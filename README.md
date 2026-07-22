@@ -62,6 +62,11 @@ Solve with temporary exact search:
 python -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3
 ```
 
+## Documentation
+
+- First CLI walkthrough: `docs/usage/cli_commands.md`
+- The guide explains the first three CLI commands (`validate`, `legal-actions`, and `solve`).
+
 ## Development Principles
 
 - Python first; no UI in early phases.
