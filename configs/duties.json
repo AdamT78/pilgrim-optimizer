@@ -1,0 +1,58 @@
+{
+  "duties": [
+    {
+      "key": "north_harvest",
+      "position": "north",
+      "effect": "produce"
+    },
+    {
+      "key": "north_east_devotion",
+      "position": "north_east",
+      "effect": "clerical_devotion"
+    },
+    {
+      "key": "east_silversmith",
+      "position": "east",
+      "effect": "clerical_silversmith"
+    },
+    {
+      "key": "south_east_harvest",
+      "position": "south_east",
+      "effect": "produce"
+    },
+    {
+      "key": "south_devotion",
+      "position": "south",
+      "effect": "clerical_devotion"
+    },
+    {
+      "key": "south_west_harvest",
+      "position": "south_west",
+      "effect": "produce"
+    },
+    {
+      "key": "west_silversmith",
+      "position": "west",
+      "effect": "clerical_silversmith"
+    },
+    {
+      "key": "north_west_harvest",
+      "position": "north_west",
+      "effect": "produce"
+    }
+  ],
+  "duty_strength": {
+    "majority": {
+      "value": 2,
+      "minority_silver_cost": 0
+    },
+    "parity": {
+      "value": 1,
+      "minority_silver_cost": 0
+    },
+    "minority": {
+      "value": 1,
+      "minority_silver_cost": 1
+    }
+  }
+}

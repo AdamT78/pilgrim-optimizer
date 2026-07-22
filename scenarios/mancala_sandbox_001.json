@@ -1,0 +1,4 @@
+{
+  "scenario_id": "mancala_sandbox_001",
+  "setup_file": "configs/setups/basic_mancala_sandbox.json"
+}

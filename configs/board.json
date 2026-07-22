@@ -1,0 +1,24 @@
+{
+  "positions": [
+    "city",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "edges": {
+    "city": ["north", "south"],
+    "north": ["north_east"],
+    "north_east": ["east"],
+    "east": ["south_east", "city"],
+    "south_east": ["south"],
+    "south": ["south_west"],
+    "south_west": ["west"],
+    "west": ["north_west", "city"],
+    "north_west": ["north"]
+  }
+}

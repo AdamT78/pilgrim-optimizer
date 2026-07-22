@@ -1,0 +1,16 @@
+.pytest_cache/
+__pycache__/
+.ruff_cache/
+.mypy_cache/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.venv/
+venv/
+
+# Generated project outputs
+outputs/
+searches/
+replays/
+benchmarks/

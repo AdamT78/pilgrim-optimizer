@@ -1,0 +1,62 @@
+"""Structured logging and replay serialization foundations."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
+
+from pilgrim.model.events import GameEvent
+from pilgrim.model.state import GameState
+
+
+def events_to_json_records(events: Iterable[GameEvent]) -> list[dict[str, Any]]:
+    """Convert immutable event tuples into JSON-serializable records."""
+    return [
+        {
+            "event_type": event.event_type.value,
+            "actor": event.actor.name.lower(),
+            "action_id": event.action_id,
+            "details": {key: value for key, value in event.details},
+        }
+        for event in events
+    ]
+
+
+def state_to_record(state: GameState) -> dict[str, Any]:
+    """Serialize a full state snapshot for replay trails."""
+    return {
+        "active_player": state.active_player.name.lower(),
+        "phase": state.phase.value,
+        "turn": state.turn,
+        "players": [
+            {
+                "victory_points": player.victory_points,
+                "piety": player.piety,
+                "resources": {
+                    "stone": player.resources.stone,
+                    "silver": player.resources.silver,
+                    "wheat": player.resources.wheat,
+                },
+            }
+            for player in state.players
+        ],
+        "acolytes": [list(vector) for vector in state.acolytes],
+    }
+
+
+def write_replay_log(path: str | Path, *, state: GameState, events: Iterable[GameEvent]) -> None:
+    """
+    Write one replay JSON document.
+
+    This intentionally small foundation can be expanded into per-transition JSONL later.
+    """
+    replay_path = Path(path)
+    replay_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "state": state_to_record(state),
+        "events": events_to_json_records(events),
+    }
+    with replay_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
