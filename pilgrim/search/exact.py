@@ -1,7 +1,7 @@
 """Depth-limited exact search placeholder for Ruleset A.
 
 This module intentionally uses a temporary objective:
-`victory_points + piety + stone + silver + wheat`
+`victory_points + piety_track_vp + stone + silver + wheat`
 and should be replaced once full scoring is implemented.
 """
 
@@ -14,6 +14,7 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
 from pilgrim.model.state import GameState
 from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.search.evaluation import evaluate_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +47,7 @@ def solve_exact(initial_state: GameState, config: GameConfig, depth: int) -> Sea
         nodes_expanded += 1
         actions = legal_actions(state, config)
         if remaining_depth == 0 or not actions:
-            result = (_evaluate_state(state, root_player), ())
+            result = (_evaluate_state(state, root_player, config), ())
             memo[memo_key] = result
             return result
 
@@ -81,6 +82,6 @@ def solve_exact(initial_state: GameState, config: GameConfig, depth: int) -> Sea
     )
 
 
-def _evaluate_state(state: GameState, perspective: PlayerId) -> int:
+def _evaluate_state(state: GameState, perspective: PlayerId, config: GameConfig) -> int:
     """Temporary objective for early experimentation."""
-    return state.player_state(perspective).value_score()
+    return evaluate_state(state, perspective, config).total

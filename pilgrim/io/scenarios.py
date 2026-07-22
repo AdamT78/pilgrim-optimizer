@@ -31,10 +31,17 @@ def load_scenario(path: str | Path) -> LoadedScenario:
 
     board_path = _resolve_path(str(merged["board_file"]), scenario_path)
     duties_path = _resolve_path(str(merged["duties_file"]), scenario_path)
+    piety_file = str(merged.get("piety_file", "configs/piety.json"))
+    piety_path = _resolve_path(piety_file, scenario_path)
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
+    piety_raw = _read_json(piety_path)
 
-    config = game_config_from_dict(board_raw=board_raw, duties_raw=duties_raw)
+    config = game_config_from_dict(
+        board_raw=board_raw,
+        duties_raw=duties_raw,
+        piety_raw=piety_raw,
+    )
     state = _game_state_from_dict(merged["initial_state"])
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
     return LoadedScenario(scenario_id=scenario_id, state=state, config=config)

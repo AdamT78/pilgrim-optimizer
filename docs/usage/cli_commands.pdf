@@ -237,7 +237,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 2199 >>
+<< /Length 2334 >>
 stream
 BT
 /F1 11 Tf
@@ -276,6 +276,10 @@ T*
 (- `Next active player` \(the player whose turn is next\)) Tj
 T*
 (- the acted player state so resource gains and acolyte recall are directly visible) Tj
+T*
+(- `Piety position` and `Piety track VP` for direct track-value inspection) Tj
+T*
+(- an evaluation breakdown for the acted player after the first full turn) Tj
 T*
 () Tj
 T*
@@ -317,12 +321,40 @@ T*
 T*
 () Tj
 T*
+(Piety Track Scoring \(v0.2\)) Tj
+T*
+() Tj
+T*
+(- Piety is now treated as a capped track position \(`max_position = 12`\).) Tj
+T*
+(- Piety position and piety VP are different values.) Tj
+T*
+(- The VP lookup table is loaded from `configs/piety.json`.) Tj
+T*
+(- Sandbox solver evaluation is still temporary, but now uses **piety track VP** instead of) Tj
+T*
+( raw piety position.) Tj
+T*
+() Tj
+T*
 (Typical development workflow) Tj
 T*
 () Tj
 T*
 (1. Edit rules/config/scenario files.) Tj
-T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1530 >>
+stream
+BT
+/F1 11 Tf
+56 760 Td
+14 TL
 (2. Run `validate` to ensure scenario integrity.) Tj
 T*
 (3. Run `legal-actions` to inspect generated action space.) Tj
@@ -342,19 +374,7 @@ T*
 (  - Use `python3` instead of `python`.) Tj
 T*
 (  - Optional alias:) Tj
-ET
-endstream
-endobj
-10 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
-endobj
-11 0 obj
-<< /Length 1109 >>
-stream
-BT
-/F1 11 Tf
-56 760 Td
-14 TL
+T*
 (    `echo 'alias python=python3' >> ~/.zshrc && source ~/.zshrc`) Tj
 T*
 (- Scenario path errors) Tj
@@ -409,10 +429,10 @@ xref
 0000002204 00000 n 
 0000004237 00000 n 
 0000004363 00000 n 
-0000006613 00000 n 
-0000006741 00000 n 
+0000006748 00000 n 
+0000006876 00000 n 
 trailer
 << /Size 12 /Root 1 0 R >>
 startxref
-7902
+8458
 %%EOF

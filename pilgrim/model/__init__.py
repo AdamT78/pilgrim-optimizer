@@ -8,7 +8,7 @@ from pilgrim.model.actions import (
     readable_route,
     resolution_from_effect,
 )
-from pilgrim.model.config import BoardConfig, DutyDefinition, GameConfig
+from pilgrim.model.config import BoardConfig, DutyDefinition, GameConfig, PietyConfig
 from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     ActionType,
@@ -39,6 +39,7 @@ __all__ = [
     "GameState",
     "PlayerId",
     "PlayerState",
+    "PietyConfig",
     "Resources",
     "TurnResolutionType",
     "TurnPhase",
