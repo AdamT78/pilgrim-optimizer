@@ -1,7 +1,7 @@
 """Depth-limited exact search placeholder for Ruleset A.
 
 This module intentionally uses a temporary objective:
-`victory_points + piety_track_vp + alms_table_vp + stone + silver + wheat`
+`victory_points + piety_track_vp + alms_table_vp + resource_total`
 and should be replaced once full scoring is implemented.
 """
 
@@ -9,13 +9,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pilgrim.evaluation.breakdown import (
+    EvaluationBreakdown,
+    evaluate_player,
+    evaluate_root_player,
+)
 from pilgrim.model.actions import GameAction, action_id
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
 from pilgrim.model.state import GameState
 from pilgrim.opponents import OpponentModelType, decision_player_for_node
 from pilgrim.rules.transition import apply_action, legal_actions
-from pilgrim.search.evaluation import evaluate_state
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +33,7 @@ class SearchResult:
     best_action_id: str | None
     principal_variation: tuple[GameAction, ...]
     principal_variation_ids: tuple[str, ...]
+    best_line_final_breakdown: EvaluationBreakdown
     nodes_expanded: int
 
 
@@ -109,6 +114,12 @@ def solve_exact(
     best_score, _, principal_variation = search(initial_state, depth)
     best_action = principal_variation[0] if principal_variation else None
     principal_variation_ids = tuple(action_id(action) for action in principal_variation)
+    best_line_final_state = _state_after_line(initial_state, principal_variation, config)
+    best_line_final_breakdown = evaluate_root_player(
+        best_line_final_state,
+        root_player_id=root_player,
+        config=config,
+    )
     return SearchResult(
         root_player_id=root_player,
         opponent_model_type=opponent_model_type,
@@ -117,10 +128,22 @@ def solve_exact(
         best_action_id=action_id(best_action) if best_action else None,
         principal_variation=principal_variation,
         principal_variation_ids=principal_variation_ids,
+        best_line_final_breakdown=best_line_final_breakdown,
         nodes_expanded=nodes_expanded,
     )
 
 
 def _evaluate_state(state: GameState, perspective: PlayerId, config: GameConfig) -> int:
     """Temporary objective for early experimentation."""
-    return evaluate_state(state, perspective, config).total
+    return evaluate_player(state, perspective, config).total
+
+
+def _state_after_line(
+    initial_state: GameState,
+    actions: tuple[GameAction, ...],
+    config: GameConfig,
+) -> GameState:
+    state = initial_state
+    for action in actions:
+        state = apply_action(state, action, config).state
+    return state

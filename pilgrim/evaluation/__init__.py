@@ -1,6 +1,6 @@
-"""Search algorithms built on top of deterministic rules APIs."""
+"""Canonical sandbox evaluation APIs."""
 
-from pilgrim.evaluation import (
+from pilgrim.evaluation.breakdown import (
     SANDBOX_EVALUATION_FORMULA,
     EvaluationBreakdown,
     evaluate_player,
@@ -10,19 +10,14 @@ from pilgrim.evaluation import (
     format_evaluation_breakdown,
     format_evaluation_breakdown_lines,
 )
-from pilgrim.opponents import OpponentModelType
-from pilgrim.search.exact import SearchResult, solve_exact
 
 __all__ = [
     "SANDBOX_EVALUATION_FORMULA",
     "EvaluationBreakdown",
-    "OpponentModelType",
-    "SearchResult",
     "evaluate_player",
     "evaluate_player_state",
     "evaluate_root_player",
     "evaluate_state",
     "format_evaluation_breakdown",
     "format_evaluation_breakdown_lines",
-    "solve_exact",
 ]

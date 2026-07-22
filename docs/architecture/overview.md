@@ -45,6 +45,16 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - then Alms-position reset for all players
 - Search remains rules-agnostic: it still consumes `legal_actions()` and `apply_action()` only.
 
+## Evaluation Breakdown Cleanup (v0.6)
+
+- Evaluation is now centralized in `pilgrim.evaluation` and remains separate from rules.
+- The canonical model is `EvaluationBreakdown` (player identity + scoring components + total).
+- Current sandbox-only formula:
+  - `victory_points + piety_track_vp + alms_table_vp + resource_total`
+- Search optimizes `EvaluationBreakdown.total` for the configured root player.
+- CLI `solve --verbose` and `apply --verbose` use the same evaluation breakdown formatter.
+- This is still an early proxy objective, not full Pilgrim final scoring.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.
