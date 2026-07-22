@@ -23,11 +23,20 @@ from pilgrim.model.enums import (
 from pilgrim.model.events import GameEvent
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import (
+    CommittedAcolytes,
+    Workforce,
+    committed_total,
+    mancala_total,
+    replace_mancala,
+    total_acolytes,
+)
 
 __all__ = [
     "ActionType",
     "BoardConfig",
     "CANONICAL_POSITION_NAMES",
+    "CommittedAcolytes",
     "DutyDefinition",
     "DutyEffect",
     "DutyStrength",
@@ -43,9 +52,14 @@ __all__ = [
     "Resources",
     "TurnResolutionType",
     "TurnPhase",
+    "Workforce",
     "action_id",
     "action_summary",
+    "committed_total",
+    "mancala_total",
     "position_name",
     "readable_route",
+    "replace_mancala",
     "resolution_from_effect",
+    "total_acolytes",
 ]

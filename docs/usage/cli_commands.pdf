@@ -237,7 +237,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 2387 >>
+<< /Length 2409 >>
 stream
 BT
 /F1 11 Tf
@@ -297,6 +297,10 @@ T*
 T*
 (- a **root-player evaluation breakdown** after the first full turn) Tj
 T*
+(- workforce totals \(`Mancala total`, `Village`, `Abbey`, committed pools, and overall ) Tj
+T*
+(`Total`\)) Tj
+T*
 () Tj
 T*
 (Position mapping used by the current sandbox:) Tj
@@ -338,10 +342,6 @@ T*
 () Tj
 T*
 (Piety Track Scoring \(v0.2\)) Tj
-T*
-() Tj
-T*
-(- Piety is now treated as a capped track position \(`max_position = 12`\).) Tj
 ET
 endstream
 endobj
@@ -349,12 +349,16 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
 endobj
 11 0 obj
-<< /Length 2343 >>
+<< /Length 2435 >>
 stream
 BT
 /F1 11 Tf
 56 760 Td
 14 TL
+() Tj
+T*
+(- Piety is now treated as a capped track position \(`max_position = 12`\).) Tj
+T*
 (- Piety position and piety VP are different values.) Tj
 T*
 (- The VP lookup table is loaded from `configs/piety.json`.) Tj
@@ -461,10 +465,10 @@ xref
 0000002204 00000 n 
 0000004266 00000 n 
 0000004392 00000 n 
-0000006830 00000 n 
-0000006958 00000 n 
+0000006852 00000 n 
+0000006980 00000 n 
 trailer
 << /Size 12 /Root 1 0 R >>
 startxref
-9353
+9467
 %%EOF

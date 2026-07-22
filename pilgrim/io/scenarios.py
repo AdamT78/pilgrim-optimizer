@@ -12,6 +12,7 @@ from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
 from pilgrim.opponents import OpponentModel, opponent_model_from_dict
 
 
@@ -82,32 +83,78 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 def _game_state_from_dict(raw: Mapping[str, Any]) -> GameState:
     players_raw = raw["players"]
-    acolytes_raw = raw["acolytes"]
-    player_one = _player_state_from_dict(players_raw["player_one"])
-    player_two = _player_state_from_dict(players_raw["player_two"])
+    acolytes_raw = raw.get("acolytes")
+    player_one = _player_state_from_dict(
+        players_raw["player_one"],
+        legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_one"),
+    )
+    player_two = _player_state_from_dict(
+        players_raw["player_two"],
+        legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_two"),
+    )
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         phase=TurnPhase.from_string(str(raw["phase"])),
         players=(player_one, player_two),
-        acolytes=(
-            tuple(int(value) for value in acolytes_raw["player_one"]),
-            tuple(int(value) for value in acolytes_raw["player_two"]),
-        ),
         turn=int(raw.get("turn", 0)),
     )
 
 
-def _player_state_from_dict(raw: Mapping[str, Any]) -> PlayerState:
+def _player_state_from_dict(
+    raw: Mapping[str, Any],
+    *,
+    legacy_mancala: tuple[int, ...] | None,
+) -> PlayerState:
     resources_raw = raw["resources"]
+    if "workforce" in raw:
+        workforce = _workforce_from_dict(raw["workforce"])
+    elif legacy_mancala is not None:
+        workforce = Workforce(mancala=legacy_mancala)
+    else:
+        workforce = Workforce(mancala=(0,) * MANCALA_POSITION_COUNT)
     return PlayerState(
         resources=Resources(
             stone=int(resources_raw.get("stone", 0)),
             silver=int(resources_raw.get("silver", 0)),
             wheat=int(resources_raw.get("wheat", 0)),
         ),
+        workforce=workforce,
         piety=int(raw.get("piety", 0)),
         victory_points=int(raw.get("victory_points", 0)),
     )
+
+
+def _workforce_from_dict(raw: Mapping[str, Any]) -> Workforce:
+    committed_raw = raw.get("committed", {})
+    if not isinstance(committed_raw, Mapping):
+        raise ValueError("workforce.committed must be an object.")
+    mancala_raw = raw.get("mancala", [0] * MANCALA_POSITION_COUNT)
+    if not isinstance(mancala_raw, list):
+        raise ValueError("workforce.mancala must be a list.")
+    return Workforce(
+        mancala=tuple(int(value) for value in mancala_raw),
+        village=int(raw.get("village", 0)),
+        abbey=int(raw.get("abbey", 0)),
+        committed=CommittedAcolytes(
+            roads=int(committed_raw.get("roads", 0)),
+            shrines=int(committed_raw.get("shrines", 0)),
+            market_ports=int(committed_raw.get("market_ports", 0)),
+            pilgrimage_sites=int(committed_raw.get("pilgrimage_sites", 0)),
+            alms_table=int(committed_raw.get("alms_table", 0)),
+        ),
+    )
+
+
+def _legacy_mancala_for_player(
+    acolytes_raw: Any,
+    player_key: str,
+) -> tuple[int, ...] | None:
+    if not isinstance(acolytes_raw, Mapping):
+        return None
+    vector = acolytes_raw.get(player_key)
+    if not isinstance(vector, list):
+        return None
+    return tuple(int(value) for value in vector)
 
 
 def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) -> PlayerId:

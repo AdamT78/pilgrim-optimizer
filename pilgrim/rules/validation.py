@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.state import GameState
+from pilgrim.model.workforce import MANCALA_POSITION_COUNT
 
 
 class TransitionValidationError(ValueError):
@@ -55,6 +56,49 @@ def ensure_non_negative_resources(state: GameState) -> None:
             raise TransitionValidationError("Piety and victory points cannot be negative.")
 
 
+def ensure_valid_workforce(state: GameState) -> None:
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        workforce = state.player_state(player_id).workforce
+        if len(workforce.mancala) != MANCALA_POSITION_COUNT:
+            raise TransitionValidationError(
+                f"{player_id.name} mancala workforce must contain "
+                f"{MANCALA_POSITION_COUNT} positions."
+            )
+        if any(count < 0 for count in workforce.mancala):
+            raise TransitionValidationError(
+                f"{player_id.name} mancala workforce cannot contain negative counts."
+            )
+        if workforce.village < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} village workforce cannot be negative."
+            )
+        if workforce.abbey < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} abbey workforce cannot be negative."
+            )
+        committed = workforce.committed
+        if committed.roads < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} committed roads workforce cannot be negative."
+            )
+        if committed.shrines < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} committed shrines workforce cannot be negative."
+            )
+        if committed.market_ports < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} committed market ports workforce cannot be negative."
+            )
+        if committed.pilgrimage_sites < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} committed pilgrimage sites workforce cannot be negative."
+            )
+        if committed.alms_table < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} committed alms table workforce cannot be negative."
+            )
+
+
 def ensure_acolyte_conservation(before: GameState, after: GameState) -> None:
     for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
         if before.total_acolytes(player_id) != after.total_acolytes(player_id):
@@ -67,6 +111,4 @@ def ensure_acolyte_conservation(before: GameState, after: GameState) -> None:
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
-    for vector in state.acolytes:
-        if any(value < 0 for value in vector):
-            raise TransitionValidationError("Acolyte vectors cannot contain negative counts.")
+    ensure_valid_workforce(state)

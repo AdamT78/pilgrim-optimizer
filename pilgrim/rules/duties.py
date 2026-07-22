@@ -66,6 +66,7 @@ def apply_duty_effect(
     )
     new_player_state = PlayerState(
         resources=new_resources,
+        workforce=player_state.workforce,
         piety=new_piety_position,
         victory_points=player_state.victory_points,
     )

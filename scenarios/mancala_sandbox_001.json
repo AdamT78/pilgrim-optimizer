@@ -4,5 +4,37 @@
   "opponent_model": {
     "type": "sandbox_active_player_max"
   },
-  "setup_file": "configs/setups/basic_mancala_sandbox.json"
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "players": {
+      "player_one": {
+        "workforce": {
+          "mancala": [3, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_two": {
+        "workforce": {
+          "mancala": [0, 1, 1, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      }
+    }
+  }
 }

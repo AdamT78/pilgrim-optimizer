@@ -5,6 +5,7 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import Workforce
 from pilgrim.opponents import OpponentModelType
 from pilgrim.search.evaluation import evaluate_state
 from pilgrim.search.exact import solve_exact
@@ -43,12 +44,16 @@ def test_evaluation_can_be_calculated_for_both_players() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=3, wheat=0), piety=12),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-        ),
-        acolytes=(
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=3, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=12,
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
         ),
         turn=0,
     )

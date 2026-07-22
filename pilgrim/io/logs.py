@@ -39,6 +39,18 @@ def state_to_record(state: GameState) -> dict[str, Any]:
                     "silver": player.resources.silver,
                     "wheat": player.resources.wheat,
                 },
+                "workforce": {
+                    "mancala": list(player.workforce.mancala),
+                    "village": player.workforce.village,
+                    "abbey": player.workforce.abbey,
+                    "committed": {
+                        "roads": player.workforce.committed.roads,
+                        "shrines": player.workforce.committed.shrines,
+                        "market_ports": player.workforce.committed.market_ports,
+                        "pilgrimage_sites": player.workforce.committed.pilgrimage_sites,
+                        "alms_table": player.workforce.committed.alms_table,
+                    },
+                },
             }
             for player in state.players
         ],
