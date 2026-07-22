@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pilgrim.model.config import PietyConfig
 from pilgrim.model.enums import DutyEffect, DutyStrength
 from pilgrim.model.state import PlayerState
+from pilgrim.rules.piety import move_piety
 
 
 def duty_strength(player_count: int, opponent_counts: tuple[int, ...]) -> DutyStrength:
@@ -31,22 +33,29 @@ def apply_duty_effect(
     effect: DutyEffect,
     duty_value: int,
     silver_cost: int,
-) -> tuple[PlayerState, tuple[int, int, int], int]:
+    piety_config: PietyConfig,
+) -> tuple[PlayerState, tuple[int, int, int], int, int]:
     """
     Apply a placeholder duty effect.
 
     Returns:
-        (new_player_state, (stone_delta, silver_delta, wheat_delta), piety_delta)
+        (
+            new_player_state,
+            (stone_delta, silver_delta, wheat_delta),
+            old_piety_position,
+            new_piety_position,
+        )
     """
     stone_delta = 0
     silver_delta = -silver_cost
     wheat_delta = 0
-    piety_delta = 0
+    old_piety_position = player_state.piety
+    new_piety_position = old_piety_position
 
     if effect is DutyEffect.PRODUCE:
         wheat_delta = duty_value
     elif effect is DutyEffect.CLERICAL_DEVOTION:
-        piety_delta = duty_value
+        new_piety_position = move_piety(old_piety_position, duty_value, piety_config)
     elif effect is DutyEffect.CLERICAL_SILVERSMITH:
         silver_delta += duty_value
 
@@ -57,7 +66,12 @@ def apply_duty_effect(
     )
     new_player_state = PlayerState(
         resources=new_resources,
-        piety=player_state.piety + piety_delta,
+        piety=new_piety_position,
         victory_points=player_state.victory_points,
     )
-    return new_player_state, (stone_delta, silver_delta, wheat_delta), piety_delta
+    return (
+        new_player_state,
+        (stone_delta, silver_delta, wheat_delta),
+        old_piety_position,
+        new_piety_position,
+    )

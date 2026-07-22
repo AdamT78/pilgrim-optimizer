@@ -2,6 +2,7 @@
   "name": "basic_mancala_sandbox",
   "board_file": "configs/board.json",
   "duties_file": "configs/duties.json",
+  "piety_file": "configs/piety.json",
   "initial_state": {
     "active_player": "player_one",
     "phase": "sow",

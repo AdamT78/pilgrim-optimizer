@@ -124,6 +124,8 @@ Using `--verbose` with `solve` prints:
 - `Acted player` (the player who executed that recommended turn)
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
+- `Piety position` and `Piety track VP` for direct track-value inspection
+- an evaluation breakdown for the acted player after the first full turn
 
 Position mapping used by the current sandbox:
 
@@ -143,6 +145,13 @@ Position mapping used by the current sandbox:
 - The solver score is not final-game scoring quality.
 - This is not strategic proof or balance validation.
 - Only the current deterministic mancala-sandbox slice is covered.
+
+## Piety Track Scoring (v0.2)
+
+- Piety is now treated as a capped track position (`max_position = 12`).
+- Piety position and piety VP are different values.
+- The VP lookup table is loaded from `configs/piety.json`.
+- Sandbox solver evaluation is still temporary, but now uses **piety track VP** instead of raw piety position.
 
 ## Typical development workflow
 

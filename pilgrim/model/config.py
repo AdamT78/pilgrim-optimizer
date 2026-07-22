@@ -40,11 +40,38 @@ class DutyDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class PietyConfig:
+    """Piety track bounds and VP scoring lookup."""
+
+    max_position: int
+    score_by_position: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if self.max_position < 0:
+            raise ValueError("Piety max_position cannot be negative.")
+        if len(self.score_by_position) != self.max_position + 1:
+            raise ValueError(
+                "Piety score_by_position length must equal max_position + 1."
+            )
+
+    def clamp(self, position: int) -> int:
+        if position < 0:
+            return 0
+        if position > self.max_position:
+            return self.max_position
+        return position
+
+    def score(self, position: int) -> int:
+        return self.score_by_position[self.clamp(position)]
+
+
+@dataclass(frozen=True, slots=True)
 class GameConfig:
     """Ruleset configuration bundle for scenario execution."""
 
     board: BoardConfig
     duties: tuple[DutyDefinition, ...]
+    piety: PietyConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -92,11 +119,23 @@ def duties_from_dict(raw: Mapping[str, Any], board: BoardConfig) -> tuple[DutyDe
     return tuple(duties)
 
 
+def piety_from_dict(raw: Mapping[str, Any]) -> PietyConfig:
+    max_position = int(raw["max_position"])
+    score_map = raw["score_by_position"]
+    if not isinstance(score_map, Mapping):
+        raise ValueError("Piety score_by_position must be an object.")
+
+    score_by_position = tuple(int(score_map[str(index)]) for index in range(max_position + 1))
+    return PietyConfig(max_position=max_position, score_by_position=score_by_position)
+
+
 def game_config_from_dict(
     *,
     board_raw: Mapping[str, Any],
     duties_raw: Mapping[str, Any],
+    piety_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
-    return GameConfig(board=board, duties=duties)
+    piety = piety_from_dict(piety_raw)
+    return GameConfig(board=board, duties=duties, piety=piety)

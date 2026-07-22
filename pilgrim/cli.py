@@ -11,8 +11,10 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
+from pilgrim.rules.piety import score_piety
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
+from pilgrim.search.evaluation import EvaluationBreakdown, evaluate_state
 from pilgrim.search.exact import solve_exact
 
 
@@ -96,6 +98,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 acted_player=acted_player,
             ):
                 print(line)
+            breakdown = evaluate_state(transition_result.state, acted_player, scenario.config)
+            print()
+            print("Evaluation breakdown (acted player):")
+            for line in _format_evaluation_breakdown(breakdown):
+                print(line)
         return 0
 
     parser.error(f"Unknown command: {args.command}")
@@ -154,10 +161,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         return f"{event_name}: {actor_name} {'; '.join(fragments)}"
 
     if event.event_type is EventType.PIETY_DELTA:
-        piety = int(details.get("piety", 0))
-        if piety == 0:
+        if "old_piety_position" in details and "new_piety_position" in details:
+            old_position = int(details["old_piety_position"])
+            new_position = int(details["new_piety_position"])
+            if old_position == new_position:
+                return None
+            old_vp = int(details.get("old_piety_vp", 0))
+            new_vp = int(details.get("new_piety_vp", 0))
+            return (
+                f"{event_name}: {actor_name} piety {old_position} -> {new_position}; "
+                f"track VP {old_vp} -> {new_vp}"
+            )
+        amount = int(details.get("piety", 0))
+        if amount == 0:
             return None
-        return f"{event_name}: {actor_name} {piety:+d} piety"
+        return f"{event_name}: {actor_name} {amount:+d} piety"
 
     if event.event_type is EventType.ACOLYTE_RECALL:
         duty_position = int(details.get("duty_position", -1))
@@ -223,8 +241,25 @@ def _format_player_state(
             f"silver={player_state.resources.silver}, "
             f"wheat={player_state.resources.wheat}"
         ),
-        f"Piety: {player_state.piety}",
+        f"Piety position: {player_state.piety}",
+        f"Piety track VP: {score_piety(player_state.piety, config.piety)}",
         f"Mancala: {mancala}",
+    )
+
+
+def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, ...]:
+    return (
+        f"Victory points: {breakdown.victory_points}",
+        f"Piety position: {breakdown.piety_position}",
+        f"Piety track VP: {breakdown.piety_track_vp}",
+        (
+            "Resources: "
+            f"stone={breakdown.stone}, "
+            f"silver={breakdown.silver}, "
+            f"wheat={breakdown.wheat}"
+        ),
+        f"Resource total: {breakdown.resource_total}",
+        f"Total sandbox evaluation: {breakdown.total}",
     )
 
 

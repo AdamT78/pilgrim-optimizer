@@ -16,6 +16,7 @@ from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
+from pilgrim.rules.piety import score_piety
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -170,11 +171,17 @@ def _apply_full_turn_action(
     ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
 
     try:
-        new_player_state, resource_delta, piety_delta = apply_duty_effect(
+        (
+            new_player_state,
+            resource_delta,
+            old_piety_position,
+            new_piety_position,
+        ) = apply_duty_effect(
             state.player_state(player),
             effect=duty.effect,
             duty_value=duty_value,
             silver_cost=silver_cost,
+            piety_config=config.piety,
         )
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
@@ -190,6 +197,11 @@ def _apply_full_turn_action(
 
     ensure_non_negative_resources(next_state)
     ensure_acolyte_conservation(state, next_state)
+
+    piety_position_delta = new_piety_position - old_piety_position
+    old_piety_vp = score_piety(old_piety_position, config.piety)
+    new_piety_vp = score_piety(new_piety_position, config.piety)
+    piety_vp_delta = new_piety_vp - old_piety_vp
 
     events.extend(
         [
@@ -220,7 +232,14 @@ def _apply_full_turn_action(
                 event_type=EventType.PIETY_DELTA,
                 actor=player,
                 action_id=action_id(action),
-                details=make_event_details(piety=piety_delta),
+                details=make_event_details(
+                    amount_gained=piety_position_delta,
+                    old_piety_position=old_piety_position,
+                    new_piety_position=new_piety_position,
+                    old_piety_vp=old_piety_vp,
+                    new_piety_vp=new_piety_vp,
+                    piety_vp_delta=piety_vp_delta,
+                ),
             ),
             GameEvent(
                 event_type=EventType.ACOLYTE_RECALL,
@@ -236,6 +255,8 @@ def _apply_full_turn_action(
             ),
         ]
     )
+    if piety_position_delta == 0:
+        events = [event for event in events if event.event_type is not EventType.PIETY_DELTA]
     return TransitionResult(state=next_state, events=tuple(events))
 
 
