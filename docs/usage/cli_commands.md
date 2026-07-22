@@ -165,6 +165,7 @@ Using `--verbose` with `solve` prints:
 - a compact state summary after applying that first full turn
 - timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`)
 - Merchant state (`Position`, `Resource`)
+- dummy acolyte state (`north_group`, `south_group`, `total`)
 - `Acted player` (the player who executed that recommended turn)
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
@@ -239,6 +240,7 @@ Position mapping used by the current sandbox:
   - `MERCHANT_ADVANCE`
   - `ROUND_END` / `ROUND_ADVANCE`
   - `SEASON_END` / `SEASON_ADVANCE`
+  - `DUMMY_ACOLYTE_MOVE` (on season boundaries)
   - season-end Alms events when a season closes
 
 ## Merchant Context (v0.8)
@@ -249,6 +251,17 @@ Position mapping used by the current sandbox:
   - `Position`
   - `Resource`
 - At taxation, verbose output shows `Resource: none`.
+
+## Dummy Acolytes (v0.9)
+
+- 2-player and 3-player scenarios now include neutral dummy acolytes.
+- If `dummy_acolytes` are not explicitly provided, setup defaults are seeded from `player_count`.
+- Verbose `solve` and `apply` state summaries include:
+  - `Dummy acolytes`
+  - `north_group`
+  - `south_group`
+  - `total`
+- On season-end turns, verbose event output includes `DUMMY_ACOLYTE_MOVE`.
 
 ## Typical development workflow
 

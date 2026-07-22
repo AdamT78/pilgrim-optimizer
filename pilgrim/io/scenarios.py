@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
@@ -15,6 +16,7 @@ from pilgrim.model.state import GameState, PlayerState
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
 from pilgrim.opponents import OpponentModel, opponent_model_from_dict
+from pilgrim.rules.dummy import seed_dummy_groups
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,9 +61,11 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         timing_raw=timing_raw,
         merchant_raw=merchant_raw,
     )
+    table_player_count = _player_count_from_dict(merged)
     state = _game_state_from_dict(
         merged["initial_state"],
         merchant_path_length=len(config.merchant.path),
+        table_player_count=table_player_count,
     )
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
     root_player_id = _root_player_from_dict(merged, default_player=state.active_player)
@@ -101,6 +105,7 @@ def _game_state_from_dict(
     raw: Mapping[str, Any],
     *,
     merchant_path_length: int,
+    table_player_count: int,
 ) -> GameState:
     players_raw = raw["players"]
     acolytes_raw = raw.get("acolytes")
@@ -114,6 +119,7 @@ def _game_state_from_dict(
     )
     timing = _timing_state_from_dict(raw)
     merchant_position = _merchant_position_from_dict(raw)
+    dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     if merchant_position >= merchant_path_length:
         raise ValueError(
             "Scenario merchant_position must be within Merchant path bounds: "
@@ -124,6 +130,8 @@ def _game_state_from_dict(
         phase=TurnPhase.from_string(str(raw["phase"])),
         players=(player_one, player_two),
         timing=timing,
+        table_player_count=table_player_count,
+        dummy_acolytes=dummy_acolytes,
         merchant_position=merchant_position,
     )
 
@@ -216,6 +224,34 @@ def _merchant_position_from_dict(raw: Mapping[str, Any]) -> int:
     if isinstance(merchant_raw, Mapping):
         return int(merchant_raw.get("position", 0))
     return int(raw.get("merchant_position", 0))
+
+
+def _dummy_acolytes_from_dict(
+    raw: Mapping[str, Any],
+    *,
+    table_player_count: int,
+) -> DummyAcolyteGroups:
+    dummy_raw = raw.get("dummy_acolytes")
+    if dummy_raw is None:
+        return seed_dummy_groups(table_player_count)
+    if not isinstance(dummy_raw, Mapping):
+        raise ValueError("dummy_acolytes must be an object with north_group/south_group.")
+
+    north_group_raw = dummy_raw.get("north_group")
+    south_group_raw = dummy_raw.get("south_group")
+    if not isinstance(north_group_raw, list) or not isinstance(south_group_raw, list):
+        raise ValueError("dummy_acolytes.north_group and south_group must be lists.")
+    return DummyAcolyteGroups(
+        north_group=tuple(int(value) for value in north_group_raw),
+        south_group=tuple(int(value) for value in south_group_raw),
+    )
+
+
+def _player_count_from_dict(raw: Mapping[str, Any]) -> int:
+    player_count_raw = raw.get("player_count")
+    if player_count_raw is None:
+        return 2
+    return int(player_count_raw)
 
 
 def _opponent_model_from_dict(raw: Mapping[str, Any]) -> OpponentModel:

@@ -1,0 +1,9 @@
+{
+  "scenario_id": "dummy_3p_setup_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "player_count": 3
+}

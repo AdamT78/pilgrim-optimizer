@@ -108,6 +108,7 @@ def test_transition_emits_turn_advance_and_updates_timing_for_normal_turn() -> N
     assert result.state.timing.season_number == 1
     assert result.state.timing.turn_in_round == 1
     assert result.state.active_player is PlayerId.PLAYER_TWO
+    assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
     assert result.state.merchant_position == 1
     assert merchant_details["from_duty"] == "taxation"
     assert merchant_details["to_duty"] == "produce"
@@ -160,6 +161,7 @@ def test_transition_season_end_triggers_alms_reward_and_reset() -> None:
     assert EventType.SEASON_END in event_types
     assert EventType.ALMS_SEASON_REWARD in event_types
     assert EventType.ALMS_RESET in event_types
+    assert EventType.DUMMY_ACOLYTE_MOVE in event_types
     assert EventType.SEASON_ADVANCE in event_types
 
     assert after.timing.season_number == 2

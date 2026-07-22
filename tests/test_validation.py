@@ -2,6 +2,7 @@ import pytest
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
@@ -91,3 +92,23 @@ def test_negative_committed_count_fails_validation() -> None:
 def test_mancala_vector_length_must_be_nine() -> None:
     with pytest.raises(ValueError):
         Workforce(mancala=(1, 2, 3))
+
+
+def test_dummy_city_position_must_be_zero() -> None:
+    with pytest.raises(ValueError):
+        DummyAcolyteGroups(
+            north_group=(1, 0, 0, 0, 0, 0, 0, 0, 0),
+            south_group=(0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+
+
+def test_dummy_totals_must_match_player_count_expectation() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    invalid_state = scenario.state.with_dummy_acolytes(
+        DummyAcolyteGroups(
+            north_group=(0, 1, 1, 0, 0, 0, 0, 0, 0),
+            south_group=(0, 0, 0, 0, 0, 1, 1, 1, 0),
+        )
+    )
+    with pytest.raises(TransitionValidationError, match="north_group total"):
+        validate_state_invariants(invalid_state)

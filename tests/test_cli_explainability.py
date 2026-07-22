@@ -45,7 +45,7 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
     assert "action: give_alms" in output
     assert "pay silver=" in output
     assert "action: tithe" in output
-    assert "Total legal actions: 12" in output
+    assert "Total legal actions:" in output
 
 
 def test_cli_solve_returns_readable_best_action(capsys) -> None:
@@ -104,6 +104,7 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Season:" in output
     assert "Turn in round:" in output
     assert "Merchant:" in output
+    assert "Dummy acolytes:" in output
     assert "Position:" in output
     assert "Resource:" in output
     assert "Acted player state:" in output

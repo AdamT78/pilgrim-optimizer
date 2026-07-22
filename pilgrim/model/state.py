@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
+from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.timing import TimingState
@@ -48,6 +49,8 @@ class GameState:
     phase: TurnPhase
     players: tuple[PlayerState, PlayerState]
     timing: TimingState = field(default_factory=TimingState)
+    table_player_count: int = 4
+    dummy_acolytes: DummyAcolyteGroups = field(default_factory=DummyAcolyteGroups)
     merchant_position: int = 0
     turn: int = 0
 
@@ -69,6 +72,8 @@ class GameState:
 
         if self.timing.turn_in_round >= len(self.players):
             raise ValueError("turn_in_round must be less than number of players.")
+        if self.table_player_count not in (2, 3, 4):
+            raise ValueError("table_player_count must be one of: 2, 3, 4.")
         if self.merchant_position < 0:
             raise ValueError("merchant_position cannot be negative.")
 
@@ -105,11 +110,21 @@ class GameState:
     def player_count(self) -> int:
         return len(self.players)
 
+    @property
+    def dummy_total(self) -> int:
+        return self.dummy_acolytes.total_count
+
+    def dummy_at_position(self, position: int) -> int:
+        return self.dummy_acolytes.dummy_at_position(position)
+
     def with_timing(self, timing: TimingState) -> GameState:
         return replace(self, timing=timing, turn=timing.absolute_turn)
 
     def with_merchant_position(self, merchant_position: int) -> GameState:
         return replace(self, merchant_position=merchant_position)
+
+    def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
+        return replace(self, dummy_acolytes=dummy_acolytes)
 
     def with_player_state(self, player_id: PlayerId, player_state: PlayerState) -> GameState:
         players = list(self.players)

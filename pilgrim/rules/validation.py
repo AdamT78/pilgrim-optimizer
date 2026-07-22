@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pilgrim.model.dummy import validate_dummy_acolytes
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.state import GameState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT
@@ -110,6 +111,19 @@ def ensure_acolyte_conservation(before: GameState, after: GameState) -> None:
             )
 
 
+def ensure_dummy_acolyte_conservation(before: GameState, after: GameState) -> None:
+    if before.dummy_acolytes.north_total != after.dummy_acolytes.north_total:
+        raise TransitionValidationError(
+            "Dummy north_group total changed across transition: "
+            f"{before.dummy_acolytes.north_total} -> {after.dummy_acolytes.north_total}."
+        )
+    if before.dummy_acolytes.south_total != after.dummy_acolytes.south_total:
+        raise TransitionValidationError(
+            "Dummy south_group total changed across transition: "
+            f"{before.dummy_acolytes.south_total} -> {after.dummy_acolytes.south_total}."
+        )
+
+
 def ensure_valid_timing(state: GameState) -> None:
     timing = state.timing
     if timing.absolute_turn < 0:
@@ -131,9 +145,20 @@ def ensure_valid_merchant_state(state: GameState) -> None:
         raise TransitionValidationError("Merchant position cannot be negative.")
 
 
+def ensure_valid_dummy_state(state: GameState) -> None:
+    try:
+        validate_dummy_acolytes(
+            state.dummy_acolytes,
+            player_count=state.table_player_count,
+        )
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
     ensure_valid_workforce(state)
     ensure_valid_timing(state)
     ensure_valid_merchant_state(state)
+    ensure_valid_dummy_state(state)

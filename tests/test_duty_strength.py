@@ -26,6 +26,20 @@ def test_majority_parity_minority_value_calculation() -> None:
     assert duty_value_and_silver_cost(minority) == (1, 1)
 
 
+def test_dummy_competition_can_cause_parity_minority_and_majority() -> None:
+    # player=1, (real_opponent=0, dummy=1) => parity
+    assert duty_strength(1, (0, 1)) is DutyStrength.PARITY
+    # player=1, (real_opponent=0, dummy=2) => minority
+    assert duty_strength(1, (0, 2)) is DutyStrength.MINORITY
+    # player=2, (real_opponent=0, dummy=1) => majority
+    assert duty_strength(2, (0, 1)) is DutyStrength.MAJORITY
+
+
+def test_highest_competing_count_is_used_across_real_and_dummy() -> None:
+    # highest competing count is 2 (dummy), not 1 (real opponent)
+    assert duty_strength(1, (1, 2)) is DutyStrength.MINORITY
+
+
 def test_minority_action_fails_when_silver_insufficient() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = GameState(

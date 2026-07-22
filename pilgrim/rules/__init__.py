@@ -9,6 +9,13 @@ from pilgrim.rules.alms import (
     resolve_give_alms,
     score_alms_table,
 )
+from pilgrim.rules.dummy import (
+    clockwise_duty_positions,
+    move_dummy_acolytes_end_of_season,
+    seed_dummy_acolytes,
+    seed_dummy_groups,
+    seed_from_anchor,
+)
 from pilgrim.rules.merchant import (
     advance_merchant_position,
     building_hire_payment_resource,
@@ -37,6 +44,11 @@ __all__ = [
     "resolve_alms_season_end",
     "resolve_give_alms",
     "score_alms_table",
+    "clockwise_duty_positions",
+    "move_dummy_acolytes_end_of_season",
+    "seed_dummy_acolytes",
+    "seed_dummy_groups",
+    "seed_from_anchor",
     "advance_active_player",
     "advance_merchant_position",
     "advance_timing",

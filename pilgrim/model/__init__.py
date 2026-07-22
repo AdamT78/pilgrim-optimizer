@@ -17,6 +17,7 @@ from pilgrim.model.config import (
     PietyConfig,
     TimingConfig,
 )
+from pilgrim.model.dummy import DummyAcolyteGroups, dummy_at_position, dummy_total, format_dummy_acolytes
 from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     ActionType,
@@ -50,6 +51,7 @@ __all__ = [
     "DutyDefinition",
     "DutyEffect",
     "DutyStrength",
+    "DummyAcolyteGroups",
     "EventType",
     "FullTurnAction",
     "GameAction",
@@ -74,5 +76,8 @@ __all__ = [
     "readable_route",
     "replace_mancala",
     "resolution_from_effect",
+    "dummy_at_position",
+    "dummy_total",
+    "format_dummy_acolytes",
     "total_acolytes",
 ]

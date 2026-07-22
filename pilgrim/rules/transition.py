@@ -15,6 +15,7 @@ from pilgrim.model.enums import DutyEffect, EventType, PlayerId, TurnPhase, Turn
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
+from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
 from pilgrim.rules.merchant import (
@@ -28,10 +29,12 @@ from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
     ensure_affordable_minority,
+    ensure_dummy_acolyte_conservation,
     ensure_non_negative_resources,
     ensure_phase,
     ensure_route_length_matches,
     ensure_selected_duty_has_acolyte,
+    ensure_valid_dummy_state,
     ensure_valid_timing,
 )
 
@@ -74,9 +77,10 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     continue
                 if duty.effect is DutyEffect.GIVE_ALMS:
                     player_count = sowed_vector[duty_position]
-                    opponent_counts = tuple(
-                        state.player_vector(opponent_id)[duty_position]
-                        for opponent_id in _opponents(state.active_player)
+                    opponent_counts = _competing_counts(
+                        state,
+                        player=state.active_player,
+                        duty_position=duty_position,
                     )
                     strength = duty_strength(player_count, opponent_counts)
                     duty_value, silver_cost = duty_value_and_silver_cost(strength)
@@ -187,9 +191,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(message)
 
         player_count = sowed_vector[action.selected_duty]
-        opponent_counts = tuple(
-            state.player_vector(opponent_id)[action.selected_duty]
-            for opponent_id in _opponents(player)
+        opponent_counts = _competing_counts(
+            state,
+            player=player,
+            duty_position=action.selected_duty,
         )
         strength = duty_strength(player_count, opponent_counts)
         duty_value, silver_cost = duty_value_and_silver_cost(strength)
@@ -395,6 +400,12 @@ def _apply_full_turn_action(
         alms_result = resolve_alms_season_end(next_state, config.alms)
         next_state = alms_result.state
         events.extend(alms_result.events)
+        next_state, dummy_move_events = move_dummy_acolytes_end_of_season(
+            next_state,
+            actor=player,
+            action_id=transition_action_id,
+        )
+        events.extend(dummy_move_events)
         next_state = resolve_season_end(next_state, config.timing)
         events.append(
             GameEvent(
@@ -410,7 +421,9 @@ def _apply_full_turn_action(
 
     ensure_non_negative_resources(next_state)
     ensure_valid_timing(next_state)
+    ensure_valid_dummy_state(next_state)
     ensure_acolyte_conservation(state, next_state)
+    ensure_dummy_acolyte_conservation(state, next_state)
     events.append(
         GameEvent(
             event_type=EventType.INVARIANT_CHECK,
@@ -426,6 +439,9 @@ def _apply_full_turn_action(
                     next_state.total_acolytes(PlayerId.PLAYER_ONE)
                     + next_state.total_acolytes(PlayerId.PLAYER_TWO)
                 ),
+                dummy_north_group_total=next_state.dummy_acolytes.north_total,
+                dummy_south_group_total=next_state.dummy_acolytes.south_total,
+                dummy_total=next_state.dummy_total,
             ),
         )
     )
@@ -436,6 +452,19 @@ def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:
     if player is PlayerId.PLAYER_ONE:
         return (PlayerId.PLAYER_TWO,)
     return (PlayerId.PLAYER_ONE,)
+
+
+def _competing_counts(
+    state: GameState,
+    *,
+    player: PlayerId,
+    duty_position: int,
+) -> tuple[int, ...]:
+    opponent_counts = [
+        state.player_vector(opponent_id)[duty_position] for opponent_id in _opponents(player)
+    ]
+    opponent_counts.append(state.dummy_at_position(duty_position))
+    return tuple(opponent_counts)
 
 
 def _alms_payment_options(

@@ -4,6 +4,7 @@
   "opponent_model": {
     "type": "sandbox_active_player_max"
   },
+  "player_count": 2,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
     "active_player": "player_two",

@@ -30,7 +30,13 @@ def state_to_record(state: GameState) -> dict[str, Any]:
         "active_player": state.active_player.name.lower(),
         "phase": state.phase.value,
         "turn": state.turn,
+        "table_player_count": state.table_player_count,
         "merchant_position": state.merchant_position,
+        "dummy_acolytes": {
+            "north_group": list(state.dummy_acolytes.north_group),
+            "south_group": list(state.dummy_acolytes.south_group),
+            "total": list(state.dummy_acolytes.total_vector),
+        },
         "players": [
             {
                 "victory_points": player.victory_points,

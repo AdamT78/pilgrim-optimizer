@@ -15,6 +15,7 @@ from pilgrim.evaluation import (
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import GameAction, action_summary, readable_route
 from pilgrim.model.config import GameConfig
+from pilgrim.model.dummy import format_dummy_acolytes
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
@@ -307,6 +308,22 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.ALMS_RESET:
         return f"{event_name}: all players reset to row 0"
 
+    if event.event_type is EventType.DUMMY_ACOLYTE_MOVE:
+        group = str(details.get("group", "unknown"))
+        from_position = int(details.get("from_position", -1))
+        to_position = int(details.get("to_position", -1))
+        from_label = position_name(from_position, positions)
+        to_label = position_name(to_position, positions)
+        before_positions = str(details.get("before_positions", "")).strip()
+        after_positions = str(details.get("after_positions", "")).strip()
+        if before_positions and after_positions:
+            return (
+                f"{event_name}: {group} before [{before_positions}]; "
+                f"moved {from_label} -> {to_label}; "
+                f"after [{after_positions}]"
+            )
+        return f"{event_name}: {group} moved {from_label} -> {to_label}"
+
     if event.event_type is EventType.MERCHANT_ADVANCE:
         from_duty = str(details.get("from_duty", "unknown"))
         to_duty = str(details.get("to_duty", "unknown"))
@@ -402,6 +419,19 @@ def _format_state_summary(
         (
             "  Resource: "
             f"{current_merchant_resource(state, config.merchant) or 'none'}"
+        ),
+        "Dummy acolytes:",
+        (
+            "  north_group: "
+            f"{format_dummy_acolytes(state.dummy_acolytes.north_group, positions=config.board.positions)}"
+        ),
+        (
+            "  south_group: "
+            f"{format_dummy_acolytes(state.dummy_acolytes.south_group, positions=config.board.positions)}"
+        ),
+        (
+            "  total: "
+            f"{format_dummy_acolytes(state.dummy_acolytes.total_vector, positions=config.board.positions)}"
         ),
         "",
         "Acted player state:",
