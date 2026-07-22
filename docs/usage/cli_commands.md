@@ -94,6 +94,9 @@ Example output:
 
 ```text
 Solve result for scenario 'mancala_sandbox_001'
+Root player: player_one
+Objective: maximize root player sandbox evaluation
+Opponent model: sandbox_active_player_max
 Depth: 3
 Best score: 3
 Nodes expanded: 27
@@ -102,9 +105,9 @@ Best first full turn:
 Turn: sow city -> north -> north_east -> east | selected duty: east | action: clerical_silversmith
 
 Best line:
-1. Turn: sow city -> north -> north_east -> east | selected duty: east | action: clerical_silversmith
-2. Turn: sow north -> north_east | selected duty: north_east | action: clerical_devotion
-3. Turn: sow city -> south | selected duty: south | action: tithe
+1. player_one: Turn: sow city -> north -> north_east -> east | selected duty: east | action: clerical_silversmith
+2. player_two: Turn: sow north -> north_east | selected duty: north_east | action: clerical_devotion
+3. player_one: Turn: sow city -> south | selected duty: south | action: tithe
 ```
 
 ## How to interpret the current output
@@ -114,6 +117,9 @@ Best line:
 - `nodes_expanded` means the number of search nodes explored.
 - `best_score` is still a value under a **temporary placeholder sandbox evaluation**, not true final Pilgrim VP.
 - `best line` is now a sequence of full turns, not alternating sow/resolve sub-actions.
+- `root player` is whose outcome is being optimized.
+- `active player` is whose turn is currently applied in a simulated state.
+- A single search line may alternate active players while still optimizing root-player outcome.
 - Together, this confirms the current development loop works end-to-end:
   `scenario -> validate -> legal actions -> search -> recommendation`.
 
@@ -125,7 +131,7 @@ Using `--verbose` with `solve` prints:
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
 - `Piety position` and `Piety track VP` for direct track-value inspection
-- an evaluation breakdown for the acted player after the first full turn
+- a **root-player evaluation breakdown** after the first full turn
 
 Position mapping used by the current sandbox:
 
@@ -152,6 +158,13 @@ Position mapping used by the current sandbox:
 - Piety position and piety VP are different values.
 - The VP lookup table is loaded from `configs/piety.json`.
 - Sandbox solver evaluation is still temporary, but now uses **piety track VP** instead of raw piety position.
+
+## Root Player and Opponent Model (v0.3)
+
+- Scenarios can set `root_player_id` explicitly (preferred).
+- If `root_player_id` is omitted, the loader defaults to the initial active player.
+- Current opponent model placeholder is `sandbox_active_player_max`.
+- This means each active player locally selects actions, while cutoff/terminal scoring is still read from the root player perspective.
 
 ## Typical development workflow
 

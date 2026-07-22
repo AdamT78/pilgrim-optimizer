@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Sequence
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_summary, readable_route
+from pilgrim.model.actions import GameAction, action_summary, readable_route
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
@@ -62,8 +62,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "solve":
-        result = solve_exact(scenario.state, scenario.config, args.depth)
+        result = solve_exact(
+            scenario.state,
+            scenario.config,
+            args.depth,
+            root_player_id=scenario.root_player_id,
+            opponent_model_type=scenario.opponent_model.type,
+        )
+        root_player_name = scenario.root_player_id.name.lower()
         print(f"Solve result for scenario '{scenario.scenario_id}'")
+        print(f"Root player: {root_player_name}")
+        print("Objective: maximize root player sandbox evaluation")
+        print(f"Opponent model: {scenario.opponent_model.type.value}")
         print(f"Depth: {args.depth}")
         print(f"Best score: {result.best_score}")
         print(f"Nodes expanded: {result.nodes_expanded}")
@@ -78,8 +88,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if result.principal_variation:
             print()
             print("Best line:")
-            for index, action in enumerate(result.principal_variation, start=1):
-                print(f"{index}. {action_summary(action, scenario.config)}")
+            annotated = _annotate_actions_with_active_players(
+                scenario.state,
+                result.principal_variation,
+                scenario.config,
+            )
+            for index, (player_id, action) in enumerate(annotated, start=1):
+                print(
+                    f"{index}. {player_id.name.lower()}: "
+                    f"{action_summary(action, scenario.config)}"
+                )
 
         if args.verbose and result.best_action is not None:
             acted_player = scenario.state.active_player
@@ -98,9 +116,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 acted_player=acted_player,
             ):
                 print(line)
-            breakdown = evaluate_state(transition_result.state, acted_player, scenario.config)
+            breakdown = evaluate_state(
+                transition_result.state,
+                scenario.root_player_id,
+                scenario.config,
+            )
             print()
-            print("Evaluation breakdown (acted player):")
+            print("Root-player evaluation breakdown:")
+            print(f"Player: {root_player_name}")
             for line in _format_evaluation_breakdown(breakdown):
                 print(line)
         return 0
@@ -261,6 +284,19 @@ def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, .
         f"Resource total: {breakdown.resource_total}",
         f"Total sandbox evaluation: {breakdown.total}",
     )
+
+
+def _annotate_actions_with_active_players(
+    initial_state: GameState,
+    actions: tuple[GameAction, ...],
+    config: GameConfig,
+) -> tuple[tuple[PlayerId, GameAction], ...]:
+    state = initial_state
+    annotated: list[tuple[PlayerId, GameAction]] = []
+    for action in actions:
+        annotated.append((state.active_player, action))
+        state = apply_action(state, action, config).state
+    return tuple(annotated)
 
 
 def _parse_route(route_text: str) -> tuple[int, ...]:

@@ -52,11 +52,15 @@ def test_cli_solve_returns_readable_best_action(capsys) -> None:
 
     assert exit_code == 0
     assert "Solve result for scenario 'mancala_sandbox_001'" in output
+    assert "Root player: player_one" in output
+    assert "Objective: maximize root player sandbox evaluation" in output
+    assert "Opponent model: sandbox_active_player_max" in output
     assert "Depth: 3" in output
     assert "Best first full turn:" in output
     assert "Turn: sow city -> north -> north_east -> east" in output
     assert "selected duty:" in output
     assert "Best line:" in output
+    assert "1. player_one: Turn:" in output
 
 
 def test_exact_search_returns_principal_variation() -> None:
@@ -94,7 +98,8 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Next active player state:" in output
     assert "Piety position:" in output
     assert "Piety track VP:" in output
-    assert "Evaluation breakdown (acted player):" in output
+    assert "Root-player evaluation breakdown:" in output
+    assert "Player: player_one" in output
     assert "Total sandbox evaluation:" in output
     assert "Active player:" not in output
     assert "Mancala: city=" in output
