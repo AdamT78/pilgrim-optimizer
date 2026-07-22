@@ -4,6 +4,27 @@ from __future__ import annotations
 
 from enum import Enum, IntEnum
 
+CANONICAL_POSITION_NAMES: tuple[str, ...] = (
+    "city",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west",
+)
+
+
+def position_name(position_id: int, positions: tuple[str, ...] | None = None) -> str:
+    """Return the canonical readable name for a position index."""
+    if positions is not None and 0 <= position_id < len(positions):
+        return positions[position_id]
+    if 0 <= position_id < len(CANONICAL_POSITION_NAMES):
+        return CANONICAL_POSITION_NAMES[position_id]
+    return f"position_{position_id}"
+
 
 class PlayerId(IntEnum):
     """Stable player ordering for tuple-indexed state containers."""
@@ -59,9 +80,19 @@ class DutyEffect(Enum):
     CLERICAL_SILVERSMITH = "clerical_silversmith"
 
 
+class TurnResolutionType(Enum):
+    """Simplified full-turn action choices for the sandbox."""
+
+    PRODUCE = "produce"
+    CLERICAL_DEVOTION = "clerical_devotion"
+    CLERICAL_SILVERSMITH = "clerical_silversmith"
+    TITHE = "tithe"
+
+
 class ActionType(Enum):
     """Action categories used for stable action IDs and logging."""
 
+    FULL_TURN = "full_turn"
     SOW = "sow"
     RESOLVE_DUTY = "resolve_duty"
     TITHE = "tithe"

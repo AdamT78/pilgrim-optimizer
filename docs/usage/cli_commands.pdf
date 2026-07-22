@@ -4,7 +4,7 @@
 << /Type /Catalog /Pages 2 0 R >>
 endobj
 2 0 obj
-<< /Type /Pages /Count 3 /Kids [4 0 R 6 0 R 8 0 R] >>
+<< /Type /Pages /Count 4 /Kids [4 0 R 6 0 R 8 0 R 10 0 R] >>
 endobj
 3 0 obj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
@@ -13,7 +13,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
 endobj
 5 0 obj
-<< /Length 1709 >>
+<< /Length 1691 >>
 stream
 BT
 /F1 11 Tf
@@ -117,7 +117,7 @@ T*
 T*
 (- Loads the same scenario.) Tj
 T*
-(- Asks the current rules engine to generate legal actions for the active player and phase.) Tj
+(- Asks the current rules engine to generate legal **full-turn** actions.) Tj
 ET
 endstream
 endobj
@@ -125,13 +125,19 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
 endobj
 7 0 obj
-<< /Length 1668 >>
+<< /Length 1982 >>
 stream
 BT
 /F1 11 Tf
 56 760 Td
 14 TL
-(- Prints stable, readable action IDs.) Tj
+(- Each listed action is one complete simplified turn: sow + selected duty/tithe ) Tj
+T*
+(resolution.) Tj
+T*
+(- Prints a numbered list of readable full-turn summaries.) Tj
+T*
+(- Prints a final legal-action count.) Tj
 T*
 () Tj
 T*
@@ -149,9 +155,19 @@ T*
 T*
 () Tj
 T*
-(sow:0:1->2->3) Tj
+(Legal actions for scenario 'mancala_sandbox_001':) Tj
 T*
-(sow:0:5->6->7) Tj
+() Tj
+T*
+(1. Turn: sow city -> north -> north_east -> east | selected duty: north | action: produce) Tj
+T*
+(2. Turn: sow city -> north -> north_east -> east | selected duty: north | action: tithe) Tj
+T*
+(...) Tj
+T*
+() Tj
+T*
+(Total legal actions: N) Tj
 T*
 () Tj
 T*
@@ -169,7 +185,7 @@ T*
 T*
 (- Runs the current exact-search prototype.) Tj
 T*
-(- Searches to the specified depth \(`--depth 3` in this example\).) Tj
+(- Searches to the specified depth in **full turns** \(`--depth 3` means 3 complete turns\).) Tj
 T*
 (- Uses a temporary placeholder evaluation function.) Tj
 T*
@@ -179,11 +195,33 @@ T*
 T*
 () Tj
 T*
-(best_score=3) Tj
+(Solve result for scenario 'mancala_sandbox_001') Tj
 T*
-(best_action=sow:0:1->2->3) Tj
+(Depth: 3) Tj
 T*
-(nodes_expanded=27) Tj
+(Best score: 3) Tj
+T*
+(Nodes expanded: 27) Tj
+T*
+() Tj
+T*
+(Best first full turn:) Tj
+T*
+(Turn: sow city -> north -> north_east -> east | selected duty: east | action: ) Tj
+T*
+(clerical_silversmith) Tj
+T*
+() Tj
+T*
+(Best line:) Tj
+T*
+(1. Turn: sow city -> north -> north_east -> east | selected duty: east | action: ) Tj
+T*
+(clerical_silversmith) Tj
+T*
+(2. Turn: sow north -> north_east | selected duty: north_east | action: clerical_devotion) Tj
+T*
+(3. Turn: sow city -> south | selected duty: south | action: tithe) Tj
 T*
 () Tj
 T*
@@ -191,17 +229,53 @@ T*
 T*
 () Tj
 T*
-(- `best_score` is a value under the **temporary placeholder evaluation**, not true final ) Tj
+(- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable ) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2199 >>
+stream
+BT
+/F1 11 Tf
+56 760 Td
+14 TL
+(form.) Tj
 T*
-(Pilgrim VP.) Tj
+(- `city -> north -> north_east -> east` corresponds to position IDs `0 -> 1 -> 2 -> 3`.) Tj
 T*
-(- `best_action=sow:0:1->2->3` means sow from city to north, north_east, east.) Tj
+(- `nodes_expanded` means the number of search nodes explored.) Tj
 T*
-(- `nodes_expanded` is how many search nodes were explored.) Tj
+(- `best_score` is still a value under a **temporary placeholder sandbox evaluation**, not ) Tj
+T*
+(true final Pilgrim VP.) Tj
+T*
+(- `best line` is now a sequence of full turns, not alternating sow/resolve sub-actions.) Tj
 T*
 (- Together, this confirms the current development loop works end-to-end:) Tj
 T*
 (  `scenario -> validate -> legal actions -> search -> recommendation`.) Tj
+T*
+() Tj
+T*
+(Using `--verbose` with `solve` prints:) Tj
+T*
+() Tj
+T*
+(- all transition events for the recommended first full turn \(sowing + duty/tithe + ) Tj
+T*
+(invariants\)) Tj
+T*
+(- a compact state summary after applying that first full turn) Tj
+T*
+(- `Acted player` \(the player who executed that recommended turn\)) Tj
+T*
+(- `Next active player` \(the player whose turn is next\)) Tj
+T*
+(- the acted player state so resource gains and acolyte recall are directly visible) Tj
 T*
 () Tj
 T*
@@ -230,19 +304,7 @@ T*
 () Tj
 T*
 (What this does not mean yet) Tj
-ET
-endstream
-endobj
-8 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
-endobj
-9 0 obj
-<< /Length 1742 >>
-stream
-BT
-/F1 11 Tf
-56 760 Td
-14 TL
+T*
 () Tj
 T*
 (- The engine is not complete for full Pilgrim gameplay.) Tj
@@ -280,7 +342,19 @@ T*
 (  - Use `python3` instead of `python`.) Tj
 T*
 (  - Optional alias:) Tj
-T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1109 >>
+stream
+BT
+/F1 11 Tf
+56 760 Td
+14 TL
 (    `echo 'alias python=python3' >> ~/.zshrc && source ~/.zshrc`) Tj
 T*
 (- Scenario path errors) Tj
@@ -301,6 +375,10 @@ T*
 T*
 (  - Remember the current scoring function is a temporary placeholder.) Tj
 T*
+(  - Re-run with verbose mode for transition details:) Tj
+T*
+(    `python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3 --verbose`) Tj
+T*
 () Tj
 T*
 (Next planned CLI improvements) Tj
@@ -320,19 +398,21 @@ ET
 endstream
 endobj
 xref
-0 10
+0 12
 0000000000 65535 f 
 0000000015 00000 n 
 0000000064 00000 n 
-0000000133 00000 n 
-0000000203 00000 n 
-0000000329 00000 n 
-0000002089 00000 n 
-0000002215 00000 n 
-0000003934 00000 n 
-0000004060 00000 n 
+0000000140 00000 n 
+0000000210 00000 n 
+0000000336 00000 n 
+0000002078 00000 n 
+0000002204 00000 n 
+0000004237 00000 n 
+0000004363 00000 n 
+0000006613 00000 n 
+0000006741 00000 n 
 trailer
-<< /Size 10 /Root 1 0 R >>
+<< /Size 12 /Root 1 0 R >>
 startxref
-5853
+7902
 %%EOF

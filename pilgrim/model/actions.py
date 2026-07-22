@@ -4,42 +4,59 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pilgrim.model.enums import ActionType
+from pilgrim.model.config import GameConfig
+from pilgrim.model.enums import ActionType, DutyEffect, TurnResolutionType, position_name
 
 
 @dataclass(frozen=True, slots=True)
-class SowingAction:
-    """Pick up all acolytes at source and sow over an exact route."""
+class FullTurnAction:
+    """
+    One complete simplified sandbox turn.
 
-    source: int
+    Flow:
+        sow from origin over route -> select duty -> resolve duty effect or tithe
+    """
+
+    origin: int
     route: tuple[int, ...]
-    action_type: ActionType = field(default=ActionType.SOW, init=False)
+    selected_duty: int
+    resolution: TurnResolutionType
+    action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
-@dataclass(frozen=True, slots=True)
-class ResolveDutyAction:
-    """Resolve a duty at the selected duty position."""
-
-    duty_position: int
-    action_type: ActionType = field(default=ActionType.RESOLVE_DUTY, init=False)
-
-
-@dataclass(frozen=True, slots=True)
-class TitheAction:
-    """Placeholder tithe action that intentionally skips recall."""
-
-    duty_position: int
-    action_type: ActionType = field(default=ActionType.TITHE, init=False)
-
-
-GameAction = SowingAction | ResolveDutyAction | TitheAction
+GameAction = FullTurnAction
 
 
 def action_id(action: GameAction) -> str:
     """Generate a stable readable action ID."""
-    if isinstance(action, SowingAction):
-        route = "->".join(str(position) for position in action.route)
-        return f"sow:{action.source}:{route}"
-    if isinstance(action, ResolveDutyAction):
-        return f"resolve-duty:{action.duty_position}"
-    return f"tithe:{action.duty_position}"
+    route = "->".join(str(position) for position in action.route)
+    return (
+        f"turn:sow:{action.origin}:{route}:"
+        f"duty:{action.selected_duty}:action:{action.resolution.value}"
+    )
+
+
+def readable_route(
+    origin: int,
+    route: tuple[int, ...],
+    *,
+    positions: tuple[str, ...] | None = None,
+) -> str:
+    """Format a route as readable position names."""
+    path = (origin, *route)
+    return " -> ".join(position_name(position_id, positions) for position_id in path)
+
+
+def action_summary(action: GameAction, config: GameConfig) -> str:
+    """Return a human-readable action summary for CLI/debug output."""
+    positions = config.board.positions
+    selected_duty = position_name(action.selected_duty, positions)
+    return (
+        f"Turn: sow {readable_route(action.origin, action.route, positions=positions)} | "
+        f"selected duty: {selected_duty} | action: {action.resolution.value}"
+    )
+
+
+def resolution_from_effect(effect: DutyEffect) -> TurnResolutionType:
+    """Map configured duty effect to the corresponding full-turn resolution."""
+    return TurnResolutionType(effect.value)
