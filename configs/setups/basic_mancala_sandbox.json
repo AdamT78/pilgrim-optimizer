@@ -6,6 +6,7 @@
   "alms_file": "configs/alms.json",
   "timing_file": "configs/timing.json",
   "merchant_file": "configs/merchant.json",
+  "player_count": 2,
   "initial_state": {
     "active_player": "player_one",
     "phase": "sow",

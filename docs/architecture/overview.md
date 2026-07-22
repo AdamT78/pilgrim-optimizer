@@ -83,6 +83,19 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - trade-route income resource
 - At `taxation`, Merchant resource context is intentionally `None` (no resource).
 
+## Dummy Acolytes (v0.9)
+
+- `GameState` now tracks neutral dummy acolytes as two internal groups:
+  - `north_group`
+  - `south_group`
+- Dummy setup is table-size dependent (`player_count`):
+  - 2 players: 3+3 seeded dummies
+  - 3 players: 2+2 seeded dummies
+  - 4 players: no dummies
+- Dummy totals are included in Duty strength comparison as neutral competition.
+- Season-end flow now includes deterministic dummy leap-frog movement before `SEASON_ADVANCE`.
+- Search remains rules-agnostic: dummy behavior is encapsulated in rules/state transition code.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

@@ -30,7 +30,10 @@ After a full-turn action resolves, the engine runs timing progression and emits 
 5. Season-end Alms events:
    - `ALMS_SEASON_REWARD`
    - `ALMS_RESET`
-6. `SEASON_ADVANCE`
+6. Season-end dummy movement events:
+   - `DUMMY_ACOLYTE_MOVE` (north group)
+   - `DUMMY_ACOLYTE_MOVE` (south group)
+7. `SEASON_ADVANCE`
 
 Only boundary events that actually apply are emitted.
 
@@ -44,6 +47,7 @@ When a season boundary is reached through normal turn progression:
 - the existing Alms leader helper resolves winner/reward
 - winner may move 1 acolyte `abbey -> committed.alms_table` if available
 - all players reset Alms position to 0
+- both dummy groups apply one leap-frog move
 - season number then advances
 
 ## Deferred
