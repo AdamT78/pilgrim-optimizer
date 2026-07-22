@@ -94,7 +94,7 @@ What it does right now:
 - Selects one action by **1-based** index (matching `legal-actions` numbering).
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
-- In verbose mode, prints transition events, resulting state summary, and root-player evaluation breakdown.
+- In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
 
 Why this matters:
 
@@ -167,7 +167,8 @@ Using `--verbose` with `solve` prints:
 - the acted player state so resource gains and acolyte recall are directly visible
 - `Piety position` and `Piety track VP` for direct track-value inspection
 - `Alms position`, `Alms table acolytes`, and `Alms table VP`
-- a **root-player evaluation breakdown** after the first full turn
+- a `Best-line final evaluation` section (state after the full principal variation)
+- a `Root-player evaluation after best first full turn` section (state after only the recommended first full turn)
 - workforce totals (`Mancala total`, `Village`, `Abbey`, committed pools, and overall `Total`)
 
 Position mapping used by the current sandbox:
@@ -208,8 +209,19 @@ Position mapping used by the current sandbox:
 - Alms positions are tracked per player (`0..6`, capped).
 - Give Alms actions now appear in legal-action output when payment is affordable.
 - Verbose solve output now includes Alms-specific events (`ALMS_PAYMENT`, `ALMS_PROGRESS`, threshold rewards).
-- Root-player evaluation breakdown now includes Alms-table scoring.
+- Verbose evaluation sections now include Alms-table scoring.
 - Use `apply --action-index` to force a specific Give Alms transition for debugging.
+
+## Evaluation Breakdown Cleanup (v0.6)
+
+- `solve --verbose` and `apply --verbose` now use a shared evaluation breakdown formatter.
+- Search and CLI both use the same canonical evaluation calculation via `EvaluationBreakdown`.
+- `Total sandbox evaluation` is still a sandbox proxy, **not** true final Pilgrim VP.
+- In solve verbose output:
+  - `Best-line final evaluation` = after the full best line
+  - `Root-player evaluation after best first full turn` = after one applied recommended turn
+- Current formula:
+  - `victory_points + piety_track_vp + alms_table_vp + resource_total`
 
 ## Typical development workflow
 

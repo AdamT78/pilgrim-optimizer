@@ -63,6 +63,7 @@ def test_cli_solve_returns_readable_best_action(capsys) -> None:
     assert "selected duty:" in output
     assert "Best line:" in output
     assert "1. player_one: Turn:" in output
+    assert "Best-line final evaluation:" in output
 
 
 def test_exact_search_returns_principal_variation() -> None:
@@ -106,7 +107,8 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Workforce:" in output
     assert "Mancala total:" in output
     assert "Committed:" in output
-    assert "Root-player evaluation breakdown:" in output
+    assert "Root-player evaluation after best first full turn:" in output
+    assert "Root-player evaluation breakdown:" not in output
     assert "Player: player_one" in output
     assert "Alms table VP:" in output
     assert "Total sandbox evaluation:" in output

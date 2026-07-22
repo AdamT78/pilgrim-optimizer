@@ -87,4 +87,6 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "ALMS_PROGRESS:" in output
     assert "ALMS_THRESHOLD_REWARD:" in output
     assert "State after action:" in output
-    assert "Root-player evaluation breakdown:" in output
+    assert "Root-player evaluation after action:" in output
+    assert "Root-player evaluation breakdown:" not in output
+    assert "Total sandbox evaluation:" in output

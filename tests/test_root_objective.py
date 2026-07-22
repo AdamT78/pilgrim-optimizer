@@ -96,3 +96,4 @@ def test_search_still_returns_full_turn_principal_variation() -> None:
         opponent_model_type=OpponentModelType.SANDBOX_ACTIVE_PLAYER_MAX,
     )
     assert len(result.principal_variation) == 2
+    assert result.best_line_final_breakdown.player_id == int(PlayerId.PLAYER_TWO)

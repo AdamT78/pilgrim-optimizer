@@ -6,17 +6,20 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from pilgrim.evaluation import (
+    EvaluationBreakdown,
+    evaluate_player,
+    evaluate_root_player,
+    format_evaluation_breakdown_lines,
+)
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import GameAction, action_summary, readable_route
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
-from pilgrim.rules.alms import score_alms_table
-from pilgrim.rules.piety import score_piety
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
-from pilgrim.search.evaluation import EvaluationBreakdown, evaluate_state
 from pilgrim.search.exact import solve_exact
 
 
@@ -109,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 root_player_id=scenario.root_player_id,
                 events_heading="Events:",
                 state_heading="State after action:",
+                evaluation_heading="Root-player evaluation after action:",
             )
         else:
             print("State updated successfully.")
@@ -152,6 +156,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"{index}. {player_id.name.lower()}: "
                     f"{action_summary(action, scenario.config)}"
                 )
+            print()
+            print("Best-line final evaluation:")
+            for line in _format_evaluation_breakdown(result.best_line_final_breakdown):
+                print(line)
 
         if args.verbose and result.best_action is not None:
             transition_result = apply_action(scenario.state, result.best_action, scenario.config)
@@ -164,6 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 root_player_id=scenario.root_player_id,
                 events_heading="Events for best first full turn:",
                 state_heading="State after best first full turn:",
+                evaluation_heading="Root-player evaluation after best first full turn:",
             )
         return 0
 
@@ -301,6 +310,7 @@ def _print_transition_report(
     root_player_id: PlayerId,
     events_heading: str,
     state_heading: str,
+    evaluation_heading: str,
 ) -> None:
     print(events_heading)
     for event in events:
@@ -317,10 +327,13 @@ def _print_transition_report(
     ):
         print(line)
 
-    breakdown = evaluate_state(next_state, root_player_id, config)
+    breakdown = evaluate_root_player(
+        next_state,
+        root_player_id=root_player_id,
+        config=config,
+    )
     print()
-    print("Root-player evaluation breakdown:")
-    print(f"Player: {root_player_id.name.lower()}")
+    print(evaluation_heading)
     for line in _format_evaluation_breakdown(breakdown):
         print(line)
 
@@ -362,26 +375,25 @@ def _format_player_state(
     config: GameConfig,
 ) -> tuple[str, ...]:
     positions = config.board.positions
+    breakdown = evaluate_player(state, player, config)
     player_state = state.player_state(player)
     player_vector = state.player_vector(player)
     mancala = ", ".join(
         f"{position_name(position_id, positions)}={count}"
         for position_id, count in enumerate(player_vector)
     )
-    alms_table_acolytes = player_state.workforce.committed.alms_table
-    alms_table_vp = score_alms_table(alms_table_acolytes, config.alms)
     return (
         (
             "Resources: "
-            f"stone={player_state.resources.stone}, "
-            f"silver={player_state.resources.silver}, "
-            f"wheat={player_state.resources.wheat}"
+            f"stone={breakdown.stone}, "
+            f"silver={breakdown.silver}, "
+            f"wheat={breakdown.wheat}"
         ),
-        f"Piety position: {player_state.piety}",
-        f"Piety track VP: {score_piety(player_state.piety, config.piety)}",
-        f"Alms position: {player_state.alms_position}",
-        f"Alms table acolytes: {alms_table_acolytes}",
-        f"Alms table VP: {alms_table_vp}",
+        f"Piety position: {breakdown.piety_position}",
+        f"Piety track VP: {breakdown.piety_track_vp}",
+        f"Alms position: {breakdown.alms_position}",
+        f"Alms table acolytes: {breakdown.alms_table_acolytes}",
+        f"Alms table VP: {breakdown.alms_table_vp}",
         "Workforce:",
         f"  Mancala total: {player_state.workforce.mancala_total}",
         f"  Village: {player_state.workforce.village}",
@@ -400,22 +412,7 @@ def _format_player_state(
 
 
 def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, ...]:
-    return (
-        f"Victory points: {breakdown.victory_points}",
-        f"Piety position: {breakdown.piety_position}",
-        f"Piety track VP: {breakdown.piety_track_vp}",
-        f"Alms position: {breakdown.alms_position}",
-        f"Alms table acolytes: {breakdown.alms_table_acolytes}",
-        f"Alms table VP: {breakdown.alms_table_vp}",
-        (
-            "Resources: "
-            f"stone={breakdown.stone}, "
-            f"silver={breakdown.silver}, "
-            f"wheat={breakdown.wheat}"
-        ),
-        f"Resource total: {breakdown.resource_total}",
-        f"Total sandbox evaluation: {breakdown.total}",
-    )
+    return format_evaluation_breakdown_lines(breakdown)
 
 
 def _annotate_actions_with_active_players(
