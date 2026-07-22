@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
+from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import (
     MANCALA_POSITION_COUNT,
     Workforce,
@@ -46,6 +47,7 @@ class GameState:
     active_player: PlayerId
     phase: TurnPhase
     players: tuple[PlayerState, PlayerState]
+    timing: TimingState = field(default_factory=TimingState)
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -53,6 +55,19 @@ class GameState:
             raise ValueError("Exactly two players are required.")
         if self.turn < 0:
             raise ValueError("Turn cannot be negative.")
+
+        if self.timing == TimingState():
+            if self.turn != self.timing.absolute_turn:
+                object.__setattr__(
+                    self,
+                    "timing",
+                    replace(self.timing, absolute_turn=self.turn),
+                )
+        elif self.turn != self.timing.absolute_turn:
+            object.__setattr__(self, "turn", self.timing.absolute_turn)
+
+        if self.timing.turn_in_round >= len(self.players):
+            raise ValueError("turn_in_round must be less than number of players.")
 
     def player_state(self, player_id: PlayerId) -> PlayerState:
         return self.players[int(player_id)]
@@ -71,6 +86,25 @@ class GameState:
     def total_acolytes(self, player_id: PlayerId) -> int:
         return total_acolytes(self.player_state(player_id).workforce)
 
+    @property
+    def round_number(self) -> int:
+        return self.timing.round_number
+
+    @property
+    def season_number(self) -> int:
+        return self.timing.season_number
+
+    @property
+    def turn_in_round(self) -> int:
+        return self.timing.turn_in_round
+
+    @property
+    def player_count(self) -> int:
+        return len(self.players)
+
+    def with_timing(self, timing: TimingState) -> GameState:
+        return replace(self, timing=timing, turn=timing.absolute_turn)
+
     def with_player_state(self, player_id: PlayerId, player_state: PlayerState) -> GameState:
         players = list(self.players)
         players[int(player_id)] = player_state
@@ -87,9 +121,21 @@ class GameState:
         )
 
     def next_player_turn(self) -> GameState:
+        next_turn_in_round = self.timing.turn_in_round + 1
+        next_round_number = self.timing.round_number
+        if next_turn_in_round >= len(self.players):
+            next_round_number += 1
+            next_turn_in_round = 0
+        next_timing = TimingState(
+            absolute_turn=self.timing.absolute_turn + 1,
+            round_number=next_round_number,
+            season_number=self.timing.season_number,
+            turn_in_round=next_turn_in_round,
+        )
         return replace(
             self,
             active_player=self.active_player.opponent(),
             phase=TurnPhase.SOW,
-            turn=self.turn + 1,
+            timing=next_timing,
+            turn=next_timing.absolute_turn,
         )

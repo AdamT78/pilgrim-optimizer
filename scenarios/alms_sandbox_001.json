@@ -6,6 +6,12 @@
   },
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 1,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
     "players": {
       "player_one": {
         "alms_position": 0,

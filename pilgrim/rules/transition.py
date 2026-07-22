@@ -14,10 +14,11 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import DutyEffect, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
-from pilgrim.rules.alms import AlmsPayment, resolve_give_alms
+from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
 from pilgrim.rules.piety import score_piety
+from pilgrim.rules.timing import advance_timing, resolve_season_end
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -26,6 +27,7 @@ from pilgrim.rules.validation import (
     ensure_phase,
     ensure_route_length_matches,
     ensure_selected_duty_has_acolyte,
+    ensure_valid_timing,
 )
 
 
@@ -136,11 +138,12 @@ def _apply_full_turn_action(
         duty_position=action.selected_duty,
     )
 
+    transition_action_id = action_id(action)
     events: list[GameEvent] = [
         GameEvent(
             event_type=EventType.SOWING,
             actor=player,
-            action_id=action_id(action),
+            action_id=transition_action_id,
             details=make_event_details(
                 source=action.origin,
                 picked_up=picked_up,
@@ -150,217 +153,248 @@ def _apply_full_turn_action(
     ]
 
     if action.resolution is TurnResolutionType.TITHE:
-        next_state = state_after_sow.next_player_turn()
-        ensure_non_negative_resources(next_state)
-        ensure_acolyte_conservation(state, next_state)
-        events.extend(
-            [
-                GameEvent(
-                    event_type=EventType.DUTY_RESOLUTION,
-                    actor=player,
-                    action_id=action_id(action),
-                    details=make_event_details(
-                        duty_position=action.selected_duty,
-                        mode="tithe",
-                        recall=False,
-                    ),
+        updated_state = state_after_sow
+        events.append(
+            GameEvent(
+                event_type=EventType.DUTY_RESOLUTION,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    duty_position=action.selected_duty,
+                    mode="tithe",
+                    recall=False,
                 ),
-                GameEvent(
-                    event_type=EventType.INVARIANT_CHECK,
-                    actor=player,
-                    action_id=action_id(action),
-                    details=make_event_details(
-                        name="post_turn",
-                        acolytes_conserved=True,
-                        total_workforce=next_state.total_acolytes(player),
-                    ),
-                ),
-            ]
-        )
-        return TransitionResult(state=next_state, events=tuple(events))
-
-    duty = config.duty_for_position(action.selected_duty)
-    if duty is None:
-        raise TransitionValidationError(f"No duty configured at position {action.selected_duty}.")
-
-    expected_resolution = resolution_from_effect(duty.effect)
-    if action.resolution is not expected_resolution:
-        message = (
-            f"Selected action {action.resolution.value} does not match "
-            f"duty effect {duty.effect.value}."
-        )
-        raise TransitionValidationError(message)
-
-    player_count = sowed_vector[action.selected_duty]
-    opponent_counts = tuple(
-        state.player_vector(opponent_id)[action.selected_duty] for opponent_id in _opponents(player)
-    )
-    strength = duty_strength(player_count, opponent_counts)
-    duty_value, silver_cost = duty_value_and_silver_cost(strength)
-    available_silver = state_after_sow.player_state(player).resources.silver
-    ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
-
-    if (
-        action.resolution is not TurnResolutionType.GIVE_ALMS
-        and (action.alms_payment_silver != 0 or action.alms_payment_wheat != 0)
-    ):
-        raise TransitionValidationError("Only Give Alms actions may include Alms payment fields.")
-
-    if action.resolution is TurnResolutionType.GIVE_ALMS:
-        try:
-            alms_resolution = resolve_give_alms(
-                state_after_sow.player_state(player),
-                duty_value=duty_value,
-                payment=AlmsPayment(
-                    silver=action.alms_payment_silver,
-                    wheat=action.alms_payment_wheat,
-                ),
-                minority_silver_cost=silver_cost,
-                config=config.alms,
             )
-        except ValueError as exc:
-            raise TransitionValidationError(str(exc)) from exc
-        new_player_state = alms_resolution.player_state
-        resource_delta = alms_resolution.resource_delta
-        old_piety_position = state_after_sow.player_state(player).piety
-        new_piety_position = state_after_sow.player_state(player).piety
+        )
     else:
-        try:
-            (
-                new_player_state,
-                resource_delta,
-                old_piety_position,
-                new_piety_position,
-            ) = apply_duty_effect(
-                state_after_sow.player_state(player),
-                effect=duty.effect,
-                duty_value=duty_value,
-                silver_cost=silver_cost,
-                piety_config=config.piety,
+        duty = config.duty_for_position(action.selected_duty)
+        if duty is None:
+            raise TransitionValidationError(
+                f"No duty configured at position {action.selected_duty}."
             )
-        except ValueError as exc:
-            raise TransitionValidationError(str(exc)) from exc
 
-    post_effect_vector = new_player_state.workforce.mancala
-    recalled = post_effect_vector[action.selected_duty]
-    recalled_vector = list(post_effect_vector)
-    recalled_vector[0] += recalled
-    recalled_vector[action.selected_duty] = 0
+        expected_resolution = resolution_from_effect(duty.effect)
+        if action.resolution is not expected_resolution:
+            message = (
+                f"Selected action {action.resolution.value} does not match "
+                f"duty effect {duty.effect.value}."
+            )
+            raise TransitionValidationError(message)
 
-    updated_state = state_after_sow.with_player_state(player, new_player_state)
-    updated_state = updated_state.with_player_vector(player, tuple(recalled_vector))
-    next_state = updated_state.next_player_turn()
-
-    ensure_non_negative_resources(next_state)
-    ensure_acolyte_conservation(state, next_state)
-
-    piety_position_delta = new_piety_position - old_piety_position
-    old_piety_vp = score_piety(old_piety_position, config.piety)
-    new_piety_vp = score_piety(new_piety_position, config.piety)
-    piety_vp_delta = new_piety_vp - old_piety_vp
-
-    events.append(
-        GameEvent(
-            event_type=EventType.DUTY_RESOLUTION,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(
-                duty_position=action.selected_duty,
-                duty_key=duty.key,
-                strength=strength.value,
-                duty_value=duty_value,
-                silver_cost=silver_cost,
-                effect=duty.effect.value,
-            ),
+        player_count = sowed_vector[action.selected_duty]
+        opponent_counts = tuple(
+            state.player_vector(opponent_id)[action.selected_duty]
+            for opponent_id in _opponents(player)
         )
-    )
-    events.append(
-        GameEvent(
-            event_type=EventType.RESOURCE_DELTA,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(
-                stone=resource_delta[0],
-                silver=resource_delta[1],
-                wheat=resource_delta[2],
-            ),
-        )
-    )
+        strength = duty_strength(player_count, opponent_counts)
+        duty_value, silver_cost = duty_value_and_silver_cost(strength)
+        available_silver = state_after_sow.player_state(player).resources.silver
+        ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
 
-    if action.resolution is TurnResolutionType.GIVE_ALMS:
-        events.append(
-            GameEvent(
-                event_type=EventType.ALMS_PAYMENT,
-                actor=player,
-                action_id=action_id(action),
-                details=make_event_details(
-                    silver=action.alms_payment_silver,
-                    wheat=action.alms_payment_wheat,
+        if (
+            action.resolution is not TurnResolutionType.GIVE_ALMS
+            and (action.alms_payment_silver != 0 or action.alms_payment_wheat != 0)
+        ):
+            raise TransitionValidationError(
+                "Only Give Alms actions may include Alms payment fields."
+            )
+
+        if action.resolution is TurnResolutionType.GIVE_ALMS:
+            try:
+                alms_resolution = resolve_give_alms(
+                    state_after_sow.player_state(player),
+                    duty_value=duty_value,
+                    payment=AlmsPayment(
+                        silver=action.alms_payment_silver,
+                        wheat=action.alms_payment_wheat,
+                    ),
                     minority_silver_cost=silver_cost,
+                    config=config.alms,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            new_player_state = alms_resolution.player_state
+            resource_delta = alms_resolution.resource_delta
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+        else:
+            try:
+                (
+                    new_player_state,
+                    resource_delta,
+                    old_piety_position,
+                    new_piety_position,
+                ) = apply_duty_effect(
+                    state_after_sow.player_state(player),
+                    effect=duty.effect,
+                    duty_value=duty_value,
+                    silver_cost=silver_cost,
+                    piety_config=config.piety,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+
+        post_effect_vector = new_player_state.workforce.mancala
+        recalled = post_effect_vector[action.selected_duty]
+        recalled_vector = list(post_effect_vector)
+        recalled_vector[0] += recalled
+        recalled_vector[action.selected_duty] = 0
+
+        updated_state = state_after_sow.with_player_state(player, new_player_state)
+        updated_state = updated_state.with_player_vector(player, tuple(recalled_vector))
+
+        piety_position_delta = new_piety_position - old_piety_position
+        old_piety_vp = score_piety(old_piety_position, config.piety)
+        new_piety_vp = score_piety(new_piety_position, config.piety)
+        piety_vp_delta = new_piety_vp - old_piety_vp
+
+        events.append(
+            GameEvent(
+                event_type=EventType.DUTY_RESOLUTION,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    duty_position=action.selected_duty,
+                    duty_key=duty.key,
+                    strength=strength.value,
+                    duty_value=duty_value,
+                    silver_cost=silver_cost,
+                    effect=duty.effect.value,
                 ),
             )
         )
         events.append(
             GameEvent(
-                event_type=EventType.ALMS_PROGRESS,
+                event_type=EventType.RESOURCE_DELTA,
                 actor=player,
-                action_id=action_id(action),
+                action_id=transition_action_id,
                 details=make_event_details(
-                    old_row=alms_resolution.old_position,
-                    new_row=alms_resolution.new_position,
+                    stone=resource_delta[0],
+                    silver=resource_delta[1],
+                    wheat=resource_delta[2],
                 ),
             )
         )
-        for outcome in alms_resolution.threshold_outcomes:
+
+        if action.resolution is TurnResolutionType.GIVE_ALMS:
             events.append(
                 GameEvent(
-                    event_type=EventType.ALMS_THRESHOLD_REWARD,
+                    event_type=EventType.ALMS_PAYMENT,
                     actor=player,
-                    action_id=action_id(action),
+                    action_id=transition_action_id,
                     details=make_event_details(
-                        threshold=outcome.threshold,
-                        reward=outcome.reward_key,
-                        moved=outcome.moved,
-                        description=outcome.description,
+                        silver=action.alms_payment_silver,
+                        wheat=action.alms_payment_wheat,
+                        minority_silver_cost=silver_cost,
                     ),
                 )
             )
-    elif piety_position_delta != 0:
+            events.append(
+                GameEvent(
+                    event_type=EventType.ALMS_PROGRESS,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        old_row=alms_resolution.old_position,
+                        new_row=alms_resolution.new_position,
+                    ),
+                )
+            )
+            for outcome in alms_resolution.threshold_outcomes:
+                events.append(
+                    GameEvent(
+                        event_type=EventType.ALMS_THRESHOLD_REWARD,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            threshold=outcome.threshold,
+                            reward=outcome.reward_key,
+                            moved=outcome.moved,
+                            description=outcome.description,
+                        ),
+                    )
+                )
+        elif piety_position_delta != 0:
+            events.append(
+                GameEvent(
+                    event_type=EventType.PIETY_DELTA,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        amount_gained=piety_position_delta,
+                        old_piety_position=old_piety_position,
+                        new_piety_position=new_piety_position,
+                        old_piety_vp=old_piety_vp,
+                        new_piety_vp=new_piety_vp,
+                        piety_vp_delta=piety_vp_delta,
+                    ),
+                )
+            )
+
         events.append(
             GameEvent(
-                event_type=EventType.PIETY_DELTA,
+                event_type=EventType.ACOLYTE_RECALL,
                 actor=player,
-                action_id=action_id(action),
+                action_id=transition_action_id,
                 details=make_event_details(
-                    amount_gained=piety_position_delta,
-                    old_piety_position=old_piety_position,
-                    new_piety_position=new_piety_position,
-                    old_piety_vp=old_piety_vp,
-                    new_piety_vp=new_piety_vp,
-                    piety_vp_delta=piety_vp_delta,
+                    duty_position=action.selected_duty,
+                    recalled=recalled,
                 ),
             )
         )
 
-    events.extend(
-        [
+    try:
+        timing_result = advance_timing(
+            updated_state,
+            config.timing,
+            action_id=transition_action_id,
+        )
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
+
+    next_state = timing_result.state
+    events.extend(timing_result.events)
+
+    if timing_result.season_ended:
+        completed_season_number = timing_result.completed_season_number
+        if completed_season_number is None:
+            completed_season_number = next_state.timing.season_number
+        alms_result = resolve_alms_season_end(next_state, config.alms)
+        next_state = alms_result.state
+        events.extend(alms_result.events)
+        next_state = resolve_season_end(next_state, config.timing)
+        events.append(
             GameEvent(
-                event_type=EventType.ACOLYTE_RECALL,
+                event_type=EventType.SEASON_ADVANCE,
                 actor=player,
-                action_id=action_id(action),
-                details=make_event_details(duty_position=action.selected_duty, recalled=recalled),
-            ),
-            GameEvent(
-                event_type=EventType.INVARIANT_CHECK,
-                actor=player,
-                action_id=action_id(action),
+                action_id=transition_action_id,
                 details=make_event_details(
-                    name="post_turn",
-                    acolytes_conserved=True,
-                    total_workforce=next_state.total_acolytes(player),
+                    from_season=completed_season_number,
+                    to_season=next_state.timing.season_number,
+                ),
+            )
+        )
+
+    ensure_non_negative_resources(next_state)
+    ensure_valid_timing(next_state)
+    ensure_acolyte_conservation(state, next_state)
+    events.append(
+        GameEvent(
+            event_type=EventType.INVARIANT_CHECK,
+            actor=player,
+            action_id=transition_action_id,
+            details=make_event_details(
+                name="post_turn",
+                acolytes_conserved=True,
+                invariant_scope="all_players",
+                total_workforce_player_one=next_state.total_acolytes(PlayerId.PLAYER_ONE),
+                total_workforce_player_two=next_state.total_acolytes(PlayerId.PLAYER_TWO),
+                total_workforce_all_players=(
+                    next_state.total_acolytes(PlayerId.PLAYER_ONE)
+                    + next_state.total_acolytes(PlayerId.PLAYER_TWO)
                 ),
             ),
-        ]
+        )
     )
     return TransitionResult(state=next_state, events=tuple(events))
 

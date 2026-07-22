@@ -256,6 +256,14 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
 
     if event.event_type is EventType.INVARIANT_CHECK:
         if details.get("acolytes_conserved") is True:
+            total_workforce_p1 = details.get("total_workforce_player_one")
+            total_workforce_p2 = details.get("total_workforce_player_two")
+            if isinstance(total_workforce_p1, int) and isinstance(total_workforce_p2, int):
+                return (
+                    f"{event_name}: passed for all players "
+                    f"(acolytes conserved; total workforce by player: "
+                    f"player_one={total_workforce_p1}, player_two={total_workforce_p2})"
+                )
             total_workforce = details.get("total_workforce")
             if isinstance(total_workforce, int):
                 return (
@@ -297,6 +305,29 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
 
     if event.event_type is EventType.ALMS_RESET:
         return f"{event_name}: all players reset to row 0"
+
+    if event.event_type is EventType.TURN_ADVANCE:
+        from_player = str(details.get("from_player", "unknown"))
+        to_player = str(details.get("to_player", "unknown"))
+        return f"{event_name}: {from_player} -> {to_player}"
+
+    if event.event_type is EventType.ROUND_END:
+        round_number = int(details.get("round", 0))
+        return f"{event_name}: round {round_number} complete"
+
+    if event.event_type is EventType.ROUND_ADVANCE:
+        from_round = int(details.get("from_round", 0))
+        to_round = int(details.get("to_round", 0))
+        return f"{event_name}: round {from_round} -> {to_round}"
+
+    if event.event_type is EventType.SEASON_END:
+        season_number = int(details.get("season", 0))
+        return f"{event_name}: season {season_number} complete"
+
+    if event.event_type is EventType.SEASON_ADVANCE:
+        from_season = int(details.get("from_season", 0))
+        to_season = int(details.get("to_season", 0))
+        return f"{event_name}: season {from_season} -> {to_season}"
 
     return f"{event_name}: {details}"
 
@@ -351,7 +382,11 @@ def _format_state_summary(
     lines: list[str] = [
         f"Acted player: {acted_name}",
         f"Next active player: {next_name}",
-        f"Turn: {state.turn}",
+        "Timing:",
+        f"  Absolute turn: {state.timing.absolute_turn}",
+        f"  Round: {state.timing.round_number}",
+        f"  Season: {state.timing.season_number}",
+        f"  Turn in round: {state.timing.turn_in_round}",
         "",
         "Acted player state:",
         *_format_player_state(state, acted_player, config),
