@@ -132,6 +132,7 @@ Using `--verbose` with `solve` prints:
 - the acted player state so resource gains and acolyte recall are directly visible
 - `Piety position` and `Piety track VP` for direct track-value inspection
 - a **root-player evaluation breakdown** after the first full turn
+- workforce totals (`Mancala total`, `Village`, `Abbey`, committed pools, and overall `Total`)
 
 Position mapping used by the current sandbox:
 

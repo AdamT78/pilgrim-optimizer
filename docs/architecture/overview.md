@@ -26,6 +26,14 @@
 
 Current default opponent model is `sandbox_active_player_max`: each active player picks locally favorable actions, while terminal/cutoff score reporting remains root-player-based.
 
+## Workforce Pools (v0.4)
+
+- `PlayerState` now contains explicit workforce pools.
+- Mancala acolytes are only one workforce component.
+- Additional pools are represented for future systems: village, abbey, and committed pools (roads, shrines, market ports, pilgrimage sites, alms table).
+- Current sandbox turn actions only move acolytes within the **mancala** pool.
+- Transition validation enforces workforce non-negativity and conservation.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

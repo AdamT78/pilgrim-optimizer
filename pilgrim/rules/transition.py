@@ -141,7 +141,11 @@ def _apply_full_turn_action(
                     event_type=EventType.INVARIANT_CHECK,
                     actor=player,
                     action_id=action_id(action),
-                    details=make_event_details(name="post_turn", acolytes_conserved=True),
+                    details=make_event_details(
+                        name="post_turn",
+                        acolytes_conserved=True,
+                        total_workforce=next_state.total_acolytes(player),
+                    ),
                 ),
             ]
         )
@@ -167,7 +171,7 @@ def _apply_full_turn_action(
     )
     strength = duty_strength(player_count, opponent_counts)
     duty_value, silver_cost = duty_value_and_silver_cost(strength)
-    available_silver = state.player_state(player).resources.silver
+    available_silver = state_after_sow.player_state(player).resources.silver
     ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
 
     try:
@@ -177,7 +181,7 @@ def _apply_full_turn_action(
             old_piety_position,
             new_piety_position,
         ) = apply_duty_effect(
-            state.player_state(player),
+            state_after_sow.player_state(player),
             effect=duty.effect,
             duty_value=duty_value,
             silver_cost=silver_cost,
@@ -251,7 +255,11 @@ def _apply_full_turn_action(
                 event_type=EventType.INVARIANT_CHECK,
                 actor=player,
                 action_id=action_id(action),
-                details=make_event_details(name="post_turn", acolytes_conserved=True),
+                details=make_event_details(
+                    name="post_turn",
+                    acolytes_conserved=True,
+                    total_workforce=next_state.total_acolytes(player),
+                ),
             ),
         ]
     )

@@ -208,6 +208,12 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
 
     if event.event_type is EventType.INVARIANT_CHECK:
         if details.get("acolytes_conserved") is True:
+            total_workforce = details.get("total_workforce")
+            if isinstance(total_workforce, int):
+                return (
+                    f"{event_name}: passed "
+                    f"(acolytes conserved; total workforce={total_workforce})"
+                )
             return f"{event_name}: passed (acolytes conserved)"
         return f"{event_name}: {details}"
 
@@ -266,6 +272,19 @@ def _format_player_state(
         ),
         f"Piety position: {player_state.piety}",
         f"Piety track VP: {score_piety(player_state.piety, config.piety)}",
+        "Workforce:",
+        f"  Mancala total: {player_state.workforce.mancala_total}",
+        f"  Village: {player_state.workforce.village}",
+        f"  Abbey: {player_state.workforce.abbey}",
+        (
+            "  Committed: "
+            f"roads={player_state.workforce.committed.roads}, "
+            f"shrines={player_state.workforce.committed.shrines}, "
+            f"market_ports={player_state.workforce.committed.market_ports}, "
+            f"pilgrimage_sites={player_state.workforce.committed.pilgrimage_sites}, "
+            f"alms_table={player_state.workforce.committed.alms_table}"
+        ),
+        f"  Total: {player_state.workforce.total}",
         f"Mancala: {mancala}",
     )
 

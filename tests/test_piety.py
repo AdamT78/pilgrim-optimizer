@@ -3,6 +3,7 @@ from pilgrim.model.actions import FullTurnAction
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import Workforce
 from pilgrim.rules.piety import move_piety, score_piety
 from pilgrim.rules.transition import apply_action
 from pilgrim.search.evaluation import evaluate_state
@@ -32,12 +33,16 @@ def test_devotion_increases_piety_and_emits_delta_when_changed() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=1, wheat=0), piety=10),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-        ),
-        acolytes=(
-            (2, 0, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=1, wheat=0),
+                workforce=Workforce(mancala=(2, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=10,
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
         ),
         turn=0,
     )
@@ -63,12 +68,16 @@ def test_devotion_event_not_emitted_when_piety_already_capped() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=1, wheat=0), piety=12),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-        ),
-        acolytes=(
-            (2, 0, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=1, wheat=0),
+                workforce=Workforce(mancala=(2, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=12,
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
         ),
         turn=0,
     )
@@ -90,12 +99,16 @@ def test_evaluation_uses_piety_track_vp_instead_of_raw_position() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-        ),
-        acolytes=(
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
         ),
         turn=0,
     )
@@ -103,12 +116,16 @@ def test_evaluation_uses_piety_track_vp_instead_of_raw_position() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=12),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0), piety=0),
-        ),
-        acolytes=(
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=12,
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+                piety=0,
+            ),
         ),
         turn=0,
     )

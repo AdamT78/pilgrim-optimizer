@@ -5,6 +5,7 @@ from pilgrim.model.actions import FullTurnAction
 from pilgrim.model.enums import DutyStrength, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import Workforce
 from pilgrim.rules.duties import duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.transition import apply_action
 from pilgrim.rules.validation import TransitionValidationError
@@ -31,12 +32,14 @@ def test_minority_action_fails_when_silver_insufficient() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
-        ),
-        acolytes=(
-            (1, 0, 0, 0, 0, 0, 0, 0, 0),
-            (0, 2, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(1, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 2, 0, 0, 0, 0, 0, 0, 0)),
+            ),
         ),
         turn=0,
     )

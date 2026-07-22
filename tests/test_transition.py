@@ -3,6 +3,7 @@ from pilgrim.model.actions import FullTurnAction
 from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.workforce import CommittedAcolytes, Workforce
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.search.exact import solve_exact
 
@@ -13,12 +14,19 @@ def test_apply_action_applies_sowing_and_duty_in_one_call() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=1, wheat=0)),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
-        ),
-        acolytes=(
-            (1, 2, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=1, wheat=0),
+                workforce=Workforce(
+                    mancala=(1, 2, 0, 0, 0, 0, 0, 0, 0),
+                    village=2,
+                    abbey=1,
+                    committed=CommittedAcolytes(roads=1, shrines=2),
+                ),
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
         ),
         turn=1,
     )
@@ -32,6 +40,12 @@ def test_apply_action_applies_sowing_and_duty_in_one_call() -> None:
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
     assert result.state.active_player is PlayerId.PLAYER_TWO
     assert result.state.phase is TurnPhase.SOW
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.village == 2
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 1
+    assert (
+        result.state.player_state(PlayerId.PLAYER_ONE).workforce.committed
+        == CommittedAcolytes(roads=1, shrines=2)
+    )
 
 
 def test_full_turn_duty_recall_returns_acolytes_to_city() -> None:
@@ -40,12 +54,19 @@ def test_full_turn_duty_recall_returns_acolytes_to_city() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=1, wheat=0)),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
-        ),
-        acolytes=(
-            (1, 2, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=1, wheat=0),
+                workforce=Workforce(
+                    mancala=(1, 2, 0, 0, 0, 0, 0, 0, 0),
+                    village=4,
+                    abbey=2,
+                    committed=CommittedAcolytes(market_ports=1, alms_table=1),
+                ),
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
         ),
         turn=1,
     )
@@ -58,6 +79,12 @@ def test_full_turn_duty_recall_returns_acolytes_to_city() -> None:
     result = apply_action(state, action, scenario.config)
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[0] == 3
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[1] == 0
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.village == 4
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 2
+    assert (
+        result.state.player_state(PlayerId.PLAYER_ONE).workforce.committed
+        == CommittedAcolytes(market_ports=1, alms_table=1)
+    )
 
 
 def test_full_turn_tithe_does_not_recall() -> None:
@@ -65,12 +92,19 @@ def test_full_turn_tithe_does_not_recall() -> None:
         active_player=PlayerId.PLAYER_ONE,
         phase=TurnPhase.SOW,
         players=(
-            PlayerState(resources=Resources(stone=0, silver=1, wheat=0)),
-            PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
-        ),
-        acolytes=(
-            (1, 2, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PlayerState(
+                resources=Resources(stone=0, silver=1, wheat=0),
+                workforce=Workforce(
+                    mancala=(1, 2, 0, 0, 0, 0, 0, 0, 0),
+                    village=4,
+                    abbey=2,
+                    committed=CommittedAcolytes(market_ports=1, alms_table=1),
+                ),
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
         ),
         turn=1,
     )
@@ -84,6 +118,12 @@ def test_full_turn_tithe_does_not_recall() -> None:
     result = apply_action(state, action, scenario.config)
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[0] == 0
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[1] == 3
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.village == 4
+    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 2
+    assert (
+        result.state.player_state(PlayerId.PLAYER_ONE).workforce.committed
+        == CommittedAcolytes(market_ports=1, alms_table=1)
+    )
 
 
 def test_acolyte_conservation_after_full_turn_transition() -> None:
@@ -96,11 +136,15 @@ def test_acolyte_conservation_after_full_turn_transition() -> None:
         resolution=TurnResolutionType.CLERICAL_SILVERSMITH,
     )
     after = apply_action(before, action, scenario.config).state
-    assert sum(before.player_vector(PlayerId.PLAYER_ONE)) == sum(
-        after.player_vector(PlayerId.PLAYER_ONE)
+    assert before.total_acolytes(PlayerId.PLAYER_ONE) == after.total_acolytes(PlayerId.PLAYER_ONE)
+    assert before.total_acolytes(PlayerId.PLAYER_TWO) == after.total_acolytes(PlayerId.PLAYER_TWO)
+    assert (
+        before.player_state(PlayerId.PLAYER_ONE).workforce.committed
+        == after.player_state(PlayerId.PLAYER_ONE).workforce.committed
     )
-    assert sum(before.player_vector(PlayerId.PLAYER_TWO)) == sum(
-        after.player_vector(PlayerId.PLAYER_TWO)
+    assert (
+        before.player_state(PlayerId.PLAYER_TWO).workforce.committed
+        == after.player_state(PlayerId.PLAYER_TWO).workforce.committed
     )
 
 

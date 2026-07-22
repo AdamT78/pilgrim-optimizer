@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
+from pilgrim.model.workforce import (
+    MANCALA_POSITION_COUNT,
+    Workforce,
+    replace_mancala,
+    total_acolytes,
+)
 
-POSITION_COUNT = 9
+POSITION_COUNT = MANCALA_POSITION_COUNT
 PlayerVector = tuple[int, ...]
 
 
@@ -16,6 +22,9 @@ class PlayerState:
     """Per-player scalar values and resources."""
 
     resources: Resources = Resources()
+    workforce: Workforce = field(
+        default_factory=lambda: Workforce(mancala=(0,) * MANCALA_POSITION_COUNT)
+    )
     piety: int = 0
     victory_points: int = 0
 
@@ -23,9 +32,10 @@ class PlayerState:
         if self.piety < 0 or self.victory_points < 0:
             raise ValueError("Piety and victory points cannot be negative.")
 
-    def value_score(self) -> int:
-        """Temporary objective used by the exact search scaffold."""
-        return self.victory_points + self.piety + self.resources.score()
+    @property
+    def mancala_acolytes(self) -> PlayerVector:
+        """Backward-compatible access to mancala pools."""
+        return self.workforce.mancala
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,19 +45,11 @@ class GameState:
     active_player: PlayerId
     phase: TurnPhase
     players: tuple[PlayerState, PlayerState]
-    acolytes: tuple[PlayerVector, PlayerVector]
     turn: int = 0
 
     def __post_init__(self) -> None:
         if len(self.players) != 2:
             raise ValueError("Exactly two players are required.")
-        if len(self.acolytes) != 2:
-            raise ValueError("Exactly two acolyte vectors are required.")
-        for vector in self.acolytes:
-            if len(vector) != POSITION_COUNT:
-                raise ValueError(f"Acolyte vectors must have {POSITION_COUNT} positions.")
-            if any(value < 0 for value in vector):
-                raise ValueError("Acolyte counts cannot be negative.")
         if self.turn < 0:
             raise ValueError("Turn cannot be negative.")
 
@@ -55,10 +57,18 @@ class GameState:
         return self.players[int(player_id)]
 
     def player_vector(self, player_id: PlayerId) -> PlayerVector:
-        return self.acolytes[int(player_id)]
+        return self.player_state(player_id).workforce.mancala
+
+    @property
+    def acolytes(self) -> tuple[PlayerVector, PlayerVector]:
+        """Backward-compatible acolyte vectors from workforce mancala pools."""
+        return (
+            self.players[int(PlayerId.PLAYER_ONE)].workforce.mancala,
+            self.players[int(PlayerId.PLAYER_TWO)].workforce.mancala,
+        )
 
     def total_acolytes(self, player_id: PlayerId) -> int:
-        return sum(self.player_vector(player_id))
+        return total_acolytes(self.player_state(player_id).workforce)
 
     def with_player_state(self, player_id: PlayerId, player_state: PlayerState) -> GameState:
         players = list(self.players)
@@ -68,9 +78,12 @@ class GameState:
     def with_player_vector(self, player_id: PlayerId, vector: PlayerVector) -> GameState:
         if len(vector) != POSITION_COUNT:
             raise ValueError(f"Acolyte vectors must have {POSITION_COUNT} positions.")
-        acolytes = list(self.acolytes)
-        acolytes[int(player_id)] = vector
-        return replace(self, acolytes=tuple(acolytes))  # type: ignore[arg-type]
+        player_state = self.player_state(player_id)
+        updated_workforce = replace_mancala(player_state.workforce, vector)
+        return self.with_player_state(
+            player_id,
+            replace(player_state, workforce=updated_workforce),
+        )
 
     def next_player_turn(self) -> GameState:
         return replace(
