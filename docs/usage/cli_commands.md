@@ -57,7 +57,8 @@ What it does right now:
 
 - Loads the same scenario.
 - Asks the current rules engine to generate legal actions for the active player and phase.
-- Prints stable, readable action IDs.
+- Prints a numbered list of readable action summaries.
+- Prints a final legal-action count.
 
 Why this matters:
 
@@ -67,8 +68,12 @@ Why this matters:
 Example output:
 
 ```text
-sow:0:1->2->3
-sow:0:5->6->7
+Legal actions for scenario 'mancala_sandbox_001':
+
+1. Sow: city -> north -> north_east -> east
+2. Sow: city -> south -> south_west -> west
+
+Total legal actions: 2
 ```
 
 ## Command 3: Run the simple solver
@@ -86,18 +91,34 @@ What it does right now:
 Example output:
 
 ```text
-best_score=3
-best_action=sow:0:1->2->3
-nodes_expanded=27
+Solve result for scenario 'mancala_sandbox_001'
+Depth: 3
+Best score: 3
+Nodes expanded: 27
+
+Best first action:
+Sow: city -> north -> north_east -> east
+
+Best line:
+1. Sow: city -> north -> north_east -> east
+2. Resolve Duty: selected duty: east | action: clerical_silversmith
+3. Sow: city -> north -> north_east
 ```
 
 ## How to interpret the current output
 
-- `best_score` is a value under the **temporary placeholder evaluation**, not true final Pilgrim VP.
-- `best_action=sow:0:1->2->3` means sow from city to north, north_east, east.
-- `nodes_expanded` is how many search nodes were explored.
+- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable form:
+  `Sow: city -> north -> north_east -> east`.
+- `city -> north -> north_east -> east` corresponds to position IDs `0 -> 1 -> 2 -> 3`.
+- `nodes_expanded` means the number of search nodes explored.
+- `best_score` is still a value under a **temporary placeholder sandbox evaluation**, not true final Pilgrim VP.
 - Together, this confirms the current development loop works end-to-end:
   `scenario -> validate -> legal actions -> search -> recommendation`.
+
+Using `--verbose` with `solve` prints:
+
+- transition events for the recommended first action
+- a compact state summary after applying that first action
 
 Position mapping used by the current sandbox:
 
@@ -140,6 +161,8 @@ Position mapping used by the current sandbox:
 - Solver output seems surprising
   - Inspect `legal-actions` first.
   - Remember the current scoring function is a temporary placeholder.
+  - Re-run with verbose mode for transition details:
+    `python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3 --verbose`
 
 ## Next planned CLI improvements
 

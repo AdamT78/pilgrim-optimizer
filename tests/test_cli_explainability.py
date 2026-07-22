@@ -1,0 +1,78 @@
+from pilgrim.cli import main
+from pilgrim.io.scenarios import load_scenario
+from pilgrim.model.actions import ResolveDutyAction, SowingAction, action_summary, readable_route
+from pilgrim.model.enums import position_name
+from pilgrim.search.exact import solve_exact
+
+
+def test_position_id_to_name_conversion() -> None:
+    assert position_name(0) == "city"
+    assert position_name(3) == "east"
+    assert position_name(8) == "north_west"
+
+
+def test_readable_route_formatting() -> None:
+    route_text = readable_route(0, (1, 2, 3))
+    assert route_text == "city -> north -> north_east -> east"
+
+
+def test_readable_action_summary() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    sow_summary = action_summary(SowingAction(source=0, route=(1, 2, 3)), scenario.config)
+    duty_summary = action_summary(ResolveDutyAction(duty_position=3), scenario.config)
+
+    assert sow_summary == "Sow: city -> north -> north_east -> east"
+    assert "selected duty: east" in duty_summary
+    assert "action: clerical_silversmith" in duty_summary
+
+
+def test_cli_legal_actions_returns_readable_output(capsys) -> None:
+    exit_code = main(["legal-actions", "scenarios/mancala_sandbox_001.json"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Legal actions for scenario 'mancala_sandbox_001':" in output
+    assert "1. Sow: city -> north -> north_east -> east" in output
+    assert "2. Sow: city -> south -> south_west -> west" in output
+    assert "Total legal actions: 2" in output
+
+
+def test_cli_solve_returns_readable_best_action(capsys) -> None:
+    exit_code = main(["solve", "scenarios/mancala_sandbox_001.json", "--depth", "3"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Solve result for scenario 'mancala_sandbox_001'" in output
+    assert "Depth: 3" in output
+    assert "Best first action:" in output
+    assert "Sow: city -> north -> north_east -> east" in output
+    assert "Best line:" in output
+
+
+def test_exact_search_returns_principal_variation() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    result = solve_exact(scenario.state, scenario.config, depth=3)
+
+    assert len(result.principal_variation) >= 1
+    assert result.principal_variation[0] == result.best_action
+    assert result.principal_variation_ids[0] == result.best_action_id
+
+
+def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
+    exit_code = main(
+        [
+            "solve",
+            "scenarios/mancala_sandbox_001.json",
+            "--depth",
+            "3",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Events for best first action:" in output
+    assert "SOWING:" in output
+    assert "INVARIANT_CHECK:" in output
+    assert "State after best first action:" in output
+    assert "Mancala: city=" in output

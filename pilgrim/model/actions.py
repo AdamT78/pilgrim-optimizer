@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pilgrim.model.enums import ActionType
+from pilgrim.model.config import GameConfig
+from pilgrim.model.enums import ActionType, position_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,3 +44,33 @@ def action_id(action: GameAction) -> str:
     if isinstance(action, ResolveDutyAction):
         return f"resolve-duty:{action.duty_position}"
     return f"tithe:{action.duty_position}"
+
+
+def readable_route(
+    source: int,
+    route: tuple[int, ...],
+    *,
+    positions: tuple[str, ...] | None = None,
+) -> str:
+    """Format a route as readable position names."""
+    path = (source, *route)
+    return " -> ".join(position_name(position_id, positions) for position_id in path)
+
+
+def action_summary(action: GameAction, config: GameConfig) -> str:
+    """Return a human-readable action summary for CLI/debug output."""
+    positions = config.board.positions
+    if isinstance(action, SowingAction):
+        return f"Sow: {readable_route(action.source, action.route, positions=positions)}"
+
+    selected_duty = position_name(action.duty_position, positions)
+    if isinstance(action, ResolveDutyAction):
+        duty = config.duty_for_position(action.duty_position)
+        if duty is None:
+            return f"Resolve Duty: selected duty: {selected_duty}"
+        return (
+            f"Resolve Duty: selected duty: {selected_duty} | "
+            f"action: {duty.effect.value}"
+        )
+
+    return f"Tithe: selected duty: {selected_duty}"
