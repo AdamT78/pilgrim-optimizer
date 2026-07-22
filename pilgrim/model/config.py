@@ -107,6 +107,26 @@ class AlmsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TimingConfig:
+    """Simplified timing cadence for rounds/seasons in sandbox mode."""
+
+    players_per_round: int
+    rounds_per_season: int
+    max_rounds: int
+    max_absolute_turns: int
+
+    def __post_init__(self) -> None:
+        if self.players_per_round < 1:
+            raise ValueError("players_per_round must be at least 1.")
+        if self.rounds_per_season < 1:
+            raise ValueError("rounds_per_season must be at least 1.")
+        if self.max_rounds < 1:
+            raise ValueError("max_rounds must be at least 1.")
+        if self.max_absolute_turns < 1:
+            raise ValueError("max_absolute_turns must be at least 1.")
+
+
+@dataclass(frozen=True, slots=True)
 class GameConfig:
     """Ruleset configuration bundle for scenario execution."""
 
@@ -114,6 +134,7 @@ class GameConfig:
     duties: tuple[DutyDefinition, ...]
     piety: PietyConfig
     alms: AlmsConfig
+    timing: TimingConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -208,9 +229,21 @@ def game_config_from_dict(
     duties_raw: Mapping[str, Any],
     piety_raw: Mapping[str, Any],
     alms_raw: Mapping[str, Any],
+    timing_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
     piety = piety_from_dict(piety_raw)
     alms = alms_from_dict(alms_raw)
-    return GameConfig(board=board, duties=duties, piety=piety, alms=alms)
+    timing = timing_from_dict(timing_raw)
+    return GameConfig(board=board, duties=duties, piety=piety, alms=alms, timing=timing)
+
+
+def timing_from_dict(raw: Mapping[str, Any]) -> TimingConfig:
+    """Parse sandbox timing configuration."""
+    return TimingConfig(
+        players_per_round=int(raw["players_per_round"]),
+        rounds_per_season=int(raw["rounds_per_season"]),
+        max_rounds=int(raw["max_rounds"]),
+        max_absolute_turns=int(raw["max_absolute_turns"]),
+    )

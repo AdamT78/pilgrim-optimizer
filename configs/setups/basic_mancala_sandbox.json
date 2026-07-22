@@ -4,10 +4,16 @@
   "duties_file": "configs/duties.json",
   "piety_file": "configs/piety.json",
   "alms_file": "configs/alms.json",
+  "timing_file": "configs/timing.json",
   "initial_state": {
     "active_player": "player_one",
     "phase": "sow",
-    "turn": 0,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 1,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
     "players": {
       "player_one": {
         "victory_points": 0,

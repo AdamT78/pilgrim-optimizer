@@ -28,6 +28,7 @@ def test_missing_root_player_defaults_to_active_player(tmp_path: Path) -> None:
                 "duties_file": str(Path("configs/duties.json").resolve()),
                 "piety_file": str(Path("configs/piety.json").resolve()),
                 "alms_file": str(Path("configs/alms.json").resolve()),
+                "timing_file": str(Path("configs/timing.json").resolve()),
                 "initial_state": setup_raw["initial_state"],
             }
         ),

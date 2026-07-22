@@ -55,6 +55,24 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - CLI `solve --verbose` and `apply --verbose` use the same evaluation breakdown formatter.
 - This is still an early proxy objective, not full Pilgrim final scoring.
 
+## Round and Season Timing (v0.7)
+
+- `GameState` now carries explicit timing state:
+  - absolute turn number
+  - round number
+  - season number
+  - turn index within round
+- Active player progression is independent from root-player optimization perspective:
+  - **active player** = whose full turn is being simulated now
+  - **root player** = whose `EvaluationBreakdown.total` search optimizes
+- Post-turn timing advancement is centralized in `pilgrim.rules.timing`.
+- After each full turn the transition pipeline now:
+  - advances active player and absolute timing
+  - emits turn/round/season timing events when boundaries are crossed
+  - resolves season-end Alms effects automatically when season boundaries are reached
+- Deferred timing item:
+  - piety-based start-player selection for new seasons (not implemented yet)
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

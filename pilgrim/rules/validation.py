@@ -110,7 +110,24 @@ def ensure_acolyte_conservation(before: GameState, after: GameState) -> None:
             )
 
 
+def ensure_valid_timing(state: GameState) -> None:
+    timing = state.timing
+    if timing.absolute_turn < 0:
+        raise TransitionValidationError("Timing absolute_turn cannot be negative.")
+    if timing.round_number < 1:
+        raise TransitionValidationError("Timing round_number must be at least 1.")
+    if timing.season_number < 1:
+        raise TransitionValidationError("Timing season_number must be at least 1.")
+    if timing.turn_in_round < 0:
+        raise TransitionValidationError("Timing turn_in_round cannot be negative.")
+    if timing.turn_in_round >= state.player_count:
+        raise TransitionValidationError(
+            f"Timing turn_in_round must be less than player count ({state.player_count})."
+        )
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
     ensure_valid_workforce(state)
+    ensure_valid_timing(state)

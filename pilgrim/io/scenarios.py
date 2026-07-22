@@ -12,6 +12,7 @@ from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
 from pilgrim.opponents import OpponentModel, opponent_model_from_dict
 
@@ -39,16 +40,20 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     piety_path = _resolve_path(piety_file, scenario_path)
     alms_file = str(merged.get("alms_file", "configs/alms.json"))
     alms_path = _resolve_path(alms_file, scenario_path)
+    timing_file = str(merged.get("timing_file", "configs/timing.json"))
+    timing_path = _resolve_path(timing_file, scenario_path)
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
     piety_raw = _read_json(piety_path)
     alms_raw = _read_json(alms_path)
+    timing_raw = _read_json(timing_path)
 
     config = game_config_from_dict(
         board_raw=board_raw,
         duties_raw=duties_raw,
         piety_raw=piety_raw,
         alms_raw=alms_raw,
+        timing_raw=timing_raw,
     )
     state = _game_state_from_dict(merged["initial_state"])
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
@@ -96,11 +101,12 @@ def _game_state_from_dict(raw: Mapping[str, Any]) -> GameState:
         players_raw["player_two"],
         legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_two"),
     )
+    timing = _timing_state_from_dict(raw)
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         phase=TurnPhase.from_string(str(raw["phase"])),
         players=(player_one, player_two),
-        turn=int(raw.get("turn", 0)),
+        timing=timing,
     )
 
 
@@ -168,6 +174,23 @@ def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) 
     if root_player_raw is None:
         return default_player
     return PlayerId(int(root_player_raw))
+
+
+def _timing_state_from_dict(raw: Mapping[str, Any]) -> TimingState:
+    timing_raw = raw.get("timing")
+    if isinstance(timing_raw, Mapping):
+        return TimingState(
+            absolute_turn=int(timing_raw.get("absolute_turn", raw.get("turn", 0))),
+            round_number=int(timing_raw.get("round_number", 1)),
+            season_number=int(timing_raw.get("season_number", 1)),
+            turn_in_round=int(timing_raw.get("turn_in_round", 0)),
+        )
+    return TimingState(
+        absolute_turn=int(raw.get("turn", 0)),
+        round_number=1,
+        season_number=1,
+        turn_in_round=0,
+    )
 
 
 def _opponent_model_from_dict(raw: Mapping[str, Any]) -> OpponentModel:

@@ -95,6 +95,7 @@ What it does right now:
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
+- Verbose apply may also include automatic timing/season events (`TURN_ADVANCE`, `ROUND_END`, `SEASON_END`, `ALMS_RESET`, etc.) when boundaries are crossed.
 
 Why this matters:
 
@@ -162,6 +163,7 @@ Using `--verbose` with `solve` prints:
 
 - all transition events for the recommended first full turn (sowing + duty/tithe + invariants)
 - a compact state summary after applying that first full turn
+- timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`)
 - `Acted player` (the player who executed that recommended turn)
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
@@ -222,6 +224,20 @@ Position mapping used by the current sandbox:
   - `Root-player evaluation after best first full turn` = after one applied recommended turn
 - Current formula:
   - `victory_points + piety_track_vp + alms_table_vp + resource_total`
+
+## Round and Season Timing (v0.7)
+
+- Timing progression is now explicit and automatic after each full turn.
+- Verbose state summaries include:
+  - `Absolute turn`
+  - `Round`
+  - `Season`
+  - `Turn in round`
+- `apply --verbose` is especially useful for inspecting automatic boundary events:
+  - `TURN_ADVANCE`
+  - `ROUND_END` / `ROUND_ADVANCE`
+  - `SEASON_END` / `SEASON_ADVANCE`
+  - season-end Alms events when a season closes
 
 ## Typical development workflow
 
