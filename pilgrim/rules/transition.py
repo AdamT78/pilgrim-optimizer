@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from pilgrim.model.actions import (
+    FullTurnAction,
     GameAction,
-    ResolveDutyAction,
-    SowingAction,
-    TitheAction,
     action_id,
+    resolution_from_effect,
 )
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import EventType, PlayerId, TurnPhase
+from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
@@ -37,108 +36,134 @@ class TransitionResult:
 
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
-    """Generate deterministic legal actions for current phase."""
-    if state.phase is TurnPhase.SOW:
-        return _legal_sowing_actions(state, config)
-    if state.phase is TurnPhase.DUTY:
-        return _legal_duty_actions(state, config)
-    return ()
+    """Generate deterministic full-turn actions for current phase."""
+    if state.phase is not TurnPhase.SOW:
+        return ()
+    return _legal_full_turn_actions(state, config)
 
 
 def apply_action(state: GameState, action: GameAction, config: GameConfig) -> TransitionResult:
-    """Apply one legal action with invariant checks."""
-    if isinstance(action, SowingAction):
-        return _apply_sowing_action(state, action, config)
-    if isinstance(action, ResolveDutyAction):
-        return _apply_resolve_duty_action(state, action, config)
-    if isinstance(action, TitheAction):
-        return _apply_tithe_action(state, action)
-    raise TypeError(f"Unsupported action type: {type(action)!r}")
+    """Apply one full-turn action with invariant checks."""
+    if not isinstance(action, FullTurnAction):
+        raise TypeError(f"Unsupported action type: {type(action)!r}")
+    return _apply_full_turn_action(state, action, config)
 
 
-def _legal_sowing_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
+def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     actions: list[GameAction] = []
-    for source in occupied_positions(player_vector):
-        picked_up = player_vector[source]
-        for route in generate_routes(source, picked_up, config.board):
-            actions.append(SowingAction(source=source, route=route))
+    for origin in occupied_positions(player_vector):
+        picked_up = player_vector[origin]
+        for route in generate_routes(origin, picked_up, config.board):
+            sowed_vector = sow_vector(player_vector, origin, route, config.board)
+            for duty_position in config.duty_positions():
+                if sowed_vector[duty_position] <= 0:
+                    continue
+                duty = config.duty_for_position(duty_position)
+                if duty is None:
+                    continue
+                actions.append(
+                    FullTurnAction(
+                        origin=origin,
+                        route=route,
+                        selected_duty=duty_position,
+                        resolution=resolution_from_effect(duty.effect),
+                    )
+                )
+                actions.append(
+                    FullTurnAction(
+                        origin=origin,
+                        route=route,
+                        selected_duty=duty_position,
+                        resolution=TurnResolutionType.TITHE,
+                    )
+                )
     return tuple(actions)
 
 
-def _legal_duty_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
-    player_vector = state.player_vector(state.active_player)
-    actions: list[GameAction] = []
-    for duty_position in config.duty_positions():
-        if player_vector[duty_position] <= 0:
-            continue
-        actions.append(ResolveDutyAction(duty_position=duty_position))
-        actions.append(TitheAction(duty_position=duty_position))
-    return tuple(actions)
-
-
-def _apply_sowing_action(
+def _apply_full_turn_action(
     state: GameState,
-    action: SowingAction,
+    action: FullTurnAction,
     config: GameConfig,
 ) -> TransitionResult:
-    ensure_phase(state, expected=TurnPhase.SOW, action_name="Sowing action")
+    ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
 
     player = state.active_player
     player_vector = state.player_vector(player)
-    picked_up = player_vector[action.source]
+    picked_up = player_vector[action.origin]
     if picked_up <= 0:
         raise TransitionValidationError("Sowing source must be occupied.")
     ensure_route_length_matches(picked_up=picked_up, route_length=len(action.route))
 
     try:
-        new_vector = sow_vector(player_vector, action.source, action.route, config.board)
+        sowed_vector = sow_vector(player_vector, action.origin, action.route, config.board)
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
 
-    updated_state = state.with_player_vector(player, new_vector)
-    next_state = replace(updated_state, phase=TurnPhase.DUTY)
-    ensure_non_negative_resources(next_state)
-    ensure_acolyte_conservation(state, next_state)
+    state_after_sow = state.with_player_vector(player, sowed_vector)
+    ensure_selected_duty_has_acolyte(
+        state_after_sow,
+        player=player,
+        duty_position=action.selected_duty,
+    )
 
-    events = (
+    events: list[GameEvent] = [
         GameEvent(
             event_type=EventType.SOWING,
             actor=player,
             action_id=action_id(action),
             details=make_event_details(
-                source=action.source,
+                source=action.origin,
                 picked_up=picked_up,
                 route="->".join(str(position) for position in action.route),
             ),
         ),
-        GameEvent(
-            event_type=EventType.INVARIANT_CHECK,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(name="post_sow", acolytes_conserved=True),
-        ),
-    )
-    return TransitionResult(state=next_state, events=events)
+    ]
 
+    if action.resolution is TurnResolutionType.TITHE:
+        next_state = state_after_sow.next_player_turn()
+        ensure_non_negative_resources(next_state)
+        ensure_acolyte_conservation(state, next_state)
+        events.extend(
+            [
+                GameEvent(
+                    event_type=EventType.DUTY_RESOLUTION,
+                    actor=player,
+                    action_id=action_id(action),
+                    details=make_event_details(
+                        duty_position=action.selected_duty,
+                        mode="tithe",
+                        recall=False,
+                    ),
+                ),
+                GameEvent(
+                    event_type=EventType.INVARIANT_CHECK,
+                    actor=player,
+                    action_id=action_id(action),
+                    details=make_event_details(name="post_turn", acolytes_conserved=True),
+                ),
+            ]
+        )
+        return TransitionResult(state=next_state, events=tuple(events))
 
-def _apply_resolve_duty_action(
-    state: GameState, action: ResolveDutyAction, config: GameConfig
-) -> TransitionResult:
-    ensure_phase(state, expected=TurnPhase.DUTY, action_name="Duty resolution")
-
-    player = state.active_player
-    ensure_selected_duty_has_acolyte(state, player=player, duty_position=action.duty_position)
-    duty = config.duty_for_position(action.duty_position)
+    duty = config.duty_for_position(action.selected_duty)
     if duty is None:
-        raise TransitionValidationError(f"No duty configured at position {action.duty_position}.")
+        raise TransitionValidationError(f"No duty configured at position {action.selected_duty}.")
 
-    player_vector = state.player_vector(player)
-    player_count = player_vector[action.duty_position]
+    expected_resolution = resolution_from_effect(duty.effect)
+    if action.resolution is not expected_resolution:
+        message = (
+            f"Selected action {action.resolution.value} does not match "
+            f"duty effect {duty.effect.value}."
+        )
+        raise TransitionValidationError(
+            message
+        )
+
+    player_count = sowed_vector[action.selected_duty]
     opponent_counts = tuple(
-        state.player_vector(opponent_id)[action.duty_position] for opponent_id in _opponents(player)
+        state.player_vector(opponent_id)[action.selected_duty] for opponent_id in _opponents(player)
     )
-
     strength = duty_strength(player_count, opponent_counts)
     duty_value, silver_cost = duty_value_and_silver_cost(strength)
     available_silver = state.player_state(player).resources.silver
@@ -154,92 +179,64 @@ def _apply_resolve_duty_action(
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
 
-    recalled = player_vector[action.duty_position]
-    recalled_vector = list(player_vector)
+    recalled = sowed_vector[action.selected_duty]
+    recalled_vector = list(sowed_vector)
     recalled_vector[0] += recalled
-    recalled_vector[action.duty_position] = 0
+    recalled_vector[action.selected_duty] = 0
 
-    updated_state = state.with_player_state(player, new_player_state)
+    updated_state = state_after_sow.with_player_state(player, new_player_state)
     updated_state = updated_state.with_player_vector(player, tuple(recalled_vector))
     next_state = updated_state.next_player_turn()
 
     ensure_non_negative_resources(next_state)
     ensure_acolyte_conservation(state, next_state)
 
-    events = (
-        GameEvent(
-            event_type=EventType.DUTY_RESOLUTION,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(
-                duty_position=action.duty_position,
-                duty_key=duty.key,
-                strength=strength.value,
-                duty_value=duty_value,
-                silver_cost=silver_cost,
-                effect=duty.effect.value,
+    events.extend(
+        [
+            GameEvent(
+                event_type=EventType.DUTY_RESOLUTION,
+                actor=player,
+                action_id=action_id(action),
+                details=make_event_details(
+                    duty_position=action.selected_duty,
+                    duty_key=duty.key,
+                    strength=strength.value,
+                    duty_value=duty_value,
+                    silver_cost=silver_cost,
+                    effect=duty.effect.value,
+                ),
             ),
-        ),
-        GameEvent(
-            event_type=EventType.RESOURCE_DELTA,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(
-                stone=resource_delta[0],
-                silver=resource_delta[1],
-                wheat=resource_delta[2],
+            GameEvent(
+                event_type=EventType.RESOURCE_DELTA,
+                actor=player,
+                action_id=action_id(action),
+                details=make_event_details(
+                    stone=resource_delta[0],
+                    silver=resource_delta[1],
+                    wheat=resource_delta[2],
+                ),
             ),
-        ),
-        GameEvent(
-            event_type=EventType.PIETY_DELTA,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(piety=piety_delta),
-        ),
-        GameEvent(
-            event_type=EventType.ACOLYTE_RECALL,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(duty_position=action.duty_position, recalled=recalled),
-        ),
-        GameEvent(
-            event_type=EventType.INVARIANT_CHECK,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(name="post_duty", acolytes_conserved=True),
-        ),
+            GameEvent(
+                event_type=EventType.PIETY_DELTA,
+                actor=player,
+                action_id=action_id(action),
+                details=make_event_details(piety=piety_delta),
+            ),
+            GameEvent(
+                event_type=EventType.ACOLYTE_RECALL,
+                actor=player,
+                action_id=action_id(action),
+                details=make_event_details(duty_position=action.selected_duty, recalled=recalled),
+            ),
+            GameEvent(
+                event_type=EventType.INVARIANT_CHECK,
+                actor=player,
+                action_id=action_id(action),
+                details=make_event_details(name="post_turn", acolytes_conserved=True),
+            ),
+        ]
     )
-    return TransitionResult(state=next_state, events=events)
-
-
-def _apply_tithe_action(state: GameState, action: TitheAction) -> TransitionResult:
-    ensure_phase(state, expected=TurnPhase.DUTY, action_name="Tithe")
-    player = state.active_player
-    ensure_selected_duty_has_acolyte(state, player=player, duty_position=action.duty_position)
-
-    next_state = state.next_player_turn()
-    ensure_non_negative_resources(next_state)
-    ensure_acolyte_conservation(state, next_state)
-
-    events = (
-        GameEvent(
-            event_type=EventType.DUTY_RESOLUTION,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(
-                duty_position=action.duty_position,
-                mode="tithe",
-                recall=False,
-            ),
-        ),
-        GameEvent(
-            event_type=EventType.INVARIANT_CHECK,
-            actor=player,
-            action_id=action_id(action),
-            details=make_event_details(name="post_tithe", acolytes_conserved=True),
-        ),
-    )
-    return TransitionResult(state=next_state, events=events)
+    return TransitionResult(state=next_state, events=tuple(events))
 
 
 def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:

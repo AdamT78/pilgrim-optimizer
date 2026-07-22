@@ -29,7 +29,7 @@ class SearchResult:
 
 
 def solve_exact(initial_state: GameState, config: GameConfig, depth: int) -> SearchResult:
-    """Run deterministic depth-limited minimax with memoization."""
+    """Run deterministic depth-limited minimax over full-turn actions."""
     if depth < 0:
         raise ValueError("Depth must be non-negative.")
 

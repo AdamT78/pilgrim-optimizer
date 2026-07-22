@@ -80,9 +80,19 @@ class DutyEffect(Enum):
     CLERICAL_SILVERSMITH = "clerical_silversmith"
 
 
+class TurnResolutionType(Enum):
+    """Simplified full-turn action choices for the sandbox."""
+
+    PRODUCE = "produce"
+    CLERICAL_DEVOTION = "clerical_devotion"
+    CLERICAL_SILVERSMITH = "clerical_silversmith"
+    TITHE = "tithe"
+
+
 class ActionType(Enum):
     """Action categories used for stable action IDs and logging."""
 
+    FULL_TURN = "full_turn"
     SOW = "sow"
     RESOLVE_DUTY = "resolve_duty"
     TITHE = "tithe"

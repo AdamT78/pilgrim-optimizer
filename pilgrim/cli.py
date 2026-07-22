@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary, readable_route
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import EventType, position_name
+from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser("validate", help="Validate a JSON scenario.")
     validate_parser.add_argument("scenario", help="Path to scenario JSON file.")
 
-    legal_parser = subparsers.add_parser("legal-actions", help="List readable legal actions.")
+    legal_parser = subparsers.add_parser("legal-actions", help="List readable full-turn actions.")
     legal_parser.add_argument("scenario", help="Path to scenario JSON file.")
 
     solve_parser = subparsers.add_parser("solve", help="Run placeholder exact search.")
@@ -67,7 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Nodes expanded: {result.nodes_expanded}")
         print()
 
-        print("Best first action:")
+        print("Best first full turn:")
         if result.best_action is None:
             print("None")
         else:
@@ -80,14 +80,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"{index}. {action_summary(action, scenario.config)}")
 
         if args.verbose and result.best_action is not None:
+            acted_player = scenario.state.active_player
             transition_result = apply_action(scenario.state, result.best_action, scenario.config)
             print()
-            print("Events for best first action:")
+            print("Events for best first full turn:")
             for event in transition_result.events:
-                print(f"* {_format_event(event, scenario.config)}")
+                formatted = _format_event(event, scenario.config)
+                if formatted is not None:
+                    print(f"* {formatted}")
             print()
-            print("State after best first action:")
-            for line in _format_state_summary(transition_result.state, scenario.config):
+            print("State after best first full turn:")
+            for line in _format_state_summary(
+                transition_result.state,
+                scenario.config,
+                acted_player=acted_player,
+            ):
                 print(line)
         return 0
 
@@ -95,10 +102,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 2
 
 
-def _format_event(event: GameEvent, config: GameConfig) -> str:
+def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     details = dict(event.details)
     positions = config.board.positions
     event_name = event.event_type.value.upper()
+    actor_name = event.actor.name.lower()
 
     if event.event_type is EventType.SOWING:
         source = int(details.get("source", -1))
@@ -134,11 +142,22 @@ def _format_event(event: GameEvent, config: GameConfig) -> str:
         stone = int(details.get("stone", 0))
         silver = int(details.get("silver", 0))
         wheat = int(details.get("wheat", 0))
-        return f"{event_name}: stone {stone:+d}, silver {silver:+d}, wheat {wheat:+d}"
+        fragments: list[str] = []
+        if stone != 0:
+            fragments.append(f"stone {stone:+d}")
+        if silver != 0:
+            fragments.append(f"silver {silver:+d}")
+        if wheat != 0:
+            fragments.append(f"wheat {wheat:+d}")
+        if not fragments:
+            return None
+        return f"{event_name}: {actor_name} {'; '.join(fragments)}"
 
     if event.event_type is EventType.PIETY_DELTA:
         piety = int(details.get("piety", 0))
-        return f"{event_name}: {piety:+d} piety"
+        if piety == 0:
+            return None
+        return f"{event_name}: {actor_name} {piety:+d} piety"
 
     if event.event_type is EventType.ACOLYTE_RECALL:
         duty_position = int(details.get("duty_position", -1))
@@ -154,25 +173,57 @@ def _format_event(event: GameEvent, config: GameConfig) -> str:
     return f"{event_name}: {details}"
 
 
-def _format_state_summary(state: GameState, config: GameConfig) -> tuple[str, ...]:
+def _format_state_summary(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acted_player: PlayerId,
+) -> tuple[str, ...]:
+    next_active_player = state.active_player
+    acted_name = acted_player.name.lower()
+    next_name = next_active_player.name.lower()
+
+    lines: list[str] = [
+        f"Acted player: {acted_name}",
+        f"Next active player: {next_name}",
+        f"Turn: {state.turn}",
+        "",
+        "Acted player state:",
+        *_format_player_state(state, acted_player, config),
+    ]
+
+    if next_active_player is not acted_player:
+        lines.extend(
+            [
+                "",
+                "Next active player state:",
+                *_format_player_state(state, next_active_player, config),
+            ]
+        )
+
+    return tuple(lines)
+
+
+def _format_player_state(
+    state: GameState,
+    player: PlayerId,
+    config: GameConfig,
+) -> tuple[str, ...]:
     positions = config.board.positions
-    active_player_name = state.active_player.name.lower()
-    active_player = state.player_state(state.active_player)
-    active_vector = state.player_vector(state.active_player)
+    player_state = state.player_state(player)
+    player_vector = state.player_vector(player)
     mancala = ", ".join(
         f"{position_name(position_id, positions)}={count}"
-        for position_id, count in enumerate(active_vector)
+        for position_id, count in enumerate(player_vector)
     )
     return (
-        f"Active player: {active_player_name}",
-        f"Turn: {state.turn}",
         (
             "Resources: "
-            f"stone={active_player.resources.stone}, "
-            f"silver={active_player.resources.silver}, "
-            f"wheat={active_player.resources.wheat}"
+            f"stone={player_state.resources.stone}, "
+            f"silver={player_state.resources.silver}, "
+            f"wheat={player_state.resources.wheat}"
         ),
-        f"Piety: {active_player.piety}",
+        f"Piety: {player_state.piety}",
         f"Mancala: {mancala}",
     )
 

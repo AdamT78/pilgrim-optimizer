@@ -56,8 +56,9 @@ python3 -m pilgrim.cli legal-actions scenarios/mancala_sandbox_001.json
 What it does right now:
 
 - Loads the same scenario.
-- Asks the current rules engine to generate legal actions for the active player and phase.
-- Prints a numbered list of readable action summaries.
+- Asks the current rules engine to generate legal **full-turn** actions.
+- Each listed action is one complete simplified turn: sow + selected duty/tithe resolution.
+- Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
 
 Why this matters:
@@ -70,10 +71,11 @@ Example output:
 ```text
 Legal actions for scenario 'mancala_sandbox_001':
 
-1. Sow: city -> north -> north_east -> east
-2. Sow: city -> south -> south_west -> west
+1. Turn: sow city -> north -> north_east -> east | selected duty: north | action: produce
+2. Turn: sow city -> north -> north_east -> east | selected duty: north | action: tithe
+...
 
-Total legal actions: 2
+Total legal actions: N
 ```
 
 ## Command 3: Run the simple solver
@@ -85,7 +87,7 @@ python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3
 What it does right now:
 
 - Runs the current exact-search prototype.
-- Searches to the specified depth (`--depth 3` in this example).
+- Searches to the specified depth in **full turns** (`--depth 3` means 3 complete turns).
 - Uses a temporary placeholder evaluation function.
 
 Example output:
@@ -96,29 +98,32 @@ Depth: 3
 Best score: 3
 Nodes expanded: 27
 
-Best first action:
-Sow: city -> north -> north_east -> east
+Best first full turn:
+Turn: sow city -> north -> north_east -> east | selected duty: east | action: clerical_silversmith
 
 Best line:
-1. Sow: city -> north -> north_east -> east
-2. Resolve Duty: selected duty: east | action: clerical_silversmith
-3. Sow: city -> north -> north_east
+1. Turn: sow city -> north -> north_east -> east | selected duty: east | action: clerical_silversmith
+2. Turn: sow north -> north_east | selected duty: north_east | action: clerical_devotion
+3. Turn: sow city -> south | selected duty: south | action: tithe
 ```
 
 ## How to interpret the current output
 
-- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable form:
-  `Sow: city -> north -> north_east -> east`.
+- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable form.
 - `city -> north -> north_east -> east` corresponds to position IDs `0 -> 1 -> 2 -> 3`.
 - `nodes_expanded` means the number of search nodes explored.
 - `best_score` is still a value under a **temporary placeholder sandbox evaluation**, not true final Pilgrim VP.
+- `best line` is now a sequence of full turns, not alternating sow/resolve sub-actions.
 - Together, this confirms the current development loop works end-to-end:
   `scenario -> validate -> legal actions -> search -> recommendation`.
 
 Using `--verbose` with `solve` prints:
 
-- transition events for the recommended first action
-- a compact state summary after applying that first action
+- all transition events for the recommended first full turn (sowing + duty/tithe + invariants)
+- a compact state summary after applying that first full turn
+- `Acted player` (the player who executed that recommended turn)
+- `Next active player` (the player whose turn is next)
+- the acted player state so resource gains and acolyte recall are directly visible
 
 Position mapping used by the current sandbox:
 

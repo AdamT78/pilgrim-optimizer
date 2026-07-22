@@ -1,7 +1,7 @@
 from pilgrim.cli import main
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import ResolveDutyAction, SowingAction, action_summary, readable_route
-from pilgrim.model.enums import position_name
+from pilgrim.model.actions import FullTurnAction, action_summary, readable_route
+from pilgrim.model.enums import TurnResolutionType, position_name
 from pilgrim.search.exact import solve_exact
 
 
@@ -18,12 +18,19 @@ def test_readable_route_formatting() -> None:
 
 def test_readable_action_summary() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
-    sow_summary = action_summary(SowingAction(source=0, route=(1, 2, 3)), scenario.config)
-    duty_summary = action_summary(ResolveDutyAction(duty_position=3), scenario.config)
-
-    assert sow_summary == "Sow: city -> north -> north_east -> east"
-    assert "selected duty: east" in duty_summary
-    assert "action: clerical_silversmith" in duty_summary
+    summary = action_summary(
+        FullTurnAction(
+            origin=0,
+            route=(1, 2, 3),
+            selected_duty=3,
+            resolution=TurnResolutionType.CLERICAL_SILVERSMITH,
+        ),
+        scenario.config,
+    )
+    assert summary == (
+        "Turn: sow city -> north -> north_east -> east | "
+        "selected duty: east | action: clerical_silversmith"
+    )
 
 
 def test_cli_legal_actions_returns_readable_output(capsys) -> None:
@@ -32,9 +39,11 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
 
     assert exit_code == 0
     assert "Legal actions for scenario 'mancala_sandbox_001':" in output
-    assert "1. Sow: city -> north -> north_east -> east" in output
-    assert "2. Sow: city -> south -> south_west -> west" in output
-    assert "Total legal actions: 2" in output
+    assert "1. Turn: sow city -> north -> north_east -> east" in output
+    assert "selected duty: north" in output
+    assert "action: produce" in output
+    assert "action: tithe" in output
+    assert "Total legal actions: 12" in output
 
 
 def test_cli_solve_returns_readable_best_action(capsys) -> None:
@@ -44,8 +53,9 @@ def test_cli_solve_returns_readable_best_action(capsys) -> None:
     assert exit_code == 0
     assert "Solve result for scenario 'mancala_sandbox_001'" in output
     assert "Depth: 3" in output
-    assert "Best first action:" in output
-    assert "Sow: city -> north -> north_east -> east" in output
+    assert "Best first full turn:" in output
+    assert "Turn: sow city -> north -> north_east -> east" in output
+    assert "selected duty:" in output
     assert "Best line:" in output
 
 
@@ -56,6 +66,7 @@ def test_exact_search_returns_principal_variation() -> None:
     assert len(result.principal_variation) >= 1
     assert result.principal_variation[0] == result.best_action
     assert result.principal_variation_ids[0] == result.best_action_id
+    assert len(result.principal_variation) == 3
 
 
 def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
@@ -71,8 +82,15 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "Events for best first action:" in output
+    assert "Events for best first full turn:" in output
     assert "SOWING:" in output
+    assert "DUTY_RESOLUTION:" in output
     assert "INVARIANT_CHECK:" in output
-    assert "State after best first action:" in output
+    assert "+0 piety" not in output
+    assert "State after best first full turn:" in output
+    assert "Acted player: player_one" in output
+    assert "Next active player: player_two" in output
+    assert "Acted player state:" in output
+    assert "Next active player state:" in output
+    assert "Active player:" not in output
     assert "Mancala: city=" in output

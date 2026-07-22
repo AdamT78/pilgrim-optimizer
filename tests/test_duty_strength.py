@@ -1,8 +1,8 @@
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import ResolveDutyAction
-from pilgrim.model.enums import DutyStrength, PlayerId, TurnPhase
+from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.enums import DutyStrength, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
 from pilgrim.rules.duties import duty_strength, duty_value_and_silver_cost
@@ -29,17 +29,22 @@ def test_minority_action_fails_when_silver_insufficient() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = GameState(
         active_player=PlayerId.PLAYER_ONE,
-        phase=TurnPhase.DUTY,
+        phase=TurnPhase.SOW,
         players=(
             PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
             PlayerState(resources=Resources(stone=0, silver=0, wheat=0)),
         ),
         acolytes=(
-            (0, 1, 0, 0, 0, 0, 0, 0, 0),
+            (1, 0, 0, 0, 0, 0, 0, 0, 0),
             (0, 2, 0, 0, 0, 0, 0, 0, 0),
         ),
         turn=0,
     )
-    action = ResolveDutyAction(duty_position=1)
+    action = FullTurnAction(
+        origin=0,
+        route=(1,),
+        selected_duty=1,
+        resolution=TurnResolutionType.PRODUCE,
+    )
     with pytest.raises(TransitionValidationError):
         apply_action(state, action, scenario.config)
