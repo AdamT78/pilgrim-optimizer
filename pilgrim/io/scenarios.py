@@ -12,6 +12,7 @@ from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.opponents import OpponentModel, opponent_model_from_dict
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +22,8 @@ class LoadedScenario:
     scenario_id: str
     state: GameState
     config: GameConfig
+    root_player_id: PlayerId
+    opponent_model: OpponentModel
 
 
 def load_scenario(path: str | Path) -> LoadedScenario:
@@ -44,7 +47,15 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     )
     state = _game_state_from_dict(merged["initial_state"])
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
-    return LoadedScenario(scenario_id=scenario_id, state=state, config=config)
+    root_player_id = _root_player_from_dict(merged, default_player=state.active_player)
+    opponent_model = _opponent_model_from_dict(merged)
+    return LoadedScenario(
+        scenario_id=scenario_id,
+        state=state,
+        config=config,
+        root_player_id=root_player_id,
+        opponent_model=opponent_model,
+    )
 
 
 def _merge_setup_into_scenario(
@@ -97,6 +108,23 @@ def _player_state_from_dict(raw: Mapping[str, Any]) -> PlayerState:
         piety=int(raw.get("piety", 0)),
         victory_points=int(raw.get("victory_points", 0)),
     )
+
+
+def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) -> PlayerId:
+    """Parse explicit root player; fallback to initial active player."""
+    root_player_raw = raw.get("root_player_id")
+    if root_player_raw is None:
+        return default_player
+    return PlayerId(int(root_player_raw))
+
+
+def _opponent_model_from_dict(raw: Mapping[str, Any]) -> OpponentModel:
+    opponent_raw = raw.get("opponent_model")
+    if opponent_raw is None:
+        return opponent_model_from_dict(None)
+    if not isinstance(opponent_raw, Mapping):
+        raise ValueError("Scenario 'opponent_model' must be an object.")
+    return opponent_model_from_dict(opponent_raw)
 
 
 def _resolve_path(path_value: str, scenario_path: Path) -> Path:

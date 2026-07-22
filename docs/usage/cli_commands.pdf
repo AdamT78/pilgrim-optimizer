@@ -125,7 +125,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
 endobj
 7 0 obj
-<< /Length 1982 >>
+<< /Length 2011 >>
 stream
 BT
 /F1 11 Tf
@@ -197,6 +197,12 @@ T*
 T*
 (Solve result for scenario 'mancala_sandbox_001') Tj
 T*
+(Root player: player_one) Tj
+T*
+(Objective: maximize root player sandbox evaluation) Tj
+T*
+(Opponent model: sandbox_active_player_max) Tj
+T*
 (Depth: 3) Tj
 T*
 (Best score: 3) Tj
@@ -215,21 +221,15 @@ T*
 T*
 (Best line:) Tj
 T*
-(1. Turn: sow city -> north -> north_east -> east | selected duty: east | action: ) Tj
+(1. player_one: Turn: sow city -> north -> north_east -> east | selected duty: east | ) Tj
 T*
-(clerical_silversmith) Tj
+(action: clerical_silversmith) Tj
 T*
-(2. Turn: sow north -> north_east | selected duty: north_east | action: clerical_devotion) Tj
+(2. player_two: Turn: sow north -> north_east | selected duty: north_east | action: ) Tj
 T*
-(3. Turn: sow city -> south | selected duty: south | action: tithe) Tj
+(clerical_devotion) Tj
 T*
-() Tj
-T*
-(How to interpret the current output) Tj
-T*
-() Tj
-T*
-(- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable ) Tj
+(3. player_one: Turn: sow city -> south | selected duty: south | action: tithe) Tj
 ET
 endstream
 endobj
@@ -237,12 +237,20 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
 endobj
 9 0 obj
-<< /Length 2334 >>
+<< /Length 2387 >>
 stream
 BT
 /F1 11 Tf
 56 760 Td
 14 TL
+() Tj
+T*
+(How to interpret the current output) Tj
+T*
+() Tj
+T*
+(- The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable ) Tj
+T*
 (form.) Tj
 T*
 (- `city -> north -> north_east -> east` corresponds to position IDs `0 -> 1 -> 2 -> 3`.) Tj
@@ -254,6 +262,14 @@ T*
 (true final Pilgrim VP.) Tj
 T*
 (- `best line` is now a sequence of full turns, not alternating sow/resolve sub-actions.) Tj
+T*
+(- `root player` is whose outcome is being optimized.) Tj
+T*
+(- `active player` is whose turn is currently applied in a simulated state.) Tj
+T*
+(- A single search line may alternate active players while still optimizing root-player ) Tj
+T*
+(outcome.) Tj
 T*
 (- Together, this confirms the current development loop works end-to-end:) Tj
 T*
@@ -279,7 +295,7 @@ T*
 T*
 (- `Piety position` and `Piety track VP` for direct track-value inspection) Tj
 T*
-(- an evaluation breakdown for the acted player after the first full turn) Tj
+(- a **root-player evaluation breakdown** after the first full turn) Tj
 T*
 () Tj
 T*
@@ -326,7 +342,19 @@ T*
 () Tj
 T*
 (- Piety is now treated as a capped track position \(`max_position = 12`\).) Tj
-T*
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2343 >>
+stream
+BT
+/F1 11 Tf
+56 760 Td
+14 TL
 (- Piety position and piety VP are different values.) Tj
 T*
 (- The VP lookup table is loaded from `configs/piety.json`.) Tj
@@ -337,24 +365,28 @@ T*
 T*
 () Tj
 T*
+(Root Player and Opponent Model \(v0.3\)) Tj
+T*
+() Tj
+T*
+(- Scenarios can set `root_player_id` explicitly \(preferred\).) Tj
+T*
+(- If `root_player_id` is omitted, the loader defaults to the initial active player.) Tj
+T*
+(- Current opponent model placeholder is `sandbox_active_player_max`.) Tj
+T*
+(- This means each active player locally selects actions, while cutoff/terminal scoring is ) Tj
+T*
+(still read from the root player perspective.) Tj
+T*
+() Tj
+T*
 (Typical development workflow) Tj
 T*
 () Tj
 T*
 (1. Edit rules/config/scenario files.) Tj
-ET
-endstream
-endobj
-10 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
-endobj
-11 0 obj
-<< /Length 1530 >>
-stream
-BT
-/F1 11 Tf
-56 760 Td
-14 TL
+T*
 (2. Run `validate` to ensure scenario integrity.) Tj
 T*
 (3. Run `legal-actions` to inspect generated action space.) Tj
@@ -427,12 +459,12 @@ xref
 0000000336 00000 n 
 0000002078 00000 n 
 0000002204 00000 n 
-0000004237 00000 n 
-0000004363 00000 n 
-0000006748 00000 n 
-0000006876 00000 n 
+0000004266 00000 n 
+0000004392 00000 n 
+0000006830 00000 n 
+0000006958 00000 n 
 trailer
 << /Size 12 /Root 1 0 R >>
 startxref
-8458
+9353
 %%EOF
