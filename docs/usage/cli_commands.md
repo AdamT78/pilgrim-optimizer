@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This guide explains the first three CLI commands in `pilgrim-optimizer` and what they currently prove in the Ruleset A mancala sandbox.
+This guide explains the first four CLI commands in `pilgrim-optimizer` and what they currently prove in the Ruleset A mancala sandbox.
 
 The goal is to make the early loop explicit:
 
-`scenario -> validate -> legal actions -> search -> recommendation`
+`scenario -> validate -> legal actions -> apply -> search -> recommendation`
 
 ## Prerequisites
 
@@ -58,8 +58,10 @@ What it does right now:
 - Loads the same scenario.
 - Asks the current rules engine to generate legal **full-turn** actions.
 - Each listed action is one complete simplified turn: sow + selected duty/tithe resolution.
+- Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
 - Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
+- Action indexes are 1-based and can be passed directly to `apply --action-index`.
 
 Why this matters:
 
@@ -74,11 +76,44 @@ Legal actions for scenario 'mancala_sandbox_001':
 1. Turn: sow city -> north -> north_east -> east | selected duty: north | action: produce
 2. Turn: sow city -> north -> north_east -> east | selected duty: north | action: tithe
 ...
+9. Turn: sow city -> south -> south_west -> west | selected duty: south | action: give_alms | pay silver=1, wheat=1
+...
 
 Total legal actions: N
 ```
 
-## Command 3: Run the simple solver
+## Command 3: Apply one legal action by index
+
+```bash
+python3 -m pilgrim.cli apply scenarios/alms_sandbox_001.json --action-index 1 --verbose
+```
+
+What it does right now:
+
+- Loads the scenario and generates legal full-turn actions.
+- Selects one action by **1-based** index (matching `legal-actions` numbering).
+- Applies exactly one transition.
+- In non-verbose mode, prints selected action and next active player.
+- In verbose mode, prints transition events, resulting state summary, and root-player evaluation breakdown.
+
+Why this matters:
+
+- `solve` chooses the best action under current sandbox evaluation.
+- `apply` is deterministic debugging: you choose the exact legal action to inspect.
+- This is especially useful for `give_alms` debugging when solver policy picks another line.
+
+Typical non-verbose output:
+
+```text
+Apply result for scenario 'alms_sandbox_001'
+Selected action 1:
+Turn: sow south_east -> south | selected duty: south | action: give_alms | pay silver=1, wheat=1
+
+State updated successfully.
+Next active player: player_two
+```
+
+## Command 4: Run the simple solver
 
 ```bash
 python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3
@@ -131,6 +166,7 @@ Using `--verbose` with `solve` prints:
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
 - `Piety position` and `Piety track VP` for direct track-value inspection
+- `Alms position`, `Alms table acolytes`, and `Alms table VP`
 - a **root-player evaluation breakdown** after the first full turn
 - workforce totals (`Mancala total`, `Village`, `Abbey`, committed pools, and overall `Total`)
 
@@ -167,13 +203,22 @@ Position mapping used by the current sandbox:
 - Current opponent model placeholder is `sandbox_active_player_max`.
 - This means each active player locally selects actions, while cutoff/terminal scoring is still read from the root player perspective.
 
+## Alms Track and Season Reward (v0.5)
+
+- Alms positions are tracked per player (`0..6`, capped).
+- Give Alms actions now appear in legal-action output when payment is affordable.
+- Verbose solve output now includes Alms-specific events (`ALMS_PAYMENT`, `ALMS_PROGRESS`, threshold rewards).
+- Root-player evaluation breakdown now includes Alms-table scoring.
+- Use `apply --action-index` to force a specific Give Alms transition for debugging.
+
 ## Typical development workflow
 
 1. Edit rules/config/scenario files.
 2. Run `validate` to ensure scenario integrity.
 3. Run `legal-actions` to inspect generated action space.
-4. Run `solve` with a small depth to sanity-check transitions/search loop.
-5. Run `pytest` to protect behavior with tests.
+4. Run `apply` on a chosen action index when you need deterministic transition debugging.
+5. Run `solve` with a small depth to sanity-check transitions/search loop.
+6. Run `pytest` to protect behavior with tests.
 
 ## Troubleshooting
 
@@ -189,6 +234,7 @@ Position mapping used by the current sandbox:
 - Solver output seems surprising
   - Inspect `legal-actions` first.
   - Remember the current scoring function is a temporary placeholder.
+  - Use `apply --action-index N --verbose` to inspect a specific action.
   - Re-run with verbose mode for transition details:
     `python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3 --verbose`
 

@@ -8,7 +8,7 @@ from pilgrim.model.actions import (
     readable_route,
     resolution_from_effect,
 )
-from pilgrim.model.config import BoardConfig, DutyDefinition, GameConfig, PietyConfig
+from pilgrim.model.config import AlmsConfig, BoardConfig, DutyDefinition, GameConfig, PietyConfig
 from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     ActionType,
@@ -34,6 +34,7 @@ from pilgrim.model.workforce import (
 
 __all__ = [
     "ActionType",
+    "AlmsConfig",
     "BoardConfig",
     "CANONICAL_POSITION_NAMES",
     "CommittedAcolytes",

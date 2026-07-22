@@ -26,11 +26,12 @@ class PlayerState:
         default_factory=lambda: Workforce(mancala=(0,) * MANCALA_POSITION_COUNT)
     )
     piety: int = 0
+    alms_position: int = 0
     victory_points: int = 0
 
     def __post_init__(self) -> None:
-        if self.piety < 0 or self.victory_points < 0:
-            raise ValueError("Piety and victory points cannot be negative.")
+        if self.piety < 0 or self.victory_points < 0 or self.alms_position < 0:
+            raise ValueError("Piety, Alms position, and victory points cannot be negative.")
 
     @property
     def mancala_acolytes(self) -> PlayerVector:

@@ -52,8 +52,10 @@ def ensure_non_negative_resources(state: GameState) -> None:
     for player in state.players:
         if player.resources.stone < 0 or player.resources.silver < 0 or player.resources.wheat < 0:
             raise TransitionValidationError("Resources cannot be negative.")
-        if player.piety < 0 or player.victory_points < 0:
-            raise TransitionValidationError("Piety and victory points cannot be negative.")
+        if player.piety < 0 or player.alms_position < 0 or player.victory_points < 0:
+            raise TransitionValidationError(
+                "Piety, Alms position, and victory points cannot be negative."
+            )
 
 
 def ensure_valid_workforce(state: GameState) -> None:

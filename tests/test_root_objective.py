@@ -27,6 +27,7 @@ def test_missing_root_player_defaults_to_active_player(tmp_path: Path) -> None:
                 "board_file": str(Path("configs/board.json").resolve()),
                 "duties_file": str(Path("configs/duties.json").resolve()),
                 "piety_file": str(Path("configs/piety.json").resolve()),
+                "alms_file": str(Path("configs/alms.json").resolve()),
                 "initial_state": setup_raw["initial_state"],
             }
         ),
@@ -81,7 +82,7 @@ def test_search_score_uses_root_player_perspective() -> None:
         opponent_model_type=OpponentModelType.SANDBOX_ACTIVE_PLAYER_MAX,
     )
 
-    assert root_one.best_score == -4
+    assert root_one.best_score == -3
     assert root_two.best_score == -5
 
 

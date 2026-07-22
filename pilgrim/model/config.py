@@ -66,12 +66,54 @@ class PietyConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AlmsConfig:
+    """Alms track bounds, threshold rewards, and Alms-table scoring."""
+
+    max_position: int
+    threshold_rewards: tuple[tuple[int, str], ...]
+    alms_table_scoring: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if self.max_position < 0:
+            raise ValueError("Alms max_position cannot be negative.")
+        if not self.alms_table_scoring:
+            raise ValueError("Alms table scoring cannot be empty.")
+        rows = [row for row, _ in self.threshold_rewards]
+        if rows != sorted(rows):
+            raise ValueError("Alms threshold rows must be sorted ascending.")
+        if len(set(rows)) != len(rows):
+            raise ValueError("Alms threshold rows must be unique.")
+        if any(row < 0 or row > self.max_position for row in rows):
+            raise ValueError("Alms threshold rows must be within alms track bounds.")
+
+    def clamp(self, position: int) -> int:
+        if position < 0:
+            return 0
+        if position > self.max_position:
+            return self.max_position
+        return position
+
+    def threshold_reward_for_row(self, row: int) -> str | None:
+        for threshold_row, reward_key in self.threshold_rewards:
+            if threshold_row == row:
+                return reward_key
+        return None
+
+    def score(self, acolytes_on_table: int) -> int:
+        if acolytes_on_table <= 0:
+            return self.alms_table_scoring[0]
+        max_index = len(self.alms_table_scoring) - 1
+        return self.alms_table_scoring[min(acolytes_on_table, max_index)]
+
+
+@dataclass(frozen=True, slots=True)
 class GameConfig:
     """Ruleset configuration bundle for scenario execution."""
 
     board: BoardConfig
     duties: tuple[DutyDefinition, ...]
     piety: PietyConfig
+    alms: AlmsConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -129,13 +171,46 @@ def piety_from_dict(raw: Mapping[str, Any]) -> PietyConfig:
     return PietyConfig(max_position=max_position, score_by_position=score_by_position)
 
 
+def alms_from_dict(raw: Mapping[str, Any]) -> AlmsConfig:
+    max_position = int(raw["max_position"])
+
+    threshold_rewards_raw = raw["threshold_rewards"]
+    if not isinstance(threshold_rewards_raw, Mapping):
+        raise ValueError("Alms threshold_rewards must be an object.")
+    threshold_rewards = tuple(
+        sorted(
+            (int(row), str(reward_key))
+            for row, reward_key in threshold_rewards_raw.items()
+        )
+    )
+
+    alms_table_scoring_raw = raw["alms_table_scoring"]
+    if not isinstance(alms_table_scoring_raw, Mapping):
+        raise ValueError("Alms alms_table_scoring must be an object.")
+    score_rows = sorted(int(key) for key in alms_table_scoring_raw)
+    if not score_rows or score_rows[0] != 0:
+        raise ValueError("Alms table scoring must include row 0.")
+    max_score_row = score_rows[-1]
+    alms_table_scoring = tuple(
+        int(alms_table_scoring_raw[str(index)]) for index in range(max_score_row + 1)
+    )
+
+    return AlmsConfig(
+        max_position=max_position,
+        threshold_rewards=threshold_rewards,
+        alms_table_scoring=alms_table_scoring,
+    )
+
+
 def game_config_from_dict(
     *,
     board_raw: Mapping[str, Any],
     duties_raw: Mapping[str, Any],
     piety_raw: Mapping[str, Any],
+    alms_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
     piety = piety_from_dict(piety_raw)
-    return GameConfig(board=board, duties=duties, piety=piety)
+    alms = alms_from_dict(alms_raw)
+    return GameConfig(board=board, duties=duties, piety=piety, alms=alms)
