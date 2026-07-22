@@ -21,9 +21,9 @@
       "effect": "produce"
     },
     {
-      "key": "south_devotion",
+      "key": "south_alms",
       "position": "south",
-      "effect": "clerical_devotion"
+      "effect": "give_alms"
     },
     {
       "key": "south_west_harvest",

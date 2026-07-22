@@ -78,6 +78,7 @@ class DutyEffect(Enum):
     PRODUCE = "produce"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
+    GIVE_ALMS = "give_alms"
 
 
 class TurnResolutionType(Enum):
@@ -86,6 +87,7 @@ class TurnResolutionType(Enum):
     PRODUCE = "produce"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
+    GIVE_ALMS = "give_alms"
     TITHE = "tithe"
 
 
@@ -106,4 +108,9 @@ class EventType(Enum):
     RESOURCE_DELTA = "resource_delta"
     PIETY_DELTA = "piety_delta"
     ACOLYTE_RECALL = "acolyte_recall"
+    ALMS_PAYMENT = "alms_payment"
+    ALMS_PROGRESS = "alms_progress"
+    ALMS_THRESHOLD_REWARD = "alms_threshold_reward"
+    ALMS_SEASON_REWARD = "alms_season_reward"
+    ALMS_RESET = "alms_reset"
     INVARIANT_CHECK = "invariant_check"

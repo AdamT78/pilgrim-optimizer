@@ -42,6 +42,8 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
     assert "1. Turn: sow city -> north -> north_east -> east" in output
     assert "selected duty: north" in output
     assert "action: produce" in output
+    assert "action: give_alms" in output
+    assert "pay silver=" in output
     assert "action: tithe" in output
     assert "Total legal actions: 12" in output
 
@@ -98,11 +100,15 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Next active player state:" in output
     assert "Piety position:" in output
     assert "Piety track VP:" in output
+    assert "Alms position:" in output
+    assert "Alms table acolytes:" in output
+    assert "Alms table VP:" in output
     assert "Workforce:" in output
     assert "Mancala total:" in output
     assert "Committed:" in output
     assert "Root-player evaluation breakdown:" in output
     assert "Player: player_one" in output
+    assert "Alms table VP:" in output
     assert "Total sandbox evaluation:" in output
     assert "Active player:" not in output
     assert "Mancala: city=" in output

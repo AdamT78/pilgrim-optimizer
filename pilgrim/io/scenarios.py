@@ -37,14 +37,18 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     duties_path = _resolve_path(str(merged["duties_file"]), scenario_path)
     piety_file = str(merged.get("piety_file", "configs/piety.json"))
     piety_path = _resolve_path(piety_file, scenario_path)
+    alms_file = str(merged.get("alms_file", "configs/alms.json"))
+    alms_path = _resolve_path(alms_file, scenario_path)
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
     piety_raw = _read_json(piety_path)
+    alms_raw = _read_json(alms_path)
 
     config = game_config_from_dict(
         board_raw=board_raw,
         duties_raw=duties_raw,
         piety_raw=piety_raw,
+        alms_raw=alms_raw,
     )
     state = _game_state_from_dict(merged["initial_state"])
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
@@ -120,6 +124,7 @@ def _player_state_from_dict(
         ),
         workforce=workforce,
         piety=int(raw.get("piety", 0)),
+        alms_position=int(raw.get("alms_position", 0)),
         victory_points=int(raw.get("victory_points", 0)),
     )
 

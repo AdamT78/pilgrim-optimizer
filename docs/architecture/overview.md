@@ -31,8 +31,19 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - `PlayerState` now contains explicit workforce pools.
 - Mancala acolytes are only one workforce component.
 - Additional pools are represented for future systems: village, abbey, and committed pools (roads, shrines, market ports, pilgrimage sites, alms table).
-- Current sandbox turn actions only move acolytes within the **mancala** pool.
 - Transition validation enforces workforce non-negativity and conservation.
+
+## Alms Subsystem (v0.5)
+
+- Alms adds per-player track state (`alms_position`) plus VP scoring from committed `alms_table` acolytes.
+- Give Alms is the first sandbox subsystem that moves workforce across pools:
+  - `village -> abbey`
+  - `abbey -> city` (mancala city position)
+  - `village -> city`
+- Season-end Alms helper adds a deterministic tie-breaked leader reward:
+  - potential `abbey -> committed.alms_table` move
+  - then Alms-position reset for all players
+- Search remains rules-agnostic: it still consumes `legal_actions()` and `apply_action()` only.
 
 ## Intentionally Deferred
 

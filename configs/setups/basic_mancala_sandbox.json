@@ -3,6 +3,7 @@
   "board_file": "configs/board.json",
   "duties_file": "configs/duties.json",
   "piety_file": "configs/piety.json",
+  "alms_file": "configs/alms.json",
   "initial_state": {
     "active_player": "player_one",
     "phase": "sow",
@@ -11,10 +12,11 @@
       "player_one": {
         "victory_points": 0,
         "piety": 0,
+        "alms_position": 0,
         "resources": {
           "stone": 0,
           "silver": 1,
-          "wheat": 0
+          "wheat": 1
         },
         "workforce": {
           "mancala": [3, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -32,6 +34,7 @@
       "player_two": {
         "victory_points": 0,
         "piety": 0,
+        "alms_position": 0,
         "resources": {
           "stone": 0,
           "silver": 0,

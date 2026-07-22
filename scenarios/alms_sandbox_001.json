@@ -1,5 +1,5 @@
 {
-  "scenario_id": "mancala_sandbox_001",
+  "scenario_id": "alms_sandbox_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -9,10 +9,15 @@
     "players": {
       "player_one": {
         "alms_position": 0,
+        "resources": {
+          "stone": 0,
+          "silver": 1,
+          "wheat": 1
+        },
         "workforce": {
-          "mancala": [3, 0, 0, 0, 0, 0, 0, 0, 0],
-          "village": 0,
-          "abbey": 0,
+          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
+          "village": 1,
+          "abbey": 1,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -24,8 +29,13 @@
       },
       "player_two": {
         "alms_position": 0,
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
         "workforce": {
-          "mancala": [0, 1, 1, 0, 0, 0, 0, 0, 0],
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 0,
           "abbey": 0,
           "committed": {

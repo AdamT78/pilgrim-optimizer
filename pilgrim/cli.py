@@ -1,8 +1,9 @@
-"""CLI entrypoint for scenario validation, action listing, and exact search."""
+"""CLI entrypoint for scenario validation, action listing, apply, and exact search."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 
 from pilgrim.io.scenarios import load_scenario
@@ -11,6 +12,7 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
+from pilgrim.rules.alms import score_alms_table
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
@@ -27,6 +29,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     legal_parser = subparsers.add_parser("legal-actions", help="List readable full-turn actions.")
     legal_parser.add_argument("scenario", help="Path to scenario JSON file.")
+
+    apply_parser = subparsers.add_parser("apply", help="Apply one legal action by index.")
+    apply_parser.add_argument("scenario", help="Path to scenario JSON file.")
+    apply_parser.add_argument(
+        "--action-index",
+        type=int,
+        required=True,
+        help="1-based index from legal-actions output.",
+    )
+    apply_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print action events and resulting state details.",
+    )
 
     solve_parser = subparsers.add_parser("solve", help="Run placeholder exact search.")
     solve_parser.add_argument("scenario", help="Path to scenario JSON file.")
@@ -59,6 +75,44 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"{index}. {action_summary(action, scenario.config)}")
         print()
         print(f"Total legal actions: {len(actions)}")
+        return 0
+
+    if args.command == "apply":
+        actions = legal_actions(scenario.state, scenario.config)
+        action_count = len(actions)
+        selected_index = args.action_index
+        if selected_index < 1 or selected_index > action_count:
+            message = (
+                f"Invalid action index {selected_index}. "
+                f"Scenario has {action_count} legal actions."
+            )
+            print(
+                message,
+                file=sys.stderr,
+            )
+            return 2
+
+        selected_action = actions[selected_index - 1]
+        transition_result = apply_action(scenario.state, selected_action, scenario.config)
+
+        print(f"Apply result for scenario '{scenario.scenario_id}'")
+        print(f"Selected action {selected_index}:")
+        print(action_summary(selected_action, scenario.config))
+        print()
+
+        if args.verbose:
+            _print_transition_report(
+                initial_state=scenario.state,
+                next_state=transition_result.state,
+                events=transition_result.events,
+                config=scenario.config,
+                root_player_id=scenario.root_player_id,
+                events_heading="Events:",
+                state_heading="State after action:",
+            )
+        else:
+            print("State updated successfully.")
+            print(f"Next active player: {transition_result.state.active_player.name.lower()}")
         return 0
 
     if args.command == "solve":
@@ -100,32 +154,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
 
         if args.verbose and result.best_action is not None:
-            acted_player = scenario.state.active_player
             transition_result = apply_action(scenario.state, result.best_action, scenario.config)
             print()
-            print("Events for best first full turn:")
-            for event in transition_result.events:
-                formatted = _format_event(event, scenario.config)
-                if formatted is not None:
-                    print(f"* {formatted}")
-            print()
-            print("State after best first full turn:")
-            for line in _format_state_summary(
-                transition_result.state,
-                scenario.config,
-                acted_player=acted_player,
-            ):
-                print(line)
-            breakdown = evaluate_state(
-                transition_result.state,
-                scenario.root_player_id,
-                scenario.config,
+            _print_transition_report(
+                initial_state=scenario.state,
+                next_state=transition_result.state,
+                events=transition_result.events,
+                config=scenario.config,
+                root_player_id=scenario.root_player_id,
+                events_heading="Events for best first full turn:",
+                state_heading="State after best first full turn:",
             )
-            print()
-            print("Root-player evaluation breakdown:")
-            print(f"Player: {root_player_name}")
-            for line in _format_evaluation_breakdown(breakdown):
-                print(line)
         return 0
 
     parser.error(f"Unknown command: {args.command}")
@@ -217,7 +256,73 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             return f"{event_name}: passed (acolytes conserved)"
         return f"{event_name}: {details}"
 
+    if event.event_type is EventType.ALMS_PAYMENT:
+        silver = int(details.get("silver", 0))
+        wheat = int(details.get("wheat", 0))
+        text = f"{event_name}: {actor_name} paid silver={silver}, wheat={wheat}"
+        minority_silver_cost = int(details.get("minority_silver_cost", 0))
+        if minority_silver_cost > 0:
+            text += f" (plus minority silver cost {minority_silver_cost})"
+        return text
+
+    if event.event_type is EventType.ALMS_PROGRESS:
+        old_row = int(details.get("old_row", 0))
+        new_row = int(details.get("new_row", 0))
+        return f"{event_name}: {actor_name} row {old_row} -> {new_row}"
+
+    if event.event_type is EventType.ALMS_THRESHOLD_REWARD:
+        description = str(details.get("description", "")).strip()
+        if description:
+            return f"{event_name}: {description}"
+        threshold = int(details.get("threshold", -1))
+        reward = str(details.get("reward", "unknown"))
+        moved = bool(details.get("moved", False))
+        return f"{event_name}: crossed row {threshold}; reward={reward}; moved={moved}"
+
+    if event.event_type is EventType.ALMS_SEASON_REWARD:
+        winner = details.get("winner")
+        moved = bool(details.get("moved", False))
+        if moved:
+            return f"{event_name}: {winner} moved 1 acolyte abbey -> alms_table"
+        return f"{event_name}: {winner} had no abbey acolyte to move"
+
+    if event.event_type is EventType.ALMS_RESET:
+        return f"{event_name}: all players reset to row 0"
+
     return f"{event_name}: {details}"
+
+
+def _print_transition_report(
+    *,
+    initial_state: GameState,
+    next_state: GameState,
+    events: tuple[GameEvent, ...],
+    config: GameConfig,
+    root_player_id: PlayerId,
+    events_heading: str,
+    state_heading: str,
+) -> None:
+    print(events_heading)
+    for event in events:
+        formatted = _format_event(event, config)
+        if formatted is not None:
+            print(f"* {formatted}")
+
+    print()
+    print(state_heading)
+    for line in _format_state_summary(
+        next_state,
+        config,
+        acted_player=initial_state.active_player,
+    ):
+        print(line)
+
+    breakdown = evaluate_state(next_state, root_player_id, config)
+    print()
+    print("Root-player evaluation breakdown:")
+    print(f"Player: {root_player_id.name.lower()}")
+    for line in _format_evaluation_breakdown(breakdown):
+        print(line)
 
 
 def _format_state_summary(
@@ -263,6 +368,8 @@ def _format_player_state(
         f"{position_name(position_id, positions)}={count}"
         for position_id, count in enumerate(player_vector)
     )
+    alms_table_acolytes = player_state.workforce.committed.alms_table
+    alms_table_vp = score_alms_table(alms_table_acolytes, config.alms)
     return (
         (
             "Resources: "
@@ -272,6 +379,9 @@ def _format_player_state(
         ),
         f"Piety position: {player_state.piety}",
         f"Piety track VP: {score_piety(player_state.piety, config.piety)}",
+        f"Alms position: {player_state.alms_position}",
+        f"Alms table acolytes: {alms_table_acolytes}",
+        f"Alms table VP: {alms_table_vp}",
         "Workforce:",
         f"  Mancala total: {player_state.workforce.mancala_total}",
         f"  Village: {player_state.workforce.village}",
@@ -294,6 +404,9 @@ def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, .
         f"Victory points: {breakdown.victory_points}",
         f"Piety position: {breakdown.piety_position}",
         f"Piety track VP: {breakdown.piety_track_vp}",
+        f"Alms position: {breakdown.alms_position}",
+        f"Alms table acolytes: {breakdown.alms_table_acolytes}",
+        f"Alms table VP: {breakdown.alms_table_vp}",
         (
             "Resources: "
             f"stone={breakdown.stone}, "

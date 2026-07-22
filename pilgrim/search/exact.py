@@ -1,7 +1,7 @@
 """Depth-limited exact search placeholder for Ruleset A.
 
 This module intentionally uses a temporary objective:
-`victory_points + piety_track_vp + stone + silver + wheat`
+`victory_points + piety_track_vp + alms_table_vp + stone + silver + wheat`
 and should be replaced once full scoring is implemented.
 """
 

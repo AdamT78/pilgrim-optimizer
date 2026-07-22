@@ -1,5 +1,15 @@
 {
-  "notes": "Placeholder alms configuration for future phases.",
-  "actions": [],
-  "rewards": []
+  "max_position": 6,
+  "threshold_rewards": {
+    "2": "village_to_abbey",
+    "4": "abbey_to_city",
+    "6": "village_to_city"
+  },
+  "alms_table_scoring": {
+    "0": 0,
+    "1": 5,
+    "2": 11,
+    "3": 18,
+    "4": 26
+  }
 }
