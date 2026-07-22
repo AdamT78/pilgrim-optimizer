@@ -126,8 +126,14 @@ def ensure_valid_timing(state: GameState) -> None:
         )
 
 
+def ensure_valid_merchant_state(state: GameState) -> None:
+    if state.merchant_position < 0:
+        raise TransitionValidationError("Merchant position cannot be negative.")
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
     ensure_valid_workforce(state)
     ensure_valid_timing(state)
+    ensure_valid_merchant_state(state)

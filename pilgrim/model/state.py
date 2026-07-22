@@ -48,6 +48,7 @@ class GameState:
     phase: TurnPhase
     players: tuple[PlayerState, PlayerState]
     timing: TimingState = field(default_factory=TimingState)
+    merchant_position: int = 0
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -68,6 +69,8 @@ class GameState:
 
         if self.timing.turn_in_round >= len(self.players):
             raise ValueError("turn_in_round must be less than number of players.")
+        if self.merchant_position < 0:
+            raise ValueError("merchant_position cannot be negative.")
 
     def player_state(self, player_id: PlayerId) -> PlayerState:
         return self.players[int(player_id)]
@@ -104,6 +107,9 @@ class GameState:
 
     def with_timing(self, timing: TimingState) -> GameState:
         return replace(self, timing=timing, turn=timing.absolute_turn)
+
+    def with_merchant_position(self, merchant_position: int) -> GameState:
+        return replace(self, merchant_position=merchant_position)
 
     def with_player_state(self, player_id: PlayerId, player_state: PlayerState) -> GameState:
         players = list(self.players)

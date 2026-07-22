@@ -13,6 +13,7 @@ from pilgrim.model.config import (
     BoardConfig,
     DutyDefinition,
     GameConfig,
+    MerchantConfig,
     PietyConfig,
     TimingConfig,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "GameConfig",
     "GameEvent",
     "GameState",
+    "MerchantConfig",
     "PlayerId",
     "PlayerState",
     "PietyConfig",

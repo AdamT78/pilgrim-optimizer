@@ -6,6 +6,7 @@
   },
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
+    "merchant_position": 0,
     "timing": {
       "absolute_turn": 0,
       "round_number": 1,

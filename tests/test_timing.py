@@ -85,13 +85,33 @@ def test_transition_emits_turn_advance_and_updates_timing_for_normal_turn() -> N
     scenario = load_scenario("scenarios/alms_sandbox_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
     result = apply_action(scenario.state, action, scenario.config)
+    merchant_event = next(
+        event for event in result.events if event.event_type is EventType.MERCHANT_ADVANCE
+    )
+    merchant_details = dict(merchant_event.details)
     event_types = {event.event_type for event in result.events}
+    turn_advance_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.event_type is EventType.TURN_ADVANCE
+    )
+    merchant_advance_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.event_type is EventType.MERCHANT_ADVANCE
+    )
     assert EventType.TURN_ADVANCE in event_types
+    assert EventType.MERCHANT_ADVANCE in event_types
+    assert merchant_advance_index == turn_advance_index + 1
     assert result.state.timing.absolute_turn == 1
     assert result.state.timing.round_number == 1
     assert result.state.timing.season_number == 1
     assert result.state.timing.turn_in_round == 1
     assert result.state.active_player is PlayerId.PLAYER_TWO
+    assert result.state.merchant_position == 1
+    assert merchant_details["from_duty"] == "taxation"
+    assert merchant_details["to_duty"] == "produce"
+    assert merchant_details["current_resource"] == "wheat"
 
 
 def test_transition_round_end_emits_round_events() -> None:
@@ -119,11 +139,13 @@ def test_transition_round_end_emits_round_events() -> None:
     result = apply_action(state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.TURN_ADVANCE in event_types
+    assert EventType.MERCHANT_ADVANCE in event_types
     assert EventType.ROUND_END in event_types
     assert EventType.ROUND_ADVANCE in event_types
     assert EventType.SEASON_END not in event_types
     assert result.state.timing.round_number == 3
     assert result.state.timing.turn_in_round == 0
+    assert result.state.merchant_position == 1
 
 
 def test_transition_season_end_triggers_alms_reward_and_reset() -> None:
@@ -134,6 +156,7 @@ def test_transition_season_end_triggers_alms_reward_and_reset() -> None:
     after = result.state
 
     event_types = {event.event_type for event in result.events}
+    assert EventType.MERCHANT_ADVANCE in event_types
     assert EventType.SEASON_END in event_types
     assert EventType.ALMS_SEASON_REWARD in event_types
     assert EventType.ALMS_RESET in event_types
@@ -141,6 +164,7 @@ def test_transition_season_end_triggers_alms_reward_and_reset() -> None:
 
     assert after.timing.season_number == 2
     assert after.timing.round_number == 4
+    assert after.merchant_position == 1
     assert after.player_state(PlayerId.PLAYER_ONE).workforce.committed.alms_table == 1
     assert after.player_state(PlayerId.PLAYER_ONE).alms_position == 0
     assert after.player_state(PlayerId.PLAYER_TWO).alms_position == 0

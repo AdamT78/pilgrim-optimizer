@@ -18,6 +18,7 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
+from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
 from pilgrim.search.exact import solve_exact
@@ -306,6 +307,15 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.ALMS_RESET:
         return f"{event_name}: all players reset to row 0"
 
+    if event.event_type is EventType.MERCHANT_ADVANCE:
+        from_duty = str(details.get("from_duty", "unknown"))
+        to_duty = str(details.get("to_duty", "unknown"))
+        current_resource = str(details.get("current_resource", "none"))
+        return (
+            f"{event_name}: {from_duty} -> {to_duty}; "
+            f"current resource={current_resource}"
+        )
+
     if event.event_type is EventType.TURN_ADVANCE:
         from_player = str(details.get("from_player", "unknown"))
         to_player = str(details.get("to_player", "unknown"))
@@ -387,6 +397,12 @@ def _format_state_summary(
         f"  Round: {state.timing.round_number}",
         f"  Season: {state.timing.season_number}",
         f"  Turn in round: {state.timing.turn_in_round}",
+        "Merchant:",
+        f"  Position: {current_merchant_duty(state, config.merchant)}",
+        (
+            "  Resource: "
+            f"{current_merchant_resource(state, config.merchant) or 'none'}"
+        ),
         "",
         "Acted player state:",
         *_format_player_state(state, acted_player, config),

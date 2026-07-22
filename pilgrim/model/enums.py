@@ -113,6 +113,7 @@ class EventType(Enum):
     ALMS_THRESHOLD_REWARD = "alms_threshold_reward"
     ALMS_SEASON_REWARD = "alms_season_reward"
     ALMS_RESET = "alms_reset"
+    MERCHANT_ADVANCE = "merchant_advance"
     TURN_ADVANCE = "turn_advance"
     ROUND_END = "round_end"
     ROUND_ADVANCE = "round_advance"

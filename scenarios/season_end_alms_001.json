@@ -8,6 +8,7 @@
   "initial_state": {
     "active_player": "player_two",
     "phase": "sow",
+    "merchant_position": 0,
     "timing": {
       "absolute_turn": 5,
       "round_number": 3,
