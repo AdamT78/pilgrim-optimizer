@@ -1,0 +1,18 @@
+{
+  "path": [
+    "taxation",
+    "produce",
+    "clerical",
+    "alms",
+    "build",
+    "clerical"
+  ],
+  "resource_by_duty": {
+    "produce": "wheat",
+    "clerical": "silver",
+    "alms": "wheat",
+    "build": "stone",
+    "taxation": null
+  },
+  "advance_after_full_turn": true
+}

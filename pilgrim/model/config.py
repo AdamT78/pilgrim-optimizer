@@ -127,6 +127,42 @@ class TimingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MerchantConfig:
+    """Sandbox Merchant path and duty->resource lookup."""
+
+    path: tuple[str, ...]
+    resource_by_duty: tuple[tuple[str, str | None], ...]
+    advance_after_full_turn: bool
+
+    def __post_init__(self) -> None:
+        if not self.path:
+            raise ValueError("Merchant path cannot be empty.")
+        if not self.resource_by_duty:
+            raise ValueError("Merchant resource_by_duty cannot be empty.")
+
+        duty_names = {name for name, _ in self.resource_by_duty}
+        valid_resources = {"stone", "silver", "wheat"}
+        for _, resource in self.resource_by_duty:
+            if resource is not None and resource not in valid_resources:
+                raise ValueError(f"Invalid Merchant resource mapping: {resource}.")
+        for duty in self.path:
+            if duty not in duty_names:
+                raise ValueError(f"Merchant path duty missing resource mapping: {duty}.")
+
+    def duty_at(self, position: int) -> str:
+        return self.path[position % len(self.path)]
+
+    def resource_for_duty(self, duty: str) -> str | None:
+        for name, resource in self.resource_by_duty:
+            if name == duty:
+                return resource
+        raise ValueError(f"Unknown Merchant duty: {duty}")
+
+    def resource_at(self, position: int) -> str | None:
+        return self.resource_for_duty(self.duty_at(position))
+
+
+@dataclass(frozen=True, slots=True)
 class GameConfig:
     """Ruleset configuration bundle for scenario execution."""
 
@@ -135,6 +171,7 @@ class GameConfig:
     piety: PietyConfig
     alms: AlmsConfig
     timing: TimingConfig
+    merchant: MerchantConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -230,13 +267,22 @@ def game_config_from_dict(
     piety_raw: Mapping[str, Any],
     alms_raw: Mapping[str, Any],
     timing_raw: Mapping[str, Any],
+    merchant_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
     piety = piety_from_dict(piety_raw)
     alms = alms_from_dict(alms_raw)
     timing = timing_from_dict(timing_raw)
-    return GameConfig(board=board, duties=duties, piety=piety, alms=alms, timing=timing)
+    merchant = merchant_from_dict(merchant_raw)
+    return GameConfig(
+        board=board,
+        duties=duties,
+        piety=piety,
+        alms=alms,
+        timing=timing,
+        merchant=merchant,
+    )
 
 
 def timing_from_dict(raw: Mapping[str, Any]) -> TimingConfig:
@@ -246,4 +292,31 @@ def timing_from_dict(raw: Mapping[str, Any]) -> TimingConfig:
         rounds_per_season=int(raw["rounds_per_season"]),
         max_rounds=int(raw["max_rounds"]),
         max_absolute_turns=int(raw["max_absolute_turns"]),
+    )
+
+
+def merchant_from_dict(raw: Mapping[str, Any]) -> MerchantConfig:
+    """Parse sandbox Merchant path and resource lookup config."""
+    path_raw = raw["path"]
+    if not isinstance(path_raw, list):
+        raise ValueError("Merchant path must be a list.")
+    path = tuple(str(entry) for entry in path_raw)
+
+    resource_lookup_raw = raw["resource_by_duty"]
+    if not isinstance(resource_lookup_raw, Mapping):
+        raise ValueError("Merchant resource_by_duty must be an object.")
+    resource_by_duty = tuple(
+        sorted(
+            (
+                str(duty_name),
+                str(resource_name) if resource_name is not None else None,
+            )
+            for duty_name, resource_name in resource_lookup_raw.items()
+        )
+    )
+
+    return MerchantConfig(
+        path=path,
+        resource_by_duty=resource_by_duty,
+        advance_after_full_turn=bool(raw.get("advance_after_full_turn", True)),
     )

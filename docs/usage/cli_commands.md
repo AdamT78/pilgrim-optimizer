@@ -164,6 +164,7 @@ Using `--verbose` with `solve` prints:
 - all transition events for the recommended first full turn (sowing + duty/tithe + invariants)
 - a compact state summary after applying that first full turn
 - timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`)
+- Merchant state (`Position`, `Resource`)
 - `Acted player` (the player who executed that recommended turn)
 - `Next active player` (the player whose turn is next)
 - the acted player state so resource gains and acolyte recall are directly visible
@@ -235,9 +236,19 @@ Position mapping used by the current sandbox:
   - `Turn in round`
 - `apply --verbose` is especially useful for inspecting automatic boundary events:
   - `TURN_ADVANCE`
+  - `MERCHANT_ADVANCE`
   - `ROUND_END` / `ROUND_ADVANCE`
   - `SEASON_END` / `SEASON_ADVANCE`
   - season-end Alms events when a season closes
+
+## Merchant Context (v0.8)
+
+- Merchant position is now part of scenario state and advances after full turns.
+- Verbose `solve` and `apply` state summaries now include:
+  - `Merchant`
+  - `Position`
+  - `Resource`
+- At taxation, verbose output shows `Resource: none`.
 
 ## Typical development workflow
 

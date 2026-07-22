@@ -42,11 +42,14 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     alms_path = _resolve_path(alms_file, scenario_path)
     timing_file = str(merged.get("timing_file", "configs/timing.json"))
     timing_path = _resolve_path(timing_file, scenario_path)
+    merchant_file = str(merged.get("merchant_file", "configs/merchant.json"))
+    merchant_path = _resolve_path(merchant_file, scenario_path)
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
     piety_raw = _read_json(piety_path)
     alms_raw = _read_json(alms_path)
     timing_raw = _read_json(timing_path)
+    merchant_raw = _read_json(merchant_path)
 
     config = game_config_from_dict(
         board_raw=board_raw,
@@ -54,8 +57,12 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         piety_raw=piety_raw,
         alms_raw=alms_raw,
         timing_raw=timing_raw,
+        merchant_raw=merchant_raw,
     )
-    state = _game_state_from_dict(merged["initial_state"])
+    state = _game_state_from_dict(
+        merged["initial_state"],
+        merchant_path_length=len(config.merchant.path),
+    )
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
     root_player_id = _root_player_from_dict(merged, default_player=state.active_player)
     opponent_model = _opponent_model_from_dict(merged)
@@ -90,7 +97,11 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
-def _game_state_from_dict(raw: Mapping[str, Any]) -> GameState:
+def _game_state_from_dict(
+    raw: Mapping[str, Any],
+    *,
+    merchant_path_length: int,
+) -> GameState:
     players_raw = raw["players"]
     acolytes_raw = raw.get("acolytes")
     player_one = _player_state_from_dict(
@@ -102,11 +113,18 @@ def _game_state_from_dict(raw: Mapping[str, Any]) -> GameState:
         legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_two"),
     )
     timing = _timing_state_from_dict(raw)
+    merchant_position = _merchant_position_from_dict(raw)
+    if merchant_position >= merchant_path_length:
+        raise ValueError(
+            "Scenario merchant_position must be within Merchant path bounds: "
+            f"{merchant_position} not in [0, {merchant_path_length - 1}]."
+        )
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         phase=TurnPhase.from_string(str(raw["phase"])),
         players=(player_one, player_two),
         timing=timing,
+        merchant_position=merchant_position,
     )
 
 
@@ -191,6 +209,13 @@ def _timing_state_from_dict(raw: Mapping[str, Any]) -> TimingState:
         season_number=1,
         turn_in_round=0,
     )
+
+
+def _merchant_position_from_dict(raw: Mapping[str, Any]) -> int:
+    merchant_raw = raw.get("merchant")
+    if isinstance(merchant_raw, Mapping):
+        return int(merchant_raw.get("position", 0))
+    return int(raw.get("merchant_position", 0))
 
 
 def _opponent_model_from_dict(raw: Mapping[str, Any]) -> OpponentModel:

@@ -17,6 +17,11 @@ from pilgrim.model.state import GameState
 from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
+from pilgrim.rules.merchant import (
+    advance_merchant_position,
+    current_merchant_duty,
+    current_merchant_resource,
+)
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.timing import advance_timing, resolve_season_end
 from pilgrim.rules.validation import (
@@ -353,7 +358,35 @@ def _apply_full_turn_action(
         raise TransitionValidationError(str(exc)) from exc
 
     next_state = timing_result.state
-    events.extend(timing_result.events)
+    timing_events = list(timing_result.events)
+    boundary_events = timing_events
+    if timing_events and timing_events[0].event_type is EventType.TURN_ADVANCE:
+        events.append(timing_events[0])
+        boundary_events = timing_events[1:]
+
+    if config.merchant.advance_after_full_turn:
+        from_duty = current_merchant_duty(next_state, config.merchant)
+        next_merchant_position = advance_merchant_position(
+            next_state.merchant_position,
+            config.merchant,
+        )
+        next_state = next_state.with_merchant_position(next_merchant_position)
+        to_duty = current_merchant_duty(next_state, config.merchant)
+        current_resource = current_merchant_resource(next_state, config.merchant)
+        events.append(
+            GameEvent(
+                event_type=EventType.MERCHANT_ADVANCE,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    from_duty=from_duty,
+                    to_duty=to_duty,
+                    current_resource=current_resource if current_resource is not None else "none",
+                ),
+            )
+        )
+
+    events.extend(boundary_events)
 
     if timing_result.season_ended:
         completed_season_number = timing_result.completed_season_number

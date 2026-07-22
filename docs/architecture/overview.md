@@ -73,6 +73,16 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Deferred timing item:
   - piety-based start-player selection for new seasons (not implemented yet)
 
+## Merchant Context (v0.8)
+
+- `GameState` now includes `merchant_position` as deterministic turn-to-turn context.
+- Merchant path and duty-to-resource lookup are loaded from `configs/merchant.json`.
+- Post-turn transition flow advances Merchant position as part of timing progression.
+- Merchant context is reusable infrastructure for future systems:
+  - building-hire payment resource
+  - trade-route income resource
+- At `taxation`, Merchant resource context is intentionally `None` (no resource).
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

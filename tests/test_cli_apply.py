@@ -86,12 +86,16 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "ALMS_PAYMENT:" in output
     assert "ALMS_PROGRESS:" in output
     assert "ALMS_THRESHOLD_REWARD:" in output
+    assert "MERCHANT_ADVANCE:" in output
     assert "State after action:" in output
     assert "Timing:" in output
     assert "Absolute turn:" in output
     assert "Round:" in output
     assert "Season:" in output
     assert "Turn in round:" in output
+    assert "Merchant:" in output
+    assert "Position:" in output
+    assert "Resource:" in output
     assert "Root-player evaluation after action:" in output
     assert "Root-player evaluation breakdown:" not in output
     assert "Total sandbox evaluation:" in output
@@ -111,6 +115,7 @@ def test_cli_apply_season_end_scenario_shows_season_and_alms_events(capsys) -> N
 
     assert exit_code == 0
     assert "SEASON_END:" in output
+    assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat" in output
     assert "ALMS_SEASON_REWARD:" in output
     assert "ALMS_RESET:" in output
     assert "SEASON_ADVANCE:" in output
@@ -118,3 +123,4 @@ def test_cli_apply_season_end_scenario_shows_season_and_alms_events(capsys) -> N
     assert "passed for all players" in output
     assert "player_one=2" in output
     assert "player_two=1" in output
+    assert "Resource: wheat" in output

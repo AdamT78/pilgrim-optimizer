@@ -24,14 +24,18 @@ Current sandbox timing config is loaded from `configs/timing.json`.
 After a full-turn action resolves, the engine runs timing progression and emits timing events:
 
 1. `TURN_ADVANCE` (always)
-2. `ROUND_END` and `ROUND_ADVANCE` (if round boundary reached)
-3. `SEASON_END` (if season boundary reached)
-4. Season-end Alms events:
+2. `MERCHANT_ADVANCE` (if Merchant config enables post-turn advancement)
+3. `ROUND_END` and `ROUND_ADVANCE` (if round boundary reached)
+4. `SEASON_END` (if season boundary reached)
+5. Season-end Alms events:
    - `ALMS_SEASON_REWARD`
    - `ALMS_RESET`
-5. `SEASON_ADVANCE`
+6. `SEASON_ADVANCE`
 
 Only boundary events that actually apply are emitted.
+
+Merchant advance is currently placed after active-player/timing advance and before round/season
+boundary events so the output reads naturally as turn progression.
 
 ## Alms season-end integration
 
