@@ -15,6 +15,7 @@ from pilgrim.model.enums import DutyEffect, EventType, PlayerId, TurnPhase, Turn
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
+from pilgrim.rules.buildings import validate_building_state
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
@@ -388,6 +389,7 @@ def _apply_full_turn_action(
         events.extend(round_end_events)
 
     ensure_non_negative_resources(next_state)
+    validate_building_state(next_state, config)
     ensure_valid_timing(next_state)
     ensure_valid_dummy_state(next_state)
     ensure_acolyte_conservation(state, next_state)

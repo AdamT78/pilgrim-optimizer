@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pilgrim.model.buildings import BuildingsConfig, PlayerBoardSlots
 from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
@@ -16,6 +17,7 @@ from pilgrim.model.state import GameState, PlayerState
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
 from pilgrim.opponents import OpponentModel, opponent_model_from_dict
+from pilgrim.rules.buildings import default_building_market, validate_building_state
 from pilgrim.rules.dummy import seed_dummy_groups
 
 
@@ -48,6 +50,12 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     merchant_path = _resolve_path(merchant_file, scenario_path)
     ship_file = str(merged.get("ship_file", "configs/ship.json"))
     ship_path = _resolve_path(ship_file, scenario_path)
+    buildings_file = merged.get("buildings_file")
+    buildings_path = (
+        _resolve_path(str(buildings_file), scenario_path)
+        if buildings_file is not None
+        else _default_buildings_path()
+    )
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
     piety_raw = _read_json(piety_path)
@@ -55,6 +63,7 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     timing_raw = _read_json(timing_path)
     merchant_raw = _read_json(merchant_path)
     ship_raw = _read_json(ship_path)
+    buildings_raw = _read_json(buildings_path)
 
     config = game_config_from_dict(
         board_raw=board_raw,
@@ -64,6 +73,7 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         timing_raw=timing_raw,
         merchant_raw=merchant_raw,
         ship_raw=ship_raw,
+        buildings_raw=buildings_raw,
     )
     table_player_count = _player_count_from_dict(merged)
     state = _game_state_from_dict(
@@ -71,8 +81,10 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         merchant_path_length=len(config.merchant.path),
         ship_start_position=config.ship.start_position,
         ship_path_length=config.ship.path_length,
+        buildings_config=config.buildings,
         table_player_count=table_player_count,
     )
+    validate_building_state(state, config)
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
     root_player_id = _root_player_from_dict(merged, default_player=state.active_player)
     opponent_model = _opponent_model_from_dict(merged)
@@ -113,6 +125,7 @@ def _game_state_from_dict(
     merchant_path_length: int,
     ship_start_position: int,
     ship_path_length: int,
+    buildings_config: BuildingsConfig,
     table_player_count: int,
 ) -> GameState:
     players_raw = raw["players"]
@@ -134,6 +147,7 @@ def _game_state_from_dict(
         start_player = PlayerId.from_string(str(raw["active_player"]))
     game_over = bool(raw.get("game_over", False))
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
+    building_market = _building_market_from_dict(raw, buildings_config)
     if merchant_position >= merchant_path_length:
         raise ValueError(
             "Scenario merchant_position must be within Merchant path bounds: "
@@ -156,6 +170,7 @@ def _game_state_from_dict(
         ship_position=ship_position,
         completed_rounds=completed_rounds,
         game_over=game_over,
+        building_market=building_market,
     )
 
 
@@ -181,6 +196,7 @@ def _player_state_from_dict(
         piety=int(raw.get("piety", 0)),
         alms_position=int(raw.get("alms_position", 0)),
         victory_points=int(raw.get("victory_points", 0)),
+        player_board_slots=_player_board_slots_from_dict(raw.get("player_board_slots")),
     )
 
 
@@ -279,6 +295,34 @@ def _dummy_acolytes_from_dict(
     )
 
 
+def _building_market_from_dict(
+    raw: Mapping[str, Any],
+    buildings_config: BuildingsConfig,
+) -> tuple[str, ...]:
+    market_raw = raw.get("building_market")
+    if market_raw is None:
+        return default_building_market(buildings_config)
+    if not isinstance(market_raw, list):
+        raise ValueError("building_market must be a list of building ids.")
+    return tuple(str(value) for value in market_raw)
+
+
+def _player_board_slots_from_dict(raw: Any) -> PlayerBoardSlots:
+    if raw is None:
+        return PlayerBoardSlots()
+    if not isinstance(raw, Mapping):
+        raise ValueError("player_board_slots must be an object.")
+    active_raw = raw.get("active_buildings", [])
+    donated_raw = raw.get("donated_buildings", [])
+    if not isinstance(active_raw, list) or not isinstance(donated_raw, list):
+        raise ValueError("active_buildings and donated_buildings must be lists.")
+    return PlayerBoardSlots(
+        active_buildings=tuple(str(value) for value in active_raw),
+        donated_buildings=tuple(str(value) for value in donated_raw),
+        cardinal_favor_tiles=int(raw.get("cardinal_favor_tiles", 0)),
+    )
+
+
 def _player_count_from_dict(raw: Mapping[str, Any]) -> int:
     player_count_raw = raw.get("player_count")
     if player_count_raw is None:
@@ -303,6 +347,10 @@ def _resolve_path(path_value: str, scenario_path: Path) -> Path:
     if local_candidate.exists():
         return local_candidate
     return (scenario_path.parent.parent / path).resolve()
+
+
+def _default_buildings_path() -> Path:
+    return (Path(__file__).resolve().parents[2] / "configs" / "buildings.json").resolve()
 
 
 def _read_json(path: Path) -> dict[str, Any]:

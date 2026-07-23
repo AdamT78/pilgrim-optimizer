@@ -8,6 +8,14 @@ from pilgrim.model.actions import (
     readable_route,
     resolution_from_effect,
 )
+from pilgrim.model.buildings import (
+    BUILDING_LEVELS,
+    BuildingDefinition,
+    BuildingsConfig,
+    BuildingSetupConfig,
+    PlayerBoardConfig,
+    PlayerBoardSlots,
+)
 from pilgrim.model.config import (
     AlmsConfig,
     BoardConfig,
@@ -51,7 +59,11 @@ from pilgrim.model.workforce import (
 __all__ = [
     "ActionType",
     "AlmsConfig",
+    "BUILDING_LEVELS",
     "BoardConfig",
+    "BuildingDefinition",
+    "BuildingSetupConfig",
+    "BuildingsConfig",
     "CANONICAL_POSITION_NAMES",
     "CommittedAcolytes",
     "DutyDefinition",
@@ -68,6 +80,8 @@ __all__ = [
     "PlayerId",
     "PlayerState",
     "PietyConfig",
+    "PlayerBoardConfig",
+    "PlayerBoardSlots",
     "Resources",
     "ShipConfig",
     "TurnResolutionType",

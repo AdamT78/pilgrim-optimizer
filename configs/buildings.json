@@ -1,5 +1,212 @@
 {
-  "notes": "Placeholder building configuration for future phases.",
-  "building_cards": [],
-  "bonuses": []
+  "setup": {
+    "buildings_per_game": 12,
+    "draw_per_level": {
+      "1": 4,
+      "2": 4,
+      "3": 4
+    },
+    "pool_size_per_level": {
+      "1": 8,
+      "2": 8,
+      "3": 8
+    }
+  },
+  "player_board": {
+    "building_and_cardinal_slot_limit": 6
+  },
+  "catalogue": [
+    {
+      "id": "confession_box",
+      "name": "Confession Box",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "chapel",
+      "name": "Chapel",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "chapter_house",
+      "name": "Chapter House",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "guild",
+      "name": "Guild",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "infirmary",
+      "name": "Infirmary",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "mint",
+      "name": "Mint",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "quarry",
+      "name": "Quarry",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "well",
+      "name": "Well",
+      "level": 1,
+      "stone_cost": 1,
+      "donation_vp": 2,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "brewery",
+      "name": "Brewery",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "cloisters",
+      "name": "Cloisters",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "dormitory",
+      "name": "Dormitory",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "grain_store",
+      "name": "Grain Store",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "indulgences",
+      "name": "Indulgences",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "library",
+      "name": "Library",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "reliquary",
+      "name": "Reliquary",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "stone_yard",
+      "name": "Stone Yard",
+      "level": 2,
+      "stone_cost": 2,
+      "donation_vp": 4,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "bank",
+      "name": "Bank",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "customs_house",
+      "name": "Customs House",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "inquisition",
+      "name": "Inquisition",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "kogge",
+      "name": "Kogge",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "mill",
+      "name": "Mill",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "pulpit",
+      "name": "Pulpit",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "scriptorium",
+      "name": "Scriptorium",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    },
+    {
+      "id": "wagon_yard",
+      "name": "Wagon Yard",
+      "level": 3,
+      "stone_cost": 3,
+      "donation_vp": 6,
+      "effect_status": "deferred"
+    }
+  ]
 }

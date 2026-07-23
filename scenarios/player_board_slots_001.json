@@ -1,0 +1,39 @@
+{
+  "scenario_id": "player_board_slots_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "building_market": [
+      "confession_box",
+      "chapel",
+      "chapter_house",
+      "guild",
+      "brewery",
+      "cloisters",
+      "dormitory",
+      "grain_store",
+      "bank",
+      "customs_house",
+      "inquisition",
+      "kogge"
+    ],
+    "players": {
+      "player_one": {
+        "player_board_slots": {
+          "active_buildings": [
+            "confession_box",
+            "chapel"
+          ],
+          "donated_buildings": [
+            "brewery"
+          ],
+          "cardinal_favor_tiles": 1
+        }
+      }
+    }
+  }
+}

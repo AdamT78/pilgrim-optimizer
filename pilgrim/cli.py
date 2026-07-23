@@ -19,6 +19,11 @@ from pilgrim.model.dummy import format_dummy_acolytes
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
+from pilgrim.rules.buildings import (
+    available_player_board_slots,
+    building_names_for_ids,
+    used_player_board_slots,
+)
 from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
@@ -509,6 +514,10 @@ def _format_state_summary(
             "  Resource: "
             f"{current_merchant_resource(state, config.merchant) or 'none'}"
         ),
+        "Building market:",
+        f"  Level 1: {_market_building_names_for_level(state, config, 1)}",
+        f"  Level 2: {_market_building_names_for_level(state, config, 2)}",
+        f"  Level 3: {_market_building_names_for_level(state, config, 3)}",
         "Dummy acolytes:",
         f"  north_group: {north_group_text}",
         f"  south_group: {south_group_text}",
@@ -539,6 +548,12 @@ def _format_player_state(
     breakdown = evaluate_player(state, player, config)
     player_state = state.player_state(player)
     player_vector = state.player_vector(player)
+    slots = player_state.player_board_slots
+    active_building_names = building_names_for_ids(slots.active_buildings, config.buildings)
+    donated_building_names = building_names_for_ids(slots.donated_buildings, config.buildings)
+    used_slots = used_player_board_slots(player_state)
+    total_slots = config.buildings.player_board.building_and_cardinal_slot_limit
+    available_slots = available_player_board_slots(player_state, config)
     mancala = ", ".join(
         f"{position_name(position_id, positions)}={count}"
         for position_id, count in enumerate(player_vector)
@@ -568,6 +583,18 @@ def _format_player_state(
             f"alms_table={player_state.workforce.committed.alms_table}"
         ),
         f"  Total: {player_state.workforce.total}",
+        "Player board slots:",
+        (
+            "  Active buildings: "
+            f"{', '.join(active_building_names) if active_building_names else 'none'}"
+        ),
+        (
+            "  Donated buildings: "
+            f"{', '.join(donated_building_names) if donated_building_names else 'none'}"
+        ),
+        f"  Cardinal favor tiles: {slots.cardinal_favor_tiles}",
+        f"  Used slots: {used_slots}/{total_slots}",
+        f"  Available slots: {available_slots}",
         f"Mancala: {mancala}",
     )
 
@@ -593,6 +620,22 @@ def _parse_route(route_text: str) -> tuple[int, ...]:
     if not route_text:
         return ()
     return tuple(int(piece) for piece in route_text.split("->"))
+
+
+def _market_building_names_for_level(
+    state: GameState,
+    config: GameConfig,
+    level: int,
+) -> str:
+    level_ids = tuple(
+        building_id
+        for building_id in state.building_market
+        if config.buildings.definition_by_id(building_id).level == level
+    )
+    level_names = building_names_for_ids(level_ids, config.buildings)
+    if not level_names:
+        return "none"
+    return ", ".join(level_names)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,22 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Game end occurs when Ship returns to NW pilgrimage site after 26 completed rounds, after final season-end Alms resolution.
 - When `game_over` becomes true, `legal_actions()` returns no actions, keeping search/CLI behavior deterministic.
 
+## Building Catalogue and Slots (v1.1)
+
+- `GameConfig` now includes static building metadata loaded from `configs/buildings.json`.
+- Building config now captures:
+  - 24-entry catalogue
+  - per-level pool metadata
+  - per-game draw shape (4/4/4)
+  - player-board slot limit
+- `GameState` now tracks:
+  - `building_market` (12 stable ids for current game)
+  - per-player board-slot occupancy (`active_buildings`, `donated_buildings`, `cardinal_favor_tiles`)
+- Scenario loading stays deterministic:
+  - explicit `building_market` is accepted
+  - missing market falls back to first 4 ids per level from catalogue order
+- Transition/search are still rules-agnostic with no building actions yet; this milestone adds data and validation only.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.
