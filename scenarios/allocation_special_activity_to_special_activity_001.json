@@ -1,5 +1,5 @@
 {
-  "scenario_id": "allocation_to_city_001",
+  "scenario_id": "allocation_special_activity_to_special_activity_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -33,7 +33,7 @@
         "workforce": {
           "mancala": [0, 0, 0, 0, 0, 0, 0, 1, 0],
           "village": 8,
-          "abbey": 1,
+          "abbey": 0,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -42,11 +42,17 @@
             "alms_table": 0
           }
         },
-        "special_activities": {}
+        "special_activities": {
+          "fields": true,
+          "road_engineer": true,
+          "stone_mason": true,
+          "alms_house": true,
+          "vestry": true
+        }
       },
       "player_two": {
         "workforce": {
-          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 1],
           "village": 0,
           "abbey": 0,
           "committed": {

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from pilgrim.model.actions import (
+    AllocationMove,
     FullTurnAction,
     GameAction,
     action_id,
@@ -38,13 +39,12 @@ from pilgrim.rules.round_end import (
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.special_activities import (
-    allocate_abbey_to_city,
-    allocate_abbey_to_special_activity,
     alms_house_extra_payment_options,
-    available_special_activities,
+    apply_allocation_move,
     can_use_alms_house_bonus,
     clerical_devotion_bonus,
     clerical_silversmith_bonus,
+    legal_allocation_moves,
     produce_stone_mason_bonus,
     produce_wheat_fields_bonus,
 )
@@ -150,26 +150,27 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 )
                             )
                 elif TurnResolutionType.ALLOCATION in category_actions:
-                    if player_state.workforce.abbey > 0:
+                    player_count = sowed_vector[duty_position]
+                    opponent_counts = _competing_counts(
+                        state,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                    )
+                    strength = duty_strength(player_count, opponent_counts)
+                    duty_value, _silver_cost = duty_value_and_silver_cost(strength)
+                    for move_sequence in _allocation_move_sequences(
+                        player_state,
+                        max_moves=duty_value,
+                    ):
                         actions.append(
                             FullTurnAction(
                                 origin=origin,
                                 route=route,
                                 selected_duty=duty_position,
                                 resolution=TurnResolutionType.ALLOCATION,
-                                allocation_target="city",
+                                allocation_moves=move_sequence,
                             )
                         )
-                        for activity_id in available_special_activities(player_state):
-                            actions.append(
-                                FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.ALLOCATION,
-                                    allocation_target=f"special_activity:{activity_id}",
-                                )
-                            )
                 else:
                     for category_action in category_actions:
                         actions.append(
@@ -284,8 +285,8 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
             )
-        if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_target:
-            raise TransitionValidationError("Only Allocation actions may set allocation_target.")
+        if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
+            raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
             use_alms_house = (
@@ -363,46 +364,43 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
-            target_kind, target_value = _parse_allocation_target(action.allocation_target)
-            try:
-                if target_kind == "city":
-                    new_player_state = allocate_abbey_to_city(state_after_sow.player_state(player))
-                    special_bonus_events.append(
-                        GameEvent(
-                            event_type=EventType.ALLOCATION,
-                            actor=player,
-                            action_id=transition_action_id,
-                            details=make_event_details(
-                                from_pool="abbey",
-                                to_pool="city",
-                                amount=1,
-                            ),
-                        )
+            if not action.allocation_moves:
+                raise TransitionValidationError(
+                    "Allocation action must include at least 1 allocation move."
+                )
+            if len(action.allocation_moves) > effective_duty_value:
+                raise TransitionValidationError(
+                    "Allocation action includes more moves than effective duty value allows."
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            for move in action.allocation_moves:
+                try:
+                    new_player_state = apply_allocation_move(new_player_state, move)
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.ALLOCATION,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            from_pool=move.source,
+                            to_pool=move.destination,
+                            amount=1,
+                        ),
                     )
-                else:
-                    if target_value is None:
-                        raise TransitionValidationError(
-                            "Allocation target special activity is missing."
-                        )
-                    new_player_state = allocate_abbey_to_special_activity(
-                        state_after_sow.player_state(player),
-                        target_value,
+                )
+
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Allocation minority silver cost would overdraw silver."
                     )
-                    special_bonus_events.append(
-                        GameEvent(
-                            event_type=EventType.ALLOCATION,
-                            actor=player,
-                            action_id=transition_action_id,
-                            details=make_event_details(
-                                from_pool="abbey",
-                                to_pool=f"special_activity:{target_value}",
-                                amount=1,
-                            ),
-                        )
-                    )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            resource_delta = (0, 0, 0)
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            resource_delta = (0, -silver_cost, 0)
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         else:
@@ -864,12 +862,45 @@ def _alms_payment_options(
     return tuple(options)
 
 
-def _parse_allocation_target(target: str | None) -> tuple[str, str | None]:
-    if not target:
-        raise TransitionValidationError("Allocation action must include allocation_target.")
-    if target == "city":
-        return "city", None
-    prefix = "special_activity:"
-    if target.startswith(prefix):
-        return "special_activity", target[len(prefix) :]
-    raise TransitionValidationError(f"Unknown allocation target: {target}")
+def _allocation_move_sequences(
+    player_state,
+    *,
+    max_moves: int,
+) -> tuple[tuple[AllocationMove, ...], ...]:
+    if max_moves <= 0:
+        return ()
+
+    discovered_sequences: list[tuple[AllocationMove, ...]] = []
+
+    def _walk(
+        current_player_state,
+        current_path: tuple[AllocationMove, ...],
+    ) -> None:
+        if len(current_path) >= max_moves:
+            return
+        for move in legal_allocation_moves(current_player_state):
+            try:
+                next_state = apply_allocation_move(current_player_state, move)
+            except ValueError:
+                continue
+            next_path = (*current_path, move)
+            discovered_sequences.append(next_path)
+            _walk(next_state, next_path)
+
+    _walk(player_state, ())
+
+    ordered_sequences: list[tuple[AllocationMove, ...]] = []
+    for length in range(max_moves, 0, -1):
+        for sequence in discovered_sequences:
+            if len(sequence) == length:
+                ordered_sequences.append(sequence)
+
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    unique_sequences: list[tuple[AllocationMove, ...]] = []
+    for sequence in ordered_sequences:
+        key = tuple((move.source, move.destination) for move in sequence)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_sequences.append(sequence)
+    return tuple(unique_sequences)

@@ -8,7 +8,7 @@ infrastructure for the headless sandbox:
 - Village / Serf pool tracking
 - Abbey / Acolyte pool tracking
 - City and Duty-tile acolyte tracking via the existing mancala vector
-- Allocation full-turn action (Abbey -> City or Abbey -> Special Activity)
+- Allocation full-turn action (Abbey <-> Special Activities and Special -> Special)
 - Six per-player Special Activity spaces and their currently supported bonuses
 
 No roads, construct, trade-route, spatial-map, or building action systems are added here.
@@ -45,22 +45,27 @@ Small sandbox scenarios may still override these counts explicitly (for focused 
 Allocation is modelled as a full-turn duty resolution (`action: allocation`) when a selected
 duty tile is assigned the `allocation` category in the scenario duty layout.
 
-Current allocation targets:
+Allocation move primitives:
 
-- `city`
-- `special_activity:<id>`
+- `abbey -> <special_activity>`
+- `<special_activity> -> abbey`
+- `<special_activity> -> <special_activity>`
 
 Rules enforced now:
 
-- requires at least 1 abbey acolyte
-- exactly 1 acolyte is moved from abbey
-- Special Activity target must be empty for that player
-- action emits `ALLOCATION` event
+- Allocation does **not** move acolytes to City.
+- One Allocation action contains `1..duty_value` moves.
+- Each move must be legal at the moment it is taken (step-by-step state updates).
+- Special Activity destination must be empty.
+- Special Activity source must be occupied.
+- A Special Activity cannot move to itself.
+- action emits one `ALLOCATION` event per move, in move order.
 
 Notes:
 
 - Duty-tile recall still runs after allocation, consistent with other non-tithe duty resolutions.
 - Allocation is no longer tied to a fixed physical position; duty layout controls where it appears.
+- A move between two Special Activities counts as one Allocation move.
 
 ## Special Activities
 

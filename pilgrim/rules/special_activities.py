@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from pilgrim.model.actions import AllocationMove
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import PlayerState
@@ -29,22 +30,6 @@ def available_special_activities(player_state: PlayerState) -> tuple[str, ...]:
     return player_state.special_activities.available()
 
 
-def allocate_abbey_to_city(player_state: PlayerState) -> PlayerState:
-    """Move one abbey acolyte to city (mancala position 0)."""
-    if player_state.workforce.abbey < 1:
-        raise ValueError("Allocation requires at least 1 abbey acolyte.")
-    mancala = list(player_state.workforce.mancala)
-    mancala[0] += 1
-    return replace(
-        player_state,
-        workforce=replace(
-            player_state.workforce,
-            mancala=tuple(mancala),
-            abbey=player_state.workforce.abbey - 1,
-        ),
-    )
-
-
 def allocate_abbey_to_special_activity(
     player_state: PlayerState,
     activity_id: str,
@@ -61,6 +46,86 @@ def allocate_abbey_to_special_activity(
             abbey=player_state.workforce.abbey - 1,
         ),
         special_activities=player_state.special_activities.with_activity(activity_id, True),
+    )
+
+
+def allocate_special_activity_to_abbey(
+    player_state: PlayerState,
+    activity_id: str,
+) -> PlayerState:
+    """Move one occupied special-activity acolyte back to abbey."""
+    if not has_special_activity(player_state, activity_id):
+        raise ValueError(f"Special activity is not occupied: {activity_id}")
+    return replace(
+        player_state,
+        workforce=replace(
+            player_state.workforce,
+            abbey=player_state.workforce.abbey + 1,
+        ),
+        special_activities=player_state.special_activities.with_activity(activity_id, False),
+    )
+
+
+def allocate_special_activity_to_special_activity(
+    player_state: PlayerState,
+    *,
+    source_activity_id: str,
+    destination_activity_id: str,
+) -> PlayerState:
+    """Move one acolyte from occupied source special-activity to empty destination."""
+    if source_activity_id == destination_activity_id:
+        raise ValueError("Allocation source and destination special activity must differ.")
+    if not has_special_activity(player_state, source_activity_id):
+        raise ValueError(f"Special activity is not occupied: {source_activity_id}")
+    if has_special_activity(player_state, destination_activity_id):
+        raise ValueError(f"Special activity already occupied: {destination_activity_id}")
+    after_source_clear = player_state.special_activities.with_activity(source_activity_id, False)
+    return replace(
+        player_state,
+        special_activities=after_source_clear.with_activity(destination_activity_id, True),
+    )
+
+
+def legal_allocation_moves(player_state: PlayerState) -> tuple[AllocationMove, ...]:
+    """Return legal one-step allocation moves in deterministic order."""
+    occupied = occupied_special_activities(player_state)
+    empty = available_special_activities(player_state)
+    moves: list[AllocationMove] = []
+
+    if player_state.workforce.abbey > 0:
+        for activity_id in empty:
+            moves.append(AllocationMove(source="abbey", destination=activity_id))
+
+    for source_activity_id in occupied:
+        for destination_activity_id in empty:
+            if source_activity_id != destination_activity_id:
+                moves.append(
+                    AllocationMove(
+                        source=source_activity_id,
+                        destination=destination_activity_id,
+                    )
+                )
+
+    for activity_id in occupied:
+        moves.append(AllocationMove(source=activity_id, destination="abbey"))
+
+    return tuple(moves)
+
+
+def apply_allocation_move(player_state: PlayerState, move: AllocationMove) -> PlayerState:
+    """Apply one allocation move with validation."""
+    if move.source == "abbey":
+        if move.destination == "abbey":
+            raise ValueError("Allocation move abbey -> abbey is not legal.")
+        return allocate_abbey_to_special_activity(player_state, move.destination)
+
+    if move.destination == "abbey":
+        return allocate_special_activity_to_abbey(player_state, move.source)
+
+    return allocate_special_activity_to_special_activity(
+        player_state,
+        source_activity_id=move.source,
+        destination_activity_id=move.destination,
     )
 
 

@@ -133,7 +133,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - City/Duty acolytes via `workforce.mancala`
 - New rules helper module `pilgrim.rules.special_activities` centralizes:
   - occupancy queries and formatting
-  - allocation helpers (Abbey -> City / Special Activity)
+  - allocation helpers (Abbey <-> Special Activity and Special -> Special)
   - current activity bonus hooks
 - Transition layer now supports:
   - `allocation` duty resolution

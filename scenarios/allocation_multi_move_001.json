@@ -1,0 +1,64 @@
+{
+  "scenario_id": "allocation_multi_move_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "duty_tiles": {
+    "north": "produce",
+    "north_east": "clerical",
+    "east": "build_roads",
+    "south_east": "construct",
+    "south": "give_alms",
+    "south_west": "ordination",
+    "west": "taxation",
+    "north_west": "allocation"
+  },
+  "initial_state": {
+    "start_player_id": "player_one",
+    "merchant_position": 0,
+    "ship_position": 0,
+    "completed_rounds": 0,
+    "game_over": false,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 1,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "players": {
+      "player_one": {
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 1, 0],
+          "village": 8,
+          "abbey": 2,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        },
+        "special_activities": {}
+      },
+      "player_two": {
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        },
+        "special_activities": {}
+      }
+    }
+  }
+}
