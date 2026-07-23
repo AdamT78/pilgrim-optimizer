@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from pilgrim.model.buildings import BuildingsConfig, buildings_config_from_dict
 from pilgrim.model.enums import DutyEffect
 
 
@@ -220,6 +221,7 @@ class GameConfig:
     timing: TimingConfig
     merchant: MerchantConfig
     ship: ShipConfig
+    buildings: BuildingsConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -317,6 +319,7 @@ def game_config_from_dict(
     timing_raw: Mapping[str, Any],
     merchant_raw: Mapping[str, Any],
     ship_raw: Mapping[str, Any],
+    buildings_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
@@ -325,6 +328,7 @@ def game_config_from_dict(
     timing = timing_from_dict(timing_raw)
     merchant = merchant_from_dict(merchant_raw)
     ship = ship_from_dict(ship_raw)
+    buildings = buildings_from_dict(buildings_raw)
     return GameConfig(
         board=board,
         duties=duties,
@@ -333,6 +337,7 @@ def game_config_from_dict(
         timing=timing,
         merchant=merchant,
         ship=ship,
+        buildings=buildings,
     )
 
 
@@ -387,3 +392,8 @@ def ship_from_dict(raw: Mapping[str, Any]) -> ShipConfig:
         pilgrimage_site_positions=tuple(int(value) for value in pilgrimage_positions_raw),
         advance_per_round=int(raw.get("advance_per_round", 1)),
     )
+
+
+def buildings_from_dict(raw: Mapping[str, Any]) -> BuildingsConfig:
+    """Parse building catalogue + player-board slot config."""
+    return buildings_config_from_dict(raw)

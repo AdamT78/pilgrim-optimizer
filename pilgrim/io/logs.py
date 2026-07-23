@@ -36,6 +36,7 @@ def state_to_record(state: GameState) -> dict[str, Any]:
         "ship_position": state.ship_position,
         "completed_rounds": state.completed_rounds,
         "merchant_position": state.merchant_position,
+        "building_market": list(state.building_market),
         "dummy_acolytes": {
             "north_group": list(state.dummy_acolytes.north_group),
             "south_group": list(state.dummy_acolytes.south_group),
@@ -61,6 +62,11 @@ def state_to_record(state: GameState) -> dict[str, Any]:
                         "pilgrimage_sites": player.workforce.committed.pilgrimage_sites,
                         "alms_table": player.workforce.committed.alms_table,
                     },
+                },
+                "player_board_slots": {
+                    "active_buildings": list(player.player_board_slots.active_buildings),
+                    "donated_buildings": list(player.player_board_slots.donated_buildings),
+                    "cardinal_favor_tiles": player.player_board_slots.cardinal_favor_tiles,
                 },
             }
             for player in state.players

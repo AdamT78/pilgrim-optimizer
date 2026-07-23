@@ -167,6 +167,7 @@ Using `--verbose` with `solve` prints:
 - timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`, `Start player`, `Game over`)
 - Ship state (`Position`, `At pilgrimage site`, `At NW pilgrimage site`)
 - Merchant state (`Position`, `Resource`)
+- building market summary (`Level 1`, `Level 2`, `Level 3`)
 - dummy acolyte state (`north_group`, `south_group`, `total`)
 - `Acted player` (the player who executed that recommended turn)
 - `Next active player` (the player whose turn is next)
@@ -176,6 +177,7 @@ Using `--verbose` with `solve` prints:
 - a `Best-line final evaluation` section (state after the full principal variation)
 - a `Root-player evaluation after best first full turn` section (state after only the recommended first full turn)
 - workforce totals (`Mancala total`, `Village`, `Abbey`, committed pools, and overall `Total`)
+- player board slot summary (`Active buildings`, `Donated buildings`, `Cardinal favor tiles`, `Used slots`, `Available slots`)
 
 Position mapping used by the current sandbox:
 
@@ -281,6 +283,17 @@ Position mapping used by the current sandbox:
   - `START_PLAYER_SELECTION` (and optional tie-break event)
   - `GAME_END` when Ship returns to NW after the full 26-round loop
 - `game_over: true` is shown in verbose state summaries, and legal-action generation returns no actions.
+
+## Building Catalogue and Slots (v1.1)
+
+- Building catalogue data is now loaded from `configs/buildings.json`.
+- Scenario state includes a 12-building `building_market` with 4 buildings per level.
+- If `building_market` is omitted, deterministic fallback is used (first 4 by level from catalogue order).
+- Verbose `solve` and `apply` output now include:
+  - `Building market`
+  - per-player `Player board slots`
+  - slot usage lines (`Used slots`, `Available slots`)
+- Building actions/effects remain deferred in this milestone.
 
 ## Typical development workflow
 

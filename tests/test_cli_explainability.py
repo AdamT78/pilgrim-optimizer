@@ -109,6 +109,8 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "At pilgrimage site:" in output
     assert "At NW pilgrimage site:" in output
     assert "Merchant:" in output
+    assert "Building market:" in output
+    assert "Level 1: Confession Box, Chapel, Chapter House, Guild" in output
     assert "Dummy acolytes:" in output
     assert "Position:" in output
     assert "Resource:" in output
@@ -120,6 +122,11 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Alms table acolytes:" in output
     assert "Alms table VP:" in output
     assert "Workforce:" in output
+    assert "Player board slots:" in output
+    assert "Active buildings: none" in output
+    assert "Donated buildings: none" in output
+    assert "Used slots: 0/6" in output
+    assert "Available slots: 6" in output
     assert "Mancala total:" in output
     assert "Committed:" in output
     assert "Root-player evaluation after best first full turn:" in output
@@ -129,3 +136,25 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Total sandbox evaluation:" in output
     assert "Active player:" not in output
     assert "Mancala: city=" in output
+
+
+def test_cli_solve_verbose_shows_populated_player_board_slots_with_names(capsys) -> None:
+    exit_code = main(
+        [
+            "solve",
+            "scenarios/player_board_slots_001.json",
+            "--depth",
+            "2",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Building market:" in output
+    assert "Player board slots:" in output
+    assert "Active buildings: Confession Box, Chapel" in output
+    assert "Donated buildings: Brewery" in output
+    assert "Cardinal favor tiles: 1" in output
+    assert "Used slots: 4/6" in output
+    assert "Available slots: 2" in output

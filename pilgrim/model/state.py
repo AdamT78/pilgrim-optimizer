@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
+from pilgrim.model.buildings import PlayerBoardSlots
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
@@ -30,6 +31,7 @@ class PlayerState:
     piety: int = 0
     alms_position: int = 0
     victory_points: int = 0
+    player_board_slots: PlayerBoardSlots = field(default_factory=PlayerBoardSlots)
 
     def __post_init__(self) -> None:
         if self.piety < 0 or self.victory_points < 0 or self.alms_position < 0:
@@ -56,6 +58,7 @@ class GameState:
     ship_position: int = 0
     completed_rounds: int = 0
     game_over: bool = False
+    building_market: tuple[str, ...] = ()
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -144,6 +147,9 @@ class GameState:
 
     def with_completed_rounds(self, completed_rounds: int) -> GameState:
         return replace(self, completed_rounds=completed_rounds)
+
+    def with_building_market(self, building_market: tuple[str, ...]) -> GameState:
+        return replace(self, building_market=building_market)
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)

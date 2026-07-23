@@ -70,6 +70,7 @@ def apply_duty_effect(
         piety=new_piety_position,
         alms_position=player_state.alms_position,
         victory_points=player_state.victory_points,
+        player_board_slots=player_state.player_board_slots,
     )
     return (
         new_player_state,

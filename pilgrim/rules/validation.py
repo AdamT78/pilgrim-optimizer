@@ -168,6 +168,29 @@ def ensure_valid_dummy_state(state: GameState) -> None:
         raise TransitionValidationError(str(exc)) from exc
 
 
+def ensure_valid_player_board_slots_structure(state: GameState) -> None:
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        slots = state.player_state(player_id).player_board_slots
+        if slots.cardinal_favor_tiles < 0:
+            raise TransitionValidationError(
+                f"{player_id.name} cardinal_favor_tiles cannot be negative."
+            )
+        if len(set(slots.active_buildings)) != len(slots.active_buildings):
+            raise TransitionValidationError(
+                f"{player_id.name} active_buildings cannot contain duplicates."
+            )
+        if len(set(slots.donated_buildings)) != len(slots.donated_buildings):
+            raise TransitionValidationError(
+                f"{player_id.name} donated_buildings cannot contain duplicates."
+            )
+        overlap = set(slots.active_buildings).intersection(slots.donated_buildings)
+        if overlap:
+            raise TransitionValidationError(
+                f"{player_id.name} building cannot be both active and donated: "
+                f"{sorted(overlap)}."
+            )
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
@@ -176,3 +199,4 @@ def validate_state_invariants(state: GameState) -> None:
     ensure_valid_merchant_state(state)
     ensure_valid_round_end_state(state)
     ensure_valid_dummy_state(state)
+    ensure_valid_player_board_slots_structure(state)
