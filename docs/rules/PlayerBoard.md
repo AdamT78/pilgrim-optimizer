@@ -1,4 +1,4 @@
-# Player Board (v1.2 Sandbox Scope)
+# Player Board (v1.4 Sandbox Scope)
 
 ## Implemented now
 
@@ -66,12 +66,14 @@ Notes:
 
 Per player, each space is either occupied or empty:
 
-- `grain`
+- `fields`
 - `road_engineer`
 - `stone_mason`
 - `alms_house`
 - `engraver`
 - `vestry`
+
+The old `grain` name has been replaced by canonical ID `fields` (player-facing: Fields).
 
 Capacity rule:
 
@@ -81,16 +83,21 @@ Helpers are available for occupied/available activity queries and counts.
 
 ## Implemented Special Activity effects
 
-### Grain
+### Fields
 
-- current produce model is generic `produce` (wheat-focused in sandbox)
-- if occupied, Grain adds `+1 wheat` to `produce`
+- produce has two explicit mutually exclusive actions: `produce_wheat` and `produce_stone`
+- Produce duty value is applied to exactly one chosen resource and cannot be split.
+- Fields is a production bonus only; it does not increase Produce duty value.
+- if occupied, Fields adds `+1 wheat` to `produce_wheat` only
+- Fields does not affect `produce_stone`
 - emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Stone Mason
 
-- placeholder hook exists
-- no runtime bonus yet because explicit `produce_stone` option is not modelled
+- Stone Mason is a production bonus only; it does not increase Produce duty value.
+- if occupied, Stone Mason adds `+1 stone` to `produce_stone` only
+- Stone Mason does not affect `produce_wheat`
+- emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Engraver
 
@@ -105,7 +112,7 @@ Helpers are available for occupied/available activity queries and counts.
 ### Alms House
 
 - optional Give Alms bonus path
-- raises duty value by `+1`
+- raises Give Alms duty value by `+1` when the extra payment is made
 - requires extra payment of exactly `1 silver` or `1 wheat`
 - extra payment is encoded in the action fields and validated
 - emits `SPECIAL_ACTIVITY_BONUS`
@@ -132,6 +139,5 @@ serfs/acolytes conservation scope.
 ## Deferred
 
 - Special Activity removal/reallocation
-- explicit produce option split (`produce_grain` vs `produce_stone`)
 - road/construct effects for Road Engineer
 - full player-board systems beyond current sandbox scope

@@ -50,7 +50,7 @@ def test_selected_duty_must_contain_active_player_acolyte() -> None:
                 origin=0,
                 route=(1, 2, 3),
                 selected_duty=8,
-                resolution=TurnResolutionType.PRODUCE,
+                resolution=TurnResolutionType.PRODUCE_WHEAT,
             ),
             scenario.config,
         )

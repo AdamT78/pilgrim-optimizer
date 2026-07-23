@@ -74,20 +74,14 @@ def clerical_devotion_bonus(player_state: PlayerState) -> int:
     return 1 if has_special_activity(player_state, "vestry") else 0
 
 
-def produce_grain_bonus(player_state: PlayerState) -> int:
-    """Grain special activity adds +1 wheat to current produce action model."""
-    return 1 if has_special_activity(player_state, "grain") else 0
+def produce_wheat_fields_bonus(player_state: PlayerState) -> int:
+    """Fields special activity adds +1 wheat to produce_wheat."""
+    return 1 if has_special_activity(player_state, "fields") else 0
 
 
-def produce_stone_bonus_hook(player_state: PlayerState) -> int:
-    """
-    Placeholder hook for Stone Mason.
-
-    Current sandbox model does not expose explicit produce-stone option, so runtime bonus
-    is deferred even when Stone Mason is occupied.
-    """
-    _ = player_state
-    return 0
+def produce_stone_mason_bonus(player_state: PlayerState) -> int:
+    """Stone Mason adds +1 stone to produce_stone."""
+    return 1 if has_special_activity(player_state, "stone_mason") else 0
 
 
 def road_engineer_duty_value_bonus_hook(player_state: PlayerState, *, action_key: str) -> int:

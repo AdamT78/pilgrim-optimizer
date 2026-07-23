@@ -41,7 +41,8 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
     assert "Legal actions for scenario 'mancala_sandbox_001':" in output
     assert "1. Turn: sow city -> north -> north_east -> east" in output
     assert "selected duty: north" in output
-    assert "action: produce" in output
+    assert "action: produce_wheat" in output
+    assert "action: produce_stone" in output
     assert "action: give_alms" in output
     assert "pay silver=" in output
     assert "action: tithe" in output

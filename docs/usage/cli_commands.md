@@ -74,10 +74,11 @@ Example output:
 ```text
 Legal actions for scenario 'mancala_sandbox_001':
 
-1. Turn: sow city -> north -> north_east -> east | selected duty: north | action: produce
-2. Turn: sow city -> north -> north_east -> east | selected duty: north | action: tithe
+1. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: produce_wheat
+2. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: produce_stone
+3. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: tithe
 ...
-9. Turn: sow city -> south -> south_west -> west | selected duty: south | action: give_alms | pay silver=1, wheat=1
+10. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: give_alms | pay silver=1, wheat=1
 ...
 
 Total legal actions: N
@@ -317,11 +318,12 @@ Position mapping used by the current sandbox:
   - `Special Activities`
 - Allocation transitions emit readable `ALLOCATION` events.
 - Active bonuses emit `SPECIAL_ACTIVITY_BONUS` events for:
-  - `grain` (current produce model)
+  - `fields` (`produce_wheat`)
+  - `stone_mason` (`produce_stone`)
   - `engraver` (`clerical_silversmith`)
   - `vestry` (`clerical_devotion`)
   - `alms_house` (`give_alms` duty-value boost + extra payment)
-- Road Engineer / Stone Mason are currently exposed as placeholder hooks without road/stone runtime systems yet.
+- Road Engineer remains a placeholder hook for deferred road/construct systems.
 
 ## Duty Tile Layout and Identity (v1.3)
 
@@ -330,6 +332,16 @@ Position mapping used by the current sandbox:
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
 - Deferred categories (`build_roads`, `construct`, `ordination`, `taxation`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
+
+## Produce Options and Fields Rename (v1.4)
+
+- Produce duty now exposes exactly two explicit actions:
+  - `produce_wheat`
+  - `produce_stone`
+- Produce duty value cannot be split across wheat and stone in one action.
+- `fields` is now the canonical special-activity ID (replacing `grain`).
+- `fields` adds `+1 wheat` to `produce_wheat` only.
+- `stone_mason` adds `+1 stone` to `produce_stone` only.
 
 ## Typical development workflow
 

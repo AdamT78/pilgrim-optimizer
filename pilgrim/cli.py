@@ -345,22 +345,38 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.SPECIAL_ACTIVITY_BONUS:
         activity = str(details.get("activity", "unknown"))
         action_name = str(details.get("action", "unknown"))
-        fragments: list[str] = [f"{activity} applied to {action_name}"]
+        if activity == "alms_house" and "duty_value_bonus" in details:
+            text = f"{event_name}: {activity} applied to {action_name}"
+            text += f"; duty value +{int(details['duty_value_bonus'])}"
+            if "extra_silver" in details or "extra_wheat" in details:
+                text += (
+                    "; paid extra "
+                    f"silver={int(details.get('extra_silver', 0))}, "
+                    f"wheat={int(details.get('extra_wheat', 0))}"
+                )
+            return text
+        bonuses: list[str] = []
         if "wheat_bonus" in details:
-            fragments.append(f"wheat +{int(details['wheat_bonus'])}")
+            bonuses.append(f"wheat +{int(details['wheat_bonus'])}")
+        if "stone_bonus" in details:
+            bonuses.append(f"stone +{int(details['stone_bonus'])}")
         if "silver_bonus" in details:
-            fragments.append(f"silver +{int(details['silver_bonus'])}")
+            bonuses.append(f"silver +{int(details['silver_bonus'])}")
         if "piety_bonus" in details:
-            fragments.append(f"piety +{int(details['piety_bonus'])}")
+            bonuses.append(f"piety +{int(details['piety_bonus'])}")
         if "duty_value_bonus" in details:
-            fragments.append(f"duty value +{int(details['duty_value_bonus'])}")
+            bonuses.append(f"duty value +{int(details['duty_value_bonus'])}")
+        if bonuses:
+            text = f"{event_name}: {activity} added {', '.join(bonuses)} to {action_name}"
+        else:
+            text = f"{event_name}: {activity} applied to {action_name}"
         if "extra_silver" in details or "extra_wheat" in details:
-            fragments.append(
-                "paid extra "
+            text += (
+                "; paid extra "
                 f"silver={int(details.get('extra_silver', 0))}, "
                 f"wheat={int(details.get('extra_wheat', 0))}"
             )
-        return f"{event_name}: {'; '.join(fragments)}"
+        return text
 
     if event.event_type is EventType.EXCESS_CHECK:
         if details.get("no_excess") is True:

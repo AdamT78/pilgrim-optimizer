@@ -123,7 +123,8 @@ def test_default_layout_still_offers_implemented_categories() -> None:
     scenario = load_scenario("scenarios/duty_tiles_default_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     resolutions = {action.resolution for action in actions}
-    assert TurnResolutionType.PRODUCE in resolutions
+    assert TurnResolutionType.PRODUCE_WHEAT in resolutions
+    assert TurnResolutionType.PRODUCE_STONE in resolutions
     assert TurnResolutionType.CLERICAL_DEVOTION in resolutions
     assert TurnResolutionType.CLERICAL_SILVERSMITH in resolutions
     assert TurnResolutionType.GIVE_ALMS in resolutions
