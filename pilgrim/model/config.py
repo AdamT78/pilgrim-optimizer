@@ -15,7 +15,12 @@ from pilgrim.model.duties import (
 )
 from pilgrim.model.enums import DutyEffect
 
-RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
+TITHE_COUNTER_RESOURCE_TYPES: tuple[str, ...] = (
+    "stone",
+    "silver",
+    "wheat",
+    "cornucopia",
+)
 _DEFAULT_TITHE_COUNTER_BY_POSITION: tuple[tuple[str, str], ...] = (
     ("north", "wheat"),
     ("north_east", "silver"),
@@ -127,7 +132,7 @@ class AlmsConfig:
 
 @dataclass(frozen=True, slots=True)
 class TitheCountersConfig:
-    """Duty-position tithe counter resources used by Taxation step II."""
+    """Duty-position counters used by Taxation step II (incl. cornucopia wildcard)."""
 
     counters_by_position: tuple[tuple[str, str | None], ...]
     board_indices_by_position: tuple[int, ...]
@@ -521,10 +526,11 @@ def tithe_counters_from_dict(
             counters[position] = None
             continue
         resource = str(resource_value)
-        if resource not in RESOURCE_TYPES:
+        if resource not in TITHE_COUNTER_RESOURCE_TYPES:
             raise ValueError(
                 "Invalid tithe counter resource for "
-                f"{position}: {resource}. Allowed: {', '.join(RESOURCE_TYPES)}."
+                f"{position}: {resource}. Allowed: "
+                f"{', '.join(TITHE_COUNTER_RESOURCE_TYPES)}."
             )
         counters[position] = resource
 

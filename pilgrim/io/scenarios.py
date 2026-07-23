@@ -242,6 +242,15 @@ def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) 
     root_player_raw = raw.get("root_player_id")
     if root_player_raw is None:
         return default_player
+    if isinstance(root_player_raw, str):
+        text = root_player_raw.strip()
+        try:
+            return PlayerId.from_string(text)
+        except ValueError:
+            try:
+                return PlayerId(int(text))
+            except ValueError as exc:
+                raise ValueError(f"Unknown root_player_id: {root_player_raw}") from exc
     return PlayerId(int(root_player_raw))
 
 

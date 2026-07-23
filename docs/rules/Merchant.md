@@ -1,4 +1,4 @@
-# Merchant (v0.8 + v1.8 Taxation Clarification)
+# Merchant (v0.8 + v1.9 Setup Generator Note)
 
 ## Implemented scope
 
@@ -56,7 +56,8 @@ Merchant advancement is integrated into **round-end** transition flow:
 5. Run trade-route placeholder and start-player selection
 6. Finish round/season advancement and invariants
 
-Merchant starts at `taxation` (`merchant_position = 0`) in default setups/scenarios.
+Merchant starts at `taxation` (`merchant_position = 0`) in default setups/scenarios, including
+seeded setup files produced by `generate-setup`.
 
 ## Future hooks
 
