@@ -79,6 +79,7 @@ class DutyEffect(Enum):
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"
+    ALLOCATION = "allocation"
 
 
 class TurnResolutionType(Enum):
@@ -88,6 +89,7 @@ class TurnResolutionType(Enum):
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"
+    ALLOCATION = "allocation"
     TITHE = "tithe"
 
 
@@ -113,6 +115,8 @@ class EventType(Enum):
     ALMS_THRESHOLD_REWARD = "alms_threshold_reward"
     ALMS_SEASON_REWARD = "alms_season_reward"
     ALMS_RESET = "alms_reset"
+    ALLOCATION = "allocation"
+    SPECIAL_ACTIVITY_BONUS = "special_activity_bonus"
     DUMMY_ACOLYTE_MOVE = "dummy_acolyte_move"
     MERCHANT_ADVANCE = "merchant_advance"
     EXCESS_CHECK = "excess_check"

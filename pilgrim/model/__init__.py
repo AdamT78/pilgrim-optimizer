@@ -45,6 +45,7 @@ from pilgrim.model.enums import (
 )
 from pilgrim.model.events import GameEvent
 from pilgrim.model.resources import Resources
+from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS, SpecialActivities
 from pilgrim.model.state import GameState, PlayerState
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import (
@@ -84,6 +85,8 @@ __all__ = [
     "PlayerBoardSlots",
     "Resources",
     "ShipConfig",
+    "SPECIAL_ACTIVITY_IDS",
+    "SpecialActivities",
     "TurnResolutionType",
     "TurnPhase",
     "TimingConfig",

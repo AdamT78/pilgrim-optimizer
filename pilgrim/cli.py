@@ -25,6 +25,7 @@ from pilgrim.rules.buildings import (
     used_player_board_slots,
 )
 from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
+from pilgrim.rules.special_activities import format_special_activities
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
 from pilgrim.search.exact import solve_exact
@@ -224,6 +225,11 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             fragments.append(f"relation {details['strength']}")
         if "duty_value" in details:
             fragments.append(f"duty value {details['duty_value']}")
+        if "effective_duty_value" in details:
+            effective_duty_value = int(details["effective_duty_value"])
+            base_duty_value = int(details.get("duty_value", effective_duty_value))
+            if effective_duty_value != base_duty_value:
+                fragments.append(f"effective duty value {effective_duty_value}")
         if "silver_cost" in details:
             fragments.append(f"silver cost {details['silver_cost']}")
         if "effect" in details:
@@ -273,9 +279,14 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             total_workforce_p1 = details.get("total_workforce_player_one")
             total_workforce_p2 = details.get("total_workforce_player_two")
             if isinstance(total_workforce_p1, int) and isinstance(total_workforce_p2, int):
+                conserved_label = (
+                    "serfs/acolytes conserved"
+                    if details.get("serfs_non_negative") is True
+                    else "acolytes conserved"
+                )
                 return (
                     f"{event_name}: passed for all players "
-                    f"(acolytes conserved; total workforce by player: "
+                    f"({conserved_label}; total workforce by player: "
                     f"player_one={total_workforce_p1}, player_two={total_workforce_p2})"
                 )
             total_workforce = details.get("total_workforce")
@@ -319,6 +330,32 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
 
     if event.event_type is EventType.ALMS_RESET:
         return f"{event_name}: all players reset to row 0"
+
+    if event.event_type is EventType.ALLOCATION:
+        from_pool = str(details.get("from_pool", "unknown"))
+        to_pool = str(details.get("to_pool", "unknown"))
+        amount = int(details.get("amount", 0))
+        return f"{event_name}: {actor_name} moved {amount} acolyte {from_pool} -> {to_pool}"
+
+    if event.event_type is EventType.SPECIAL_ACTIVITY_BONUS:
+        activity = str(details.get("activity", "unknown"))
+        action_name = str(details.get("action", "unknown"))
+        fragments: list[str] = [f"{activity} applied to {action_name}"]
+        if "wheat_bonus" in details:
+            fragments.append(f"wheat +{int(details['wheat_bonus'])}")
+        if "silver_bonus" in details:
+            fragments.append(f"silver +{int(details['silver_bonus'])}")
+        if "piety_bonus" in details:
+            fragments.append(f"piety +{int(details['piety_bonus'])}")
+        if "duty_value_bonus" in details:
+            fragments.append(f"duty value +{int(details['duty_value_bonus'])}")
+        if "extra_silver" in details or "extra_wheat" in details:
+            fragments.append(
+                "paid extra "
+                f"silver={int(details.get('extra_silver', 0))}, "
+                f"wheat={int(details.get('extra_wheat', 0))}"
+            )
+        return f"{event_name}: {'; '.join(fragments)}"
 
     if event.event_type is EventType.EXCESS_CHECK:
         if details.get("no_excess") is True:
@@ -554,6 +591,9 @@ def _format_player_state(
     used_slots = used_player_board_slots(player_state)
     total_slots = config.buildings.player_board.building_and_cardinal_slot_limit
     available_slots = available_player_board_slots(player_state, config)
+    special_activity_acolytes = player_state.special_activities.count
+    workforce_total = player_state.workforce.total + special_activity_acolytes
+    special_activities = format_special_activities(player_state)
     mancala = ", ".join(
         f"{position_name(position_id, positions)}={count}"
         for position_id, count in enumerate(player_vector)
@@ -574,6 +614,7 @@ def _format_player_state(
         f"  Mancala total: {player_state.workforce.mancala_total}",
         f"  Village: {player_state.workforce.village}",
         f"  Abbey: {player_state.workforce.abbey}",
+        f"  Special Activities: {special_activity_acolytes}",
         (
             "  Committed: "
             f"roads={player_state.workforce.committed.roads}, "
@@ -582,7 +623,12 @@ def _format_player_state(
             f"pilgrimage_sites={player_state.workforce.committed.pilgrimage_sites}, "
             f"alms_table={player_state.workforce.committed.alms_table}"
         ),
-        f"  Total: {player_state.workforce.total}",
+        f"  Total: {workforce_total}",
+        "Village:",
+        f"  Serfs: {player_state.workforce.village}",
+        "Abbey:",
+        f"  Acolytes: {player_state.workforce.abbey}",
+        f"Special Activities: {special_activities}",
         "Player board slots:",
         (
             "  Active buildings: "

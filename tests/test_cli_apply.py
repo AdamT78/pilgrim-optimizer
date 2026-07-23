@@ -209,3 +209,68 @@ def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) ->
     assert "SHIP_ADVANCE:" in output
     assert "MERCHANT_ADVANCE:" in output
     assert "START_PLAYER_SELECTION:" in output
+
+
+def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/allocation_to_city_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Apply result for scenario 'allocation_to_city_001'" in output
+    assert "action: allocation" in output
+    assert "ALLOCATION: player_one moved 1 acolyte abbey -> city" in output
+    assert "Village:" in output
+    assert "Abbey:" in output
+    assert "Special Activities: 0" in output
+    assert "Special Activities: none" in output
+    assert "Total: 10" in output
+
+
+def test_cli_apply_allocation_with_occupied_special_activities_counts_them_in_total(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/allocation_all_special_occupied_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Special Activities: 6" in output
+    assert (
+        "Special Activities: "
+        "grain, road_engineer, stone_mason, alms_house, engraver, vestry"
+    ) in output
+    assert "Total: 16" in output
+    assert "player_one=16" in output
+
+
+def test_cli_apply_alms_house_bonus_event_is_visible(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/special_activity_alms_house_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "SPECIAL_ACTIVITY_BONUS:" in output
+    assert "alms_house applied to give_alms" in output
+    assert "effective duty value 2" in output
+    assert "paid extra silver=1, wheat=0" in output
+    assert "Special Activities: 1" in output

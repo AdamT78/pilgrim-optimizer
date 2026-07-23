@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from pilgrim.model.actions import (
     FullTurnAction,
@@ -31,6 +31,17 @@ from pilgrim.rules.round_end import (
     select_next_start_player,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
+from pilgrim.rules.special_activities import (
+    allocate_abbey_to_city,
+    allocate_abbey_to_special_activity,
+    alms_house_extra_payment_options,
+    available_special_activities,
+    can_use_alms_house_bonus,
+    clerical_devotion_bonus,
+    clerical_silversmith_bonus,
+    produce_grain_bonus,
+    produce_stone_bonus_hook,
+)
 from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
     TransitionValidationError,
@@ -42,6 +53,7 @@ from pilgrim.rules.validation import (
     ensure_route_length_matches,
     ensure_selected_duty_has_acolyte,
     ensure_valid_dummy_state,
+    ensure_valid_special_activities_state,
     ensure_valid_timing,
 )
 
@@ -72,7 +84,8 @@ def apply_action(state: GameState, action: GameAction, config: GameConfig) -> Tr
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
-    player_resources = state.player_state(state.active_player).resources
+    player_state = state.player_state(state.active_player)
+    player_resources = player_state.resources
     actions: list[GameAction] = []
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
@@ -95,6 +108,27 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     duty_value, silver_cost = duty_value_and_silver_cost(strength)
                     available_silver = player_resources.silver - silver_cost
                     if available_silver >= 0:
+                        if can_use_alms_house_bonus(player_state):
+                            for extra_silver, extra_wheat in alms_house_extra_payment_options(
+                                player_resources
+                            ):
+                                for payment in _alms_payment_options(
+                                    duty_value=duty_value + 1,
+                                    available_silver=available_silver - extra_silver,
+                                    available_wheat=player_resources.wheat - extra_wheat,
+                                ):
+                                    actions.append(
+                                        FullTurnAction(
+                                            origin=origin,
+                                            route=route,
+                                            selected_duty=duty_position,
+                                            resolution=TurnResolutionType.GIVE_ALMS,
+                                            alms_payment_silver=payment.silver,
+                                            alms_payment_wheat=payment.wheat,
+                                            alms_house_extra_silver=extra_silver,
+                                            alms_house_extra_wheat=extra_wheat,
+                                        )
+                                    )
                         for payment in _alms_payment_options(
                             duty_value=duty_value,
                             available_silver=available_silver,
@@ -108,6 +142,27 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                     resolution=TurnResolutionType.GIVE_ALMS,
                                     alms_payment_silver=payment.silver,
                                     alms_payment_wheat=payment.wheat,
+                                )
+                            )
+                elif duty.effect is DutyEffect.ALLOCATION:
+                    if player_state.workforce.abbey > 0:
+                        actions.append(
+                            FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ALLOCATION,
+                                allocation_target="city",
+                            )
+                        )
+                        for activity_id in available_special_activities(player_state):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ALLOCATION,
+                                    allocation_target=f"special_activity:{activity_id}",
                                 )
                             )
                 else:
@@ -211,20 +266,58 @@ def _apply_full_turn_action(
         duty_value, silver_cost = duty_value_and_silver_cost(strength)
         available_silver = state_after_sow.player_state(player).resources.silver
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
+        special_bonus_events: list[GameEvent] = []
+        effective_duty_value = duty_value
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS
-            and (action.alms_payment_silver != 0 or action.alms_payment_wheat != 0)
+            and (
+                action.alms_payment_silver != 0
+                or action.alms_payment_wheat != 0
+                or action.alms_house_extra_silver != 0
+                or action.alms_house_extra_wheat != 0
+            )
         ):
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
             )
+        if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_target:
+            raise TransitionValidationError("Only Allocation actions may set allocation_target.")
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
+            use_alms_house = (
+                action.alms_house_extra_silver != 0 or action.alms_house_extra_wheat != 0
+            )
+            if use_alms_house:
+                if not can_use_alms_house_bonus(state_after_sow.player_state(player)):
+                    raise TransitionValidationError("Alms House is not occupied for this player.")
+                if (action.alms_house_extra_silver, action.alms_house_extra_wheat) not in (
+                    (1, 0),
+                    (0, 1),
+                ):
+                    raise TransitionValidationError(
+                        "Alms House extra payment must be exactly 1 silver or 1 wheat."
+                    )
+                effective_duty_value += 1
+                current_resources = state_after_sow.player_state(player).resources
+                if (
+                    current_resources.silver
+                    < silver_cost + action.alms_payment_silver + action.alms_house_extra_silver
+                ):
+                    raise TransitionValidationError(
+                        "Insufficient silver for minority/alms payment plus Alms House cost."
+                    )
+                if (
+                    current_resources.wheat
+                    < action.alms_payment_wheat + action.alms_house_extra_wheat
+                ):
+                    raise TransitionValidationError(
+                        "Insufficient wheat for alms payment plus Alms House cost."
+                    )
             try:
                 alms_resolution = resolve_give_alms(
                     state_after_sow.player_state(player),
-                    duty_value=duty_value,
+                    duty_value=effective_duty_value,
                     payment=AlmsPayment(
                         silver=action.alms_payment_silver,
                         wheat=action.alms_payment_wheat,
@@ -235,10 +328,129 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
             new_player_state = alms_resolution.player_state
-            resource_delta = alms_resolution.resource_delta
+            if use_alms_house:
+                new_resources = new_player_state.resources.add(
+                    silver=-action.alms_house_extra_silver,
+                    wheat=-action.alms_house_extra_wheat,
+                )
+                if new_resources.silver < 0 or new_resources.wheat < 0:
+                    raise TransitionValidationError(
+                        "Alms House extra payment would overdraw resources."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            activity="alms_house",
+                            action=action.resolution.value,
+                            duty_value_bonus=1,
+                            extra_silver=action.alms_house_extra_silver,
+                            extra_wheat=action.alms_house_extra_wheat,
+                        ),
+                    )
+                )
+            resource_delta = (
+                alms_resolution.resource_delta[0],
+                alms_resolution.resource_delta[1] - action.alms_house_extra_silver,
+                alms_resolution.resource_delta[2] - action.alms_house_extra_wheat,
+            )
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+        elif action.resolution is TurnResolutionType.ALLOCATION:
+            target_kind, target_value = _parse_allocation_target(action.allocation_target)
+            try:
+                if target_kind == "city":
+                    new_player_state = allocate_abbey_to_city(state_after_sow.player_state(player))
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.ALLOCATION,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                from_pool="abbey",
+                                to_pool="city",
+                                amount=1,
+                            ),
+                        )
+                    )
+                else:
+                    if target_value is None:
+                        raise TransitionValidationError(
+                            "Allocation target special activity is missing."
+                        )
+                    new_player_state = allocate_abbey_to_special_activity(
+                        state_after_sow.player_state(player),
+                        target_value,
+                    )
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.ALLOCATION,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                from_pool="abbey",
+                                to_pool=f"special_activity:{target_value}",
+                                amount=1,
+                            ),
+                        )
+                    )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            resource_delta = (0, 0, 0)
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         else:
+            if duty.effect is DutyEffect.PRODUCE:
+                effective_duty_value += produce_grain_bonus(state_after_sow.player_state(player))
+                _ = produce_stone_bonus_hook(state_after_sow.player_state(player))
+                if effective_duty_value != duty_value:
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                activity="grain",
+                                action=action.resolution.value,
+                                wheat_bonus=effective_duty_value - duty_value,
+                            ),
+                        )
+                    )
+            elif duty.effect is DutyEffect.CLERICAL_SILVERSMITH:
+                bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
+                effective_duty_value += bonus
+                if bonus:
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                activity="engraver",
+                                action=action.resolution.value,
+                                silver_bonus=bonus,
+                            ),
+                        )
+                    )
+            elif duty.effect is DutyEffect.CLERICAL_DEVOTION:
+                bonus = clerical_devotion_bonus(state_after_sow.player_state(player))
+                effective_duty_value += bonus
+                if bonus:
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                activity="vestry",
+                                action=action.resolution.value,
+                                piety_bonus=bonus,
+                            ),
+                        )
+                    )
             try:
                 (
                     new_player_state,
@@ -248,7 +460,7 @@ def _apply_full_turn_action(
                 ) = apply_duty_effect(
                     state_after_sow.player_state(player),
                     effect=duty.effect,
-                    duty_value=duty_value,
+                    duty_value=effective_duty_value,
                     silver_cost=silver_cost,
                     piety_config=config.piety,
                 )
@@ -279,6 +491,7 @@ def _apply_full_turn_action(
                     duty_key=duty.key,
                     strength=strength.value,
                     duty_value=duty_value,
+                    effective_duty_value=effective_duty_value,
                     silver_cost=silver_cost,
                     effect=duty.effect.value,
                 ),
@@ -296,6 +509,7 @@ def _apply_full_turn_action(
                 ),
             )
         )
+        events.extend(special_bonus_events)
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
             events.append(
@@ -392,6 +606,7 @@ def _apply_full_turn_action(
     validate_building_state(next_state, config)
     ensure_valid_timing(next_state)
     ensure_valid_dummy_state(next_state)
+    ensure_valid_special_activities_state(next_state)
     ensure_acolyte_conservation(state, next_state)
     ensure_dummy_acolyte_conservation(state, next_state)
     events.append(
@@ -402,6 +617,7 @@ def _apply_full_turn_action(
             details=make_event_details(
                 name="post_turn",
                 acolytes_conserved=True,
+                serfs_non_negative=True,
                 invariant_scope="all_players",
                 total_workforce_player_one=next_state.total_acolytes(PlayerId.PLAYER_ONE),
                 total_workforce_player_two=next_state.total_acolytes(PlayerId.PLAYER_TWO),
@@ -608,3 +824,14 @@ def _alms_payment_options(
         if silver <= available_silver and wheat <= available_wheat:
             options.append(AlmsPayment(silver=silver, wheat=wheat))
     return tuple(options)
+
+
+def _parse_allocation_target(target: str | None) -> tuple[str, str | None]:
+    if not target:
+        raise TransitionValidationError("Allocation action must include allocation_target.")
+    if target == "city":
+        return "city", None
+    prefix = "special_activity:"
+    if target.startswith(prefix):
+        return "special_activity", target[len(prefix) :]
+    raise TransitionValidationError(f"Unknown allocation target: {target}")

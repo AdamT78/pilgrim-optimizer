@@ -13,6 +13,7 @@ from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
+from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS, SpecialActivities
 from pilgrim.model.state import GameState, PlayerState
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
@@ -196,6 +197,7 @@ def _player_state_from_dict(
         piety=int(raw.get("piety", 0)),
         alms_position=int(raw.get("alms_position", 0)),
         victory_points=int(raw.get("victory_points", 0)),
+        special_activities=_special_activities_from_dict(raw.get("special_activities")),
         player_board_slots=_player_board_slots_from_dict(raw.get("player_board_slots")),
     )
 
@@ -320,6 +322,36 @@ def _player_board_slots_from_dict(raw: Any) -> PlayerBoardSlots:
         active_buildings=tuple(str(value) for value in active_raw),
         donated_buildings=tuple(str(value) for value in donated_raw),
         cardinal_favor_tiles=int(raw.get("cardinal_favor_tiles", 0)),
+    )
+
+
+def _special_activities_from_dict(raw: Any) -> SpecialActivities:
+    if raw is None:
+        return SpecialActivities()
+    if isinstance(raw, list):
+        flags = {str(item): True for item in raw}
+    elif isinstance(raw, Mapping):
+        flags: dict[str, bool] = {}
+        for key, value in raw.items():
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"special_activities.{key} must be true/false, got {type(value).__name__}."
+                )
+            flags[str(key)] = value
+    else:
+        raise ValueError("special_activities must be an object or list.")
+    unknown_ids = set(flags) - set(SPECIAL_ACTIVITY_IDS)
+    if unknown_ids:
+        raise ValueError(
+            "Unknown special activity id(s): " + ", ".join(sorted(unknown_ids)) + "."
+        )
+    return SpecialActivities(
+        grain=bool(flags.get("grain", False)),
+        road_engineer=bool(flags.get("road_engineer", False)),
+        stone_mason=bool(flags.get("stone_mason", False)),
+        alms_house=bool(flags.get("alms_house", False)),
+        engraver=bool(flags.get("engraver", False)),
+        vestry=bool(flags.get("vestry", False)),
     )
 
 

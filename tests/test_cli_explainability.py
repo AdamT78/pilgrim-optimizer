@@ -122,6 +122,11 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Alms table acolytes:" in output
     assert "Alms table VP:" in output
     assert "Workforce:" in output
+    assert "Village:" in output
+    assert "Abbey:" in output
+    assert "Special Activities: 0" in output
+    assert "Special Activities: none" in output
+    assert "Special Activities:" in output
     assert "Player board slots:" in output
     assert "Active buildings: none" in output
     assert "Donated buildings: none" in output

@@ -1,18 +1,13 @@
 {
-  "name": "basic_mancala_sandbox",
-  "board_file": "configs/board.json",
-  "duties_file": "configs/duties.json",
-  "piety_file": "configs/piety.json",
-  "alms_file": "configs/alms.json",
-  "timing_file": "configs/timing.json",
-  "merchant_file": "configs/merchant.json",
-  "ship_file": "configs/ship.json",
-  "buildings_file": "configs/buildings.json",
+  "scenario_id": "special_activity_alms_house_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
   "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
-    "active_player": "player_one",
     "start_player_id": "player_one",
-    "phase": "sow",
     "merchant_position": 0,
     "ship_position": 0,
     "completed_rounds": 0,
@@ -25,18 +20,15 @@
     },
     "players": {
       "player_one": {
-        "victory_points": 0,
-        "piety": 0,
-        "alms_position": 0,
         "resources": {
           "stone": 0,
-          "silver": 1,
-          "wheat": 1
+          "silver": 2,
+          "wheat": 2
         },
         "workforce": {
-          "mancala": [3, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
           "village": 8,
-          "abbey": 3,
+          "abbey": 1,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -44,21 +36,21 @@
             "pilgrimage_sites": 0,
             "alms_table": 0
           }
+        },
+        "special_activities": {
+          "alms_house": true
         }
       },
       "player_two": {
-        "victory_points": 0,
-        "piety": 0,
-        "alms_position": 0,
         "resources": {
           "stone": 0,
           "silver": 0,
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 1, 1, 0, 0, 0, 0, 0, 0],
-          "village": 8,
-          "abbey": 3,
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -66,7 +58,8 @@
             "pilgrimage_sites": 0,
             "alms_table": 0
           }
-        }
+        },
+        "special_activities": {}
       }
     }
   }

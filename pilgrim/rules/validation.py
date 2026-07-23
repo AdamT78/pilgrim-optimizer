@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pilgrim.model.dummy import validate_dummy_acolytes
 from pilgrim.model.enums import PlayerId, TurnPhase
+from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import GameState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT
 
@@ -191,6 +192,15 @@ def ensure_valid_player_board_slots_structure(state: GameState) -> None:
             )
 
 
+def ensure_valid_special_activities_state(state: GameState) -> None:
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        activities = state.player_state(player_id).special_activities
+        if activities.count > len(SPECIAL_ACTIVITY_IDS):
+            raise TransitionValidationError(
+                f"{player_id.name} special-activity occupancy exceeds capacity."
+            )
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
@@ -199,4 +209,5 @@ def validate_state_invariants(state: GameState) -> None:
     ensure_valid_merchant_state(state)
     ensure_valid_round_end_state(state)
     ensure_valid_dummy_state(state)
+    ensure_valid_special_activities_state(state)
     ensure_valid_player_board_slots_structure(state)

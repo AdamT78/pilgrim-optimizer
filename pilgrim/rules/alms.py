@@ -116,9 +116,9 @@ def apply_alms_threshold_reward(
                 abbey=workforce.abbey + 1,
             )
             moved = True
-            description = "crossed row 2; moved 1 acolyte village -> abbey"
+            description = "crossed row 2; moved 1 worker village -> abbey"
         else:
-            description = "crossed row 2; no village acolyte available"
+            description = "crossed row 2; no village serf available"
     elif reward_key == "abbey_to_city":
         if workforce.abbey > 0:
             city_mancala = list(workforce.mancala)
@@ -142,9 +142,9 @@ def apply_alms_threshold_reward(
                 village=workforce.village - 1,
             )
             moved = True
-            description = "crossed row 6; moved 1 acolyte village -> city"
+            description = "crossed row 6; moved 1 worker village -> city"
         else:
-            description = "crossed row 6; no village acolyte available"
+            description = "crossed row 6; no village serf available"
     else:
         raise ValueError(f"Unknown Alms threshold reward: {reward_key}")
 

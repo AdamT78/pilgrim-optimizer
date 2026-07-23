@@ -57,7 +57,7 @@ class Workforce:
         if any(count < 0 for count in self.mancala):
             raise ValueError("Mancala workforce counts cannot be negative.")
         if self.village < 0:
-            raise ValueError("Village acolytes cannot be negative.")
+            raise ValueError("Village serfs cannot be negative.")
         if self.abbey < 0:
             raise ValueError("Abbey acolytes cannot be negative.")
 
@@ -66,8 +66,21 @@ class Workforce:
         return sum(self.mancala)
 
     @property
+    def village_serfs(self) -> int:
+        return self.village
+
+    @property
+    def abbey_acolytes(self) -> int:
+        return self.abbey
+
+    @property
     def committed_total(self) -> int:
         return self.committed.total
+
+    @property
+    def non_village_acolyte_total(self) -> int:
+        """Acolytes in abbey + city/duties + committed pools."""
+        return self.mancala_total + self.abbey + self.committed_total
 
     @property
     def total(self) -> int:
