@@ -403,3 +403,47 @@ def test_cli_apply_ordination_multi_step_reports_steps_and_events(capsys) -> Non
     ) in output
     assert "ORDINATION: player_one ordained 1 serf village -> abbey; paid wheat=1" in output
     assert "ORDINATION: player_one sent 1 acolyte abbey -> city; paid wheat=1" in output
+
+
+def test_cli_apply_taxation_verbose_shows_no_bonus_path(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/taxation_no_other_majority_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: taxation | take: stone" in output
+    assert (
+        "DUTY_RESOLUTION: selected north_west (taxation); relation majority; duty value 2"
+    ) in output
+    assert "TAXATION: player_one took step 1 resource stone" in output
+    assert "TAXATION: player_one had no other majority duty tiles; no bonus resources" in output
+    assert "RESOURCE_DELTA: player_one stone +1" in output
+    assert "SPECIAL_ACTIVITY_BONUS:" not in output
+
+
+def test_cli_apply_taxation_verbose_shows_bonus_resources(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/taxation_majority_bonus_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: taxation | take: stone; bonus: stone, stone" in output
+    assert "TAXATION: player_one took step 1 resource stone" in output
+    assert (
+        "TAXATION: player_one took bonus resources stone, stone from other majority duty tiles"
+    ) in output
+    assert "RESOURCE_DELTA: player_one stone +3" in output

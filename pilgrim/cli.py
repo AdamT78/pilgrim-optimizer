@@ -340,6 +340,27 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"paid wheat={wheat_paid}"
         )
 
+    if event.event_type is EventType.TAXATION:
+        step = str(details.get("step", "")).strip()
+        if step == "step_1":
+            resource = str(details.get("resource", "unknown"))
+            return f"{event_name}: {actor_name} took step 1 resource {resource}"
+        if step == "step_2":
+            no_bonus = bool(details.get("no_bonus", False))
+            resources_csv = str(details.get("resources", "")).strip()
+            if no_bonus or not resources_csv:
+                return (
+                    f"{event_name}: {actor_name} had no other majority duty tiles; no bonus resources"
+                )
+            resources_text = ", ".join(
+                resource for resource in resources_csv.split(",") if resource
+            )
+            return (
+                f"{event_name}: {actor_name} took bonus resources {resources_text} "
+                "from other majority duty tiles"
+            )
+        return f"{event_name}: {actor_name} {details}"
+
     if event.event_type is EventType.ALMS_PROGRESS:
         old_row = int(details.get("old_row", 0))
         new_row = int(details.get("new_row", 0))

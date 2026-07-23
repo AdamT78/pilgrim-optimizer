@@ -8,11 +8,24 @@ from typing import Any
 
 from pilgrim.model.buildings import BuildingsConfig, buildings_config_from_dict
 from pilgrim.model.duties import (
+    DUTY_POSITIONS,
     DutyTilesLayout,
     default_duty_tiles,
     duty_tiles_layout_from_mapping,
 )
 from pilgrim.model.enums import DutyEffect
+
+RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
+_DEFAULT_TITHE_COUNTER_BY_POSITION: tuple[tuple[str, str], ...] = (
+    ("north", "wheat"),
+    ("north_east", "silver"),
+    ("east", "stone"),
+    ("south_east", "silver"),
+    ("south", "wheat"),
+    ("south_west", "stone"),
+    ("west", "silver"),
+    ("north_west", "wheat"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +123,36 @@ class AlmsConfig:
             return self.alms_table_scoring[0]
         max_index = len(self.alms_table_scoring) - 1
         return self.alms_table_scoring[min(acolytes_on_table, max_index)]
+
+
+@dataclass(frozen=True, slots=True)
+class TitheCountersConfig:
+    """Duty-position tithe counter resources used by Taxation step II."""
+
+    counters_by_position: tuple[tuple[str, str | None], ...]
+    board_indices_by_position: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.counters_by_position) != len(DUTY_POSITIONS):
+            raise ValueError("Tithe counters must provide all 8 duty positions.")
+        if len(self.board_indices_by_position) != len(DUTY_POSITIONS):
+            raise ValueError("Tithe counter board index vector must match duty positions length.")
+
+    def resource_for_position_name(self, position_name: str) -> str | None:
+        for name, resource in self.counters_by_position:
+            if name == position_name:
+                return resource
+        raise ValueError(f"Unknown tithe-counter duty position: {position_name}")
+
+    def resource_for_board_index(self, board_position: int) -> str | None:
+        try:
+            duty_index = self.board_indices_by_position.index(board_position)
+        except ValueError as exc:
+            raise ValueError(f"Board position {board_position} is not a duty tile.") from exc
+        return self.counters_by_position[duty_index][1]
+
+    def mapping(self) -> dict[str, str | None]:
+        return dict(self.counters_by_position)
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +271,7 @@ class GameConfig:
     ship: ShipConfig
     buildings: BuildingsConfig
     duty_tiles: DutyTilesLayout
+    tithe_counters: TitheCountersConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -249,6 +293,9 @@ class GameConfig:
 
     def duty_tiles_mapping(self) -> dict[str, str]:
         return self.duty_tiles.mapping()
+
+    def tithe_counters_mapping(self) -> dict[str, str | None]:
+        return self.tithe_counters.mapping()
 
 
 def board_from_dict(raw: Mapping[str, Any]) -> BoardConfig:
@@ -339,6 +386,7 @@ def game_config_from_dict(
     ship_raw: Mapping[str, Any],
     buildings_raw: Mapping[str, Any],
     duty_tiles_raw: Mapping[str, Any] | None = None,
+    tithe_counters_raw: Mapping[str, Any] | None = None,
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
@@ -360,6 +408,11 @@ def game_config_from_dict(
         duty_tiles_mapping,
         board_positions=board.positions,
     )
+    tithe_counters = tithe_counters_from_dict(
+        tithe_counters_raw,
+        duty_tiles_mapping=duty_tiles_mapping,
+        board_positions=board.positions,
+    )
     return GameConfig(
         board=board,
         duties=duties,
@@ -370,6 +423,7 @@ def game_config_from_dict(
         ship=ship,
         buildings=buildings,
         duty_tiles=duty_tiles,
+        tithe_counters=tithe_counters,
     )
 
 
@@ -429,3 +483,67 @@ def ship_from_dict(raw: Mapping[str, Any]) -> ShipConfig:
 def buildings_from_dict(raw: Mapping[str, Any]) -> BuildingsConfig:
     """Parse building catalogue + player-board slot config."""
     return buildings_config_from_dict(raw)
+
+
+def tithe_counters_from_dict(
+    raw: Mapping[str, Any] | None,
+    *,
+    duty_tiles_mapping: Mapping[str, str],
+    board_positions: tuple[str, ...],
+) -> TitheCountersConfig:
+    """Parse scenario/setup tithe counters with deterministic fallback defaults."""
+    taxation_positions = [
+        position_name
+        for position_name, duty_category in duty_tiles_mapping.items()
+        if duty_category == "taxation"
+    ]
+    if len(taxation_positions) != 1:
+        raise ValueError("Duty tile layout must contain exactly one taxation position.")
+    taxation_position = taxation_positions[0]
+
+    if raw is not None and not isinstance(raw, Mapping):
+        raise ValueError("tithe_counters must be an object mapping duty positions to resources.")
+
+    counters: dict[str, str | None] = dict(_DEFAULT_TITHE_COUNTER_BY_POSITION)
+    counters[taxation_position] = None
+
+    provided = raw if raw is not None else {}
+    for position_name, resource_value in provided.items():
+        position = str(position_name)
+        if position == "city":
+            raise ValueError("city cannot have a tithe counter.")
+        if position not in DUTY_POSITIONS:
+            raise ValueError(
+                "Unknown tithe counter duty position: "
+                f"{position}. Allowed: {', '.join(DUTY_POSITIONS)}."
+            )
+        if resource_value is None:
+            counters[position] = None
+            continue
+        resource = str(resource_value)
+        if resource not in RESOURCE_TYPES:
+            raise ValueError(
+                "Invalid tithe counter resource for "
+                f"{position}: {resource}. Allowed: {', '.join(RESOURCE_TYPES)}."
+            )
+        counters[position] = resource
+
+    if counters[taxation_position] is not None:
+        raise ValueError(
+            f"Taxation duty tile '{taxation_position}' cannot have a non-null tithe counter."
+        )
+
+    board_indices: list[int] = []
+    for position_name in DUTY_POSITIONS:
+        try:
+            board_indices.append(board_positions.index(position_name))
+        except ValueError as exc:
+            raise ValueError(
+                f"Duty position '{position_name}' missing from board positions."
+            ) from exc
+
+    ordered_counters = tuple((position_name, counters[position_name]) for position_name in DUTY_POSITIONS)
+    return TitheCountersConfig(
+        counters_by_position=ordered_counters,
+        board_indices_by_position=tuple(board_indices),
+    )

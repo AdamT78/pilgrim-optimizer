@@ -1,4 +1,4 @@
-# Merchant (v0.8 + v1.0 Timing Update)
+# Merchant (v0.8 + v1.8 Taxation Clarification)
 
 ## Implemented scope
 
@@ -66,3 +66,16 @@ The rules layer exposes placeholders:
 - `trade_route_income_resource(...)`
 
 Both currently return `current_merchant_resource(...)` and are intended for future systems.
+
+## Taxation interaction
+
+Taxation is now an implemented duty action, but Merchant resource context remains unchanged:
+
+- Merchant can stand on the `taxation` duty tile.
+- At `taxation`, current Merchant resource is still `None` (`none` in CLI output).
+- Future systems should continue to treat this as:
+  - no trade-route income resource when Merchant is on Taxation
+  - no building-hire payment resource when Merchant is on Taxation
+
+Trade routes and building hire are still out of scope for the current milestone; the helper
+hooks preserve the `None` context for forward compatibility.

@@ -57,6 +57,14 @@ def test_future_hooks_reuse_current_merchant_resource() -> None:
     )
 
 
+def test_taxation_scenario_merchant_resource_context_is_none() -> None:
+    scenario = load_scenario("scenarios/taxation_merchant_resource_none_001.json")
+    assert current_merchant_duty(scenario.state, scenario.config.merchant) == "taxation"
+    assert current_merchant_resource(scenario.state, scenario.config.merchant) is None
+    assert building_hire_payment_resource(scenario.state, scenario.config.merchant) is None
+    assert trade_route_income_resource(scenario.state, scenario.config.merchant) is None
+
+
 def test_missing_merchant_position_defaults_to_zero(tmp_path: Path) -> None:
     setup_raw = json.loads(Path("configs/setups/basic_mancala_sandbox.json").read_text())
     initial_state = dict(setup_raw["initial_state"])

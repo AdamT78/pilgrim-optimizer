@@ -64,6 +64,9 @@ What it does right now:
 - Ordination actions show ordered steps:
   - `action: ordination | steps: ordain`
   - `action: ordination | steps: ordain; mission`
+- Taxation actions show chosen resources:
+  - `action: taxation | take: wheat`
+  - `action: taxation | take: wheat; bonus: stone, silver`
 - Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
@@ -337,7 +340,7 @@ Position mapping used by the current sandbox:
 - City is not a duty tile.
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
-- Deferred categories (`build_roads`, `construct`, `taxation`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
+- Deferred categories (`build_roads`, `construct`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
 
 ## Produce Options and Fields Rename (v1.4)
 
@@ -376,6 +379,16 @@ Position mapping used by the current sandbox:
   - `mission` (pay 1 wheat; abbey -> city)
 - One action can include `1..duty_value` steps, validated sequentially.
 - Verbose apply now emits one `ORDINATION` event per step.
+
+## Taxation Duty Rules (v1.8)
+
+- Taxation now has a dedicated `taxation` action in legal-action generation.
+- Step I always takes one chosen resource (`stone`, `silver`, or `wheat`).
+- Step II uses Tithe-counter resource types from other majority duty tiles only.
+- The selected Taxation duty tile is excluded from Step II and has no non-null Tithe counter.
+- At duty value 2, Step II can choose repeated/mixed resources (for example `stone, stone` or `stone, silver`).
+- Verbose apply emits `TAXATION` events for step 1 and step 2 plus a single combined `RESOURCE_DELTA`.
+- Merchant at Taxation still shows `Resource: none`.
 
 ## Typical development workflow
 

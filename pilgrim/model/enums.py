@@ -92,6 +92,7 @@ class TurnResolutionType(Enum):
     GIVE_ALMS = "give_alms"
     DONATE_BUILDING = "donate_building"
     ORDINATION = "ordination"
+    TAXATION = "taxation"
     ALLOCATION = "allocation"
     TITHE = "tithe"
 
@@ -114,6 +115,7 @@ class EventType(Enum):
     PIETY_DELTA = "piety_delta"
     ACOLYTE_RECALL = "acolyte_recall"
     ORDINATION = "ordination"
+    TAXATION = "taxation"
     ALMS_PAYMENT = "alms_payment"
     BUILDING_DONATION = "building_donation"
     ALMS_PROGRESS = "alms_progress"
