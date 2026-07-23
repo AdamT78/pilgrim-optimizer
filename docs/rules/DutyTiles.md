@@ -1,4 +1,4 @@
-# Duty Tiles (v1.9 Sandbox Scope)
+# Duty Tiles (v2.1 Sandbox Scope)
 
 ## Core model
 
@@ -77,12 +77,13 @@ Implemented action systems:
 - `ordination`:
   - `ordination` (ordered `ordain`/`mission` steps)
 - `allocation`
+- `build_roads`:
+  - `build_roads_deferred` (scaffold only; no spatial placement yet)
 - `taxation`:
   - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
 Deferred category systems (valid in layout, no non-tithe action yet):
 
-- `build_roads`
 - `construct`
 
 ## Runtime implications
@@ -109,6 +110,14 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Each ordination step must be legal when reached and costs 1 wheat.
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
+- For `build_roads`:
+  - legal actions currently include `build_roads_deferred` plus `tithe`
+  - `build_roads_deferred` applies normal duty relation, minority silver cost, and recall
+  - no roads/bridges/fords/shrines are placed, upgraded, or demolished in this milestone
+  - `DUTY_DEFERRED` event documents deferred option families:
+    - build road/bridge/ford/shrine
+    - upgrade road/bridge
+    - demolish road/bridge
 - For `taxation`:
   - Step I always takes exactly one chosen resource: `stone`, `silver`, or `wheat`.
   - Step II checks other physical duty tiles (excluding the selected Taxation tile and any
@@ -131,4 +140,5 @@ Deferred category systems (valid in layout, no non-tithe action yet):
     `stone` / `silver` / `wheat` and is not itself a gained resource.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
-  - `DUTY_RESOLUTION: selected east (build_roads); mode tithe`
+  - `DUTY_RESOLUTION: selected east (build_roads); ...; action build_roads_deferred`
+  - `DUTY_DEFERRED: build_roads requires spatial road/shrine system; ...`

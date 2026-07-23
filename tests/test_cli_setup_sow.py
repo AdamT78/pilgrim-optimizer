@@ -23,9 +23,9 @@ def test_cli_apply_setup_sow_verbose_shows_setup_events_and_state(capsys) -> Non
     assert "DUTY_RESOLUTION:" not in output
     assert "ACOLYTE_RECALL:" not in output
     assert "Setup:" in output
-    assert "Setup sow required: true" in output
-    assert "Setup sow complete: false" in output
+    assert "Setup sow: in progress" in output
     assert "Completed by: player_one" in output
+    assert "Remaining: player_two" in output
     assert "Absolute turn: 0" in output
     assert "Round: 1" in output
     assert "Season: 1" in output
@@ -50,7 +50,8 @@ def test_cli_apply_final_setup_sow_verbose_shows_setup_complete(capsys) -> None:
     assert "SETUP_SOW_COMPLETE:" in output
     assert "SETUP_COMPLETE:" in output
     assert "normal play begins with player_one" in output
-    assert "Setup sow complete: true" in output
+    assert "Setup sow: complete" in output
     assert "Completed by: player_one, player_two" in output
+    assert "Remaining:" not in output
     assert "Absolute turn: 0" in output
     assert "Turn in round: 0" in output

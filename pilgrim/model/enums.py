@@ -88,6 +88,7 @@ class TurnResolutionType(Enum):
 
     PRODUCE_WHEAT = "produce_wheat"
     PRODUCE_STONE = "produce_stone"
+    BUILD_ROADS_DEFERRED = "build_roads_deferred"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"
@@ -117,6 +118,7 @@ class EventType(Enum):
     SETUP_COMPLETE = "setup_complete"
     SOWING = "sowing"
     DUTY_RESOLUTION = "duty_resolution"
+    DUTY_DEFERRED = "duty_deferred"
     RESOURCE_DELTA = "resource_delta"
     PIETY_DELTA = "piety_delta"
     ACOLYTE_RECALL = "acolyte_recall"

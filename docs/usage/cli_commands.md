@@ -334,7 +334,7 @@ Position mapping used by the current sandbox:
   - `engraver` (`clerical_silversmith`)
   - `vestry` (`clerical_devotion`)
   - `alms_house` (`give_alms` duty-value boost + extra payment)
-- Road Engineer remains a placeholder hook for deferred road/construct systems.
+- `road_engineer` now boosts `build_roads_deferred` effective duty value by `+1`.
 
 ## Duty Tile Layout and Identity (v1.3)
 
@@ -342,7 +342,8 @@ Position mapping used by the current sandbox:
 - City is not a duty tile.
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
-- Deferred categories (`build_roads`, `construct`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
+- `construct` remains a deferred category (currently tithe-only).
+- `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe` while spatial systems remain out of scope.
 
 ## Produce Options and Fields Rename (v1.4)
 

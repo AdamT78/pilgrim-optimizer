@@ -319,6 +319,19 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             fragments.append(f"action {details['effect']}")
         return f"{event_name}: {'; '.join(fragments)}"
 
+    if event.event_type is EventType.DUTY_DEFERRED:
+        scaffold = str(details.get("scaffold", "")).strip()
+        effective_duty_value = details.get("effective_duty_value")
+        spent = details.get("spent")
+        if scaffold:
+            if isinstance(effective_duty_value, int) and spent is False:
+                return (
+                    f"{event_name}: {scaffold}; effective duty value "
+                    f"{effective_duty_value} not spent in this scaffold"
+                )
+            return f"{event_name}: {scaffold}"
+        return f"{event_name}: {details}"
+
     if event.event_type is EventType.RESOURCE_DELTA:
         stone = int(details.get("stone", 0))
         silver = int(details.get("silver", 0))
@@ -672,6 +685,7 @@ def _format_state_summary(
         state.dummy_acolytes.total_vector,
         positions=config.board.positions,
     )
+    setup_lines = _format_setup_summary(state)
 
     lines: list[str] = [
         f"Acted player: {acted_name}",
@@ -683,17 +697,7 @@ def _format_state_summary(
         f"  Turn in round: {state.timing.turn_in_round}",
         f"  Start player: {state.start_player.name.lower()}",
         f"  Game over: {str(state.game_over).lower()}",
-        "Setup:",
-        f"  Setup sow required: {str(state.setup_sow_required).lower()}",
-        f"  Setup sow complete: {str(state.setup_sow_complete).lower()}",
-        (
-            "  Completed by: "
-            + (
-                ", ".join(player_id.name.lower() for player_id in state.setup_sow_completed_by)
-                if state.setup_sow_completed_by
-                else "none"
-            )
-        ),
+        *setup_lines,
         "Ship:",
         f"  Position: {state.ship_position}",
         (
@@ -735,6 +739,37 @@ def _format_state_summary(
         )
 
     return tuple(lines)
+
+
+def _format_setup_summary(state: GameState) -> tuple[str, ...]:
+    if not state.setup_sow_required:
+        return ("Setup: not required",)
+
+    completed_by = tuple(player_id.name.lower() for player_id in state.setup_sow_completed_by)
+    if state.setup_sow_complete:
+        if completed_by:
+            completed_text = ", ".join(completed_by)
+        else:
+            completed_text = "unavailable (legacy state)"
+        return (
+            "Setup:",
+            "  Setup sow: complete",
+            f"  Completed by: {completed_text}",
+        )
+
+    all_players = tuple(PlayerId(index) for index in range(state.player_count))
+    completed_set = set(state.setup_sow_completed_by)
+    remaining = tuple(
+        player_id.name.lower() for player_id in all_players if player_id not in completed_set
+    )
+    completed_text = ", ".join(completed_by) if completed_by else "none"
+    remaining_text = ", ".join(remaining) if remaining else "none (legacy state)"
+    return (
+        "Setup:",
+        "  Setup sow: in progress",
+        f"  Completed by: {completed_text}",
+        f"  Remaining: {remaining_text}",
+    )
 
 
 def _format_player_state(
