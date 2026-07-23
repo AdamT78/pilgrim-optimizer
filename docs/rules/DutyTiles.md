@@ -1,4 +1,4 @@
-# Duty Tiles (v1.7 Sandbox Scope)
+# Duty Tiles (v1.8 Sandbox Scope)
 
 ## Core model
 
@@ -73,12 +73,13 @@ Implemented action systems:
 - `ordination`:
   - `ordination` (ordered `ordain`/`mission` steps)
 - `allocation`
+- `taxation`:
+  - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
 Deferred category systems (valid in layout, no non-tithe action yet):
 
 - `build_roads`
 - `construct`
-- `taxation`
 
 ## Runtime implications
 
@@ -104,6 +105,24 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Each ordination step must be legal when reached and costs 1 wheat.
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
+- For `taxation`:
+  - Step I always takes exactly one chosen resource: `stone`, `silver`, or `wheat`.
+  - Step II checks other physical duty tiles (excluding the selected Taxation tile and any
+    position whose category is `taxation`) where the acting player has true majority.
+  - Eligible Step II resource types come from `tithe_counters` on those other majority tiles.
+  - If no eligible other majorities exist, Step II is empty.
+  - If eligible types exist, Step II chooses exactly `duty_value` resources with repetition
+    allowed (for example `stone, stone` or `stone, silver` at duty value 2).
+  - Maximum total gain is `1 + duty_value` (currently at most 3 resources).
+  - Taxation recalls acolytes only from the selected Taxation tile.
+  - Taxation does not change piety, does not advance Alms, and does not consume Tithe counters.
+  - Special Activities and Produce/Clerical building effects do not boost Taxation resources.
+- Tithe counters are modeled separately from `tithe` action mode:
+  - `tithe_counters` map physical duty positions to one of `stone` / `silver` / `wheat` (or
+    `null`).
+  - `city` is never valid for a counter.
+  - The physical position currently mapped to duty category `taxation` must have no non-null
+    Tithe counter.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); mode tithe`

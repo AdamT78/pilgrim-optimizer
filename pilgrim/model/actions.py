@@ -31,6 +31,8 @@ class FullTurnAction:
     alms_house_extra_wheat: int = 0
     donate_building_id: str | None = None
     ordination_steps: tuple[str, ...] = ()
+    taxation_step1_resource: str | None = None
+    taxation_step2_resources: tuple[str, ...] = ()
     allocation_moves: tuple[AllocationMove, ...] = ()
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
@@ -80,6 +82,15 @@ def action_id(action: GameAction) -> str:
         ordination_suffix = ":steps:" + (
             ",".join(action.ordination_steps) if action.ordination_steps else "none"
         )
+    taxation_suffix = ""
+    if action.resolution is TurnResolutionType.TAXATION:
+        step_1 = action.taxation_step1_resource or "none"
+        step_2 = (
+            ",".join(action.taxation_step2_resources)
+            if action.taxation_step2_resources
+            else "none"
+        )
+        taxation_suffix = f":take:{step_1}:bonus:{step_2}"
     allocation_suffix = ""
     if action.resolution is TurnResolutionType.ALLOCATION:
         if action.allocation_moves:
@@ -91,7 +102,7 @@ def action_id(action: GameAction) -> str:
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
-        f"{payment_suffix}{donation_suffix}{ordination_suffix}{allocation_suffix}"
+        f"{payment_suffix}{donation_suffix}{ordination_suffix}{taxation_suffix}{allocation_suffix}"
     )
 
 
@@ -132,6 +143,10 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += " | steps: " + (
             "; ".join(action.ordination_steps) if action.ordination_steps else "none"
         )
+    if action.resolution is TurnResolutionType.TAXATION:
+        summary += f" | take: {action.taxation_step1_resource or 'unknown'}"
+        if action.taxation_step2_resources:
+            summary += "; bonus: " + ", ".join(action.taxation_step2_resources)
     if action.resolution is TurnResolutionType.ALLOCATION:
         if action.allocation_moves:
             summary += " | moves: " + "; ".join(

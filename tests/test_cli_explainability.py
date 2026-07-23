@@ -182,3 +182,21 @@ def test_cli_solve_verbose_shows_populated_player_board_slots_with_names(capsys)
     assert "Cardinal favor tiles: 1" in output
     assert "Used slots: 4/6" in output
     assert "Available slots: 2" in output
+
+
+def test_cli_solve_taxation_merchant_verbose_shows_none_resource(capsys) -> None:
+    exit_code = main(
+        [
+            "solve",
+            "scenarios/taxation_merchant_resource_none_001.json",
+            "--depth",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Merchant:" in output
+    assert "Position: taxation" in output
+    assert "Resource: none" in output

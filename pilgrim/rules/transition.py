@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from itertools import combinations_with_replacement
 
 from pilgrim.model.actions import (
     AllocationMove,
@@ -11,7 +12,7 @@ from pilgrim.model.actions import (
     action_id,
 )
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
+from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import (
@@ -81,6 +82,9 @@ class TransitionResult:
 
     state: GameState
     events: tuple[GameEvent, ...]
+
+
+_TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
 
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -221,6 +225,40 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 ordination_steps=step_sequence,
                             )
                         )
+                elif TurnResolutionType.TAXATION in category_actions:
+                    player_count = sowed_vector[duty_position]
+                    opponent_counts = _competing_counts(
+                        state,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                    )
+                    strength = duty_strength(player_count, opponent_counts)
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    available_silver = player_resources.silver - silver_cost
+                    if available_silver < 0:
+                        continue
+                    bonus_resource_types = _taxation_bonus_resource_types(
+                        state,
+                        config,
+                        player=state.active_player,
+                        sowed_vector=sowed_vector,
+                        selected_duty=duty_position,
+                    )
+                    for step_1_resource in _TAXATION_RESOURCE_TYPES:
+                        for step_2_resources in _taxation_bonus_resource_choices(
+                            bonus_resource_types,
+                            duty_value=duty_value,
+                        ):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.TAXATION,
+                                    taxation_step1_resource=step_1_resource,
+                                    taxation_step2_resources=step_2_resources,
+                                )
+                            )
                 else:
                     for category_action in category_actions:
                         actions.append(
@@ -347,6 +385,16 @@ def _apply_full_turn_action(
         if action.resolution is not TurnResolutionType.ORDINATION and action.ordination_steps:
             raise TransitionValidationError(
                 "Only ordination actions may include ordination_steps."
+            )
+        if (
+            action.resolution is not TurnResolutionType.TAXATION
+            and (
+                action.taxation_step1_resource is not None
+                or action.taxation_step2_resources
+            )
+        ):
+            raise TransitionValidationError(
+                "Only taxation actions may include taxation_step1_resource/taxation_step2_resources."
             )
         if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
             raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
@@ -538,6 +586,101 @@ def _apply_full_turn_action(
                 new_player_state = replace(new_player_state, resources=new_resources)
 
             resource_delta = (0, -silver_cost, -len(action.ordination_steps))
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+        elif action.resolution is TurnResolutionType.TAXATION:
+            step_1_resource = action.taxation_step1_resource
+            if step_1_resource not in _TAXATION_RESOURCE_TYPES:
+                raise TransitionValidationError(
+                    "Taxation action requires taxation_step1_resource in: "
+                    + ", ".join(_TAXATION_RESOURCE_TYPES)
+                    + "."
+                )
+
+            bonus_resource_types = _taxation_bonus_resource_types(
+                state,
+                config,
+                player=player,
+                sowed_vector=sowed_vector,
+                selected_duty=action.selected_duty,
+            )
+            legal_step_2_choices = _taxation_bonus_resource_choices(
+                bonus_resource_types,
+                duty_value=effective_duty_value,
+            )
+            step_2_resources = tuple(action.taxation_step2_resources)
+            if step_2_resources not in legal_step_2_choices:
+                raise TransitionValidationError(
+                    "Illegal taxation_step2_resources for current majority tiles and duty value."
+                )
+
+            stone_delta = 0
+            silver_delta = -silver_cost
+            wheat_delta = 0
+
+            for resource in (step_1_resource, *step_2_resources):
+                if resource == "stone":
+                    stone_delta += 1
+                elif resource == "silver":
+                    silver_delta += 1
+                elif resource == "wheat":
+                    wheat_delta += 1
+                else:
+                    raise TransitionValidationError(f"Unknown taxation resource: {resource}")
+
+            new_player_state = state_after_sow.player_state(player)
+            new_resources = new_player_state.resources.add(
+                stone=stone_delta,
+                silver=silver_delta,
+                wheat=wheat_delta,
+            )
+            if (
+                new_resources.stone < 0
+                or new_resources.silver < 0
+                or new_resources.wheat < 0
+            ):
+                raise TransitionValidationError("Taxation resource update cannot overdraw resources.")
+            new_player_state = replace(new_player_state, resources=new_resources)
+
+            special_bonus_events.append(
+                GameEvent(
+                    event_type=EventType.TAXATION,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        step="step_1",
+                        resource=step_1_resource,
+                    ),
+                )
+            )
+            if step_2_resources:
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.TAXATION,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            step="step_2",
+                            resources=",".join(step_2_resources),
+                            no_bonus=False,
+                        ),
+                    )
+                )
+            else:
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.TAXATION,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            step="step_2",
+                            resources="",
+                            no_bonus=True,
+                        ),
+                    )
+                )
+
+            resource_delta = (stone_delta, silver_delta, wheat_delta)
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
@@ -1086,6 +1229,47 @@ def _legal_give_alms_donation_buildings(
             continue
         legal_buildings.append(building_id)
     return tuple(legal_buildings)
+
+
+def _taxation_bonus_resource_types(
+    state: GameState,
+    config: GameConfig,
+    *,
+    player: PlayerId,
+    sowed_vector: tuple[int, ...],
+    selected_duty: int,
+) -> tuple[str, ...]:
+    unlocked_resources: set[str] = set()
+    for duty_position in config.duty_positions():
+        if duty_position == selected_duty:
+            continue
+        if config.duty_category_for_position(duty_position) == "taxation":
+            continue
+        strength = duty_strength(
+            sowed_vector[duty_position],
+            _competing_counts(state, player=player, duty_position=duty_position),
+        )
+        if strength is not DutyStrength.MAJORITY:
+            continue
+        resource = config.tithe_counters.resource_for_board_index(duty_position)
+        if resource is not None:
+            unlocked_resources.add(resource)
+    return tuple(resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources)
+
+
+def _taxation_bonus_resource_choices(
+    bonus_resource_types: tuple[str, ...],
+    *,
+    duty_value: int,
+) -> tuple[tuple[str, ...], ...]:
+    if duty_value <= 0:
+        return ()
+    if not bonus_resource_types:
+        return ((),)
+    return tuple(
+        tuple(choice)
+        for choice in combinations_with_replacement(bonus_resource_types, duty_value)
+    )
 
 
 def _allocation_move_sequences(

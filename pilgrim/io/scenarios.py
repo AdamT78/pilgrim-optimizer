@@ -76,6 +76,7 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         ship_raw=ship_raw,
         buildings_raw=buildings_raw,
         duty_tiles_raw=_duty_tiles_from_dict(merged.get("duty_tiles")),
+        tithe_counters_raw=_tithe_counters_from_dict(merged.get("tithe_counters")),
     )
     table_player_count = _player_count_from_dict(merged)
     state = _game_state_from_dict(
@@ -370,6 +371,14 @@ def _duty_tiles_from_dict(raw: Any) -> Mapping[str, str] | None:
     if not isinstance(raw, Mapping):
         raise ValueError("duty_tiles must be an object mapping positions to categories.")
     return {str(position): str(category) for position, category in raw.items()}
+
+
+def _tithe_counters_from_dict(raw: Any) -> Mapping[str, Any] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError("tithe_counters must be an object mapping positions to resources/null.")
+    return {str(position): resource for position, resource in raw.items()}
 
 
 def _player_count_from_dict(raw: Mapping[str, Any]) -> int:

@@ -27,7 +27,7 @@ _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
     "build_roads": (),
     "construct": (),
     "ordination": (TurnResolutionType.ORDINATION,),
-    "taxation": (),
+    "taxation": (TurnResolutionType.TAXATION,),
 }
 
 _RESOLUTION_EFFECTS: Mapping[TurnResolutionType, DutyEffect] = {

@@ -1,0 +1,37 @@
+{
+  "scenario_id": "taxation_minor_cost_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 4,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 0,
+          "silver": 1,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 1, 0],
+          "village": 0,
+          "abbey": 0
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 2],
+          "village": 0,
+          "abbey": 0
+        }
+      }
+    }
+  }
+}
