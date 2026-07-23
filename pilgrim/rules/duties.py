@@ -11,7 +11,10 @@ from pilgrim.model.state import PlayerState
 from pilgrim.rules.piety import move_piety
 
 _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
-    "produce": (TurnResolutionType.PRODUCE,),
+    "produce": (
+        TurnResolutionType.PRODUCE_WHEAT,
+        TurnResolutionType.PRODUCE_STONE,
+    ),
     "clerical": (
         TurnResolutionType.CLERICAL_DEVOTION,
         TurnResolutionType.CLERICAL_SILVERSMITH,
@@ -25,7 +28,6 @@ _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
 }
 
 _RESOLUTION_EFFECTS: Mapping[TurnResolutionType, DutyEffect] = {
-    TurnResolutionType.PRODUCE: DutyEffect.PRODUCE,
     TurnResolutionType.CLERICAL_DEVOTION: DutyEffect.CLERICAL_DEVOTION,
     TurnResolutionType.CLERICAL_SILVERSMITH: DutyEffect.CLERICAL_SILVERSMITH,
 }
@@ -71,6 +73,41 @@ def effect_for_resolution(resolution: TurnResolutionType) -> DutyEffect:
         raise ValueError(
             f"Resolution does not map to direct duty effect: {resolution.value}"
         ) from exc
+
+
+def apply_produce_resolution(
+    player_state: PlayerState,
+    *,
+    resolution: TurnResolutionType,
+    duty_value: int,
+    silver_cost: int,
+) -> tuple[PlayerState, tuple[int, int, int]]:
+    """Apply produce_wheat or produce_stone resolution with minority silver cost."""
+    if resolution is TurnResolutionType.PRODUCE_WHEAT:
+        stone_delta = 0
+        wheat_delta = duty_value
+    elif resolution is TurnResolutionType.PRODUCE_STONE:
+        stone_delta = duty_value
+        wheat_delta = 0
+    else:
+        raise ValueError(f"Unsupported produce resolution: {resolution.value}")
+
+    silver_delta = -silver_cost
+    new_resources = player_state.resources.add(
+        stone=stone_delta,
+        silver=silver_delta,
+        wheat=wheat_delta,
+    )
+    new_player_state = PlayerState(
+        resources=new_resources,
+        workforce=player_state.workforce,
+        piety=player_state.piety,
+        alms_position=player_state.alms_position,
+        victory_points=player_state.victory_points,
+        special_activities=player_state.special_activities,
+        player_board_slots=player_state.player_board_slots,
+    )
+    return new_player_state, (stone_delta, silver_delta, wheat_delta)
 
 
 def apply_duty_effect(

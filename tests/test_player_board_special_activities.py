@@ -9,7 +9,8 @@ from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SpecialActivities
 from pilgrim.rules.special_activities import (
-    produce_stone_bonus_hook,
+    produce_stone_mason_bonus,
+    produce_wheat_fields_bonus,
     road_engineer_duty_value_bonus_hook,
 )
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -66,7 +67,7 @@ def test_allocation_to_special_activity_occupies_target_and_conserves_acolytes()
         action
         for action in actions
         if action.resolution is TurnResolutionType.ALLOCATION
-        and action.allocation_target == "special_activity:grain"
+        and action.allocation_target == "special_activity:fields"
     )
 
     before_total = scenario.state.total_acolytes(PlayerId.PLAYER_ONE)
@@ -76,8 +77,8 @@ def test_allocation_to_special_activity_occupies_target_and_conserves_acolytes()
     after_total = result.state.total_acolytes(PlayerId.PLAYER_ONE)
 
     assert after.workforce.abbey == before.workforce.abbey - 1
-    assert after.special_activities.grain is True
-    assert before.special_activities.grain is False
+    assert after.special_activities.fields is True
+    assert before.special_activities.fields is False
     assert before_total == after_total
 
 
@@ -200,10 +201,16 @@ def test_alms_house_not_used_without_extra_resource() -> None:
 def test_special_activity_hooks_exist() -> None:
     scenario = load_scenario("scenarios/special_activity_clerical_001.json")
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    assert produce_stone_bonus_hook(player_one) == 0
+    assert produce_wheat_fields_bonus(player_one) == 0
+    assert produce_stone_mason_bonus(player_one) == 0
     assert road_engineer_duty_value_bonus_hook(player_one, action_key="build_roads") == 0
 
 
 def test_special_activity_model_rejects_non_boolean_flags() -> None:
     with pytest.raises(ValueError):
-        SpecialActivities(grain=1)  # type: ignore[arg-type]
+        SpecialActivities(fields=1)  # type: ignore[arg-type]
+
+
+def test_fields_is_valid_special_activity_id() -> None:
+    activities = SpecialActivities().with_activity("fields", True)
+    assert activities.fields is True

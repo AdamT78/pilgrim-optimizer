@@ -96,4 +96,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
 
 def resolution_from_effect(effect: DutyEffect) -> TurnResolutionType:
     """Map configured duty effect to the corresponding full-turn resolution."""
+    if effect is DutyEffect.PRODUCE:
+        # Legacy duty effect mapping defaults to the explicit wheat option.
+        return TurnResolutionType.PRODUCE_WHEAT
     return TurnResolutionType(effect.value)

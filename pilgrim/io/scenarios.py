@@ -341,13 +341,21 @@ def _special_activities_from_dict(raw: Any) -> SpecialActivities:
             flags[str(key)] = value
     else:
         raise ValueError("special_activities must be an object or list.")
+    if "grain" in flags and "fields" not in flags:
+        flags["fields"] = bool(flags["grain"])
+    elif "grain" in flags and "fields" in flags:
+        if bool(flags["grain"]) != bool(flags["fields"]):
+            raise ValueError(
+                "special_activities.grain alias conflicts with special_activities.fields."
+            )
+    flags.pop("grain", None)
     unknown_ids = set(flags) - set(SPECIAL_ACTIVITY_IDS)
     if unknown_ids:
         raise ValueError(
             "Unknown special activity id(s): " + ", ".join(sorted(unknown_ids)) + "."
         )
     return SpecialActivities(
-        grain=bool(flags.get("grain", False)),
+        fields=bool(flags.get("fields", False)),
         road_engineer=bool(flags.get("road_engineer", False)),
         stone_mason=bool(flags.get("stone_mason", False)),
         alms_house=bool(flags.get("alms_house", False)),

@@ -19,6 +19,7 @@ from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import (
     action_options_for_duty_category,
     apply_duty_effect,
+    apply_produce_resolution,
     duty_strength,
     duty_value_and_silver_cost,
     effect_for_resolution,
@@ -44,8 +45,8 @@ from pilgrim.rules.special_activities import (
     can_use_alms_house_bonus,
     clerical_devotion_bonus,
     clerical_silversmith_bonus,
-    produce_grain_bonus,
-    produce_stone_bonus_hook,
+    produce_stone_mason_bonus,
+    produce_wheat_fields_bonus,
 )
 from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
@@ -405,69 +406,104 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         else:
-            if action.resolution is TurnResolutionType.PRODUCE:
-                effective_duty_value += produce_grain_bonus(state_after_sow.player_state(player))
-                _ = produce_stone_bonus_hook(state_after_sow.player_state(player))
-                if effective_duty_value != duty_value:
-                    special_bonus_events.append(
-                        GameEvent(
-                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
-                            actor=player,
-                            action_id=transition_action_id,
-                            details=make_event_details(
-                                activity="grain",
-                                action=action.resolution.value,
-                                wheat_bonus=effective_duty_value - duty_value,
-                            ),
+            if action.resolution in (
+                TurnResolutionType.PRODUCE_WHEAT,
+                TurnResolutionType.PRODUCE_STONE,
+            ):
+                produce_resource_bonus = 0
+                if action.resolution is TurnResolutionType.PRODUCE_WHEAT:
+                    wheat_bonus = produce_wheat_fields_bonus(state_after_sow.player_state(player))
+                    produce_resource_bonus = wheat_bonus
+                    if wheat_bonus:
+                        special_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    activity="fields",
+                                    action=action.resolution.value,
+                                    wheat_bonus=wheat_bonus,
+                                ),
+                            )
                         )
+                else:
+                    stone_bonus = produce_stone_mason_bonus(
+                        state_after_sow.player_state(player)
                     )
-            elif action.resolution is TurnResolutionType.CLERICAL_SILVERSMITH:
-                bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
-                effective_duty_value += bonus
-                if bonus:
-                    special_bonus_events.append(
-                        GameEvent(
-                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
-                            actor=player,
-                            action_id=transition_action_id,
-                            details=make_event_details(
-                                activity="engraver",
-                                action=action.resolution.value,
-                                silver_bonus=bonus,
-                            ),
+                    produce_resource_bonus = stone_bonus
+                    if stone_bonus:
+                        special_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    activity="stone_mason",
+                                    action=action.resolution.value,
+                                    stone_bonus=stone_bonus,
+                                ),
+                            )
                         )
+                try:
+                    new_player_state, resource_delta = apply_produce_resolution(
+                        state_after_sow.player_state(player),
+                        resolution=action.resolution,
+                        duty_value=duty_value + produce_resource_bonus,
+                        silver_cost=silver_cost,
                     )
-            elif action.resolution is TurnResolutionType.CLERICAL_DEVOTION:
-                bonus = clerical_devotion_bonus(state_after_sow.player_state(player))
-                effective_duty_value += bonus
-                if bonus:
-                    special_bonus_events.append(
-                        GameEvent(
-                            event_type=EventType.SPECIAL_ACTIVITY_BONUS,
-                            actor=player,
-                            action_id=transition_action_id,
-                            details=make_event_details(
-                                activity="vestry",
-                                action=action.resolution.value,
-                                piety_bonus=bonus,
-                            ),
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                old_piety_position = state_after_sow.player_state(player).piety
+                new_piety_position = state_after_sow.player_state(player).piety
+            else:
+                if action.resolution is TurnResolutionType.CLERICAL_SILVERSMITH:
+                    bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
+                    effective_duty_value += bonus
+                    if bonus:
+                        special_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    activity="engraver",
+                                    action=action.resolution.value,
+                                    silver_bonus=bonus,
+                                ),
+                            )
                         )
+                elif action.resolution is TurnResolutionType.CLERICAL_DEVOTION:
+                    bonus = clerical_devotion_bonus(state_after_sow.player_state(player))
+                    effective_duty_value += bonus
+                    if bonus:
+                        special_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    activity="vestry",
+                                    action=action.resolution.value,
+                                    piety_bonus=bonus,
+                                ),
+                            )
+                        )
+                try:
+                    (
+                        new_player_state,
+                        resource_delta,
+                        old_piety_position,
+                        new_piety_position,
+                    ) = apply_duty_effect(
+                        state_after_sow.player_state(player),
+                        effect=effect_for_resolution(action.resolution),
+                        duty_value=effective_duty_value,
+                        silver_cost=silver_cost,
+                        piety_config=config.piety,
                     )
-            try:
-                (
-                    new_player_state,
-                    resource_delta,
-                    old_piety_position,
-                    new_piety_position,
-                ) = apply_duty_effect(
-                    state_after_sow.player_state(player),
-                    effect=effect_for_resolution(action.resolution),
-                    duty_value=effective_duty_value,
-                    silver_cost=silver_cost,
-                    piety_config=config.piety,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
 
         post_effect_vector = new_player_state.workforce.mancala
         recalled = post_effect_vector[action.selected_duty]
@@ -499,6 +535,7 @@ def _apply_full_turn_action(
                 ),
             )
         )
+        events.extend(special_bonus_events)
         events.append(
             GameEvent(
                 event_type=EventType.RESOURCE_DELTA,
@@ -511,7 +548,6 @@ def _apply_full_turn_action(
                 ),
             )
         )
-        events.extend(special_bonus_events)
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
             events.append(

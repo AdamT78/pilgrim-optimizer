@@ -1,39 +1,23 @@
 {
-  "scenario_id": "allocation_all_special_occupied_001",
+  "scenario_id": "produce_special_activity_stone_mason_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
   },
-  "player_count": 2,
+  "player_count": 4,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
-  "duty_tiles": {
-    "north": "produce",
-    "north_east": "clerical",
-    "east": "build_roads",
-    "south_east": "construct",
-    "south": "give_alms",
-    "south_west": "ordination",
-    "west": "taxation",
-    "north_west": "allocation"
-  },
   "initial_state": {
-    "start_player_id": "player_one",
-    "merchant_position": 0,
-    "ship_position": 0,
-    "completed_rounds": 0,
-    "game_over": false,
-    "timing": {
-      "absolute_turn": 0,
-      "round_number": 1,
-      "season_number": 1,
-      "turn_in_round": 0
-    },
     "players": {
       "player_one": {
+        "resources": {
+          "stone": 0,
+          "silver": 1,
+          "wheat": 0
+        },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 0, 0, 0, 1, 0],
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 8,
-          "abbey": 1,
+          "abbey": 3,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -43,15 +27,15 @@
           }
         },
         "special_activities": {
-          "fields": true,
-          "road_engineer": true,
-          "stone_mason": true,
-          "alms_house": true,
-          "engraver": true,
-          "vestry": true
+          "stone_mason": true
         }
       },
       "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
         "workforce": {
           "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 0,

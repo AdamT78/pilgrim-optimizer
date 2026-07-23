@@ -61,7 +61,7 @@ def test_minority_action_fails_when_silver_insufficient() -> None:
         origin=0,
         route=(1,),
         selected_duty=1,
-        resolution=TurnResolutionType.PRODUCE,
+        resolution=TurnResolutionType.PRODUCE_WHEAT,
     )
     with pytest.raises(TransitionValidationError):
         apply_action(state, action, scenario.config)

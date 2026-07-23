@@ -1,4 +1,4 @@
-# Duty Tiles (v1.3 Sandbox Scope)
+# Duty Tiles (v1.4 Sandbox Scope)
 
 ## Core model
 
@@ -61,7 +61,9 @@ No randomization occurs inside scenario loading, rules transitions, or search.
 
 Implemented action systems:
 
-- `produce`
+- `produce`:
+  - `produce_wheat`
+  - `produce_stone`
 - `clerical`:
   - `clerical_devotion`
   - `clerical_silversmith`
@@ -80,6 +82,10 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Majority/parity/minority is still computed on the selected **physical** duty position.
 - Duty value is still derived from the selected position relation.
 - Available non-tithe actions come from the selected position's **category**.
+- For `produce`, one explicit option is chosen: `produce_wheat` or `produce_stone`.
+- Produce duty value cannot be split across resources in one action.
+- Produce special-activity bonuses (Fields / Stone Mason) add produced resources and do not
+  change duty value.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); mode tithe`

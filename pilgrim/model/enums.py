@@ -85,7 +85,8 @@ class DutyEffect(Enum):
 class TurnResolutionType(Enum):
     """Simplified full-turn action choices for the sandbox."""
 
-    PRODUCE = "produce"
+    PRODUCE_WHEAT = "produce_wheat"
+    PRODUCE_STONE = "produce_stone"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"

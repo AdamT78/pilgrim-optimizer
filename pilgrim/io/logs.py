@@ -64,7 +64,7 @@ def state_to_record(state: GameState) -> dict[str, Any]:
                     },
                 },
                 "special_activities": {
-                    "grain": player.special_activities.grain,
+                    "fields": player.special_activities.fields,
                     "road_engineer": player.special_activities.road_engineer,
                     "stone_mason": player.special_activities.stone_mason,
                     "alms_house": player.special_activities.alms_house,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 SPECIAL_ACTIVITY_IDS: tuple[str, ...] = (
-    "grain",
+    "fields",
     "road_engineer",
     "stone_mason",
     "alms_house",
@@ -18,7 +18,7 @@ SPECIAL_ACTIVITY_IDS: tuple[str, ...] = (
 class SpecialActivities:
     """Per-player special-activity occupancy (one acolyte max per space)."""
 
-    grain: bool = False
+    fields: bool = False
     road_engineer: bool = False
     stone_mason: bool = False
     alms_house: bool = False
@@ -44,7 +44,7 @@ class SpecialActivities:
         if occupied == self.has(activity_id):
             return self
         return SpecialActivities(
-            grain=self.grain if activity_id != "grain" else occupied,
+            fields=self.fields if activity_id != "fields" else occupied,
             road_engineer=(
                 self.road_engineer
                 if activity_id != "road_engineer"
@@ -55,6 +55,11 @@ class SpecialActivities:
             engraver=self.engraver if activity_id != "engraver" else occupied,
             vestry=self.vestry if activity_id != "vestry" else occupied,
         )
+
+    @property
+    def grain(self) -> bool:
+        """Deprecated alias for backwards compatibility with older tests/scenarios."""
+        return self.fields
 
     def occupied(self) -> tuple[str, ...]:
         return tuple(

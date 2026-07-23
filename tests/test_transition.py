@@ -34,7 +34,7 @@ def test_apply_action_applies_sowing_and_duty_in_one_call() -> None:
         origin=0,
         route=(1,),
         selected_duty=1,
-        resolution=TurnResolutionType.PRODUCE,
+        resolution=TurnResolutionType.PRODUCE_WHEAT,
     )
     result = apply_action(state, action, scenario.config)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
@@ -74,7 +74,7 @@ def test_full_turn_duty_recall_returns_acolytes_to_city() -> None:
         origin=0,
         route=(1,),
         selected_duty=1,
-        resolution=TurnResolutionType.PRODUCE,
+        resolution=TurnResolutionType.PRODUCE_WHEAT,
     )
     result = apply_action(state, action, scenario.config)
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[0] == 3
