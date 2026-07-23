@@ -495,6 +495,11 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                     f"wheat={int(details.get('extra_wheat', 0))}"
                 )
             return text
+        if activity == "road_engineer" and details.get("construct_extra_road") is True:
+            return (
+                f"{event_name}: road_engineer allowed one additional road for construct "
+                "because a road was included in the plan"
+            )
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")

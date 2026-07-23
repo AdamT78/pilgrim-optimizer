@@ -58,6 +58,7 @@ from pilgrim.rules.special_activities import (
     can_use_alms_house_bonus,
     clerical_devotion_bonus,
     clerical_silversmith_bonus,
+    has_special_activity,
     legal_allocation_moves,
     produce_stone_mason_bonus,
     produce_wheat_fields_bonus,
@@ -89,6 +90,13 @@ class TransitionResult:
 
 
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
+_CONSTRUCT_PLAN_BUILDING = "building"
+_CONSTRUCT_PLAN_ROAD = "road"
+_CONSTRUCT_PLAN_BUILDING_AND_ROAD = "building + road"
+_CONSTRUCT_PLAN_ROAD_WITH_EXTRA = "road + road_engineer_extra_road"
+_CONSTRUCT_PLAN_BUILDING_AND_ROAD_WITH_EXTRA = (
+    "building + road + road_engineer_extra_road"
+)
 
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -220,6 +228,29 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 selected_duty=duty_position,
                                 resolution=TurnResolutionType.ALLOCATION,
                                 allocation_moves=move_sequence,
+                            )
+                        )
+                elif TurnResolutionType.CONSTRUCT_DEFERRED in category_actions:
+                    player_count = sowed_vector[duty_position]
+                    opponent_counts = _competing_counts(
+                        state,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                    )
+                    strength = duty_strength(player_count, opponent_counts)
+                    duty_value, _silver_cost = duty_value_and_silver_cost(strength)
+                    has_road_engineer = has_special_activity(player_state, "road_engineer")
+                    for construct_plan in _construct_plan_options(
+                        duty_value=duty_value,
+                        has_road_engineer=has_road_engineer,
+                    ):
+                        actions.append(
+                            FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
+                                construct_plan=construct_plan,
                             )
                         )
                 elif TurnResolutionType.ORDINATION in category_actions:
@@ -553,6 +584,13 @@ def _apply_full_turn_action(
             )
         if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
             raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
+        if (
+            action.resolution is not TurnResolutionType.CONSTRUCT_DEFERRED
+            and action.construct_plan is not None
+        ):
+            raise TransitionValidationError(
+                "Only Construct actions may include construct_plan."
+            )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
             use_alms_house = (
@@ -726,6 +764,63 @@ def _apply_full_turn_action(
                     ),
                     effective_duty_value=effective_duty_value,
                     spent=False,
+                ),
+            )
+        elif action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+            if not action.construct_plan:
+                raise TransitionValidationError(
+                    "Construct action requires construct_plan."
+                )
+            has_road_engineer = has_special_activity(
+                state_after_sow.player_state(player),
+                "road_engineer",
+            )
+            allowed_construct_plans = _construct_plan_options(
+                duty_value=duty_value,
+                has_road_engineer=has_road_engineer,
+            )
+            if action.construct_plan not in allowed_construct_plans:
+                raise TransitionValidationError(
+                    "Illegal construct_plan for current duty value/special-activity state."
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Construct minority silver cost would overdraw silver."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            if _construct_plan_uses_road_engineer_extra(action.construct_plan):
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            activity="road_engineer",
+                            action=action.resolution.value,
+                            construct_extra_road=True,
+                            reason="road included in plan",
+                        ),
+                    )
+                )
+
+            resource_delta = (0, -silver_cost, 0)
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+            duty_deferred_event = GameEvent(
+                event_type=EventType.DUTY_DEFERRED,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    duty_category="construct",
+                    scaffold=(
+                        "construct requires building/spatial road system; "
+                        f"requested plan: {action.construct_plan}"
+                    ),
                 ),
             )
         elif action.resolution is TurnResolutionType.ORDINATION:
@@ -1406,6 +1501,30 @@ def _next_incomplete_setup_player(
         if candidate not in completed_set:
             return candidate
     return None
+
+
+def _construct_plan_options(
+    *,
+    duty_value: int,
+    has_road_engineer: bool,
+) -> tuple[str, ...]:
+    if duty_value <= 0:
+        return ()
+
+    plans: list[str] = []
+    if has_road_engineer:
+        plans.append(_CONSTRUCT_PLAN_ROAD_WITH_EXTRA)
+        if duty_value >= 2:
+            plans.append(_CONSTRUCT_PLAN_BUILDING_AND_ROAD_WITH_EXTRA)
+    if duty_value >= 2:
+        plans.append(_CONSTRUCT_PLAN_BUILDING_AND_ROAD)
+    plans.append(_CONSTRUCT_PLAN_BUILDING)
+    plans.append(_CONSTRUCT_PLAN_ROAD)
+    return tuple(plans)
+
+
+def _construct_plan_uses_road_engineer_extra(plan: str) -> bool:
+    return "road_engineer_extra_road" in plan
 
 
 def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:

@@ -133,15 +133,13 @@ def test_default_layout_still_offers_implemented_categories() -> None:
     assert TurnResolutionType.ALLOCATION in resolutions
 
 
-def test_construct_remains_deferred_and_build_roads_exposes_scaffold_action() -> None:
+def test_build_roads_exposes_scaffold_action_in_default_deferred_fixture() -> None:
     scenario = load_scenario("scenarios/duty_tiles_deferred_categories_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     saw_build_roads_scaffold = False
     saw_build_roads_tithe = False
     for action in actions:
         category = scenario.config.duty_category_for_position(action.selected_duty)
-        if category == "construct":
-            assert action.resolution is TurnResolutionType.TITHE
         if category == "build_roads":
             if action.resolution is TurnResolutionType.BUILD_ROADS_DEFERRED:
                 saw_build_roads_scaffold = True
