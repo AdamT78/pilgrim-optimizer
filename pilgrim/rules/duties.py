@@ -24,7 +24,7 @@ _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
         TurnResolutionType.DONATE_BUILDING,
     ),
     "allocation": (TurnResolutionType.ALLOCATION,),
-    "build_roads": (),
+    "build_roads": (TurnResolutionType.BUILD_ROADS_DEFERRED,),
     "construct": (),
     "ordination": (TurnResolutionType.ORDINATION,),
     "taxation": (TurnResolutionType.TAXATION,),

@@ -151,8 +151,10 @@ Helpers are available for occupied/available activity queries and counts.
 
 ### Road Engineer
 
-- placeholder hook exists only
-- no runtime road-related effect in this milestone
+- when taking `build_roads`, Road Engineer raises effective Duty Value by `+1`
+- this currently applies only to `build_roads_deferred` scaffold resolution
+- no runtime road/bridge/ford/shrine placement is performed in this milestone
+- construct-related Road Engineer behavior remains deferred until Construct road placement exists
 
 ## Validation and invariants
 
@@ -171,5 +173,5 @@ serfs/acolytes conservation scope.
 ## Deferred
 
 - Special Activity removal/reallocation
-- road/construct effects for Road Engineer
+- construct-related Road Engineer placement effects
 - full player-board systems beyond current sandbox scope

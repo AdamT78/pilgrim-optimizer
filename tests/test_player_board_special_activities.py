@@ -188,6 +188,24 @@ def test_special_activity_hooks_exist() -> None:
     assert road_engineer_duty_value_bonus_hook(player_one, action_key="build_roads") == 0
 
 
+def test_road_engineer_hook_applies_to_build_roads_only() -> None:
+    scenario = load_scenario("scenarios/special_activity_clerical_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    player_with_road_engineer = replace(
+        player_one,
+        special_activities=player_one.special_activities.with_activity("road_engineer", True),
+    )
+    assert road_engineer_duty_value_bonus_hook(
+        player_with_road_engineer, action_key="build_roads"
+    ) == 1
+    assert road_engineer_duty_value_bonus_hook(
+        player_with_road_engineer, action_key="construct"
+    ) == 0
+    assert road_engineer_duty_value_bonus_hook(
+        player_with_road_engineer, action_key="produce"
+    ) == 0
+
+
 def test_special_activity_model_rejects_non_boolean_flags() -> None:
     with pytest.raises(ValueError):
         SpecialActivities(fields=1)  # type: ignore[arg-type]

@@ -61,6 +61,7 @@ from pilgrim.rules.special_activities import (
     legal_allocation_moves,
     produce_stone_mason_bonus,
     produce_wheat_fields_bonus,
+    road_engineer_duty_value_bonus_hook,
 )
 from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
@@ -515,6 +516,7 @@ def _apply_full_turn_action(
         effective_duty_value = duty_value
         give_alms_resolution = None
         donate_building_alms_resolution = None
+        duty_deferred_event: GameEvent | None = None
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS
@@ -678,6 +680,53 @@ def _apply_full_turn_action(
                         donation_vp=donated_building.donation_vp,
                     ),
                 )
+            )
+        elif action.resolution is TurnResolutionType.BUILD_ROADS_DEFERRED:
+            road_engineer_bonus = road_engineer_duty_value_bonus_hook(
+                state_after_sow.player_state(player),
+                action_key="build_roads",
+            )
+            effective_duty_value += road_engineer_bonus
+            if road_engineer_bonus:
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            activity="road_engineer",
+                            action=action.resolution.value,
+                            duty_value_bonus=road_engineer_bonus,
+                        ),
+                    )
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Build Roads minority silver cost would overdraw silver."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            resource_delta = (0, -silver_cost, 0)
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+            duty_deferred_event = GameEvent(
+                event_type=EventType.DUTY_DEFERRED,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    duty_category="build_roads",
+                    scaffold=(
+                        "build_roads requires spatial road/shrine system; options are "
+                        "build road/bridge/ford/shrine, upgrade road/bridge, "
+                        "demolish road/bridge"
+                    ),
+                    effective_duty_value=effective_duty_value,
+                    spent=False,
+                ),
             )
         elif action.resolution is TurnResolutionType.ORDINATION:
             if not action.ordination_steps:
@@ -1007,6 +1056,8 @@ def _apply_full_turn_action(
             )
         )
         events.extend(special_bonus_events)
+        if duty_deferred_event is not None:
+            events.append(duty_deferred_event)
         events.append(
             GameEvent(
                 event_type=EventType.RESOURCE_DELTA,

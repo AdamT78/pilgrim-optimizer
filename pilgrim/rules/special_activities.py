@@ -155,8 +155,8 @@ def road_engineer_duty_value_bonus_hook(player_state: PlayerState, *, action_key
 
     Road-building / construct systems are not yet implemented in the sandbox runtime.
     """
-    _ = action_key
-    _ = player_state
+    if action_key == "build_roads" and has_special_activity(player_state, "road_engineer"):
+        return 1
     return 0
 
 

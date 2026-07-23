@@ -151,8 +151,10 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - `GameConfig` now resolves duty category by selected position at runtime.
 - Legal action generation and duty resolution use category-based option mapping, removing
   hardcoded position semantics like "south always means give_alms".
-- Deferred categories are valid in layout (`build_roads`, `construct`) and currently expose no
-  non-tithe action.
+- Deferred categories remain valid in layout.
+- `construct` currently exposes no non-tithe action.
+- `build_roads` now exposes a deterministic scaffold action (`build_roads_deferred`) that
+  resolves duty relation/cost/recall without spatial map effects.
 
 ## Seeded Setup Generator (v1.9)
 
