@@ -36,6 +36,12 @@ from pilgrim.rules.merchant import (
     current_merchant_duty,
     current_merchant_resource,
 )
+from pilgrim.rules.ordination import (
+    ORDINATION_MISSION,
+    ORDINATION_ORDAIN,
+    apply_ordination_step,
+    legal_ordination_step_sequences,
+)
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
@@ -190,6 +196,31 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 allocation_moves=move_sequence,
                             )
                         )
+                elif TurnResolutionType.ORDINATION in category_actions:
+                    player_count = sowed_vector[duty_position]
+                    opponent_counts = _competing_counts(
+                        state,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                    )
+                    strength = duty_strength(player_count, opponent_counts)
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    available_silver = player_resources.silver - silver_cost
+                    if available_silver < 0:
+                        continue
+                    for step_sequence in legal_ordination_step_sequences(
+                        player_state,
+                        max_steps=duty_value,
+                    ):
+                        actions.append(
+                            FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ORDINATION,
+                                ordination_steps=step_sequence,
+                            )
+                        )
                 else:
                     for category_action in category_actions:
                         actions.append(
@@ -312,6 +343,10 @@ def _apply_full_turn_action(
         ):
             raise TransitionValidationError(
                 "Only donate_building actions may include donate_building_id."
+            )
+        if action.resolution is not TurnResolutionType.ORDINATION and action.ordination_steps:
+            raise TransitionValidationError(
+                "Only ordination actions may include ordination_steps."
             )
         if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
             raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
@@ -443,6 +478,68 @@ def _apply_full_turn_action(
                     ),
                 )
             )
+        elif action.resolution is TurnResolutionType.ORDINATION:
+            if not action.ordination_steps:
+                raise TransitionValidationError(
+                    "Ordination action must include at least 1 ordination step."
+                )
+            if len(action.ordination_steps) > effective_duty_value:
+                raise TransitionValidationError(
+                    "Ordination action includes more steps than effective duty value allows."
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            for step in action.ordination_steps:
+                try:
+                    new_player_state = apply_ordination_step(new_player_state, step)
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                if step == ORDINATION_ORDAIN:
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.ORDINATION,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                step=ORDINATION_ORDAIN,
+                                from_pool="village",
+                                to_pool="abbey",
+                                unit="serf",
+                                amount=1,
+                                wheat_paid=1,
+                            ),
+                        )
+                    )
+                elif step == ORDINATION_MISSION:
+                    special_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.ORDINATION,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                step=ORDINATION_MISSION,
+                                from_pool="abbey",
+                                to_pool="city",
+                                unit="acolyte",
+                                amount=1,
+                                wheat_paid=1,
+                            ),
+                        )
+                    )
+                else:
+                    raise TransitionValidationError(f"Unknown ordination step: {step}")
+
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Ordination minority silver cost would overdraw silver."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            resource_delta = (0, -silver_cost, -len(action.ordination_steps))
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
             if not action.allocation_moves:
                 raise TransitionValidationError(

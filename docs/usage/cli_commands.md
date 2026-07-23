@@ -61,6 +61,9 @@ What it does right now:
 - Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
 - If the acting player has active buildings, Give Alms can also show:
   - `action: donate_building | building: <building_id>`
+- Ordination actions show ordered steps:
+  - `action: ordination | steps: ordain`
+  - `action: ordination | steps: ordain; mission`
 - Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
@@ -334,7 +337,7 @@ Position mapping used by the current sandbox:
 - City is not a duty tile.
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
-- Deferred categories (`build_roads`, `construct`, `ordination`, `taxation`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
+- Deferred categories (`build_roads`, `construct`, `taxation`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
 
 ## Produce Options and Fields Rename (v1.4)
 
@@ -364,6 +367,15 @@ Position mapping used by the current sandbox:
 - Donation always advances Alms by exactly one row.
 - On majority Give Alms, donation does not chain into a second paid Give Alms step.
 - Alms House still enhances paid `give_alms` only; it does not modify `donate_building`.
+
+## Ordination Duty Steps (v1.7)
+
+- Ordination now has a dedicated `ordination` action with ordered steps.
+- Step primitives are:
+  - `ordain` (pay 1 wheat; village -> abbey)
+  - `mission` (pay 1 wheat; abbey -> city)
+- One action can include `1..duty_value` steps, validated sequentially.
+- Verbose apply now emits one `ORDINATION` event per step.
 
 ## Typical development workflow
 

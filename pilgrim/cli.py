@@ -319,6 +319,27 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         donation_vp = int(details.get("donation_vp", 0))
         return f"{event_name}: {actor_name} donated {donated_label}; donation_vp={donation_vp}"
 
+    if event.event_type is EventType.ORDINATION:
+        step = str(details.get("step", "")).strip()
+        amount = int(details.get("amount", 1))
+        from_pool = str(details.get("from_pool", "unknown"))
+        to_pool = str(details.get("to_pool", "unknown"))
+        wheat_paid = int(details.get("wheat_paid", 1))
+        if step == "ordain":
+            return (
+                f"{event_name}: {actor_name} ordained {amount} serf {from_pool} -> {to_pool}; "
+                f"paid wheat={wheat_paid}"
+            )
+        if step == "mission":
+            return (
+                f"{event_name}: {actor_name} sent {amount} acolyte {from_pool} -> {to_pool}; "
+                f"paid wheat={wheat_paid}"
+            )
+        return (
+            f"{event_name}: {actor_name} step={step} moved {amount} {from_pool} -> {to_pool}; "
+            f"paid wheat={wheat_paid}"
+        )
+
     if event.event_type is EventType.ALMS_PROGRESS:
         old_row = int(details.get("old_row", 0))
         new_row = int(details.get("new_row", 0))
