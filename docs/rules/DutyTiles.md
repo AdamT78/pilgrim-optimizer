@@ -86,6 +86,8 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Produce duty value cannot be split across resources in one action.
 - Produce special-activity bonuses (Fields / Stone Mason) add produced resources and do not
   change duty value.
+- For `allocation`, duty value controls how many allocation moves can be sequenced in one
+  action (1..duty value) between Abbey and Special Activities.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); mode tithe`

@@ -343,6 +343,15 @@ Position mapping used by the current sandbox:
 - `fields` adds `+1 wheat` to `produce_wheat` only.
 - `stone_mason` adds `+1 stone` to `produce_stone` only.
 
+## Allocation Duty Move Sequences (v1.5)
+
+- Allocation action summaries now show explicit move sequences:
+  - `action: allocation | moves: abbey -> fields`
+  - `action: allocation | moves: abbey -> fields; abbey -> engraver`
+- Allocation no longer uses `target: city` output.
+- Verbose apply emits one `ALLOCATION` event per move in sequence order.
+- Allocation moves are between Abbey and Special Activities only.
+
 ## Typical development workflow
 
 1. Edit rules/config/scenario files.

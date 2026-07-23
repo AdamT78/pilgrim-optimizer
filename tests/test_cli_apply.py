@@ -215,7 +215,7 @@ def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> Non
     exit_code = main(
         [
             "apply",
-            "scenarios/allocation_to_city_001.json",
+            "scenarios/allocation_abbey_to_special_activity_001.json",
             "--action-index",
             "1",
             "--verbose",
@@ -224,13 +224,16 @@ def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> Non
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "Apply result for scenario 'allocation_to_city_001'" in output
+    assert "Apply result for scenario 'allocation_abbey_to_special_activity_001'" in output
     assert "action: allocation" in output
-    assert "ALLOCATION: player_one moved 1 acolyte abbey -> city" in output
+    assert "moves: abbey -> fields" in output
+    assert "ALLOCATION: player_one moved 1 acolyte abbey -> fields" in output
+    assert "target: city" not in output
     assert "Village:" in output
     assert "Abbey:" in output
     assert "Special Activities: 0" in output
     assert "Special Activities: none" in output
+    assert "Special Activities: fields" in output
     assert "Total: 10" in output
 
 
@@ -255,6 +258,28 @@ def test_cli_apply_allocation_with_occupied_special_activities_counts_them_in_to
     assert "grain, road_engineer" not in output
     assert "Total: 16" in output
     assert "player_one=16" in output
+
+
+def test_cli_apply_allocation_multi_move_reports_allocation_move_sequence(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/allocation_multi_move_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: allocation | moves:" in output
+    assert "target: city" not in output
+    first_index = output.index("ALLOCATION: player_one moved 1 acolyte abbey -> fields")
+    second_index = output.index(
+        "ALLOCATION: player_one moved 1 acolyte abbey -> road_engineer"
+    )
+    assert second_index > first_index
 
 
 def test_cli_apply_alms_house_bonus_event_is_visible(capsys) -> None:

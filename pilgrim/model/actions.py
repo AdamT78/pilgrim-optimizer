@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from pilgrim.model.config import GameConfig
 from pilgrim.model.duties import duty_category_at_position
 from pilgrim.model.enums import ActionType, DutyEffect, TurnResolutionType, position_name
+from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
+
+_ALLOCATION_SOURCE_PREFIX = "abbey"
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +29,29 @@ class FullTurnAction:
     alms_payment_wheat: int = 0
     alms_house_extra_silver: int = 0
     alms_house_extra_wheat: int = 0
-    allocation_target: str | None = None
+    allocation_moves: tuple[AllocationMove, ...] = ()
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationMove:
+    """One allocation sub-move between Abbey and special-activity slots."""
+
+    source: str
+    destination: str
+
+    def __post_init__(self) -> None:
+        if self.source == self.destination:
+            raise ValueError("Allocation move cannot have same source and destination.")
+        if self.source != _ALLOCATION_SOURCE_PREFIX and self.source not in SPECIAL_ACTIVITY_IDS:
+            raise ValueError(f"Unknown allocation move source: {self.source}")
+        if (
+            self.destination != _ALLOCATION_SOURCE_PREFIX
+            and self.destination not in SPECIAL_ACTIVITY_IDS
+        ):
+            raise ValueError(f"Unknown allocation move destination: {self.destination}")
+        if self.source == _ALLOCATION_SOURCE_PREFIX and self.destination == _ALLOCATION_SOURCE_PREFIX:
+            raise ValueError("Allocation move abbey -> abbey is not legal.")
 
 
 GameAction = FullTurnAction
@@ -48,8 +72,12 @@ def action_id(action: GameAction) -> str:
             )
     allocation_suffix = ""
     if action.resolution is TurnResolutionType.ALLOCATION:
-        allocation_target = action.allocation_target or "unknown"
-        allocation_suffix = f":allocation_target:{allocation_target}"
+        if action.allocation_moves:
+            allocation_suffix = ":allocation_moves:" + ",".join(
+                f"{move.source}>{move.destination}" for move in action.allocation_moves
+            )
+        else:
+            allocation_suffix = ":allocation_moves:none"
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
@@ -89,8 +117,12 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
                 f"wheat={action.alms_house_extra_wheat}"
             )
     if action.resolution is TurnResolutionType.ALLOCATION:
-        allocation_target = action.allocation_target or "unknown"
-        summary += f" | target: {allocation_target}"
+        if action.allocation_moves:
+            summary += " | moves: " + "; ".join(
+                f"{move.source} -> {move.destination}" for move in action.allocation_moves
+            )
+        else:
+            summary += " | moves: none"
     return summary
 
 

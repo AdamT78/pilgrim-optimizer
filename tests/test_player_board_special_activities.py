@@ -39,36 +39,9 @@ def test_existing_reduced_sandbox_scenarios_remain_valid() -> None:
     assert player_two.workforce.abbey == 0
 
 
-def test_allocation_to_city_reduces_abbey_and_increases_city() -> None:
-    scenario = load_scenario("scenarios/allocation_to_city_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    assert actions
-    first_action = actions[0]
-    assert first_action.resolution is TurnResolutionType.ALLOCATION
-    assert first_action.allocation_target == "city"
-
-    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    assert before.special_activities.count == 0
-    result = apply_action(scenario.state, first_action, scenario.config)
-    after = result.state.player_state(PlayerId.PLAYER_ONE)
-
-    assert after.workforce.abbey == before.workforce.abbey - 1
-    # +1 from allocation, +1 from duty recall on the selected tile.
-    assert after.workforce.mancala[0] == before.workforce.mancala[0] + 2
-    assert after.special_activities.count == 0
-    assert any(event.event_type is EventType.ALLOCATION for event in result.events)
-
-
-def test_allocation_to_special_activity_occupies_target_and_conserves_acolytes() -> None:
-    scenario = load_scenario("scenarios/allocation_to_special_activity_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    assert actions
-    first_action = next(
-        action
-        for action in actions
-        if action.resolution is TurnResolutionType.ALLOCATION
-        and action.allocation_target == "special_activity:fields"
-    )
+def test_allocation_abbey_to_special_activity_occupies_target_and_conserves_acolytes() -> None:
+    scenario = load_scenario("scenarios/allocation_abbey_to_special_activity_001.json")
+    first_action = legal_actions(scenario.state, scenario.config)[0]
 
     before_total = scenario.state.total_acolytes(PlayerId.PLAYER_ONE)
     before = scenario.state.player_state(PlayerId.PLAYER_ONE)
@@ -76,31 +49,40 @@ def test_allocation_to_special_activity_occupies_target_and_conserves_acolytes()
     after = result.state.player_state(PlayerId.PLAYER_ONE)
     after_total = result.state.total_acolytes(PlayerId.PLAYER_ONE)
 
+    assert first_action.resolution is TurnResolutionType.ALLOCATION
     assert after.workforce.abbey == before.workforce.abbey - 1
     assert after.special_activities.fields is True
     assert before.special_activities.fields is False
     assert before_total == after_total
+    assert any(event.event_type is EventType.ALLOCATION for event in result.events)
 
 
-def test_allocation_not_generated_without_abbey_acolyte() -> None:
-    scenario = load_scenario("scenarios/allocation_to_special_activity_001.json")
-    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    no_abbey_state = scenario.state.with_player_state(
-        PlayerId.PLAYER_ONE,
-        replace(player_one, workforce=replace(player_one.workforce, abbey=0)),
-    )
-    actions = legal_actions(no_abbey_state, scenario.config)
-    assert all(action.resolution is not TurnResolutionType.ALLOCATION for action in actions)
+def test_allocation_special_activity_to_abbey_clears_source() -> None:
+    scenario = load_scenario("scenarios/allocation_special_activity_to_abbey_001.json")
+    first_action = legal_actions(scenario.state, scenario.config)[0]
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, first_action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert first_action.resolution is TurnResolutionType.ALLOCATION
+    assert before.special_activities.fields is True
+    assert after.special_activities.fields is False
+    assert after.workforce.abbey == before.workforce.abbey + 1
 
 
-def test_allocation_skips_occupied_special_activities() -> None:
-    scenario = load_scenario("scenarios/allocation_all_special_occupied_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    allocation_actions = [
-        action for action in actions if action.resolution is TurnResolutionType.ALLOCATION
-    ]
-    assert allocation_actions
-    assert all(action.allocation_target == "city" for action in allocation_actions)
+def test_allocation_special_activity_to_special_activity_moves_between_slots() -> None:
+    scenario = load_scenario("scenarios/allocation_special_activity_to_special_activity_001.json")
+    first_action = legal_actions(scenario.state, scenario.config)[0]
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, first_action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert first_action.resolution is TurnResolutionType.ALLOCATION
+    assert before.special_activities.fields is True
+    assert before.special_activities.engraver is False
+    assert after.special_activities.fields is False
+    assert after.special_activities.engraver is True
+    assert after.workforce.abbey == before.workforce.abbey
 
 
 def test_engraver_bonus_adds_silver_to_clerical_silversmith() -> None:

@@ -1,6 +1,7 @@
 """Domain models for the deterministic Pilgrim sandbox."""
 
 from pilgrim.model.actions import (
+    AllocationMove,
     FullTurnAction,
     GameAction,
     action_id,
@@ -68,6 +69,7 @@ from pilgrim.model.workforce import (
 
 __all__ = [
     "ActionType",
+    "AllocationMove",
     "AlmsConfig",
     "BUILDING_LEVELS",
     "BoardConfig",
