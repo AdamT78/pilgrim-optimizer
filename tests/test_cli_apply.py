@@ -340,3 +340,45 @@ def test_cli_apply_stone_mason_bonus_does_not_raise_effective_duty_value(capsys)
     assert "effective duty value 3" not in output
     assert "SPECIAL_ACTIVITY_BONUS: stone_mason added stone +1 to produce_stone" in output
     assert "RESOURCE_DELTA: player_one stone +3" in output
+
+
+def test_cli_apply_donate_building_verbose_shows_donation_events_and_slot_state(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/give_alms_donate_building_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: donate_building | building: confession_box" in output
+    assert "BUILDING_DONATION: player_one donated Confession Box; donation_vp=2" in output
+    assert "ALMS_PROGRESS: player_one row 0 -> 1" in output
+    assert "ALMS_PAYMENT:" not in output
+    assert "Active buildings: none" in output
+    assert "Donated buildings: Confession Box" in output
+    assert "Used slots: 1/6" in output
+
+
+def test_cli_apply_majority_donate_building_forfeits_second_give_alms(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/give_alms_donate_building_majority_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: donate_building | building: bank" in output
+    assert "DUTY_RESOLUTION: selected south (give_alms); relation majority; duty value 2" in output
+    assert "BUILDING_DONATION: player_one donated Bank; donation_vp=6" in output
+    assert "ALMS_PROGRESS: player_one row 0 -> 1" in output
+    assert "ALMS_PAYMENT:" not in output

@@ -14,8 +14,13 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
-from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
-from pilgrim.rules.buildings import validate_building_state
+from pilgrim.rules.alms import (
+    AlmsPayment,
+    resolve_alms_season_end,
+    resolve_donate_building_alms,
+    resolve_give_alms,
+)
+from pilgrim.rules.buildings import donate_active_building, validate_building_state
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import (
     action_options_for_duty_category,
@@ -149,6 +154,20 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                     alms_payment_wheat=payment.wheat,
                                 )
                             )
+                        if TurnResolutionType.DONATE_BUILDING in category_actions:
+                            for building_id in _legal_give_alms_donation_buildings(
+                                player_state,
+                                config,
+                            ):
+                                actions.append(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.DONATE_BUILDING,
+                                        donate_building_id=building_id,
+                                    )
+                                )
                 elif TurnResolutionType.ALLOCATION in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
@@ -272,6 +291,8 @@ def _apply_full_turn_action(
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
         special_bonus_events: list[GameEvent] = []
         effective_duty_value = duty_value
+        give_alms_resolution = None
+        donate_building_alms_resolution = None
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS
@@ -284,6 +305,13 @@ def _apply_full_turn_action(
         ):
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
+            )
+        if (
+            action.resolution is not TurnResolutionType.DONATE_BUILDING
+            and action.donate_building_id is not None
+        ):
+            raise TransitionValidationError(
+                "Only donate_building actions may include donate_building_id."
             )
         if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
             raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
@@ -319,7 +347,7 @@ def _apply_full_turn_action(
                         "Insufficient wheat for alms payment plus Alms House cost."
                     )
             try:
-                alms_resolution = resolve_give_alms(
+                give_alms_resolution = resolve_give_alms(
                     state_after_sow.player_state(player),
                     duty_value=effective_duty_value,
                     payment=AlmsPayment(
@@ -331,7 +359,7 @@ def _apply_full_turn_action(
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
-            new_player_state = alms_resolution.player_state
+            new_player_state = give_alms_resolution.player_state
             if use_alms_house:
                 new_resources = new_player_state.resources.add(
                     silver=-action.alms_house_extra_silver,
@@ -357,12 +385,64 @@ def _apply_full_turn_action(
                     )
                 )
             resource_delta = (
-                alms_resolution.resource_delta[0],
-                alms_resolution.resource_delta[1] - action.alms_house_extra_silver,
-                alms_resolution.resource_delta[2] - action.alms_house_extra_wheat,
+                give_alms_resolution.resource_delta[0],
+                give_alms_resolution.resource_delta[1] - action.alms_house_extra_silver,
+                give_alms_resolution.resource_delta[2] - action.alms_house_extra_wheat,
             )
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
+        elif action.resolution is TurnResolutionType.DONATE_BUILDING:
+            if not action.donate_building_id:
+                raise TransitionValidationError(
+                    "donate_building action requires donate_building_id."
+                )
+
+            try:
+                donated_player_state, donated_building = donate_active_building(
+                    state_after_sow.player_state(player),
+                    building_id=action.donate_building_id,
+                    config=config,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+
+            if silver_cost:
+                resources_after_silver_cost = donated_player_state.resources.add(
+                    silver=-silver_cost
+                )
+                if resources_after_silver_cost.silver < 0:
+                    raise TransitionValidationError(
+                        "Donate building minority silver cost would overdraw silver."
+                    )
+                donated_player_state = replace(
+                    donated_player_state,
+                    resources=resources_after_silver_cost,
+                )
+
+            try:
+                donate_building_alms_resolution = resolve_donate_building_alms(
+                    donated_player_state,
+                    config=config.alms,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+
+            new_player_state = donate_building_alms_resolution.player_state
+            resource_delta = (0, -silver_cost, 0)
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+            special_bonus_events.append(
+                GameEvent(
+                    event_type=EventType.BUILDING_DONATION,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        building_id=donated_building.id,
+                        building_name=donated_building.name,
+                        donation_vp=donated_building.donation_vp,
+                    ),
+                )
+            )
         elif action.resolution is TurnResolutionType.ALLOCATION:
             if not action.allocation_moves:
                 raise TransitionValidationError(
@@ -548,6 +628,8 @@ def _apply_full_turn_action(
         )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
+            if give_alms_resolution is None:
+                raise TransitionValidationError("Missing Give Alms resolution payload.")
             events.append(
                 GameEvent(
                     event_type=EventType.ALMS_PAYMENT,
@@ -566,12 +648,42 @@ def _apply_full_turn_action(
                     actor=player,
                     action_id=transition_action_id,
                     details=make_event_details(
-                        old_row=alms_resolution.old_position,
-                        new_row=alms_resolution.new_position,
+                        old_row=give_alms_resolution.old_position,
+                        new_row=give_alms_resolution.new_position,
                     ),
                 )
             )
-            for outcome in alms_resolution.threshold_outcomes:
+            for outcome in give_alms_resolution.threshold_outcomes:
+                events.append(
+                    GameEvent(
+                        event_type=EventType.ALMS_THRESHOLD_REWARD,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            threshold=outcome.threshold,
+                            reward=outcome.reward_key,
+                            moved=outcome.moved,
+                            description=outcome.description,
+                        ),
+                    )
+                )
+        elif action.resolution is TurnResolutionType.DONATE_BUILDING:
+            if donate_building_alms_resolution is None:
+                raise TransitionValidationError(
+                    "Missing donate_building Alms resolution payload."
+                )
+            events.append(
+                GameEvent(
+                    event_type=EventType.ALMS_PROGRESS,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        old_row=donate_building_alms_resolution.old_position,
+                        new_row=donate_building_alms_resolution.new_position,
+                    ),
+                )
+            )
+            for outcome in donate_building_alms_resolution.threshold_outcomes:
                 events.append(
                     GameEvent(
                         event_type=EventType.ALMS_THRESHOLD_REWARD,
@@ -860,6 +972,23 @@ def _alms_payment_options(
         if silver <= available_silver and wheat <= available_wheat:
             options.append(AlmsPayment(silver=silver, wheat=wheat))
     return tuple(options)
+
+
+def _legal_give_alms_donation_buildings(
+    player_state,
+    config: GameConfig,
+) -> tuple[str, ...]:
+    legal_buildings: list[str] = []
+    donated_buildings = set(player_state.player_board_slots.donated_buildings)
+    for building_id in player_state.player_board_slots.active_buildings:
+        if building_id in donated_buildings:
+            continue
+        try:
+            config.buildings.definition_by_id(building_id)
+        except ValueError:
+            continue
+        legal_buildings.append(building_id)
+    return tuple(legal_buildings)
 
 
 def _allocation_move_sequences(

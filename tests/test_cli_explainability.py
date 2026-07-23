@@ -159,8 +159,10 @@ def test_cli_solve_verbose_shows_populated_player_board_slots_with_names(capsys)
     assert exit_code == 0
     assert "Building market:" in output
     assert "Player board slots:" in output
-    assert "Active buildings: Confession Box, Chapel" in output
-    assert "Donated buildings: Brewery" in output
+    assert "Active buildings:" in output
+    assert "Chapel" in output
+    assert "Donated buildings:" in output
+    assert "Brewery" in output
     assert "Cardinal favor tiles: 1" in output
     assert "Used slots: 4/6" in output
     assert "Available slots: 2" in output

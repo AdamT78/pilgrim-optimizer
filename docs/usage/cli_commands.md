@@ -59,6 +59,8 @@ What it does right now:
 - Asks the current rules engine to generate legal **full-turn** actions.
 - Each listed action is one complete simplified turn: sow + selected duty/tithe resolution.
 - Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
+- If the acting player has active buildings, Give Alms can also show:
+  - `action: donate_building | building: <building_id>`
 - Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
@@ -79,6 +81,7 @@ Legal actions for scenario 'mancala_sandbox_001':
 3. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: tithe
 ...
 10. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: give_alms | pay silver=1, wheat=1
+11. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: donate_building | building: confession_box
 ...
 
 Total legal actions: N
@@ -351,6 +354,16 @@ Position mapping used by the current sandbox:
 - Allocation no longer uses `target: city` output.
 - Verbose apply emits one `ALLOCATION` event per move in sequence order.
 - Allocation moves are between Abbey and Special Activities only.
+
+## Give Alms Building Donation Option (v1.6)
+
+- Give Alms now has two explicit options:
+  - `give_alms` (pay silver/wheat)
+  - `donate_building` (donate one active building)
+- Donation transitions now emit `BUILDING_DONATION` and `ALMS_PROGRESS`.
+- Donation always advances Alms by exactly one row.
+- On majority Give Alms, donation does not chain into a second paid Give Alms step.
+- Alms House still enhances paid `give_alms` only; it does not modify `donate_building`.
 
 ## Typical development workflow
 
