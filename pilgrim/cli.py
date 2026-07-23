@@ -16,7 +16,7 @@ from pilgrim.evaluation import (
     format_evaluation_breakdown_lines,
 )
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import GameAction, action_summary, readable_route
+from pilgrim.model.actions import GameAction, SetupSowAction, action_summary, readable_route
 from pilgrim.model.config import GameConfig
 from pilgrim.model.dummy import format_dummy_acolytes
 from pilgrim.model.duties import DUTY_POSITIONS
@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser("validate", help="Validate a JSON scenario.")
     validate_parser.add_argument("scenario", help="Path to scenario JSON file.")
 
-    legal_parser = subparsers.add_parser("legal-actions", help="List readable full-turn actions.")
+    legal_parser = subparsers.add_parser("legal-actions", help="List readable legal actions.")
     legal_parser.add_argument("scenario", help="Path to scenario JSON file.")
 
     apply_parser = subparsers.add_parser("apply", help="Apply one legal action by index.")
@@ -192,7 +192,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Nodes expanded: {result.nodes_expanded}")
         print()
 
-        print("Best first full turn:")
+        best_action_heading = "Best first full turn:"
+        events_heading = "Events for best first full turn:"
+        state_heading = "State after best first full turn:"
+        evaluation_heading = "Root-player evaluation after best first full turn:"
+        if isinstance(result.best_action, SetupSowAction):
+            best_action_heading = "Best first setup sow:"
+            events_heading = "Events for best first setup sow:"
+            state_heading = "State after best first setup sow:"
+            evaluation_heading = "Root-player evaluation after best first setup sow:"
+
+        print(best_action_heading)
         if result.best_action is None:
             print("None")
         else:
@@ -225,9 +235,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 events=transition_result.events,
                 config=scenario.config,
                 root_player_id=scenario.root_player_id,
-                events_heading="Events for best first full turn:",
-                state_heading="State after best first full turn:",
-                evaluation_heading="Root-player evaluation after best first full turn:",
+                events_heading=events_heading,
+                state_heading=state_heading,
+                evaluation_heading=evaluation_heading,
             )
         return 0
 
@@ -249,6 +259,35 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         return (
             f"{event_name}: picked up {picked_up} from {position_name(source, positions)}; "
             f"route {readable_route(source, route, positions=positions)}"
+        )
+
+    if event.event_type is EventType.SETUP_SOWING:
+        source = int(details.get("source", -1))
+        picked_up = details.get("picked_up", "?")
+        route_names = str(details.get("route_names", "")).strip()
+        if not route_names:
+            route_text = str(details.get("route", ""))
+            route = _parse_route(route_text)
+            route_names = readable_route(source, route, positions=positions)
+        return (
+            f"{event_name}: {actor_name} picked up {picked_up} from "
+            f"{position_name(source, positions)}; route {route_names}"
+        )
+
+    if event.event_type is EventType.SETUP_SOW_COMPLETE:
+        player_name = str(details.get("player", actor_name))
+        return f"{event_name}: {player_name} completed setup sow"
+
+    if event.event_type is EventType.SETUP_PLAYER_ADVANCE:
+        from_player = str(details.get("from_player", actor_name))
+        to_player = str(details.get("to_player", "unknown"))
+        return f"{event_name}: {from_player} -> {to_player}"
+
+    if event.event_type is EventType.SETUP_COMPLETE:
+        start_player = str(details.get("start_player", "unknown"))
+        return (
+            f"{event_name}: all players completed setup sow; "
+            f"normal play begins with {start_player}"
         )
 
     if event.event_type is EventType.DUTY_RESOLUTION:
@@ -644,6 +683,17 @@ def _format_state_summary(
         f"  Turn in round: {state.timing.turn_in_round}",
         f"  Start player: {state.start_player.name.lower()}",
         f"  Game over: {str(state.game_over).lower()}",
+        "Setup:",
+        f"  Setup sow required: {str(state.setup_sow_required).lower()}",
+        f"  Setup sow complete: {str(state.setup_sow_complete).lower()}",
+        (
+            "  Completed by: "
+            + (
+                ", ".join(player_id.name.lower() for player_id in state.setup_sow_completed_by)
+                if state.setup_sow_completed_by
+                else "none"
+            )
+        ),
         "Ship:",
         f"  Position: {state.ship_position}",
         (

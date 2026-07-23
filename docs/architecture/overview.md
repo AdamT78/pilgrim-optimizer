@@ -172,6 +172,28 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - no randomization inside transition/apply logic
   - no randomization inside search/solve
 
+## Setup Sow Phase (v2.0)
+
+- `GameState` now tracks explicit setup progression:
+  - `setup_sow_required`
+  - `setup_sow_complete`
+  - `setup_sow_completed_by`
+- Top-level phase now includes `setup_sow` for pre-game actions.
+- Legal-action generation is phase-aware:
+  - `setup_sow` phase generates setup-only sow actions
+  - `sow` phase generates normal full-turn duty/tithe actions
+- Setup sow transitions are isolated from normal turn advancement:
+  - no duty resolution/tithe flow
+  - no recall
+  - no turn/round/season advancement
+  - no Merchant/Ship movement
+- Setup completion transition is explicit:
+  - marks all players complete
+  - returns to normal `sow` phase
+  - resets active player to `start_player`
+  - preserves turn-0 timing scaffold
+- Validation includes setup-state invariants so malformed setup progression fails fast.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

@@ -53,6 +53,7 @@ class PlayerId(IntEnum):
 class TurnPhase(Enum):
     """Top-level turn phase for the Mancala sandbox."""
 
+    SETUP_SOW = "setup_sow"
     SOW = "sow"
     DUTY = "duty"
 
@@ -100,6 +101,7 @@ class TurnResolutionType(Enum):
 class ActionType(Enum):
     """Action categories used for stable action IDs and logging."""
 
+    SETUP_SOW = "setup_sow"
     FULL_TURN = "full_turn"
     SOW = "sow"
     RESOLVE_DUTY = "resolve_duty"
@@ -109,6 +111,10 @@ class ActionType(Enum):
 class EventType(Enum):
     """Structured transition event categories."""
 
+    SETUP_SOWING = "setup_sowing"
+    SETUP_SOW_COMPLETE = "setup_sow_complete"
+    SETUP_PLAYER_ADVANCE = "setup_player_advance"
+    SETUP_COMPLETE = "setup_complete"
     SOWING = "sowing"
     DUTY_RESOLUTION = "duty_resolution"
     RESOURCE_DELTA = "resource_delta"

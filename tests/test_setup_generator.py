@@ -140,7 +140,12 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
 
     assert initial_state["active_player"] == "player_one"
     assert initial_state["start_player_id"] == "player_one"
-    assert initial_state["phase"] == "sow"
+    assert initial_state["phase"] == "setup_sow"
+    assert initial_state["setup"] == {
+        "setup_sow_required": True,
+        "setup_sow_complete": False,
+        "setup_sow_completed_by": [],
+    }
     assert initial_state["ship_position"] == 0
     assert initial_state["merchant_position"] == 0
     assert initial_state["completed_rounds"] == 0
@@ -152,7 +157,7 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
 
     assert metadata["generated"] is True
     assert metadata["setup_sow_required"] is True
-    assert metadata["setup_sow_implemented"] is False
+    assert metadata["setup_sow_implemented"] is True
     assert "note" in metadata
 
     for player_id in ("player_one", "player_two"):

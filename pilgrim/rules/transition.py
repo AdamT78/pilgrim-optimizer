@@ -9,7 +9,9 @@ from pilgrim.model.actions import (
     AllocationMove,
     FullTurnAction,
     GameAction,
+    SetupSowAction,
     action_id,
+    readable_route,
 )
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
@@ -72,6 +74,7 @@ from pilgrim.rules.validation import (
     ensure_selected_duty_has_acolyte,
     ensure_valid_dummy_state,
     ensure_valid_special_activities_state,
+    ensure_valid_setup_state,
     ensure_valid_timing,
 )
 
@@ -91,6 +94,8 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
     """Generate deterministic full-turn actions for current phase."""
     if state.game_over:
         return ()
+    if state.phase is TurnPhase.SETUP_SOW:
+        return _legal_setup_sow_actions(state, config)
     if state.phase is not TurnPhase.SOW:
         return ()
     return _legal_full_turn_actions(state, config)
@@ -98,9 +103,25 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
 
 def apply_action(state: GameState, action: GameAction, config: GameConfig) -> TransitionResult:
     """Apply one full-turn action with invariant checks."""
-    if not isinstance(action, FullTurnAction):
-        raise TypeError(f"Unsupported action type: {type(action)!r}")
-    return _apply_full_turn_action(state, action, config)
+    if isinstance(action, SetupSowAction):
+        return _apply_setup_sow_action(state, action, config)
+    if isinstance(action, FullTurnAction):
+        return _apply_full_turn_action(state, action, config)
+    raise TypeError(f"Unsupported action type: {type(action)!r}")
+
+
+def _legal_setup_sow_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
+    if not state.setup_sow_required or state.setup_sow_complete:
+        return ()
+    city_position = 0
+    player_vector = state.player_vector(state.active_player)
+    picked_up = player_vector[city_position]
+    if picked_up <= 0:
+        return ()
+    return tuple(
+        SetupSowAction(origin=city_position, route=route)
+        for route in generate_routes(city_position, picked_up, config.board)
+    )
 
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -278,6 +299,138 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     )
                 )
     return tuple(actions)
+
+
+def _apply_setup_sow_action(
+    state: GameState,
+    action: SetupSowAction,
+    config: GameConfig,
+) -> TransitionResult:
+    if state.game_over:
+        raise TransitionValidationError("Cannot apply action: game is already over.")
+    ensure_phase(state, expected=TurnPhase.SETUP_SOW, action_name="Setup sow action")
+    if not state.setup_sow_required or state.setup_sow_complete:
+        raise TransitionValidationError("Setup sow action is not legal in current setup state.")
+    if action.origin != 0:
+        raise TransitionValidationError("Setup sow origin must be city.")
+
+    player = state.active_player
+    if player in set(state.setup_sow_completed_by):
+        raise TransitionValidationError("Active player already completed setup sow.")
+
+    player_vector = state.player_vector(player)
+    picked_up = player_vector[action.origin]
+    if picked_up <= 0:
+        raise TransitionValidationError("Setup sow requires at least one city acolyte.")
+    ensure_route_length_matches(picked_up=picked_up, route_length=len(action.route))
+
+    try:
+        sowed_vector = sow_vector(player_vector, action.origin, action.route, config.board)
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
+
+    transition_action_id = action_id(action)
+    route_numbers = "->".join(str(position) for position in action.route)
+    route_names = readable_route(action.origin, action.route, positions=config.board.positions)
+    events: list[GameEvent] = [
+        GameEvent(
+            event_type=EventType.SETUP_SOWING,
+            actor=player,
+            action_id=transition_action_id,
+            details=make_event_details(
+                source=action.origin,
+                picked_up=picked_up,
+                route=route_numbers,
+                route_names=route_names,
+            ),
+        )
+    ]
+
+    state_after_sow = state.with_player_vector(player, sowed_vector)
+    completed_by = (*state.setup_sow_completed_by, player)
+    events.append(
+        GameEvent(
+            event_type=EventType.SETUP_SOW_COMPLETE,
+            actor=player,
+            action_id=transition_action_id,
+            details=make_event_details(player=_player_label(player)),
+        )
+    )
+
+    next_player = _next_incomplete_setup_player(
+        state_after_sow,
+        current_player=player,
+        completed_by=completed_by,
+    )
+    if next_player is None:
+        next_state = replace(
+            state_after_sow,
+            setup_sow_complete=True,
+            setup_sow_completed_by=tuple(completed_by),
+            phase=TurnPhase.SOW,
+            active_player=state.start_player,
+        )
+        events.append(
+            GameEvent(
+                event_type=EventType.SETUP_COMPLETE,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    start_player=_player_label(state.start_player),
+                ),
+            )
+        )
+    else:
+        next_state = replace(
+            state_after_sow,
+            setup_sow_complete=False,
+            setup_sow_completed_by=tuple(completed_by),
+            phase=TurnPhase.SETUP_SOW,
+            active_player=next_player,
+        )
+        events.append(
+            GameEvent(
+                event_type=EventType.SETUP_PLAYER_ADVANCE,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    from_player=_player_label(player),
+                    to_player=_player_label(next_player),
+                ),
+            )
+        )
+
+    ensure_non_negative_resources(next_state)
+    validate_building_state(next_state, config)
+    ensure_valid_timing(next_state)
+    ensure_valid_dummy_state(next_state)
+    ensure_valid_special_activities_state(next_state)
+    ensure_valid_setup_state(next_state)
+    ensure_acolyte_conservation(state, next_state)
+    ensure_dummy_acolyte_conservation(state, next_state)
+    events.append(
+        GameEvent(
+            event_type=EventType.INVARIANT_CHECK,
+            actor=player,
+            action_id=transition_action_id,
+            details=make_event_details(
+                name="post_setup_sow",
+                acolytes_conserved=True,
+                serfs_non_negative=True,
+                invariant_scope="all_players",
+                total_workforce_player_one=next_state.total_acolytes(PlayerId.PLAYER_ONE),
+                total_workforce_player_two=next_state.total_acolytes(PlayerId.PLAYER_TWO),
+                total_workforce_all_players=(
+                    next_state.total_acolytes(PlayerId.PLAYER_ONE)
+                    + next_state.total_acolytes(PlayerId.PLAYER_TWO)
+                ),
+                dummy_north_group_total=next_state.dummy_acolytes.north_total,
+                dummy_south_group_total=next_state.dummy_acolytes.south_total,
+                dummy_total=next_state.dummy_total,
+            ),
+        )
+    )
+    return TransitionResult(state=next_state, events=tuple(events))
 
 
 def _apply_full_turn_action(
@@ -995,6 +1148,7 @@ def _apply_full_turn_action(
     ensure_valid_timing(next_state)
     ensure_valid_dummy_state(next_state)
     ensure_valid_special_activities_state(next_state)
+    ensure_valid_setup_state(next_state)
     ensure_acolyte_conservation(state, next_state)
     ensure_dummy_acolyte_conservation(state, next_state)
     events.append(
@@ -1177,6 +1331,30 @@ def _resolve_round_end_phases(
             )
         )
     return next_state, tuple(events)
+
+
+def _player_label(player: PlayerId) -> str:
+    if player is PlayerId.PLAYER_ONE:
+        return "player_one"
+    return "player_two"
+
+
+def _next_incomplete_setup_player(
+    state: GameState,
+    *,
+    current_player: PlayerId,
+    completed_by: tuple[PlayerId, ...],
+) -> PlayerId | None:
+    turn_order = tuple(PlayerId(index) for index in range(state.player_count))
+    completed_set = set(completed_by)
+    if set(turn_order).issubset(completed_set):
+        return None
+    current_index = turn_order.index(current_player)
+    for offset in range(1, len(turn_order) + 1):
+        candidate = turn_order[(current_index + offset) % len(turn_order)]
+        if candidate not in completed_set:
+            return candidate
+    return None
 
 
 def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:
