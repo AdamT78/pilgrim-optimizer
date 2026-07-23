@@ -56,8 +56,9 @@ python3 -m pilgrim.cli legal-actions scenarios/mancala_sandbox_001.json
 What it does right now:
 
 - Loads the same scenario.
-- Asks the current rules engine to generate legal **full-turn** actions.
-- Each listed action is one complete simplified turn: sow + selected duty/tithe resolution.
+- Asks the current rules engine to generate legal actions for the current phase.
+- In normal `sow` phase, each action is one complete simplified turn: sow + selected duty/tithe resolution.
+- In `setup_sow` phase, actions are setup sow actions only (`Setup sow: ...`).
 - Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
 - If the acting player has active buildings, Give Alms can also show:
   - `action: donate_building | building: <building_id>`
@@ -67,7 +68,7 @@ What it does right now:
 - Taxation actions show chosen resources:
   - `action: taxation | take: wheat`
   - `action: taxation | take: wheat; bonus: stone, silver`
-- Prints a numbered list of readable full-turn summaries.
+- Prints a numbered list of readable legal-action summaries.
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
 - If `game_over` is true, legal action list is empty by design.
@@ -101,12 +102,13 @@ python3 -m pilgrim.cli apply scenarios/alms_sandbox_001.json --action-index 1 --
 
 What it does right now:
 
-- Loads the scenario and generates legal full-turn actions.
+- Loads the scenario and generates legal actions for the current phase.
 - Selects one action by **1-based** index (matching `legal-actions` numbering).
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
 - Verbose apply may also include round-end pipeline events (`EXCESS_*`, `SHIP_ADVANCE`, `SEASON_END`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
+- Verbose state summary always includes a `Setup` section (`required`, `complete`, `completed by`).
 
 Why this matters:
 
@@ -390,7 +392,7 @@ Position mapping used by the current sandbox:
 - Verbose apply emits `TAXATION` events for step 1 and step 2 plus a single combined `RESOURCE_DELTA`.
 - Merchant at Taxation still shows `Resource: none`.
 
-## Seeded Setup Generation (v1.9)
+## Seeded Setup Generation and Setup Sow (v2.0)
 
 Generate deterministic setup scenarios from `(players, seed)`:
 
@@ -408,7 +410,19 @@ Current behavior:
   - randomized Tithe counters (Taxation tile excluded)
   - randomized 12-building market (4 per level)
   - explicit dummy acolyte setup for `player_count`
-  - setup metadata marking setup sow as required but not implemented
+  - explicit setup state (`initial_state.setup`)
+  - setup metadata marking setup sow as required and implemented
+
+Setup sow behavior:
+
+- `solve` on setup-required scenarios lists setup sow actions, not duty/tithe full turns
+- `apply --verbose` emits setup-specific events:
+  - `SETUP_SOWING`
+  - `SETUP_SOW_COMPLETE`
+  - `SETUP_PLAYER_ADVANCE`
+  - `SETUP_COMPLETE` (final setup sow)
+- setup sow does not emit duty/timing/round-end events
+- after final setup sow, normal play starts at turn 0 timing scaffold
 
 Determinism boundary remains unchanged:
 

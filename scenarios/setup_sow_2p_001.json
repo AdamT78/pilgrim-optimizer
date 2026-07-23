@@ -1,0 +1,75 @@
+{
+  "scenario_id": "setup_sow_2p_001",
+  "root_player_id": "player_one",
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "active_player": "player_one",
+    "start_player_id": "player_one",
+    "phase": "setup_sow",
+    "merchant_position": 0,
+    "ship_position": 0,
+    "completed_rounds": 0,
+    "game_over": false,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 1,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "setup": {
+      "setup_sow_required": true,
+      "setup_sow_complete": false,
+      "setup_sow_completed_by": []
+    },
+    "players": {
+      "player_one": {
+        "victory_points": 0,
+        "piety": 0,
+        "alms_position": 0,
+        "resources": {
+          "stone": 1,
+          "silver": 1,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [5, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 8,
+          "abbey": 3,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_two": {
+        "victory_points": 0,
+        "piety": 0,
+        "alms_position": 0,
+        "resources": {
+          "stone": 1,
+          "silver": 1,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [5, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 8,
+          "abbey": 3,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      }
+    }
+  }
+}

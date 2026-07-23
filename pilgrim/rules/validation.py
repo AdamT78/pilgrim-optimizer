@@ -201,6 +201,56 @@ def ensure_valid_special_activities_state(state: GameState) -> None:
             )
 
 
+def ensure_valid_setup_state(state: GameState) -> None:
+    completed_by = state.setup_sow_completed_by
+    if len(set(completed_by)) != len(completed_by):
+        raise TransitionValidationError("setup_sow_completed_by cannot contain duplicates.")
+    for player_id in completed_by:
+        if int(player_id) >= state.player_count:
+            raise TransitionValidationError(
+                "setup_sow_completed_by contains unknown player id for this state."
+            )
+
+    if not state.setup_sow_required:
+        if state.phase is TurnPhase.SETUP_SOW:
+            raise TransitionValidationError(
+                "phase=setup_sow requires setup.setup_sow_required to be true."
+            )
+        return
+
+    all_players = tuple(PlayerId(index) for index in range(state.player_count))
+    completed_set = set(completed_by)
+    if state.setup_sow_complete:
+        if completed_set != set(all_players):
+            raise TransitionValidationError(
+                "setup_sow_complete=true requires setup_sow_completed_by to contain all players."
+            )
+        if state.phase is TurnPhase.SETUP_SOW:
+            raise TransitionValidationError(
+                "setup_sow_complete=true cannot keep phase=setup_sow."
+            )
+        return
+
+    if state.phase is not TurnPhase.SETUP_SOW:
+        raise TransitionValidationError(
+            "Incomplete setup sow must use phase=setup_sow."
+        )
+    if state.active_player in completed_set:
+        raise TransitionValidationError(
+            "active_player cannot already be in setup_sow_completed_by."
+        )
+    remaining_players = [player for player in all_players if player not in completed_set]
+    if state.active_player not in remaining_players:
+        raise TransitionValidationError(
+            "active_player must be one of the players who still need setup sow."
+        )
+    for player in remaining_players:
+        if state.player_vector(player)[0] <= 0:
+            raise TransitionValidationError(
+                f"{player.name} must have at least 1 city acolyte during incomplete setup sow."
+            )
+
+
 def validate_state_invariants(state: GameState) -> None:
     """Basic state-level checks used by CLI validation."""
     ensure_non_negative_resources(state)
@@ -211,3 +261,4 @@ def validate_state_invariants(state: GameState) -> None:
     ensure_valid_dummy_state(state)
     ensure_valid_special_activities_state(state)
     ensure_valid_player_board_slots_structure(state)
+    ensure_valid_setup_state(state)

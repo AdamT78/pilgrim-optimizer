@@ -60,6 +60,9 @@ class GameState:
     ship_position: int = 0
     completed_rounds: int = 0
     game_over: bool = False
+    setup_sow_required: bool = False
+    setup_sow_complete: bool = True
+    setup_sow_completed_by: tuple[PlayerId, ...] = ()
     building_market: tuple[str, ...] = ()
     turn: int = 0
 
@@ -91,6 +94,11 @@ class GameState:
             raise ValueError("completed_rounds cannot be negative.")
         if self.merchant_position < 0:
             raise ValueError("merchant_position cannot be negative.")
+        if len(set(self.setup_sow_completed_by)) != len(self.setup_sow_completed_by):
+            raise ValueError("setup_sow_completed_by cannot contain duplicates.")
+        for player_id in self.setup_sow_completed_by:
+            if int(player_id) >= len(self.players):
+                raise ValueError("setup_sow_completed_by contains unknown player id.")
 
     def player_state(self, player_id: PlayerId) -> PlayerState:
         return self.players[int(player_id)]
@@ -156,6 +164,18 @@ class GameState:
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)
+
+    def with_setup_sow_progress(
+        self,
+        *,
+        setup_sow_complete: bool,
+        setup_sow_completed_by: tuple[PlayerId, ...],
+    ) -> GameState:
+        return replace(
+            self,
+            setup_sow_complete=setup_sow_complete,
+            setup_sow_completed_by=setup_sow_completed_by,
+        )
 
     def with_player_state(self, player_id: PlayerId, player_state: PlayerState) -> GameState:
         players = list(self.players)

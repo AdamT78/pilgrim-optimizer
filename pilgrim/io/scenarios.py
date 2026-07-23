@@ -81,6 +81,7 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     table_player_count = _player_count_from_dict(merged)
     state = _game_state_from_dict(
         merged["initial_state"],
+        scenario_raw=merged,
         merchant_path_length=len(config.merchant.path),
         ship_start_position=config.ship.start_position,
         ship_path_length=config.ship.path_length,
@@ -125,6 +126,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 def _game_state_from_dict(
     raw: Mapping[str, Any],
     *,
+    scenario_raw: Mapping[str, Any],
     merchant_path_length: int,
     ship_start_position: int,
     ship_path_length: int,
@@ -149,6 +151,15 @@ def _game_state_from_dict(
     if start_player is None:
         start_player = PlayerId.from_string(str(raw["active_player"]))
     game_over = bool(raw.get("game_over", False))
+    setup_sow_required, setup_sow_complete, setup_sow_completed_by = _setup_sow_state_from_dict(
+        raw,
+        scenario_raw=scenario_raw,
+    )
+    phase = _phase_from_dict(
+        raw,
+        setup_sow_required=setup_sow_required,
+        setup_sow_complete=setup_sow_complete,
+    )
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     building_market = _building_market_from_dict(raw, buildings_config)
     if merchant_position >= merchant_path_length:
@@ -164,7 +175,7 @@ def _game_state_from_dict(
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         start_player=start_player,
-        phase=TurnPhase.from_string(str(raw["phase"])),
+        phase=phase,
         players=(player_one, player_two),
         timing=timing,
         table_player_count=table_player_count,
@@ -173,6 +184,9 @@ def _game_state_from_dict(
         ship_position=ship_position,
         completed_rounds=completed_rounds,
         game_over=game_over,
+        setup_sow_required=setup_sow_required,
+        setup_sow_complete=setup_sow_complete,
+        setup_sow_completed_by=setup_sow_completed_by,
         building_market=building_market,
     )
 
@@ -254,6 +268,48 @@ def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) 
     return PlayerId(int(root_player_raw))
 
 
+def _setup_sow_state_from_dict(
+    initial_state_raw: Mapping[str, Any],
+    *,
+    scenario_raw: Mapping[str, Any],
+) -> tuple[bool, bool, tuple[PlayerId, ...]]:
+    metadata_raw = scenario_raw.get("setup_metadata")
+    metadata_required = False
+    if isinstance(metadata_raw, Mapping):
+        metadata_required = bool(metadata_raw.get("setup_sow_required", False))
+
+    setup_raw = initial_state_raw.get("setup")
+    if setup_raw is None:
+        if metadata_required:
+            return True, False, ()
+        return False, True, ()
+    if not isinstance(setup_raw, Mapping):
+        raise ValueError("initial_state.setup must be an object when provided.")
+
+    setup_sow_required = bool(setup_raw.get("setup_sow_required", metadata_required))
+    setup_sow_complete = bool(setup_raw.get("setup_sow_complete", not setup_sow_required))
+    completed_raw = setup_raw.get("setup_sow_completed_by", [])
+    if not isinstance(completed_raw, list):
+        raise ValueError("initial_state.setup.setup_sow_completed_by must be a list.")
+    completed_by = tuple(_player_id_from_any(value) for value in completed_raw)
+    return setup_sow_required, setup_sow_complete, completed_by
+
+
+def _phase_from_dict(
+    initial_state_raw: Mapping[str, Any],
+    *,
+    setup_sow_required: bool,
+    setup_sow_complete: bool,
+) -> TurnPhase:
+    phase_text = str(initial_state_raw.get("phase", TurnPhase.SOW.value))
+    phase = TurnPhase.from_string(phase_text)
+    if setup_sow_required and not setup_sow_complete:
+        return TurnPhase.SETUP_SOW
+    if setup_sow_required and setup_sow_complete and phase is TurnPhase.SETUP_SOW:
+        return TurnPhase.SOW
+    return phase
+
+
 def _timing_state_from_dict(raw: Mapping[str, Any]) -> TimingState:
     timing_raw = raw.get("timing")
     if isinstance(timing_raw, Mapping):
@@ -284,7 +340,17 @@ def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
         return None
     if isinstance(start_player_raw, int):
         return PlayerId(start_player_raw)
-    return PlayerId.from_string(str(start_player_raw))
+    return _player_id_from_any(start_player_raw)
+
+
+def _player_id_from_any(raw_value: Any) -> PlayerId:
+    if isinstance(raw_value, int):
+        return PlayerId(raw_value)
+    text = str(raw_value).strip()
+    try:
+        return PlayerId.from_string(text)
+    except ValueError:
+        return PlayerId(int(text))
 
 
 def _dummy_acolytes_from_dict(

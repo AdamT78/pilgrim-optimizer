@@ -28,6 +28,12 @@ def test_cli_generate_setup_writes_file_and_prints_summary(capsys, tmp_path: Pat
     assert "Setup sow required: true" in output
     generated = json.loads(output_path.read_text(encoding="utf-8"))
     assert generated["root_player_id"] == "player_one"
+    assert generated["setup_metadata"]["setup_sow_implemented"] is True
+    assert generated["initial_state"]["setup"] == {
+        "setup_sow_required": True,
+        "setup_sow_complete": False,
+        "setup_sow_completed_by": [],
+    }
 
     validate_exit = main(["validate", str(output_path)])
     validate_output = capsys.readouterr().out
@@ -105,6 +111,7 @@ def test_cli_generate_setup_generated_2p_scenario_can_solve_depth_one(
     assert solve_exit == 0
     assert "Solve result for scenario" in solve_output
     assert "Root player: player_one" in solve_output
+    assert "Setup sow: sow city ->" in solve_output
 
 
 def test_cli_generate_setup_rejects_invalid_player_count(capsys, tmp_path: Path) -> None:

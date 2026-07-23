@@ -65,16 +65,21 @@ def generate_setup_scenario(
             "seed": seed,
             "player_count": player_count,
             "setup_sow_required": True,
-            "setup_sow_implemented": False,
+            "setup_sow_implemented": True,
             "note": (
                 "Generated setup is deterministic. "
-                "Setup sow is not implemented in this PR."
+                "Each real player must complete setup sow before normal play."
             ),
         },
         "initial_state": {
             "active_player": "player_one",
             "start_player_id": "player_one",
-            "phase": "sow",
+            "phase": "setup_sow",
+            "setup": {
+                "setup_sow_required": True,
+                "setup_sow_complete": False,
+                "setup_sow_completed_by": [],
+            },
             "merchant_position": 0,
             "ship_position": 0,
             "completed_rounds": 0,

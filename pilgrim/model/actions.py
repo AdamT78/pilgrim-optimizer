@@ -38,6 +38,15 @@ class FullTurnAction:
 
 
 @dataclass(frozen=True, slots=True)
+class SetupSowAction:
+    """One pre-game setup sow from city only."""
+
+    origin: int
+    route: tuple[int, ...]
+    action_type: ActionType = field(default=ActionType.SETUP_SOW, init=False)
+
+
+@dataclass(frozen=True, slots=True)
 class AllocationMove:
     """One allocation sub-move between Abbey and special-activity slots."""
 
@@ -58,11 +67,16 @@ class AllocationMove:
             raise ValueError("Allocation move abbey -> abbey is not legal.")
 
 
-GameAction = FullTurnAction
+GameAction = FullTurnAction | SetupSowAction
 
 
 def action_id(action: GameAction) -> str:
     """Generate a stable readable action ID."""
+    if isinstance(action, SetupSowAction):
+        route = "->".join(str(position) for position in action.route)
+        return f"setup_sow:sow:{action.origin}:{route}"
+
+    # Full-turn actions only below.
     route = "->".join(str(position) for position in action.route)
     payment_suffix = ""
     if action.resolution is TurnResolutionType.GIVE_ALMS:
@@ -120,6 +134,10 @@ def readable_route(
 def action_summary(action: GameAction, config: GameConfig) -> str:
     """Return a human-readable action summary for CLI/debug output."""
     positions = config.board.positions
+    if isinstance(action, SetupSowAction):
+        return f"Setup sow: sow {readable_route(action.origin, action.route, positions=positions)}"
+
+    # Full-turn actions only below.
     selected_duty = position_name(action.selected_duty, positions)
     duty_category = duty_category_at_position(config, action.selected_duty)
     summary = (
