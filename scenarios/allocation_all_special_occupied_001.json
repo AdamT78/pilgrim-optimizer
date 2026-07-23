@@ -6,7 +6,16 @@
   },
   "player_count": 2,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
-  "duties_file": "configs/duties_allocation.json",
+  "duty_tiles": {
+    "north": "produce",
+    "north_east": "clerical",
+    "east": "build_roads",
+    "south_east": "construct",
+    "south": "give_alms",
+    "south_west": "ordination",
+    "west": "taxation",
+    "north_west": "allocation"
+  },
   "initial_state": {
     "start_player_id": "player_one",
     "merchant_position": 0,

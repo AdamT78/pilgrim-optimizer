@@ -39,6 +39,12 @@ Key correction in v1.0:
 - Merchant does **not** advance on ordinary turns.
 - Merchant advances once during round-end processing.
 
+## Interaction with duty layout (v1.3)
+
+- Timing flow is unchanged by duty-tile layout customization.
+- Duty category identity is now scenario-defined and independent from physical position, but
+  turn/round/season advancement still keys off applied full turns exactly as before.
+
 ## Season-end integrations
 
 At Ship-triggered season end:

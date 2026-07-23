@@ -2,10 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from pilgrim.model.config import PietyConfig
-from pilgrim.model.enums import DutyEffect, DutyStrength
+from pilgrim.model.duties import DUTY_CATEGORIES
+from pilgrim.model.enums import DutyEffect, DutyStrength, TurnResolutionType
 from pilgrim.model.state import PlayerState
 from pilgrim.rules.piety import move_piety
+
+_DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
+    "produce": (TurnResolutionType.PRODUCE,),
+    "clerical": (
+        TurnResolutionType.CLERICAL_DEVOTION,
+        TurnResolutionType.CLERICAL_SILVERSMITH,
+    ),
+    "give_alms": (TurnResolutionType.GIVE_ALMS,),
+    "allocation": (TurnResolutionType.ALLOCATION,),
+    "build_roads": (),
+    "construct": (),
+    "ordination": (),
+    "taxation": (),
+}
+
+_RESOLUTION_EFFECTS: Mapping[TurnResolutionType, DutyEffect] = {
+    TurnResolutionType.PRODUCE: DutyEffect.PRODUCE,
+    TurnResolutionType.CLERICAL_DEVOTION: DutyEffect.CLERICAL_DEVOTION,
+    TurnResolutionType.CLERICAL_SILVERSMITH: DutyEffect.CLERICAL_SILVERSMITH,
+}
 
 
 def duty_strength(player_count: int, opponent_counts: tuple[int, ...]) -> DutyStrength:
@@ -25,6 +48,29 @@ def duty_value_and_silver_cost(strength: DutyStrength) -> tuple[int, int]:
     if strength is DutyStrength.PARITY:
         return 1, 0
     return 1, 1
+
+
+def action_options_for_duty_category(duty_category: str) -> tuple[TurnResolutionType, ...]:
+    """Return currently available action options for one duty category."""
+    if duty_category not in _DUTY_CATEGORY_ACTIONS:
+        allowed = ", ".join(DUTY_CATEGORIES)
+        raise ValueError(f"Unknown duty category '{duty_category}'. Allowed: {allowed}.")
+    return _DUTY_CATEGORY_ACTIONS[duty_category]
+
+
+def is_deferred_duty_category(duty_category: str) -> bool:
+    """Return True when a duty category is valid but intentionally deferred."""
+    return len(action_options_for_duty_category(duty_category)) == 0
+
+
+def effect_for_resolution(resolution: TurnResolutionType) -> DutyEffect:
+    """Map concrete duty action resolution to effect implementation helper."""
+    try:
+        return _RESOLUTION_EFFECTS[resolution]
+    except KeyError as exc:
+        raise ValueError(
+            f"Resolution does not map to direct duty effect: {resolution.value}"
+        ) from exc
 
 
 def apply_duty_effect(

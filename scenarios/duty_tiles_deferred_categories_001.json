@@ -1,0 +1,19 @@
+{
+  "scenario_id": "duty_tiles_deferred_categories_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "duty_tiles": {
+    "north": "produce",
+    "north_east": "clerical",
+    "east": "build_roads",
+    "south_east": "construct",
+    "south": "give_alms",
+    "south_west": "ordination",
+    "west": "allocation",
+    "north_west": "taxation"
+  }
+}

@@ -132,7 +132,7 @@ def test_acolyte_conservation_after_full_turn_transition() -> None:
     action = FullTurnAction(
         origin=0,
         route=(1, 2, 3),
-        selected_duty=3,
+        selected_duty=2,
         resolution=TurnResolutionType.CLERICAL_SILVERSMITH,
     )
     after = apply_action(before, action, scenario.config).state

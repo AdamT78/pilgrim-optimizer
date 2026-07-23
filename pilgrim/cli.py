@@ -16,6 +16,7 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import GameAction, action_summary, readable_route
 from pilgrim.model.config import GameConfig
 from pilgrim.model.dummy import format_dummy_acolytes
+from pilgrim.model.duties import DUTY_POSITIONS
 from pilgrim.model.enums import EventType, PlayerId, position_name
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
@@ -218,9 +219,13 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             if isinstance(duty_position, int)
             else "unknown"
         )
+        duty_category = str(details.get("duty_category", "")).strip()
+        duty_with_category = (
+            f"{duty_label} ({duty_category})" if duty_category else duty_label
+        )
         if details.get("mode") == "tithe":
-            return f"{event_name}: selected {duty_label}; mode tithe"
-        fragments = [f"selected {duty_label}"]
+            return f"{event_name}: selected {duty_with_category}; mode tithe"
+        fragments = [f"selected {duty_with_category}"]
         if "strength" in details:
             fragments.append(f"relation {details['strength']}")
         if "duty_value" in details:
@@ -551,6 +556,8 @@ def _format_state_summary(
             "  Resource: "
             f"{current_merchant_resource(state, config.merchant) or 'none'}"
         ),
+        "Duty tiles:",
+        *_format_duty_tiles_layout(config),
         "Building market:",
         f"  Level 1: {_market_building_names_for_level(state, config, 1)}",
         f"  Level 2: {_market_building_names_for_level(state, config, 2)}",
@@ -682,6 +689,14 @@ def _market_building_names_for_level(
     if not level_names:
         return "none"
     return ", ".join(level_names)
+
+
+def _format_duty_tiles_layout(config: GameConfig) -> tuple[str, ...]:
+    duty_tiles = config.duty_tiles_mapping()
+    return tuple(
+        f"  {position_name}: {duty_tiles[position_name]}"
+        for position_name in DUTY_POSITIONS
+    )
 
 
 if __name__ == "__main__":

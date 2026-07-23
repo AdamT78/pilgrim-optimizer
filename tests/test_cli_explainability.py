@@ -29,7 +29,7 @@ def test_readable_action_summary() -> None:
     )
     assert summary == (
         "Turn: sow city -> north -> north_east -> east | "
-        "selected duty: east | action: clerical_silversmith"
+        "selected duty: east (build_roads) | action: clerical_silversmith"
     )
 
 

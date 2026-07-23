@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from pilgrim.model.config import GameConfig
+from pilgrim.model.duties import duty_category_at_position
 from pilgrim.model.enums import ActionType, DutyEffect, TurnResolutionType, position_name
 
 
@@ -71,9 +72,10 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     """Return a human-readable action summary for CLI/debug output."""
     positions = config.board.positions
     selected_duty = position_name(action.selected_duty, positions)
+    duty_category = duty_category_at_position(config, action.selected_duty)
     summary = (
         f"Turn: sow {readable_route(action.origin, action.route, positions=positions)} | "
-        f"selected duty: {selected_duty} | action: {action.resolution.value}"
+        f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
     )
     if action.resolution is TurnResolutionType.GIVE_ALMS:
         summary += (
