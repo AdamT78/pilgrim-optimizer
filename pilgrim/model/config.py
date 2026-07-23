@@ -132,7 +132,7 @@ class MerchantConfig:
 
     path: tuple[str, ...]
     resource_by_duty: tuple[tuple[str, str | None], ...]
-    advance_after_full_turn: bool
+    advance_at_round_end: bool
 
     def __post_init__(self) -> None:
         if not self.path:
@@ -163,6 +163,53 @@ class MerchantConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ShipConfig:
+    """Abstract round-marker path used to trigger round/season/game-end phases."""
+
+    path_length: int
+    start_position: int
+    nw_pilgrimage_site_position: int
+    pilgrimage_site_positions: tuple[int, ...]
+    advance_per_round: int
+
+    def __post_init__(self) -> None:
+        if self.path_length < 1:
+            raise ValueError("Ship path_length must be at least 1.")
+        if self.advance_per_round < 1:
+            raise ValueError("Ship advance_per_round must be at least 1.")
+        if not (0 <= self.start_position < self.path_length):
+            raise ValueError("Ship start_position must be within [0, path_length).")
+        if not (0 <= self.nw_pilgrimage_site_position < self.path_length):
+            raise ValueError("Ship nw_pilgrimage_site_position must be within [0, path_length).")
+        if not self.pilgrimage_site_positions:
+            raise ValueError("Ship pilgrimage_site_positions cannot be empty.")
+        invalid_positions = [
+            position
+            for position in self.pilgrimage_site_positions
+            if position < 0 or position >= self.path_length
+        ]
+        if invalid_positions:
+            raise ValueError(
+                "Ship pilgrimage_site_positions must be within [0, path_length): "
+                f"{invalid_positions}."
+            )
+        if self.nw_pilgrimage_site_position not in self.pilgrimage_site_positions:
+            raise ValueError("NW pilgrimage site must be included in pilgrimage_site_positions.")
+
+    def wrap(self, position: int) -> int:
+        return position % self.path_length
+
+    def advance(self, position: int) -> int:
+        return self.wrap(position + self.advance_per_round)
+
+    def is_pilgrimage_site(self, position: int) -> bool:
+        return self.wrap(position) in self.pilgrimage_site_positions
+
+    def is_nw_site(self, position: int) -> bool:
+        return self.wrap(position) == self.nw_pilgrimage_site_position
+
+
+@dataclass(frozen=True, slots=True)
 class GameConfig:
     """Ruleset configuration bundle for scenario execution."""
 
@@ -172,6 +219,7 @@ class GameConfig:
     alms: AlmsConfig
     timing: TimingConfig
     merchant: MerchantConfig
+    ship: ShipConfig
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -268,6 +316,7 @@ def game_config_from_dict(
     alms_raw: Mapping[str, Any],
     timing_raw: Mapping[str, Any],
     merchant_raw: Mapping[str, Any],
+    ship_raw: Mapping[str, Any],
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
@@ -275,6 +324,7 @@ def game_config_from_dict(
     alms = alms_from_dict(alms_raw)
     timing = timing_from_dict(timing_raw)
     merchant = merchant_from_dict(merchant_raw)
+    ship = ship_from_dict(ship_raw)
     return GameConfig(
         board=board,
         duties=duties,
@@ -282,6 +332,7 @@ def game_config_from_dict(
         alms=alms,
         timing=timing,
         merchant=merchant,
+        ship=ship,
     )
 
 
@@ -318,5 +369,21 @@ def merchant_from_dict(raw: Mapping[str, Any]) -> MerchantConfig:
     return MerchantConfig(
         path=path,
         resource_by_duty=resource_by_duty,
-        advance_after_full_turn=bool(raw.get("advance_after_full_turn", True)),
+        advance_at_round_end=bool(
+            raw.get("advance_at_round_end", raw.get("advance_after_full_turn", True))
+        ),
+    )
+
+
+def ship_from_dict(raw: Mapping[str, Any]) -> ShipConfig:
+    """Parse abstract round-marker config for round-end sequencing."""
+    pilgrimage_positions_raw = raw["pilgrimage_site_positions"]
+    if not isinstance(pilgrimage_positions_raw, list):
+        raise ValueError("Ship pilgrimage_site_positions must be a list.")
+    return ShipConfig(
+        path_length=int(raw["path_length"]),
+        start_position=int(raw["start_position"]),
+        nw_pilgrimage_site_position=int(raw["nw_pilgrimage_site_position"]),
+        pilgrimage_site_positions=tuple(int(value) for value in pilgrimage_positions_raw),
+        advance_per_round=int(raw.get("advance_per_round", 1)),
     )

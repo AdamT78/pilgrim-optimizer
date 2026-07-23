@@ -73,6 +73,7 @@ def test_missing_merchant_position_defaults_to_zero(tmp_path: Path) -> None:
                 "alms_file": str(Path("configs/alms.json").resolve()),
                 "timing_file": str(Path("configs/timing.json").resolve()),
                 "merchant_file": str(Path("configs/merchant.json").resolve()),
+                "ship_file": str(Path("configs/ship.json").resolve()),
                 "initial_state": initial_state,
             }
         ),

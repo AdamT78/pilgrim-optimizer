@@ -8,8 +8,12 @@
   "player_count": 2,
   "initial_state": {
     "active_player": "player_two",
+    "start_player_id": "player_one",
     "phase": "sow",
     "merchant_position": 0,
+    "ship_position": 3,
+    "completed_rounds": 2,
+    "game_over": false,
     "timing": {
       "absolute_turn": 5,
       "round_number": 3,

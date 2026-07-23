@@ -145,6 +145,19 @@ def ensure_valid_merchant_state(state: GameState) -> None:
         raise TransitionValidationError("Merchant position cannot be negative.")
 
 
+def ensure_valid_round_end_state(state: GameState) -> None:
+    if state.ship_position < 0:
+        raise TransitionValidationError("Ship position cannot be negative.")
+    if state.completed_rounds < 0:
+        raise TransitionValidationError("completed_rounds cannot be negative.")
+    if int(state.start_player) >= state.player_count:
+        raise TransitionValidationError("start_player must be a valid real player.")
+    if int(state.active_player) >= state.player_count:
+        raise TransitionValidationError("active_player must be a valid real player.")
+    if not isinstance(state.game_over, bool):
+        raise TransitionValidationError("game_over must be boolean.")
+
+
 def ensure_valid_dummy_state(state: GameState) -> None:
     try:
         validate_dummy_acolytes(
@@ -161,4 +174,5 @@ def validate_state_invariants(state: GameState) -> None:
     ensure_valid_workforce(state)
     ensure_valid_timing(state)
     ensure_valid_merchant_state(state)
+    ensure_valid_round_end_state(state)
     ensure_valid_dummy_state(state)

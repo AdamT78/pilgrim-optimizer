@@ -48,10 +48,14 @@ class GameState:
     active_player: PlayerId
     phase: TurnPhase
     players: tuple[PlayerState, PlayerState]
+    start_player: PlayerId = PlayerId.PLAYER_ONE
     timing: TimingState = field(default_factory=TimingState)
     table_player_count: int = 4
     dummy_acolytes: DummyAcolyteGroups = field(default_factory=DummyAcolyteGroups)
     merchant_position: int = 0
+    ship_position: int = 0
+    completed_rounds: int = 0
+    game_over: bool = False
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -72,8 +76,14 @@ class GameState:
 
         if self.timing.turn_in_round >= len(self.players):
             raise ValueError("turn_in_round must be less than number of players.")
+        if int(self.start_player) >= len(self.players):
+            raise ValueError("start_player must be one of the real players in state.")
         if self.table_player_count not in (2, 3, 4):
             raise ValueError("table_player_count must be one of: 2, 3, 4.")
+        if self.ship_position < 0:
+            raise ValueError("ship_position cannot be negative.")
+        if self.completed_rounds < 0:
+            raise ValueError("completed_rounds cannot be negative.")
         if self.merchant_position < 0:
             raise ValueError("merchant_position cannot be negative.")
 
@@ -122,6 +132,18 @@ class GameState:
 
     def with_merchant_position(self, merchant_position: int) -> GameState:
         return replace(self, merchant_position=merchant_position)
+
+    def with_ship_position(self, ship_position: int) -> GameState:
+        return replace(self, ship_position=ship_position)
+
+    def with_start_player(self, start_player: PlayerId) -> GameState:
+        return replace(self, start_player=start_player)
+
+    def with_game_over(self, game_over: bool) -> GameState:
+        return replace(self, game_over=game_over)
+
+    def with_completed_rounds(self, completed_rounds: int) -> GameState:
+        return replace(self, completed_rounds=completed_rounds)
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)

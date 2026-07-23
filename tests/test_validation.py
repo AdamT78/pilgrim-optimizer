@@ -7,7 +7,7 @@ from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
 from pilgrim.model.workforce import CommittedAcolytes, Workforce
-from pilgrim.rules.transition import apply_action
+from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import TransitionValidationError, validate_state_invariants
 
 
@@ -112,3 +112,15 @@ def test_dummy_totals_must_match_player_count_expectation() -> None:
     )
     with pytest.raises(TransitionValidationError, match="north_group total"):
         validate_state_invariants(invalid_state)
+
+
+def test_game_over_blocks_legal_actions() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    over_state = scenario.state.with_game_over(True)
+    assert legal_actions(over_state, scenario.config) == ()
+
+
+def test_ship_position_cannot_be_negative() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    with pytest.raises(ValueError):
+        scenario.state.with_ship_position(-1)
