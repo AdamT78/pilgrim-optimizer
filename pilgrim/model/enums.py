@@ -90,6 +90,7 @@ class TurnResolutionType(Enum):
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"
+    DONATE_BUILDING = "donate_building"
     ALLOCATION = "allocation"
     TITHE = "tithe"
 
@@ -112,6 +113,7 @@ class EventType(Enum):
     PIETY_DELTA = "piety_delta"
     ACOLYTE_RECALL = "acolyte_recall"
     ALMS_PAYMENT = "alms_payment"
+    BUILDING_DONATION = "building_donation"
     ALMS_PROGRESS = "alms_progress"
     ALMS_THRESHOLD_REWARD = "alms_threshold_reward"
     ALMS_SEASON_REWARD = "alms_season_reward"

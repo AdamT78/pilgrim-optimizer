@@ -312,6 +312,13 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             text += f" (plus minority silver cost {minority_silver_cost})"
         return text
 
+    if event.event_type is EventType.BUILDING_DONATION:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        donated_label = building_name if building_name else building_id
+        donation_vp = int(details.get("donation_vp", 0))
+        return f"{event_name}: {actor_name} donated {donated_label}; donation_vp={donation_vp}"
+
     if event.event_type is EventType.ALMS_PROGRESS:
         old_row = int(details.get("old_row", 0))
         new_row = int(details.get("new_row", 0))

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 from pilgrim.model.buildings import (
@@ -149,6 +150,41 @@ def building_stone_cost(building: BuildingDefinition) -> int:
 def building_donation_vp(building: BuildingDefinition) -> int:
     """Return donation VP for one building definition."""
     return building.donation_vp
+
+
+def donate_active_building(
+    player_state: PlayerState,
+    *,
+    building_id: str,
+    config: GameConfig,
+) -> tuple[PlayerState, BuildingDefinition]:
+    """Move one active building to donated and add its donation VP."""
+    slots = player_state.player_board_slots
+    if building_id in slots.donated_buildings:
+        raise ValueError(f"Building '{building_id}' is already donated.")
+    if building_id not in slots.active_buildings:
+        raise ValueError(f"Building '{building_id}' is not in active_buildings.")
+
+    definition = building_by_id(config.buildings, building_id)
+    remaining_active = tuple(
+        current_building_id
+        for current_building_id in slots.active_buildings
+        if current_building_id != building_id
+    )
+    if len(remaining_active) != len(slots.active_buildings) - 1:
+        raise ValueError(f"Building '{building_id}' must appear exactly once in active_buildings.")
+
+    updated_slots = PlayerBoardSlots(
+        active_buildings=remaining_active,
+        donated_buildings=(*slots.donated_buildings, building_id),
+        cardinal_favor_tiles=slots.cardinal_favor_tiles,
+    )
+    updated_player_state = replace(
+        player_state,
+        victory_points=player_state.victory_points + definition.donation_vp,
+        player_board_slots=updated_slots,
+    )
+    return updated_player_state, definition
 
 
 def used_player_board_slots(player_state: PlayerState) -> int:

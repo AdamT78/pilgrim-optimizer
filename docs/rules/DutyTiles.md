@@ -1,4 +1,4 @@
-# Duty Tiles (v1.4 Sandbox Scope)
+# Duty Tiles (v1.6 Sandbox Scope)
 
 ## Core model
 
@@ -67,7 +67,9 @@ Implemented action systems:
 - `clerical`:
   - `clerical_devotion`
   - `clerical_silversmith`
-- `give_alms`
+- `give_alms`:
+  - `give_alms` (pay silver/wheat)
+  - `donate_building` (donate one active building)
 - `allocation`
 
 Deferred category systems (valid in layout, no non-tithe action yet):
@@ -86,6 +88,13 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Produce duty value cannot be split across resources in one action.
 - Produce special-activity bonuses (Fields / Stone Mason) add produced resources and do not
   change duty value.
+- For `give_alms`, paid actions still pay silver/wheat equal to effective duty value and move
+  that many rows.
+- `donate_building` always donates exactly one active building and advances Alms by exactly one
+  row.
+- On majority `give_alms`, `donate_building` still resolves as one deterministic action; it does
+  not chain into a second paid Give Alms step.
+- Alms House currently enhances only paid `give_alms`, not `donate_building`.
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
 - Verbose CLI now prints duty layout and shows category in action/event text:

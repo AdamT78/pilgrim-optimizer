@@ -1,16 +1,16 @@
-# Buildings (v1.1 Sandbox Scope)
+# Buildings (v1.6 Sandbox Scope)
 
 ## Implemented now
 
-This milestone adds deterministic building data and board-slot state only.
+This milestone adds deterministic building data and board-slot state, plus the
+`donate_building` action under Give Alms.
 
 - static 24-building catalogue in `configs/buildings.json`
 - per-game 12-building market shape (4 per level)
 - deterministic scenario market fallback (no random draws in engine/search)
 - player-board slot occupancy state
+- Give Alms `donate_building` option (move one active building to donated, +1 Alms row)
 - slot-capacity validation (shared building + Cardinal favor spaces)
-
-No building actions or effects are implemented yet.
 
 ## Catalogue structure
 
@@ -78,6 +78,29 @@ Important:
 - donated buildings still consume slots
 - Cardinal favor tiles consume slots
 
+## Give Alms building donation option
+
+Give Alms now has a deterministic donation action:
+
+- `action: donate_building | building: <building_id>`
+
+When resolved:
+
+- exactly one building moves from `active_buildings` to `donated_buildings`
+- Alms advances by exactly one row
+- threshold rewards still apply if a row is crossed
+- building donation VP is added from catalogue metadata:
+  - level 1 -> 2 VP
+  - level 2 -> 4 VP
+  - level 3 -> 6 VP
+- donated buildings remain on the player board and still consume slots
+
+Current scope constraints:
+
+- no chained "second Give Alms payment" after donation (majority extra step is forfeited)
+- Alms House bonus applies only to paid `give_alms`, not `donate_building`
+- this does **not** introduce general-purpose building buy/hire/donate systems
+
 ## Validation rules
 
 Catalogue validation enforces:
@@ -107,7 +130,7 @@ Player-board slot validation enforces:
 
 ## Deferred in later milestones
 
-- building purchase/hire/donation actions
+- building purchase/hire actions
 - Confession Box and all other building effects
 - Cardinal favor gain logic
 - trade-route/trail/building-system interactions

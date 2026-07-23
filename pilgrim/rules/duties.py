@@ -19,7 +19,10 @@ _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
         TurnResolutionType.CLERICAL_DEVOTION,
         TurnResolutionType.CLERICAL_SILVERSMITH,
     ),
-    "give_alms": (TurnResolutionType.GIVE_ALMS,),
+    "give_alms": (
+        TurnResolutionType.GIVE_ALMS,
+        TurnResolutionType.DONATE_BUILDING,
+    ),
     "allocation": (TurnResolutionType.ALLOCATION,),
     "build_roads": (),
     "construct": (),

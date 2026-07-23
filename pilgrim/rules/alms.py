@@ -50,6 +50,16 @@ class GiveAlmsResolution:
 
 
 @dataclass(frozen=True, slots=True)
+class DonateBuildingAlmsResolution:
+    """Resolved Alms movement payload for donate_building."""
+
+    player_state: PlayerState
+    old_position: int
+    new_position: int
+    threshold_outcomes: tuple[AlmsThresholdOutcome, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AlmsSeasonEndResult:
     """Result of season-end Alms reward and track reset."""
 
@@ -204,6 +214,29 @@ def resolve_give_alms(
     return GiveAlmsResolution(
         player_state=updated_player,
         resource_delta=(0, -total_silver_cost, -payment.wheat),
+        old_position=old_position,
+        new_position=new_position,
+        threshold_outcomes=tuple(outcomes),
+    )
+
+
+def resolve_donate_building_alms(
+    player: PlayerState,
+    *,
+    config: AlmsConfig,
+) -> DonateBuildingAlmsResolution:
+    """Resolve deterministic +1 Alms movement for donate_building."""
+    old_position = clamp_alms_position(player.alms_position, config)
+    new_position = move_alms_position(old_position, 1, config)
+    updated_player = replace(player, alms_position=new_position)
+
+    outcomes: list[AlmsThresholdOutcome] = []
+    for threshold in crossed_alms_thresholds(old_position, new_position, config):
+        updated_player, outcome = apply_alms_threshold_reward(updated_player, threshold, config)
+        outcomes.append(outcome)
+
+    return DonateBuildingAlmsResolution(
+        player_state=updated_player,
         old_position=old_position,
         new_position=new_position,
         threshold_outcomes=tuple(outcomes),

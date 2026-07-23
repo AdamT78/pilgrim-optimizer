@@ -1,4 +1,4 @@
-# Player Board (v1.4 Sandbox Scope)
+# Player Board (v1.6 Sandbox Scope)
 
 ## Implemented now
 
@@ -11,7 +11,8 @@ infrastructure for the headless sandbox:
 - Allocation full-turn action (Abbey <-> Special Activities and Special -> Special)
 - Six per-player Special Activity spaces and their currently supported bonuses
 
-No roads, construct, trade-route, spatial-map, or building action systems are added here.
+No roads, construct, trade-route, or spatial-map systems are added here.
+The only building action currently supported is Give Alms `donate_building`.
 
 ## Player-board workforce areas
 
@@ -39,6 +40,20 @@ In `configs/setups/basic_mancala_sandbox.json`, default real-table setup now inc
 - Abbey Acolytes: 3
 
 Small sandbox scenarios may still override these counts explicitly (for focused tests).
+
+## Player-board slots and Give Alms donation
+
+Per-player shared slot state is tracked as:
+
+- `active_buildings`
+- `donated_buildings`
+- `cardinal_favor_tiles`
+
+Donation under Give Alms moves exactly one building from active to donated:
+
+- donated building abilities are considered unavailable for future use
+- donated buildings still consume board slots
+- slot usage is preserved by donation (`active -1`, `donated +1`)
 
 ## Allocation action
 
@@ -121,6 +136,7 @@ Helpers are available for occupied/available activity queries and counts.
 - requires extra payment of exactly `1 silver` or `1 wheat`
 - extra payment is encoded in the action fields and validated
 - emits `SPECIAL_ACTIVITY_BONUS`
+- does not enhance `donate_building` in the current milestone
 
 ### Road Engineer
 
