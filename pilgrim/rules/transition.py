@@ -8,16 +8,21 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     action_id,
-    resolution_from_effect,
 )
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import DutyEffect, EventType, PlayerId, TurnPhase, TurnResolutionType
+from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import AlmsPayment, resolve_alms_season_end, resolve_give_alms
 from pilgrim.rules.buildings import validate_building_state
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
-from pilgrim.rules.duties import apply_duty_effect, duty_strength, duty_value_and_silver_cost
+from pilgrim.rules.duties import (
+    action_options_for_duty_category,
+    apply_duty_effect,
+    duty_strength,
+    duty_value_and_silver_cost,
+    effect_for_resolution,
+)
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
 from pilgrim.rules.merchant import (
     advance_merchant_position,
@@ -94,10 +99,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             for duty_position in config.duty_positions():
                 if sowed_vector[duty_position] <= 0:
                     continue
-                duty = config.duty_for_position(duty_position)
-                if duty is None:
-                    continue
-                if duty.effect is DutyEffect.GIVE_ALMS:
+                duty_category = config.duty_category_for_position(duty_position)
+                category_actions = action_options_for_duty_category(duty_category)
+                if TurnResolutionType.GIVE_ALMS in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
                         state,
@@ -144,7 +148,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                     alms_payment_wheat=payment.wheat,
                                 )
                             )
-                elif duty.effect is DutyEffect.ALLOCATION:
+                elif TurnResolutionType.ALLOCATION in category_actions:
                     if player_state.workforce.abbey > 0:
                         actions.append(
                             FullTurnAction(
@@ -166,14 +170,15 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 )
                             )
                 else:
-                    actions.append(
-                        FullTurnAction(
-                            origin=origin,
-                            route=route,
-                            selected_duty=duty_position,
-                            resolution=resolution_from_effect(duty.effect),
+                    for category_action in category_actions:
+                        actions.append(
+                            FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=category_action,
+                            )
                         )
-                    )
                 actions.append(
                     FullTurnAction(
                         origin=origin,
@@ -229,6 +234,7 @@ def _apply_full_turn_action(
 
     if action.resolution is TurnResolutionType.TITHE:
         updated_state = state_after_sow
+        duty_category = config.duty_category_for_position(action.selected_duty)
         events.append(
             GameEvent(
                 event_type=EventType.DUTY_RESOLUTION,
@@ -236,23 +242,19 @@ def _apply_full_turn_action(
                 action_id=transition_action_id,
                 details=make_event_details(
                     duty_position=action.selected_duty,
+                    duty_category=duty_category,
                     mode="tithe",
                     recall=False,
                 ),
             )
         )
     else:
-        duty = config.duty_for_position(action.selected_duty)
-        if duty is None:
-            raise TransitionValidationError(
-                f"No duty configured at position {action.selected_duty}."
-            )
-
-        expected_resolution = resolution_from_effect(duty.effect)
-        if action.resolution is not expected_resolution:
+        duty_category = config.duty_category_for_position(action.selected_duty)
+        allowed_resolutions = action_options_for_duty_category(duty_category)
+        if action.resolution not in allowed_resolutions:
             message = (
                 f"Selected action {action.resolution.value} does not match "
-                f"duty effect {duty.effect.value}."
+                f"duty category {duty_category}."
             )
             raise TransitionValidationError(message)
 
@@ -403,7 +405,7 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         else:
-            if duty.effect is DutyEffect.PRODUCE:
+            if action.resolution is TurnResolutionType.PRODUCE:
                 effective_duty_value += produce_grain_bonus(state_after_sow.player_state(player))
                 _ = produce_stone_bonus_hook(state_after_sow.player_state(player))
                 if effective_duty_value != duty_value:
@@ -419,7 +421,7 @@ def _apply_full_turn_action(
                             ),
                         )
                     )
-            elif duty.effect is DutyEffect.CLERICAL_SILVERSMITH:
+            elif action.resolution is TurnResolutionType.CLERICAL_SILVERSMITH:
                 bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
                 effective_duty_value += bonus
                 if bonus:
@@ -435,7 +437,7 @@ def _apply_full_turn_action(
                             ),
                         )
                     )
-            elif duty.effect is DutyEffect.CLERICAL_DEVOTION:
+            elif action.resolution is TurnResolutionType.CLERICAL_DEVOTION:
                 bonus = clerical_devotion_bonus(state_after_sow.player_state(player))
                 effective_duty_value += bonus
                 if bonus:
@@ -459,7 +461,7 @@ def _apply_full_turn_action(
                     new_piety_position,
                 ) = apply_duty_effect(
                     state_after_sow.player_state(player),
-                    effect=duty.effect,
+                    effect=effect_for_resolution(action.resolution),
                     duty_value=effective_duty_value,
                     silver_cost=silver_cost,
                     piety_config=config.piety,
@@ -488,12 +490,12 @@ def _apply_full_turn_action(
                 action_id=transition_action_id,
                 details=make_event_details(
                     duty_position=action.selected_duty,
-                    duty_key=duty.key,
+                    duty_category=duty_category,
                     strength=strength.value,
                     duty_value=duty_value,
                     effective_duty_value=effective_duty_value,
                     silver_cost=silver_cost,
-                    effect=duty.effect.value,
+                    effect=action.resolution.value,
                 ),
             )
         )

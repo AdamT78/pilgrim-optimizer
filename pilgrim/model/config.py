@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from pilgrim.model.buildings import BuildingsConfig, buildings_config_from_dict
+from pilgrim.model.duties import (
+    DutyTilesLayout,
+    default_duty_tiles,
+    duty_tiles_layout_from_mapping,
+)
 from pilgrim.model.enums import DutyEffect
 
 
@@ -222,6 +227,7 @@ class GameConfig:
     merchant: MerchantConfig
     ship: ShipConfig
     buildings: BuildingsConfig
+    duty_tiles: DutyTilesLayout
 
     def duty_for_position(self, position: int) -> DutyDefinition | None:
         for duty in self.duties:
@@ -230,7 +236,19 @@ class GameConfig:
         return None
 
     def duty_positions(self) -> tuple[int, ...]:
-        return tuple(duty.position for duty in self.duties)
+        return self.duty_tiles.board_duty_positions()
+
+    def duty_category_for_position(self, position: int) -> str:
+        return self.duty_tiles.category_for_board_index(position)
+
+    def board_position_for_duty_category(self, duty_category: str) -> int:
+        return self.duty_tiles.board_index_for_category(duty_category)
+
+    def position_name_for_duty_category(self, duty_category: str) -> str:
+        return self.duty_tiles.position_name_for_category(duty_category)
+
+    def duty_tiles_mapping(self) -> dict[str, str]:
+        return self.duty_tiles.mapping()
 
 
 def board_from_dict(raw: Mapping[str, Any]) -> BoardConfig:
@@ -320,6 +338,7 @@ def game_config_from_dict(
     merchant_raw: Mapping[str, Any],
     ship_raw: Mapping[str, Any],
     buildings_raw: Mapping[str, Any],
+    duty_tiles_raw: Mapping[str, Any] | None = None,
 ) -> GameConfig:
     board = board_from_dict(board_raw)
     duties = duties_from_dict(duties_raw, board)
@@ -329,6 +348,18 @@ def game_config_from_dict(
     merchant = merchant_from_dict(merchant_raw)
     ship = ship_from_dict(ship_raw)
     buildings = buildings_from_dict(buildings_raw)
+    duty_tiles_mapping = (
+        {
+            str(position): str(category)
+            for position, category in duty_tiles_raw.items()
+        }
+        if duty_tiles_raw is not None
+        else default_duty_tiles()
+    )
+    duty_tiles = duty_tiles_layout_from_mapping(
+        duty_tiles_mapping,
+        board_positions=board.positions,
+    )
     return GameConfig(
         board=board,
         duties=duties,
@@ -338,6 +369,7 @@ def game_config_from_dict(
         merchant=merchant,
         ship=ship,
         buildings=buildings,
+        duty_tiles=duty_tiles,
     )
 
 

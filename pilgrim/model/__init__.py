@@ -32,6 +32,15 @@ from pilgrim.model.dummy import (
     dummy_total,
     format_dummy_acolytes,
 )
+from pilgrim.model.duties import (
+    DUTY_CATEGORIES,
+    DUTY_POSITIONS,
+    DutyTilesLayout,
+    default_duty_tiles,
+    duty_category_at_position,
+    position_for_duty_category,
+    validate_duty_tiles,
+)
 from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     ActionType,
@@ -70,7 +79,10 @@ __all__ = [
     "DutyDefinition",
     "DutyEffect",
     "DutyStrength",
+    "DUTY_CATEGORIES",
+    "DUTY_POSITIONS",
     "DummyAcolyteGroups",
+    "DutyTilesLayout",
     "EventType",
     "FullTurnAction",
     "GameAction",
@@ -97,6 +109,9 @@ __all__ = [
     "committed_total",
     "mancala_total",
     "position_name",
+    "default_duty_tiles",
+    "duty_category_at_position",
+    "position_for_duty_category",
     "readable_route",
     "replace_mancala",
     "resolution_from_effect",
@@ -104,4 +119,5 @@ __all__ = [
     "dummy_total",
     "format_dummy_acolytes",
     "total_acolytes",
+    "validate_duty_tiles",
 ]

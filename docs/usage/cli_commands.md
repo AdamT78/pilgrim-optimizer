@@ -167,6 +167,7 @@ Using `--verbose` with `solve` prints:
 - timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`, `Start player`, `Game over`)
 - Ship state (`Position`, `At pilgrimage site`, `At NW pilgrimage site`)
 - Merchant state (`Position`, `Resource`)
+- duty-tile layout (`Duty tiles:` with position -> category mapping)
 - building market summary (`Level 1`, `Level 2`, `Level 3`)
 - dummy acolyte state (`north_group`, `south_group`, `total`)
 - `Acted player` (the player who executed that recommended turn)
@@ -179,6 +180,9 @@ Using `--verbose` with `solve` prints:
 - workforce totals (`Mancala total`, `Village`, `Abbey`, `Special Activities`, committed pools, and overall `Total`)
 - player-board workforce labels (`Village: Serfs`, `Abbey: Acolytes`)
 - Special Activity occupancy summary (`Special Activities: ...`)
+- selected-duty output now includes category identity, e.g.:
+  - `selected duty: north_east (clerical)`
+  - `DUTY_RESOLUTION: selected south (give_alms); ...`
 
 `Workforce: Total` includes all currently tracked pools:
 
@@ -318,6 +322,14 @@ Position mapping used by the current sandbox:
   - `vestry` (`clerical_devotion`)
   - `alms_house` (`give_alms` duty-value boost + extra payment)
 - Road Engineer / Stone Mason are currently exposed as placeholder hooks without road/stone runtime systems yet.
+
+## Duty Tile Layout and Identity (v1.3)
+
+- Duty tiles are now scenario-defined (or deterministic fallback) via `duty_tiles`.
+- City is not a duty tile.
+- The 8 non-city positions map to 8 duty categories exactly once each.
+- Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
+- Deferred categories (`build_roads`, `construct`, `ordination`, `taxation`) are valid layout identities and currently produce only tithe as non-deferred effects remain out of scope.
 
 ## Typical development workflow
 

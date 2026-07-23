@@ -43,7 +43,7 @@ Small sandbox scenarios may still override these counts explicitly (for focused 
 ## Allocation action
 
 Allocation is modelled as a full-turn duty resolution (`action: allocation`) when a selected
-duty tile uses the `allocation` effect.
+duty tile is assigned the `allocation` category in the scenario duty layout.
 
 Current allocation targets:
 
@@ -60,6 +60,7 @@ Rules enforced now:
 Notes:
 
 - Duty-tile recall still runs after allocation, consistent with other non-tithe duty resolutions.
+- Allocation is no longer tied to a fixed physical position; duty layout controls where it appears.
 
 ## Special Activities
 

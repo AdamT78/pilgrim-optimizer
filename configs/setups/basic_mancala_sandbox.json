@@ -8,6 +8,16 @@
   "merchant_file": "configs/merchant.json",
   "ship_file": "configs/ship.json",
   "buildings_file": "configs/buildings.json",
+  "duty_tiles": {
+    "north": "produce",
+    "north_east": "clerical",
+    "east": "build_roads",
+    "south_east": "construct",
+    "south": "give_alms",
+    "south_west": "ordination",
+    "west": "allocation",
+    "north_west": "taxation"
+  },
   "player_count": 2,
   "initial_state": {
     "active_player": "player_one",

@@ -142,6 +142,18 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - optional Alms House give-alms boost with explicit extra payment fields
 - Search remains decoupled from these details and still consumes `legal_actions()` + `apply_action()`.
 
+## Duty Tile Identity Framework (v1.3)
+
+- Duty identity is now scenario-defined via a deterministic `duty_tiles` layout.
+- Physical board position and duty category are explicitly separated:
+  - physical: non-city mancala positions
+  - identity: one of eight duty categories
+- `GameConfig` now resolves duty category by selected position at runtime.
+- Legal action generation and duty resolution use category-based option mapping, removing
+  hardcoded position semantics like "south always means give_alms".
+- Deferred categories are valid in layout (`build_roads`, `construct`, `ordination`, `taxation`)
+  but currently expose no non-tithe action.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.
