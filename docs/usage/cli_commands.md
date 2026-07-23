@@ -342,8 +342,9 @@ Position mapping used by the current sandbox:
 - City is not a duty tile.
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
-- `construct` remains a deferred category (currently tithe-only).
-- `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe` while spatial systems remain out of scope.
+- `construct` now exposes `construct_deferred` scaffold plans plus `tithe`.
+- `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe`.
+- both remain non-spatial scaffolds in current scope (no map/placement changes).
 
 ## Produce Options and Fields Rename (v1.4)
 

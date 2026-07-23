@@ -1,4 +1,4 @@
-# Player Board (v1.7 Sandbox Scope)
+# Player Board (v2.2 Sandbox Scope)
 
 ## Implemented now
 
@@ -154,7 +154,12 @@ Helpers are available for occupied/available activity queries and counts.
 - when taking `build_roads`, Road Engineer raises effective Duty Value by `+1`
 - this currently applies only to `build_roads_deferred` scaffold resolution
 - no runtime road/bridge/ford/shrine placement is performed in this milestone
-- construct-related Road Engineer behavior remains deferred until Construct road placement exists
+- when taking `construct`, Road Engineer does **not** raise duty value
+- instead, Construct may include one additional deferred road only if the plan already includes a
+  road built via duty value
+- this appears as a Construct scaffold plan (`... + road_engineer_extra_road`) plus
+  `SPECIAL_ACTIVITY_BONUS`
+- no runtime road/bridge placement is performed for Construct in this milestone
 
 ## Validation and invariants
 
@@ -173,5 +178,5 @@ serfs/acolytes conservation scope.
 ## Deferred
 
 - Special Activity removal/reallocation
-- construct-related Road Engineer placement effects
+- real spatial placement effects for Road Engineer (Build Roads / Construct)
 - full player-board systems beyond current sandbox scope

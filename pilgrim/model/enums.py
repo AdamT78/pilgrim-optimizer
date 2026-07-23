@@ -89,6 +89,7 @@ class TurnResolutionType(Enum):
     PRODUCE_WHEAT = "produce_wheat"
     PRODUCE_STONE = "produce_stone"
     BUILD_ROADS_DEFERRED = "build_roads_deferred"
+    CONSTRUCT_DEFERRED = "construct_deferred"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
     GIVE_ALMS = "give_alms"

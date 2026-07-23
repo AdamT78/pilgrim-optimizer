@@ -1,4 +1,4 @@
-# Duty Tiles (v2.1 Sandbox Scope)
+# Duty Tiles (v2.2 Sandbox Scope)
 
 ## Core model
 
@@ -79,12 +79,14 @@ Implemented action systems:
 - `allocation`
 - `build_roads`:
   - `build_roads_deferred` (scaffold only; no spatial placement yet)
+- `construct`:
+  - `construct_deferred` (scaffold only; no building/spatial placement yet)
 - `taxation`:
   - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
 Deferred category systems (valid in layout, no non-tithe action yet):
 
-- `construct`
+- none
 
 ## Runtime implications
 
@@ -118,6 +120,18 @@ Deferred category systems (valid in layout, no non-tithe action yet):
     - build road/bridge/ford/shrine
     - upgrade road/bridge
     - demolish road/bridge
+- For `construct`:
+  - legal actions currently include `construct_deferred` plus `tithe`
+  - scaffold plans model intent only (`building`, `road`, `building + road`, plus Road Engineer
+    extra-road variants when legal)
+  - real Construct rule modelled by plan constraints:
+    - at most 1 building from Construct
+    - at duty value 2, `building + road` is legal
+    - `building + building` is never legal
+  - no buildings, roads, bridges, upgrades, demolitions, or map changes are applied in this
+    milestone
+  - minority silver cost and duty recall still apply normally
+  - `DUTY_DEFERRED` event records the requested deferred plan
 - For `taxation`:
   - Step I always takes exactly one chosen resource: `stone`, `silver`, or `wheat`.
   - Step II checks other physical duty tiles (excluding the selected Taxation tile and any
@@ -142,3 +156,5 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); ...; action build_roads_deferred`
   - `DUTY_DEFERRED: build_roads requires spatial road/shrine system; ...`
+  - `DUTY_RESOLUTION: selected south_east (construct); ...; action construct_deferred`
+  - `DUTY_DEFERRED: construct requires building/spatial road system; requested plan: ...`

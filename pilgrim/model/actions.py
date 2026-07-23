@@ -34,6 +34,7 @@ class FullTurnAction:
     taxation_step1_resource: str | None = None
     taxation_step2_resources: tuple[str, ...] = ()
     allocation_moves: tuple[AllocationMove, ...] = ()
+    construct_plan: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
@@ -113,10 +114,15 @@ def action_id(action: GameAction) -> str:
             )
         else:
             allocation_suffix = ":allocation_moves:none"
+    construct_suffix = ""
+    if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+        plan = action.construct_plan or "none"
+        construct_suffix = ":construct_plan:" + plan.replace(" + ", "+").replace(" ", "_")
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
-        f"{payment_suffix}{donation_suffix}{ordination_suffix}{taxation_suffix}{allocation_suffix}"
+        f"{payment_suffix}{donation_suffix}{ordination_suffix}"
+        f"{taxation_suffix}{allocation_suffix}{construct_suffix}"
     )
 
 
@@ -172,6 +178,8 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             )
         else:
             summary += " | moves: none"
+    if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+        summary += f" | plan: {action.construct_plan or 'none'}"
     return summary
 
 
