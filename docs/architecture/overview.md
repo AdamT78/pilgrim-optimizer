@@ -151,8 +151,26 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - `GameConfig` now resolves duty category by selected position at runtime.
 - Legal action generation and duty resolution use category-based option mapping, removing
   hardcoded position semantics like "south always means give_alms".
-- Deferred categories are valid in layout (`build_roads`, `construct`, `ordination`, `taxation`)
-  but currently expose no non-tithe action.
+- Deferred categories are valid in layout (`build_roads`, `construct`) and currently expose no
+  non-tithe action.
+
+## Seeded Setup Generator (v1.9)
+
+- Setup randomization is now available as an explicit CLI file-generation step only.
+- `generate-setup` uses a local seeded RNG to produce deterministic scenario JSON from:
+  - player count
+  - seed
+  - output path
+- Generated files include:
+  - randomized duty layout
+  - randomized Tithe counters (with Taxation tile excluded)
+  - randomized 12-building market draw (4 per level)
+  - explicit dummy setup by player count
+  - turn-0 scaffold state plus setup metadata
+- Runtime determinism boundary is unchanged:
+  - no randomization inside scenario loading
+  - no randomization inside transition/apply logic
+  - no randomization inside search/solve
 
 ## Intentionally Deferred
 

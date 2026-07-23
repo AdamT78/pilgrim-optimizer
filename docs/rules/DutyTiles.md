@@ -1,4 +1,4 @@
-# Duty Tiles (v1.8 Sandbox Scope)
+# Duty Tiles (v1.9 Sandbox Scope)
 
 ## Core model
 
@@ -54,6 +54,10 @@ scenario JSON:
 ```
 
 If omitted, the same mapping above is used as deterministic fallback.
+
+For setup-file authoring convenience, a seeded setup generator now exists:
+
+`python3 -m pilgrim.cli generate-setup --players <2|3|4> --seed <int> --output <path>`
 
 No randomization occurs inside scenario loading, rules transitions, or search.
 
@@ -118,11 +122,13 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - Taxation does not change piety, does not advance Alms, and does not consume Tithe counters.
   - Special Activities and Produce/Clerical building effects do not boost Taxation resources.
 - Tithe counters are modeled separately from `tithe` action mode:
-  - `tithe_counters` map physical duty positions to one of `stone` / `silver` / `wheat` (or
-    `null`).
+  - `tithe_counters` map physical duty positions to one of
+    `stone` / `silver` / `wheat` / `cornucopia` (or `null`).
   - `city` is never valid for a counter.
   - The physical position currently mapped to duty category `taxation` must have no non-null
     Tithe counter.
+  - `cornucopia` is a Taxation Step-II wildcard source: it unlocks chosen resource gains from
+    `stone` / `silver` / `wheat` and is not itself a gained resource.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); mode tithe`

@@ -1252,7 +1252,9 @@ def _taxation_bonus_resource_types(
         if strength is not DutyStrength.MAJORITY:
             continue
         resource = config.tithe_counters.resource_for_board_index(duty_position)
-        if resource is not None:
+        if resource == "cornucopia":
+            unlocked_resources.update(_TAXATION_RESOURCE_TYPES)
+        elif resource in _TAXATION_RESOURCE_TYPES:
             unlocked_resources.add(resource)
     return tuple(resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources)
 

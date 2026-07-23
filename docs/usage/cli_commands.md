@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This guide explains the first four CLI commands in `pilgrim-optimizer` and what they currently prove in the Ruleset A mancala sandbox.
+This guide explains the core CLI commands in `pilgrim-optimizer` and what they currently prove in the Ruleset A mancala sandbox.
 
 The goal is to make the early loop explicit:
 
@@ -389,6 +389,30 @@ Position mapping used by the current sandbox:
 - At duty value 2, Step II can choose repeated/mixed resources (for example `stone, stone` or `stone, silver`).
 - Verbose apply emits `TAXATION` events for step 1 and step 2 plus a single combined `RESOURCE_DELTA`.
 - Merchant at Taxation still shows `Resource: none`.
+
+## Seeded Setup Generation (v1.9)
+
+Generate deterministic setup scenarios from `(players, seed)`:
+
+```bash
+python3 -m pilgrim.cli generate-setup --players 2 --seed 123 --output scenarios/generated/setup_2p_seed_123.json
+```
+
+Current behavior:
+
+- setup randomness is used only at generation time (local seeded RNG)
+- generated scenario files are plain JSON and can be committed/validated
+- same seed + same player count produces identical output
+- generated file includes:
+  - randomized duty layout
+  - randomized Tithe counters (Taxation tile excluded)
+  - randomized 12-building market (4 per level)
+  - explicit dummy acolyte setup for `player_count`
+  - setup metadata marking setup sow as required but not implemented
+
+Determinism boundary remains unchanged:
+
+- no randomization occurs inside `validate`, `legal-actions`, `apply`, or `solve`
 
 ## Typical development workflow
 

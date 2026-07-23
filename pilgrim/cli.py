@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from pilgrim.evaluation import (
     EvaluationBreakdown,
@@ -30,6 +33,7 @@ from pilgrim.rules.special_activities import format_special_activities
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
 from pilgrim.search.exact import solve_exact
+from pilgrim.setup.generator import generate_setup_scenario
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -64,12 +68,47 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print first-action events and resulting state summary.",
     )
+
+    generate_parser = subparsers.add_parser(
+        "generate-setup",
+        help="Generate deterministic seeded setup scenario JSON.",
+    )
+    generate_parser.add_argument(
+        "--players",
+        type=int,
+        required=True,
+        help="Table player count (2, 3, or 4).",
+    )
+    generate_parser.add_argument(
+        "--seed",
+        type=int,
+        required=True,
+        help="Seed value for deterministic setup generation.",
+    )
+    generate_parser.add_argument(
+        "--output",
+        required=True,
+        help="Path to write generated scenario JSON.",
+    )
+    generate_parser.add_argument(
+        "--name",
+        default=None,
+        help="Optional scenario_id override.",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "generate-setup":
+        return _generate_setup_command(
+            players=args.players,
+            seed=args.seed,
+            output=args.output,
+            scenario_name=args.name,
+        )
 
     scenario = load_scenario(args.scenario)
     if args.command == "validate":
@@ -761,6 +800,128 @@ def _format_duty_tiles_layout(config: GameConfig) -> tuple[str, ...]:
     return tuple(
         f"  {position_name}: {duty_tiles[position_name]}"
         for position_name in DUTY_POSITIONS
+    )
+
+
+def _generate_setup_command(
+    *,
+    players: int,
+    seed: int,
+    output: str,
+    scenario_name: str | None,
+) -> int:
+    output_path = Path(output).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        generated = generate_setup_scenario(
+            player_count=players,
+            seed=seed,
+            scenario_name=scenario_name,
+        )
+        _rewrite_generated_config_paths_for_output(generated, output_path=output_path)
+        _validate_generated_scenario_payload(generated, output_path=output_path)
+    except Exception as exc:
+        print(f"Generated scenario failed validation: {exc}", file=sys.stderr)
+        return 2
+
+    output_path.write_text(
+        json.dumps(generated, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    for line in _format_generated_setup_summary(
+        generated,
+        output_path=output_path,
+    ):
+        print(line)
+    return 0
+
+
+def _rewrite_generated_config_paths_for_output(
+    generated: dict[str, object],
+    *,
+    output_path: Path,
+) -> None:
+    output_dir = output_path.parent
+    repo_root = Path(__file__).resolve().parents[1]
+    path_fields = (
+        "board_file",
+        "duties_file",
+        "piety_file",
+        "alms_file",
+        "timing_file",
+        "merchant_file",
+        "ship_file",
+        "buildings_file",
+    )
+    for field_name in path_fields:
+        raw_path = generated.get(field_name)
+        if not isinstance(raw_path, str):
+            raise ValueError(f"Generated scenario field '{field_name}' must be a string path.")
+        absolute_path = (
+            Path(raw_path).resolve()
+            if Path(raw_path).is_absolute()
+            else (repo_root / raw_path).resolve()
+        )
+        generated[field_name] = Path(
+            os.path.relpath(absolute_path, output_dir)
+        ).as_posix()
+
+
+def _validate_generated_scenario_payload(
+    generated: dict[str, object],
+    *,
+    output_path: Path,
+) -> None:
+    temp_path = output_path.parent / f".{output_path.stem}.validate.tmp.json"
+    temp_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
+    try:
+        loaded = load_scenario(temp_path)
+        validate_state_invariants(loaded.state)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _format_generated_setup_summary(
+    generated: dict[str, object],
+    *,
+    output_path: Path,
+) -> tuple[str, ...]:
+    player_count = int(generated.get("player_count", 0))
+    metadata = generated.get("setup_metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("Generated scenario missing setup_metadata object.")
+    seed = metadata.get("seed")
+    setup_sow_required = str(bool(metadata.get("setup_sow_required", False))).lower()
+    duty_tiles = generated.get("duty_tiles")
+    if not isinstance(duty_tiles, dict):
+        raise ValueError("Generated scenario missing duty_tiles object.")
+    taxation_tile = next(
+        position
+        for position, category in duty_tiles.items()
+        if category == "taxation"
+    )
+    duty_layout = ", ".join(f"{position}={category}" for position, category in duty_tiles.items())
+    tithe_counters = generated.get("tithe_counters")
+    if not isinstance(tithe_counters, dict):
+        raise ValueError("Generated scenario missing tithe_counters object.")
+    initial_state = generated.get("initial_state")
+    if not isinstance(initial_state, dict):
+        raise ValueError("Generated scenario missing initial_state object.")
+    building_market = initial_state.get("building_market")
+    if not isinstance(building_market, list):
+        raise ValueError("Generated scenario missing initial_state.building_market list.")
+    return (
+        f"Generated setup scenario: {output_path.as_posix()}",
+        f"Players: {player_count}",
+        f"Seed: {seed}",
+        f"Duty tiles: {duty_layout}",
+        f"Taxation tile: {taxation_tile}",
+        f"Tithe counters: {len(tithe_counters)} counters; taxation has none",
+        f"Building market: {len(building_market)} buildings",
+        f"Dummy acolytes: {player_count}-player setup",
+        f"Setup sow required: {setup_sow_required}",
     )
 
 

@@ -1,4 +1,4 @@
-# Buildings (v1.6 Sandbox Scope)
+# Buildings (v1.9 Sandbox Scope)
 
 ## Implemented now
 
@@ -53,6 +53,10 @@ If `building_market` is omitted, loader applies a deterministic fallback:
 
 This keeps scenario loading and search deterministic; no random market draw happens inside
 the rules engine.
+
+Seeded setup generation can now produce randomized-but-deterministic market draws at file
+generation time (`generate-setup`), still preserving deterministic runtime behavior once the
+scenario is written.
 
 ## Player-board slots
 

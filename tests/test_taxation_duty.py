@@ -234,7 +234,7 @@ def test_fallback_tithe_counters_never_assign_counter_to_taxation_tile() -> None
 def test_tithe_counters_reject_non_null_counter_on_taxation_tile(tmp_path: Path) -> None:
     scenario_raw = _absolute_base_scenario()
     scenario_raw["scenario_id"] = "tmp_invalid_taxation_counter"
-    scenario_raw["tithe_counters"] = {"north_west": "stone"}
+    scenario_raw["tithe_counters"] = {"north_west": "cornucopia"}
     scenario_path = tmp_path / "tmp_invalid_taxation_counter.json"
     scenario_path.write_text(json.dumps(scenario_raw), encoding="utf-8")
 
