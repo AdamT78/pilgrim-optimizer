@@ -1,4 +1,4 @@
-# Player Board (v1.6 Sandbox Scope)
+# Player Board (v1.7 Sandbox Scope)
 
 ## Implemented now
 
@@ -40,6 +40,17 @@ In `configs/setups/basic_mancala_sandbox.json`, default real-table setup now inc
 - Abbey Acolytes: 3
 
 Small sandbox scenarios may still override these counts explicitly (for focused tests).
+
+## Ordination duty workforce flow
+
+Ordination now uses the existing player-board workforce pools directly:
+
+- `ordain`: pay 1 wheat, move 1 worker `village -> abbey`
+- `mission`: pay 1 wheat, move 1 acolyte `abbey -> city` (mancala position `city`)
+
+One Ordination action can include multiple ordered steps up to duty value. Steps are validated
+and applied sequentially, so a newly ordained acolyte can be missioned in the same action
+(`ordain; mission`).
 
 ## Player-board slots and Give Alms donation
 

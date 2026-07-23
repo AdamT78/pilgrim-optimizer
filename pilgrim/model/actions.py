@@ -30,6 +30,7 @@ class FullTurnAction:
     alms_house_extra_silver: int = 0
     alms_house_extra_wheat: int = 0
     donate_building_id: str | None = None
+    ordination_steps: tuple[str, ...] = ()
     allocation_moves: tuple[AllocationMove, ...] = ()
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
@@ -74,6 +75,11 @@ def action_id(action: GameAction) -> str:
     donation_suffix = ""
     if action.resolution is TurnResolutionType.DONATE_BUILDING:
         donation_suffix = f":building:{action.donate_building_id or 'none'}"
+    ordination_suffix = ""
+    if action.resolution is TurnResolutionType.ORDINATION:
+        ordination_suffix = ":steps:" + (
+            ",".join(action.ordination_steps) if action.ordination_steps else "none"
+        )
     allocation_suffix = ""
     if action.resolution is TurnResolutionType.ALLOCATION:
         if action.allocation_moves:
@@ -85,7 +91,7 @@ def action_id(action: GameAction) -> str:
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
-        f"{payment_suffix}{donation_suffix}{allocation_suffix}"
+        f"{payment_suffix}{donation_suffix}{ordination_suffix}{allocation_suffix}"
     )
 
 
@@ -122,6 +128,10 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             )
     if action.resolution is TurnResolutionType.DONATE_BUILDING:
         summary += f" | building: {action.donate_building_id or 'unknown'}"
+    if action.resolution is TurnResolutionType.ORDINATION:
+        summary += " | steps: " + (
+            "; ".join(action.ordination_steps) if action.ordination_steps else "none"
+        )
     if action.resolution is TurnResolutionType.ALLOCATION:
         if action.allocation_moves:
             summary += " | moves: " + "; ".join(

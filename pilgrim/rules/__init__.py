@@ -42,6 +42,14 @@ from pilgrim.rules.merchant import (
     merchant_position_name,
     trade_route_income_resource,
 )
+from pilgrim.rules.ordination import (
+    ORDINATION_MISSION,
+    ORDINATION_ORDAIN,
+    ORDINATION_STEP_TYPES,
+    apply_ordination_step,
+    legal_ordination_step_sequences,
+    legal_ordination_steps,
+)
 from pilgrim.rules.piety import clamp_piety, move_piety, score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
@@ -93,6 +101,12 @@ __all__ = [
     "load_building_config",
     "building_by_id",
     "buildings_by_level",
+    "ORDINATION_ORDAIN",
+    "ORDINATION_MISSION",
+    "ORDINATION_STEP_TYPES",
+    "legal_ordination_steps",
+    "apply_ordination_step",
+    "legal_ordination_step_sequences",
     "validate_building_catalogue",
     "validate_building_market",
     "default_building_market",

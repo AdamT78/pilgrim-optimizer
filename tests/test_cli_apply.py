@@ -382,3 +382,24 @@ def test_cli_apply_majority_donate_building_forfeits_second_give_alms(capsys) ->
     assert "BUILDING_DONATION: player_one donated Bank; donation_vp=6" in output
     assert "ALMS_PROGRESS: player_one row 0 -> 1" in output
     assert "ALMS_PAYMENT:" not in output
+
+
+def test_cli_apply_ordination_multi_step_reports_steps_and_events(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/ordination_ordain_then_mission_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "action: ordination | steps: ordain; mission" in output
+    assert (
+        "DUTY_RESOLUTION: selected south_west (ordination); relation majority; duty value 2"
+    ) in output
+    assert "ORDINATION: player_one ordained 1 serf village -> abbey; paid wheat=1" in output
+    assert "ORDINATION: player_one sent 1 acolyte abbey -> city; paid wheat=1" in output

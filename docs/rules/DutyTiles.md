@@ -1,4 +1,4 @@
-# Duty Tiles (v1.6 Sandbox Scope)
+# Duty Tiles (v1.7 Sandbox Scope)
 
 ## Core model
 
@@ -70,13 +70,14 @@ Implemented action systems:
 - `give_alms`:
   - `give_alms` (pay silver/wheat)
   - `donate_building` (donate one active building)
+- `ordination`:
+  - `ordination` (ordered `ordain`/`mission` steps)
 - `allocation`
 
 Deferred category systems (valid in layout, no non-tithe action yet):
 
 - `build_roads`
 - `construct`
-- `ordination`
 - `taxation`
 
 ## Runtime implications
@@ -95,6 +96,12 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - On majority `give_alms`, `donate_building` still resolves as one deterministic action; it does
   not chain into a second paid Give Alms step.
 - Alms House currently enhances only paid `give_alms`, not `donate_building`.
+- For `ordination`, each action contains `1..duty_value` ordered steps chosen from:
+  - `ordain`: pay 1 wheat, move 1 worker village -> abbey
+  - `mission`: pay 1 wheat, move 1 acolyte abbey -> city
+- Ordination steps are validated sequentially, so `ordain; mission` is legal at duty value 2 even
+  when Abbey starts empty.
+- Each ordination step must be legal when reached and costs 1 wheat.
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
 - Verbose CLI now prints duty layout and shows category in action/event text:

@@ -129,13 +129,14 @@ def test_default_layout_still_offers_implemented_categories() -> None:
     assert TurnResolutionType.CLERICAL_DEVOTION in resolutions
     assert TurnResolutionType.CLERICAL_SILVERSMITH in resolutions
     assert TurnResolutionType.GIVE_ALMS in resolutions
+    assert TurnResolutionType.ORDINATION in resolutions
     assert TurnResolutionType.ALLOCATION in resolutions
 
 
 def test_deferred_categories_validate_and_do_not_emit_non_tithe_actions() -> None:
     scenario = load_scenario("scenarios/duty_tiles_deferred_categories_001.json")
     actions = legal_actions(scenario.state, scenario.config)
-    deferred_categories = {"build_roads", "construct", "ordination", "taxation"}
+    deferred_categories = {"build_roads", "construct", "taxation"}
     for action in actions:
         category = scenario.config.duty_category_for_position(action.selected_duty)
         if category in deferred_categories:

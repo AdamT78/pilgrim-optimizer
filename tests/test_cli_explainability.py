@@ -33,6 +33,22 @@ def test_readable_action_summary() -> None:
     )
 
 
+def test_readable_action_summary_includes_ordination_steps() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    summary = action_summary(
+        FullTurnAction(
+            origin=5,
+            route=(6,),
+            selected_duty=6,
+            resolution=TurnResolutionType.ORDINATION,
+            ordination_steps=("ordain", "mission"),
+        ),
+        scenario.config,
+    )
+    assert "action: ordination" in summary
+    assert "steps: ordain; mission" in summary
+
+
 def test_cli_legal_actions_returns_readable_output(capsys) -> None:
     exit_code = main(["legal-actions", "scenarios/mancala_sandbox_001.json"])
     output = capsys.readouterr().out
