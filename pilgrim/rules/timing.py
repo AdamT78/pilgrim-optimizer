@@ -36,7 +36,7 @@ def is_round_end(timing: TimingState, config: TimingConfig) -> bool:
 
 
 def is_season_end(timing: TimingState, config: TimingConfig) -> bool:
-    """Return true when the current turn will complete the season."""
+    """Legacy round-cadence season check (ship-triggered seasons are authoritative)."""
     if not is_round_end(timing, config):
         return False
     return timing.round_number % config.rounds_per_season == 0
@@ -45,11 +45,14 @@ def is_season_end(timing: TimingState, config: TimingConfig) -> bool:
 def resolve_round_end(state: GameState, config: TimingConfig) -> GameState:
     """Advance to the next round and reset turn index within round."""
     _ensure_timing_config_compatible(state, config)
+    next_round = state.timing.round_number + 1
+    if next_round > config.max_rounds:
+        raise ValueError(f"Round exceeds max_rounds={config.max_rounds}.")
     return replace(
         state,
         timing=replace(
             state.timing,
-            round_number=state.timing.round_number + 1,
+            round_number=next_round,
             turn_in_round=0,
         ),
     )
@@ -75,14 +78,13 @@ def advance_timing(
 
     Event order emitted here:
     - TURN_ADVANCE (always)
-    - ROUND_END / ROUND_ADVANCE (when round closes)
-    - SEASON_END (when season boundary reached)
+    - ROUND_END (when round closes)
     """
     _ensure_timing_config_compatible(state, config)
     actor = state.active_player
     next_player = advance_active_player(state, config)
     round_ended = is_round_end(state.timing, config)
-    season_ended = is_season_end(state.timing, config)
+    season_ended = False
     completed_round_number: int | None = None
     completed_season_number: int | None = None
 
@@ -103,7 +105,13 @@ def advance_timing(
     )
     if round_ended:
         completed_round_number = state.timing.round_number
-        updated_state = resolve_round_end(updated_state, config)
+        updated_state = replace(
+            updated_state,
+            timing=replace(
+                updated_state.timing,
+                turn_in_round=0,
+            ),
+        )
     else:
         updated_state = replace(
             updated_state,
@@ -131,27 +139,6 @@ def advance_timing(
                 actor=actor,
                 action_id=action_id,
                 details=make_event_details(round=completed_round_number),
-            )
-        )
-        events.append(
-            GameEvent(
-                event_type=EventType.ROUND_ADVANCE,
-                actor=actor,
-                action_id=action_id,
-                details=make_event_details(
-                    from_round=completed_round_number,
-                    to_round=updated_state.timing.round_number,
-                ),
-            )
-        )
-    if season_ended:
-        completed_season_number = state.timing.season_number
-        events.append(
-            GameEvent(
-                event_type=EventType.SEASON_END,
-                actor=actor,
-                action_id=action_id,
-                details=make_event_details(season=completed_season_number),
             )
         )
 

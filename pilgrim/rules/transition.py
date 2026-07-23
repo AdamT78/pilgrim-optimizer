@@ -24,7 +24,13 @@ from pilgrim.rules.merchant import (
     current_merchant_resource,
 )
 from pilgrim.rules.piety import score_piety
-from pilgrim.rules.timing import advance_timing, resolve_season_end
+from pilgrim.rules.round_end import (
+    apply_excess_resource_caps,
+    resolve_trade_route_income,
+    select_next_start_player,
+)
+from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
+from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -49,6 +55,8 @@ class TransitionResult:
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     """Generate deterministic full-turn actions for current phase."""
+    if state.game_over:
+        return ()
     if state.phase is not TurnPhase.SOW:
         return ()
     return _legal_full_turn_actions(state, config)
@@ -126,6 +134,8 @@ def _apply_full_turn_action(
     action: FullTurnAction,
     config: GameConfig,
 ) -> TransitionResult:
+    if state.game_over:
+        raise TransitionValidationError("Cannot apply action: game is already over.")
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
 
     player = state.active_player
@@ -363,61 +373,19 @@ def _apply_full_turn_action(
         raise TransitionValidationError(str(exc)) from exc
 
     next_state = timing_result.state
-    timing_events = list(timing_result.events)
-    boundary_events = timing_events
-    if timing_events and timing_events[0].event_type is EventType.TURN_ADVANCE:
-        events.append(timing_events[0])
-        boundary_events = timing_events[1:]
-
-    if config.merchant.advance_after_full_turn:
-        from_duty = current_merchant_duty(next_state, config.merchant)
-        next_merchant_position = advance_merchant_position(
-            next_state.merchant_position,
-            config.merchant,
-        )
-        next_state = next_state.with_merchant_position(next_merchant_position)
-        to_duty = current_merchant_duty(next_state, config.merchant)
-        current_resource = current_merchant_resource(next_state, config.merchant)
-        events.append(
-            GameEvent(
-                event_type=EventType.MERCHANT_ADVANCE,
-                actor=player,
-                action_id=transition_action_id,
-                details=make_event_details(
-                    from_duty=from_duty,
-                    to_duty=to_duty,
-                    current_resource=current_resource if current_resource is not None else "none",
-                ),
-            )
-        )
-
-    events.extend(boundary_events)
-
-    if timing_result.season_ended:
-        completed_season_number = timing_result.completed_season_number
-        if completed_season_number is None:
-            completed_season_number = next_state.timing.season_number
-        alms_result = resolve_alms_season_end(next_state, config.alms)
-        next_state = alms_result.state
-        events.extend(alms_result.events)
-        next_state, dummy_move_events = move_dummy_acolytes_end_of_season(
+    events.extend(timing_result.events)
+    if timing_result.round_ended:
+        completed_round_number = timing_result.completed_round_number
+        if completed_round_number is None:
+            completed_round_number = next_state.timing.round_number
+        next_state, round_end_events = _resolve_round_end_phases(
             next_state,
+            config,
             actor=player,
             action_id=transition_action_id,
+            completed_round_number=completed_round_number,
         )
-        events.extend(dummy_move_events)
-        next_state = resolve_season_end(next_state, config.timing)
-        events.append(
-            GameEvent(
-                event_type=EventType.SEASON_ADVANCE,
-                actor=player,
-                action_id=transition_action_id,
-                details=make_event_details(
-                    from_season=completed_season_number,
-                    to_season=next_state.timing.season_number,
-                ),
-            )
-        )
+        events.extend(round_end_events)
 
     ensure_non_negative_resources(next_state)
     ensure_valid_timing(next_state)
@@ -446,6 +414,163 @@ def _apply_full_turn_action(
         )
     )
     return TransitionResult(state=next_state, events=tuple(events))
+
+
+def _resolve_round_end_phases(
+    state: GameState,
+    config: GameConfig,
+    *,
+    actor: PlayerId,
+    action_id: str,
+    completed_round_number: int,
+) -> tuple[GameState, tuple[GameEvent, ...]]:
+    events: list[GameEvent] = []
+    next_state = state
+
+    # 1) Excess cap
+    next_state, excess_events = apply_excess_resource_caps(
+        next_state,
+        actor=actor,
+        action_id=action_id,
+    )
+    events.extend(excess_events)
+
+    # 2) Ship advance
+    from_ship = next_state.ship_position
+    to_ship = advance_ship_position(from_ship, config.ship)
+    next_state = next_state.with_ship_position(to_ship)
+    next_state = next_state.with_completed_rounds(next_state.completed_rounds + 1)
+    ship_at_pilgrimage = is_pilgrimage_site(to_ship, config.ship)
+    ship_at_nw = is_nw_pilgrimage_site(to_ship, config.ship)
+    events.append(
+        GameEvent(
+            event_type=EventType.SHIP_ADVANCE,
+            actor=actor,
+            action_id=action_id,
+            details=make_event_details(
+                from_position=from_ship,
+                to_position=to_ship,
+                at_pilgrimage_site=ship_at_pilgrimage,
+                at_nw_pilgrimage_site=ship_at_nw,
+                completed_rounds=next_state.completed_rounds,
+            ),
+        )
+    )
+
+    # 3) Season end from ship marker
+    season_ended = ship_at_pilgrimage
+    if season_ended:
+        completed_season_number = next_state.timing.season_number
+        events.append(
+            GameEvent(
+                event_type=EventType.SEASON_END,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(season=completed_season_number),
+            )
+        )
+        alms_result = resolve_alms_season_end(next_state, config.alms)
+        next_state = alms_result.state
+        events.extend(alms_result.events)
+
+    # Final NW pilgrimage-site return after full 26-round loop ends the game.
+    game_over = (
+        season_ended
+        and ship_at_nw
+        and next_state.completed_rounds >= config.ship.path_length
+    )
+    if game_over:
+        next_state = next_state.with_game_over(True)
+        events.append(
+            GameEvent(
+                event_type=EventType.GAME_END,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    reason=(
+                        "ship returned to NW Pilgrimage Site after final Alms Table assessment"
+                    )
+                ),
+            )
+        )
+        return next_state, tuple(events)
+
+    # Dummy acolytes move on normal season ends only, not on final game-ending NW return.
+    if season_ended:
+        next_state, dummy_move_events = move_dummy_acolytes_end_of_season(
+            next_state,
+            actor=actor,
+            action_id=action_id,
+        )
+        events.extend(dummy_move_events)
+
+    # 4) Merchant advances once at round end.
+    if config.merchant.advance_at_round_end:
+        from_duty = current_merchant_duty(next_state, config.merchant)
+        next_merchant_position = advance_merchant_position(
+            next_state.merchant_position,
+            config.merchant,
+        )
+        next_state = next_state.with_merchant_position(next_merchant_position)
+        to_duty = current_merchant_duty(next_state, config.merchant)
+        current_resource = current_merchant_resource(next_state, config.merchant)
+        events.append(
+            GameEvent(
+                event_type=EventType.MERCHANT_ADVANCE,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    from_duty=from_duty,
+                    to_duty=to_duty,
+                    current_resource=current_resource if current_resource is not None else "none",
+                ),
+            )
+        )
+
+    # 5) Trade-route placeholder hook.
+    next_state, trade_route_events = resolve_trade_route_income(
+        next_state,
+        actor=actor,
+        action_id=action_id,
+    )
+    events.extend(trade_route_events)
+
+    # 6) Start-player placeholder policy.
+    next_state, start_player_events, _ = select_next_start_player(
+        next_state,
+        actor=actor,
+        action_id=action_id,
+    )
+    events.extend(start_player_events)
+
+    # 7) Round advance and potential season advance.
+    next_state = resolve_round_end(next_state, config.timing)
+    events.append(
+        GameEvent(
+            event_type=EventType.ROUND_ADVANCE,
+            actor=actor,
+            action_id=action_id,
+            details=make_event_details(
+                from_round=completed_round_number,
+                to_round=next_state.timing.round_number,
+            ),
+        )
+    )
+    if season_ended:
+        completed_season_number = next_state.timing.season_number
+        next_state = resolve_season_end(next_state, config.timing)
+        events.append(
+            GameEvent(
+                event_type=EventType.SEASON_ADVANCE,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    from_season=completed_season_number,
+                    to_season=next_state.timing.season_number,
+                ),
+            )
+        )
+    return next_state, tuple(events)
 
 
 def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:

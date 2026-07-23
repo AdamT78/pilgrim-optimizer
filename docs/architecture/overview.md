@@ -68,16 +68,14 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Post-turn timing advancement is centralized in `pilgrim.rules.timing`.
 - After each full turn the transition pipeline now:
   - advances active player and absolute timing
-  - emits turn/round/season timing events when boundaries are crossed
-  - resolves season-end Alms effects automatically when season boundaries are reached
-- Deferred timing item:
-  - piety-based start-player selection for new seasons (not implemented yet)
+  - detects whether the turn closed the round
+  - runs extra round-end phases only when needed
 
 ## Merchant Context (v0.8)
 
 - `GameState` now includes `merchant_position` as deterministic turn-to-turn context.
 - Merchant path and duty-to-resource lookup are loaded from `configs/merchant.json`.
-- Post-turn transition flow advances Merchant position as part of timing progression.
+- Round-end transition flow advances Merchant position once per completed round.
 - Merchant context is reusable infrastructure for future systems:
   - building-hire payment resource
   - trade-route income resource
@@ -95,6 +93,20 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Dummy totals are included in Duty strength comparison as neutral competition.
 - Season-end flow now includes deterministic dummy leap-frog movement before `SEASON_ADVANCE`.
 - Search remains rules-agnostic: dummy behavior is encapsulated in rules/state transition code.
+
+## Round-End Phase Pipeline (v1.0)
+
+- Round-end orchestration is now explicit in `pilgrim.rules.transition` and helper modules:
+  - `pilgrim.rules.round_end` for excess caps, start-player policy, trade-route placeholder
+  - `pilgrim.rules.ship` for abstract Ship marker movement and site checks
+- `GameState` now tracks:
+  - `start_player`
+  - `ship_position`
+  - `completed_rounds`
+  - `game_over`
+- Season-end trigger now comes from Ship pilgrimage-site positions, not only round cadence.
+- Game end occurs when Ship returns to NW pilgrimage site after 26 completed rounds, after final season-end Alms resolution.
+- When `game_over` becomes true, `legal_actions()` returns no actions, keeping search/CLI behavior deterministic.
 
 ## Intentionally Deferred
 

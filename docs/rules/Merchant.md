@@ -1,4 +1,4 @@
-# Merchant (v0.8 Sandbox Scope)
+# Merchant (v0.8 + v1.0 Timing Update)
 
 ## Implemented scope
 
@@ -9,7 +9,7 @@ Implemented items:
 - Merchant path config loaded from `configs/merchant.json`
 - Merchant duty lookup from current position
 - Merchant resource lookup from current duty
-- Merchant advancement after each full turn (configurable)
+- Merchant advancement once per round during round-end processing
 - `MERCHANT_ADVANCE` transition event
 
 Not implemented in this milestone:
@@ -47,16 +47,16 @@ At `taxation`, Merchant resource is intentionally `None` (shown as `none` in CLI
 
 ## Advancement timing
 
-Merchant advancement is integrated into full-turn transition flow:
+Merchant advancement is integrated into **round-end** transition flow:
 
-1. Apply full-turn action
-2. Recall acolytes when applicable
-3. Advance active player/timing (`TURN_ADVANCE`)
-4. Advance Merchant (`MERCHANT_ADVANCE`)
-5. Resolve round/season boundary events
-6. Validate invariants
+1. Resolve the current full turn and emit `TURN_ADVANCE`
+2. If round does not end: no Merchant movement
+3. If round ends: run Excess/Ship/season-end steps
+4. Advance Merchant once (`MERCHANT_ADVANCE`) if game has not ended
+5. Run trade-route placeholder and start-player selection
+6. Finish round/season advancement and invariants
 
-This ordering is designed for readable debug traces and deterministic replay.
+Merchant starts at `taxation` (`merchant_position = 0`) in default setups/scenarios.
 
 ## Future hooks
 

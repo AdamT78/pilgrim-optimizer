@@ -62,6 +62,7 @@ What it does right now:
 - Prints a numbered list of readable full-turn summaries.
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
+- If `game_over` is true, legal action list is empty by design.
 
 Why this matters:
 
@@ -95,7 +96,7 @@ What it does right now:
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
-- Verbose apply may also include automatic timing/season events (`TURN_ADVANCE`, `ROUND_END`, `SEASON_END`, `ALMS_RESET`, etc.) when boundaries are crossed.
+- Verbose apply may also include round-end pipeline events (`EXCESS_*`, `SHIP_ADVANCE`, `SEASON_END`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
 
 Why this matters:
 
@@ -163,7 +164,8 @@ Using `--verbose` with `solve` prints:
 
 - all transition events for the recommended first full turn (sowing + duty/tithe + invariants)
 - a compact state summary after applying that first full turn
-- timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`)
+- timing state (`Absolute turn`, `Round`, `Season`, `Turn in round`, `Start player`, `Game over`)
+- Ship state (`Position`, `At pilgrimage site`, `At NW pilgrimage site`)
 - Merchant state (`Position`, `Resource`)
 - dummy acolyte state (`north_group`, `south_group`, `total`)
 - `Acted player` (the player who executed that recommended turn)
@@ -235,17 +237,23 @@ Position mapping used by the current sandbox:
   - `Round`
   - `Season`
   - `Turn in round`
+  - `Start player`
+  - `Game over`
+  - `Ship` status
 - `apply --verbose` is especially useful for inspecting automatic boundary events:
   - `TURN_ADVANCE`
-  - `MERCHANT_ADVANCE`
   - `ROUND_END` / `ROUND_ADVANCE`
+  - `EXCESS_CHECK` / `EXCESS_DISCARD`
+  - `SHIP_ADVANCE`
   - `SEASON_END` / `SEASON_ADVANCE`
   - `DUMMY_ACOLYTE_MOVE` (on season boundaries)
+  - `MERCHANT_ADVANCE` (round end only)
+  - `START_PLAYER_SELECTION` (and tie-break event when relevant)
   - season-end Alms events when a season closes
 
 ## Merchant Context (v0.8)
 
-- Merchant position is now part of scenario state and advances after full turns.
+- Merchant position is now part of scenario state and advances at round end.
 - Verbose `solve` and `apply` state summaries now include:
   - `Merchant`
   - `Position`
@@ -262,6 +270,17 @@ Position mapping used by the current sandbox:
   - `south_group`
   - `total`
 - On season-end turns, verbose event output includes `DUMMY_ACOLYTE_MOVE`.
+
+## Round-End Phase Structure (v1.0)
+
+- Merchant no longer advances after every turn; it advances once per round end.
+- Round-end verbose traces now include:
+  - `EXCESS_CHECK` / `EXCESS_DISCARD`
+  - `SHIP_ADVANCE`
+  - `TRADE_ROUTE_INCOME_SKIPPED` (placeholder)
+  - `START_PLAYER_SELECTION` (and optional tie-break event)
+  - `GAME_END` when Ship returns to NW after the full 26-round loop
+- `game_over: true` is shown in verbose state summaries, and legal-action generation returns no actions.
 
 ## Typical development workflow
 

@@ -75,7 +75,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Legal actions for scenario '{scenario.scenario_id}':")
         print()
         if not actions:
-            print("No legal actions available.")
+            if scenario.state.game_over:
+                print("No legal actions available (game over).")
+            else:
+                print("No legal actions available.")
         for index, action in enumerate(actions, start=1):
             print(f"{index}. {action_summary(action, scenario.config)}")
         print()
@@ -118,7 +121,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             print("State updated successfully.")
-            print(f"Next active player: {transition_result.state.active_player.name.lower()}")
+            if transition_result.state.game_over:
+                print("Next active player: none (game over)")
+            else:
+                print(f"Next active player: {transition_result.state.active_player.name.lower()}")
+            print(f"Game over: {str(transition_result.state.game_over).lower()}")
         return 0
 
     if args.command == "solve":
@@ -308,6 +315,33 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.ALMS_RESET:
         return f"{event_name}: all players reset to row 0"
 
+    if event.event_type is EventType.EXCESS_CHECK:
+        if details.get("no_excess") is True:
+            return f"{event_name}: no excess resources"
+        return f"{event_name}: {details}"
+
+    if event.event_type is EventType.EXCESS_DISCARD:
+        player = str(details.get("player", "unknown"))
+        resource = str(details.get("resource", "unknown"))
+        before = int(details.get("before", 0))
+        after = int(details.get("after", 0))
+        returned = int(details.get("returned", max(before - after, 0)))
+        return (
+            f"{event_name}: {player} {resource} {before} -> {after}; "
+            f"returned {returned} to supply"
+        )
+
+    if event.event_type is EventType.SHIP_ADVANCE:
+        from_position = int(details.get("from_position", -1))
+        to_position = int(details.get("to_position", -1))
+        pilgrimage = bool(details.get("at_pilgrimage_site", False))
+        nw_site = bool(details.get("at_nw_pilgrimage_site", False))
+        return (
+            f"{event_name}: {from_position} -> {to_position}; "
+            f"pilgrimage_site={str(pilgrimage).lower()}; "
+            f"nw_site={str(nw_site).lower()}"
+        )
+
     if event.event_type is EventType.DUMMY_ACOLYTE_MOVE:
         group = str(details.get("group", "unknown"))
         from_position = int(details.get("from_position", -1))
@@ -332,6 +366,33 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"{event_name}: {from_duty} -> {to_duty}; "
             f"current resource={current_resource}"
         )
+
+    if event.event_type is EventType.TRADE_ROUTE_INCOME_SKIPPED:
+        return f"{event_name}: trade routes not implemented"
+
+    if event.event_type is EventType.START_PLAYER_TIE_BREAK:
+        tied_players = str(details.get("tied_players", ""))
+        current_start = str(details.get("current_start_player", "unknown"))
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        tied_labels = ", ".join(tied_players.split(",")) if tied_players else "none"
+        return (
+            f"{event_name}: tied players [{tied_labels}]; "
+            f"current start player {current_start}; deciding player {deciding_player}"
+        )
+
+    if event.event_type is EventType.START_PLAYER_SELECTION:
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        selected_player = str(details.get("selected_start_player", "unknown"))
+        return (
+            f"{event_name}: {deciding_player} selected {selected_player} "
+            f"as next start player"
+        )
+
+    if event.event_type is EventType.GAME_END:
+        reason = str(details.get("reason", "")).strip()
+        if reason:
+            return f"{event_name}: {reason}"
+        return f"{event_name}: game over"
 
     if event.event_type is EventType.TURN_ADVANCE:
         from_player = str(details.get("from_player", "unknown"))
@@ -404,7 +465,23 @@ def _format_state_summary(
 ) -> tuple[str, ...]:
     next_active_player = state.active_player
     acted_name = acted_player.name.lower()
-    next_name = next_active_player.name.lower()
+    next_name = (
+        "none (game over)"
+        if state.game_over
+        else next_active_player.name.lower()
+    )
+    north_group_text = format_dummy_acolytes(
+        state.dummy_acolytes.north_group,
+        positions=config.board.positions,
+    )
+    south_group_text = format_dummy_acolytes(
+        state.dummy_acolytes.south_group,
+        positions=config.board.positions,
+    )
+    total_group_text = format_dummy_acolytes(
+        state.dummy_acolytes.total_vector,
+        positions=config.board.positions,
+    )
 
     lines: list[str] = [
         f"Acted player: {acted_name}",
@@ -414,6 +491,18 @@ def _format_state_summary(
         f"  Round: {state.timing.round_number}",
         f"  Season: {state.timing.season_number}",
         f"  Turn in round: {state.timing.turn_in_round}",
+        f"  Start player: {state.start_player.name.lower()}",
+        f"  Game over: {str(state.game_over).lower()}",
+        "Ship:",
+        f"  Position: {state.ship_position}",
+        (
+            "  At pilgrimage site: "
+            f"{str(config.ship.is_pilgrimage_site(state.ship_position)).lower()}"
+        ),
+        (
+            "  At NW pilgrimage site: "
+            f"{str(config.ship.is_nw_site(state.ship_position)).lower()}"
+        ),
         "Merchant:",
         f"  Position: {current_merchant_duty(state, config.merchant)}",
         (
@@ -421,24 +510,15 @@ def _format_state_summary(
             f"{current_merchant_resource(state, config.merchant) or 'none'}"
         ),
         "Dummy acolytes:",
-        (
-            "  north_group: "
-            f"{format_dummy_acolytes(state.dummy_acolytes.north_group, positions=config.board.positions)}"
-        ),
-        (
-            "  south_group: "
-            f"{format_dummy_acolytes(state.dummy_acolytes.south_group, positions=config.board.positions)}"
-        ),
-        (
-            "  total: "
-            f"{format_dummy_acolytes(state.dummy_acolytes.total_vector, positions=config.board.positions)}"
-        ),
+        f"  north_group: {north_group_text}",
+        f"  south_group: {south_group_text}",
+        f"  total: {total_group_text}",
         "",
         "Acted player state:",
         *_format_player_state(state, acted_player, config),
     ]
 
-    if next_active_player is not acted_player:
+    if not state.game_over and next_active_player is not acted_player:
         lines.extend(
             [
                 "",

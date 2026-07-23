@@ -14,5 +14,5 @@
     "build": "stone",
     "taxation": null
   },
-  "advance_after_full_turn": true
+  "advance_at_round_end": true
 }

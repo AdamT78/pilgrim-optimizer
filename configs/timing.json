@@ -1,6 +1,6 @@
 {
   "players_per_round": 2,
   "rounds_per_season": 3,
-  "max_rounds": 13,
-  "max_absolute_turns": 26
+  "max_rounds": 26,
+  "max_absolute_turns": 52
 }

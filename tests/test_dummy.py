@@ -59,6 +59,7 @@ def test_dummy_defaults_to_empty_for_four_player_count(tmp_path: Path) -> None:
                 "alms_file": str(Path("configs/alms.json").resolve()),
                 "timing_file": str(Path("configs/timing.json").resolve()),
                 "merchant_file": str(Path("configs/merchant.json").resolve()),
+                "ship_file": str(Path("configs/ship.json").resolve()),
                 "player_count": 4,
                 "initial_state": initial_state,
             }
@@ -88,6 +89,7 @@ def test_explicit_dummy_groups_can_be_loaded_from_scenario(tmp_path: Path) -> No
                 "alms_file": str(Path("configs/alms.json").resolve()),
                 "timing_file": str(Path("configs/timing.json").resolve()),
                 "merchant_file": str(Path("configs/merchant.json").resolve()),
+                "ship_file": str(Path("configs/ship.json").resolve()),
                 "player_count": 2,
                 "initial_state": initial_state,
             }

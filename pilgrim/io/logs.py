@@ -28,9 +28,13 @@ def state_to_record(state: GameState) -> dict[str, Any]:
     """Serialize a full state snapshot for replay trails."""
     return {
         "active_player": state.active_player.name.lower(),
+        "start_player_id": state.start_player.name.lower(),
         "phase": state.phase.value,
         "turn": state.turn,
+        "game_over": state.game_over,
         "table_player_count": state.table_player_count,
+        "ship_position": state.ship_position,
+        "completed_rounds": state.completed_rounds,
         "merchant_position": state.merchant_position,
         "dummy_acolytes": {
             "north_group": list(state.dummy_acolytes.north_group),

@@ -95,13 +95,19 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "Events:" in output
     assert "ALMS_PAYMENT:" in output
     assert "ALMS_PROGRESS:" in output
-    assert "MERCHANT_ADVANCE:" in output
+    assert "MERCHANT_ADVANCE:" not in output
+    assert "SHIP_ADVANCE:" not in output
     assert "State after action:" in output
     assert "Timing:" in output
     assert "Absolute turn:" in output
     assert "Round:" in output
     assert "Season:" in output
     assert "Turn in round:" in output
+    assert "Start player:" in output
+    assert "Game over:" in output
+    assert "Ship:" in output
+    assert "At pilgrimage site:" in output
+    assert "At NW pilgrimage site:" in output
     assert "Merchant:" in output
     assert "Dummy acolytes:" in output
     assert "Position:" in output
@@ -134,6 +140,7 @@ def test_cli_apply_season_end_scenario_shows_season_and_alms_events(capsys) -> N
     assert "passed for all players" in output
     assert "player_one=2" in output
     assert "player_two=1" in output
+    assert "Next active player: player_two" in output
     assert "Resource: wheat" in output
 
 
@@ -158,3 +165,47 @@ def test_cli_apply_dummy_season_move_scenario_shows_dummy_events(capsys) -> None
     assert "south_group before [south, south_west, west]" in output
     assert "moved south -> north_west" in output
     assert "after [south_west, west, north_west]" in output
+
+
+def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/game_end_nw_site_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Apply result for scenario 'game_end_nw_site_001'" in output
+    assert "GAME_END:" in output
+    assert "ALMS_SEASON_REWARD:" in output
+    assert "ALMS_RESET:" in output
+    assert "DUMMY_ACOLYTE_MOVE:" not in output
+    assert "MERCHANT_ADVANCE:" not in output
+    assert "State after action:" in output
+    assert "Next active player: none (game over)" in output
+    assert "Game over: true" in output
+
+
+def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/round_end_excess_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "ROUND_END:" in output
+    assert "EXCESS_DISCARD:" in output
+    assert "SHIP_ADVANCE:" in output
+    assert "MERCHANT_ADVANCE:" in output
+    assert "START_PLAYER_SELECTION:" in output

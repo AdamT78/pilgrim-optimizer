@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.config import GameConfig, game_config_from_dict
+from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
@@ -46,12 +46,15 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     timing_path = _resolve_path(timing_file, scenario_path)
     merchant_file = str(merged.get("merchant_file", "configs/merchant.json"))
     merchant_path = _resolve_path(merchant_file, scenario_path)
+    ship_file = str(merged.get("ship_file", "configs/ship.json"))
+    ship_path = _resolve_path(ship_file, scenario_path)
     board_raw = _read_json(board_path)
     duties_raw = _read_json(duties_path)
     piety_raw = _read_json(piety_path)
     alms_raw = _read_json(alms_path)
     timing_raw = _read_json(timing_path)
     merchant_raw = _read_json(merchant_path)
+    ship_raw = _read_json(ship_path)
 
     config = game_config_from_dict(
         board_raw=board_raw,
@@ -60,11 +63,14 @@ def load_scenario(path: str | Path) -> LoadedScenario:
         alms_raw=alms_raw,
         timing_raw=timing_raw,
         merchant_raw=merchant_raw,
+        ship_raw=ship_raw,
     )
     table_player_count = _player_count_from_dict(merged)
     state = _game_state_from_dict(
         merged["initial_state"],
         merchant_path_length=len(config.merchant.path),
+        ship_start_position=config.ship.start_position,
+        ship_path_length=config.ship.path_length,
         table_player_count=table_player_count,
     )
     scenario_id = str(merged.get("scenario_id", merged.get("name", scenario_path.stem)))
@@ -105,6 +111,8 @@ def _game_state_from_dict(
     raw: Mapping[str, Any],
     *,
     merchant_path_length: int,
+    ship_start_position: int,
+    ship_path_length: int,
     table_player_count: int,
 ) -> GameState:
     players_raw = raw["players"]
@@ -119,20 +127,35 @@ def _game_state_from_dict(
     )
     timing = _timing_state_from_dict(raw)
     merchant_position = _merchant_position_from_dict(raw)
+    ship_position = int(raw.get("ship_position", ship_start_position))
+    completed_rounds = int(raw.get("completed_rounds", max(0, timing.round_number - 1)))
+    start_player = _start_player_from_dict(raw)
+    if start_player is None:
+        start_player = PlayerId.from_string(str(raw["active_player"]))
+    game_over = bool(raw.get("game_over", False))
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     if merchant_position >= merchant_path_length:
         raise ValueError(
             "Scenario merchant_position must be within Merchant path bounds: "
             f"{merchant_position} not in [0, {merchant_path_length - 1}]."
         )
+    if ship_position < 0 or ship_position >= ship_path_length:
+        raise ValueError(
+            "Scenario ship_position must be within Ship path bounds: "
+            f"{ship_position} not in [0, {ship_path_length - 1}]."
+        )
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
+        start_player=start_player,
         phase=TurnPhase.from_string(str(raw["phase"])),
         players=(player_one, player_two),
         timing=timing,
         table_player_count=table_player_count,
         dummy_acolytes=dummy_acolytes,
         merchant_position=merchant_position,
+        ship_position=ship_position,
+        completed_rounds=completed_rounds,
+        game_over=game_over,
     )
 
 
@@ -224,6 +247,15 @@ def _merchant_position_from_dict(raw: Mapping[str, Any]) -> int:
     if isinstance(merchant_raw, Mapping):
         return int(merchant_raw.get("position", 0))
     return int(raw.get("merchant_position", 0))
+
+
+def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
+    start_player_raw = raw.get("start_player_id")
+    if start_player_raw is None:
+        return None
+    if isinstance(start_player_raw, int):
+        return PlayerId(start_player_raw)
+    return PlayerId.from_string(str(start_player_raw))
 
 
 def _dummy_acolytes_from_dict(

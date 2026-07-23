@@ -1,5 +1,5 @@
 {
-  "scenario_id": "mancala_sandbox_001",
+  "scenario_id": "game_end_nw_site_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -7,24 +7,27 @@
   "player_count": 2,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
+    "active_player": "player_two",
     "start_player_id": "player_one",
+    "phase": "sow",
     "merchant_position": 0,
-    "ship_position": 0,
-    "completed_rounds": 0,
+    "ship_position": 25,
+    "completed_rounds": 25,
     "game_over": false,
     "timing": {
-      "absolute_turn": 0,
-      "round_number": 1,
-      "season_number": 1,
-      "turn_in_round": 0
+      "absolute_turn": 51,
+      "round_number": 26,
+      "season_number": 6,
+      "turn_in_round": 1
     },
     "players": {
       "player_one": {
-        "alms_position": 0,
+        "piety": 6,
+        "alms_position": 4,
         "workforce": {
-          "mancala": [3, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 0,
-          "abbey": 0,
+          "abbey": 1,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -35,9 +38,10 @@
         }
       },
       "player_two": {
-        "alms_position": 0,
+        "piety": 5,
+        "alms_position": 2,
         "workforce": {
-          "mancala": [0, 1, 1, 0, 0, 0, 0, 0, 0],
+          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
           "village": 0,
           "abbey": 0,
           "committed": {

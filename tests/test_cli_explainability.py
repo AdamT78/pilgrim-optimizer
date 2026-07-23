@@ -92,7 +92,7 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Events for best first full turn:" in output
     assert "SOWING:" in output
     assert "DUTY_RESOLUTION:" in output
-    assert "MERCHANT_ADVANCE:" in output
+    assert "MERCHANT_ADVANCE:" not in output
     assert "INVARIANT_CHECK:" in output
     assert "+0 piety" not in output
     assert "State after best first full turn:" in output
@@ -103,6 +103,11 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "Round:" in output
     assert "Season:" in output
     assert "Turn in round:" in output
+    assert "Start player:" in output
+    assert "Game over:" in output
+    assert "Ship:" in output
+    assert "At pilgrimage site:" in output
+    assert "At NW pilgrimage site:" in output
     assert "Merchant:" in output
     assert "Dummy acolytes:" in output
     assert "Position:" in output

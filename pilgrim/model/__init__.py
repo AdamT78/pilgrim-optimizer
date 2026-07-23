@@ -15,9 +15,15 @@ from pilgrim.model.config import (
     GameConfig,
     MerchantConfig,
     PietyConfig,
+    ShipConfig,
     TimingConfig,
 )
-from pilgrim.model.dummy import DummyAcolyteGroups, dummy_at_position, dummy_total, format_dummy_acolytes
+from pilgrim.model.dummy import (
+    DummyAcolyteGroups,
+    dummy_at_position,
+    dummy_total,
+    format_dummy_acolytes,
+)
 from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     ActionType,
@@ -63,6 +69,7 @@ __all__ = [
     "PlayerState",
     "PietyConfig",
     "Resources",
+    "ShipConfig",
     "TurnResolutionType",
     "TurnPhase",
     "TimingConfig",
