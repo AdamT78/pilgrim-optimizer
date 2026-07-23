@@ -62,6 +62,9 @@ Each player has shared slot occupancy state:
 - `donated_buildings`
 - `cardinal_favor_tiles`
 
+These six shared spaces are part of the broader player-board model (see
+`docs/rules/PlayerBoard.md`), alongside Village/Abbey workforce and Special Activities.
+
 Slot usage:
 
 `used = len(active_buildings) + len(donated_buildings) + cardinal_favor_tiles`

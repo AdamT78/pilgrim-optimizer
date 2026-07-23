@@ -1,0 +1,209 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from pilgrim.io.scenarios import load_scenario
+from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.model.resources import Resources
+from pilgrim.model.special_activities import SpecialActivities
+from pilgrim.rules.special_activities import (
+    produce_stone_bonus_hook,
+    road_engineer_duty_value_bonus_hook,
+)
+from pilgrim.rules.transition import apply_action, legal_actions
+
+
+def test_player_board_full_setup_has_default_serfs_and_abbey_acolytes() -> None:
+    scenario = load_scenario("scenarios/player_board_full_setup_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
+
+    assert player_one.workforce.village == 8
+    assert player_two.workforce.village == 8
+    assert player_one.workforce.abbey == 3
+    assert player_two.workforce.abbey == 3
+    assert player_one.special_activities.count == 0
+    assert player_two.special_activities.count == 0
+
+
+def test_existing_reduced_sandbox_scenarios_remain_valid() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
+    assert player_one.workforce.village == 0
+    assert player_two.workforce.village == 0
+    assert player_one.workforce.abbey == 0
+    assert player_two.workforce.abbey == 0
+
+
+def test_allocation_to_city_reduces_abbey_and_increases_city() -> None:
+    scenario = load_scenario("scenarios/allocation_to_city_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    assert actions
+    first_action = actions[0]
+    assert first_action.resolution is TurnResolutionType.ALLOCATION
+    assert first_action.allocation_target == "city"
+
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    assert before.special_activities.count == 0
+    result = apply_action(scenario.state, first_action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert after.workforce.abbey == before.workforce.abbey - 1
+    # +1 from allocation, +1 from duty recall on the selected tile.
+    assert after.workforce.mancala[0] == before.workforce.mancala[0] + 2
+    assert after.special_activities.count == 0
+    assert any(event.event_type is EventType.ALLOCATION for event in result.events)
+
+
+def test_allocation_to_special_activity_occupies_target_and_conserves_acolytes() -> None:
+    scenario = load_scenario("scenarios/allocation_to_special_activity_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    assert actions
+    first_action = next(
+        action
+        for action in actions
+        if action.resolution is TurnResolutionType.ALLOCATION
+        and action.allocation_target == "special_activity:grain"
+    )
+
+    before_total = scenario.state.total_acolytes(PlayerId.PLAYER_ONE)
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, first_action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+    after_total = result.state.total_acolytes(PlayerId.PLAYER_ONE)
+
+    assert after.workforce.abbey == before.workforce.abbey - 1
+    assert after.special_activities.grain is True
+    assert before.special_activities.grain is False
+    assert before_total == after_total
+
+
+def test_allocation_not_generated_without_abbey_acolyte() -> None:
+    scenario = load_scenario("scenarios/allocation_to_special_activity_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    no_abbey_state = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(player_one, workforce=replace(player_one.workforce, abbey=0)),
+    )
+    actions = legal_actions(no_abbey_state, scenario.config)
+    assert all(action.resolution is not TurnResolutionType.ALLOCATION for action in actions)
+
+
+def test_allocation_skips_occupied_special_activities() -> None:
+    scenario = load_scenario("scenarios/allocation_all_special_occupied_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    allocation_actions = [
+        action for action in actions if action.resolution is TurnResolutionType.ALLOCATION
+    ]
+    assert allocation_actions
+    assert all(action.allocation_target == "city" for action in allocation_actions)
+
+
+def test_engraver_bonus_adds_silver_to_clerical_silversmith() -> None:
+    scenario = load_scenario("scenarios/special_activity_clerical_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.CLERICAL_SILVERSMITH
+    )
+    result = apply_action(scenario.state, action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert after.resources.silver == 2
+    assert any(
+        event.event_type is EventType.SPECIAL_ACTIVITY_BONUS
+        and dict(event.details).get("activity") == "engraver"
+        for event in result.events
+    )
+
+
+def test_vestry_bonus_adds_piety_to_clerical_devotion() -> None:
+    scenario = load_scenario("scenarios/special_activity_clerical_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.CLERICAL_DEVOTION
+    )
+    result = apply_action(scenario.state, action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert after.piety == 2
+    assert any(
+        event.event_type is EventType.SPECIAL_ACTIVITY_BONUS
+        and dict(event.details).get("activity") == "vestry"
+        for event in result.events
+    )
+
+
+def test_alms_house_bonus_actions_require_extra_payment() -> None:
+    scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
+    give_alms_actions = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.resolution is TurnResolutionType.GIVE_ALMS
+    ]
+
+    assert give_alms_actions
+    assert any(
+        action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
+        for action in give_alms_actions
+    )
+
+
+def test_alms_house_bonus_applies_and_emits_event() -> None:
+    scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
+    action = legal_actions(scenario.state, scenario.config)[0]
+    assert action.resolution is TurnResolutionType.GIVE_ALMS
+    assert action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
+
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    assert after.alms_position >= before.alms_position + 2
+    assert after.resources.silver == (
+        before.resources.silver - action.alms_payment_silver - action.alms_house_extra_silver
+    )
+    assert after.resources.wheat == (
+        before.resources.wheat - action.alms_payment_wheat - action.alms_house_extra_wheat
+    )
+    assert any(
+        event.event_type is EventType.SPECIAL_ACTIVITY_BONUS
+        and dict(event.details).get("activity") == "alms_house"
+        for event in result.events
+    )
+
+
+def test_alms_house_not_used_without_extra_resource() -> None:
+    scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    reduced_resources_state = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(player_one, resources=Resources(stone=0, silver=1, wheat=0)),
+    )
+
+    give_alms_actions = [
+        action
+        for action in legal_actions(reduced_resources_state, scenario.config)
+        if action.resolution is TurnResolutionType.GIVE_ALMS
+    ]
+    assert give_alms_actions
+    assert all(
+        action.alms_house_extra_silver == 0 and action.alms_house_extra_wheat == 0
+        for action in give_alms_actions
+    )
+
+
+def test_special_activity_hooks_exist() -> None:
+    scenario = load_scenario("scenarios/special_activity_clerical_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    assert produce_stone_bonus_hook(player_one) == 0
+    assert road_engineer_duty_value_bonus_hook(player_one, action_key="build_roads") == 0
+
+
+def test_special_activity_model_rejects_non_boolean_flags() -> None:
+    with pytest.raises(ValueError):
+        SpecialActivities(grain=1)  # type: ignore[arg-type]

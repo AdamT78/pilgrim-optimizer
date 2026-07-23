@@ -63,6 +63,14 @@ def state_to_record(state: GameState) -> dict[str, Any]:
                         "alms_table": player.workforce.committed.alms_table,
                     },
                 },
+                "special_activities": {
+                    "grain": player.special_activities.grain,
+                    "road_engineer": player.special_activities.road_engineer,
+                    "stone_mason": player.special_activities.stone_mason,
+                    "alms_house": player.special_activities.alms_house,
+                    "engraver": player.special_activities.engraver,
+                    "vestry": player.special_activities.vestry,
+                },
                 "player_board_slots": {
                     "active_buildings": list(player.player_board_slots.active_buildings),
                     "donated_buildings": list(player.player_board_slots.donated_buildings),

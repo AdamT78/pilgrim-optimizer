@@ -124,6 +124,24 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - missing market falls back to first 4 ids per level from catalogue order
 - Transition/search are still rules-agnostic with no building actions yet; this milestone adds data and validation only.
 
+## Player Board Workforce and Special Activities (v1.2)
+
+- `PlayerState` now also carries per-player `special_activities` occupancy flags.
+- Player-board workforce semantics are now explicit in CLI/docs:
+  - Village workers (Serfs) via `workforce.village`
+  - Abbey acolytes via `workforce.abbey`
+  - City/Duty acolytes via `workforce.mancala`
+- New rules helper module `pilgrim.rules.special_activities` centralizes:
+  - occupancy queries and formatting
+  - allocation helpers (Abbey -> City / Special Activity)
+  - current activity bonus hooks
+- Transition layer now supports:
+  - `allocation` duty resolution
+  - `ALLOCATION` events
+  - `SPECIAL_ACTIVITY_BONUS` events for active effects
+  - optional Alms House give-alms boost with explicit extra payment fields
+- Search remains decoupled from these details and still consumes `legal_actions()` + `apply_action()`.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

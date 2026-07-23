@@ -8,6 +8,7 @@ from pilgrim.model.buildings import PlayerBoardSlots
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
+from pilgrim.model.special_activities import SpecialActivities
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import (
     MANCALA_POSITION_COUNT,
@@ -31,6 +32,7 @@ class PlayerState:
     piety: int = 0
     alms_position: int = 0
     victory_points: int = 0
+    special_activities: SpecialActivities = field(default_factory=SpecialActivities)
     player_board_slots: PlayerBoardSlots = field(default_factory=PlayerBoardSlots)
 
     def __post_init__(self) -> None:
@@ -105,7 +107,8 @@ class GameState:
         )
 
     def total_acolytes(self, player_id: PlayerId) -> int:
-        return total_acolytes(self.player_state(player_id).workforce)
+        player_state = self.player_state(player_id)
+        return total_acolytes(player_state.workforce) + player_state.special_activities.count
 
     @property
     def round_number(self) -> int:

@@ -101,7 +101,7 @@ def test_threshold_reward_no_source_pool_keeps_workforce_non_negative() -> None:
     assert updated == player
     assert updated.workforce.total == player.workforce.total
     assert outcome.moved is False
-    assert "no village acolyte available" in outcome.description
+    assert "no village serf available" in outcome.description
 
 
 def test_give_alms_transition_pays_advances_rewards_and_recalls() -> None:

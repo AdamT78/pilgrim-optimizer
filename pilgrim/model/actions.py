@@ -23,6 +23,9 @@ class FullTurnAction:
     resolution: TurnResolutionType
     alms_payment_silver: int = 0
     alms_payment_wheat: int = 0
+    alms_house_extra_silver: int = 0
+    alms_house_extra_wheat: int = 0
+    allocation_target: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
@@ -37,9 +40,19 @@ def action_id(action: GameAction) -> str:
         payment_suffix = (
             f":pay_silver:{action.alms_payment_silver}:pay_wheat:{action.alms_payment_wheat}"
         )
+        if action.alms_house_extra_silver or action.alms_house_extra_wheat:
+            payment_suffix += (
+                f":alms_house_extra_silver:{action.alms_house_extra_silver}"
+                f":alms_house_extra_wheat:{action.alms_house_extra_wheat}"
+            )
+    allocation_suffix = ""
+    if action.resolution is TurnResolutionType.ALLOCATION:
+        allocation_target = action.allocation_target or "unknown"
+        allocation_suffix = f":allocation_target:{allocation_target}"
     return (
         f"turn:sow:{action.origin}:{route}:"
-        f"duty:{action.selected_duty}:action:{action.resolution.value}{payment_suffix}"
+        f"duty:{action.selected_duty}:action:{action.resolution.value}"
+        f"{payment_suffix}{allocation_suffix}"
     )
 
 
@@ -67,6 +80,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             f" | pay silver={action.alms_payment_silver}, "
             f"wheat={action.alms_payment_wheat}"
         )
+        if action.alms_house_extra_silver or action.alms_house_extra_wheat:
+            summary += (
+                " | alms_house extra "
+                f"silver={action.alms_house_extra_silver}, "
+                f"wheat={action.alms_house_extra_wheat}"
+            )
+    if action.resolution is TurnResolutionType.ALLOCATION:
+        allocation_target = action.allocation_target or "unknown"
+        summary += f" | target: {allocation_target}"
     return summary
 
 

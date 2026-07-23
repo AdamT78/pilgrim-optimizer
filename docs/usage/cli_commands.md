@@ -176,7 +176,17 @@ Using `--verbose` with `solve` prints:
 - `Alms position`, `Alms table acolytes`, and `Alms table VP`
 - a `Best-line final evaluation` section (state after the full principal variation)
 - a `Root-player evaluation after best first full turn` section (state after only the recommended first full turn)
-- workforce totals (`Mancala total`, `Village`, `Abbey`, committed pools, and overall `Total`)
+- workforce totals (`Mancala total`, `Village`, `Abbey`, `Special Activities`, committed pools, and overall `Total`)
+- player-board workforce labels (`Village: Serfs`, `Abbey: Acolytes`)
+- Special Activity occupancy summary (`Special Activities: ...`)
+
+`Workforce: Total` includes all currently tracked pools:
+
+- Mancala/City/Duty acolytes
+- Village serfs
+- Abbey acolytes
+- occupied Special Activity acolytes
+- committed acolytes
 - player board slot summary (`Active buildings`, `Donated buildings`, `Cardinal favor tiles`, `Used slots`, `Available slots`)
 
 Position mapping used by the current sandbox:
@@ -294,6 +304,20 @@ Position mapping used by the current sandbox:
   - per-player `Player board slots`
   - slot usage lines (`Used slots`, `Available slots`)
 - Building actions/effects remain deferred in this milestone.
+
+## Player Board Workforce and Special Activities (v1.2)
+
+- `apply --verbose` and `solve --verbose` now show explicit player-board workforce sections:
+  - `Village` / `Serfs`
+  - `Abbey` / `Acolytes`
+  - `Special Activities`
+- Allocation transitions emit readable `ALLOCATION` events.
+- Active bonuses emit `SPECIAL_ACTIVITY_BONUS` events for:
+  - `grain` (current produce model)
+  - `engraver` (`clerical_silversmith`)
+  - `vestry` (`clerical_devotion`)
+  - `alms_house` (`give_alms` duty-value boost + extra payment)
+- Road Engineer / Stone Mason are currently exposed as placeholder hooks without road/stone runtime systems yet.
 
 ## Typical development workflow
 
