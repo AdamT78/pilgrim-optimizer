@@ -7,7 +7,7 @@ from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
-def _construct_plans_for_scenario(path: str) -> tuple[str, ...]:
+def _construct_road_plans(path: str) -> tuple[str, ...]:
     scenario = load_scenario(path)
     return tuple(
         action.construct_plan or ""
@@ -16,48 +16,40 @@ def _construct_plans_for_scenario(path: str) -> tuple[str, ...]:
     )
 
 
-def test_construct_legal_actions_duty_value_one_include_building_and_road() -> None:
+def _action_for_construct_road_plan(path: str, *, plan: str):
+    scenario = load_scenario(path)
+    return next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        and action.construct_plan == plan
+    )
+
+
+def test_construct_legal_actions_without_affordable_buildings_include_only_road_plan() -> None:
     scenario = load_scenario("scenarios/construct_deferred_building_001.json")
     actions = legal_actions(scenario.state, scenario.config)
-    construct_plans = {
+    construct_road_plans = {
         action.construct_plan
         for action in actions
         if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
     }
+    resolutions = {action.resolution for action in actions}
 
-    assert construct_plans == {"building", "road"}
+    assert TurnResolutionType.CONSTRUCT_BUILDING not in resolutions
+    assert TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED not in resolutions
+    assert construct_road_plans == {"road"}
     assert any(action.resolution is TurnResolutionType.TITHE for action in actions)
-    assert "building + building" not in construct_plans
-    assert "road + road" not in construct_plans
-
-
-def test_construct_legal_actions_duty_value_two_include_building_plus_road() -> None:
-    scenario = load_scenario("scenarios/construct_deferred_building_and_road_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    construct_actions = [
-        action
-        for action in actions
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
-    ]
-    construct_plans = {action.construct_plan for action in construct_actions}
-
-    assert construct_plans == {"building + road", "building", "road"}
-    assert construct_actions[0].construct_plan == "building + road"
-    assert "building + building" not in construct_plans
-    assert "road + road" not in construct_plans
 
 
 def test_construct_road_engineer_extra_road_requires_road_in_plan() -> None:
-    construct_plans = set(_construct_plans_for_scenario("scenarios/construct_road_engineer_extra_road_001.json"))
+    construct_plans = set(_construct_road_plans("scenarios/construct_road_engineer_extra_road_001.json"))
 
     assert "road + road_engineer_extra_road" in construct_plans
-    assert "building + road_engineer_extra_road" not in construct_plans
-    assert "building + building" not in construct_plans
-    assert "road + road" not in construct_plans
-    assert any("road_engineer_extra_road" not in plan for plan in construct_plans)
+    assert "road" in construct_plans
 
 
-def test_construct_road_engineer_duty_value_two_includes_extra_road_variants() -> None:
+def test_construct_road_engineer_duty_value_two_without_stone_has_no_building_actions() -> None:
     scenario = load_scenario("scenarios/construct_deferred_building_and_road_001.json")
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
     state_with_road_engineer = scenario.state.with_player_state(
@@ -72,17 +64,24 @@ def test_construct_road_engineer_duty_value_two_includes_extra_road_variants() -
         for action in legal_actions(state_with_road_engineer, scenario.config)
         if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
     }
+    resolutions = {
+        action.resolution for action in legal_actions(state_with_road_engineer, scenario.config)
+    }
 
     assert "road + road_engineer_extra_road" in construct_plans
-    assert "building + road + road_engineer_extra_road" in construct_plans
-    assert "building + road_engineer_extra_road" not in construct_plans
+    assert "road" in construct_plans
+    assert TurnResolutionType.CONSTRUCT_BUILDING not in resolutions
+    assert TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED not in resolutions
 
 
-def test_apply_construct_building_scaffold_emits_deferred_and_preserves_building_state() -> None:
+def test_apply_construct_road_scaffold_emits_deferred_and_preserves_building_state() -> None:
     scenario = load_scenario("scenarios/construct_deferred_building_001.json")
     before_player = scenario.state.player_state(PlayerId.PLAYER_ONE)
     before_slots = before_player.player_board_slots
-    action = legal_actions(scenario.state, scenario.config)[0]
+    action = _action_for_construct_road_plan(
+        "scenarios/construct_deferred_building_001.json",
+        plan="road",
+    )
 
     result = apply_action(scenario.state, action, scenario.config)
     after_player = result.state.player_state(PlayerId.PLAYER_ONE)
@@ -91,7 +90,7 @@ def test_apply_construct_building_scaffold_emits_deferred_and_preserves_building
     assert EventType.DUTY_RESOLUTION in event_types
     assert EventType.DUTY_DEFERRED in event_types
     assert EventType.ACOLYTE_RECALL in event_types
-    assert EventType.SPECIAL_ACTIVITY_BONUS not in event_types
+    assert EventType.BUILDING_CONSTRUCTED not in event_types
 
     duty_event = next(
         event for event in result.events if event.event_type is EventType.DUTY_RESOLUTION
@@ -105,7 +104,7 @@ def test_apply_construct_building_scaffold_emits_deferred_and_preserves_building
     deferred_event = next(
         event for event in result.events if event.event_type is EventType.DUTY_DEFERRED
     )
-    assert "requested plan: building" in str(dict(deferred_event.details).get("scaffold"))
+    assert "requested plan: road" in str(dict(deferred_event.details).get("scaffold"))
 
     assert after_player.resources == before_player.resources
     assert after_player.player_board_slots == before_slots
@@ -113,27 +112,12 @@ def test_apply_construct_building_scaffold_emits_deferred_and_preserves_building
     assert after_player.workforce.committed == before_player.workforce.committed
 
 
-def test_apply_construct_building_and_road_scaffold_preserves_slot_state() -> None:
-    scenario = load_scenario("scenarios/construct_deferred_building_and_road_001.json")
-    before_slots = scenario.state.player_state(PlayerId.PLAYER_ONE).player_board_slots
-    action = legal_actions(scenario.state, scenario.config)[0]
-
-    result = apply_action(scenario.state, action, scenario.config)
-    after_player = result.state.player_state(PlayerId.PLAYER_ONE)
-
-    deferred_event = next(
-        event for event in result.events if event.event_type is EventType.DUTY_DEFERRED
-    )
-    assert "requested plan: building + road" in str(dict(deferred_event.details).get("scaffold"))
-    assert after_player.player_board_slots == before_slots
-    assert after_player.workforce.committed == scenario.state.player_state(
-        PlayerId.PLAYER_ONE
-    ).workforce.committed
-
-
 def test_apply_construct_road_engineer_extra_road_emits_bonus_without_duty_value_raise() -> None:
     scenario = load_scenario("scenarios/construct_road_engineer_extra_road_001.json")
-    action = legal_actions(scenario.state, scenario.config)[0]
+    action = _action_for_construct_road_plan(
+        "scenarios/construct_road_engineer_extra_road_001.json",
+        plan="road + road_engineer_extra_road",
+    )
 
     result = apply_action(scenario.state, action, scenario.config)
 
@@ -161,7 +145,10 @@ def test_apply_construct_road_engineer_extra_road_emits_bonus_without_duty_value
 
 def test_apply_construct_minority_cost_applies_silver_delta() -> None:
     scenario = load_scenario("scenarios/construct_minority_cost_001.json")
-    action = legal_actions(scenario.state, scenario.config)[0]
+    action = _action_for_construct_road_plan(
+        "scenarios/construct_minority_cost_001.json",
+        plan="road",
+    )
 
     result = apply_action(scenario.state, action, scenario.config)
     duty_event = next(

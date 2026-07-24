@@ -11,8 +11,9 @@ infrastructure for the headless sandbox:
 - Allocation full-turn action (Abbey <-> Special Activities and Special -> Special)
 - Six per-player Special Activity spaces and their currently supported bonuses
 
-No roads, construct, trade-route, or spatial-map systems are added here.
-The only building action currently supported is Give Alms `donate_building`.
+No road/trade-route/spatial-map placement systems are added here.
+Construct building acquisition is supported for market buildings; road/spatial Construct effects
+remain deferred.
 
 ## Player-board workforce areas
 
@@ -65,6 +66,21 @@ Donation under Give Alms moves exactly one building from active to donated:
 - donated building abilities are considered unavailable for future use
 - donated buildings still consume board slots
 - slot usage is preserved by donation (`active -1`, `donated +1`)
+
+## Construct building acquisition and slots
+
+Construct now supports acquiring exactly one building from `building_market`:
+
+- cost is stone equal to the building level
+- acquired building is added to `active_buildings`
+- building is removed from market immediately
+- this consumes one shared player-board slot at once
+
+Slot limit remains shared across:
+
+- `active_buildings`
+- `donated_buildings`
+- `cardinal_favor_tiles`
 
 ## Allocation action
 

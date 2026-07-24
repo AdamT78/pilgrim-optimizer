@@ -208,6 +208,25 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - existing duty-specific hooks remain authoritative runtime behavior
   - known unimplemented building effects are tracked without changing rules execution
 
+## Construct Building Acquisition (v2.5)
+
+- Construct now includes explicit acquisition actions:
+  - `construct_building`
+  - `construct_building_and_road_deferred`
+  - `construct_deferred` (road-only scaffold retained)
+- Building acquisition transition behavior is now stateful:
+  - validates market presence, stone affordability, and free player-board slot
+  - applies stone payment (plus normal minority silver cost when applicable)
+  - removes the acquired building from `building_market`
+  - adds the building to acting player's `active_buildings`
+  - emits `BUILDING_CONSTRUCTED` explainability event
+- Mixed Construct (`building + road`) is partially implemented:
+  - building resolves now
+  - road part stays deferred with `DUTY_DEFERRED`
+  - Road Engineer still uses Construct-specific extra-road semantics only
+- Runtime market validation now supports shrinking `building_market` during play while preserving
+  deterministic id/level constraints.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

@@ -35,6 +35,7 @@ class FullTurnAction:
     taxation_step2_resources: tuple[str, ...] = ()
     allocation_moves: tuple[AllocationMove, ...] = ()
     construct_plan: str | None = None
+    construct_building_id: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
@@ -118,6 +119,15 @@ def action_id(action: GameAction) -> str:
     if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
         plan = action.construct_plan or "none"
         construct_suffix = ":construct_plan:" + plan.replace(" + ", "+").replace(" ", "_")
+    elif action.resolution is TurnResolutionType.CONSTRUCT_BUILDING:
+        construct_suffix = f":construct_building:{action.construct_building_id or 'none'}"
+    elif action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED:
+        plan = action.construct_plan or "none"
+        construct_suffix = (
+            f":construct_building:{action.construct_building_id or 'none'}"
+            + ":construct_plan:"
+            + plan.replace(" + ", "+").replace(" ", "_")
+        )
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
@@ -180,6 +190,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             summary += " | moves: none"
     if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
         summary += f" | plan: {action.construct_plan or 'none'}"
+    if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING:
+        summary += f" | building: {action.construct_building_id or 'unknown'}"
+    if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED:
+        summary += f" | building: {action.construct_building_id or 'unknown'}"
+        summary += f" | deferred plan: {action.construct_plan or 'none'}"
     return summary
 
 

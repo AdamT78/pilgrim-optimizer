@@ -1,4 +1,4 @@
-# Duty Enhancements (v2.3)
+# Duty Enhancements (v2.5)
 
 ## Purpose
 
@@ -17,6 +17,13 @@ Runtime policy for currently implemented building bonuses:
 - Only buildings in a player's `active_buildings` apply.
 - Buildings in `donated_buildings` do not apply.
 - These bonuses stack with matching Special Activity bonuses.
+
+Construct note for this milestone:
+
+- Construct can now acquire one building from market (stone cost by level), but that acquisition is
+  core Construct behavior, not a Duty enhancement entry.
+- Registry entries still focus on modifiers/bonuses (for Construct: Road Engineer deferred-road
+  extension logic).
 
 ## Registry fields
 
@@ -68,7 +75,7 @@ Format:
 
 ### Construct
 
-- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Construct does not use generic duty-value +1 from Road Engineer.`
+- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Applies to Construct road plans (road-only and building+road deferred); Construct does not use generic duty-value +1 from Road Engineer.`
 
 ### Allocation
 
