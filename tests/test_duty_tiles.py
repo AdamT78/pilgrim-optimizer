@@ -117,7 +117,7 @@ def test_custom_south_allocation_applies_without_position_hardcoding() -> None:
     assert first_action.selected_duty == scenario.config.board.index_for_name("south")
     assert after.workforce.abbey == before.workforce.abbey - 1
     assert after.workforce.mancala[0] == before.workforce.mancala[0] + 1
-    assert after.special_activities.fields is True
+    assert after.special_activities.count_for("fields") == 1
 
 
 def test_default_layout_still_offers_implemented_categories() -> None:

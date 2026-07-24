@@ -256,6 +256,11 @@ def allocation_infirmary_duty_value_bonus(player_state: PlayerState) -> int:
     return 1 if player_has_active_building(player_state, "infirmary") else 0
 
 
+def player_has_active_chapter_house(player_state: PlayerState) -> bool:
+    """Return True when Chapter House is currently active on this player board."""
+    return player_has_active_building(player_state, "chapter_house")
+
+
 def ordination_infirmary_duty_value_bonus(
     player_state: PlayerState,
     *,

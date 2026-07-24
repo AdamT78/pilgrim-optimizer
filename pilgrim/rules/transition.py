@@ -16,6 +16,7 @@ from pilgrim.model.actions import (
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
+from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import (
     AlmsPayment,
@@ -31,6 +32,7 @@ from pilgrim.rules.buildings import (
     donate_active_building,
     has_available_player_board_slot,
     ordination_infirmary_duty_value_bonus,
+    player_has_active_chapter_house,
     player_has_active_building,
     produce_stone_quarry_bonus,
     produce_wheat_well_bonus,
@@ -66,16 +68,19 @@ from pilgrim.rules.round_end import (
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.special_activities import (
+    alms_house_duty_value_bonus_capacity,
     alms_house_extra_payment_options,
-    apply_allocation_move,
+    apply_allocation_move_with_capacity,
     can_use_alms_house_bonus,
     clerical_devotion_bonus,
     clerical_silversmith_bonus,
-    has_special_activity,
     legal_allocation_moves,
     produce_stone_mason_bonus,
     produce_wheat_fields_bonus,
+    road_engineer_construct_extra_roads_bonus,
     road_engineer_duty_value_bonus_hook,
+    special_activity_capacity,
+    special_activity_count,
 )
 from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
@@ -104,7 +109,7 @@ class TransitionResult:
 
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
 _CONSTRUCT_PLAN_ROAD = "road"
-_CONSTRUCT_PLAN_ROAD_WITH_EXTRA = "road + road_engineer_extra_road"
+_CONSTRUCT_PLAN_EXTRA_ROAD = "road_engineer_extra_road"
 _CONSTRUCT_ROAD_SCAFFOLD_TEXT = "construct road part requires spatial road system"
 
 
@@ -146,6 +151,8 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
     player_vector = state.player_vector(state.active_player)
     player_state = state.player_state(state.active_player)
     player_resources = player_state.resources
+    chapter_house_active = player_has_active_chapter_house(player_state)
+    activity_capacity = special_activity_capacity(chapter_house_active=chapter_house_active)
     actions: list[GameAction] = []
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
@@ -168,13 +175,27 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     available_silver = player_resources.silver - silver_cost
                     if available_silver >= 0:
                         if can_use_alms_house_bonus(player_state):
+                            alms_house_bonus_cap = alms_house_duty_value_bonus_capacity(
+                                player_state
+                            )
                             for extra_silver, extra_wheat in alms_house_extra_payment_options(
-                                player_resources
+                                player_resources,
+                                max_bonus=alms_house_bonus_cap,
                             ):
+                                alms_house_bonus = extra_silver + extra_wheat
+                                if alms_house_bonus <= 0:
+                                    continue
+                                available_silver_after_extra = available_silver - extra_silver
+                                available_wheat_after_extra = player_resources.wheat - extra_wheat
+                                if (
+                                    available_silver_after_extra < 0
+                                    or available_wheat_after_extra < 0
+                                ):
+                                    continue
                                 for payment in _alms_payment_options(
-                                    duty_value=duty_value + 1,
-                                    available_silver=available_silver - extra_silver,
-                                    available_wheat=player_resources.wheat - extra_wheat,
+                                    duty_value=duty_value + alms_house_bonus,
+                                    available_silver=available_silver_after_extra,
+                                    available_wheat=available_wheat_after_extra,
                                 ):
                                     actions.append(
                                         FullTurnAction(
@@ -232,6 +253,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     for move_sequence in _allocation_move_sequences(
                         player_state,
                         max_moves=allocation_effective_duty_value,
+                        special_activity_capacity=activity_capacity,
                     ):
                         actions.append(
                             FullTurnAction(
@@ -251,7 +273,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     )
                     strength = duty_strength(player_count, opponent_counts)
                     duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                    has_road_engineer = has_special_activity(player_state, "road_engineer")
+                    road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
+                        player_state
+                    )
                     if player_resources.silver >= silver_cost:
                         constructible_building_ids = _constructible_building_ids(
                             player_state=player_state,
@@ -270,7 +294,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                             )
                         for construct_plan in _construct_road_only_plans(
                             duty_value=duty_value,
-                            has_road_engineer=has_road_engineer,
+                            road_engineer_extra_roads=road_engineer_extra_roads,
                         ):
                             actions.append(
                                 FullTurnAction(
@@ -283,7 +307,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                             )
                         for construct_plan in _construct_building_plus_road_plans(
                             duty_value=duty_value,
-                            has_road_engineer=has_road_engineer,
+                            road_engineer_extra_roads=road_engineer_extra_roads,
                         ):
                             for building_id in constructible_building_ids:
                                 actions.append(
@@ -659,21 +683,32 @@ def _apply_full_turn_action(
             )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
+            alms_house_bonus = action.alms_house_extra_silver + action.alms_house_extra_wheat
             use_alms_house = (
                 action.alms_house_extra_silver != 0 or action.alms_house_extra_wheat != 0
             )
             if use_alms_house:
                 if not can_use_alms_house_bonus(state_after_sow.player_state(player)):
                     raise TransitionValidationError("Alms House is not occupied for this player.")
+                alms_house_bonus_cap = alms_house_duty_value_bonus_capacity(
+                    state_after_sow.player_state(player)
+                )
+                if alms_house_bonus <= 0 or alms_house_bonus > alms_house_bonus_cap:
+                    raise TransitionValidationError(
+                        "Alms House extra payment exceeds occupied Alms House capacity."
+                    )
+                current_resources = state_after_sow.player_state(player).resources
+                valid_extra_options = alms_house_extra_payment_options(
+                    current_resources,
+                    max_bonus=alms_house_bonus_cap,
+                )
                 if (action.alms_house_extra_silver, action.alms_house_extra_wheat) not in (
-                    (1, 0),
-                    (0, 1),
+                    valid_extra_options
                 ):
                     raise TransitionValidationError(
-                        "Alms House extra payment must be exactly 1 silver or 1 wheat."
+                        "Alms House extra payment does not match a legal payment combination."
                     )
-                effective_duty_value += 1
-                current_resources = state_after_sow.player_state(player).resources
+                effective_duty_value += alms_house_bonus
                 if (
                     current_resources.silver
                     < silver_cost + action.alms_payment_silver + action.alms_house_extra_silver
@@ -720,7 +755,7 @@ def _apply_full_turn_action(
                         details=make_event_details(
                             activity="alms_house",
                             action=action.resolution.value,
-                            duty_value_bonus=1,
+                            duty_value_bonus=alms_house_bonus,
                             extra_silver=action.alms_house_extra_silver,
                             extra_wheat=action.alms_house_extra_wheat,
                         ),
@@ -835,13 +870,12 @@ def _apply_full_turn_action(
         elif action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
             if not action.construct_plan:
                 raise TransitionValidationError("Construct action requires construct_plan.")
-            has_road_engineer = has_special_activity(
+            road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
                 state_after_sow.player_state(player),
-                "road_engineer",
             )
             allowed_construct_plans = _construct_road_only_plans(
                 duty_value=duty_value,
-                has_road_engineer=has_road_engineer,
+                road_engineer_extra_roads=road_engineer_extra_roads,
             )
             if action.construct_plan not in allowed_construct_plans:
                 raise TransitionValidationError(
@@ -857,18 +891,22 @@ def _apply_full_turn_action(
                     )
                 new_player_state = replace(new_player_state, resources=new_resources)
 
-            if _construct_plan_uses_road_engineer_extra(action.construct_plan):
+            construct_extra_roads = _construct_plan_extra_road_count(action.construct_plan)
+            if construct_extra_roads:
+                bonus_details = {
+                    "activity": "road_engineer",
+                    "action": action.resolution.value,
+                    "construct_extra_roads": construct_extra_roads,
+                    "reason": "road included in plan",
+                }
+                if construct_extra_roads == 1:
+                    bonus_details["construct_extra_road"] = True
                 special_bonus_events.append(
                     GameEvent(
                         event_type=EventType.SPECIAL_ACTIVITY_BONUS,
                         actor=player,
                         action_id=transition_action_id,
-                        details=make_event_details(
-                            activity="road_engineer",
-                            action=action.resolution.value,
-                            construct_extra_road=True,
-                            reason="road included in plan",
-                        ),
+                        details=make_event_details(**bonus_details),
                     )
                 )
 
@@ -953,13 +991,12 @@ def _apply_full_turn_action(
                     "construct_building_and_road_deferred requires duty value >= 2."
                 )
 
-            has_road_engineer = has_special_activity(
+            road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
                 state_after_sow.player_state(player),
-                "road_engineer",
             )
             allowed_construct_plans = _construct_building_plus_road_plans(
                 duty_value=duty_value,
-                has_road_engineer=has_road_engineer,
+                road_engineer_extra_roads=road_engineer_extra_roads,
             )
             if action.construct_plan not in allowed_construct_plans:
                 raise TransitionValidationError(
@@ -990,18 +1027,22 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(str(exc)) from exc
 
             stone_cost = constructed_building.stone_cost
-            if _construct_plan_uses_road_engineer_extra(action.construct_plan):
+            construct_extra_roads = _construct_plan_extra_road_count(action.construct_plan)
+            if construct_extra_roads:
+                bonus_details = {
+                    "activity": "road_engineer",
+                    "action": action.resolution.value,
+                    "construct_extra_roads": construct_extra_roads,
+                    "reason": "road included in plan",
+                }
+                if construct_extra_roads == 1:
+                    bonus_details["construct_extra_road"] = True
                 special_bonus_events.append(
                     GameEvent(
                         event_type=EventType.SPECIAL_ACTIVITY_BONUS,
                         actor=player,
                         action_id=transition_action_id,
-                        details=make_event_details(
-                            activity="road_engineer",
-                            action=action.resolution.value,
-                            construct_extra_road=True,
-                            reason="road included in plan",
-                        ),
+                        details=make_event_details(**bonus_details),
                     )
                 )
 
@@ -1220,6 +1261,12 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
+            chapter_house_active = player_has_active_chapter_house(
+                state_after_sow.player_state(player)
+            )
+            allocation_special_activity_capacity = special_activity_capacity(
+                chapter_house_active=chapter_house_active
+            )
             allocation_bonus = allocation_infirmary_duty_value_bonus(
                 state_after_sow.player_state(player)
             )
@@ -1248,10 +1295,42 @@ def _apply_full_turn_action(
 
             new_player_state = state_after_sow.player_state(player)
             for move in action.allocation_moves:
+                destination_activity: str | None = None
+                destination_count_before = 0
+                if move.destination in SPECIAL_ACTIVITY_IDS:
+                    destination_activity = move.destination
+                    destination_count_before = special_activity_count(
+                        new_player_state,
+                        destination_activity,
+                    )
                 try:
-                    new_player_state = apply_allocation_move(new_player_state, move)
+                    new_player_state = apply_allocation_move_with_capacity(
+                        new_player_state,
+                        move,
+                        capacity=allocation_special_activity_capacity,
+                    )
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
+                if (
+                    chapter_house_active
+                    and destination_activity is not None
+                    and destination_count_before >= 1
+                    and special_activity_count(new_player_state, destination_activity) >= 2
+                ):
+                    building_bonus_events.append(
+                        GameEvent(
+                            event_type=EventType.BUILDING_BONUS,
+                            actor=player,
+                            action_id=transition_action_id,
+                            details=make_event_details(
+                                building="chapter_house",
+                                action=action.resolution.value,
+                                activity=destination_activity,
+                                capacity=allocation_special_activity_capacity,
+                                second_acolyte=True,
+                            ),
+                        )
+                    )
                 special_bonus_events.append(
                     GameEvent(
                         event_type=EventType.ALLOCATION,
@@ -1477,12 +1556,21 @@ def _apply_full_turn_action(
         duty_value_building_bonus_events = [
             event for event in building_bonus_events if _is_duty_value_building_bonus_event(event)
         ]
+        allocation_capacity_building_bonus_events = [
+            event
+            for event in building_bonus_events
+            if _is_allocation_capacity_building_bonus_event(event)
+        ]
         output_building_bonus_events = [
             event
             for event in building_bonus_events
-            if not _is_duty_value_building_bonus_event(event)
+            if (
+                not _is_duty_value_building_bonus_event(event)
+                and not _is_allocation_capacity_building_bonus_event(event)
+            )
         ]
         events.extend(duty_value_building_bonus_events)
+        events.extend(allocation_capacity_building_bonus_events)
         events.extend(special_bonus_events)
         events.extend(output_building_bonus_events)
         if duty_deferred_event is not None and not construct_events:
@@ -1843,41 +1931,65 @@ def _next_incomplete_setup_player(
 def _construct_road_only_plans(
     *,
     duty_value: int,
-    has_road_engineer: bool,
+    road_engineer_extra_roads: int,
 ) -> tuple[str, ...]:
     if duty_value <= 0:
         return ()
 
-    plans: list[str] = []
-    if has_road_engineer:
-        plans.append(_CONSTRUCT_PLAN_ROAD_WITH_EXTRA)
-    plans.append(_CONSTRUCT_PLAN_ROAD)
-    return tuple(plans)
+    max_extra_roads = max(0, road_engineer_extra_roads)
+    return _construct_road_plans(max_extra_roads=max_extra_roads)
 
 
 def _construct_building_plus_road_plans(
     *,
     duty_value: int,
-    has_road_engineer: bool,
+    road_engineer_extra_roads: int,
 ) -> tuple[str, ...]:
     if duty_value < 2:
         return ()
 
+    max_extra_roads = max(0, road_engineer_extra_roads)
+    return _construct_road_plans(max_extra_roads=max_extra_roads)
+
+
+def _construct_road_plans(*, max_extra_roads: int) -> tuple[str, ...]:
     plans: list[str] = []
-    if has_road_engineer:
-        plans.append(_CONSTRUCT_PLAN_ROAD_WITH_EXTRA)
-    plans.append(_CONSTRUCT_PLAN_ROAD)
+    for extra_roads in range(max_extra_roads, -1, -1):
+        plans.append(_construct_plan_with_extra_roads(extra_roads))
     return tuple(plans)
 
 
-def _construct_plan_uses_road_engineer_extra(plan: str) -> bool:
-    return "road_engineer_extra_road" in plan
+def _construct_plan_with_extra_roads(extra_roads: int) -> str:
+    if extra_roads < 0:
+        raise ValueError("extra_roads cannot be negative.")
+    parts = [_CONSTRUCT_PLAN_ROAD]
+    parts.extend(_CONSTRUCT_PLAN_EXTRA_ROAD for _ in range(extra_roads))
+    return " + ".join(parts)
+
+
+def _construct_plan_extra_road_count(plan: str) -> int:
+    return sum(
+        1
+        for part in (piece.strip() for piece in plan.split("+"))
+        if part == _CONSTRUCT_PLAN_EXTRA_ROAD
+    )
 
 
 def _is_duty_value_building_bonus_event(event: GameEvent) -> bool:
     if event.event_type is not EventType.BUILDING_BONUS:
         return False
     return "duty_value_bonus" in dict(event.details)
+
+
+def _is_allocation_capacity_building_bonus_event(event: GameEvent) -> bool:
+    if event.event_type is not EventType.BUILDING_BONUS:
+        return False
+    details = dict(event.details)
+    return (
+        details.get("building") == "chapter_house"
+        and details.get("action") == TurnResolutionType.ALLOCATION.value
+        and details.get("second_acolyte") is True
+    )
 
 
 def _constructible_building_ids(
@@ -2004,6 +2116,7 @@ def _allocation_move_sequences(
     player_state,
     *,
     max_moves: int,
+    special_activity_capacity: int,
 ) -> tuple[tuple[AllocationMove, ...], ...]:
     if max_moves <= 0:
         return ()
@@ -2016,9 +2129,16 @@ def _allocation_move_sequences(
     ) -> None:
         if len(current_path) >= max_moves:
             return
-        for move in legal_allocation_moves(current_player_state):
+        for move in legal_allocation_moves(
+            current_player_state,
+            capacity=special_activity_capacity,
+        ):
             try:
-                next_state = apply_allocation_move(current_player_state, move)
+                next_state = apply_allocation_move_with_capacity(
+                    current_player_state,
+                    move,
+                    capacity=special_activity_capacity,
+                )
             except ValueError:
                 continue
             next_path = (*current_path, move)

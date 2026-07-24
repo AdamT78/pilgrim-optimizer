@@ -15,7 +15,6 @@ DutyEnhancementStatus = Literal[
     "implemented_scaffolded",
     "known_unimplemented",
     "deferred_spatial",
-    "deferred_special_activity_system",
 ]
 
 
@@ -112,9 +111,9 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         action_key="all_special_activity_spaces",
         source_type="building",
         source_key="chapter_house",
-        effect="affects all Special Activity spaces",
-        status="deferred_special_activity_system",
-        notes="Deferred until broader special-activity building system is implemented.",
+        effect="allows a second acolyte on each Special Activity via Allocation; bonuses scale by acolyte count, max 2",
+        status="implemented",
+        notes="Active Chapter House increases per-space Special Activity capacity from 1 to 2.",
     ),
     DutyEnhancement(
         duty="clerical",

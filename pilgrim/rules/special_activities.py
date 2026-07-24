@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from pilgrim.model.actions import AllocationMove
 from pilgrim.model.resources import Resources
-from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
+from pilgrim.model.special_activities import MAX_SPECIAL_ACTIVITY_ACOLYTES, SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import PlayerState
 
 
@@ -15,37 +15,58 @@ def occupied_special_activities(player_state: PlayerState) -> tuple[str, ...]:
     return player_state.special_activities.occupied()
 
 
-def special_activity_count(player_state: PlayerState) -> int:
-    """Return occupied special-activity count for one player."""
-    return player_state.special_activities.count
+def special_activity_count(player_state: PlayerState, activity_id: str | None = None) -> int:
+    """
+    Return special-activity occupancy count.
+
+    - no activity_id: total acolytes across all special activities
+    - with activity_id: count for that one activity
+    """
+    if activity_id is None:
+        return player_state.special_activities.count
+    return player_state.special_activities.count_for(activity_id)
 
 
 def has_special_activity(player_state: PlayerState, activity_id: str) -> bool:
     """Return True when one activity is occupied."""
-    return player_state.special_activities.has(activity_id)
+    return special_activity_count(player_state, activity_id) > 0
 
 
-def available_special_activities(player_state: PlayerState) -> tuple[str, ...]:
-    """Return empty special-activity ids for one player."""
-    return player_state.special_activities.available()
+def special_activity_capacity(*, chapter_house_active: bool) -> int:
+    """Return Special Activity occupancy capacity for one space."""
+    return 2 if chapter_house_active else 1
+
+
+def available_special_activities(
+    player_state: PlayerState,
+    *,
+    capacity: int = 1,
+) -> tuple[str, ...]:
+    """Return special-activity ids whose occupancy is below capacity."""
+    return player_state.special_activities.available(capacity=capacity)
 
 
 def allocate_abbey_to_special_activity(
     player_state: PlayerState,
     activity_id: str,
+    *,
+    capacity: int = 1,
 ) -> PlayerState:
-    """Move one abbey acolyte into one empty special-activity space."""
+    """Move one abbey acolyte into one not-full special-activity space."""
     if player_state.workforce.abbey < 1:
         raise ValueError("Allocation requires at least 1 abbey acolyte.")
-    if has_special_activity(player_state, activity_id):
-        raise ValueError(f"Special activity already occupied: {activity_id}")
+    if special_activity_count(player_state, activity_id) >= capacity:
+        raise ValueError(f"Special activity is full: {activity_id}")
     return replace(
         player_state,
         workforce=replace(
             player_state.workforce,
             abbey=player_state.workforce.abbey - 1,
         ),
-        special_activities=player_state.special_activities.with_activity(activity_id, True),
+        special_activities=player_state.special_activities.increment(
+            activity_id,
+            capacity=capacity,
+        ),
     )
 
 
@@ -62,7 +83,7 @@ def allocate_special_activity_to_abbey(
             player_state.workforce,
             abbey=player_state.workforce.abbey + 1,
         ),
-        special_activities=player_state.special_activities.with_activity(activity_id, False),
+        special_activities=player_state.special_activities.decrement(activity_id),
     )
 
 
@@ -71,33 +92,45 @@ def allocate_special_activity_to_special_activity(
     *,
     source_activity_id: str,
     destination_activity_id: str,
+    capacity: int = 1,
 ) -> PlayerState:
-    """Move one acolyte from occupied source special-activity to empty destination."""
+    """Move one acolyte from occupied source special-activity to not-full destination."""
     if source_activity_id == destination_activity_id:
         raise ValueError("Allocation source and destination special activity must differ.")
     if not has_special_activity(player_state, source_activity_id):
         raise ValueError(f"Special activity is not occupied: {source_activity_id}")
-    if has_special_activity(player_state, destination_activity_id):
-        raise ValueError(f"Special activity already occupied: {destination_activity_id}")
-    after_source_clear = player_state.special_activities.with_activity(source_activity_id, False)
+    if special_activity_count(player_state, destination_activity_id) >= capacity:
+        raise ValueError(f"Special activity is full: {destination_activity_id}")
+    after_source_decrement = player_state.special_activities.decrement(source_activity_id)
     return replace(
         player_state,
-        special_activities=after_source_clear.with_activity(destination_activity_id, True),
+        special_activities=after_source_decrement.increment(
+            destination_activity_id,
+            capacity=capacity,
+        ),
     )
 
 
-def legal_allocation_moves(player_state: PlayerState) -> tuple[AllocationMove, ...]:
+def legal_allocation_moves(
+    player_state: PlayerState,
+    *,
+    capacity: int = 1,
+) -> tuple[AllocationMove, ...]:
     """Return legal one-step allocation moves in deterministic order."""
+    if capacity < 1 or capacity > MAX_SPECIAL_ACTIVITY_ACOLYTES:
+        raise ValueError(
+            f"Special activity capacity must be in range 1..{MAX_SPECIAL_ACTIVITY_ACOLYTES}."
+        )
     occupied = occupied_special_activities(player_state)
-    empty = available_special_activities(player_state)
+    available_targets = available_special_activities(player_state, capacity=capacity)
     moves: list[AllocationMove] = []
 
     if player_state.workforce.abbey > 0:
-        for activity_id in empty:
+        for activity_id in available_targets:
             moves.append(AllocationMove(source="abbey", destination=activity_id))
 
     for source_activity_id in occupied:
-        for destination_activity_id in empty:
+        for destination_activity_id in available_targets:
             if source_activity_id != destination_activity_id:
                 moves.append(
                     AllocationMove(
@@ -114,10 +147,24 @@ def legal_allocation_moves(player_state: PlayerState) -> tuple[AllocationMove, .
 
 def apply_allocation_move(player_state: PlayerState, move: AllocationMove) -> PlayerState:
     """Apply one allocation move with validation."""
+    return apply_allocation_move_with_capacity(player_state, move, capacity=1)
+
+
+def apply_allocation_move_with_capacity(
+    player_state: PlayerState,
+    move: AllocationMove,
+    *,
+    capacity: int = 1,
+) -> PlayerState:
+    """Apply one allocation move with one explicit Special Activity capacity."""
     if move.source == "abbey":
         if move.destination == "abbey":
             raise ValueError("Allocation move abbey -> abbey is not legal.")
-        return allocate_abbey_to_special_activity(player_state, move.destination)
+        return allocate_abbey_to_special_activity(
+            player_state,
+            move.destination,
+            capacity=capacity,
+        )
 
     if move.destination == "abbey":
         return allocate_special_activity_to_abbey(player_state, move.source)
@@ -126,27 +173,28 @@ def apply_allocation_move(player_state: PlayerState, move: AllocationMove) -> Pl
         player_state,
         source_activity_id=move.source,
         destination_activity_id=move.destination,
+        capacity=capacity,
     )
 
 
 def clerical_silversmith_bonus(player_state: PlayerState) -> int:
-    """Engraver adds +1 silver to clerical_silversmith."""
-    return 1 if has_special_activity(player_state, "engraver") else 0
+    """Engraver adds +1 silver per acolyte to clerical_silversmith."""
+    return special_activity_count(player_state, "engraver")
 
 
 def clerical_devotion_bonus(player_state: PlayerState) -> int:
-    """Vestry adds +1 piety to clerical_devotion."""
-    return 1 if has_special_activity(player_state, "vestry") else 0
+    """Vestry adds +1 piety per acolyte to clerical_devotion."""
+    return special_activity_count(player_state, "vestry")
 
 
 def produce_wheat_fields_bonus(player_state: PlayerState) -> int:
-    """Fields special activity adds +1 wheat to produce_wheat."""
-    return 1 if has_special_activity(player_state, "fields") else 0
+    """Fields adds +1 wheat per acolyte to produce_wheat."""
+    return special_activity_count(player_state, "fields")
 
 
 def produce_stone_mason_bonus(player_state: PlayerState) -> int:
-    """Stone Mason adds +1 stone to produce_stone."""
-    return 1 if has_special_activity(player_state, "stone_mason") else 0
+    """Stone Mason adds +1 stone per acolyte to produce_stone."""
+    return special_activity_count(player_state, "stone_mason")
 
 
 def road_engineer_duty_value_bonus_hook(player_state: PlayerState, *, action_key: str) -> int:
@@ -155,27 +203,45 @@ def road_engineer_duty_value_bonus_hook(player_state: PlayerState, *, action_key
 
     Road-building / construct systems are not yet implemented in the sandbox runtime.
     """
-    if action_key == "build_roads" and has_special_activity(player_state, "road_engineer"):
-        return 1
+    if action_key == "build_roads":
+        return special_activity_count(player_state, "road_engineer")
     return 0
 
 
 def can_use_alms_house_bonus(player_state: PlayerState) -> bool:
     """Return True when Alms House special activity is occupied."""
-    return has_special_activity(player_state, "alms_house")
+    return special_activity_count(player_state, "alms_house") > 0
 
 
-def alms_house_extra_payment_options(resources: Resources) -> tuple[tuple[int, int], ...]:
+def alms_house_duty_value_bonus_capacity(player_state: PlayerState) -> int:
+    """Return maximum +duty-value bonus available from Alms House occupancy."""
+    return special_activity_count(player_state, "alms_house")
+
+
+def road_engineer_construct_extra_roads_bonus(player_state: PlayerState) -> int:
+    """Return max additional deferred construct roads from Road Engineer occupancy."""
+    return special_activity_count(player_state, "road_engineer")
+
+
+def alms_house_extra_payment_options(
+    resources: Resources,
+    *,
+    max_bonus: int,
+) -> tuple[tuple[int, int], ...]:
     """
     Return legal Alms House extra payment options as (extra_silver, extra_wheat).
 
-    Exactly one of silver/wheat must be paid.
+    Each extra +1 duty value requires paying one silver or one wheat.
+    Supports all bonus levels from +1 up to max_bonus.
     """
     options: list[tuple[int, int]] = []
-    if resources.silver >= 1:
-        options.append((1, 0))
-    if resources.wheat >= 1:
-        options.append((0, 1))
+    if max_bonus <= 0:
+        return ()
+    for duty_value_bonus in range(max_bonus, 0, -1):
+        for extra_silver in range(duty_value_bonus, -1, -1):
+            extra_wheat = duty_value_bonus - extra_silver
+            if extra_silver <= resources.silver and extra_wheat <= resources.wheat:
+                options.append((extra_silver, extra_wheat))
     return tuple(options)
 
 
@@ -186,7 +252,15 @@ def all_special_activity_ids() -> tuple[str, ...]:
 
 def format_special_activities(player_state: PlayerState) -> str:
     """Compact string for verbose CLI summary."""
-    occupied = occupied_special_activities(player_state)
-    if not occupied:
+    parts: list[str] = []
+    for activity_id in all_special_activity_ids():
+        count = special_activity_count(player_state, activity_id)
+        if count <= 0:
+            continue
+        if count == 1:
+            parts.append(activity_id)
+        else:
+            parts.append(f"{activity_id} x{count}")
+    if not parts:
         return "none"
-    return ", ".join(occupied)
+    return ", ".join(parts)

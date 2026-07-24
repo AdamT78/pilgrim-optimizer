@@ -1,4 +1,4 @@
-# Duty Enhancements (v2.6)
+# Duty Enhancements (v2.7)
 
 ## Purpose
 
@@ -47,7 +47,6 @@ Status values currently used:
 - `implemented`
 - `implemented_scaffolded`
 - `known_unimplemented`
-- `deferred_special_activity_system`
 
 ## Registry entries
 
@@ -71,21 +70,21 @@ Format:
 
 ### Give Alms
 
-- `give_alms | give_alms | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus requires paying exactly 1 extra silver or wheat.`
+- `give_alms | give_alms | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); each +1 still requires one extra paid silver/wheat.`
 - `give_alms | give_alms | building | mill | deferred | known_unimplemented | Give Alms building interaction is not implemented yet.`
 
 ### Build Roads
 
-- `build_roads | build_roads_deferred | special_activity | road_engineer | +1 effective Duty Value | implemented_scaffolded | Current Build Roads runtime is deferred/scaffolded.`
+- `build_roads | build_roads_deferred | special_activity | road_engineer | +1 effective Duty Value | implemented_scaffolded | Bonus scales by occupied Road Engineer acolytes (max +2 with active Chapter House). Build Roads runtime remains deferred/scaffolded.`
 
 ### Construct
 
-- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Applies to Construct road plans (road-only and building+road deferred); Construct does not use generic duty-value +1 from Road Engineer.`
+- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Applies to Construct road plans (road-only and building+road deferred); scales by occupied Road Engineer acolytes (max +2 with active Chapter House); Construct does not use generic duty-value +1 from Road Engineer.`
 
 ### Allocation
 
 - `allocation | allocation | building | infirmary | +1 effective Duty Value | implemented | Applied in transition when Infirmary is active.`
-- `allocation | all_special_activity_spaces | building | chapter_house | affects all Special Activity spaces | deferred_special_activity_system | Deferred until broader special-activity building system is implemented.`
+- `allocation | all_special_activity_spaces | building | chapter_house | allows a second acolyte on each Special Activity via Allocation; bonuses scale by acolyte count, max 2 | implemented | Active Chapter House increases per-space Special Activity capacity from 1 to 2; donated Chapter House does not apply.`
 
 ### Ordination
 

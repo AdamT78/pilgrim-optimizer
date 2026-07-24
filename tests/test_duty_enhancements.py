@@ -73,8 +73,8 @@ def test_registry_contains_all_required_entries() -> None:
             "all_special_activity_spaces",
             "building",
             "chapter_house",
-            "affects all Special Activity spaces",
-            "deferred_special_activity_system",
+            "allows a second acolyte on each Special Activity via Allocation; bonuses scale by acolyte count, max 2",
+            "implemented",
         ),
         (
             "clerical",
@@ -117,17 +117,19 @@ def test_well_quarry_mint_chapel_are_implemented_and_other_buildings_remain_defe
     implemented_building_sources = {
         entry.source_key for entry in building_entries if entry.status == "implemented"
     }
-    assert implemented_building_sources == {"well", "quarry", "mint", "chapel", "infirmary"}
+    assert implemented_building_sources == {
+        "well",
+        "quarry",
+        "mint",
+        "chapel",
+        "infirmary",
+        "chapter_house",
+    }
 
     unimplemented_building_sources = {
         entry.source_key for entry in building_entries if entry.status != "implemented"
     }
-    assert unimplemented_building_sources == {"chapter_house", "mill"}
-    assert any(
-        entry.source_key == "chapter_house"
-        and entry.status == "deferred_special_activity_system"
-        for entry in building_entries
-    )
+    assert unimplemented_building_sources == {"mill"}
 
 
 def test_implemented_special_activity_effects_appear_in_registry() -> None:
