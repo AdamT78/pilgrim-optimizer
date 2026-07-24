@@ -120,10 +120,10 @@ def default_building_market(config: BuildingsConfig) -> tuple[str, ...]:
 
 
 def validate_building_market(market: tuple[str, ...], config: BuildingsConfig) -> None:
-    """Validate scenario building market composition."""
-    if len(market) != config.setup.buildings_per_game:
+    """Validate runtime building market composition."""
+    if len(market) > config.setup.buildings_per_game:
         raise TransitionValidationError(
-            f"Building market must contain exactly {config.setup.buildings_per_game} buildings."
+            f"Building market cannot exceed {config.setup.buildings_per_game} buildings."
         )
     if len(set(market)) != len(market):
         raise TransitionValidationError("Building market cannot contain duplicate building ids.")
@@ -136,9 +136,9 @@ def validate_building_market(market: tuple[str, ...], config: BuildingsConfig) -
     for level in BUILDING_LEVELS:
         expected = config.setup.draw_count(level)
         actual = level_counts[level]
-        if actual != expected:
+        if actual > expected:
             raise TransitionValidationError(
-                f"Building market must contain exactly {expected} level-{level} buildings."
+                f"Building market may contain at most {expected} level-{level} buildings."
             )
 
 
@@ -185,6 +185,45 @@ def donate_active_building(
         player_board_slots=updated_slots,
     )
     return updated_player_state, definition
+
+
+def construct_building_from_market(
+    player_state: PlayerState,
+    *,
+    building_id: str,
+    building_market: tuple[str, ...],
+    config: GameConfig,
+) -> tuple[PlayerState, tuple[str, ...], BuildingDefinition]:
+    """Construct one market building and move it to active_buildings."""
+    if building_id not in building_market:
+        raise ValueError(f"Building '{building_id}' is not available in building_market.")
+    if building_id in player_state.player_board_slots.active_buildings:
+        raise ValueError(f"Building '{building_id}' is already active on this player board.")
+    if building_id in player_state.player_board_slots.donated_buildings:
+        raise ValueError(f"Building '{building_id}' is already donated on this player board.")
+    if not has_available_player_board_slot(player_state, config):
+        raise ValueError("No available player-board slot for constructing a building.")
+
+    definition = building_by_id(config.buildings, building_id)
+    stone_cost = building_stone_cost(definition)
+    resources_after_cost = player_state.resources.add(stone=-stone_cost)
+    if resources_after_cost.stone < 0:
+        raise ValueError(
+            f"Insufficient stone to construct '{building_id}': need {stone_cost}."
+        )
+
+    updated_slots = PlayerBoardSlots(
+        active_buildings=(*player_state.player_board_slots.active_buildings, building_id),
+        donated_buildings=player_state.player_board_slots.donated_buildings,
+        cardinal_favor_tiles=player_state.player_board_slots.cardinal_favor_tiles,
+    )
+    updated_player_state = replace(
+        player_state,
+        resources=resources_after_cost,
+        player_board_slots=updated_slots,
+    )
+    updated_market = _remove_first_occurrence(building_market, building_id)
+    return updated_player_state, updated_market, definition
 
 
 def player_has_active_building(player_state: PlayerState, building_id: str) -> bool:
@@ -269,12 +308,7 @@ def validate_player_board_slots(
 def validate_building_state(state: GameState, config: GameConfig) -> None:
     """Validate market + per-player slot occupancy against building config."""
     validate_building_catalogue(config.buildings)
-    market = (
-        state.building_market
-        if state.building_market
-        else default_building_market(config.buildings)
-    )
-    validate_building_market(market, config.buildings)
+    validate_building_market(state.building_market, config.buildings)
     for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
         validate_player_board_slots(
             state.player_state(player_id).player_board_slots,
@@ -293,3 +327,16 @@ def building_names_for_ids(
 def _ensure_unique_ids(values: tuple[str, ...], *, label: str) -> None:
     if len(set(values)) != len(values):
         raise TransitionValidationError(f"{label} cannot contain duplicate building ids.")
+
+
+def _remove_first_occurrence(values: tuple[str, ...], target: str) -> tuple[str, ...]:
+    removed = False
+    kept: list[str] = []
+    for value in values:
+        if value == target and not removed:
+            removed = True
+            continue
+        kept.append(value)
+    if not removed:
+        raise ValueError(f"Cannot remove '{target}': value not found.")
+    return tuple(kept)

@@ -410,6 +410,26 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         donation_vp = int(details.get("donation_vp", 0))
         return f"{event_name}: {actor_name} donated {donated_label}; donation_vp={donation_vp}"
 
+    if event.event_type is EventType.BUILDING_CONSTRUCTED:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        built_label = building_name if building_name else building_id
+        source = str(details.get("source", "market"))
+        level = int(details.get("level", 0))
+        stone_cost = int(details.get("stone_cost", 0))
+        active_count = int(details.get("active_buildings_count", 0))
+        used_slots = int(details.get("used_slots", 0))
+        slot_limit = int(details.get("slot_limit", 0))
+        text = (
+            f"{event_name}: {actor_name} constructed {built_label} from {source}; "
+            f"level {level}; cost stone {stone_cost}; active buildings now {active_count}"
+        )
+        if slot_limit > 0:
+            text += f"; used slots {used_slots}/{slot_limit}"
+        else:
+            text += f"; used slots {used_slots}"
+        return text
+
     if event.event_type is EventType.ORDINATION:
         step = str(details.get("step", "")).strip()
         amount = int(details.get("amount", 1))

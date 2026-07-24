@@ -26,9 +26,12 @@ from pilgrim.rules.alms import (
 from pilgrim.rules.buildings import (
     clerical_devotion_chapel_bonus,
     clerical_silversmith_mint_bonus,
+    construct_building_from_market,
     donate_active_building,
+    has_available_player_board_slot,
     produce_stone_quarry_bonus,
     produce_wheat_well_bonus,
+    used_player_board_slots,
     validate_building_state,
 )
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
@@ -97,13 +100,9 @@ class TransitionResult:
 
 
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
-_CONSTRUCT_PLAN_BUILDING = "building"
 _CONSTRUCT_PLAN_ROAD = "road"
-_CONSTRUCT_PLAN_BUILDING_AND_ROAD = "building + road"
 _CONSTRUCT_PLAN_ROAD_WITH_EXTRA = "road + road_engineer_extra_road"
-_CONSTRUCT_PLAN_BUILDING_AND_ROAD_WITH_EXTRA = (
-    "building + road + road_engineer_extra_road"
-)
+_CONSTRUCT_ROAD_SCAFFOLD_TEXT = "construct road part requires spatial road system"
 
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -245,21 +244,54 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         duty_position=duty_position,
                     )
                     strength = duty_strength(player_count, opponent_counts)
-                    duty_value, _silver_cost = duty_value_and_silver_cost(strength)
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
                     has_road_engineer = has_special_activity(player_state, "road_engineer")
-                    for construct_plan in _construct_plan_options(
-                        duty_value=duty_value,
-                        has_road_engineer=has_road_engineer,
-                    ):
-                        actions.append(
-                            FullTurnAction(
-                                origin=origin,
-                                route=route,
-                                selected_duty=duty_position,
-                                resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
-                                construct_plan=construct_plan,
-                            )
+                    if player_resources.silver >= silver_cost:
+                        constructible_building_ids = _constructible_building_ids(
+                            player_state=player_state,
+                            config=config,
+                            building_market=state.building_market,
                         )
+                        for building_id in constructible_building_ids:
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+                                    construct_building_id=building_id,
+                                )
+                            )
+                        for construct_plan in _construct_road_only_plans(
+                            duty_value=duty_value,
+                            has_road_engineer=has_road_engineer,
+                        ):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
+                                    construct_plan=construct_plan,
+                                )
+                            )
+                        for construct_plan in _construct_building_plus_road_plans(
+                            duty_value=duty_value,
+                            has_road_engineer=has_road_engineer,
+                        ):
+                            for building_id in constructible_building_ids:
+                                actions.append(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=(
+                                            TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+                                        ),
+                                        construct_plan=construct_plan,
+                                        construct_building_id=building_id,
+                                    )
+                                )
                 elif TurnResolutionType.ORDINATION in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
@@ -552,10 +584,12 @@ def _apply_full_turn_action(
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
         special_bonus_events: list[GameEvent] = []
         building_bonus_events: list[GameEvent] = []
+        construct_events: list[GameEvent] = []
         effective_duty_value = duty_value
         give_alms_resolution = None
         donate_building_alms_resolution = None
         duty_deferred_event: GameEvent | None = None
+        updated_building_market = state_after_sow.building_market
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS
@@ -593,11 +627,26 @@ def _apply_full_turn_action(
         if action.resolution is not TurnResolutionType.ALLOCATION and action.allocation_moves:
             raise TransitionValidationError("Only Allocation actions may set allocation_moves.")
         if (
-            action.resolution is not TurnResolutionType.CONSTRUCT_DEFERRED
+            action.resolution
+            not in (
+                TurnResolutionType.CONSTRUCT_DEFERRED,
+                TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
+            )
             and action.construct_plan is not None
         ):
             raise TransitionValidationError(
-                "Only Construct actions may include construct_plan."
+                "Only Construct road-plan actions may include construct_plan."
+            )
+        if (
+            action.resolution
+            not in (
+                TurnResolutionType.CONSTRUCT_BUILDING,
+                TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
+            )
+            and action.construct_building_id is not None
+        ):
+            raise TransitionValidationError(
+                "Only Construct building actions may include construct_building_id."
             )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
@@ -776,20 +825,18 @@ def _apply_full_turn_action(
             )
         elif action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
             if not action.construct_plan:
-                raise TransitionValidationError(
-                    "Construct action requires construct_plan."
-                )
+                raise TransitionValidationError("Construct action requires construct_plan.")
             has_road_engineer = has_special_activity(
                 state_after_sow.player_state(player),
                 "road_engineer",
             )
-            allowed_construct_plans = _construct_plan_options(
+            allowed_construct_plans = _construct_road_only_plans(
                 duty_value=duty_value,
                 has_road_engineer=has_road_engineer,
             )
             if action.construct_plan not in allowed_construct_plans:
                 raise TransitionValidationError(
-                    "Illegal construct_plan for current duty value/special-activity state."
+                    "Illegal construct road plan for current duty value/special-activity state."
                 )
 
             new_player_state = state_after_sow.player_state(player)
@@ -826,7 +873,159 @@ def _apply_full_turn_action(
                 details=make_event_details(
                     duty_category="construct",
                     scaffold=(
-                        "construct requires building/spatial road system; "
+                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; "
+                        f"requested plan: {action.construct_plan}"
+                    ),
+                ),
+            )
+        elif action.resolution is TurnResolutionType.CONSTRUCT_BUILDING:
+            if not action.construct_building_id:
+                raise TransitionValidationError(
+                    "construct_building action requires construct_building_id."
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Construct minority silver cost would overdraw silver."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            try:
+                (
+                    new_player_state,
+                    updated_building_market,
+                    constructed_building,
+                ) = construct_building_from_market(
+                    new_player_state,
+                    building_id=action.construct_building_id,
+                    building_market=updated_building_market,
+                    config=config,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+
+            stone_cost = constructed_building.stone_cost
+            resource_delta = (-stone_cost, -silver_cost, 0)
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+            construct_events.append(
+                GameEvent(
+                    event_type=EventType.BUILDING_CONSTRUCTED,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        building_id=constructed_building.id,
+                        building_name=constructed_building.name,
+                        level=constructed_building.level,
+                        stone_cost=stone_cost,
+                        source="market",
+                        active_buildings_count=len(
+                            new_player_state.player_board_slots.active_buildings
+                        ),
+                        used_slots=used_player_board_slots(new_player_state),
+                        slot_limit=config.buildings.player_board.building_and_cardinal_slot_limit,
+                    ),
+                )
+            )
+        elif action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED:
+            if not action.construct_building_id:
+                raise TransitionValidationError(
+                    "construct_building_and_road_deferred requires construct_building_id."
+                )
+            if not action.construct_plan:
+                raise TransitionValidationError(
+                    "construct_building_and_road_deferred requires construct_plan."
+                )
+            if duty_value < 2:
+                raise TransitionValidationError(
+                    "construct_building_and_road_deferred requires duty value >= 2."
+                )
+
+            has_road_engineer = has_special_activity(
+                state_after_sow.player_state(player),
+                "road_engineer",
+            )
+            allowed_construct_plans = _construct_building_plus_road_plans(
+                duty_value=duty_value,
+                has_road_engineer=has_road_engineer,
+            )
+            if action.construct_plan not in allowed_construct_plans:
+                raise TransitionValidationError(
+                    "Illegal construct road plan for building+road action."
+                )
+
+            new_player_state = state_after_sow.player_state(player)
+            if silver_cost:
+                new_resources = new_player_state.resources.add(silver=-silver_cost)
+                if new_resources.silver < 0:
+                    raise TransitionValidationError(
+                        "Construct minority silver cost would overdraw silver."
+                    )
+                new_player_state = replace(new_player_state, resources=new_resources)
+
+            try:
+                (
+                    new_player_state,
+                    updated_building_market,
+                    constructed_building,
+                ) = construct_building_from_market(
+                    new_player_state,
+                    building_id=action.construct_building_id,
+                    building_market=updated_building_market,
+                    config=config,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+
+            stone_cost = constructed_building.stone_cost
+            if _construct_plan_uses_road_engineer_extra(action.construct_plan):
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            activity="road_engineer",
+                            action=action.resolution.value,
+                            construct_extra_road=True,
+                            reason="road included in plan",
+                        ),
+                    )
+                )
+
+            resource_delta = (-stone_cost, -silver_cost, 0)
+            old_piety_position = state_after_sow.player_state(player).piety
+            new_piety_position = state_after_sow.player_state(player).piety
+            construct_events.append(
+                GameEvent(
+                    event_type=EventType.BUILDING_CONSTRUCTED,
+                    actor=player,
+                    action_id=transition_action_id,
+                    details=make_event_details(
+                        building_id=constructed_building.id,
+                        building_name=constructed_building.name,
+                        level=constructed_building.level,
+                        stone_cost=stone_cost,
+                        source="market",
+                        active_buildings_count=len(
+                            new_player_state.player_board_slots.active_buildings
+                        ),
+                        used_slots=used_player_board_slots(new_player_state),
+                        slot_limit=config.buildings.player_board.building_and_cardinal_slot_limit,
+                    ),
+                )
+            )
+            duty_deferred_event = GameEvent(
+                event_type=EventType.DUTY_DEFERRED,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    duty_category="construct",
+                    scaffold=(
+                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; "
                         f"requested plan: {action.construct_plan}"
                     ),
                 ),
@@ -1203,6 +1402,7 @@ def _apply_full_turn_action(
 
         updated_state = state_after_sow.with_player_state(player, new_player_state)
         updated_state = updated_state.with_player_vector(player, tuple(recalled_vector))
+        updated_state = updated_state.with_building_market(updated_building_market)
 
         piety_position_delta = new_piety_position - old_piety_position
         old_piety_vp = score_piety(old_piety_position, config.piety)
@@ -1227,7 +1427,7 @@ def _apply_full_turn_action(
         )
         events.extend(special_bonus_events)
         events.extend(building_bonus_events)
-        if duty_deferred_event is not None:
+        if duty_deferred_event is not None and not construct_events:
             events.append(duty_deferred_event)
         events.append(
             GameEvent(
@@ -1241,6 +1441,9 @@ def _apply_full_turn_action(
                 ),
             )
         )
+        events.extend(construct_events)
+        if duty_deferred_event is not None and construct_events:
+            events.append(duty_deferred_event)
 
         if action.resolution is TurnResolutionType.GIVE_ALMS:
             if give_alms_resolution is None:
@@ -1579,7 +1782,7 @@ def _next_incomplete_setup_player(
     return None
 
 
-def _construct_plan_options(
+def _construct_road_only_plans(
     *,
     duty_value: int,
     has_road_engineer: bool,
@@ -1590,17 +1793,52 @@ def _construct_plan_options(
     plans: list[str] = []
     if has_road_engineer:
         plans.append(_CONSTRUCT_PLAN_ROAD_WITH_EXTRA)
-        if duty_value >= 2:
-            plans.append(_CONSTRUCT_PLAN_BUILDING_AND_ROAD_WITH_EXTRA)
-    if duty_value >= 2:
-        plans.append(_CONSTRUCT_PLAN_BUILDING_AND_ROAD)
-    plans.append(_CONSTRUCT_PLAN_BUILDING)
+    plans.append(_CONSTRUCT_PLAN_ROAD)
+    return tuple(plans)
+
+
+def _construct_building_plus_road_plans(
+    *,
+    duty_value: int,
+    has_road_engineer: bool,
+) -> tuple[str, ...]:
+    if duty_value < 2:
+        return ()
+
+    plans: list[str] = []
+    if has_road_engineer:
+        plans.append(_CONSTRUCT_PLAN_ROAD_WITH_EXTRA)
     plans.append(_CONSTRUCT_PLAN_ROAD)
     return tuple(plans)
 
 
 def _construct_plan_uses_road_engineer_extra(plan: str) -> bool:
     return "road_engineer_extra_road" in plan
+
+
+def _constructible_building_ids(
+    *,
+    player_state,
+    config: GameConfig,
+    building_market: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not has_available_player_board_slot(player_state, config):
+        return ()
+
+    owned_buildings = set(player_state.player_board_slots.active_buildings).union(
+        player_state.player_board_slots.donated_buildings
+    )
+    affordable_buildings: list[str] = []
+    for building_id in building_market:
+        if building_id in owned_buildings:
+            continue
+        try:
+            definition = config.buildings.definition_by_id(building_id)
+        except ValueError:
+            continue
+        if player_state.resources.stone >= definition.stone_cost:
+            affordable_buildings.append(building_id)
+    return tuple(affordable_buildings)
 
 
 def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:

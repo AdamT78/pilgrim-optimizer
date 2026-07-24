@@ -1,4 +1,4 @@
-# Duty Tiles (v2.2 Sandbox Scope)
+# Duty Tiles (v2.5 Sandbox Scope)
 
 ## Core model
 
@@ -80,7 +80,9 @@ Implemented action systems:
 - `build_roads`:
   - `build_roads_deferred` (scaffold only; no spatial placement yet)
 - `construct`:
-  - `construct_deferred` (scaffold only; no building/spatial placement yet)
+  - `construct_building` (acquire 1 market building by paying stone = building level)
+  - `construct_building_and_road_deferred` (real building acquisition + deferred road part)
+  - `construct_deferred` (road-only scaffold)
 - `taxation`:
   - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
@@ -136,17 +138,21 @@ Deferred category systems (valid in layout, no non-tithe action yet):
     - upgrade road/bridge
     - demolish road/bridge
 - For `construct`:
-  - legal actions currently include `construct_deferred` plus `tithe`
-  - scaffold plans model intent only (`building`, `road`, `building + road`, plus Road Engineer
-    extra-road variants when legal)
-  - real Construct rule modelled by plan constraints:
-    - at most 1 building from Construct
-    - at duty value 2, `building + road` is legal
-    - `building + building` is never legal
-  - no buildings, roads, bridges, upgrades, demolitions, or map changes are applied in this
-    milestone
+  - legal actions now include `construct_building`, `construct_deferred`, and (at duty value 2)
+    `construct_building_and_road_deferred`, plus `tithe`
+  - Construct can acquire exactly one market building:
+    - pay stone equal to building level (L1=1, L2=2, L3=3)
+    - remove that building from `building_market`
+    - add it to acting player's `active_buildings`
+    - consume one shared player-board slot immediately
+  - Construct still enforces "max 1 building per Construct action"
+  - at duty value 2, building + road is partially implemented:
+    - building resolves immediately
+    - road remains deferred and logged via `DUTY_DEFERRED`
+  - Road Engineer for Construct does not raise generic duty value:
+    - it only allows one additional deferred road when a road plan is already included
+  - roads/bridges/upgrades/demolition/spatial placement remain deferred
   - minority silver cost and duty recall still apply normally
-  - `DUTY_DEFERRED` event records the requested deferred plan
 - For `taxation`:
   - Step I always takes exactly one chosen resource: `stone`, `silver`, or `wheat`.
   - Step II checks other physical duty tiles (excluding the selected Taxation tile and any
@@ -171,5 +177,6 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); ...; action build_roads_deferred`
   - `DUTY_DEFERRED: build_roads requires spatial road/shrine system; ...`
-  - `DUTY_RESOLUTION: selected south_east (construct); ...; action construct_deferred`
-  - `DUTY_DEFERRED: construct requires building/spatial road system; requested plan: ...`
+  - `DUTY_RESOLUTION: selected south_east (construct); ...; action construct_building`
+  - `BUILDING_CONSTRUCTED: player_one constructed Well from market; level 1; cost stone 1; ...`
+  - `DUTY_DEFERRED: construct road part requires spatial road system; requested plan: ...`

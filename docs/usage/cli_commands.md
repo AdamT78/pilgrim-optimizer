@@ -319,7 +319,8 @@ Position mapping used by the current sandbox:
   - `Building market`
   - per-player `Player board slots`
   - slot usage lines (`Used slots`, `Available slots`)
-- Building actions/effects remain deferred in this milestone.
+- Construct building acquisition now appears in verbose output via `BUILDING_CONSTRUCTED`,
+  updated market rows, and updated active-building slot usage.
 
 ## Player Board Workforce and Special Activities (v1.2)
 
@@ -342,9 +343,14 @@ Position mapping used by the current sandbox:
 - City is not a duty tile.
 - The 8 non-city positions map to 8 duty categories exactly once each.
 - Legal actions are now generated from duty category at selected position, not fixed position hardcoding.
-- `construct` now exposes `construct_deferred` scaffold plans plus `tithe`.
+- `construct` now exposes:
+  - `construct_building`
+  - `construct_building_and_road_deferred`
+  - `construct_deferred` (road-only scaffold)
+  - `tithe`
 - `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe`.
-- both remain non-spatial scaffolds in current scope (no map/placement changes).
+- Build Roads remains fully non-spatial scaffolded.
+- Construct road effects remain non-spatial scaffolded; only building acquisition is implemented.
 
 ## Produce Options and Fields Rename (v1.4)
 
