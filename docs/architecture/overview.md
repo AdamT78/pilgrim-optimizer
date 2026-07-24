@@ -333,7 +333,30 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - hired variants are unavailable while own-active variants still work
 - Event ordering for hired sources is explicit:
   - `BUILDING_HIRED` then `BUILDING_BONUS`
-- Infirmary, Chapter House, and Mill remain outside hire-source wiring in this milestone.
+- Chapter House and Mill remain outside hire-source wiring in this milestone.
+
+## Hire Sources for Infirmary Duty Bonuses (v3.1b)
+
+- Transition/runtime wiring now consumes hire sources for Infirmary in:
+  - `allocation` (`+1 effective Duty Value`)
+  - `ordination` (`+1 effective Duty Value` only when the extra paid step is used)
+- Source resolution remains deterministic:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable
+- Legal-action generation now:
+  - preserves base Allocation/Ordination actions without forced hire
+  - emits hired Infirmary variants only when the extra cap is actually used
+  - enforces joint affordability (minority silver + step wheat + hire payment)
+- Apply-time ordering for hired Infirmary paths:
+  - `DUTY_RESOLUTION`
+  - `BUILDING_HIRED`
+  - `BUILDING_BONUS`
+  - `ALLOCATION` / `ORDINATION` step events
+- Scope boundary remains:
+  - Chapter House hire wiring is still deferred
+  - Mill remains deferred/unimplemented
 
 ## Intentionally Deferred
 

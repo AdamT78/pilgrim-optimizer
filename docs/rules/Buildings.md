@@ -150,7 +150,37 @@ Notes:
 
 Important scope boundary:
 
-- Infirmary, Chapter House, and Mill are still not wired to hire sources.
+- Chapter House and Mill are still not wired to hire sources.
+
+## Infirmary hire wiring (v3.1b)
+
+Infirmary duty-value bonuses now also resolve through hire sources:
+
+- own active Infirmary -> free
+- live market Infirmary -> hire from bank
+- opponent active Infirmary -> hire from owner
+
+Allocation behavior:
+
+- Infirmary adds `+1 effective Duty Value` (same cap semantics as own-active behavior)
+- hired Infirmary variants are generated only when they use that extra cap
+- hired source emits `BUILDING_HIRED` before `BUILDING_BONUS`
+
+Ordination behavior:
+
+- Infirmary adds `+1 effective Duty Value` only when the action actually takes the extra paid step
+- the extra Ordination step still costs wheat; Infirmary does not make steps free
+- hired extra-step variants are generated only when all costs are jointly affordable:
+  - minority silver (if any)
+  - Ordination wheat step costs
+  - Infirmary hire payment (`1` Merchant resource)
+
+Unavailable source rules remain enforced:
+
+- donated Infirmary
+- not-live market Infirmary
+- Merchant on Taxation (`resource = none`)
+- insufficient hire payment resource
 
 ## Player-board slots
 

@@ -24,8 +24,9 @@ Runtime policy for currently implemented building bonuses:
 - Merchant on Taxation has resource `none`, so hired sources are unavailable there.
 - These bonuses stack with matching Special Activity bonuses.
 - Infirmary is now implemented as a true duty-value modifier:
-  - Allocation: `+1 effective Duty Value`
-  - Ordination: `+1 effective Duty Value` only when the extra paid Ordination step is used
+  - Allocation: `+1 effective Duty Value` from own-active or usable hired source
+  - Ordination: `+1 effective Duty Value` only when the extra paid Ordination step is used,
+    from own-active or usable hired source
 - Well / Quarry / Mint / Chapel remain direct output bonuses (resource/piety), not duty-value
   modifiers.
 
@@ -51,7 +52,10 @@ Building hire infrastructure note (v3.1a):
   - Quarry (`produce_stone`)
   - Mint (`clerical_silversmith`)
   - Chapel (`clerical_devotion`)
-- Infirmary, Chapter House, and Mill remain own-active only for now.
+- Infirmary is now also wired:
+  - Allocation effective-duty cap bonus (`+1`)
+  - Ordination extra-step effective-duty cap bonus (`+1` when extra step is used)
+- Chapter House and Mill remain own-active-only / deferred for hire wiring.
 
 ## Registry fields
 
@@ -81,15 +85,15 @@ Format:
 
 - `produce | produce_wheat | special_activity | fields | +1 wheat | implemented | Applied by produce_wheat_fields_bonus() hook.`
 - `produce | produce_stone | special_activity | stone_mason | +1 stone | implemented | Applied by produce_stone_mason_bonus() hook.`
-- `produce | produce_wheat | building | well | +1 wheat | implemented | Applied in transition when Well is active.`
-- `produce | produce_stone | building | quarry | +1 stone | implemented | Applied in transition when Quarry is active.`
+- `produce | produce_wheat | building | well | +1 wheat | implemented | Applied in transition from own-active or usable hired Well source.`
+- `produce | produce_stone | building | quarry | +1 stone | implemented | Applied in transition from own-active or usable hired Quarry source.`
 
 ### Clerical
 
 - `clerical | clerical_devotion | special_activity | vestry | +1 piety | implemented | Applied by clerical_devotion_bonus() hook.`
 - `clerical | clerical_silversmith | special_activity | engraver | +1 silver | implemented | Applied by clerical_silversmith_bonus() hook.`
-- `clerical | clerical_silversmith | building | mint | +1 silver | implemented | Applied in transition when Mint is active.`
-- `clerical | clerical_devotion | building | chapel | +1 piety | implemented | Applied in transition when Chapel is active.`
+- `clerical | clerical_silversmith | building | mint | +1 silver | implemented | Applied in transition from own-active or usable hired Mint source.`
+- `clerical | clerical_devotion | building | chapel | +1 piety | implemented | Applied in transition from own-active or usable hired Chapel source.`
 
 ### Give Alms
 
@@ -106,10 +110,10 @@ Format:
 
 ### Allocation
 
-- `allocation | allocation | building | infirmary | +1 effective Duty Value | implemented | Applied in transition when Infirmary is active.`
+- `allocation | allocation | building | infirmary | +1 effective Duty Value | implemented | Applied in transition from own-active or usable hired Infirmary source.`
 - `allocation | all_special_activity_spaces | building | chapter_house | allows a second acolyte on each Special Activity via Allocation; bonuses scale by acolyte count, max 2 | implemented | Active Chapter House increases per-space Special Activity capacity from 1 to 2; donated Chapter House does not apply.`
 
 ### Ordination
 
 - `ordination | ordination | building | mill | deferred | known_unimplemented | Ordination building interaction is not implemented yet.`
-- `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | implemented | Applied when active Infirmary is used for an extra paid ordination step.`
+- `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | implemented | Applied when own-active or usable hired Infirmary is used for an extra paid ordination step.`

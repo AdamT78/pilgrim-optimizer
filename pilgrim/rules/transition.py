@@ -28,7 +28,6 @@ from pilgrim.rules.buildings import (
     BuildingAbilitySource,
     BuildingHirePayment,
     BuildingHireTurnContext,
-    allocation_infirmary_duty_value_bonus,
     apply_building_hire_payment,
     building_ability_source,
     can_hire_building_this_turn,
@@ -37,9 +36,7 @@ from pilgrim.rules.buildings import (
     donate_active_building,
     has_available_player_board_slot,
     is_building_live,
-    ordination_infirmary_duty_value_bonus,
     player_has_active_chapter_house,
-    player_has_active_building,
     record_hired_building_this_turn,
     used_player_board_slots,
     validate_hire_sequence_for_turn,
@@ -122,6 +119,11 @@ _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_STONE: "quarry",
     TurnResolutionType.CLERICAL_SILVERSMITH: "mint",
     TurnResolutionType.CLERICAL_DEVOTION: "chapel",
+}
+_HIRED_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
+    **_SIMPLE_BONUS_BUILDING_BY_ACTION,
+    TurnResolutionType.ALLOCATION: "infirmary",
+    TurnResolutionType.ORDINATION: "infirmary",
 }
 
 
@@ -258,24 +260,75 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         duty_position=duty_position,
                     )
                     strength = duty_strength(player_count, opponent_counts)
-                    duty_value, _silver_cost = duty_value_and_silver_cost(strength)
-                    allocation_effective_duty_value = (
-                        duty_value + allocation_infirmary_duty_value_bonus(player_state)
-                    )
-                    for move_sequence in _allocation_move_sequences(
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    base_move_sequences = _allocation_move_sequences(
                         player_state,
-                        max_moves=allocation_effective_duty_value,
+                        max_moves=duty_value,
                         special_activity_capacity=activity_capacity,
-                    ):
-                        actions.append(
-                            FullTurnAction(
-                                origin=origin,
-                                route=route,
-                                selected_duty=duty_position,
-                                resolution=TurnResolutionType.ALLOCATION,
-                                allocation_moves=move_sequence,
+                    )
+                    infirmary_source = building_ability_source(
+                        state,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="infirmary",
+                    )
+
+                    if infirmary_source.source_type == "own_active" and infirmary_source.usable:
+                        for move_sequence in _allocation_move_sequences(
+                            player_state,
+                            max_moves=duty_value + 1,
+                            special_activity_capacity=activity_capacity,
+                        ):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ALLOCATION,
+                                    allocation_moves=move_sequence,
+                                )
                             )
-                        )
+                    else:
+                        for move_sequence in base_move_sequences:
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ALLOCATION,
+                                    allocation_moves=move_sequence,
+                                )
+                            )
+                        if (
+                            _is_hired_source(infirmary_source)
+                            and infirmary_source.usable
+                            and _can_afford_hire_with_resolution_costs(
+                                player_state,
+                                source=infirmary_source,
+                                minority_silver_cost=silver_cost,
+                                ordination_step_count=0,
+                            )
+                        ):
+                            for move_sequence in _allocation_move_sequences(
+                                player_state,
+                                max_moves=duty_value + 1,
+                                special_activity_capacity=activity_capacity,
+                            ):
+                                if len(move_sequence) <= duty_value:
+                                    continue
+                                actions.append(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.ALLOCATION,
+                                        allocation_moves=move_sequence,
+                                        hired_building_id="infirmary",
+                                        hired_building_source=_hired_building_source_label(
+                                            infirmary_source
+                                        ),
+                                    )
+                                )
                 elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
@@ -347,13 +400,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     available_silver = player_resources.silver - silver_cost
                     if available_silver < 0:
                         continue
-                    ordination_cap_bonus = (
-                        1 if player_has_active_building(player_state, "infirmary") else 0
-                    )
-                    for step_sequence in legal_ordination_step_sequences(
+
+                    base_sequences = legal_ordination_step_sequences(
                         player_state,
-                        max_steps=duty_value + ordination_cap_bonus,
-                    ):
+                        max_steps=duty_value,
+                    )
+                    for step_sequence in base_sequences:
                         actions.append(
                             FullTurnAction(
                                 origin=origin,
@@ -363,6 +415,54 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 ordination_steps=step_sequence,
                             )
                         )
+
+                    infirmary_source = building_ability_source(
+                        state,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="infirmary",
+                    )
+                    bonus_sequences = legal_ordination_step_sequences(
+                        player_state,
+                        max_steps=duty_value + 1,
+                    )
+                    if infirmary_source.source_type == "own_active" and infirmary_source.usable:
+                        for step_sequence in bonus_sequences:
+                            if len(step_sequence) <= duty_value:
+                                continue
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                )
+                            )
+                    elif _is_hired_source(infirmary_source) and infirmary_source.usable:
+                        for step_sequence in bonus_sequences:
+                            if len(step_sequence) <= duty_value:
+                                continue
+                            if not _can_afford_hire_with_resolution_costs(
+                                player_state,
+                                source=infirmary_source,
+                                minority_silver_cost=silver_cost,
+                                ordination_step_count=len(step_sequence),
+                            ):
+                                continue
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                    hired_building_id="infirmary",
+                                    hired_building_source=_hired_building_source_label(
+                                        infirmary_source
+                                    ),
+                                )
+                            )
                 elif TurnResolutionType.TAXATION in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
@@ -703,11 +803,11 @@ def _apply_full_turn_action(
                 "hired_building_id and hired_building_source must be set together."
             )
         if action.hired_building_id is not None:
-            if action.resolution not in _SIMPLE_BONUS_BUILDING_BY_ACTION:
+            if action.resolution not in _HIRED_BUILDING_BY_ACTION:
                 raise TransitionValidationError(
-                    "Only produce/clerical simple bonus actions may include hired building fields."
+                    "This action cannot include hired building fields."
                 )
-            expected_hire_building = _SIMPLE_BONUS_BUILDING_BY_ACTION[action.resolution]
+            expected_hire_building = _HIRED_BUILDING_BY_ACTION[action.resolution]
             if action.hired_building_id != expected_hire_building:
                 raise TransitionValidationError(
                     "hired_building_id does not match action resolution expected building: "
@@ -1150,18 +1250,22 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Ordination action must include at least 1 ordination step."
                 )
-            ordination_cap_bonus = (
-                1 if player_has_active_building(state_after_sow.player_state(player), "infirmary") else 0
+            ordination_source = _resolved_infirmary_source_for_action(
+                state=state_after_sow,
+                config=config,
+                player=player,
+                action=action,
+                duty_value=duty_value,
+                silver_cost=silver_cost,
+                mode="ordination",
             )
+            ordination_cap_bonus = 1 if ordination_source is not None else 0
             max_ordination_steps = duty_value + ordination_cap_bonus
             if len(action.ordination_steps) > max_ordination_steps:
                 raise TransitionValidationError(
                     "Ordination action includes more steps than effective duty value allows."
                 )
-            ordination_bonus = ordination_infirmary_duty_value_bonus(
-                state_after_sow.player_state(player),
-                extra_step_wheat_paid=len(action.ordination_steps) > duty_value,
-            )
+            ordination_bonus = 1 if len(action.ordination_steps) > duty_value else 0
             if ordination_bonus:
                 effective_duty_value += ordination_bonus
                 building_bonus_events.append(
@@ -1178,7 +1282,27 @@ def _apply_full_turn_action(
                     )
                 )
 
-            new_player_state = state_after_sow.player_state(player)
+            state_for_ordination = state_after_sow
+            new_player_state = state_for_ordination.player_state(player)
+            if ordination_source is not None and _is_hired_source(ordination_source):
+                try:
+                    state_for_ordination, hire_payment = apply_building_hire_payment(
+                        state_for_ordination,
+                        acting_player=player,
+                        source=ordination_source,
+                    )
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                new_player_state = state_for_ordination.player_state(player)
+                building_hired_events.append(
+                    _building_hired_event(
+                        source=ordination_source,
+                        payment=hire_payment,
+                        actor=player,
+                        action_id=transition_action_id,
+                        config=config,
+                    )
+                )
             for step in action.ordination_steps:
                 try:
                     new_player_state = apply_ordination_step(new_player_state, step)
@@ -1227,7 +1351,11 @@ def _apply_full_turn_action(
                     )
                 new_player_state = replace(new_player_state, resources=new_resources)
 
-            resource_delta = (0, -silver_cost, -len(action.ordination_steps))
+            state_after_resolution = state_for_ordination.with_player_state(player, new_player_state)
+            resource_delta = _resource_delta_between(
+                state_after_sow.player_state(player).resources,
+                new_player_state.resources,
+            )
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.TAXATION:
@@ -1332,9 +1460,16 @@ def _apply_full_turn_action(
             allocation_special_activity_capacity = special_activity_capacity(
                 chapter_house_active=chapter_house_active
             )
-            allocation_bonus = allocation_infirmary_duty_value_bonus(
-                state_after_sow.player_state(player)
+            allocation_source = _resolved_infirmary_source_for_action(
+                state=state_after_sow,
+                config=config,
+                player=player,
+                action=action,
+                duty_value=duty_value,
+                silver_cost=silver_cost,
+                mode="allocation",
             )
+            allocation_bonus = 1 if allocation_source is not None else 0
             if allocation_bonus:
                 effective_duty_value += allocation_bonus
                 building_bonus_events.append(
@@ -1358,7 +1493,27 @@ def _apply_full_turn_action(
                     "Allocation action includes more moves than effective duty value allows."
                 )
 
-            new_player_state = state_after_sow.player_state(player)
+            state_for_allocation = state_after_sow
+            new_player_state = state_for_allocation.player_state(player)
+            if allocation_source is not None and _is_hired_source(allocation_source):
+                try:
+                    state_for_allocation, hire_payment = apply_building_hire_payment(
+                        state_for_allocation,
+                        acting_player=player,
+                        source=allocation_source,
+                    )
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                new_player_state = state_for_allocation.player_state(player)
+                building_hired_events.append(
+                    _building_hired_event(
+                        source=allocation_source,
+                        payment=hire_payment,
+                        actor=player,
+                        action_id=transition_action_id,
+                        config=config,
+                    )
+                )
             for move in action.allocation_moves:
                 destination_activity: str | None = None
                 destination_count_before = 0
@@ -1417,7 +1572,11 @@ def _apply_full_turn_action(
                     )
                 new_player_state = replace(new_player_state, resources=new_resources)
 
-            resource_delta = (0, -silver_cost, 0)
+            state_after_resolution = state_for_allocation.with_player_state(player, new_player_state)
+            resource_delta = _resource_delta_between(
+                state_after_sow.player_state(player).resources,
+                new_player_state.resources,
+            )
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         else:
@@ -1515,7 +1674,7 @@ def _apply_full_turn_action(
                 old_piety_position = state_after_sow.player_state(player).piety
                 new_piety_position = state_after_sow.player_state(player).piety
                 state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
-                if selected_simple_source is not None and _is_hired_simple_source(selected_simple_source):
+                if selected_simple_source is not None and _is_hired_source(selected_simple_source):
                     try:
                         state_after_resolution, hire_payment = apply_building_hire_payment(
                             state_after_resolution,
@@ -1631,7 +1790,7 @@ def _apply_full_turn_action(
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
                 state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
-                if selected_simple_source is not None and _is_hired_simple_source(selected_simple_source):
+                if selected_simple_source is not None and _is_hired_source(selected_simple_source):
                     try:
                         state_after_resolution, hire_payment = apply_building_hire_payment(
                             state_after_resolution,
@@ -1705,10 +1864,10 @@ def _apply_full_turn_action(
                 and not _is_allocation_capacity_building_bonus_event(event)
             )
         ]
+        events.extend(building_hired_events)
         events.extend(duty_value_building_bonus_events)
         events.extend(allocation_capacity_building_bonus_events)
         events.extend(special_bonus_events)
-        events.extend(building_hired_events)
         events.extend(output_building_bonus_events)
         if duty_deferred_event is not None and not construct_events:
             events.append(duty_deferred_event)
@@ -2186,6 +2345,75 @@ def _resolved_simple_bonus_source_for_action(
     return None
 
 
+def _resolved_infirmary_source_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+    duty_value: int,
+    silver_cost: int,
+    mode: str,
+) -> BuildingAbilitySource | None:
+    """Resolve/validate Infirmary source for allocation or ordination actions."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key="infirmary",
+    )
+    action_has_hire_fields = action.hired_building_id is not None
+    uses_infirmary_bonus = False
+    if mode == "allocation":
+        uses_infirmary_bonus = True
+        if _is_hired_source(source):
+            uses_infirmary_bonus = len(action.allocation_moves) > duty_value
+    elif mode == "ordination":
+        uses_infirmary_bonus = len(action.ordination_steps) > duty_value
+    else:
+        raise TransitionValidationError(f"Unknown infirmary action mode: {mode}.")
+
+    if source.source_type == "own_active" and source.usable:
+        if action_has_hire_fields:
+            raise TransitionValidationError(
+                "Infirmary is own-active; action must not include hired building fields."
+            )
+        return source if uses_infirmary_bonus else None
+
+    if _is_hired_source(source) and source.usable:
+        if not action_has_hire_fields:
+            return None
+        expected_source_label = _hired_building_source_label(source)
+        if action.hired_building_id != "infirmary":
+            raise TransitionValidationError(
+                "Action hired_building_id must be infirmary for this resolution."
+            )
+        if action.hired_building_source != expected_source_label:
+            raise TransitionValidationError(
+                "Action hired_building_source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+        if not uses_infirmary_bonus:
+            raise TransitionValidationError(
+                "Infirmary hire fields are only legal when action uses the extra Infirmary bonus."
+            )
+        ordination_steps = len(action.ordination_steps) if mode == "ordination" else 0
+        if not _can_afford_hire_with_resolution_costs(
+            state.player_state(player),
+            source=source,
+            minority_silver_cost=silver_cost,
+            ordination_step_count=ordination_steps,
+        ):
+            raise TransitionValidationError(
+                "Infirmary hire plus duty costs are not affordable for this action."
+            )
+        return source
+
+    if action_has_hire_fields:
+        raise TransitionValidationError("Infirmary is not hire-usable in current state.")
+    return None
+
+
 def _hired_building_source_label(source: BuildingAbilitySource) -> str:
     if source.source_type == "live_market_hire":
         return "market"
@@ -2194,8 +2422,39 @@ def _hired_building_source_label(source: BuildingAbilitySource) -> str:
     return source.source_type
 
 
-def _is_hired_simple_source(source: BuildingAbilitySource) -> bool:
+def _is_hired_source(source: BuildingAbilitySource) -> bool:
     return source.source_type in ("live_market_hire", "opponent_active_hire")
+
+
+def _can_afford_hire_with_resolution_costs(
+    player_state,
+    *,
+    source: BuildingAbilitySource,
+    minority_silver_cost: int,
+    ordination_step_count: int,
+) -> bool:
+    """Return True when hire + duty costs are jointly affordable."""
+    required_stone = 0
+    required_silver = max(0, minority_silver_cost)
+    required_wheat = max(0, ordination_step_count)
+    if _is_hired_source(source):
+        if source.hire_resource is None or source.hire_cost <= 0:
+            return False
+        if source.hire_resource == "stone":
+            required_stone += source.hire_cost
+        elif source.hire_resource == "silver":
+            required_silver += source.hire_cost
+        elif source.hire_resource == "wheat":
+            required_wheat += source.hire_cost
+        else:
+            return False
+
+    resources = player_state.resources
+    return (
+        resources.stone >= required_stone
+        and resources.silver >= required_silver
+        and resources.wheat >= required_wheat
+    )
 
 
 def _building_hired_event(
