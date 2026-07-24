@@ -168,7 +168,11 @@ def test_kogge_does_not_modify_non_city_sow_origins() -> None:
 
 
 def test_turn_modifier_registry_marks_only_kogge_as_implemented() -> None:
-    assert {entry.building_key for entry in implemented_turn_modifiers()} == {"kogge"}
+    assert {entry.building_key for entry in implemented_turn_modifiers()} == {
+        "kogge",
+        "dormitory",
+        "inquisition",
+    }
     assert {
         entry.building_key for entry in scaffolded_turn_modifiers()
-    } == {"cloisters", "dormitory", "inquisition", "library"}
+    } == {"cloisters", "library"}

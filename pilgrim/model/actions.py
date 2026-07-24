@@ -36,6 +36,10 @@ class FullTurnAction:
     allocation_moves: tuple[AllocationMove, ...] = ()
     construct_plan: str | None = None
     construct_building_id: str | None = None
+    start_turn_building_id: str | None = None
+    start_turn_building_source: str | None = None
+    start_turn_relocation_from: int | None = None
+    start_turn_relocation_to: int | None = None
     sow_route_building_id: str | None = None
     sow_route_building_source: str | None = None
     hired_building_id: str | None = None
@@ -132,6 +136,19 @@ def action_id(action: GameAction) -> str:
             + ":construct_plan:"
             + plan.replace(" + ", "+").replace(" ", "_")
         )
+    start_turn_suffix = ""
+    if (
+        action.start_turn_building_id is not None
+        or action.start_turn_building_source is not None
+        or action.start_turn_relocation_from is not None
+        or action.start_turn_relocation_to is not None
+    ):
+        start_turn_suffix = (
+            f":start_turn_building:{action.start_turn_building_id or 'none'}"
+            f":source:{action.start_turn_building_source or 'unknown'}"
+            f":from:{action.start_turn_relocation_from if action.start_turn_relocation_from is not None else 'none'}"
+            f":to:{action.start_turn_relocation_to if action.start_turn_relocation_to is not None else 'none'}"
+        )
     sow_route_suffix = ""
     if action.sow_route_building_id is not None or action.sow_route_building_source is not None:
         sow_route_suffix = (
@@ -148,7 +165,8 @@ def action_id(action: GameAction) -> str:
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
-        f"{taxation_suffix}{allocation_suffix}{construct_suffix}{sow_route_suffix}{hire_suffix}"
+        f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
+        f"{sow_route_suffix}{hire_suffix}"
     )
 
 
@@ -231,6 +249,23 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         elif action.resolution is TurnResolutionType.ORDINATION:
             required_wheat = len(action.ordination_steps)
         summary += f" | mill wheat spent={max(0, required_wheat - 2)}"
+    if (
+        action.start_turn_building_id is not None
+        and action.start_turn_relocation_from is not None
+        and action.start_turn_relocation_to is not None
+        and action.start_turn_building_source is not None
+    ):
+        start_summary = (
+            f"start: {action.start_turn_building_id} "
+            f"{position_name(action.start_turn_relocation_from, positions)} -> "
+            f"{position_name(action.start_turn_relocation_to, positions)}"
+        )
+        if action.start_turn_building_source != "own_active":
+            start_summary += (
+                f" | hire building: {action.start_turn_building_id} "
+                f"from {action.start_turn_building_source}"
+            )
+        summary = f"{start_summary} | {summary}"
     return summary
 
 

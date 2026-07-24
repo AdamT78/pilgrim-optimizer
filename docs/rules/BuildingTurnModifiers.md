@@ -1,4 +1,4 @@
-# Building Turn Modifiers (v3.4)
+# Building Turn Modifiers (v3.5)
 
 ## Purpose
 
@@ -51,7 +51,7 @@ Current statuses:
 - `implemented`
 - `deferred_spatial`
 
-## Entries in v3.4
+## Entries in v3.5
 
 - `kogge`
   - category: `sow_route_modifier`
@@ -60,34 +60,51 @@ Current statuses:
   - status: `implemented`
   - notes: implemented in transition sow-route generation and apply validation/events
 
+- `dormitory`
+  - category: `start_turn_relocation`
+  - phase: `start_of_turn`
+  - effect: may return 1 acolyte from any Duty action to City
+  - status: `implemented`
+  - notes: implemented as optional pre-sow start-turn relocation action prefix
+
+- `inquisition`
+  - category: `start_turn_relocation`
+  - phase: `start_of_turn`
+  - effect: may move 1 acolyte from City to any Duty
+  - status: `implemented`
+  - notes: implemented as optional pre-sow start-turn relocation action prefix
+
+Start-turn relocation runtime semantics:
+
+- prefixes a normal full-turn action (not a standalone turn)
+- resolves before sowing
+- supports own active, live market hire, and opponent active hire sources
+- hired variants emit `BUILDING_HIRED` then `BUILDING_BONUS`, then `START_TURN_RELOCATION`, then `SOWING`
+- own-active variants omit `BUILDING_HIRED`
+- hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
+  hire payment is unaffordable
+
 The following entries remain `scaffolded`:
 - `cloisters`
   - category: `sow_route_modifier`
   - phase: `during_sow`
   - effect: may skip one Duty tile or the city when moving acolytes to Duty actions
   - notes: skip-route logic deferred
-- `dormitory`
-  - category: `start_turn_relocation`
-  - phase: `start_of_turn`
-  - effect: may return 1 acolyte from any Duty action to City
-  - notes: optional pre-turn action composition deferred
-- `inquisition`
-  - category: `start_turn_relocation`
-  - phase: `start_of_turn`
-  - effect: may move 1 acolyte from City to any Duty
-  - notes: optional pre-turn action composition deferred
 - `library`
   - category: `end_turn_relocation`
   - phase: `end_of_turn`
   - effect: may move 1 acolyte from City directly to a Duty action or back to Abbey
   - notes: optional post-turn action composition deferred
 
-## Future action-shape examples (not implemented yet)
+## Action-shape examples
 
-These examples are documentation only:
+Implemented examples:
 
-- `start: dormitory north -> city | turn: sow city -> south | action: give_alms_paid`
-- `start: inquisition city -> east | turn: sow city -> north | action: produce_wheat`
+- `start: dormitory east -> city | turn: sow city -> north -> north_east | action: produce_wheat`
+- `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
+
+Deferred example:
+
 - `turn: sow city -> north | action: produce_wheat | end: library city -> abbey`
 
-No such composite action model is implemented in this milestone.
+The Library end-turn relocation shape remains deferred.

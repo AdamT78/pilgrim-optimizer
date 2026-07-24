@@ -237,7 +237,7 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
-## Building turn-modifier registry (v3.3/v3.4)
+## Building turn-modifier registry (v3.3-v3.5)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:
 
@@ -254,6 +254,7 @@ Scope in this milestone:
 
 - classification and lookup registry
 - runtime wiring now implemented for Kogge sow-route expansion
+- runtime wiring now implemented for Dormitory and Inquisition start-turn relocations
 - no generic runtime modifier engine
 
 Category mapping:
@@ -264,8 +265,8 @@ Category mapping:
 
 Status:
 
-- `kogge` is now `implemented`
-- `cloisters`, `dormitory`, `inquisition`, and `library` remain `scaffolded`
+- `kogge`, `dormitory`, and `inquisition` are now `implemented`
+- `cloisters` and `library` remain `scaffolded`
 
 Kogge runtime behavior:
 
@@ -276,6 +277,32 @@ Kogge runtime behavior:
   - live market hire (pay bank)
 - hired Kogge is unavailable when Merchant resource is `none` (Taxation), insufficient, donated,
   or not live
+
+Dormitory runtime behavior:
+
+- optional start-turn relocation prefix on a normal full-turn action
+- moves exactly one acting-player acolyte from a non-city Duty tile to City
+- source resolution follows normal building source priority:
+  - own active Dormitory (free)
+  - opponent active hire (pay owner)
+  - live market hire (pay bank)
+- hired Dormitory is unavailable when Merchant resource is `none` (Taxation), insufficient,
+  donated, or not live
+- event ordering: `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` ->
+  `SOWING`
+
+Inquisition runtime behavior:
+
+- optional start-turn relocation prefix on a normal full-turn action
+- moves exactly one acting-player acolyte from City to a non-city Duty tile
+- source resolution follows normal building source priority:
+  - own active Inquisition (free)
+  - opponent active hire (pay owner)
+  - live market hire (pay bank)
+- hired Inquisition is unavailable when Merchant resource is `none` (Taxation), insufficient,
+  donated, or not live
+- event ordering: `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` ->
+  `SOWING`
 
 ## Player-board slots
 
