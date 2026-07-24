@@ -1,0 +1,44 @@
+{
+  "scenario_id": "building_hire_opponent_owned_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "merchant_position": 1,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 3,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "building_market": [],
+    "building_availability": {
+      "well": 2
+    },
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 1
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "player_board_slots": {
+          "active_buildings": [
+            "well"
+          ],
+          "donated_buildings": []
+        }
+      }
+    }
+  }
+}

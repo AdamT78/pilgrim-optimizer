@@ -290,6 +290,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Hiring remains deferred:
   - no bank-hire or other-player-hire runtime behavior is implemented yet
 
+## Building Hire Infrastructure (v3.0)
+
+- Rules now include a deterministic building-ability source resolver:
+  - `own_active`
+  - `live_market_hire`
+  - `opponent_active_hire`
+  - `unavailable`
+- Resolver semantics include unavailable reasons (`donated`, `not_live`,
+  `merchant_resource_none`, `insufficient_resource`, `not_selected`).
+- Merchant-based hire-cost infrastructure is now explicit:
+  - cost is `1` Merchant resource
+  - Taxation has no Tithe resource, so Merchant resource is `none` there
+  - live market hire pays bank
+  - opponent active hire pays owner
+  - own active use pays nothing
+- Turn-hire tracking infrastructure is now explicit:
+  - same building cannot be hired twice in one player turn
+  - different buildings can each be hired once in same turn
+  - implemented as pure immutable helper/context scaffolding (not persisted in `GameState`)
+- Payment routing helpers now support pure description + state application for transfers.
+- Transition behavior remains unchanged for existing bonuses:
+  - Well/Quarry/Mint/Chapel/Infirmary/Chapter House continue to apply from own active buildings
+    only
+  - no automatic hire integration is enabled yet
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

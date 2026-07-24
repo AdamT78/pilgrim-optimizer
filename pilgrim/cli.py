@@ -432,6 +432,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             text += f"; used slots {used_slots}"
         return text
 
+    if event.event_type is EventType.BUILDING_HIRED:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        hired_label = building_name if building_name else building_id
+        source = str(details.get("source", "unknown"))
+        payee = str(details.get("payee", "unknown"))
+        resource = str(details.get("resource", "none"))
+        amount = int(details.get("amount", 0))
+        if amount > 0 and resource != "none":
+            return (
+                f"{event_name}: {actor_name} hired {hired_label} from {source}; "
+                f"paid {resource} {amount} to {payee}"
+            )
+        return f"{event_name}: {actor_name} used {hired_label} from {source}; no payment"
+
     if event.event_type is EventType.ORDINATION:
         step = str(details.get("step", "")).strip()
         amount = int(details.get("amount", 1))

@@ -373,6 +373,22 @@ Position mapping used by the current sandbox:
 - Construct road effects remain non-spatial scaffolded; only building acquisition is implemented.
 - Building hiring (bank or other player) remains deferred.
 
+## Building Hire Infrastructure (v3.0)
+
+- The rules layer now has source/cost/payment helpers for building-ability access:
+  - own active (`free`)
+  - live market hire (`pay Merchant resource to bank`)
+  - opponent active hire (`pay Merchant resource to owner`)
+  - unavailable (`donated`, `not_live`, `merchant_resource_none`, `insufficient_resource`,
+    `not_selected`)
+- Taxation has no Tithe resource, so Merchant resource is `none` there; hired sources are
+  unavailable there.
+- A given building can be hired at most once in one player turn (pure helper/context scaffold).
+- Different live buildings can each be hired once in the same turn if each cost is payable.
+- Existing CLI action generation/apply flow is intentionally unchanged in this milestone:
+  - existing building bonuses still apply from own active buildings only
+  - no new user-facing hire action command is introduced yet
+
 ## Produce Options and Fields Rename (v1.4)
 
 - Produce duty now exposes exactly two explicit actions:
