@@ -381,7 +381,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_BONUS`
   - action-specific events (`ORDINATION` steps / Alms events)
 
-## Building Turn-Modifier Registry (v3.3/v3.4)
+## Building Turn-Modifier Registry (v3.3-v3.5)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
   non-duty-output building effects that target movement/turn phases.
@@ -389,15 +389,20 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - during sow route modifiers: `kogge`, `cloisters`
   - start-of-turn relocations: `dormitory`, `inquisition`
   - end-of-turn relocation: `library`
-- Runtime status in v3.4:
-  - `kogge` is now implemented as an explicit sow-route modifier in transition logic
+- Runtime status in v3.5:
+  - `kogge` is implemented as an explicit sow-route modifier
     (`city -> east` and `city -> west` starts from City)
-  - `cloisters`, `dormitory`, `inquisition`, and `library` remain scaffolded
-- Kogge source/payment semantics reuse existing building-hire infrastructure:
+  - `dormitory` and `inquisition` are implemented as optional start-turn relocation prefixes
+    attached to a normal full-turn action
+  - `cloisters` and `library` remain scaffolded
+- Kogge/Dormitory/Inquisition source/payment semantics reuse existing building-hire infrastructure:
   - own active (free)
   - opponent active hire (pay owner)
   - live market hire (pay bank)
   - unavailable when donated, not live, merchant none, or insufficient hire resource
+- Start-turn relocation timing:
+  - relocation applies before sowing
+  - hired path ordering is `BUILDING_HIRED` -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`
 - Separation of concerns remains:
   - Duty-output modifiers stay in `duty_enhancements`
   - turn-phase movement modifiers live in `building_turn_modifiers`

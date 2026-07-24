@@ -51,16 +51,16 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "start_turn_relocation",
             "start_of_turn",
             "may return 1 acolyte from any Duty action to City",
-            "scaffolded",
-            "optional pre-turn action composition deferred",
+            "implemented",
+            "implemented as optional pre-sow start-turn relocation action prefix.",
         ),
         (
             "inquisition",
             "start_turn_relocation",
             "start_of_turn",
             "may move 1 acolyte from City to any Duty",
-            "scaffolded",
-            "optional pre-turn action composition deferred",
+            "implemented",
+            "implemented as optional pre-sow start-turn relocation action prefix.",
         ),
         (
             "library",
@@ -107,10 +107,14 @@ def test_turn_modifier_lookup_by_building_is_normalized() -> None:
 
 
 def test_turn_modifier_status_helpers() -> None:
-    assert {entry.building_key for entry in implemented_turn_modifiers()} == {"kogge"}
+    assert {entry.building_key for entry in implemented_turn_modifiers()} == {
+        "kogge",
+        "dormitory",
+        "inquisition",
+    }
     assert {
         entry.building_key for entry in scaffolded_turn_modifiers()
-    } == {"cloisters", "dormitory", "inquisition", "library"}
+    } == {"cloisters", "library"}
 
 
 def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
@@ -133,8 +137,6 @@ def test_scaffold_only_turn_modifiers_have_no_legal_action_side_effects() -> Non
                 active_buildings=(
                     *existing_active_buildings,
                     "cloisters",
-                    "dormitory",
-                    "inquisition",
                     "library",
                 ),
             ),

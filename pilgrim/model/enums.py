@@ -139,6 +139,7 @@ class EventType(Enum):
     SETUP_SOW_COMPLETE = "setup_sow_complete"
     SETUP_PLAYER_ADVANCE = "setup_player_advance"
     SETUP_COMPLETE = "setup_complete"
+    START_TURN_RELOCATION = "start_turn_relocation"
     SOWING = "sowing"
     DUTY_RESOLUTION = "duty_resolution"
     DUTY_DEFERRED = "duty_deferred"

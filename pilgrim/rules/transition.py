@@ -112,6 +112,27 @@ class TransitionResult:
     events: tuple[GameEvent, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _StartTurnRelocationOption:
+    """Pre-sow state plus relocation metadata for one start-turn modifier use."""
+
+    state: GameState
+    building_id: str
+    source: BuildingAbilitySource
+    from_position: int
+    to_position: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedStartTurnRelocation:
+    """Validated start-turn relocation directive from one action."""
+
+    building_id: str
+    source: BuildingAbilitySource
+    from_position: int
+    to_position: int
+
+
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
 _CONSTRUCT_PLAN_ROAD = "road"
 _CONSTRUCT_PLAN_EXTRA_ROAD = "road_engineer_extra_road"
@@ -168,6 +189,27 @@ def _legal_setup_sow_actions(state: GameState, config: GameConfig) -> tuple[Game
 
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
+    actions: list[GameAction] = []
+    for start_turn_option in _legal_start_turn_relocation_options(state, config):
+        start_turn_state = state if start_turn_option is None else start_turn_option.state
+        variant_actions = _legal_full_turn_actions_for_state(start_turn_state, config)
+        if start_turn_option is None:
+            actions.extend(variant_actions)
+            continue
+        for action in variant_actions:
+            if not isinstance(action, FullTurnAction):
+                actions.append(action)
+                continue
+            actions.append(
+                _with_start_turn_relocation_fields(
+                    action,
+                    option=start_turn_option,
+                )
+            )
+    return tuple(actions)
+
+
+def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     base_player_state = state.player_state(state.active_player)
     base_player_resources = base_player_state.resources
@@ -848,8 +890,9 @@ def _apply_full_turn_action(
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
 
     player = state.active_player
+    turn_start_resources = state.player_state(player).resources
     transition_action_id = action_id(action)
-    kogge_source = _resolved_kogge_source_for_action(
+    start_turn_relocation = _resolved_start_turn_relocation_for_action(
         state=state,
         config=config,
         player=player,
@@ -857,6 +900,57 @@ def _apply_full_turn_action(
     )
     state_for_sow = state
     pre_sowing_events: list[GameEvent] = []
+    if start_turn_relocation is not None:
+        if _is_hired_source(start_turn_relocation.source):
+            try:
+                state_for_sow, start_turn_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=start_turn_relocation.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=start_turn_relocation.source,
+                    payment=start_turn_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _start_turn_building_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+                relocation=start_turn_relocation,
+                config=config,
+            )
+        )
+        try:
+            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+                state_for_sow.player_vector(player),
+                from_position=start_turn_relocation.from_position,
+                to_position=start_turn_relocation.to_position,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        state_for_sow = state_for_sow.with_player_vector(player, relocated_vector)
+        pre_sowing_events.append(
+            _start_turn_relocation_event(
+                actor=player,
+                action_id=transition_action_id,
+                relocation=start_turn_relocation,
+                config=config,
+            )
+        )
+
+    kogge_source = _resolved_kogge_source_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
     if kogge_source is not None:
         if _is_hired_source(kogge_source):
             try:
@@ -1087,6 +1181,24 @@ def _apply_full_turn_action(
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
+        if (
+            start_turn_relocation is not None
+            and start_turn_relocation.source.source_type != "own_active"
+        ):
+            if not can_hire_building_this_turn(
+                hire_context,
+                building_key=start_turn_relocation.building_id,
+            ):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=start_turn_relocation.building_id,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
         if not validate_hire_sequence_for_turn(hire_context.hired_buildings):
             raise TransitionValidationError(
                 "Same building cannot be hired more than once in one turn."
@@ -1239,7 +1351,7 @@ def _apply_full_turn_action(
                 )
             state_after_resolution = state_for_give_alms.with_player_state(player, new_player_state)
             resource_delta = _resource_delta_between(
-                state_after_sow.player_state(player).resources,
+                turn_start_resources,
                 new_player_state.resources,
             )
             old_piety_position = state_after_sow.player_state(player).piety
@@ -1723,7 +1835,7 @@ def _apply_full_turn_action(
 
             state_after_resolution = state_for_ordination.with_player_state(player, new_player_state)
             resource_delta = _resource_delta_between(
-                state_after_sow.player_state(player).resources,
+                turn_start_resources,
                 new_player_state.resources,
             )
             old_piety_position = state_after_sow.player_state(player).piety
@@ -1944,7 +2056,7 @@ def _apply_full_turn_action(
 
             state_after_resolution = state_for_allocation.with_player_state(player, new_player_state)
             resource_delta = _resource_delta_between(
-                state_after_sow.player_state(player).resources,
+                turn_start_resources,
                 new_player_state.resources,
             )
             old_piety_position = state_after_sow.player_state(player).piety
@@ -2064,7 +2176,7 @@ def _apply_full_turn_action(
                         )
                     )
                 resource_delta = _resource_delta_between(
-                    state_after_sow.player_state(player).resources,
+                    turn_start_resources,
                     new_player_state.resources,
                 )
             else:
@@ -2180,7 +2292,7 @@ def _apply_full_turn_action(
                         )
                     )
                 resource_delta = _resource_delta_between(
-                    state_after_sow.player_state(player).resources,
+                    turn_start_resources,
                     new_player_state.resources,
                 )
 
@@ -2611,6 +2723,166 @@ def _next_incomplete_setup_player(
     return None
 
 
+def _legal_start_turn_relocation_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_StartTurnRelocationOption | None, ...]:
+    options: list[_StartTurnRelocationOption | None] = [None]
+    options.extend(_legal_dormitory_relocation_options(state, config))
+    options.extend(_legal_inquisition_relocation_options(state, config))
+    return tuple(options)
+
+
+def _legal_dormitory_relocation_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_StartTurnRelocationOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key="dormitory",
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = _state_after_optional_start_turn_hire_payment(
+        state,
+        player=state.active_player,
+        source=source,
+    )
+    if state_after_hire is None:
+        return ()
+
+    city_position = config.board.index_for_name("city")
+    player_vector = state_after_hire.player_vector(state.active_player)
+    options: list[_StartTurnRelocationOption] = []
+    for duty_position in config.duty_positions():
+        if player_vector[duty_position] <= 0:
+            continue
+        relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+            player_vector,
+            from_position=duty_position,
+            to_position=city_position,
+        )
+        options.append(
+            _StartTurnRelocationOption(
+                state=state_after_hire.with_player_vector(state.active_player, relocated_vector),
+                building_id="dormitory",
+                source=source,
+                from_position=duty_position,
+                to_position=city_position,
+            )
+        )
+    return tuple(options)
+
+
+def _legal_inquisition_relocation_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_StartTurnRelocationOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key="inquisition",
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = _state_after_optional_start_turn_hire_payment(
+        state,
+        player=state.active_player,
+        source=source,
+    )
+    if state_after_hire is None:
+        return ()
+
+    city_position = config.board.index_for_name("city")
+    player_vector = state_after_hire.player_vector(state.active_player)
+    if player_vector[city_position] <= 0:
+        return ()
+
+    options: list[_StartTurnRelocationOption] = []
+    for duty_position in config.duty_positions():
+        relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+            player_vector,
+            from_position=city_position,
+            to_position=duty_position,
+        )
+        options.append(
+            _StartTurnRelocationOption(
+                state=state_after_hire.with_player_vector(state.active_player, relocated_vector),
+                building_id="inquisition",
+                source=source,
+                from_position=city_position,
+                to_position=duty_position,
+            )
+        )
+    return tuple(options)
+
+
+def _state_after_optional_start_turn_hire_payment(
+    state: GameState,
+    *,
+    player: PlayerId,
+    source: BuildingAbilitySource,
+) -> GameState | None:
+    if not _is_hired_source(source):
+        return state
+    try:
+        paid_state, _payment = apply_building_hire_payment(
+            state,
+            acting_player=player,
+            source=source,
+        )
+    except ValueError:
+        return None
+    return paid_state
+
+
+def _with_start_turn_relocation_fields(
+    action: FullTurnAction,
+    *,
+    option: _StartTurnRelocationOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        start_turn_building_id=option.building_id,
+        start_turn_building_source=source_label,
+        start_turn_relocation_from=option.from_position,
+        start_turn_relocation_to=option.to_position,
+    )
+
+
+def _relocate_one_acolyte_in_mancala_vector(
+    vector: tuple[int, ...],
+    *,
+    from_position: int,
+    to_position: int,
+) -> tuple[int, ...]:
+    if from_position < 0 or from_position >= len(vector):
+        raise ValueError(f"Invalid from_position: {from_position}")
+    if to_position < 0 or to_position >= len(vector):
+        raise ValueError(f"Invalid to_position: {to_position}")
+    if vector[from_position] <= 0:
+        raise ValueError("Cannot relocate acolyte from an empty mancala position.")
+
+    updated = list(vector)
+    updated[from_position] -= 1
+    updated[to_position] += 1
+    return tuple(updated)
+
+
 def _legal_sow_routes_for_origin(
     state: GameState,
     config: GameConfig,
@@ -2796,6 +3068,99 @@ def _legal_action_variants_for_resolution(
             selected_duty=selected_duty,
             resolution=resolution,
         ),
+    )
+
+
+def _resolved_start_turn_relocation_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedStartTurnRelocation | None:
+    fields = (
+        action.start_turn_building_id,
+        action.start_turn_building_source,
+        action.start_turn_relocation_from,
+        action.start_turn_relocation_to,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "start_turn_building_id/source and start_turn_relocation_from/to must be set together."
+        )
+
+    building_id = action.start_turn_building_id
+    source_label = action.start_turn_building_source
+    from_position = action.start_turn_relocation_from
+    to_position = action.start_turn_relocation_to
+    assert building_id is not None
+    assert source_label is not None
+    assert from_position is not None
+    assert to_position is not None
+
+    if building_id not in ("dormitory", "inquisition"):
+        raise TransitionValidationError(
+            "Only Dormitory and Inquisition are supported for start-turn relocation fields."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=building_id,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                f"{building_id} is own-active; start_turn_building_source must be own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "start_turn_building_source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError(
+            f"{building_id} is not usable for start-turn relocation in current state."
+        )
+
+    city_position = config.board.index_for_name("city")
+    duty_positions = set(config.duty_positions())
+    player_vector = state.player_vector(player)
+
+    if building_id == "dormitory":
+        if from_position not in duty_positions or from_position == city_position:
+            raise TransitionValidationError(
+                "Dormitory relocation source must be a non-city Duty tile."
+            )
+        if to_position != city_position:
+            raise TransitionValidationError("Dormitory relocation target must be City.")
+        if player_vector[from_position] <= 0:
+            raise TransitionValidationError(
+                "Dormitory relocation source must contain at least one acting-player acolyte."
+            )
+    else:
+        if from_position != city_position:
+            raise TransitionValidationError("Inquisition relocation source must be City.")
+        if to_position not in duty_positions or to_position == city_position:
+            raise TransitionValidationError(
+                "Inquisition relocation target must be a non-city Duty tile."
+            )
+        if player_vector[city_position] <= 0:
+            raise TransitionValidationError(
+                "Inquisition relocation requires at least one acting-player acolyte in City."
+            )
+
+    return _ResolvedStartTurnRelocation(
+        building_id=building_id,
+        source=source,
+        from_position=from_position,
+        to_position=to_position,
     )
 
 
@@ -3133,6 +3498,50 @@ def _kogge_route_bonus_event(
             building="kogge",
             action="sowing",
             enabled_route=route_label,
+        ),
+    )
+
+
+def _start_turn_building_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    relocation: _ResolvedStartTurnRelocation,
+    config: GameConfig,
+) -> GameEvent:
+    from_name = config.board.positions[relocation.from_position]
+    to_name = config.board.positions[relocation.to_position]
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=relocation.building_id,
+            action="start_turn_relocation",
+            start_turn_from=from_name,
+            start_turn_to=to_name,
+        ),
+    )
+
+
+def _start_turn_relocation_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    relocation: _ResolvedStartTurnRelocation,
+    config: GameConfig,
+) -> GameEvent:
+    building_name = config.buildings.name_for_id(relocation.building_id)
+    return GameEvent(
+        event_type=EventType.START_TURN_RELOCATION,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=relocation.building_id,
+            building_name=building_name,
+            from_position=relocation.from_position,
+            to_position=relocation.to_position,
+            amount=1,
         ),
     )
 

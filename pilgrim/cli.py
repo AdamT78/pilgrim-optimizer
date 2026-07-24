@@ -536,6 +536,19 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         amount = int(details.get("amount", 0))
         return f"{event_name}: {actor_name} moved {amount} acolyte {from_pool} -> {to_pool}"
 
+    if event.event_type is EventType.START_TURN_RELOCATION:
+        from_position = int(details.get("from_position", -1))
+        to_position = int(details.get("to_position", -1))
+        amount = int(details.get("amount", 1))
+        building_name = str(
+            details.get("building_name", details.get("building", "unknown"))
+        )
+        return (
+            f"{event_name}: {actor_name} moved {amount} acolyte "
+            f"{position_name(from_position, positions)} -> {position_name(to_position, positions)} "
+            f"using {building_name}"
+        )
+
     if event.event_type is EventType.BUILDING_BONUS:
         building = str(details.get("building", "unknown"))
         action_name = str(details.get("action", "unknown"))
@@ -556,6 +569,22 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         if building == "kogge" and "enabled_route" in details:
             enabled_route = str(details.get("enabled_route", "")).strip()
             return f"{event_name}: kogge enabled {enabled_route} sow route"
+        if (
+            building in ("dormitory", "inquisition")
+            and "start_turn_from" in details
+            and "start_turn_to" in details
+        ):
+            start_turn_from = str(details.get("start_turn_from", "unknown"))
+            start_turn_to = str(details.get("start_turn_to", "unknown"))
+            if building == "dormitory":
+                return (
+                    f"{event_name}: dormitory returned 1 acolyte from "
+                    f"{start_turn_from} to {start_turn_to}"
+                )
+            return (
+                f"{event_name}: inquisition moved 1 acolyte from "
+                f"{start_turn_from} to {start_turn_to}"
+            )
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")
