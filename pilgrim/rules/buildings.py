@@ -187,6 +187,31 @@ def donate_active_building(
     return updated_player_state, definition
 
 
+def player_has_active_building(player_state: PlayerState, building_id: str) -> bool:
+    """Return True when one building is currently active on the player board."""
+    return building_id in player_state.player_board_slots.active_buildings
+
+
+def produce_wheat_well_bonus(player_state: PlayerState) -> int:
+    """Well adds +1 wheat to produce_wheat when active."""
+    return 1 if player_has_active_building(player_state, "well") else 0
+
+
+def produce_stone_quarry_bonus(player_state: PlayerState) -> int:
+    """Quarry adds +1 stone to produce_stone when active."""
+    return 1 if player_has_active_building(player_state, "quarry") else 0
+
+
+def clerical_silversmith_mint_bonus(player_state: PlayerState) -> int:
+    """Mint adds +1 silver to clerical_silversmith when active."""
+    return 1 if player_has_active_building(player_state, "mint") else 0
+
+
+def clerical_devotion_chapel_bonus(player_state: PlayerState) -> int:
+    """Chapel adds +1 piety to clerical_devotion when active."""
+    return 1 if player_has_active_building(player_state, "chapel") else 0
+
+
 def used_player_board_slots(player_state: PlayerState) -> int:
     """Return number of occupied shared board slots."""
     slots = player_state.player_board_slots

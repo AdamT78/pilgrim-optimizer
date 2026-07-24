@@ -82,7 +82,7 @@ def test_registry_contains_all_required_entries() -> None:
             "building",
             "mint",
             "+1 silver",
-            "known_unimplemented",
+            "implemented",
         ),
         (
             "clerical",
@@ -90,7 +90,7 @@ def test_registry_contains_all_required_entries() -> None:
             "building",
             "chapel",
             "+1 piety",
-            "known_unimplemented",
+            "implemented",
         ),
         ("give_alms", "give_alms", "building", "mill", "deferred", "known_unimplemented"),
         ("ordination", "ordination", "building", "mill", "deferred", "known_unimplemented"),
@@ -102,21 +102,27 @@ def test_registry_contains_all_required_entries() -> None:
             "+1 effective Duty Value if wheat cost is paid",
             "known_unimplemented",
         ),
-        ("produce", "produce_wheat", "building", "well", "+1 wheat", "known_unimplemented"),
-        ("produce", "produce_stone", "building", "quarry", "+1 stone", "known_unimplemented"),
+        ("produce", "produce_wheat", "building", "well", "+1 wheat", "implemented"),
+        ("produce", "produce_stone", "building", "quarry", "+1 stone", "implemented"),
     }
 
     assert signatures == expected
 
 
-def test_building_effects_are_registered_but_not_marked_implemented() -> None:
+def test_well_quarry_mint_chapel_are_implemented_and_other_buildings_remain_deferred() -> None:
     building_entries = [
         entry for entry in all_duty_enhancements() if entry.source_type == "building"
     ]
     assert len(building_entries) == 9
-    assert all(
-        entry.status not in {"implemented", "implemented_scaffolded"} for entry in building_entries
-    )
+    implemented_building_sources = {
+        entry.source_key for entry in building_entries if entry.status == "implemented"
+    }
+    assert implemented_building_sources == {"well", "quarry", "mint", "chapel"}
+
+    unimplemented_building_sources = {
+        entry.source_key for entry in building_entries if entry.status != "implemented"
+    }
+    assert unimplemented_building_sources == {"infirmary", "chapter_house", "mill"}
     assert any(
         entry.source_key == "chapter_house"
         and entry.status == "deferred_special_activity_system"

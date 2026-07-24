@@ -122,8 +122,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="mint",
         effect="+1 silver",
-        status="known_unimplemented",
-        notes="Documented only; not currently applied.",
+        status="implemented",
+        notes="Applied in transition when Mint is active.",
     ),
     DutyEnhancement(
         duty="clerical",
@@ -131,8 +131,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="chapel",
         effect="+1 piety",
-        status="known_unimplemented",
-        notes="Documented only; not currently applied.",
+        status="implemented",
+        notes="Applied in transition when Chapel is active.",
     ),
     DutyEnhancement(
         duty="give_alms",
@@ -167,8 +167,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="well",
         effect="+1 wheat",
-        status="known_unimplemented",
-        notes="Documented only; not currently applied.",
+        status="implemented",
+        notes="Applied in transition when Well is active.",
     ),
     DutyEnhancement(
         duty="produce",
@@ -176,8 +176,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="quarry",
         effect="+1 stone",
-        status="known_unimplemented",
-        notes="Documented only; not currently applied.",
+        status="implemented",
+        notes="Applied in transition when Quarry is active.",
     ),
 )
 

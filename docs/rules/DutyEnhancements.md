@@ -12,6 +12,12 @@ Important scope boundaries:
 - It does **not** implement building effects.
 - Gameplay behavior continues to come from existing action generation and transition logic.
 
+Runtime policy for currently implemented building bonuses:
+
+- Only buildings in a player's `active_buildings` apply.
+- Buildings in `donated_buildings` do not apply.
+- These bonuses stack with matching Special Activity bonuses.
+
 ## Registry fields
 
 Each entry records:
@@ -41,15 +47,15 @@ Format:
 
 - `produce | produce_wheat | special_activity | fields | +1 wheat | implemented | Applied by produce_wheat_fields_bonus() hook.`
 - `produce | produce_stone | special_activity | stone_mason | +1 stone | implemented | Applied by produce_stone_mason_bonus() hook.`
-- `produce | produce_wheat | building | well | +1 wheat | known_unimplemented | Documented only; not currently applied.`
-- `produce | produce_stone | building | quarry | +1 stone | known_unimplemented | Documented only; not currently applied.`
+- `produce | produce_wheat | building | well | +1 wheat | implemented | Applied in transition when Well is active.`
+- `produce | produce_stone | building | quarry | +1 stone | implemented | Applied in transition when Quarry is active.`
 
 ### Clerical
 
 - `clerical | clerical_devotion | special_activity | vestry | +1 piety | implemented | Applied by clerical_devotion_bonus() hook.`
 - `clerical | clerical_silversmith | special_activity | engraver | +1 silver | implemented | Applied by clerical_silversmith_bonus() hook.`
-- `clerical | clerical_silversmith | building | mint | +1 silver | known_unimplemented | Documented only; not currently applied.`
-- `clerical | clerical_devotion | building | chapel | +1 piety | known_unimplemented | Documented only; not currently applied.`
+- `clerical | clerical_silversmith | building | mint | +1 silver | implemented | Applied in transition when Mint is active.`
+- `clerical | clerical_devotion | building | chapel | +1 piety | implemented | Applied in transition when Chapel is active.`
 
 ### Give Alms
 
