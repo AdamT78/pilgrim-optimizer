@@ -1,4 +1,4 @@
-# Duty Tiles (v2.6 Sandbox Scope)
+# Duty Tiles (v2.7 Sandbox Scope)
 
 ## Core model
 
@@ -138,6 +138,11 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - parity Allocation can sequence up to 2 moves
   - majority Allocation can sequence up to 3 moves
   - this is a true duty-value modifier and appears in `effective duty value` output
+- Active Chapter House modifies Special Activity occupancy semantics for Allocation:
+  - without active Chapter House, each Special Activity space has capacity 1
+  - with active Chapter House, each Special Activity space has capacity 2
+  - second-acolyte occupancy still requires legal Allocation moves
+  - donated/inactive Chapter House does not apply
 - For `build_roads`:
   - legal actions currently include `build_roads_deferred` plus `tithe`
   - `build_roads_deferred` applies normal duty relation, minority silver cost, and recall
@@ -159,7 +164,9 @@ Deferred category systems (valid in layout, no non-tithe action yet):
     - building resolves immediately
     - road remains deferred and logged via `DUTY_DEFERRED`
   - Road Engineer for Construct does not raise generic duty value:
-    - it only allows one additional deferred road when a road plan is already included
+    - it allows additional deferred roads when a road plan is already included
+    - additional-road count scales by occupied Road Engineer acolytes (max +2 with active
+      Chapter House)
   - roads/bridges/upgrades/demolition/spatial placement remain deferred
   - minority silver cost and duty recall still apply normally
 - For `taxation`:
@@ -192,3 +199,4 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - `DUTY_RESOLUTION: selected north_west (allocation); ...; duty value 1; effective duty value 2; ...`
   - `BUILDING_BONUS: infirmary added duty value +1 to allocation`
   - `BUILDING_BONUS: infirmary added duty value +1 to ordination; extra wheat cost paid`
+  - `BUILDING_BONUS: chapter_house allowed second acolyte on vestry (capacity 2)`

@@ -103,8 +103,8 @@ def test_allocation_multi_move_two_abbey_transfers_consume_two_abbey() -> None:
     after = result.state.player_state(PlayerId.PLAYER_ONE)
 
     assert after.workforce.abbey == before.workforce.abbey - 2
-    assert after.special_activities.fields is True
-    assert after.special_activities.road_engineer is True
+    assert after.special_activities.count_for("fields") == 1
+    assert after.special_activities.count_for("road_engineer") == 1
 
 
 def test_allocation_special_to_abbey_then_abbey_to_special_is_legal() -> None:
@@ -133,8 +133,8 @@ def test_allocation_special_to_abbey_then_abbey_to_special_is_legal() -> None:
 
     result = apply_action(mutated_state, sequence_action, scenario.config)
     after = result.state.player_state(PlayerId.PLAYER_ONE)
-    assert after.special_activities.fields is False
-    assert after.special_activities.engraver is True
+    assert after.special_activities.count_for("fields") == 0
+    assert after.special_activities.count_for("engraver") == 1
     assert after.workforce.abbey == 0
 
 
@@ -148,7 +148,7 @@ def test_allocation_application_variants_and_recall() -> None:
     after_abbey = abbey_result.state.player_state(PlayerId.PLAYER_ONE)
     north_west = abbey_scenario.config.board.index_for_name("north_west")
     assert after_abbey.workforce.abbey == before_abbey.workforce.abbey - 1
-    assert after_abbey.special_activities.fields is True
+    assert after_abbey.special_activities.count_for("fields") == 1
     assert after_abbey.workforce.mancala[0] == before_abbey.workforce.mancala[0] + 1
     assert after_abbey.workforce.mancala[north_west] == 0
     assert abbey_scenario.state.total_acolytes(PlayerId.PLAYER_ONE) == abbey_result.state.total_acolytes(
@@ -164,7 +164,7 @@ def test_allocation_application_variants_and_recall() -> None:
         to_abbey_scenario.config,
     )
     to_abbey_after = to_abbey_result.state.player_state(PlayerId.PLAYER_ONE)
-    assert to_abbey_after.special_activities.fields is False
+    assert to_abbey_after.special_activities.count_for("fields") == 0
     assert to_abbey_after.workforce.abbey == 1
 
     to_special_scenario, to_special_actions = _allocation_actions(
@@ -176,8 +176,8 @@ def test_allocation_application_variants_and_recall() -> None:
         to_special_scenario.config,
     )
     to_special_after = to_special_result.state.player_state(PlayerId.PLAYER_ONE)
-    assert to_special_after.special_activities.fields is False
-    assert to_special_after.special_activities.engraver is True
+    assert to_special_after.special_activities.count_for("fields") == 0
+    assert to_special_after.special_activities.count_for("engraver") == 1
     assert to_special_after.workforce.abbey == 0
 
 

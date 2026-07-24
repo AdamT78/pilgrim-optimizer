@@ -58,12 +58,14 @@ from pilgrim.rules.round_end import (
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.special_activities import (
+    alms_house_duty_value_bonus_capacity,
     all_special_activity_ids,
     allocate_abbey_to_special_activity,
     allocate_special_activity_to_abbey,
     allocate_special_activity_to_special_activity,
     alms_house_extra_payment_options,
     apply_allocation_move,
+    apply_allocation_move_with_capacity,
     available_special_activities,
     can_use_alms_house_bonus,
     clerical_devotion_bonus,
@@ -74,7 +76,9 @@ from pilgrim.rules.special_activities import (
     occupied_special_activities,
     produce_stone_mason_bonus,
     produce_wheat_fields_bonus,
+    road_engineer_construct_extra_roads_bonus,
     road_engineer_duty_value_bonus_hook,
+    special_activity_capacity,
     special_activity_count,
 )
 from pilgrim.rules.timing import (
@@ -130,11 +134,13 @@ __all__ = [
     "is_nw_pilgrimage_site",
     "is_pilgrimage_site",
     "all_special_activity_ids",
+    "alms_house_duty_value_bonus_capacity",
     "allocate_abbey_to_special_activity",
     "allocate_special_activity_to_abbey",
     "allocate_special_activity_to_special_activity",
     "alms_house_extra_payment_options",
     "apply_allocation_move",
+    "apply_allocation_move_with_capacity",
     "available_special_activities",
     "can_use_alms_house_bonus",
     "clerical_devotion_bonus",
@@ -145,7 +151,9 @@ __all__ = [
     "occupied_special_activities",
     "produce_stone_mason_bonus",
     "produce_wheat_fields_bonus",
+    "road_engineer_construct_extra_roads_bonus",
     "road_engineer_duty_value_bonus_hook",
+    "special_activity_capacity",
     "special_activity_count",
     "advance_active_player",
     "advance_merchant_position",

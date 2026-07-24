@@ -51,8 +51,8 @@ def test_allocation_abbey_to_special_activity_occupies_target_and_conserves_acol
 
     assert first_action.resolution is TurnResolutionType.ALLOCATION
     assert after.workforce.abbey == before.workforce.abbey - 1
-    assert after.special_activities.fields is True
-    assert before.special_activities.fields is False
+    assert after.special_activities.count_for("fields") == 1
+    assert before.special_activities.count_for("fields") == 0
     assert before_total == after_total
     assert any(event.event_type is EventType.ALLOCATION for event in result.events)
 
@@ -65,8 +65,8 @@ def test_allocation_special_activity_to_abbey_clears_source() -> None:
     after = result.state.player_state(PlayerId.PLAYER_ONE)
 
     assert first_action.resolution is TurnResolutionType.ALLOCATION
-    assert before.special_activities.fields is True
-    assert after.special_activities.fields is False
+    assert before.special_activities.count_for("fields") == 1
+    assert after.special_activities.count_for("fields") == 0
     assert after.workforce.abbey == before.workforce.abbey + 1
 
 
@@ -78,10 +78,10 @@ def test_allocation_special_activity_to_special_activity_moves_between_slots() -
     after = result.state.player_state(PlayerId.PLAYER_ONE)
 
     assert first_action.resolution is TurnResolutionType.ALLOCATION
-    assert before.special_activities.fields is True
-    assert before.special_activities.engraver is False
-    assert after.special_activities.fields is False
-    assert after.special_activities.engraver is True
+    assert before.special_activities.count_for("fields") == 1
+    assert before.special_activities.count_for("engraver") == 0
+    assert after.special_activities.count_for("fields") == 0
+    assert after.special_activities.count_for("engraver") == 1
     assert after.workforce.abbey == before.workforce.abbey
 
 
@@ -208,9 +208,16 @@ def test_road_engineer_hook_applies_to_build_roads_only() -> None:
 
 def test_special_activity_model_rejects_non_boolean_flags() -> None:
     with pytest.raises(ValueError):
-        SpecialActivities(fields=1)  # type: ignore[arg-type]
+        SpecialActivities(fields=3)
+
+
+def test_special_activity_model_allows_count_based_occupancy() -> None:
+    activities = SpecialActivities(fields=2, vestry=1)
+    assert activities.count_for("fields") == 2
+    assert activities.count_for("vestry") == 1
+    assert activities.count == 3
 
 
 def test_fields_is_valid_special_activity_id() -> None:
     activities = SpecialActivities().with_activity("fields", True)
-    assert activities.fields is True
+    assert activities.count_for("fields") == 1

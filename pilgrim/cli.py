@@ -505,6 +505,17 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.BUILDING_BONUS:
         building = str(details.get("building", "unknown"))
         action_name = str(details.get("action", "unknown"))
+        if (
+            building == "chapter_house"
+            and action_name == "allocation"
+            and details.get("second_acolyte") is True
+        ):
+            activity = str(details.get("activity", "unknown"))
+            capacity = int(details.get("capacity", 2))
+            return (
+                f"{event_name}: chapter_house allowed second acolyte on "
+                f"{activity} (capacity {capacity})"
+            )
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")
@@ -536,9 +547,18 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                     f"wheat={int(details.get('extra_wheat', 0))}"
                 )
             return text
-        if activity == "road_engineer" and details.get("construct_extra_road") is True:
+        if activity == "road_engineer" and (
+            details.get("construct_extra_road") is True
+            or "construct_extra_roads" in details
+        ):
+            extra_roads = int(details.get("construct_extra_roads", 1))
+            if extra_roads <= 1:
+                return (
+                    f"{event_name}: road_engineer allowed one additional road for construct "
+                    "because a road was included in the plan"
+                )
             return (
-                f"{event_name}: road_engineer allowed one additional road for construct "
+                f"{event_name}: road_engineer allowed {extra_roads} additional roads for construct "
                 "because a road was included in the plan"
             )
         bonuses: list[str] = []

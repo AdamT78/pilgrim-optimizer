@@ -194,8 +194,18 @@ def ensure_valid_player_board_slots_structure(state: GameState) -> None:
 
 def ensure_valid_special_activities_state(state: GameState) -> None:
     for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        player_state = state.player_state(player_id)
         activities = state.player_state(player_id).special_activities
-        if activities.count > len(SPECIAL_ACTIVITY_IDS):
+        chapter_house_active = "chapter_house" in player_state.player_board_slots.active_buildings
+        capacity = 2 if chapter_house_active else 1
+        for activity_id in SPECIAL_ACTIVITY_IDS:
+            activity_count = activities.count_for(activity_id)
+            if activity_count > capacity:
+                raise TransitionValidationError(
+                    f"{player_id.name} special-activity '{activity_id}' exceeds capacity "
+                    f"{capacity}."
+                )
+        if activities.count > len(SPECIAL_ACTIVITY_IDS) * capacity:
             raise TransitionValidationError(
                 f"{player_id.name} special-activity occupancy exceeds capacity."
             )

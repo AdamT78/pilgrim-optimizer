@@ -126,7 +126,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 
 ## Player Board Workforce and Special Activities (v1.2)
 
-- `PlayerState` now also carries per-player `special_activities` occupancy flags.
+- `PlayerState` now carries per-player `special_activities` occupancy counts.
 - Player-board workforce semantics are now explicit in CLI/docs:
   - Village workers (Serfs) via `workforce.village`
   - Abbey acolytes via `workforce.abbey`
@@ -243,6 +243,27 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - Infirmary emits `BUILDING_BONUS` duty-value events
   - direct output bonuses (Well/Quarry/Mint/Chapel and matching Special Activities) remain
     separate output bonuses and do not alter `effective_duty_value`
+
+## Chapter House Special Activity Capacity (v2.7)
+
+- Special Activity occupancy is now count-based (`0..2`) with immutable state semantics.
+- Scenario loading now supports legacy boolean/list forms and count mappings for
+  `special_activities`.
+- Chapter House behavior is implemented through explicit transition/helpers (not via generic
+  registry execution):
+  - active Chapter House raises Special Activity capacity from `1` to `2`
+  - second-acolyte placements are still ordinary Allocation moves
+  - donated/inactive Chapter House does not apply
+- Allocation legal generation/apply now uses capacity-aware move validation:
+  - `abbey -> special_activity`
+  - `special_activity -> abbey`
+  - `special_activity -> special_activity`
+  - source counts decrement by 1; destination counts increment by 1
+- Special Activity bonuses now scale by occupancy count:
+  - Fields / Stone Mason / Engraver / Vestry output bonuses
+  - Alms House paid Give Alms duty-value bonus (`+1`/`+2` by paid extras)
+  - Road Engineer Build Roads duty-value bonus (`+1`/`+2`)
+  - Road Engineer Construct deferred extra-road scaffold count (`+1`/`+2`)
 
 ## Intentionally Deferred
 

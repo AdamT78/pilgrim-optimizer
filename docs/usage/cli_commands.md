@@ -334,8 +334,9 @@ Position mapping used by the current sandbox:
   - `stone_mason` (`produce_stone`)
   - `engraver` (`clerical_silversmith`)
   - `vestry` (`clerical_devotion`)
-  - `alms_house` (`give_alms` duty-value boost + extra payment)
-- `road_engineer` now boosts `build_roads_deferred` effective duty value by `+1`.
+  - `alms_house` (`give_alms` duty-value boost + extra payment; scales by occupancy with Chapter House)
+- `road_engineer` now boosts `build_roads_deferred` effective duty value by occupied acolyte count
+  (up to `+2` with active Chapter House).
 
 ## Duty Tile Layout and Identity (v1.3)
 

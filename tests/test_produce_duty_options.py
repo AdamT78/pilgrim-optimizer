@@ -210,4 +210,4 @@ def test_minority_silver_cost_applies_to_produce_wheat_and_produce_stone() -> No
 def test_legacy_grain_alias_normalizes_to_fields() -> None:
     activities = scenario_loader._special_activities_from_dict({"grain": True})
 
-    assert activities.fields is True
+    assert activities.count_for("fields") == 1

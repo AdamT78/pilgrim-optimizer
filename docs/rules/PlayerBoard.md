@@ -1,4 +1,4 @@
-# Player Board (v2.6 Sandbox Scope)
+# Player Board (v2.7 Sandbox Scope)
 
 ## Implemented now
 
@@ -98,7 +98,7 @@ Rules enforced now:
 - Allocation does **not** move acolytes to City.
 - One Allocation action contains `1..duty_value` moves.
 - Each move must be legal at the moment it is taken (step-by-step state updates).
-- Special Activity destination must be empty.
+- Special Activity destination must be below its current capacity.
 - Special Activity source must be occupied.
 - A Special Activity cannot move to itself.
 - action emits one `ALLOCATION` event per move, in move order.
@@ -111,7 +111,7 @@ Notes:
 
 ## Special Activities
 
-Per player, each space is either occupied or empty:
+Per player, each space tracks occupied acolyte count:
 
 - `fields`
 - `road_engineer`
@@ -122,9 +122,12 @@ Per player, each space is either occupied or empty:
 
 The old `grain` name has been replaced by canonical ID `fields` (player-facing: Fields).
 
-Capacity rule:
+Capacity rule by Chapter House status:
 
-- max 1 acolyte per Special Activity space per player
+- without active Chapter House: max 1 acolyte per Special Activity space
+- with active Chapter House: max 2 acolytes per Special Activity space
+- second-acolyte occupancy is still placed by Allocation (Chapter House does not move acolytes)
+- donated Chapter House does not apply
 
 Helpers are available for occupied/available activity queries and counts.
 
@@ -138,44 +141,47 @@ For a central Duty-action enhancement index (Special Activities plus known build
 - produce has two explicit mutually exclusive actions: `produce_wheat` and `produce_stone`
 - Produce duty value is applied to exactly one chosen resource and cannot be split.
 - Fields is a production bonus only; it does not increase Produce duty value.
-- if occupied, Fields adds `+1 wheat` to `produce_wheat` only
+- Fields adds `+1 wheat` per occupied Fields acolyte to `produce_wheat` only
 - Fields does not affect `produce_stone`
 - emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Stone Mason
 
 - Stone Mason is a production bonus only; it does not increase Produce duty value.
-- if occupied, Stone Mason adds `+1 stone` to `produce_stone` only
+- Stone Mason adds `+1 stone` per occupied Stone Mason acolyte to `produce_stone` only
 - Stone Mason does not affect `produce_wheat`
 - emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Engraver
 
-- adds `+1 silver` to `clerical_silversmith`
+- adds `+1 silver` per occupied Engraver acolyte to `clerical_silversmith`
 - emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Vestry
 
-- adds `+1 piety` to `clerical_devotion`
+- adds `+1 piety` per occupied Vestry acolyte to `clerical_devotion`
 - emits `SPECIAL_ACTIVITY_BONUS`
 
 ### Alms House
 
 - optional Give Alms bonus path
-- raises Give Alms duty value by `+1` when the extra payment is made
-- requires extra payment of exactly `1 silver` or `1 wheat`
+- raises Give Alms duty value by `+N` when the extra payment is made
+- `N` is capped by occupied Alms House acolytes (`N<=1` normally, `N<=2` with active Chapter House)
+- each `+1` requires extra payment of `1 silver` or `1 wheat`
 - extra payment is encoded in the action fields and validated
 - emits `SPECIAL_ACTIVITY_BONUS`
 - does not enhance `donate_building` in the current milestone
 
 ### Road Engineer
 
-- when taking `build_roads`, Road Engineer raises effective Duty Value by `+1`
+- when taking `build_roads`, Road Engineer raises effective Duty Value by `+N`
+- `N` equals occupied Road Engineer acolytes (`N<=1` normally, `N<=2` with active Chapter House)
 - this currently applies only to `build_roads_deferred` scaffold resolution
 - no runtime road/bridge/ford/shrine placement is performed in this milestone
 - when taking `construct`, Road Engineer does **not** raise duty value
-- instead, Construct may include one additional deferred road only if the plan already includes a
+- instead, Construct may include additional deferred roads only if the plan already includes a
   road built via duty value
+- extra-road count scales by occupied Road Engineer acolytes (max +2 with active Chapter House)
 - this appears as a Construct scaffold plan (`... + road_engineer_extra_road`) plus
   `SPECIAL_ACTIVITY_BONUS`
 - no runtime road/bridge placement is performed for Construct in this milestone
@@ -191,6 +197,10 @@ These building bonuses are now implemented in the Duty transition paths:
 - Infirmary: true duty-value modifier bonuses:
   - Allocation: `+1 effective Duty Value`
   - Ordination: `+1 effective Duty Value` when the chosen sequence uses an extra paid step
+- Chapter House:
+  - raises Special Activity per-space capacity from 1 to 2 while active
+  - enables Allocation placement of second acolytes on Special Activity spaces
+  - makes Special Activity bonus output scale by occupied acolyte count (max 2)
 
 Rules for these bonuses:
 
@@ -215,6 +225,6 @@ serfs/acolytes conservation scope.
 
 ## Deferred
 
-- Special Activity removal/reallocation
+- Mill building effects
 - real spatial placement effects for Road Engineer (Build Roads / Construct)
 - full player-board systems beyond current sandbox scope

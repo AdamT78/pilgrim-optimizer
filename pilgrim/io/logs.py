@@ -64,12 +64,12 @@ def state_to_record(state: GameState) -> dict[str, Any]:
                     },
                 },
                 "special_activities": {
-                    "fields": player.special_activities.fields,
-                    "road_engineer": player.special_activities.road_engineer,
-                    "stone_mason": player.special_activities.stone_mason,
-                    "alms_house": player.special_activities.alms_house,
-                    "engraver": player.special_activities.engraver,
-                    "vestry": player.special_activities.vestry,
+                    "fields": player.special_activities.count_for("fields"),
+                    "road_engineer": player.special_activities.count_for("road_engineer"),
+                    "stone_mason": player.special_activities.count_for("stone_mason"),
+                    "alms_house": player.special_activities.count_for("alms_house"),
+                    "engraver": player.special_activities.count_for("engraver"),
+                    "vestry": player.special_activities.count_for("vestry"),
                 },
                 "player_board_slots": {
                     "active_buildings": list(player.player_board_slots.active_buildings),

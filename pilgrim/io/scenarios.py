@@ -406,37 +406,42 @@ def _special_activities_from_dict(raw: Any) -> SpecialActivities:
     if raw is None:
         return SpecialActivities()
     if isinstance(raw, list):
-        flags = {str(item): True for item in raw}
+        counts = {str(item): 1 for item in raw}
     elif isinstance(raw, Mapping):
-        flags: dict[str, bool] = {}
+        counts: dict[str, int] = {}
         for key, value in raw.items():
-            if not isinstance(value, bool):
-                raise ValueError(
-                    f"special_activities.{key} must be true/false, got {type(value).__name__}."
-                )
-            flags[str(key)] = value
+            if isinstance(value, bool):
+                counts[str(key)] = int(value)
+                continue
+            if isinstance(value, int):
+                counts[str(key)] = value
+                continue
+            raise ValueError(
+                "special_activities."
+                f"{key} must be true/false or integer count, got {type(value).__name__}."
+            )
     else:
         raise ValueError("special_activities must be an object or list.")
-    if "grain" in flags and "fields" not in flags:
-        flags["fields"] = bool(flags["grain"])
-    elif "grain" in flags and "fields" in flags:
-        if bool(flags["grain"]) != bool(flags["fields"]):
+    if "grain" in counts and "fields" not in counts:
+        counts["fields"] = int(counts["grain"])
+    elif "grain" in counts and "fields" in counts:
+        if int(counts["grain"]) != int(counts["fields"]):
             raise ValueError(
                 "special_activities.grain alias conflicts with special_activities.fields."
             )
-    flags.pop("grain", None)
-    unknown_ids = set(flags) - set(SPECIAL_ACTIVITY_IDS)
+    counts.pop("grain", None)
+    unknown_ids = set(counts) - set(SPECIAL_ACTIVITY_IDS)
     if unknown_ids:
         raise ValueError(
             "Unknown special activity id(s): " + ", ".join(sorted(unknown_ids)) + "."
         )
     return SpecialActivities(
-        fields=bool(flags.get("fields", False)),
-        road_engineer=bool(flags.get("road_engineer", False)),
-        stone_mason=bool(flags.get("stone_mason", False)),
-        alms_house=bool(flags.get("alms_house", False)),
-        engraver=bool(flags.get("engraver", False)),
-        vestry=bool(flags.get("vestry", False)),
+        fields=counts.get("fields", 0),
+        road_engineer=counts.get("road_engineer", 0),
+        stone_mason=counts.get("stone_mason", 0),
+        alms_house=counts.get("alms_house", 0),
+        engraver=counts.get("engraver", 0),
+        vestry=counts.get("vestry", 0),
     )
 
 
