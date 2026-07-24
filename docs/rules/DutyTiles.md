@@ -141,11 +141,14 @@ Duty tile categories are not action names. Use the following concrete action nam
 - Ordination steps are validated sequentially, so `ordain; mission` is legal at duty value 2 even
   when Abbey starts empty.
 - Each ordination step must be legal when reached and costs 1 wheat.
-- Active Infirmary now modifies Ordination duty value semantics:
-  - legal generation may allow one additional step (`+1` cap) when Infirmary is active
+- Usable Infirmary source now modifies Ordination duty value semantics:
+  - legal generation may allow one additional step (`+1` cap) when Infirmary source is usable
+    (own active or hired)
   - the extra step still costs wheat (no free steps)
   - apply-time `effective duty value` and `BUILDING_BONUS` are emitted only when the chosen
     sequence actually uses that extra paid step
+  - hired variants are blocked when Merchant resource is `none` (Taxation) or hire cost is
+    unaffordable
 - For `clerical`:
   - Mint adds `+1 silver` to `clerical_silversmith`
   - Chapel adds `+1 piety` to `clerical_devotion`
@@ -154,10 +157,11 @@ Duty tile categories are not action names. Use the following concrete action nam
   - Merchant on Taxation (`resource: none`) prevents hired-source clerical bonuses
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
-- Active Infirmary now adds `+1 effective Duty Value` to Allocation:
+- Usable Infirmary source now adds `+1 effective Duty Value` to Allocation:
   - parity Allocation can sequence up to 2 moves
   - majority Allocation can sequence up to 3 moves
   - this is a true duty-value modifier and appears in `effective duty value` output
+  - own-active source is free; hired source pays `1` Merchant resource
 - Active Chapter House modifies Special Activity occupancy semantics for Allocation:
   - without active Chapter House, each Special Activity space has capacity 1
   - with active Chapter House, each Special Activity space has capacity 2
@@ -220,6 +224,7 @@ Duty tile categories are not action names. Use the following concrete action nam
   - `BUILDING_CONSTRUCTED: player_one constructed Well from market; level 1; cost stone 1; ...`
   - `DUTY_DEFERRED: construct road part requires spatial road system; requested plan: ...`
   - `DUTY_RESOLUTION: selected north_west (allocation); ...; duty value 1; effective duty value 2; ...`
+  - `BUILDING_HIRED: player_one hired Infirmary from market; paid wheat 1 to bank`
   - `BUILDING_BONUS: infirmary added duty value +1 to allocation`
   - `BUILDING_BONUS: infirmary added duty value +1 to ordination; extra wheat cost paid`
   - `BUILDING_BONUS: chapter_house allowed second acolyte on vestry (capacity 2)`

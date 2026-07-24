@@ -406,7 +406,29 @@ Position mapping used by the current sandbox:
   - hired variants are not generated
   - own-active bonus variants remain available
 - Scope boundary remains:
-  - Infirmary, Chapter House, and Mill are not wired to hire sources yet.
+  - Chapter House and Mill are not wired to hire sources yet.
+
+## Hire Sources for Infirmary Duty Bonuses (v3.1b)
+
+- `allocation` and `ordination` now also use Infirmary hire sources:
+  - own active Infirmary (free)
+  - live market Infirmary (pay Merchant resource `1` to bank)
+  - opponent active Infirmary (pay Merchant resource `1` to owner)
+- `legal-actions` output now includes hired Infirmary context when used, for example:
+  - `... | action: allocation | ... | hire building: infirmary from market`
+  - `... | action: ordination | steps: ordain; mission | hire building: infirmary from player_two`
+- Allocation semantics:
+  - Infirmary adds `+1 effective Duty Value`
+- Ordination semantics:
+  - Infirmary adds `+1 effective Duty Value` only for extra-step actions
+  - extra Ordination steps still cost wheat
+  - hired extra-step variants are emitted only when hire + step + minority costs are affordable
+- `apply --verbose` event ordering for hired Infirmary actions:
+  - `DUTY_RESOLUTION`
+  - `BUILDING_HIRED`
+  - `BUILDING_BONUS`
+  - `ALLOCATION`/`ORDINATION` step events
+- Merchant at Taxation still has resource `none`, so hired Infirmary variants are not generated.
 
 ## Produce Options and Fields Rename (v1.4)
 
