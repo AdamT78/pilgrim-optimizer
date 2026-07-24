@@ -44,7 +44,7 @@ def test_construct_legal_actions_generate_affordable_building_actions_at_duty_va
     assert building_ids == ["well", "chapel", "mint", "quarry"]
     assert all(building_id is not None for building_id in building_ids)
     assert any(
-        action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
         and action.construct_plan == "road"
         for action in actions
     )
@@ -70,7 +70,7 @@ def test_construct_legal_actions_duty_value_two_include_building_plus_road_actio
     assert combined_buildings == {"well", "chapel", "mint", "quarry"}
     assert ("well", "road + road_engineer_extra_road") not in combined_pairs
     assert any(
-        action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
         and action.construct_plan == "road"
         for action in actions
     )
@@ -83,7 +83,7 @@ def test_construct_road_engineer_extra_road_variants_require_road_included() -> 
     deferred_plans = {
         action.construct_plan
         for action in actions
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
     }
     combined_pairs = {
         (action.construct_building_id, action.construct_plan)
@@ -108,7 +108,7 @@ def test_construct_no_slot_prevents_building_actions_but_keeps_road_scaffold() -
 
     assert TurnResolutionType.CONSTRUCT_BUILDING not in resolutions
     assert TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED not in resolutions
-    assert any(action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED for action in actions)
+    assert any(action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED for action in actions)
 
 
 def test_construct_insufficient_stone_filters_unaffordable_buildings() -> None:

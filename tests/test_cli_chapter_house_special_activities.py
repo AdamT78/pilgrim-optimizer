@@ -127,7 +127,7 @@ def test_cli_apply_build_roads_two_road_engineers_shows_effective_plus_two(capsy
 def test_cli_apply_give_alms_two_alms_house_shows_plus_two_bonus(capsys) -> None:
     action_index = _action_index(
         "scenarios/give_alms_chapter_house_two_alms_house_001.json",
-        resolution=TurnResolutionType.GIVE_ALMS,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
         alms_house_bonus=2,
     )
     exit_code = main(
@@ -143,13 +143,13 @@ def test_cli_apply_give_alms_two_alms_house_shows_plus_two_bonus(capsys) -> None
 
     assert exit_code == 0
     assert "effective duty value 4" in output
-    assert "SPECIAL_ACTIVITY_BONUS: alms_house applied to give_alms; duty value +2" in output
+    assert "SPECIAL_ACTIVITY_BONUS: alms_house applied to give_alms_paid; duty value +2" in output
 
 
 def test_cli_apply_construct_two_road_engineers_shows_double_extra_plan(capsys) -> None:
     action_index = _action_index(
         "scenarios/construct_chapter_house_two_road_engineers_001.json",
-        resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
+        resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
         plan="road + road_engineer_extra_road + road_engineer_extra_road",
     )
     exit_code = main(
@@ -164,7 +164,7 @@ def test_cli_apply_construct_two_road_engineers_shows_double_extra_plan(capsys) 
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "action: construct_deferred | plan: road + road_engineer_extra_road + road_engineer_extra_road" in output
+    assert "action: construct_road_deferred | plan: road + road_engineer_extra_road + road_engineer_extra_road" in output
     assert (
         "SPECIAL_ACTIVITY_BONUS: road_engineer allowed 2 additional roads for construct "
         "because a road was included in the plan"

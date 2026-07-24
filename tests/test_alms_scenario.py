@@ -17,7 +17,7 @@ def test_alms_sandbox_legal_actions_include_give_alms_with_payment_text(capsys) 
 
     assert exit_code == 0
     assert "Legal actions for scenario 'alms_sandbox_001':" in output
-    assert "action: give_alms" in output
+    assert "action: give_alms_paid" in output
     assert "pay silver=" in output
 
 
@@ -25,11 +25,11 @@ def test_alms_sandbox_give_alms_transition_emits_events_and_conserves_workforce(
     scenario = load_scenario("scenarios/alms_sandbox_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     give_alms_action = next(
-        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     )
 
     summary = action_summary(give_alms_action, scenario.config)
-    assert "action: give_alms" in summary
+    assert "action: give_alms_paid" in summary
     assert "pay silver=" in summary
 
     before = scenario.state

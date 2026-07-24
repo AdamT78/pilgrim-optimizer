@@ -163,7 +163,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     continue
                 duty_category = config.duty_category_for_position(duty_position)
                 category_actions = action_options_for_duty_category(duty_category)
-                if TurnResolutionType.GIVE_ALMS in category_actions:
+                if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
                         state,
@@ -202,7 +202,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                             origin=origin,
                                             route=route,
                                             selected_duty=duty_position,
-                                            resolution=TurnResolutionType.GIVE_ALMS,
+                                            resolution=TurnResolutionType.GIVE_ALMS_PAID,
                                             alms_payment_silver=payment.silver,
                                             alms_payment_wheat=payment.wheat,
                                             alms_house_extra_silver=extra_silver,
@@ -219,12 +219,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
-                                    resolution=TurnResolutionType.GIVE_ALMS,
+                                    resolution=TurnResolutionType.GIVE_ALMS_PAID,
                                     alms_payment_silver=payment.silver,
                                     alms_payment_wheat=payment.wheat,
                                 )
                             )
-                        if TurnResolutionType.DONATE_BUILDING in category_actions:
+                        if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
                             for building_id in _legal_give_alms_donation_buildings(
                                 player_state,
                                 config,
@@ -234,7 +234,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                         origin=origin,
                                         route=route,
                                         selected_duty=duty_position,
-                                        resolution=TurnResolutionType.DONATE_BUILDING,
+                                        resolution=TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
                                         donate_building_id=building_id,
                                     )
                                 )
@@ -264,7 +264,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                 allocation_moves=move_sequence,
                             )
                         )
-                elif TurnResolutionType.CONSTRUCT_DEFERRED in category_actions:
+                elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
                         state,
@@ -301,7 +301,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
-                                    resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
+                                    resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
                                     construct_plan=construct_plan,
                                 )
                             )
@@ -625,7 +625,7 @@ def _apply_full_turn_action(
         updated_building_market = state_after_sow.building_market
 
         if (
-            action.resolution is not TurnResolutionType.GIVE_ALMS
+            action.resolution is not TurnResolutionType.GIVE_ALMS_PAID
             and (
                 action.alms_payment_silver != 0
                 or action.alms_payment_wheat != 0
@@ -637,11 +637,11 @@ def _apply_full_turn_action(
                 "Only Give Alms actions may include Alms payment fields."
             )
         if (
-            action.resolution is not TurnResolutionType.DONATE_BUILDING
+            action.resolution is not TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
             and action.donate_building_id is not None
         ):
             raise TransitionValidationError(
-                "Only donate_building actions may include donate_building_id."
+                "Only give_alms_donate_building actions may include donate_building_id."
             )
         if action.resolution is not TurnResolutionType.ORDINATION and action.ordination_steps:
             raise TransitionValidationError(
@@ -662,7 +662,7 @@ def _apply_full_turn_action(
         if (
             action.resolution
             not in (
-                TurnResolutionType.CONSTRUCT_DEFERRED,
+                TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
                 TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
             )
             and action.construct_plan is not None
@@ -682,7 +682,7 @@ def _apply_full_turn_action(
                 "Only Construct building actions may include construct_building_id."
             )
 
-        if action.resolution is TurnResolutionType.GIVE_ALMS:
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             alms_house_bonus = action.alms_house_extra_silver + action.alms_house_extra_wheat
             use_alms_house = (
                 action.alms_house_extra_silver != 0 or action.alms_house_extra_wheat != 0
@@ -768,10 +768,10 @@ def _apply_full_turn_action(
             )
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
-        elif action.resolution is TurnResolutionType.DONATE_BUILDING:
+        elif action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
             if not action.donate_building_id:
                 raise TransitionValidationError(
-                    "donate_building action requires donate_building_id."
+                    "give_alms_donate_building action requires donate_building_id."
                 )
 
             try:
@@ -867,7 +867,7 @@ def _apply_full_turn_action(
                     spent=False,
                 ),
             )
-        elif action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+        elif action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED:
             if not action.construct_plan:
                 raise TransitionValidationError("Construct action requires construct_plan.")
             road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
@@ -1591,7 +1591,7 @@ def _apply_full_turn_action(
         if duty_deferred_event is not None and construct_events:
             events.append(duty_deferred_event)
 
-        if action.resolution is TurnResolutionType.GIVE_ALMS:
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             if give_alms_resolution is None:
                 raise TransitionValidationError("Missing Give Alms resolution payload.")
             events.append(
@@ -1631,10 +1631,10 @@ def _apply_full_turn_action(
                         ),
                     )
                 )
-        elif action.resolution is TurnResolutionType.DONATE_BUILDING:
+        elif action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
             if donate_building_alms_resolution is None:
                 raise TransitionValidationError(
-                    "Missing donate_building Alms resolution payload."
+                    "Missing give_alms_donate_building Alms resolution payload."
                 )
             events.append(
                 GameEvent(

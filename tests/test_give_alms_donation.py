@@ -66,10 +66,10 @@ def test_give_alms_legal_actions_include_paid_and_donate_building_options() -> N
 
     actions = legal_actions(state, scenario.config)
     give_alms_actions = [
-        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     donate_actions = [
-        action for action in actions if action.resolution is TurnResolutionType.DONATE_BUILDING
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
     ]
 
     assert give_alms_actions
@@ -87,6 +87,8 @@ def test_give_alms_legal_actions_include_paid_and_donate_building_options() -> N
     assert all(action.alms_payment_wheat == 0 for action in donate_actions)
     assert all(action.alms_house_extra_silver == 0 for action in donate_actions)
     assert all(action.alms_house_extra_wheat == 0 for action in donate_actions)
+    assert all(action.resolution.value != "give_alms" for action in actions)
+    assert all(action.resolution.value != "donate_building" for action in actions)
 
 
 def test_give_alms_legal_actions_do_not_generate_donate_without_active_buildings() -> None:
@@ -101,7 +103,7 @@ def test_give_alms_legal_actions_do_not_generate_donate_without_active_buildings
 
     actions = legal_actions(state, scenario.config)
     assert not any(
-        action.resolution is TurnResolutionType.DONATE_BUILDING for action in actions
+        action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING for action in actions
     )
 
 
@@ -125,10 +127,10 @@ def test_give_alms_legal_actions_skip_unknown_or_already_donated_buildings() -> 
     already_donated_actions = legal_actions(already_donated_state, scenario.config)
 
     assert not any(
-        action.resolution is TurnResolutionType.DONATE_BUILDING for action in unknown_actions
+        action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING for action in unknown_actions
     )
     assert not any(
-        action.resolution is TurnResolutionType.DONATE_BUILDING
+        action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
         for action in already_donated_actions
     )
 
@@ -139,7 +141,7 @@ def test_donate_building_action_moves_building_advances_alms_and_keeps_slot_usag
     before_used_slots = used_player_board_slots(before_player)
     action = legal_actions(scenario.state, scenario.config)[0]
 
-    assert action.resolution is TurnResolutionType.DONATE_BUILDING
+    assert action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
     assert action.donate_building_id == "confession_box"
     assert action.alms_payment_silver == 0
     assert action.alms_payment_wheat == 0
@@ -184,10 +186,10 @@ def test_donate_building_majority_still_advances_alms_by_exactly_one_and_no_paym
     )
     alms_progress_details = dict(alms_progress_event.details)
 
-    assert action.resolution is TurnResolutionType.DONATE_BUILDING
+    assert action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
     assert action.donate_building_id == "bank"
     assert duty_details["duty_value"] == 2
-    assert duty_details["effect"] == "donate_building"
+    assert duty_details["effect"] == "give_alms_donate_building"
     assert alms_progress_details["old_row"] == 0
     assert alms_progress_details["new_row"] == 1
     assert after_player.alms_position == 1
@@ -225,7 +227,7 @@ def test_donate_building_applies_minority_silver_cost() -> None:
     action = next(
         candidate
         for candidate in legal_actions(state, scenario.config)
-        if candidate.resolution is TurnResolutionType.DONATE_BUILDING
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
     )
 
     result = apply_action(state, action, scenario.config)
@@ -251,10 +253,10 @@ def test_alms_house_bonus_does_not_apply_to_donate_building() -> None:
     )
     actions = legal_actions(state, scenario.config)
     give_alms_actions = [
-        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     donate_action = next(
-        action for action in actions if action.resolution is TurnResolutionType.DONATE_BUILDING
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
     )
     result = apply_action(state, donate_action, scenario.config)
     alms_progress_event = next(
@@ -279,5 +281,5 @@ def test_paid_give_alms_behavior_remains_available_without_active_buildings() ->
     scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
     actions = legal_actions(scenario.state, scenario.config)
 
-    assert any(action.resolution is TurnResolutionType.GIVE_ALMS for action in actions)
-    assert not any(action.resolution is TurnResolutionType.DONATE_BUILDING for action in actions)
+    assert any(action.resolution is TurnResolutionType.GIVE_ALMS_PAID for action in actions)
+    assert not any(action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING for action in actions)

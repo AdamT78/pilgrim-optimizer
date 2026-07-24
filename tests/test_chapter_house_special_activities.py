@@ -240,7 +240,7 @@ def test_build_roads_two_road_engineers_scales_duty_value_bonus_to_plus_two() ->
 def test_give_alms_two_alms_house_supports_plus_two_bonus_with_extra_payments() -> None:
     scenario, give_alms_actions = _actions_for_resolution(
         "scenarios/give_alms_chapter_house_two_alms_house_001.json",
-        TurnResolutionType.GIVE_ALMS,
+        TurnResolutionType.GIVE_ALMS_PAID,
     )
     assert any(
         action.alms_house_extra_silver + action.alms_house_extra_wheat == 2
@@ -285,7 +285,7 @@ def test_alms_house_count_two_does_not_apply_to_donate_building() -> None:
     donate_action = next(
         action
         for action in legal_actions(donate_ready_state, scenario.config)
-        if action.resolution is TurnResolutionType.DONATE_BUILDING
+        if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING
         and action.donate_building_id == "confession_box"
     )
     result = apply_action(donate_ready_state, donate_action, scenario.config)
@@ -300,7 +300,7 @@ def test_alms_house_count_two_does_not_apply_to_donate_building() -> None:
 def test_construct_two_road_engineers_supports_double_extra_road_scaffold() -> None:
     scenario, construct_actions = _actions_for_resolution(
         "scenarios/construct_chapter_house_two_road_engineers_001.json",
-        TurnResolutionType.CONSTRUCT_DEFERRED,
+        TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
     )
     construct_plans = {action.construct_plan for action in construct_actions}
     assert "road" in construct_plans

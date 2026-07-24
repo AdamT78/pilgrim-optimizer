@@ -129,7 +129,7 @@ def test_give_alms_transition_pays_advances_rewards_and_recalls() -> None:
         origin=0,
         route=(5, 6, 7),
         selected_duty=5,
-        resolution=TurnResolutionType.GIVE_ALMS,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
         alms_payment_silver=1,
         alms_payment_wheat=1,
     )
@@ -175,7 +175,7 @@ def test_give_alms_transition_fails_when_payment_is_insufficient() -> None:
         origin=0,
         route=(5, 6, 7),
         selected_duty=5,
-        resolution=TurnResolutionType.GIVE_ALMS,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
         alms_payment_silver=2,
         alms_payment_wheat=0,
     )
@@ -204,7 +204,7 @@ def test_give_alms_transition_fails_when_payment_does_not_match_duty_value() -> 
         origin=0,
         route=(5, 6, 7),
         selected_duty=5,
-        resolution=TurnResolutionType.GIVE_ALMS,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
         alms_payment_silver=1,
         alms_payment_wheat=0,
     )
@@ -233,7 +233,7 @@ def test_give_alms_applies_minority_silver_cost_in_addition_to_payment() -> None
         origin=0,
         route=(5,),
         selected_duty=5,
-        resolution=TurnResolutionType.GIVE_ALMS,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
         alms_payment_silver=0,
         alms_payment_wheat=1,
     )
@@ -373,11 +373,11 @@ def test_legal_actions_include_give_alms_payment_when_available() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     give_alms_actions = [
-        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS
+        action for action in actions if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     assert give_alms_actions
     summary = action_summary(give_alms_actions[0], scenario.config)
-    assert "action: give_alms" in summary
+    assert "action: give_alms_paid" in summary
     assert "pay silver=" in summary
     assert "wheat=" in summary
 
@@ -402,7 +402,7 @@ def test_give_alms_payment_options_for_duty_value_one() -> None:
     options = [
         (action.alms_payment_silver, action.alms_payment_wheat)
         for action in legal_actions(state, scenario.config)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     assert (1, 0) in options
     assert (0, 1) in options
@@ -428,6 +428,6 @@ def test_give_alms_payment_options_for_duty_value_two() -> None:
     options = {
         (action.alms_payment_silver, action.alms_payment_wheat)
         for action in legal_actions(state, scenario.config)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     }
     assert options == {(2, 0), (1, 1), (0, 2)}

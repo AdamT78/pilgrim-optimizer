@@ -61,7 +61,7 @@ What it does right now:
 - In `setup_sow` phase, actions are setup sow actions only (`Setup sow: ...`).
 - Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
 - If the acting player has active buildings, Give Alms can also show:
-  - `action: donate_building | building: <building_id>`
+  - `action: give_alms_donate_building | building: <building_id>`
 - Ordination actions show ordered steps:
   - `action: ordination | steps: ordain`
   - `action: ordination | steps: ordain; mission`
@@ -72,6 +72,13 @@ What it does right now:
 - Prints a final legal-action count.
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
 - If `game_over` is true, legal action list is empty by design.
+
+Canonical naming reminder:
+
+| Duty tile | Canonical action names |
+| --- | --- |
+| `give_alms` | `give_alms_paid`, `give_alms_donate_building`, `tithe` |
+| `construct` | `construct_building`, `construct_building_and_road_deferred`, `construct_road_deferred`, `tithe` |
 
 Why this matters:
 
@@ -87,8 +94,8 @@ Legal actions for scenario 'mancala_sandbox_001':
 2. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: produce_stone
 3. Turn: sow city -> north -> north_east -> east | selected duty: north (produce) | action: tithe
 ...
-10. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: give_alms | pay silver=1, wheat=1
-11. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: donate_building | building: confession_box
+10. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: give_alms_paid | pay silver=1, wheat=1
+11. Turn: sow city -> south -> south_west -> west | selected duty: south (give_alms) | action: give_alms_donate_building | building: confession_box
 ...
 
 Total legal actions: N
@@ -121,7 +128,7 @@ Typical non-verbose output:
 ```text
 Apply result for scenario 'alms_sandbox_001'
 Selected action 1:
-Turn: sow south_east -> south | selected duty: south | action: give_alms | pay silver=1, wheat=1
+Turn: sow south_east -> south | selected duty: south | action: give_alms_paid | pay silver=1, wheat=1
 
 State updated successfully.
 Next active player: player_two
@@ -347,7 +354,7 @@ Position mapping used by the current sandbox:
 - `construct` now exposes:
   - `construct_building`
   - `construct_building_and_road_deferred`
-  - `construct_deferred` (road-only scaffold)
+  - `construct_road_deferred` (road-only scaffold)
   - `tithe`
 - `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe`.
 - Build Roads remains fully non-spatial scaffolded.
@@ -375,12 +382,13 @@ Position mapping used by the current sandbox:
 ## Give Alms Building Donation Option (v1.6)
 
 - Give Alms now has two explicit options:
-  - `give_alms` (pay silver/wheat)
-  - `donate_building` (donate one active building)
+  - `give_alms_paid` (pay silver/wheat)
+  - `give_alms_donate_building` (donate one active building)
 - Donation transitions now emit `BUILDING_DONATION` and `ALMS_PROGRESS`.
 - Donation always advances Alms by exactly one row.
 - On majority Give Alms, donation does not chain into a second paid Give Alms step.
-- Alms House still enhances paid `give_alms` only; it does not modify `donate_building`.
+- Alms House still enhances paid `give_alms_paid` only; it does not modify
+  `give_alms_donate_building`.
 
 ## Ordination Duty Steps (v1.7)
 

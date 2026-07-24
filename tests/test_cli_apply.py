@@ -74,7 +74,7 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     give_alms_index = next(
         index
         for index, action in enumerate(actions, start=1)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     )
 
     exit_code = main(
@@ -91,7 +91,7 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert exit_code == 0
     assert "Apply result for scenario 'alms_sandbox_001'" in output
     assert f"Selected action {give_alms_index}:" in output
-    assert "action: give_alms" in output
+    assert "action: give_alms_paid" in output
     assert "Events:" in output
     assert "ALMS_PAYMENT:" in output
     assert "ALMS_PROGRESS:" in output
@@ -436,7 +436,7 @@ def test_cli_apply_donate_building_verbose_shows_donation_events_and_slot_state(
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "action: donate_building | building: confession_box" in output
+    assert "action: give_alms_donate_building | building: confession_box" in output
     assert "BUILDING_DONATION: player_one donated Confession Box; donation_vp=2" in output
     assert "ALMS_PROGRESS: player_one row 0 -> 1" in output
     assert "ALMS_PAYMENT:" not in output
@@ -458,7 +458,7 @@ def test_cli_apply_majority_donate_building_forfeits_second_give_alms(capsys) ->
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "action: donate_building | building: bank" in output
+    assert "action: give_alms_donate_building | building: bank" in output
     assert "DUTY_RESOLUTION: selected south (give_alms); relation majority; duty value 2" in output
     assert "BUILDING_DONATION: player_one donated Bank; donation_vp=6" in output
     assert "ALMS_PROGRESS: player_one row 0 -> 1" in output
