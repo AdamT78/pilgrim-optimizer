@@ -26,11 +26,13 @@ from pilgrim.rules.alms import (
 )
 from pilgrim.rules.buildings import (
     allocation_infirmary_duty_value_bonus,
+    building_live_round,
     clerical_devotion_chapel_bonus,
     clerical_silversmith_mint_bonus,
     construct_building_from_market,
     donate_active_building,
     has_available_player_board_slot,
+    is_building_live,
     ordination_infirmary_duty_value_bonus,
     player_has_active_chapter_house,
     player_has_active_building,
@@ -278,6 +280,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     )
                     if player_resources.silver >= silver_cost:
                         constructible_building_ids = _constructible_building_ids(
+                            state=state,
                             player_state=player_state,
                             config=config,
                             building_market=state.building_market,
@@ -930,6 +933,13 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "construct_building action requires construct_building_id."
                 )
+            if not is_building_live(state_after_sow, action.construct_building_id):
+                live_round = building_live_round(state_after_sow, action.construct_building_id)
+                raise TransitionValidationError(
+                    "construct_building action requires a live market building: "
+                    f"{action.construct_building_id} "
+                    f"(round {state_after_sow.round_number}; live round {live_round})."
+                )
 
             new_player_state = state_after_sow.player_state(player)
             if silver_cost:
@@ -981,6 +991,13 @@ def _apply_full_turn_action(
             if not action.construct_building_id:
                 raise TransitionValidationError(
                     "construct_building_and_road_deferred requires construct_building_id."
+                )
+            if not is_building_live(state_after_sow, action.construct_building_id):
+                live_round = building_live_round(state_after_sow, action.construct_building_id)
+                raise TransitionValidationError(
+                    "construct_building_and_road_deferred requires a live market building: "
+                    f"{action.construct_building_id} "
+                    f"(round {state_after_sow.round_number}; live round {live_round})."
                 )
             if not action.construct_plan:
                 raise TransitionValidationError(
@@ -1994,6 +2011,7 @@ def _is_allocation_capacity_building_bonus_event(event: GameEvent) -> bool:
 
 def _constructible_building_ids(
     *,
+    state: GameState,
     player_state,
     config: GameConfig,
     building_market: tuple[str, ...],
@@ -2011,6 +2029,8 @@ def _constructible_building_ids(
         try:
             definition = config.buildings.definition_by_id(building_id)
         except ValueError:
+            continue
+        if not is_building_live(state, building_id):
             continue
         if player_state.resources.stone >= definition.stone_cost:
             affordable_buildings.append(building_id)

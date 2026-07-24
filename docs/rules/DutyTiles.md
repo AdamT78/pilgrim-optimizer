@@ -171,6 +171,9 @@ Duty tile categories are not action names. Use the following concrete action nam
 - For `construct`:
   - legal actions now include `construct_building`, `construct_road_deferred`, and (at duty value
     2) `construct_building_and_road_deferred`, plus `tithe`
+  - market buildings now have deterministic live rounds (`2..26`)
+  - a market building is live when `current round >= live round`
+  - Construct purchase actions are generated only for live market buildings
   - Construct can acquire exactly one market building:
     - pay stone equal to building level (L1=1, L2=2, L3=3)
     - remove that building from `building_market`
@@ -217,3 +220,7 @@ Duty tile categories are not action names. Use the following concrete action nam
   - `BUILDING_BONUS: infirmary added duty value +1 to allocation`
   - `BUILDING_BONUS: infirmary added duty value +1 to ordination; extra wheat cost paid`
   - `BUILDING_BONUS: chapter_house allowed second acolyte on vestry (capacity 2)`
+  - `Building availability:` summary:
+    - `Live market: ...`
+    - `Future market: ... (round N)`
+    - `Owned/live: ...`

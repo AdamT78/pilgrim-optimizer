@@ -7,11 +7,16 @@ from pilgrim.model.buildings import PlayerBoardSlots
 from pilgrim.model.enums import PlayerId
 from pilgrim.rules.buildings import (
     available_player_board_slots,
+    building_live_round,
     building_by_id,
     buildings_by_level,
     default_building_market,
+    future_buildings,
     has_available_player_board_slot,
+    is_building_live,
+    live_buildings,
     used_player_board_slots,
+    validate_building_availability,
     validate_building_catalogue,
     validate_building_market,
     validate_player_board_slots,
@@ -105,6 +110,34 @@ def test_missing_market_uses_deterministic_fallback() -> None:
         "inquisition",
         "kogge",
     )
+
+
+def test_missing_availability_defaults_selected_market_to_live_round_two() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    state = scenario.state
+
+    assert len(state.building_availability) == len(state.building_market)
+    assert set(building_id for building_id, _live_round in state.building_availability) == set(
+        state.building_market
+    )
+    assert all(live_round == 2 for _, live_round in state.building_availability)
+
+    first_building = state.building_market[0]
+    assert building_live_round(state, first_building) == 2
+    assert is_building_live(state, first_building) is False
+    assert is_building_live(state, first_building, round_number=2) is True
+
+
+def test_live_and_future_building_helpers_reflect_current_round() -> None:
+    scenario = load_scenario("scenarios/building_availability_future_001.json")
+    state = scenario.state
+
+    assert building_live_round(state, "well") == 2
+    assert building_live_round(state, "chapel") == 4
+    assert is_building_live(state, "well") is True
+    assert is_building_live(state, "chapel") is False
+    assert live_buildings(state) == ("well",)
+    assert future_buildings(state)[0] == ("chapel", 4)
 
 
 def test_building_market_duplicate_invalid() -> None:
@@ -203,3 +236,43 @@ def test_player_board_slots_unknown_building_id_invalid() -> None:
     )
     with pytest.raises(ValueError, match="Unknown building id"):
         validate_player_board_slots(invalid_slots, scenario.config.buildings)
+
+
+def test_building_availability_rejects_live_round_below_two() -> None:
+    scenario = load_scenario("scenarios/building_availability_round2_001.json")
+    availability = dict(scenario.state.building_availability)
+    availability["well"] = 1
+    invalid_state = scenario.state.with_building_availability(tuple(sorted(availability.items())))
+
+    with pytest.raises(TransitionValidationError, match="between 2 and 26"):
+        validate_building_availability(invalid_state, scenario.config)
+
+
+def test_building_availability_rejects_live_round_above_twenty_six() -> None:
+    scenario = load_scenario("scenarios/building_availability_round2_001.json")
+    availability = dict(scenario.state.building_availability)
+    availability["well"] = 27
+    invalid_state = scenario.state.with_building_availability(tuple(sorted(availability.items())))
+
+    with pytest.raises(TransitionValidationError, match="between 2 and 26"):
+        validate_building_availability(invalid_state, scenario.config)
+
+
+def test_building_availability_rejects_key_not_in_selected_buildings() -> None:
+    scenario = load_scenario("scenarios/building_availability_round2_001.json")
+    availability = dict(scenario.state.building_availability)
+    availability["mill"] = 12
+    invalid_state = scenario.state.with_building_availability(tuple(sorted(availability.items())))
+
+    with pytest.raises(TransitionValidationError, match="selected building in game state"):
+        validate_building_availability(invalid_state, scenario.config)
+
+
+def test_building_availability_rejects_missing_market_entry_when_explicit() -> None:
+    scenario = load_scenario("scenarios/building_availability_round2_001.json")
+    availability = dict(scenario.state.building_availability)
+    availability.pop("well")
+    invalid_state = scenario.state.with_building_availability(tuple(sorted(availability.items())))
+
+    with pytest.raises(TransitionValidationError, match="missing building_availability round"):
+        validate_building_availability(invalid_state, scenario.config)

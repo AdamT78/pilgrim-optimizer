@@ -58,6 +58,34 @@ Seeded setup generation can now produce randomized-but-deterministic market draw
 generation time (`generate-setup`), still preserving deterministic runtime behavior once the
 scenario is written.
 
+## Building availability timeline (v2.9)
+
+Selected buildings now also carry deterministic live-round metadata:
+
+- `initial_state.building_availability` maps `building_id -> live_round`
+- live rounds are constrained to `2..26`
+- a building is considered live when:
+  - `current_round >= live_round`
+
+Backward-compatible scenario loading behavior:
+
+- if `building_availability` is omitted, each selected market building defaults to live round `2`
+
+Generated setup scenarios now always include explicit `building_availability` entries using the
+seeded local RNG.
+
+Current runtime use:
+
+- display/explainability (`apply --verbose` / `solve --verbose`)
+- validation
+- Construct purchase gating
+
+Construct note:
+
+- Construct can buy from `building_market` only when a target building is live
+- future/non-live market buildings are not legal Construct purchase targets yet
+- building hiring (bank or other players) remains deferred
+
 ## Player-board slots
 
 Each player has shared slot occupancy state:
@@ -123,6 +151,15 @@ Market validation enforces:
 - no duplicates
 - all ids exist in catalogue
 - level mix is exactly 4/4/4
+- every building currently in `building_market` has a `building_availability` entry
+
+Building availability validation enforces:
+
+- every availability key is a valid building id from the catalogue
+- every availability key refers to a selected building currently present in game state
+  (market or already owned)
+- each live round is an integer in `2..26`
+- no duplicate availability keys
 
 Player-board slot validation enforces:
 

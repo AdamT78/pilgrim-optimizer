@@ -162,6 +162,7 @@ def _game_state_from_dict(
     )
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     building_market = _building_market_from_dict(raw, buildings_config)
+    building_availability = _building_availability_from_dict(raw, building_market)
     if merchant_position >= merchant_path_length:
         raise ValueError(
             "Scenario merchant_position must be within Merchant path bounds: "
@@ -188,6 +189,7 @@ def _game_state_from_dict(
         setup_sow_complete=setup_sow_complete,
         setup_sow_completed_by=setup_sow_completed_by,
         building_market=building_market,
+        building_availability=building_availability,
     )
 
 
@@ -384,6 +386,23 @@ def _building_market_from_dict(
     if not isinstance(market_raw, list):
         raise ValueError("building_market must be a list of building ids.")
     return tuple(str(value) for value in market_raw)
+
+
+def _building_availability_from_dict(
+    raw: Mapping[str, Any],
+    building_market: tuple[str, ...],
+) -> tuple[tuple[str, int], ...]:
+    availability_raw = raw.get("building_availability")
+    if availability_raw is None:
+        # Backward-compatible fallback for legacy scenarios.
+        return tuple((building_id, 2) for building_id in building_market)
+    if not isinstance(availability_raw, Mapping):
+        raise ValueError("building_availability must be an object mapping building ids to rounds.")
+    entries = tuple(
+        (str(building_id), int(live_round))
+        for building_id, live_round in availability_raw.items()
+    )
+    return tuple(sorted(entries))
 
 
 def _player_board_slots_from_dict(raw: Any) -> PlayerBoardSlots:

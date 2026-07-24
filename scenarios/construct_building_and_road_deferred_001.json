@@ -7,6 +7,12 @@
   "player_count": 4,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 2,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
     "building_market": [
       "well",
       "chapel",
