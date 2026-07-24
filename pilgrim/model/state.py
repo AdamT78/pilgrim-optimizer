@@ -64,6 +64,7 @@ class GameState:
     setup_sow_complete: bool = True
     setup_sow_completed_by: tuple[PlayerId, ...] = ()
     building_market: tuple[str, ...] = ()
+    building_availability: tuple[tuple[str, int], ...] = ()
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -99,6 +100,14 @@ class GameState:
         for player_id in self.setup_sow_completed_by:
             if int(player_id) >= len(self.players):
                 raise ValueError("setup_sow_completed_by contains unknown player id.")
+        availability_keys = [building_id for building_id, _live_round in self.building_availability]
+        if len(set(availability_keys)) != len(availability_keys):
+            raise ValueError("building_availability cannot contain duplicate building ids.")
+        for building_id, live_round in self.building_availability:
+            if not building_id:
+                raise ValueError("building_availability cannot contain empty building ids.")
+            if live_round < 0:
+                raise ValueError("building_availability live rounds cannot be negative.")
 
     def player_state(self, player_id: PlayerId) -> PlayerState:
         return self.players[int(player_id)]
@@ -161,6 +170,12 @@ class GameState:
 
     def with_building_market(self, building_market: tuple[str, ...]) -> GameState:
         return replace(self, building_market=building_market)
+
+    def with_building_availability(
+        self,
+        building_availability: tuple[tuple[str, int], ...],
+    ) -> GameState:
+        return replace(self, building_availability=building_availability)
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)

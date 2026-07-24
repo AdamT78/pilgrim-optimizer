@@ -265,6 +265,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - Road Engineer Build Roads duty-value bonus (`+1`/`+2`)
   - Road Engineer Construct deferred extra-road scaffold count (`+1`/`+2`)
 
+## Building Availability Timeline (v2.9)
+
+- `GameState` now carries deterministic `building_availability` metadata:
+  - tuple of `(building_id, live_round)` entries
+  - live rounds constrained to `2..26`
+- Scenario-loading behavior:
+  - explicit `initial_state.building_availability` is parsed and validated
+  - legacy scenarios without it default selected market buildings to live round `2`
+- Validation now enforces:
+  - all current market buildings have availability entries
+  - availability keys reference selected in-game buildings
+  - round bounds and uniqueness constraints
+- Rules helpers now expose:
+  - `building_live_round(...)`
+  - `is_building_live(...)`
+  - `live_buildings(...)`
+  - `future_buildings(...)`
+- Construct integration:
+  - legal Construct purchase actions are now gated to live market buildings
+  - apply-time validation rejects attempts to construct non-live market buildings
+- Setup generator integration:
+  - generated setups now include explicit live rounds for selected buildings using seeded local RNG
+- Hiring remains deferred:
+  - no bank-hire or other-player-hire runtime behavior is implemented yet
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

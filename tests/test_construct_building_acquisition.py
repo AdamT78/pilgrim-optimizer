@@ -133,6 +133,55 @@ def test_construct_insufficient_stone_filters_unaffordable_buildings() -> None:
     assert combined_ids == {"well", "chapel", "mint", "quarry"}
 
 
+def test_construct_live_only_filters_not_yet_live_market_buildings() -> None:
+    scenario = load_scenario("scenarios/construct_building_live_only_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+
+    building_ids = {
+        action.construct_building_id
+        for action in actions
+        if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
+    }
+    combined_ids = {
+        action.construct_building_id
+        for action in actions
+        if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+    }
+
+    assert building_ids == {"well"}
+    assert not combined_ids
+    assert any(action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED for action in actions)
+
+
+def test_construct_not_live_buildings_generate_no_building_actions() -> None:
+    scenario = load_scenario("scenarios/construct_building_not_live_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    resolutions = {action.resolution for action in actions}
+
+    assert TurnResolutionType.CONSTRUCT_BUILDING not in resolutions
+    assert TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED not in resolutions
+    assert TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in resolutions
+
+
+def test_apply_construct_building_rejects_not_yet_live_market_building() -> None:
+    scenario = load_scenario("scenarios/construct_building_not_live_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    road_action = _action_for_construct(
+        actions,
+        resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
+        plan="road",
+    )
+    invalid_action = replace(
+        road_action,
+        resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+        construct_building_id="well",
+        construct_plan=None,
+    )
+
+    with pytest.raises(TransitionValidationError, match="requires a live market building"):
+        apply_action(scenario.state, invalid_action, scenario.config)
+
+
 def test_apply_construct_building_level1_updates_market_slots_and_events() -> None:
     scenario = load_scenario("scenarios/construct_building_level1_001.json")
     before_player = scenario.state.player_state(PlayerId.PLAYER_ONE)
@@ -357,7 +406,7 @@ def test_apply_construct_building_rejects_non_market_building() -> None:
     )
     invalid_action = replace(action, construct_building_id="not_in_market")
 
-    with pytest.raises(TransitionValidationError, match="building_market"):
+    with pytest.raises(TransitionValidationError, match="live market building|building_market"):
         apply_action(scenario.state, invalid_action, scenario.config)
 
 

@@ -1,5 +1,5 @@
 {
-  "scenario_id": "construct_building_minority_cost_001",
+  "scenario_id": "building_availability_future_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -9,7 +9,7 @@
   "initial_state": {
     "timing": {
       "absolute_turn": 0,
-      "round_number": 2,
+      "round_number": 3,
       "season_number": 1,
       "turn_in_round": 0
     },
@@ -27,15 +27,39 @@
       "inquisition",
       "kogge"
     ],
+    "building_availability": {
+      "well": 2,
+      "chapel": 4,
+      "mint": 7,
+      "quarry": 9,
+      "brewery": 11,
+      "cloisters": 13,
+      "dormitory": 15,
+      "grain_store": 17,
+      "bank": 19,
+      "customs_house": 21,
+      "inquisition": 23,
+      "kogge": 25
+    },
     "players": {
       "player_one": {
         "resources": {
           "stone": 1,
-          "silver": 1,
+          "silver": 0,
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 1, 0, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0
         },
@@ -48,7 +72,17 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 2, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0
         },

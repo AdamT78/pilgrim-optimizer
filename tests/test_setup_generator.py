@@ -29,6 +29,8 @@ def test_setup_generator_different_seed_changes_layout_or_market_or_counters() -
         or generated_a["tithe_counters"] != generated_b["tithe_counters"]
         or generated_a["initial_state"]["building_market"]  # type: ignore[index]
         != generated_b["initial_state"]["building_market"]  # type: ignore[index]
+        or generated_a["initial_state"]["building_availability"]  # type: ignore[index]
+        != generated_b["initial_state"]["building_availability"]  # type: ignore[index]
     )
     assert differs
 
@@ -104,6 +106,7 @@ def test_setup_generator_tithe_counter_pool_and_taxation_gap() -> None:
 def test_setup_generator_building_market_is_12_with_4_per_level_and_no_duplicates() -> None:
     generated = generate_setup_scenario(player_count=2, seed=123)
     building_market = generated["initial_state"]["building_market"]  # type: ignore[index]
+    building_availability = generated["initial_state"]["building_availability"]  # type: ignore[index]
     building_config = load_building_config(
         json.loads(Path("configs/buildings.json").read_text(encoding="utf-8"))
     )
@@ -114,6 +117,8 @@ def test_setup_generator_building_market_is_12_with_4_per_level_and_no_duplicate
     for building_id in building_market:
         level_counts[building_config.definition_by_id(building_id).level] += 1
     assert level_counts == {1: 4, 2: 4, 3: 4}
+    assert set(building_availability) == set(building_market)
+    assert all(2 <= int(live_round) <= 26 for live_round in building_availability.values())
 
 
 @pytest.mark.parametrize(
@@ -154,6 +159,7 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
     assert initial_state["timing"]["round_number"] == 1
     assert initial_state["timing"]["season_number"] == 1
     assert initial_state["timing"]["turn_in_round"] == 0
+    assert len(initial_state["building_availability"]) == len(initial_state["building_market"])
 
     assert metadata["generated"] is True
     assert metadata["setup_sow_required"] is True

@@ -37,6 +37,7 @@ def generate_setup_scenario(
     duty_tiles = _generate_duty_tiles(rng)
     tithe_counters = _generate_tithe_counters(rng, duty_tiles)
     building_market = _generate_building_market(rng)
+    building_availability = _generate_building_availability(rng, building_market)
     dummy_groups = seed_dummy_groups(player_count)
     player_ids = _player_ids_for_count(player_count)
     scenario_id = scenario_name or f"generated_setup_{player_count}p_seed_{seed}"
@@ -95,6 +96,7 @@ def generate_setup_scenario(
                 "south_group": list(dummy_groups.south_group),
             },
             "building_market": building_market,
+            "building_availability": building_availability,
             "players": players,
         },
     }
@@ -134,6 +136,18 @@ def _generate_building_market(rng: random.Random) -> list[str]:
         rng.shuffle(pool)
         market.extend(pool[:4])
     return market
+
+
+def _generate_building_availability(
+    rng: random.Random,
+    building_market: list[str],
+) -> dict[str, int]:
+    available_rounds = list(range(2, 27))
+    sampled_rounds = sorted(rng.sample(available_rounds, len(building_market)))
+    return {
+        building_id: live_round
+        for building_id, live_round in zip(building_market, sampled_rounds, strict=True)
+    }
 
 
 def _building_ids_by_level_from_default_catalogue() -> dict[int, tuple[str, ...]]:

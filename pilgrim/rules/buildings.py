@@ -24,6 +24,9 @@ _EXPECTED_DONATION_VP_BY_LEVEL: dict[int, int] = {
     2: 4,
     3: 6,
 }
+MIN_BUILDING_LIVE_ROUND = 2
+MAX_BUILDING_LIVE_ROUND = 26
+DEFAULT_BUILDING_LIVE_ROUND = MIN_BUILDING_LIVE_ROUND
 
 
 def load_building_config(raw: Mapping[str, Any]) -> BuildingsConfig:
@@ -330,11 +333,97 @@ def validate_building_state(state: GameState, config: GameConfig) -> None:
     """Validate market + per-player slot occupancy against building config."""
     validate_building_catalogue(config.buildings)
     validate_building_market(state.building_market, config.buildings)
+    validate_building_availability(state, config)
     for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
         validate_player_board_slots(
             state.player_state(player_id).player_board_slots,
             config.buildings,
         )
+
+
+def validate_building_availability(state: GameState, config: GameConfig) -> None:
+    """Validate live-round timeline metadata for selected buildings."""
+    availability_keys = [building_id for building_id, _round_number in state.building_availability]
+    if len(set(availability_keys)) != len(availability_keys):
+        raise TransitionValidationError(
+            "building_availability cannot contain duplicate building ids."
+        )
+
+    selected_building_ids = set(state.building_market)
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        slots = state.player_state(player_id).player_board_slots
+        selected_building_ids.update(slots.active_buildings)
+        selected_building_ids.update(slots.donated_buildings)
+
+    availability_map = _building_availability_map(state)
+    for building_id, live_round in state.building_availability:
+        try:
+            building_by_id(config.buildings, building_id)
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        if not isinstance(live_round, int) or isinstance(live_round, bool):
+            raise TransitionValidationError(
+                "building_availability live rounds must be integer values."
+            )
+        if live_round < MIN_BUILDING_LIVE_ROUND or live_round > MAX_BUILDING_LIVE_ROUND:
+            raise TransitionValidationError(
+                "building_availability live rounds must be between "
+                f"{MIN_BUILDING_LIVE_ROUND} and {MAX_BUILDING_LIVE_ROUND}."
+            )
+        if building_id not in selected_building_ids:
+            raise TransitionValidationError(
+                "building_availability key must reference a selected building in game state: "
+                f"{building_id}."
+            )
+
+    for building_id in state.building_market:
+        if building_id not in availability_map:
+            raise TransitionValidationError(
+                "building_market entry missing building_availability round: "
+                f"{building_id}."
+            )
+
+
+def building_live_round(state: GameState, building_key: str) -> int | None:
+    """Return the configured live round for one building, if known."""
+    return _building_availability_map(state).get(building_key)
+
+
+def is_building_live(
+    state: GameState,
+    building_key: str,
+    *,
+    round_number: int | None = None,
+) -> bool:
+    """Return True when current/effective round is at or beyond building live round."""
+    effective_round = state.round_number if round_number is None else round_number
+    live_round = building_live_round(state, building_key)
+    if live_round is None:
+        return False
+    return effective_round >= live_round
+
+
+def live_buildings(state: GameState) -> tuple[str, ...]:
+    """Return currently live building ids across the tracked availability map."""
+    effective_round = state.round_number
+    return tuple(
+        sorted(
+            building_id
+            for building_id, live_round in _building_availability_map(state).items()
+            if effective_round >= live_round
+        )
+    )
+
+
+def future_buildings(state: GameState) -> tuple[tuple[str, int], ...]:
+    """Return not-yet-live building ids with their configured live rounds."""
+    effective_round = state.round_number
+    entries = [
+        (building_id, live_round)
+        for building_id, live_round in _building_availability_map(state).items()
+        if effective_round < live_round
+    ]
+    return tuple(sorted(entries, key=lambda item: (item[1], item[0])))
 
 
 def building_names_for_ids(
@@ -348,6 +437,10 @@ def building_names_for_ids(
 def _ensure_unique_ids(values: tuple[str, ...], *, label: str) -> None:
     if len(set(values)) != len(values):
         raise TransitionValidationError(f"{label} cannot contain duplicate building ids.")
+
+
+def _building_availability_map(state: GameState) -> dict[str, int]:
+    return {building_id: live_round for building_id, live_round in state.building_availability}
 
 
 def _remove_first_occurrence(values: tuple[str, ...], target: str) -> tuple[str, ...]:

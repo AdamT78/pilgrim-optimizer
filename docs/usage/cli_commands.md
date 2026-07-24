@@ -73,12 +73,18 @@ What it does right now:
 - Action indexes are 1-based and can be passed directly to `apply --action-index`.
 - If `game_over` is true, legal action list is empty by design.
 
-Canonical naming reminder:
+Duty Tiles and Actions (canonical naming):
 
 | Duty tile | Canonical action names |
 | --- | --- |
-| `give_alms` | `give_alms_paid`, `give_alms_donate_building`, `tithe` |
+| `produce` | `produce_wheat`, `produce_stone`, `tithe` |
+| `clerical` | `clerical_devotion`, `clerical_silversmith`, `tithe` |
+| `build_roads` | `build_roads_deferred`, `tithe` |
 | `construct` | `construct_building`, `construct_building_and_road_deferred`, `construct_road_deferred`, `tithe` |
+| `give_alms` | `give_alms_paid`, `give_alms_donate_building`, `tithe` |
+| `ordination` | `ordination`, `tithe` |
+| `allocation` | `allocation`, `tithe` |
+| `taxation` | `taxation`, `tithe` |
 
 Why this matters:
 
@@ -322,8 +328,13 @@ Position mapping used by the current sandbox:
 - Building catalogue data is now loaded from `configs/buildings.json`.
 - Scenario state includes a 12-building `building_market` with 4 buildings per level.
 - If `building_market` is omitted, deterministic fallback is used (first 4 by level from catalogue order).
+- Scenario state now also supports `building_availability` (`building_id -> live_round`).
+  - live rounds are `2..26`
+  - a building is live when `current round >= live_round`
+  - if `building_availability` is omitted, selected market buildings default to live round `2`
 - Verbose `solve` and `apply` output now include:
   - `Building market`
+  - `Building availability` (`Live market`, `Future market`, `Owned/live`)
   - per-player `Player board slots`
   - slot usage lines (`Used slots`, `Available slots`)
 - Construct building acquisition now appears in verbose output via `BUILDING_CONSTRUCTED`,
@@ -356,9 +367,11 @@ Position mapping used by the current sandbox:
   - `construct_building_and_road_deferred`
   - `construct_road_deferred` (road-only scaffold)
   - `tithe`
+- Construct purchase actions are generated only for live market buildings.
 - `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe`.
 - Build Roads remains fully non-spatial scaffolded.
 - Construct road effects remain non-spatial scaffolded; only building acquisition is implemented.
+- Building hiring (bank or other player) remains deferred.
 
 ## Produce Options and Fields Rename (v1.4)
 

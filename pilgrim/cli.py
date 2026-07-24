@@ -26,6 +26,8 @@ from pilgrim.model.state import GameState
 from pilgrim.rules.buildings import (
     available_player_board_slots,
     building_names_for_ids,
+    future_buildings,
+    live_buildings,
     used_player_board_slots,
 )
 from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
@@ -786,6 +788,8 @@ def _format_state_summary(
         f"  Level 1: {_market_building_names_for_level(state, config, 1)}",
         f"  Level 2: {_market_building_names_for_level(state, config, 2)}",
         f"  Level 3: {_market_building_names_for_level(state, config, 3)}",
+        "Building availability:",
+        *_format_building_availability_summary(state, config),
         "Dummy acolytes:",
         f"  north_group: {north_group_text}",
         f"  south_group: {south_group_text}",
@@ -946,6 +950,47 @@ def _market_building_names_for_level(
     return ", ".join(level_names)
 
 
+def _format_building_availability_summary(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[str, ...]:
+    live_set = set(live_buildings(state))
+    market_set = set(state.building_market)
+    market_live_ids = tuple(building_id for building_id in state.building_market if building_id in live_set)
+    market_future_entries = tuple(
+        (building_id, live_round)
+        for building_id, live_round in future_buildings(state)
+        if building_id in market_set
+    )
+
+    market_live_names = building_names_for_ids(market_live_ids, config.buildings)
+    live_market_text = ", ".join(market_live_names) if market_live_names else "none"
+
+    market_future_text_parts: list[str] = []
+    for building_id, live_round in market_future_entries:
+        building_name = config.buildings.name_for_id(building_id)
+        market_future_text_parts.append(f"{building_name} (round {live_round})")
+    future_market_text = ", ".join(market_future_text_parts) if market_future_text_parts else "none"
+
+    owned_live_parts: list[str] = []
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        player_label = player_id.name.lower()
+        slots = state.player_state(player_id).player_board_slots
+        owned_ids = (*slots.active_buildings, *slots.donated_buildings)
+        for building_id in owned_ids:
+            if building_id in market_set or building_id not in live_set:
+                continue
+            building_name = config.buildings.name_for_id(building_id)
+            owned_live_parts.append(f"{building_name} ({player_label})")
+    owned_live_text = ", ".join(owned_live_parts) if owned_live_parts else "none"
+
+    return (
+        f"  Live market: {live_market_text}",
+        f"  Future market: {future_market_text}",
+        f"  Owned/live: {owned_live_text}",
+    )
+
+
 def _format_duty_tiles_layout(config: GameConfig) -> tuple[str, ...]:
     duty_tiles = config.duty_tiles_mapping()
     return tuple(
@@ -1063,6 +1108,9 @@ def _format_generated_setup_summary(
     building_market = initial_state.get("building_market")
     if not isinstance(building_market, list):
         raise ValueError("Generated scenario missing initial_state.building_market list.")
+    building_availability = initial_state.get("building_availability")
+    if not isinstance(building_availability, dict):
+        raise ValueError("Generated scenario missing initial_state.building_availability object.")
     return (
         f"Generated setup scenario: {output_path.as_posix()}",
         f"Players: {player_count}",
@@ -1071,6 +1119,7 @@ def _format_generated_setup_summary(
         f"Taxation tile: {taxation_tile}",
         f"Tithe counters: {len(tithe_counters)} counters; taxation has none",
         f"Building market: {len(building_market)} buildings",
+        f"Building availability: {len(building_availability)} entries",
         f"Dummy acolytes: {player_count}-player setup",
         f"Setup sow required: {setup_sow_required}",
     )

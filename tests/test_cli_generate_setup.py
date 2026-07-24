@@ -25,6 +25,7 @@ def test_cli_generate_setup_writes_file_and_prints_summary(capsys, tmp_path: Pat
     assert "Players: 2" in output
     assert "Seed: 123" in output
     assert "Taxation tile:" in output
+    assert "Building availability: 12 entries" in output
     assert "Setup sow required: true" in output
     generated = json.loads(output_path.read_text(encoding="utf-8"))
     assert generated["root_player_id"] == "player_one"

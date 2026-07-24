@@ -72,9 +72,17 @@ Donation under Give Alms moves exactly one building from active to donated:
 Construct now supports acquiring exactly one building from `building_market`:
 
 - cost is stone equal to the building level
+- only live market buildings are legal Construct purchase targets
+  - live means `current round >= building live round`
 - acquired building is added to `active_buildings`
 - building is removed from market immediately
 - this consumes one shared player-board slot at once
+
+Building availability timeline notes:
+
+- selected buildings carry live rounds in `initial_state.building_availability`
+- fallback for legacy scenarios is live round `2` for all selected market buildings
+- hiring (bank/other-player building use) is still not implemented
 
 Slot limit remains shared across:
 
