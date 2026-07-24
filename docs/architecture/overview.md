@@ -310,10 +310,10 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - different buildings can each be hired once in same turn
   - implemented as pure immutable helper/context scaffolding (not persisted in `GameState`)
 - Payment routing helpers now support pure description + state application for transfers.
-- Transition behavior remains unchanged for existing bonuses:
-  - Well/Quarry/Mint/Chapel/Infirmary/Chapter House continue to apply from own active buildings
-    only
-  - no automatic hire integration is enabled yet
+- Transition wiring now consumes this infrastructure for:
+  - Well/Quarry/Mint/Chapel (direct-output bonuses)
+  - Infirmary (`allocation` + `ordination` duty-value cap effects)
+  - Mill (`give_alms_paid` + `ordination` wheat-cost waiver)
 
 ## Hire Sources for Simple Building Bonuses (v3.1a)
 
@@ -333,7 +333,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - hired variants are unavailable while own-active variants still work
 - Event ordering for hired sources is explicit:
   - `BUILDING_HIRED` then `BUILDING_BONUS`
-- Chapter House and Mill remain outside hire-source wiring in this milestone.
+- Chapter House remains outside hire-source wiring in this milestone.
 
 ## Hire Sources for Infirmary Duty Bonuses (v3.1b)
 
@@ -356,7 +356,30 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `ALLOCATION` / `ORDINATION` step events
 - Scope boundary remains:
   - Chapter House hire wiring is still deferred
-  - Mill remains deferred/unimplemented
+  - no standalone "hire action" exists; hiring is attached to consuming actions
+
+## Mill Wheat-Cost Rule (v3.2)
+
+- Transition/runtime wiring now consumes hire sources for Mill in:
+  - `give_alms_paid`
+  - `ordination`
+- Source resolution remains deterministic:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable
+- Wheat-cost transform:
+  - `mill_waiver = min(2, required_wheat)`
+  - `actual_wheat_spent = max(0, required_wheat - 2)`
+- Scope behavior:
+  - waives only action wheat costs (`give_alms_paid` wheat + Alms House extra wheat, Ordination step
+    wheat)
+  - does not waive silver costs, minority silver, tithe, or Mill hire payment
+- Apply-time ordering for hired Mill paths:
+  - `DUTY_RESOLUTION`
+  - `BUILDING_HIRED`
+  - `BUILDING_BONUS`
+  - action-specific events (`ORDINATION` steps / Alms events)
 
 ## Intentionally Deferred
 

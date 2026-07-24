@@ -92,8 +92,22 @@ def test_registry_contains_all_required_entries() -> None:
             "+1 piety",
             "implemented",
         ),
-        ("give_alms", "give_alms_paid", "building", "mill", "deferred", "known_unimplemented"),
-        ("ordination", "ordination", "building", "mill", "deferred", "known_unimplemented"),
+        (
+            "give_alms",
+            "give_alms_paid",
+            "building",
+            "mill",
+            "waive up to first 2 wheat costs",
+            "implemented",
+        ),
+        (
+            "ordination",
+            "ordination",
+            "building",
+            "mill",
+            "waive up to first 2 wheat costs",
+            "implemented",
+        ),
         (
             "ordination",
             "ordination",
@@ -109,7 +123,7 @@ def test_registry_contains_all_required_entries() -> None:
     assert signatures == expected
 
 
-def test_well_quarry_mint_chapel_are_implemented_and_other_buildings_remain_deferred() -> None:
+def test_building_registry_entries_reflect_current_implemented_scope() -> None:
     building_entries = [
         entry for entry in all_duty_enhancements() if entry.source_type == "building"
     ]
@@ -124,12 +138,13 @@ def test_well_quarry_mint_chapel_are_implemented_and_other_buildings_remain_defe
         "chapel",
         "infirmary",
         "chapter_house",
+        "mill",
     }
 
     unimplemented_building_sources = {
         entry.source_key for entry in building_entries if entry.status != "implemented"
     }
-    assert unimplemented_building_sources == {"mill"}
+    assert unimplemented_building_sources == set()
 
 
 def test_implemented_special_activity_effects_appear_in_registry() -> None:

@@ -397,9 +397,26 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         return f"{event_name}: {details}"
 
     if event.event_type is EventType.ALMS_PAYMENT:
-        silver = int(details.get("silver", 0))
-        wheat = int(details.get("wheat", 0))
-        text = f"{event_name}: {actor_name} paid silver={silver}, wheat={wheat}"
+        credited_silver = details.get("credited_silver")
+        credited_wheat = details.get("credited_wheat")
+        actual_paid_silver = details.get("actual_paid_silver")
+        actual_paid_wheat = details.get("actual_paid_wheat")
+
+        if (
+            credited_silver is not None
+            and credited_wheat is not None
+            and actual_paid_silver is not None
+            and actual_paid_wheat is not None
+        ):
+            text = (
+                f"{event_name}: {actor_name} credited silver={int(credited_silver)}, "
+                f"wheat={int(credited_wheat)} toward Give Alms; actual paid "
+                f"silver={int(actual_paid_silver)}, wheat={int(actual_paid_wheat)}"
+            )
+        else:
+            silver = int(details.get("silver", 0))
+            wheat = int(details.get("wheat", 0))
+            text = f"{event_name}: {actor_name} paid silver={silver}, wheat={wheat}"
         minority_silver_cost = int(details.get("minority_silver_cost", 0))
         if minority_silver_cost > 0:
             text += f" (plus minority silver cost {minority_silver_cost})"
@@ -533,6 +550,9 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                 f"{event_name}: chapter_house allowed second acolyte on "
                 f"{activity} (capacity {capacity})"
             )
+        if building == "mill" and "wheat_waived" in details:
+            wheat_waived = int(details.get("wheat_waived", 0))
+            return f"{event_name}: mill waived wheat cost {wheat_waived} for {action_name}"
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")

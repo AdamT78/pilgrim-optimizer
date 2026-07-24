@@ -1,0 +1,50 @@
+{
+  "scenario_id": "ordination_hire_mill_insufficient_resource_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 4,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "merchant_position": 4,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 3,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "building_market": [
+      "mill"
+    ],
+    "building_availability": {
+      "mill": 2
+    },
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 1, 0, 0, 0],
+          "village": 1,
+          "abbey": 0
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0
+        }
+      }
+    }
+  }
+}

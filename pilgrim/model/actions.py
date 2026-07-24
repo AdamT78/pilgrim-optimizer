@@ -208,6 +208,13 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             f" | hire building: {action.hired_building_id} "
             f"from {action.hired_building_source}"
         )
+    if action.hired_building_id == "mill":
+        required_wheat = 0
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
+            required_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
+        elif action.resolution is TurnResolutionType.ORDINATION:
+            required_wheat = len(action.ordination_steps)
+        summary += f" | mill wheat spent={max(0, required_wheat - 2)}"
     return summary
 
 

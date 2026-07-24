@@ -128,6 +128,13 @@ Duty tile categories are not action names. Use the following concrete action nam
 - Hired produce bonuses still stack with matching Special Activity bonuses.
 - For `give_alms`, paid actions still pay silver/wheat equal to effective duty value and move
   that many rows.
+- Mill now modifies wheat costs for `give_alms_paid`:
+  - source may be own-active, live-market hire, or opponent-active hire
+  - `mill_waiver = min(2, required_wheat)`
+  - `actual_wheat_spent = max(0, required_wheat - 2)`
+  - required wheat includes both declared `give_alms_paid` wheat and Alms House extra wheat
+  - Merchant on Taxation (`resource: none`) blocks hired Mill variants
+  - Mill does not waive silver costs or Mill hire payment
 - `give_alms_donate_building` always donates exactly one active building and advances Alms by
   exactly one
   row.
@@ -141,6 +148,12 @@ Duty tile categories are not action names. Use the following concrete action nam
 - Ordination steps are validated sequentially, so `ordain; mission` is legal at duty value 2 even
   when Abbey starts empty.
 - Each ordination step must be legal when reached and costs 1 wheat.
+- Mill now modifies Ordination wheat costs:
+  - source may be own-active, live-market hire, or opponent-active hire
+  - required wheat is the number of Ordination steps in the chosen sequence
+  - `actual_wheat_spent = max(0, required_wheat - 2)`
+  - Merchant on Taxation (`resource: none`) blocks hired Mill variants
+  - Mill does not waive minority silver cost or Mill hire payment
 - Usable Infirmary source now modifies Ordination duty value semantics:
   - legal generation may allow one additional step (`+1` cap) when Infirmary source is usable
     (own active or hired)
@@ -149,6 +162,15 @@ Duty tile categories are not action names. Use the following concrete action nam
     sequence actually uses that extra paid step
   - hired variants are blocked when Merchant resource is `none` (Taxation) or hire cost is
     unaffordable
+
+```text
+Required wheat | Mill waiver | Actual wheat spent
+1              | 1           | 0
+2              | 2           | 0
+3              | 2           | 1
+4              | 2           | 2
+5              | 2           | 3
+```
 - For `clerical`:
   - Mint adds `+1 silver` to `clerical_silversmith`
   - Chapel adds `+1 piety` to `clerical_devotion`

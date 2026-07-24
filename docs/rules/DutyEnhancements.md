@@ -27,6 +27,10 @@ Runtime policy for currently implemented building bonuses:
   - Allocation: `+1 effective Duty Value` from own-active or usable hired source
   - Ordination: `+1 effective Duty Value` only when the extra paid Ordination step is used,
     from own-active or usable hired source
+- Mill is now implemented as a wheat-cost modifier:
+  - `give_alms_paid`: waive up to first `2` required wheat
+  - `ordination`: waive up to first `2` required wheat
+  - formula: `actual_wheat_spent = max(0, required_wheat - 2)`
 - Well / Quarry / Mint / Chapel remain direct output bonuses (resource/piety), not duty-value
   modifiers.
 
@@ -55,7 +59,10 @@ Building hire infrastructure note (v3.1a):
 - Infirmary is now also wired:
   - Allocation effective-duty cap bonus (`+1`)
   - Ordination extra-step effective-duty cap bonus (`+1` when extra step is used)
-- Chapter House and Mill remain own-active-only / deferred for hire wiring.
+- Mill is now also wired:
+  - own active, live market hire, opponent active hire
+  - hire payment is separate and not waived by Mill
+- Chapter House remains own-active-only / deferred for hire wiring.
 
 ## Registry fields
 
@@ -98,7 +105,7 @@ Format:
 ### Give Alms
 
 - `give_alms | give_alms_paid | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); each +1 still requires one extra paid silver/wheat.`
-- `give_alms | give_alms_paid | building | mill | deferred | known_unimplemented | Give Alms building interaction is not implemented yet.`
+- `give_alms | give_alms_paid | building | mill | waive up to first 2 wheat costs | implemented | Applied in transition from own-active or usable hired Mill source; does not waive silver or hire payment.`
 
 ### Build Roads
 
@@ -115,5 +122,5 @@ Format:
 
 ### Ordination
 
-- `ordination | ordination | building | mill | deferred | known_unimplemented | Ordination building interaction is not implemented yet.`
+- `ordination | ordination | building | mill | waive up to first 2 wheat costs | implemented | Applied in transition from own-active or usable hired Mill source; does not waive silver or hire payment.`
 - `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | implemented | Applied when own-active or usable hired Infirmary is used for an extra paid ordination step.`
