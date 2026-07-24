@@ -389,12 +389,13 @@ def validate_building_state(state: GameState, config: GameConfig) -> None:
     """Validate market + per-player slot occupancy against building config."""
     validate_building_catalogue(config.buildings)
     validate_building_market(state.building_market, config.buildings)
-    validate_building_availability(state, config)
     for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
         validate_player_board_slots(
             state.player_state(player_id).player_board_slots,
             config.buildings,
         )
+    _validate_unique_building_locations(state)
+    validate_building_availability(state, config)
 
 
 def validate_building_availability(state: GameState, config: GameConfig) -> None:
@@ -437,6 +438,33 @@ def validate_building_availability(state: GameState, config: GameConfig) -> None
             raise TransitionValidationError(
                 "building_market entry missing building_availability round: "
                 f"{building_id}."
+            )
+
+
+def _validate_unique_building_locations(state: GameState) -> None:
+    """Ensure one building tile occupies exactly one runtime location."""
+    building_locations: dict[str, list[str]] = {}
+    for building_id in state.building_market:
+        building_locations.setdefault(building_id, []).append("building_market")
+
+    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        player_slots = state.player_state(player_id).player_board_slots
+        player_label = _player_label(player_id)
+        for building_id in player_slots.active_buildings:
+            building_locations.setdefault(building_id, []).append(
+                f"active_buildings:{player_label}"
+            )
+        for building_id in player_slots.donated_buildings:
+            building_locations.setdefault(building_id, []).append(
+                f"donated_buildings:{player_label}"
+            )
+
+    for building_id, locations in sorted(building_locations.items()):
+        if len(locations) > 1:
+            locations_text = ", ".join(locations)
+            raise TransitionValidationError(
+                "Building id cannot appear in multiple locations simultaneously: "
+                f"{building_id} in {locations_text}."
             )
 
 

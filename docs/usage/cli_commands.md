@@ -451,18 +451,25 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
-## Building Turn-Modifier Scaffold (v3.3)
+## Building Turn-Modifier Registry (v3.3/v3.4)
 
-- A metadata-only registry now tracks deferred movement/turn-phase building modifiers:
+- A dedicated registry tracks movement/turn-phase building modifiers:
   - `kogge`, `cloisters`, `dormitory`, `inquisition`, `library`
 - Registry location:
   - `pilgrim/rules/building_turn_modifiers.py`
 - Rule documentation:
   - `docs/rules/BuildingTurnModifiers.md`
-- Scope boundary:
-  - no runtime behavior is wired yet
-  - no legal-action output changes are expected from these entries in this milestone
-  - no dedicated CLI command is added yet; this is scaffolding only
+- Runtime status:
+  - `kogge` is now implemented and can add `city -> east` / `city -> west` sow starts
+  - action summaries show route usage:
+    - `| use building: kogge` (own active)
+    - `| hire building: kogge from market` or `| hire building: kogge from player_two`
+  - verbose apply output includes:
+    - `BUILDING_HIRED` before sowing for hired Kogge routes
+    - `BUILDING_BONUS: kogge enabled city -> east|west sow route`
+- Remaining scaffold:
+  - `cloisters`, `dormitory`, `inquisition`, and `library` still have no runtime behavior
+  - no dedicated CLI command is added for turn-modifier registry inspection
 
 ## Produce Options and Fields Rename (v1.4)
 

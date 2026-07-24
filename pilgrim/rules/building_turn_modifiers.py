@@ -36,8 +36,8 @@ _BUILDING_TURN_MODIFIERS: tuple[BuildingTurnModifier, ...] = (
         category="sow_route_modifier",
         phase="during_sow",
         effect="adds city -> east and city -> west sow options",
-        status="scaffolded",
-        notes="actual route generation deferred",
+        status="implemented",
+        notes="implemented in transition sow-route generation and apply validation/events.",
     ),
     BuildingTurnModifier(
         building_key="cloisters",

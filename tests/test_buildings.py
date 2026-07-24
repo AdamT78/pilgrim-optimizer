@@ -19,6 +19,7 @@ from pilgrim.rules.buildings import (
     validate_building_availability,
     validate_building_catalogue,
     validate_building_market,
+    validate_building_state,
     validate_player_board_slots,
 )
 from pilgrim.rules.validation import TransitionValidationError
@@ -236,6 +237,77 @@ def test_player_board_slots_unknown_building_id_invalid() -> None:
     )
     with pytest.raises(ValueError, match="Unknown building id"):
         validate_player_board_slots(invalid_slots, scenario.config.buildings)
+
+
+def test_building_state_rejects_building_in_market_and_active() -> None:
+    scenario = load_scenario("scenarios/building_market_001.json")
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    invalid_state = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(
+            player_one,
+            player_board_slots=replace(
+                player_one.player_board_slots,
+                active_buildings=("kogge",),
+            ),
+        ),
+    )
+
+    with pytest.raises(TransitionValidationError, match="multiple locations simultaneously"):
+        validate_building_state(invalid_state, scenario.config)
+
+
+def test_building_state_rejects_building_in_market_and_donated() -> None:
+    scenario = load_scenario("scenarios/building_market_001.json")
+    player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
+    invalid_state = scenario.state.with_player_state(
+        PlayerId.PLAYER_TWO,
+        replace(
+            player_two,
+            player_board_slots=replace(
+                player_two.player_board_slots,
+                donated_buildings=("kogge",),
+            ),
+        ),
+    )
+
+    with pytest.raises(TransitionValidationError, match="multiple locations simultaneously"):
+        validate_building_state(invalid_state, scenario.config)
+
+
+def test_building_state_rejects_active_and_donated_across_players() -> None:
+    scenario = load_scenario("scenarios/building_market_001.json")
+    market_without_kogge = tuple(
+        building_id for building_id in scenario.state.building_market if building_id != "kogge"
+    )
+    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
+    invalid_state = (
+        scenario.state.with_building_market(market_without_kogge)
+        .with_player_state(
+            PlayerId.PLAYER_ONE,
+            replace(
+                player_one,
+                player_board_slots=replace(
+                    player_one.player_board_slots,
+                    active_buildings=("kogge",),
+                ),
+            ),
+        )
+        .with_player_state(
+            PlayerId.PLAYER_TWO,
+            replace(
+                player_two,
+                player_board_slots=replace(
+                    player_two.player_board_slots,
+                    donated_buildings=("kogge",),
+                ),
+            ),
+        )
+    )
+
+    with pytest.raises(TransitionValidationError, match="multiple locations simultaneously"):
+        validate_building_state(invalid_state, scenario.config)
 
 
 def test_building_availability_rejects_live_round_below_two() -> None:

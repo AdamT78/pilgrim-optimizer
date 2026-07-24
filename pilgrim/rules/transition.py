@@ -13,7 +13,7 @@ from pilgrim.model.actions import (
     action_id,
     readable_route,
 )
-from pilgrim.model.config import GameConfig
+from pilgrim.model.config import BoardConfig, GameConfig
 from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
@@ -169,18 +169,41 @@ def _legal_setup_sow_actions(state: GameState, config: GameConfig) -> tuple[Game
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
-    player_state = state.player_state(state.active_player)
-    player_resources = player_state.resources
-    chapter_house_active = player_has_active_chapter_house(player_state)
+    base_player_state = state.player_state(state.active_player)
+    base_player_resources = base_player_state.resources
+    chapter_house_active = player_has_active_chapter_house(base_player_state)
     activity_capacity = special_activity_capacity(chapter_house_active=chapter_house_active)
     actions: list[GameAction] = []
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
-        for route in generate_routes(origin, picked_up, config.board):
-            sowed_vector = sow_vector(player_vector, origin, route, config.board)
+        for route, kogge_source in _legal_sow_routes_for_origin(
+            state,
+            config,
+            origin=origin,
+            picked_up=picked_up,
+        ):
+            route_state = state
+            player_state = base_player_state
+            player_resources = base_player_resources
+            if kogge_source is not None and _is_hired_source(kogge_source):
+                route_state, _ = apply_building_hire_payment(
+                    state,
+                    acting_player=state.active_player,
+                    source=kogge_source,
+                )
+                player_state = route_state.player_state(state.active_player)
+                player_resources = player_state.resources
+            sowed_vector = _sow_vector_with_optional_city_kogge(
+                player_vector,
+                origin=origin,
+                route=route,
+                board=config.board,
+                kogge_source=kogge_source,
+            )
             for duty_position in config.duty_positions():
                 if sowed_vector[duty_position] <= 0:
                     continue
+                actions_before_duty = len(actions)
                 duty_category = config.duty_category_for_position(duty_position)
                 category_actions = action_options_for_duty_category(duty_category)
                 if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
@@ -195,7 +218,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     available_silver = player_resources.silver - silver_cost
                     if available_silver >= 0:
                         mill_source = building_ability_source(
-                            state,
+                            route_state,
                             config,
                             acting_player=state.active_player,
                             building_key="mill",
@@ -304,7 +327,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         special_activity_capacity=activity_capacity,
                     )
                     infirmary_source = building_ability_source(
-                        state,
+                        route_state,
                         config,
                         acting_player=state.active_player,
                         building_key="infirmary",
@@ -379,10 +402,10 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     )
                     if player_resources.silver >= silver_cost:
                         constructible_building_ids = _constructible_building_ids(
-                            state=state,
+                            state=route_state,
                             player_state=player_state,
                             config=config,
-                            building_market=state.building_market,
+                            building_market=route_state.building_market,
                         )
                         for building_id in constructible_building_ids:
                             actions.append(
@@ -438,13 +461,13 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         continue
 
                     infirmary_source = building_ability_source(
-                        state,
+                        route_state,
                         config,
                         acting_player=state.active_player,
                         building_key="infirmary",
                     )
                     mill_source = building_ability_source(
-                        state,
+                        route_state,
                         config,
                         acting_player=state.active_player,
                         building_key="mill",
@@ -658,7 +681,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     for category_action in category_actions:
                         actions.extend(
                             _legal_action_variants_for_resolution(
-                                state=state,
+                                state=route_state,
                                 config=config,
                                 origin=origin,
                                 route=route,
@@ -674,6 +697,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         resolution=TurnResolutionType.TITHE,
                     )
                 )
+                if kogge_source is not None:
+                    for index in range(actions_before_duty, len(actions)):
+                        action = actions[index]
+                        if not isinstance(action, FullTurnAction):
+                            continue
+                        actions[index] = _with_kogge_route_fields(action, source=kogge_source)
     return tuple(actions)
 
 
@@ -819,26 +848,69 @@ def _apply_full_turn_action(
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
 
     player = state.active_player
-    player_vector = state.player_vector(player)
+    transition_action_id = action_id(action)
+    kogge_source = _resolved_kogge_source_for_action(
+        state=state,
+        config=config,
+        player=player,
+        action=action,
+    )
+    state_for_sow = state
+    pre_sowing_events: list[GameEvent] = []
+    if kogge_source is not None:
+        if _is_hired_source(kogge_source):
+            try:
+                state_for_sow, kogge_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=kogge_source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=kogge_source,
+                    payment=kogge_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _kogge_route_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+                route=action.route,
+                config=config,
+            )
+        )
+
+    player_vector = state_for_sow.player_vector(player)
     picked_up = player_vector[action.origin]
     if picked_up <= 0:
         raise TransitionValidationError("Sowing source must be occupied.")
     ensure_route_length_matches(picked_up=picked_up, route_length=len(action.route))
 
     try:
-        sowed_vector = sow_vector(player_vector, action.origin, action.route, config.board)
+        sowed_vector = _sow_vector_with_optional_city_kogge(
+            player_vector,
+            origin=action.origin,
+            route=action.route,
+            board=config.board,
+            kogge_source=kogge_source,
+        )
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
 
-    state_after_sow = state.with_player_vector(player, sowed_vector)
+    state_after_sow = state_for_sow.with_player_vector(player, sowed_vector)
     ensure_selected_duty_has_acolyte(
         state_after_sow,
         player=player,
         duty_position=action.selected_duty,
     )
 
-    transition_action_id = action_id(action)
     events: list[GameEvent] = [
+        *pre_sowing_events,
         GameEvent(
             event_type=EventType.SOWING,
             actor=player,
@@ -957,6 +1029,19 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Only Construct building actions may include construct_building_id."
             )
+        if (action.sow_route_building_id is None) != (action.sow_route_building_source is None):
+            raise TransitionValidationError(
+                "sow_route_building_id and sow_route_building_source must be set together."
+            )
+        if (
+            action.sow_route_building_id is not None
+            and action.sow_route_building_id != "kogge"
+        ):
+            raise TransitionValidationError(
+                "Only Kogge is supported for sow_route_building fields in this milestone."
+            )
+
+        hire_context = BuildingHireTurnContext()
         if (action.hired_building_id is None) != (action.hired_building_source is None):
             raise TransitionValidationError(
                 "hired_building_id and hired_building_source must be set together."
@@ -973,7 +1058,6 @@ def _apply_full_turn_action(
                     "hired_building_id does not match action resolution expected building(s): "
                     f"{expected_buildings}."
                 )
-            hire_context = BuildingHireTurnContext()
             if not can_hire_building_this_turn(
                 hire_context,
                 building_key=action.hired_building_id,
@@ -988,10 +1072,25 @@ def _apply_full_turn_action(
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
-            if not validate_hire_sequence_for_turn(hire_context.hired_buildings):
+        if (
+            action.sow_route_building_id == "kogge"
+            and action.sow_route_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(hire_context, building_key="kogge"):
                 raise TransitionValidationError(
                     "Same building cannot be hired more than once in one turn."
                 )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key="kogge",
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if not validate_hire_sequence_for_turn(hire_context.hired_buildings):
+            raise TransitionValidationError(
+                "Same building cannot be hired more than once in one turn."
+            )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             required_mill_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
@@ -2512,6 +2611,121 @@ def _next_incomplete_setup_player(
     return None
 
 
+def _legal_sow_routes_for_origin(
+    state: GameState,
+    config: GameConfig,
+    *,
+    origin: int,
+    picked_up: int,
+) -> tuple[tuple[tuple[int, ...], BuildingAbilitySource | None], ...]:
+    routes: list[tuple[tuple[int, ...], BuildingAbilitySource | None]] = []
+    if picked_up <= 0:
+        return ()
+
+    city_position = config.board.index_for_name("city")
+    east_position = config.board.index_for_name("east")
+    west_position = config.board.index_for_name("west")
+    if origin == city_position:
+        kogge_source = building_ability_source(
+            state,
+            config,
+            acting_player=state.active_player,
+            building_key="kogge",
+        )
+        if kogge_source.usable and (
+            kogge_source.source_type == "own_active" or _is_hired_source(kogge_source)
+        ):
+            for first_step in (east_position, west_position):
+                for suffix_route in generate_routes(first_step, picked_up - 1, config.board):
+                    routes.append(((first_step, *suffix_route), kogge_source))
+
+    routes.extend(
+        (route, None)
+        for route in generate_routes(origin, picked_up, config.board)
+    )
+    return tuple(routes)
+
+
+def _with_kogge_route_fields(
+    action: FullTurnAction,
+    *,
+    source: BuildingAbilitySource,
+) -> FullTurnAction:
+    if source.source_type == "own_active":
+        return replace(
+            action,
+            sow_route_building_id="kogge",
+            sow_route_building_source="own_active",
+        )
+    if _is_hired_source(source):
+        return replace(
+            action,
+            sow_route_building_id="kogge",
+            sow_route_building_source=_hired_building_source_label(source),
+        )
+    raise ValueError("Kogge route source must be own-active or hired.")
+
+
+def _sow_vector_with_optional_city_kogge(
+    vector: tuple[int, ...],
+    *,
+    origin: int,
+    route: tuple[int, ...],
+    board: BoardConfig,
+    kogge_source: BuildingAbilitySource | None,
+) -> tuple[int, ...]:
+    if origin < 0 or origin >= len(vector):
+        raise ValueError(f"Invalid source position: {origin}")
+    picked_up = vector[origin]
+    if picked_up <= 0:
+        raise ValueError("Sowing source must contain at least one acolyte.")
+    if len(route) != picked_up:
+        raise ValueError("Route length must equal number of picked-up acolytes.")
+
+    allows_kogge_city_step = kogge_source is not None and kogge_source.usable
+    if not _is_legal_route_with_optional_city_kogge(
+        origin,
+        route,
+        board=board,
+        allows_kogge_city_step=allows_kogge_city_step,
+    ):
+        raise ValueError("Route is not legal for the board graph.")
+
+    updated = list(vector)
+    updated[origin] = 0
+    for position in route:
+        updated[position] += 1
+    return tuple(updated)
+
+
+def _is_legal_route_with_optional_city_kogge(
+    origin: int,
+    route: tuple[int, ...],
+    *,
+    board: BoardConfig,
+    allows_kogge_city_step: bool,
+) -> bool:
+    current = origin
+    city_position = board.index_for_name("city")
+    east_position = board.index_for_name("east")
+    west_position = board.index_for_name("west")
+
+    for index, next_position in enumerate(route):
+        if next_position in board.neighbors(current):
+            current = next_position
+            continue
+        if (
+            allows_kogge_city_step
+            and index == 0
+            and current == city_position
+            and next_position in (east_position, west_position)
+        ):
+            current = next_position
+            continue
+        return False
+    return True
+
+
 def _legal_action_variants_for_resolution(
     *,
     state: GameState,
@@ -2582,6 +2796,72 @@ def _legal_action_variants_for_resolution(
             selected_duty=selected_duty,
             resolution=resolution,
         ),
+    )
+
+
+def _route_requires_kogge(action: FullTurnAction, config: GameConfig) -> bool:
+    if not action.route:
+        return False
+    city_position = config.board.index_for_name("city")
+    if action.origin != city_position:
+        return False
+    first_step = action.route[0]
+    east_position = config.board.index_for_name("east")
+    west_position = config.board.index_for_name("west")
+    if first_step in config.board.neighbors(city_position):
+        return False
+    return first_step in (east_position, west_position)
+
+
+def _resolved_kogge_source_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> BuildingAbilitySource | None:
+    action_has_route_modifier_fields = action.sow_route_building_id is not None
+    route_requires_kogge = _route_requires_kogge(action, config)
+    if not route_requires_kogge:
+        if action_has_route_modifier_fields:
+            raise TransitionValidationError(
+                "Kogge sow-route fields are only legal when route uses city -> east/west."
+            )
+        return None
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key="kogge",
+    )
+    if source.source_type == "own_active" and source.usable:
+        if action_has_route_modifier_fields:
+            if action.sow_route_building_id != "kogge":
+                raise TransitionValidationError("sow_route_building_id must be kogge.")
+            if action.sow_route_building_source != "own_active":
+                raise TransitionValidationError(
+                    "Own-active Kogge route must set sow_route_building_source=own_active."
+                )
+        return source
+
+    if _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if not action_has_route_modifier_fields:
+            raise TransitionValidationError(
+                "Hired Kogge route must include sow-route building fields."
+            )
+        if action.sow_route_building_id != "kogge":
+            raise TransitionValidationError("sow_route_building_id must be kogge.")
+        if action.sow_route_building_source != expected_source_label:
+            raise TransitionValidationError(
+                "sow_route_building_source does not match resolved Kogge source: "
+                f"expected {expected_source_label}."
+            )
+        return source
+
+    raise TransitionValidationError(
+        "Route requires Kogge (city -> east/west), but Kogge is unavailable."
     )
 
 
@@ -2830,6 +3110,29 @@ def _building_hired_event(
             payee=payment.payee,
             resource=payment.resource or "none",
             amount=payment.amount,
+        ),
+    )
+
+
+def _kogge_route_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    route: tuple[int, ...],
+    config: GameConfig,
+) -> GameEvent:
+    city_position = config.board.index_for_name("city")
+    if not route:
+        raise ValueError("Kogge route bonus event requires a non-empty route.")
+    route_label = readable_route(city_position, (route[0],), positions=config.board.positions)
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building="kogge",
+            action="sowing",
+            enabled_route=route_label,
         ),
     )
 

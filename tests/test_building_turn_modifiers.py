@@ -27,7 +27,7 @@ def _signature(entry) -> tuple[str, str, str, str, str, str]:
     )
 
 
-def test_turn_modifier_registry_contains_exact_scaffold_entries() -> None:
+def test_turn_modifier_registry_contains_expected_entries() -> None:
     signatures = {_signature(entry) for entry in all_building_turn_modifiers()}
     assert signatures == {
         (
@@ -35,8 +35,8 @@ def test_turn_modifier_registry_contains_exact_scaffold_entries() -> None:
             "sow_route_modifier",
             "during_sow",
             "adds city -> east and city -> west sow options",
-            "scaffolded",
-            "actual route generation deferred",
+            "implemented",
+            "implemented in transition sow-route generation and apply validation/events.",
         ),
         (
             "cloisters",
@@ -107,11 +107,10 @@ def test_turn_modifier_lookup_by_building_is_normalized() -> None:
 
 
 def test_turn_modifier_status_helpers() -> None:
-    entries = all_building_turn_modifiers()
-    assert entries
-    assert all(entry.status == "scaffolded" for entry in entries)
-    assert scaffolded_turn_modifiers() == entries
-    assert implemented_turn_modifiers() == ()
+    assert {entry.building_key for entry in implemented_turn_modifiers()} == {"kogge"}
+    assert {
+        entry.building_key for entry in scaffolded_turn_modifiers()
+    } == {"cloisters", "dormitory", "inquisition", "library"}
 
 
 def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
@@ -119,7 +118,7 @@ def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
     assert len(entries) == len(set(entries))
 
 
-def test_turn_modifier_scaffold_has_no_legal_action_side_effects() -> None:
+def test_scaffold_only_turn_modifiers_have_no_legal_action_side_effects() -> None:
     scenario = load_scenario("scenarios/ordination_mill_active_two_steps_free_001.json")
     base_actions = legal_actions(scenario.state, scenario.config)
     active_player = scenario.state.active_player
@@ -133,7 +132,6 @@ def test_turn_modifier_scaffold_has_no_legal_action_side_effects() -> None:
                 active_player_state.player_board_slots,
                 active_buildings=(
                     *existing_active_buildings,
-                    "kogge",
                     "cloisters",
                     "dormitory",
                     "inquisition",
