@@ -315,6 +315,26 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
     only
   - no automatic hire integration is enabled yet
 
+## Hire Sources for Simple Building Bonuses (v3.1a)
+
+- Transition/runtime wiring now consumes hire sources for four direct-output bonuses:
+  - Well -> `produce_wheat`
+  - Quarry -> `produce_stone`
+  - Mint -> `clerical_silversmith`
+  - Chapel -> `clerical_devotion`
+- Source resolution remains deterministic:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable
+- Taxation clarification is now fully enforced in these wired actions:
+  - Taxation has no Tithe resource
+  - Merchant resource is `none`
+  - hired variants are unavailable while own-active variants still work
+- Event ordering for hired sources is explicit:
+  - `BUILDING_HIRED` then `BUILDING_BONUS`
+- Infirmary, Chapter House, and Mill remain outside hire-source wiring in this milestone.
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

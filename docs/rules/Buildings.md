@@ -118,13 +118,39 @@ Per-turn hire limit rule (infrastructure helper scope):
 - a given building may be hired at most once during one player turn
 - multiple different buildings may each be hired once during the same turn
 - v3.0 provides pure helper/context support for this rule
-- runtime duty actions are not yet wired to consume this helper
+- v3.1a simple bonus actions now consume this helper pattern for single-building hires
+
+## Simple bonus hire wiring (v3.1a)
+
+This milestone wires hire sources into four direct-output building bonuses:
+
+- Well -> `produce_wheat` `+1 wheat`
+- Quarry -> `produce_stone` `+1 stone`
+- Mint -> `clerical_silversmith` `+1 silver`
+- Chapel -> `clerical_devotion` `+1 piety`
+
+These four abilities now resolve from:
+
+- own active building (free)
+- live market hire (pay Merchant resource `1` to bank)
+- opponent active hire (pay Merchant resource `1` to owner)
+
+Unavailable source cases remain enforced:
+
+- donated building
+- not-live market building
+- Merchant on taxation (`resource = none`)
+- insufficient Merchant resource payment
+
+Notes:
+
+- `BUILDING_HIRED` is emitted for hired sources (before `BUILDING_BONUS`).
+- own-active use remains free and emits only `BUILDING_BONUS`.
+- direct-output semantics remain unchanged (no effective duty-value inflation for these four).
 
 Important scope boundary:
 
-- existing building bonuses (Well/Quarry/Mint/Chapel/Infirmary/Chapter House) are still wired
-  from own active buildings only in current duty transitions
-- this milestone does not yet auto-wire hired sources into those bonuses
+- Infirmary, Chapter House, and Mill are still not wired to hire sources.
 
 ## Player-board slots
 

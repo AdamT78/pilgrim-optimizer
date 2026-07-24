@@ -14,8 +14,14 @@ Important scope boundaries:
 
 Runtime policy for currently implemented building bonuses:
 
-- Only buildings in a player's `active_buildings` apply.
 - Buildings in `donated_buildings` do not apply.
+- Well/Quarry/Mint/Chapel now apply from either:
+  - own active building (free), or
+  - a usable hired source (live market or opponent active).
+- Hired source payment is one Merchant resource:
+  - live market -> bank
+  - opponent active -> owner
+- Merchant on Taxation has resource `none`, so hired sources are unavailable there.
 - These bonuses stack with matching Special Activity bonuses.
 - Infirmary is now implemented as a true duty-value modifier:
   - Allocation: `+1 effective Duty Value`
@@ -30,7 +36,7 @@ Construct note for this milestone:
 - Registry entries still focus on modifiers/bonuses (for Construct: Road Engineer deferred-road
   extension logic).
 
-Building hire infrastructure note (v3.0):
+Building hire infrastructure note (v3.1a):
 
 - Rules helpers now model source/cost/payment for potential hired building use:
   - own active
@@ -40,8 +46,12 @@ Building hire infrastructure note (v3.0):
 - Hire cost is one Merchant resource to bank/opponent depending on source.
 - Merchant resource `none` (taxation) blocks hiring.
 - Donated buildings remain unavailable.
-- Existing Duty transitions still consume own-active building bonuses only until a follow-up
-  milestone wires hire sources into concrete actions.
+- Current hire-source wiring is intentionally limited to direct-output bonuses:
+  - Well (`produce_wheat`)
+  - Quarry (`produce_stone`)
+  - Mint (`clerical_silversmith`)
+  - Chapel (`clerical_devotion`)
+- Infirmary, Chapter House, and Mill remain own-active only for now.
 
 ## Registry fields
 
