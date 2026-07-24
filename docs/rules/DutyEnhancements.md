@@ -64,6 +64,13 @@ Building hire infrastructure note (v3.1a):
   - hire payment is separate and not waived by Mill
 - Chapter House remains own-active-only / deferred for hire wiring.
 
+Turn-phase movement modifier note (v3.3):
+
+- Cloisters / Dormitory / Library / Inquisition / Kogge are now tracked in a separate
+  scaffold registry: `pilgrim/rules/building_turn_modifiers.py`
+- these are not listed as Duty enhancements because they primarily modify sow routing or
+  start/end-turn relocation phases rather than direct duty output
+
 ## Registry fields
 
 Each entry records:

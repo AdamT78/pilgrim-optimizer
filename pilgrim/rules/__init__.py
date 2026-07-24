@@ -44,6 +44,15 @@ from pilgrim.rules.buildings import (
     validate_building_state,
     validate_player_board_slots,
 )
+from pilgrim.rules.building_turn_modifiers import (
+    BuildingTurnModifier,
+    all_building_turn_modifiers,
+    implemented_turn_modifiers,
+    scaffolded_turn_modifiers,
+    turn_modifiers_for_building,
+    turn_modifiers_for_category,
+    turn_modifiers_for_phase,
+)
 from pilgrim.rules.dummy import (
     clockwise_duty_positions,
     move_dummy_acolytes_end_of_season,
@@ -157,6 +166,13 @@ __all__ = [
     "validate_player_board_slots",
     "validate_building_state",
     "building_names_for_ids",
+    "BuildingTurnModifier",
+    "all_building_turn_modifiers",
+    "turn_modifiers_for_building",
+    "turn_modifiers_for_phase",
+    "turn_modifiers_for_category",
+    "scaffolded_turn_modifiers",
+    "implemented_turn_modifiers",
     "move_dummy_acolytes_end_of_season",
     "seed_dummy_acolytes",
     "seed_dummy_groups",
