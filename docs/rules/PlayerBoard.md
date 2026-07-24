@@ -1,4 +1,4 @@
-# Player Board (v2.2 Sandbox Scope)
+# Player Board (v2.6 Sandbox Scope)
 
 ## Implemented now
 
@@ -188,12 +188,16 @@ These building bonuses are now implemented in the Duty transition paths:
 - Quarry: `produce_stone` gains `+1 stone`
 - Mint: `clerical_silversmith` gains `+1 silver`
 - Chapel: `clerical_devotion` gains `+1 piety`
+- Infirmary: true duty-value modifier bonuses:
+  - Allocation: `+1 effective Duty Value`
+  - Ordination: `+1 effective Duty Value` when the chosen sequence uses an extra paid step
 
 Rules for these bonuses:
 
 - only `active_buildings` apply
 - `donated_buildings` do not apply
 - bonuses stack with matching Special Activity bonuses
+- Infirmary's Ordination bonus does not make any step free; wheat costs still apply per step
 
 ## Validation and invariants
 
