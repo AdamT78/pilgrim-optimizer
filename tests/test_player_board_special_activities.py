@@ -126,7 +126,7 @@ def test_alms_house_bonus_actions_require_extra_payment() -> None:
     give_alms_actions = [
         action
         for action in legal_actions(scenario.state, scenario.config)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
 
     assert give_alms_actions
@@ -139,7 +139,7 @@ def test_alms_house_bonus_actions_require_extra_payment() -> None:
 def test_alms_house_bonus_applies_and_emits_event() -> None:
     scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
-    assert action.resolution is TurnResolutionType.GIVE_ALMS
+    assert action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     assert action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
 
     before = scenario.state.player_state(PlayerId.PLAYER_ONE)
@@ -171,7 +171,7 @@ def test_alms_house_not_used_without_extra_resource() -> None:
     give_alms_actions = [
         action
         for action in legal_actions(reduced_resources_state, scenario.config)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     assert give_alms_actions
     assert all(

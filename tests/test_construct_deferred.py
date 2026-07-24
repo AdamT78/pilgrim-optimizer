@@ -12,7 +12,7 @@ def _construct_road_plans(path: str) -> tuple[str, ...]:
     return tuple(
         action.construct_plan or ""
         for action in legal_actions(scenario.state, scenario.config)
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
     )
 
 
@@ -21,7 +21,7 @@ def _action_for_construct_road_plan(path: str, *, plan: str):
     return next(
         action
         for action in legal_actions(scenario.state, scenario.config)
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
         and action.construct_plan == plan
     )
 
@@ -32,7 +32,7 @@ def test_construct_legal_actions_without_affordable_buildings_include_only_road_
     construct_road_plans = {
         action.construct_plan
         for action in actions
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
     }
     resolutions = {action.resolution for action in actions}
 
@@ -40,6 +40,7 @@ def test_construct_legal_actions_without_affordable_buildings_include_only_road_
     assert TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED not in resolutions
     assert construct_road_plans == {"road"}
     assert any(action.resolution is TurnResolutionType.TITHE for action in actions)
+    assert all(action.resolution.value != "construct_deferred" for action in actions)
 
 
 def test_construct_road_engineer_extra_road_requires_road_in_plan() -> None:
@@ -62,7 +63,7 @@ def test_construct_road_engineer_duty_value_two_without_stone_has_no_building_ac
     construct_plans = {
         action.construct_plan
         for action in legal_actions(state_with_road_engineer, scenario.config)
-        if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED
+        if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED
     }
     resolutions = {
         action.resolution for action in legal_actions(state_with_road_engineer, scenario.config)
@@ -97,7 +98,7 @@ def test_apply_construct_road_scaffold_emits_deferred_and_preserves_building_sta
     )
     duty_details = dict(duty_event.details)
     assert duty_details["duty_category"] == "construct"
-    assert duty_details["effect"] == "construct_deferred"
+    assert duty_details["effect"] == "construct_road_deferred"
     assert duty_details["duty_value"] == 1
     assert duty_details["effective_duty_value"] == 1
 
@@ -134,7 +135,7 @@ def test_apply_construct_road_engineer_extra_road_emits_bonus_without_duty_value
         and dict(event.details).get("activity") == "road_engineer"
     )
     bonus_details = dict(bonus_event.details)
-    assert bonus_details["action"] == "construct_deferred"
+    assert bonus_details["action"] == "construct_road_deferred"
     assert bonus_details["construct_extra_road"] is True
 
     deferred_event = next(

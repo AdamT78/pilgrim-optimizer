@@ -72,7 +72,7 @@ def test_custom_layout_allows_give_alms_on_north_and_allocation_on_south() -> No
     actions = legal_actions(scenario.state, scenario.config)
 
     assert any(
-        action.selected_duty == north and action.resolution is TurnResolutionType.GIVE_ALMS
+        action.selected_duty == north and action.resolution is TurnResolutionType.GIVE_ALMS_PAID
         for action in actions
     )
     assert any(
@@ -80,14 +80,14 @@ def test_custom_layout_allows_give_alms_on_north_and_allocation_on_south() -> No
         for action in actions
     )
     assert not any(
-        action.selected_duty == south and action.resolution is TurnResolutionType.GIVE_ALMS
+        action.selected_duty == south and action.resolution is TurnResolutionType.GIVE_ALMS_PAID
         for action in actions
     )
 
     give_alms_action = next(
         action
         for action in actions
-        if action.selected_duty == north and action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.selected_duty == north and action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     )
     summary = action_summary(give_alms_action, scenario.config)
     assert "selected duty: north (give_alms)" in summary
@@ -128,7 +128,7 @@ def test_default_layout_still_offers_implemented_categories() -> None:
     assert TurnResolutionType.PRODUCE_STONE in resolutions
     assert TurnResolutionType.CLERICAL_DEVOTION in resolutions
     assert TurnResolutionType.CLERICAL_SILVERSMITH in resolutions
-    assert TurnResolutionType.GIVE_ALMS in resolutions
+    assert TurnResolutionType.GIVE_ALMS_PAID in resolutions
     assert TurnResolutionType.ORDINATION in resolutions
     assert TurnResolutionType.ALLOCATION in resolutions
 

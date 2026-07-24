@@ -91,15 +91,35 @@ class TurnResolutionType(Enum):
     BUILD_ROADS_DEFERRED = "build_roads_deferred"
     CONSTRUCT_BUILDING = "construct_building"
     CONSTRUCT_BUILDING_AND_ROAD_DEFERRED = "construct_building_and_road_deferred"
-    CONSTRUCT_DEFERRED = "construct_deferred"
+    CONSTRUCT_ROAD_DEFERRED = "construct_road_deferred"
     CLERICAL_DEVOTION = "clerical_devotion"
     CLERICAL_SILVERSMITH = "clerical_silversmith"
-    GIVE_ALMS = "give_alms"
-    DONATE_BUILDING = "donate_building"
+    GIVE_ALMS_PAID = "give_alms_paid"
+    GIVE_ALMS_DONATE_BUILDING = "give_alms_donate_building"
     ORDINATION = "ordination"
     TAXATION = "taxation"
     ALLOCATION = "allocation"
     TITHE = "tithe"
+
+    # Backward-compatible aliases for prior canonical names.
+    CONSTRUCT_DEFERRED = "construct_road_deferred"
+    GIVE_ALMS = "give_alms_paid"
+    DONATE_BUILDING = "give_alms_donate_building"
+
+    @classmethod
+    def _missing_(cls, value: object) -> TurnResolutionType | None:
+        """Support loading legacy action-name strings from older fixtures/logs."""
+        if not isinstance(value, str):
+            return None
+        legacy_map = {
+            "construct_deferred": cls.CONSTRUCT_ROAD_DEFERRED.value,
+            "give_alms": cls.GIVE_ALMS_PAID.value,
+            "donate_building": cls.GIVE_ALMS_DONATE_BUILDING.value,
+        }
+        mapped = legacy_map.get(value)
+        if mapped is None:
+            return None
+        return cls(mapped)
 
 
 class ActionType(Enum):

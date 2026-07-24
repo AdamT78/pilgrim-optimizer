@@ -106,7 +106,7 @@ def test_dummy_affects_duty_strength_in_transition() -> None:
     give_alms_action = next(
         action
         for action in legal_actions(scenario.state, scenario.config)
-        if action.resolution is TurnResolutionType.GIVE_ALMS
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     )
     result = apply_action(scenario.state, give_alms_action, scenario.config)
     duty_event = next(

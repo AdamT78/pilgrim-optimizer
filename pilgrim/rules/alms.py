@@ -51,7 +51,7 @@ class GiveAlmsResolution:
 
 @dataclass(frozen=True, slots=True)
 class DonateBuildingAlmsResolution:
-    """Resolved Alms movement payload for donate_building."""
+    """Resolved Alms movement payload for give_alms_donate_building."""
 
     player_state: PlayerState
     old_position: int
@@ -225,7 +225,7 @@ def resolve_donate_building_alms(
     *,
     config: AlmsConfig,
 ) -> DonateBuildingAlmsResolution:
-    """Resolve deterministic +1 Alms movement for donate_building."""
+    """Resolve deterministic +1 Alms movement for give_alms_donate_building."""
     old_position = clamp_alms_position(player.alms_position, config)
     new_position = move_alms_position(old_position, 1, config)
     updated_player = replace(player, alms_position=new_position)

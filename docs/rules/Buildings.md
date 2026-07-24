@@ -3,13 +3,13 @@
 ## Implemented now
 
 This milestone adds deterministic building data and board-slot state, plus the
-`donate_building` action under Give Alms.
+`give_alms_donate_building` action under Give Alms.
 
 - static 24-building catalogue in `configs/buildings.json`
 - per-game 12-building market shape (4 per level)
 - deterministic scenario market fallback (no random draws in engine/search)
 - player-board slot occupancy state
-- Give Alms `donate_building` option (move one active building to donated, +1 Alms row)
+- Give Alms `give_alms_donate_building` option (move one active building to donated, +1 Alms row)
 - slot-capacity validation (shared building + Cardinal favor spaces)
 
 ## Catalogue structure
@@ -86,7 +86,7 @@ Important:
 
 Give Alms now has a deterministic donation action:
 
-- `action: donate_building | building: <building_id>`
+- `action: give_alms_donate_building | building: <building_id>`
 
 When resolved:
 
@@ -102,7 +102,7 @@ When resolved:
 Current scope constraints:
 
 - no chained "second Give Alms payment" after donation (majority extra step is forfeited)
-- Alms House bonus applies only to paid `give_alms`, not `donate_building`
+- Alms House bonus applies only to paid `give_alms_paid`, not `give_alms_donate_building`
 - this does **not** introduce general-purpose building buy/hire/donate systems
 
 ## Validation rules

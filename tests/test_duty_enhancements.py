@@ -38,7 +38,7 @@ def test_registry_contains_all_required_entries() -> None:
         ),
         (
             "give_alms",
-            "give_alms",
+            "give_alms_paid",
             "special_activity",
             "alms_house",
             "optional +1 effective Duty Value with extra payment",
@@ -54,7 +54,7 @@ def test_registry_contains_all_required_entries() -> None:
         ),
         (
             "construct",
-            "construct_deferred",
+            "construct_road_deferred",
             "special_activity",
             "road_engineer",
             "extra deferred road only if road already included",
@@ -92,7 +92,7 @@ def test_registry_contains_all_required_entries() -> None:
             "+1 piety",
             "implemented",
         ),
-        ("give_alms", "give_alms", "building", "mill", "deferred", "known_unimplemented"),
+        ("give_alms", "give_alms_paid", "building", "mill", "deferred", "known_unimplemented"),
         ("ordination", "ordination", "building", "mill", "deferred", "known_unimplemented"),
         (
             "ordination",
@@ -141,9 +141,9 @@ def test_implemented_special_activity_effects_appear_in_registry() -> None:
         ("stone_mason", "produce_stone", "implemented"),
         ("vestry", "clerical_devotion", "implemented"),
         ("engraver", "clerical_silversmith", "implemented"),
-        ("alms_house", "give_alms", "implemented"),
+        ("alms_house", "give_alms_paid", "implemented"),
         ("road_engineer", "build_roads_deferred", "implemented_scaffolded"),
-        ("road_engineer", "construct_deferred", "implemented_scaffolded"),
+        ("road_engineer", "construct_road_deferred", "implemented_scaffolded"),
     }
 
     assert expected_special_activity_entries <= implemented
@@ -163,7 +163,7 @@ def test_lookup_helpers_return_expected_subsets() -> None:
         "quarry",
     ]
 
-    give_alms_entries = enhancements_for_action("give_alms")
+    give_alms_entries = enhancements_for_action("give_alms_paid")
     assert [(entry.source_type, entry.source_key) for entry in give_alms_entries] == [
         ("special_activity", "alms_house"),
         ("building", "mill"),
@@ -172,7 +172,7 @@ def test_lookup_helpers_return_expected_subsets() -> None:
     road_engineer_entries = enhancements_by_source("road_engineer")
     assert [(entry.duty, entry.action_key) for entry in road_engineer_entries] == [
         ("build_roads", "build_roads_deferred"),
-        ("construct", "construct_deferred"),
+        ("construct", "construct_road_deferred"),
     ]
 
     implemented = set(implemented_enhancements())

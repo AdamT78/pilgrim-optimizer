@@ -70,8 +70,8 @@ Format:
 
 ### Give Alms
 
-- `give_alms | give_alms | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); each +1 still requires one extra paid silver/wheat.`
-- `give_alms | give_alms | building | mill | deferred | known_unimplemented | Give Alms building interaction is not implemented yet.`
+- `give_alms | give_alms_paid | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); each +1 still requires one extra paid silver/wheat.`
+- `give_alms | give_alms_paid | building | mill | deferred | known_unimplemented | Give Alms building interaction is not implemented yet.`
 
 ### Build Roads
 
@@ -79,7 +79,7 @@ Format:
 
 ### Construct
 
-- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Applies to Construct road plans (road-only and building+road deferred); scales by occupied Road Engineer acolytes (max +2 with active Chapter House); Construct does not use generic duty-value +1 from Road Engineer.`
+- `construct | construct_road_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Applies to Construct road plans (road-only and building+road deferred); scales by occupied Road Engineer acolytes (max +2 with active Chapter House); Construct does not use generic duty-value +1 from Road Engineer.`
 
 ### Allocation
 

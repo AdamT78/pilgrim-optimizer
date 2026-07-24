@@ -81,7 +81,7 @@ def action_id(action: GameAction) -> str:
     # Full-turn actions only below.
     route = "->".join(str(position) for position in action.route)
     payment_suffix = ""
-    if action.resolution is TurnResolutionType.GIVE_ALMS:
+    if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
         payment_suffix = (
             f":pay_silver:{action.alms_payment_silver}:pay_wheat:{action.alms_payment_wheat}"
         )
@@ -91,7 +91,7 @@ def action_id(action: GameAction) -> str:
                 f":alms_house_extra_wheat:{action.alms_house_extra_wheat}"
             )
     donation_suffix = ""
-    if action.resolution is TurnResolutionType.DONATE_BUILDING:
+    if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
         donation_suffix = f":building:{action.donate_building_id or 'none'}"
     ordination_suffix = ""
     if action.resolution is TurnResolutionType.ORDINATION:
@@ -116,7 +116,7 @@ def action_id(action: GameAction) -> str:
         else:
             allocation_suffix = ":allocation_moves:none"
     construct_suffix = ""
-    if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+    if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED:
         plan = action.construct_plan or "none"
         construct_suffix = ":construct_plan:" + plan.replace(" + ", "+").replace(" ", "_")
     elif action.resolution is TurnResolutionType.CONSTRUCT_BUILDING:
@@ -160,7 +160,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         f"Turn: sow {readable_route(action.origin, action.route, positions=positions)} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
     )
-    if action.resolution is TurnResolutionType.GIVE_ALMS:
+    if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
         summary += (
             f" | pay silver={action.alms_payment_silver}, "
             f"wheat={action.alms_payment_wheat}"
@@ -171,7 +171,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
                 f"silver={action.alms_house_extra_silver}, "
                 f"wheat={action.alms_house_extra_wheat}"
             )
-    if action.resolution is TurnResolutionType.DONATE_BUILDING:
+    if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
         summary += f" | building: {action.donate_building_id or 'unknown'}"
     if action.resolution is TurnResolutionType.ORDINATION:
         summary += " | steps: " + (
@@ -188,7 +188,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             )
         else:
             summary += " | moves: none"
-    if action.resolution is TurnResolutionType.CONSTRUCT_DEFERRED:
+    if action.resolution is TurnResolutionType.CONSTRUCT_ROAD_DEFERRED:
         summary += f" | plan: {action.construct_plan or 'none'}"
     if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING:
         summary += f" | building: {action.construct_building_id or 'unknown'}"

@@ -71,7 +71,7 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
     ),
     DutyEnhancement(
         duty="give_alms",
-        action_key="give_alms",
+        action_key="give_alms_paid",
         source_type="special_activity",
         source_key="alms_house",
         effect="optional +1 effective Duty Value with extra payment",
@@ -89,7 +89,7 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
     ),
     DutyEnhancement(
         duty="construct",
-        action_key="construct_deferred",
+        action_key="construct_road_deferred",
         source_type="special_activity",
         source_key="road_engineer",
         effect="extra deferred road only if road already included",
@@ -135,7 +135,7 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
     ),
     DutyEnhancement(
         duty="give_alms",
-        action_key="give_alms",
+        action_key="give_alms_paid",
         source_type="building",
         source_key="mill",
         effect="deferred",

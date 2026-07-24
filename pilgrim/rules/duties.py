@@ -20,15 +20,15 @@ _DUTY_CATEGORY_ACTIONS: Mapping[str, tuple[TurnResolutionType, ...]] = {
         TurnResolutionType.CLERICAL_SILVERSMITH,
     ),
     "give_alms": (
-        TurnResolutionType.GIVE_ALMS,
-        TurnResolutionType.DONATE_BUILDING,
+        TurnResolutionType.GIVE_ALMS_PAID,
+        TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
     ),
     "allocation": (TurnResolutionType.ALLOCATION,),
     "build_roads": (TurnResolutionType.BUILD_ROADS_DEFERRED,),
     "construct": (
         TurnResolutionType.CONSTRUCT_BUILDING,
         TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
-        TurnResolutionType.CONSTRUCT_DEFERRED,
+        TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
     ),
     "ordination": (TurnResolutionType.ORDINATION,),
     "taxation": (TurnResolutionType.TAXATION,),

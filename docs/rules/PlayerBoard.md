@@ -170,7 +170,7 @@ For a central Duty-action enhancement index (Special Activities plus known build
 - each `+1` requires extra payment of `1 silver` or `1 wheat`
 - extra payment is encoded in the action fields and validated
 - emits `SPECIAL_ACTIVITY_BONUS`
-- does not enhance `donate_building` in the current milestone
+- does not enhance `give_alms_donate_building` in the current milestone
 
 ### Road Engineer
 

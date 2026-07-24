@@ -26,7 +26,7 @@ def _action_index(
 def test_cli_apply_construct_road_only_verbose_shows_scaffold_plan(capsys) -> None:
     action_index = _action_index(
         "scenarios/construct_deferred_building_001.json",
-        resolution=TurnResolutionType.CONSTRUCT_DEFERRED,
+        resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
         plan="road",
     )
     exit_code = main(
@@ -41,7 +41,7 @@ def test_cli_apply_construct_road_only_verbose_shows_scaffold_plan(capsys) -> No
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "action: construct_deferred | plan: road" in output
+    assert "action: construct_road_deferred | plan: road" in output
     assert (
         "DUTY_DEFERRED: construct road part requires spatial road system; requested plan: road"
         in output

@@ -59,7 +59,7 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
     assert "selected duty: north" in output
     assert "action: produce_wheat" in output
     assert "action: produce_stone" in output
-    assert "action: give_alms" in output
+    assert "action: give_alms_paid" in output
     assert "pay silver=" in output
     assert "action: tithe" in output
     assert "Total legal actions:" in output

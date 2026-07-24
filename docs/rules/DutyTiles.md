@@ -72,8 +72,8 @@ Implemented action systems:
   - `clerical_devotion`
   - `clerical_silversmith`
 - `give_alms`:
-  - `give_alms` (pay silver/wheat)
-  - `donate_building` (donate one active building)
+  - `give_alms_paid` (pay silver/wheat)
+  - `give_alms_donate_building` (donate one active building)
 - `ordination`:
   - `ordination` (ordered `ordain`/`mission` steps)
 - `allocation`
@@ -82,7 +82,7 @@ Implemented action systems:
 - `construct`:
   - `construct_building` (acquire 1 market building by paying stone = building level)
   - `construct_building_and_road_deferred` (real building acquisition + deferred road part)
-  - `construct_deferred` (road-only scaffold)
+  - `construct_road_deferred` (road-only scaffold)
 - `taxation`:
   - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
@@ -94,6 +94,21 @@ Enhancement mapping reference:
 Deferred category systems (valid in layout, no non-tithe action yet):
 
 - none
+
+## Canonical Action Names
+
+Duty tile categories are not action names. Use the following concrete action names:
+
+| Duty tile | Canonical action names |
+| --- | --- |
+| `produce` | `produce_wheat`, `produce_stone`, `tithe` |
+| `clerical` | `clerical_devotion`, `clerical_silversmith`, `tithe` |
+| `build_roads` | `build_roads_deferred`, `tithe` |
+| `construct` | `construct_building`, `construct_building_and_road_deferred`, `construct_road_deferred`, `tithe` |
+| `give_alms` | `give_alms_paid`, `give_alms_donate_building`, `tithe` |
+| `ordination` | `ordination`, `tithe` |
+| `allocation` | `allocation`, `tithe` |
+| `taxation` | `taxation`, `tithe` |
 
 ## Runtime implications
 
@@ -111,11 +126,13 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   Special Activity bonuses.
 - For `give_alms`, paid actions still pay silver/wheat equal to effective duty value and move
   that many rows.
-- `donate_building` always donates exactly one active building and advances Alms by exactly one
+- `give_alms_donate_building` always donates exactly one active building and advances Alms by
+  exactly one
   row.
-- On majority `give_alms`, `donate_building` still resolves as one deterministic action; it does
-  not chain into a second paid Give Alms step.
-- Alms House currently enhances only paid `give_alms`, not `donate_building`.
+- On majority `give_alms`, `give_alms_donate_building` still resolves as one deterministic
+  action; it does not chain into a second paid Give Alms step.
+- Alms House currently enhances only paid `give_alms_paid`, not
+  `give_alms_donate_building`.
 - For `ordination`, each action contains `1..duty_value` ordered steps chosen from:
   - `ordain`: pay 1 wheat, move 1 worker village -> abbey
   - `mission`: pay 1 wheat, move 1 acolyte abbey -> city
@@ -152,8 +169,8 @@ Deferred category systems (valid in layout, no non-tithe action yet):
     - upgrade road/bridge
     - demolish road/bridge
 - For `construct`:
-  - legal actions now include `construct_building`, `construct_deferred`, and (at duty value 2)
-    `construct_building_and_road_deferred`, plus `tithe`
+  - legal actions now include `construct_building`, `construct_road_deferred`, and (at duty value
+    2) `construct_building_and_road_deferred`, plus `tithe`
   - Construct can acquire exactly one market building:
     - pay stone equal to building level (L1=1, L2=2, L3=3)
     - remove that building from `building_market`

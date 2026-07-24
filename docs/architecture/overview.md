@@ -213,7 +213,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Construct now includes explicit acquisition actions:
   - `construct_building`
   - `construct_building_and_road_deferred`
-  - `construct_deferred` (road-only scaffold retained)
+  - `construct_road_deferred` (road-only scaffold retained)
 - Building acquisition transition behavior is now stateful:
   - validates market presence, stone affordability, and free player-board slot
   - applies stone payment (plus normal minority silver cost when applicable)
