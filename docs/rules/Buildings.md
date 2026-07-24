@@ -237,7 +237,7 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
-## Building turn-modifier registry (v3.3-v3.5)
+## Building turn-modifier registry (v3.3-v3.6)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:
 
@@ -255,6 +255,7 @@ Scope in this milestone:
 - classification and lookup registry
 - runtime wiring now implemented for Kogge sow-route expansion
 - runtime wiring now implemented for Dormitory and Inquisition start-turn relocations
+- runtime wiring now implemented for Library end-turn relocations
 - no generic runtime modifier engine
 
 Category mapping:
@@ -265,8 +266,8 @@ Category mapping:
 
 Status:
 
-- `kogge`, `dormitory`, and `inquisition` are now `implemented`
-- `cloisters` and `library` remain `scaffolded`
+- `kogge`, `dormitory`, `inquisition`, and `library` are now `implemented`
+- `cloisters` remains `scaffolded`
 
 Kogge runtime behavior:
 
@@ -303,6 +304,20 @@ Inquisition runtime behavior:
   donated, or not live
 - event ordering: `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` ->
   `SOWING`
+
+Library runtime behavior:
+
+- optional end-turn relocation suffix on a normal full-turn action
+- moves exactly one acting-player acolyte from City to a non-city Duty tile or Abbey
+- source resolution follows normal building source priority:
+  - own active Library (free)
+  - opponent active hire (pay owner)
+  - live market hire (pay bank)
+- hired Library is unavailable when Merchant resource is `none` (Taxation), insufficient,
+  donated, or not live
+- timing: resolves after `ACOLYTE_RECALL` and before `TURN_ADVANCE`
+- event ordering: `ACOLYTE_RECALL` -> `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` ->
+  `END_TURN_RELOCATION` -> `TURN_ADVANCE`
 
 ## Player-board slots
 

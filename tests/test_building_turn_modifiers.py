@@ -67,8 +67,8 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "end_turn_relocation",
             "end_of_turn",
             "may move 1 acolyte from City directly to a Duty action or back to Abbey",
-            "scaffolded",
-            "optional post-turn action composition deferred",
+            "implemented",
+            "implemented as optional post-turn end-turn relocation action suffix.",
         ),
     }
 
@@ -111,10 +111,11 @@ def test_turn_modifier_status_helpers() -> None:
         "kogge",
         "dormitory",
         "inquisition",
+        "library",
     }
     assert {
         entry.building_key for entry in scaffolded_turn_modifiers()
-    } == {"cloisters", "library"}
+    } == {"cloisters"}
 
 
 def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
@@ -137,7 +138,6 @@ def test_scaffold_only_turn_modifiers_have_no_legal_action_side_effects() -> Non
                 active_buildings=(
                     *existing_active_buildings,
                     "cloisters",
-                    "library",
                 ),
             ),
         ),

@@ -1,4 +1,4 @@
-# Building Turn Modifiers (v3.5)
+# Building Turn Modifiers (v3.6)
 
 ## Purpose
 
@@ -51,7 +51,7 @@ Current statuses:
 - `implemented`
 - `deferred_spatial`
 
-## Entries in v3.5
+## Entries in v3.6
 
 - `kogge`
   - category: `sow_route_modifier`
@@ -74,6 +74,13 @@ Current statuses:
   - status: `implemented`
   - notes: implemented as optional pre-sow start-turn relocation action prefix
 
+- `library`
+  - category: `end_turn_relocation`
+  - phase: `end_of_turn`
+  - effect: may move 1 acolyte from City directly to a Duty action or back to Abbey
+  - status: `implemented`
+  - notes: implemented as optional post-turn end-turn relocation action suffix
+
 Start-turn relocation runtime semantics:
 
 - prefixes a normal full-turn action (not a standalone turn)
@@ -84,17 +91,23 @@ Start-turn relocation runtime semantics:
 - hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
   hire payment is unaffordable
 
+End-turn relocation (Library) runtime semantics:
+
+- suffixes a normal full-turn action (not a standalone turn)
+- source location is City; target is one non-city Duty tile or Abbey
+- resolves after `ACOLYTE_RECALL` and before `TURN_ADVANCE`
+- supports own active, live market hire, and opponent active hire sources
+- hired variants emit `BUILDING_HIRED` then `BUILDING_BONUS`, then `END_TURN_RELOCATION`
+- own-active variants omit `BUILDING_HIRED`
+- hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
+  hire payment is unaffordable
+
 The following entries remain `scaffolded`:
 - `cloisters`
   - category: `sow_route_modifier`
   - phase: `during_sow`
   - effect: may skip one Duty tile or the city when moving acolytes to Duty actions
   - notes: skip-route logic deferred
-- `library`
-  - category: `end_turn_relocation`
-  - phase: `end_of_turn`
-  - effect: may move 1 acolyte from City directly to a Duty action or back to Abbey
-  - notes: optional post-turn action composition deferred
 
 ## Action-shape examples
 
@@ -102,9 +115,5 @@ Implemented examples:
 
 - `start: dormitory east -> city | turn: sow city -> north -> north_east | action: produce_wheat`
 - `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
-
-Deferred example:
-
-- `turn: sow city -> north | action: produce_wheat | end: library city -> abbey`
-
-The Library end-turn relocation shape remains deferred.
+- `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> west`
+- `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> abbey`

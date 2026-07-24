@@ -549,6 +549,18 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"using {building_name}"
         )
 
+    if event.event_type is EventType.END_TURN_RELOCATION:
+        from_pool = str(details.get("from_pool", "city"))
+        to_pool = str(details.get("to_pool", "unknown"))
+        amount = int(details.get("amount", 1))
+        building_name = str(
+            details.get("building_name", details.get("building", "unknown"))
+        )
+        return (
+            f"{event_name}: {actor_name} moved {amount} acolyte "
+            f"{from_pool} -> {to_pool} using {building_name}"
+        )
+
     if event.event_type is EventType.BUILDING_BONUS:
         building = str(details.get("building", "unknown"))
         action_name = str(details.get("action", "unknown"))
@@ -584,6 +596,17 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             return (
                 f"{event_name}: inquisition moved 1 acolyte from "
                 f"{start_turn_from} to {start_turn_to}"
+            )
+        if (
+            building == "library"
+            and "end_turn_from" in details
+            and "end_turn_to" in details
+        ):
+            end_turn_from = str(details.get("end_turn_from", "unknown"))
+            end_turn_to = str(details.get("end_turn_to", "unknown"))
+            return (
+                f"{event_name}: library moved 1 acolyte from "
+                f"{end_turn_from} to {end_turn_to}"
             )
         bonuses: list[str] = []
         if "wheat_bonus" in details:
