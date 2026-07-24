@@ -150,6 +150,7 @@ class EventType(Enum):
     ALMS_PAYMENT = "alms_payment"
     BUILDING_DONATION = "building_donation"
     BUILDING_CONSTRUCTED = "building_constructed"
+    BUILDING_HIRED = "building_hired"
     BUILDING_BONUS = "building_bonus"
     ALMS_PROGRESS = "alms_progress"
     ALMS_THRESHOLD_REWARD = "alms_threshold_reward"

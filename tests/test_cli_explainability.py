@@ -1,7 +1,8 @@
-from pilgrim.cli import main
+from pilgrim.cli import _format_event, main
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, action_summary, readable_route
-from pilgrim.model.enums import TurnResolutionType, position_name
+from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType, position_name
+from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.search.exact import solve_exact
 
 
@@ -200,3 +201,23 @@ def test_cli_solve_taxation_merchant_verbose_shows_none_resource(capsys) -> None
     assert "Merchant:" in output
     assert "Position: taxation" in output
     assert "Resource: none" in output
+
+
+def test_format_building_hired_event_market_payment() -> None:
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    event = GameEvent(
+        event_type=EventType.BUILDING_HIRED,
+        actor=PlayerId.PLAYER_ONE,
+        action_id="test_hire",
+        details=make_event_details(
+            amount=1,
+            building_id="well",
+            building_name="Well",
+            payee="bank",
+            resource="wheat",
+            source="market",
+        ),
+    )
+
+    text = _format_event(event, scenario.config)
+    assert text == "BUILDING_HIRED: player_one hired Well from market; paid wheat 1 to bank"

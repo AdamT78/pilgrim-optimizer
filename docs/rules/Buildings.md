@@ -86,6 +86,46 @@ Construct note:
 - future/non-live market buildings are not legal Construct purchase targets yet
 - building hiring (bank or other players) remains deferred
 
+## Building hire infrastructure (v3.0)
+
+This milestone adds source/cost/payment infrastructure for future hired building abilities.
+
+Potential ability sources:
+
+- own active building (`active_buildings`) -> free use
+- live market building (`building_market` + live round reached) -> hire from bank
+- opponent-owned active building -> hire from that owner
+- donated building -> unavailable
+
+Hire cost rule:
+
+- exactly `1` resource of Merchant's current resource type
+
+Payment destination:
+
+- live market hire -> bank
+- opponent active hire -> owning player
+- own active -> no payment
+
+Merchant none rule:
+
+- Taxation Duty tile has no Tithe resource, so Merchant resource is `none` there
+- own active building remains usable for free
+- hired building sources are unavailable while Merchant resource is `none`
+
+Per-turn hire limit rule (infrastructure helper scope):
+
+- a given building may be hired at most once during one player turn
+- multiple different buildings may each be hired once during the same turn
+- v3.0 provides pure helper/context support for this rule
+- runtime duty actions are not yet wired to consume this helper
+
+Important scope boundary:
+
+- existing building bonuses (Well/Quarry/Mint/Chapel/Infirmary/Chapter House) are still wired
+  from own active buildings only in current duty transitions
+- this milestone does not yet auto-wire hired sources into those bonuses
+
 ## Player-board slots
 
 Each player has shared slot occupancy state:

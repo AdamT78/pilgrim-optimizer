@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pilgrim.model.buildings import (
@@ -16,7 +16,9 @@ from pilgrim.model.buildings import (
 )
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
+from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
+from pilgrim.rules.merchant import current_merchant_resource
 from pilgrim.rules.validation import TransitionValidationError
 
 _EXPECTED_DONATION_VP_BY_LEVEL: dict[int, int] = {
@@ -27,6 +29,46 @@ _EXPECTED_DONATION_VP_BY_LEVEL: dict[int, int] = {
 MIN_BUILDING_LIVE_ROUND = 2
 MAX_BUILDING_LIVE_ROUND = 26
 DEFAULT_BUILDING_LIVE_ROUND = MIN_BUILDING_LIVE_ROUND
+_HIRE_COST = 1
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingAbilitySource:
+    """Resolved source for one building ability lookup."""
+
+    building_key: str
+    source_type: str
+    owner: str | None = None
+    hire_resource: str | None = None
+    hire_cost: int = 0
+    payable_to: str | None = None
+    usable: bool = False
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingHirePayment:
+    """Concrete payment route for one building hire source."""
+
+    building_key: str
+    payer: str
+    payee: str
+    resource: str | None
+    amount: int
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingHireTurnContext:
+    """Per-turn hired-building tracker (same building at most once per turn)."""
+
+    hired_buildings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        normalized = tuple(normalize_hire_building_key(key) for key in self.hired_buildings)
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("hired_buildings cannot contain duplicates in one turn.")
+        if normalized != self.hired_buildings:
+            object.__setattr__(self, "hired_buildings", normalized)
 
 
 def load_building_config(raw: Mapping[str, Any]) -> BuildingsConfig:
@@ -384,6 +426,259 @@ def validate_building_availability(state: GameState, config: GameConfig) -> None
             )
 
 
+def building_ability_source(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+) -> BuildingAbilitySource:
+    """Resolve how one player may access one building ability right now."""
+    donated_owner = _donated_owner(state, building_key)
+    if donated_owner is not None:
+        return BuildingAbilitySource(
+            building_key=building_key,
+            source_type="unavailable",
+            owner=donated_owner,
+            usable=False,
+            reason="donated",
+        )
+
+    player_state = state.player_state(acting_player)
+    if building_key in player_state.player_board_slots.active_buildings:
+        return BuildingAbilitySource(
+            building_key=building_key,
+            source_type="own_active",
+            owner=_player_label(acting_player),
+            hire_resource=None,
+            hire_cost=0,
+            payable_to=None,
+            usable=True,
+        )
+
+    opponent_owner = _opponent_active_owner(
+        state,
+        acting_player=acting_player,
+        building_key=building_key,
+    )
+    if opponent_owner is not None:
+        return _hired_source(
+            state,
+            config,
+            acting_player=acting_player,
+            building_key=building_key,
+            source_type="opponent_active_hire",
+            owner=opponent_owner,
+            payable_to=opponent_owner,
+        )
+
+    if building_key in state.building_market:
+        if not is_building_live(state, building_key):
+            return BuildingAbilitySource(
+                building_key=building_key,
+                source_type="unavailable",
+                hire_cost=_HIRE_COST,
+                payable_to="bank",
+                usable=False,
+                reason="not_live",
+            )
+        return _hired_source(
+            state,
+            config,
+            acting_player=acting_player,
+            building_key=building_key,
+            source_type="live_market_hire",
+            owner=None,
+            payable_to="bank",
+        )
+
+    return BuildingAbilitySource(
+        building_key=building_key,
+        source_type="unavailable",
+        usable=False,
+        reason="not_selected",
+    )
+
+
+def available_building_ability_sources(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+) -> tuple[BuildingAbilitySource, ...]:
+    """Return usable ability sources only for one building lookup."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=acting_player,
+        building_key=building_key,
+    )
+    if source.usable:
+        return (source,)
+    return ()
+
+
+def can_use_building_ability(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+) -> bool:
+    """Return True when building ability is usable under current source/cost rules."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=acting_player,
+        building_key=building_key,
+    )
+    return source.usable
+
+
+def building_hire_cost(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+) -> tuple[str | None, int]:
+    """Return (resource, cost) for one current ability-source resolution."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=acting_player,
+        building_key=building_key,
+    )
+    return source.hire_resource, source.hire_cost
+
+
+def normalize_hire_building_key(building_key: str) -> str:
+    """Normalize building ids used by turn-hire tracking helpers."""
+    normalized = "_".join(
+        building_key.strip().lower().replace("-", " ").replace("_", " ").split()
+    )
+    if not normalized:
+        raise ValueError("Building key cannot be empty for hire tracking.")
+    return normalized
+
+
+def can_hire_building_this_turn(
+    context: BuildingHireTurnContext,
+    *,
+    building_key: str,
+) -> bool:
+    """Return True when this building has not yet been hired during the same turn."""
+    normalized = normalize_hire_building_key(building_key)
+    return normalized not in context.hired_buildings
+
+
+def record_hired_building_this_turn(
+    context: BuildingHireTurnContext,
+    *,
+    building_key: str,
+) -> BuildingHireTurnContext:
+    """Return updated immutable hire context after recording one building hire."""
+    normalized = normalize_hire_building_key(building_key)
+    if normalized in context.hired_buildings:
+        raise ValueError(f"Building already hired this turn: {normalized}.")
+    return BuildingHireTurnContext(
+        hired_buildings=(*context.hired_buildings, normalized),
+    )
+
+
+def validate_hire_sequence_for_turn(building_keys: Sequence[str]) -> bool:
+    """Return False when any normalized building appears more than once in a turn."""
+    context = BuildingHireTurnContext()
+    for building_key in building_keys:
+        if not can_hire_building_this_turn(context, building_key=building_key):
+            return False
+        context = record_hired_building_this_turn(context, building_key=building_key)
+    return True
+
+
+def building_hire_payment(
+    state: GameState,
+    *,
+    acting_player: PlayerId,
+    source: BuildingAbilitySource,
+) -> BuildingHirePayment:
+    """Describe payment route for a resolved building-ability source."""
+    # Validate player id against current state for deterministic callers.
+    state.player_state(acting_player)
+    payer = _player_label(acting_player)
+    if source.source_type == "own_active":
+        return BuildingHirePayment(
+            building_key=source.building_key,
+            payer=payer,
+            payee="none",
+            resource=None,
+            amount=0,
+        )
+    if source.source_type not in ("live_market_hire", "opponent_active_hire"):
+        raise ValueError("Building ability source cannot be hired.")
+    if not source.usable:
+        raise ValueError(
+            f"Building ability source is not usable for hire payment: {source.reason or 'unavailable'}."
+        )
+    if source.hire_resource is None or source.hire_cost <= 0:
+        raise ValueError("Building hire source is missing cost/resource details.")
+    payee = source.payable_to or "bank"
+    return BuildingHirePayment(
+        building_key=source.building_key,
+        payer=payer,
+        payee=payee,
+        resource=source.hire_resource,
+        amount=source.hire_cost,
+    )
+
+
+def apply_building_hire_payment(
+    state: GameState,
+    *,
+    acting_player: PlayerId,
+    source: BuildingAbilitySource,
+) -> tuple[GameState, BuildingHirePayment]:
+    """Apply one hire payment transfer to state and return payment details."""
+    payment = building_hire_payment(
+        state,
+        acting_player=acting_player,
+        source=source,
+    )
+    if payment.amount <= 0 or payment.resource is None:
+        return state, payment
+
+    payer_state = state.player_state(acting_player)
+    payer_resources = _apply_resource_delta(
+        payer_state.resources,
+        resource=payment.resource,
+        delta=-payment.amount,
+    )
+    if _resource_amount(payer_resources, payment.resource) < 0:
+        raise ValueError(
+            f"Insufficient {payment.resource} for building hire payment by {payment.payer}."
+        )
+    next_state = state.with_player_state(
+        acting_player,
+        replace(payer_state, resources=payer_resources),
+    )
+
+    recipient_player_id = _player_id_from_label(payment.payee)
+    if recipient_player_id is not None:
+        recipient_state = next_state.player_state(recipient_player_id)
+        recipient_resources = _apply_resource_delta(
+            recipient_state.resources,
+            resource=payment.resource,
+            delta=payment.amount,
+        )
+        next_state = next_state.with_player_state(
+            recipient_player_id,
+            replace(recipient_state, resources=recipient_resources),
+        )
+
+    return next_state, payment
+
+
 def building_live_round(state: GameState, building_key: str) -> int | None:
     """Return the configured live round for one building, if known."""
     return _building_availability_map(state).get(building_key)
@@ -437,6 +732,108 @@ def building_names_for_ids(
 def _ensure_unique_ids(values: tuple[str, ...], *, label: str) -> None:
     if len(set(values)) != len(values):
         raise TransitionValidationError(f"{label} cannot contain duplicate building ids.")
+
+
+def _hired_source(
+    state: GameState,
+    config: GameConfig,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+    source_type: str,
+    owner: str | None,
+    payable_to: str,
+) -> BuildingAbilitySource:
+    hire_resource = current_merchant_resource(state, config.merchant)
+    if hire_resource is None:
+        return BuildingAbilitySource(
+            building_key=building_key,
+            source_type="unavailable",
+            owner=owner,
+            hire_resource=None,
+            hire_cost=_HIRE_COST,
+            payable_to=payable_to,
+            usable=False,
+            reason="merchant_resource_none",
+        )
+
+    acting_resources = state.player_state(acting_player).resources
+    if _resource_amount(acting_resources, hire_resource) < _HIRE_COST:
+        return BuildingAbilitySource(
+            building_key=building_key,
+            source_type="unavailable",
+            owner=owner,
+            hire_resource=hire_resource,
+            hire_cost=_HIRE_COST,
+            payable_to=payable_to,
+            usable=False,
+            reason="insufficient_resource",
+        )
+
+    return BuildingAbilitySource(
+        building_key=building_key,
+        source_type=source_type,
+        owner=owner,
+        hire_resource=hire_resource,
+        hire_cost=_HIRE_COST,
+        payable_to=payable_to,
+        usable=True,
+    )
+
+
+def _opponent_active_owner(
+    state: GameState,
+    *,
+    acting_player: PlayerId,
+    building_key: str,
+) -> str | None:
+    for candidate in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        if candidate is acting_player:
+            continue
+        candidate_slots = state.player_state(candidate).player_board_slots
+        if building_key in candidate_slots.active_buildings:
+            return _player_label(candidate)
+    return None
+
+
+def _donated_owner(state: GameState, building_key: str) -> str | None:
+    for candidate in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+        candidate_slots = state.player_state(candidate).player_board_slots
+        if building_key in candidate_slots.donated_buildings:
+            return _player_label(candidate)
+    return None
+
+
+def _player_label(player_id: PlayerId) -> str:
+    return player_id.name.lower()
+
+
+def _player_id_from_label(label: str) -> PlayerId | None:
+    if label == "player_one":
+        return PlayerId.PLAYER_ONE
+    if label == "player_two":
+        return PlayerId.PLAYER_TWO
+    return None
+
+
+def _resource_amount(resources: Resources, resource: str) -> int:
+    if resource == "stone":
+        return resources.stone
+    if resource == "silver":
+        return resources.silver
+    if resource == "wheat":
+        return resources.wheat
+    raise ValueError(f"Unknown resource type for building hire: {resource}.")
+
+
+def _apply_resource_delta(resources: Resources, *, resource: str, delta: int) -> Resources:
+    if resource == "stone":
+        return resources.add(stone=delta)
+    if resource == "silver":
+        return resources.add(silver=delta)
+    if resource == "wheat":
+        return resources.add(wheat=delta)
+    raise ValueError(f"Unknown resource type for building hire: {resource}.")
 
 
 def _building_availability_map(state: GameState) -> dict[str, int]:
