@@ -1,4 +1,4 @@
-# Duty Enhancements (v2.5)
+# Duty Enhancements (v2.6)
 
 ## Purpose
 
@@ -17,6 +17,11 @@ Runtime policy for currently implemented building bonuses:
 - Only buildings in a player's `active_buildings` apply.
 - Buildings in `donated_buildings` do not apply.
 - These bonuses stack with matching Special Activity bonuses.
+- Infirmary is now implemented as a true duty-value modifier:
+  - Allocation: `+1 effective Duty Value`
+  - Ordination: `+1 effective Duty Value` only when the extra paid Ordination step is used
+- Well / Quarry / Mint / Chapel remain direct output bonuses (resource/piety), not duty-value
+  modifiers.
 
 Construct note for this milestone:
 
@@ -79,10 +84,10 @@ Format:
 
 ### Allocation
 
-- `allocation | allocation | building | infirmary | +1 effective Duty Value | known_unimplemented | Documented only; no runtime building bonus is applied yet.`
+- `allocation | allocation | building | infirmary | +1 effective Duty Value | implemented | Applied in transition when Infirmary is active.`
 - `allocation | all_special_activity_spaces | building | chapter_house | affects all Special Activity spaces | deferred_special_activity_system | Deferred until broader special-activity building system is implemented.`
 
 ### Ordination
 
 - `ordination | ordination | building | mill | deferred | known_unimplemented | Ordination building interaction is not implemented yet.`
-- `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | known_unimplemented | Conditional wheat-payment interaction is not implemented yet.`
+- `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | implemented | Applied when active Infirmary is used for an extra paid ordination step.`

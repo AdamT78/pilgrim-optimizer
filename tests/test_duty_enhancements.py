@@ -66,7 +66,7 @@ def test_registry_contains_all_required_entries() -> None:
             "building",
             "infirmary",
             "+1 effective Duty Value",
-            "known_unimplemented",
+            "implemented",
         ),
         (
             "allocation",
@@ -100,7 +100,7 @@ def test_registry_contains_all_required_entries() -> None:
             "building",
             "infirmary",
             "+1 effective Duty Value if wheat cost is paid",
-            "known_unimplemented",
+            "implemented",
         ),
         ("produce", "produce_wheat", "building", "well", "+1 wheat", "implemented"),
         ("produce", "produce_stone", "building", "quarry", "+1 stone", "implemented"),
@@ -117,12 +117,12 @@ def test_well_quarry_mint_chapel_are_implemented_and_other_buildings_remain_defe
     implemented_building_sources = {
         entry.source_key for entry in building_entries if entry.status == "implemented"
     }
-    assert implemented_building_sources == {"well", "quarry", "mint", "chapel"}
+    assert implemented_building_sources == {"well", "quarry", "mint", "chapel", "infirmary"}
 
     unimplemented_building_sources = {
         entry.source_key for entry in building_entries if entry.status != "implemented"
     }
-    assert unimplemented_building_sources == {"infirmary", "chapter_house", "mill"}
+    assert unimplemented_building_sources == {"chapter_house", "mill"}
     assert any(
         entry.source_key == "chapter_house"
         and entry.status == "deferred_special_activity_system"

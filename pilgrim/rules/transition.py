@@ -24,11 +24,14 @@ from pilgrim.rules.alms import (
     resolve_give_alms,
 )
 from pilgrim.rules.buildings import (
+    allocation_infirmary_duty_value_bonus,
     clerical_devotion_chapel_bonus,
     clerical_silversmith_mint_bonus,
     construct_building_from_market,
     donate_active_building,
     has_available_player_board_slot,
+    ordination_infirmary_duty_value_bonus,
+    player_has_active_building,
     produce_stone_quarry_bonus,
     produce_wheat_well_bonus,
     used_player_board_slots,
@@ -223,9 +226,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     )
                     strength = duty_strength(player_count, opponent_counts)
                     duty_value, _silver_cost = duty_value_and_silver_cost(strength)
+                    allocation_effective_duty_value = (
+                        duty_value + allocation_infirmary_duty_value_bonus(player_state)
+                    )
                     for move_sequence in _allocation_move_sequences(
                         player_state,
-                        max_moves=duty_value,
+                        max_moves=allocation_effective_duty_value,
                     ):
                         actions.append(
                             FullTurnAction(
@@ -304,9 +310,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     available_silver = player_resources.silver - silver_cost
                     if available_silver < 0:
                         continue
+                    ordination_cap_bonus = (
+                        1 if player_has_active_building(player_state, "infirmary") else 0
+                    )
                     for step_sequence in legal_ordination_step_sequences(
                         player_state,
-                        max_steps=duty_value,
+                        max_steps=duty_value + ordination_cap_bonus,
                     ):
                         actions.append(
                             FullTurnAction(
@@ -1035,9 +1044,32 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Ordination action must include at least 1 ordination step."
                 )
-            if len(action.ordination_steps) > effective_duty_value:
+            ordination_cap_bonus = (
+                1 if player_has_active_building(state_after_sow.player_state(player), "infirmary") else 0
+            )
+            max_ordination_steps = duty_value + ordination_cap_bonus
+            if len(action.ordination_steps) > max_ordination_steps:
                 raise TransitionValidationError(
                     "Ordination action includes more steps than effective duty value allows."
+                )
+            ordination_bonus = ordination_infirmary_duty_value_bonus(
+                state_after_sow.player_state(player),
+                extra_step_wheat_paid=len(action.ordination_steps) > duty_value,
+            )
+            if ordination_bonus:
+                effective_duty_value += ordination_bonus
+                building_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.BUILDING_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            building="infirmary",
+                            action=action.resolution.value,
+                            duty_value_bonus=ordination_bonus,
+                            extra_wheat_cost_paid=True,
+                        ),
+                    )
                 )
 
             new_player_state = state_after_sow.player_state(player)
@@ -1188,6 +1220,23 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
+            allocation_bonus = allocation_infirmary_duty_value_bonus(
+                state_after_sow.player_state(player)
+            )
+            if allocation_bonus:
+                effective_duty_value += allocation_bonus
+                building_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.BUILDING_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            building="infirmary",
+                            action=action.resolution.value,
+                            duty_value_bonus=allocation_bonus,
+                        ),
+                    )
+                )
             if not action.allocation_moves:
                 raise TransitionValidationError(
                     "Allocation action must include at least 1 allocation move."
@@ -1425,8 +1474,17 @@ def _apply_full_turn_action(
                 ),
             )
         )
+        duty_value_building_bonus_events = [
+            event for event in building_bonus_events if _is_duty_value_building_bonus_event(event)
+        ]
+        output_building_bonus_events = [
+            event
+            for event in building_bonus_events
+            if not _is_duty_value_building_bonus_event(event)
+        ]
+        events.extend(duty_value_building_bonus_events)
         events.extend(special_bonus_events)
-        events.extend(building_bonus_events)
+        events.extend(output_building_bonus_events)
         if duty_deferred_event is not None and not construct_events:
             events.append(duty_deferred_event)
         events.append(
@@ -1814,6 +1872,12 @@ def _construct_building_plus_road_plans(
 
 def _construct_plan_uses_road_engineer_extra(plan: str) -> bool:
     return "road_engineer_extra_road" in plan
+
+
+def _is_duty_value_building_bonus_event(event: GameEvent) -> bool:
+    if event.event_type is not EventType.BUILDING_BONUS:
+        return False
+    return "duty_value_bonus" in dict(event.details)
 
 
 def _constructible_building_ids(

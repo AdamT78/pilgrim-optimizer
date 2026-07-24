@@ -1,4 +1,4 @@
-# Duty Tiles (v2.5 Sandbox Scope)
+# Duty Tiles (v2.6 Sandbox Scope)
 
 ## Core model
 
@@ -122,6 +122,11 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Ordination steps are validated sequentially, so `ordain; mission` is legal at duty value 2 even
   when Abbey starts empty.
 - Each ordination step must be legal when reached and costs 1 wheat.
+- Active Infirmary now modifies Ordination duty value semantics:
+  - legal generation may allow one additional step (`+1` cap) when Infirmary is active
+  - the extra step still costs wheat (no free steps)
+  - apply-time `effective duty value` and `BUILDING_BONUS` are emitted only when the chosen
+    sequence actually uses that extra paid step
 - For `clerical`:
   - Mint adds `+1 silver` to `clerical_silversmith`
   - Chapel adds `+1 piety` to `clerical_devotion`
@@ -129,6 +134,10 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - these bonuses stack with matching Special Activity bonuses (Engraver / Vestry)
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
+- Active Infirmary now adds `+1 effective Duty Value` to Allocation:
+  - parity Allocation can sequence up to 2 moves
+  - majority Allocation can sequence up to 3 moves
+  - this is a true duty-value modifier and appears in `effective duty value` output
 - For `build_roads`:
   - legal actions currently include `build_roads_deferred` plus `tithe`
   - `build_roads_deferred` applies normal duty relation, minority silver cost, and recall
@@ -180,3 +189,6 @@ Deferred category systems (valid in layout, no non-tithe action yet):
   - `DUTY_RESOLUTION: selected south_east (construct); ...; action construct_building`
   - `BUILDING_CONSTRUCTED: player_one constructed Well from market; level 1; cost stone 1; ...`
   - `DUTY_DEFERRED: construct road part requires spatial road system; requested plan: ...`
+  - `DUTY_RESOLUTION: selected north_west (allocation); ...; duty value 1; effective duty value 2; ...`
+  - `BUILDING_BONUS: infirmary added duty value +1 to allocation`
+  - `BUILDING_BONUS: infirmary added duty value +1 to ordination; extra wheat cost paid`

@@ -104,8 +104,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="infirmary",
         effect="+1 effective Duty Value",
-        status="known_unimplemented",
-        notes="Documented only; no runtime building bonus is applied yet.",
+        status="implemented",
+        notes="Applied in transition when Infirmary is active.",
     ),
     DutyEnhancement(
         duty="allocation",
@@ -158,8 +158,8 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_type="building",
         source_key="infirmary",
         effect="+1 effective Duty Value if wheat cost is paid",
-        status="known_unimplemented",
-        notes="Conditional wheat-payment interaction is not implemented yet.",
+        status="implemented",
+        notes="Applied when active Infirmary is used for an extra paid ordination step.",
     ),
     DutyEnhancement(
         duty="produce",

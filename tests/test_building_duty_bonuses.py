@@ -55,9 +55,13 @@ def test_well_adds_plus_one_wheat_to_produce_wheat() -> None:
     assert after.resources.wheat == 3
     bonus_event = next(event for event in _building_bonus_events(result.events))
     bonus_details = dict(bonus_event.details)
+    resource_event = next(
+        event for event in result.events if event.event_type is EventType.RESOURCE_DELTA
+    )
     assert bonus_details["building"] == "well"
     assert bonus_details["action"] == "produce_wheat"
     assert bonus_details["wheat_bonus"] == 1
+    assert result.events.index(bonus_event) < result.events.index(resource_event)
 
 
 def test_quarry_adds_plus_one_stone_to_produce_stone() -> None:
@@ -191,9 +195,11 @@ def test_chapel_adds_plus_one_piety_to_clerical_devotion() -> None:
     assert after.piety == 3
     bonus_event = next(event for event in _building_bonus_events(result.events))
     bonus_details = dict(bonus_event.details)
+    piety_event = next(event for event in result.events if event.event_type is EventType.PIETY_DELTA)
     assert bonus_details["building"] == "chapel"
     assert bonus_details["action"] == "clerical_devotion"
     assert bonus_details["piety_bonus"] == 1
+    assert result.events.index(bonus_event) < result.events.index(piety_event)
 
 
 def test_mint_does_not_affect_clerical_devotion() -> None:

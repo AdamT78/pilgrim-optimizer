@@ -251,6 +251,22 @@ def clerical_devotion_chapel_bonus(player_state: PlayerState) -> int:
     return 1 if player_has_active_building(player_state, "chapel") else 0
 
 
+def allocation_infirmary_duty_value_bonus(player_state: PlayerState) -> int:
+    """Infirmary adds +1 effective duty value to allocation when active."""
+    return 1 if player_has_active_building(player_state, "infirmary") else 0
+
+
+def ordination_infirmary_duty_value_bonus(
+    player_state: PlayerState,
+    *,
+    extra_step_wheat_paid: bool,
+) -> int:
+    """Infirmary adds +1 effective duty value to ordination when an extra paid step is used."""
+    if not extra_step_wheat_paid:
+        return 0
+    return 1 if player_has_active_building(player_state, "infirmary") else 0
+
+
 def used_player_board_slots(player_state: PlayerState) -> int:
     """Return number of occupied shared board slots."""
     slots = player_state.player_board_slots

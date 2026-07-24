@@ -227,6 +227,23 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Runtime market validation now supports shrinking `building_market` during play while preserving
   deterministic id/level constraints.
 
+## Infirmary Duty Bonuses (v2.6)
+
+- Infirmary building effects are implemented in explicit duty-specific transition/generation paths
+  (not via generic registry execution):
+  - Allocation: active Infirmary adds `+1 effective Duty Value`
+  - Ordination: active Infirmary allows one additional paid step and contributes
+    `+1 effective Duty Value` only when that extra step is actually used
+- Legal-action generation now incorporates Infirmary caps where relevant:
+  - Allocation move-sequence generation uses `base + 1` when Infirmary is active
+  - Ordination sequence generation can explore one extra step when Infirmary is active, while
+    step-level wheat/workforce legality is still enforced by Ordination rules
+- Event semantics stay consistent with existing duty-value policy:
+  - true duty-value modifiers surface via `effective_duty_value` in `DUTY_RESOLUTION`
+  - Infirmary emits `BUILDING_BONUS` duty-value events
+  - direct output bonuses (Well/Quarry/Mint/Chapel and matching Special Activities) remain
+    separate output bonuses and do not alter `effective_duty_value`
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.

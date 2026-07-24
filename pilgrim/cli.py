@@ -514,8 +514,13 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             bonuses.append(f"silver +{int(details['silver_bonus'])}")
         if "piety_bonus" in details:
             bonuses.append(f"piety +{int(details['piety_bonus'])}")
+        if "duty_value_bonus" in details:
+            bonuses.append(f"duty value +{int(details['duty_value_bonus'])}")
         if bonuses:
-            return f"{event_name}: {building} added {', '.join(bonuses)} to {action_name}"
+            text = f"{event_name}: {building} added {', '.join(bonuses)} to {action_name}"
+            if details.get("extra_wheat_cost_paid") is True:
+                text += "; extra wheat cost paid"
+            return text
         return f"{event_name}: {building} applied to {action_name}"
 
     if event.event_type is EventType.SPECIAL_ACTIVITY_BONUS:
