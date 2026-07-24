@@ -389,6 +389,25 @@ Position mapping used by the current sandbox:
   - existing building bonuses still apply from own active buildings only
   - no new user-facing hire action command is introduced yet
 
+## Hire Sources for Simple Building Bonuses (v3.1a)
+
+- Action generation/apply now wire hire sources for:
+  - `produce_wheat` (Well)
+  - `produce_stone` (Quarry)
+  - `clerical_silversmith` (Mint)
+  - `clerical_devotion` (Chapel)
+- When a hired source is used, action summaries include hire context:
+  - `... | hire building: well from market`
+  - `... | hire building: well from player_two`
+- Verbose apply output now includes:
+  - `BUILDING_HIRED` (for hired sources only)
+  - `BUILDING_BONUS` (own or hired source)
+- Taxation/merchant-none behavior for these actions:
+  - hired variants are not generated
+  - own-active bonus variants remain available
+- Scope boundary remains:
+  - Infirmary, Chapter House, and Mill are not wired to hire sources yet.
+
 ## Produce Options and Fields Rename (v1.4)
 
 - Produce duty now exposes exactly two explicit actions:

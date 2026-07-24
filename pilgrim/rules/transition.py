@@ -25,10 +25,14 @@ from pilgrim.rules.alms import (
     resolve_give_alms,
 )
 from pilgrim.rules.buildings import (
+    BuildingAbilitySource,
+    BuildingHirePayment,
+    BuildingHireTurnContext,
     allocation_infirmary_duty_value_bonus,
+    apply_building_hire_payment,
+    building_ability_source,
+    can_hire_building_this_turn,
     building_live_round,
-    clerical_devotion_chapel_bonus,
-    clerical_silversmith_mint_bonus,
     construct_building_from_market,
     donate_active_building,
     has_available_player_board_slot,
@@ -36,9 +40,9 @@ from pilgrim.rules.buildings import (
     ordination_infirmary_duty_value_bonus,
     player_has_active_chapter_house,
     player_has_active_building,
-    produce_stone_quarry_bonus,
-    produce_wheat_well_bonus,
+    record_hired_building_this_turn,
     used_player_board_slots,
+    validate_hire_sequence_for_turn,
     validate_building_state,
 )
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
@@ -113,6 +117,12 @@ _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
 _CONSTRUCT_PLAN_ROAD = "road"
 _CONSTRUCT_PLAN_EXTRA_ROAD = "road_engineer_extra_road"
 _CONSTRUCT_ROAD_SCAFFOLD_TEXT = "construct road part requires spatial road system"
+_SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
+    TurnResolutionType.PRODUCE_WHEAT: "well",
+    TurnResolutionType.PRODUCE_STONE: "quarry",
+    TurnResolutionType.CLERICAL_SILVERSMITH: "mint",
+    TurnResolutionType.CLERICAL_DEVOTION: "chapel",
+}
 
 
 def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -389,8 +399,10 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                             )
                 else:
                     for category_action in category_actions:
-                        actions.append(
-                            FullTurnAction(
+                        actions.extend(
+                            _legal_action_variants_for_resolution(
+                                state=state,
+                                config=config,
                                 origin=origin,
                                 route=route,
                                 selected_duty=duty_position,
@@ -620,12 +632,14 @@ def _apply_full_turn_action(
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
         special_bonus_events: list[GameEvent] = []
         building_bonus_events: list[GameEvent] = []
+        building_hired_events: list[GameEvent] = []
         construct_events: list[GameEvent] = []
         effective_duty_value = duty_value
         give_alms_resolution = None
         donate_building_alms_resolution = None
         duty_deferred_event: GameEvent | None = None
         updated_building_market = state_after_sow.building_market
+        state_after_resolution: GameState | None = None
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS_PAID
@@ -684,6 +698,40 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Only Construct building actions may include construct_building_id."
             )
+        if (action.hired_building_id is None) != (action.hired_building_source is None):
+            raise TransitionValidationError(
+                "hired_building_id and hired_building_source must be set together."
+            )
+        if action.hired_building_id is not None:
+            if action.resolution not in _SIMPLE_BONUS_BUILDING_BY_ACTION:
+                raise TransitionValidationError(
+                    "Only produce/clerical simple bonus actions may include hired building fields."
+                )
+            expected_hire_building = _SIMPLE_BONUS_BUILDING_BY_ACTION[action.resolution]
+            if action.hired_building_id != expected_hire_building:
+                raise TransitionValidationError(
+                    "hired_building_id does not match action resolution expected building: "
+                    f"{expected_hire_building}."
+                )
+            hire_context = BuildingHireTurnContext()
+            if not can_hire_building_this_turn(
+                hire_context,
+                building_key=action.hired_building_id,
+            ):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=action.hired_building_id,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            if not validate_hire_sequence_for_turn(hire_context.hired_buildings):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             alms_house_bonus = action.alms_house_extra_silver + action.alms_house_extra_wheat
@@ -1378,6 +1426,7 @@ def _apply_full_turn_action(
                 TurnResolutionType.PRODUCE_STONE,
             ):
                 produce_resource_bonus = 0
+                selected_simple_source: BuildingAbilitySource | None = None
                 if action.resolution is TurnResolutionType.PRODUCE_WHEAT:
                     wheat_bonus = produce_wheat_fields_bonus(state_after_sow.player_state(player))
                     produce_resource_bonus += wheat_bonus
@@ -1394,9 +1443,15 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
-                    well_bonus = produce_wheat_well_bonus(state_after_sow.player_state(player))
-                    produce_resource_bonus += well_bonus
-                    if well_bonus:
+                    selected_simple_source = _resolved_simple_bonus_source_for_action(
+                        state=state_after_sow,
+                        config=config,
+                        player=player,
+                        action=action,
+                        building_key="well",
+                    )
+                    if selected_simple_source is not None:
+                        produce_resource_bonus += 1
                         building_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.BUILDING_BONUS,
@@ -1405,7 +1460,7 @@ def _apply_full_turn_action(
                                 details=make_event_details(
                                     building="well",
                                     action=action.resolution.value,
-                                    wheat_bonus=well_bonus,
+                                    wheat_bonus=1,
                                 ),
                             )
                         )
@@ -1427,11 +1482,15 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
-                    quarry_bonus = produce_stone_quarry_bonus(
-                        state_after_sow.player_state(player)
+                    selected_simple_source = _resolved_simple_bonus_source_for_action(
+                        state=state_after_sow,
+                        config=config,
+                        player=player,
+                        action=action,
+                        building_key="quarry",
                     )
-                    produce_resource_bonus += quarry_bonus
-                    if quarry_bonus:
+                    if selected_simple_source is not None:
+                        produce_resource_bonus += 1
                         building_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.BUILDING_BONUS,
@@ -1440,12 +1499,12 @@ def _apply_full_turn_action(
                                 details=make_event_details(
                                     building="quarry",
                                     action=action.resolution.value,
-                                    stone_bonus=quarry_bonus,
+                                    stone_bonus=1,
                                 ),
                             )
                         )
                 try:
-                    new_player_state, resource_delta = apply_produce_resolution(
+                    new_player_state, _produce_resource_delta = apply_produce_resolution(
                         state_after_sow.player_state(player),
                         resolution=action.resolution,
                         duty_value=duty_value + produce_resource_bonus,
@@ -1455,8 +1514,33 @@ def _apply_full_turn_action(
                     raise TransitionValidationError(str(exc)) from exc
                 old_piety_position = state_after_sow.player_state(player).piety
                 new_piety_position = state_after_sow.player_state(player).piety
+                state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
+                if selected_simple_source is not None and _is_hired_simple_source(selected_simple_source):
+                    try:
+                        state_after_resolution, hire_payment = apply_building_hire_payment(
+                            state_after_resolution,
+                            acting_player=player,
+                            source=selected_simple_source,
+                        )
+                    except ValueError as exc:
+                        raise TransitionValidationError(str(exc)) from exc
+                    new_player_state = state_after_resolution.player_state(player)
+                    building_hired_events.append(
+                        _building_hired_event(
+                            source=selected_simple_source,
+                            payment=hire_payment,
+                            actor=player,
+                            action_id=transition_action_id,
+                            config=config,
+                        )
+                    )
+                resource_delta = _resource_delta_between(
+                    state_after_sow.player_state(player).resources,
+                    new_player_state.resources,
+                )
             else:
                 clerical_output_bonus = 0
+                selected_simple_source = None
                 if action.resolution is TurnResolutionType.CLERICAL_SILVERSMITH:
                     bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
                     clerical_output_bonus += bonus
@@ -1473,11 +1557,15 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
-                    mint_bonus = clerical_silversmith_mint_bonus(
-                        state_after_sow.player_state(player)
+                    selected_simple_source = _resolved_simple_bonus_source_for_action(
+                        state=state_after_sow,
+                        config=config,
+                        player=player,
+                        action=action,
+                        building_key="mint",
                     )
-                    clerical_output_bonus += mint_bonus
-                    if mint_bonus:
+                    if selected_simple_source is not None:
+                        clerical_output_bonus += 1
                         building_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.BUILDING_BONUS,
@@ -1486,7 +1574,7 @@ def _apply_full_turn_action(
                                 details=make_event_details(
                                     building="mint",
                                     action=action.resolution.value,
-                                    silver_bonus=mint_bonus,
+                                    silver_bonus=1,
                                 ),
                             )
                         )
@@ -1506,11 +1594,15 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
-                    chapel_bonus = clerical_devotion_chapel_bonus(
-                        state_after_sow.player_state(player)
+                    selected_simple_source = _resolved_simple_bonus_source_for_action(
+                        state=state_after_sow,
+                        config=config,
+                        player=player,
+                        action=action,
+                        building_key="chapel",
                     )
-                    clerical_output_bonus += chapel_bonus
-                    if chapel_bonus:
+                    if selected_simple_source is not None:
+                        clerical_output_bonus += 1
                         building_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.BUILDING_BONUS,
@@ -1519,7 +1611,7 @@ def _apply_full_turn_action(
                                 details=make_event_details(
                                     building="chapel",
                                     action=action.resolution.value,
-                                    piety_bonus=chapel_bonus,
+                                    piety_bonus=1,
                                 ),
                             )
                         )
@@ -1538,14 +1630,41 @@ def _apply_full_turn_action(
                     )
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
+                state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
+                if selected_simple_source is not None and _is_hired_simple_source(selected_simple_source):
+                    try:
+                        state_after_resolution, hire_payment = apply_building_hire_payment(
+                            state_after_resolution,
+                            acting_player=player,
+                            source=selected_simple_source,
+                        )
+                    except ValueError as exc:
+                        raise TransitionValidationError(str(exc)) from exc
+                    new_player_state = state_after_resolution.player_state(player)
+                    building_hired_events.append(
+                        _building_hired_event(
+                            source=selected_simple_source,
+                            payment=hire_payment,
+                            actor=player,
+                            action_id=transition_action_id,
+                            config=config,
+                        )
+                    )
+                resource_delta = _resource_delta_between(
+                    state_after_sow.player_state(player).resources,
+                    new_player_state.resources,
+                )
 
+        if state_after_resolution is None:
+            state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
+        new_player_state = state_after_resolution.player_state(player)
         post_effect_vector = new_player_state.workforce.mancala
         recalled = post_effect_vector[action.selected_duty]
         recalled_vector = list(post_effect_vector)
         recalled_vector[0] += recalled
         recalled_vector[action.selected_duty] = 0
 
-        updated_state = state_after_sow.with_player_state(player, new_player_state)
+        updated_state = state_after_resolution
         updated_state = updated_state.with_player_vector(player, tuple(recalled_vector))
         updated_state = updated_state.with_building_market(updated_building_market)
 
@@ -1589,6 +1708,7 @@ def _apply_full_turn_action(
         events.extend(duty_value_building_bonus_events)
         events.extend(allocation_capacity_building_bonus_events)
         events.extend(special_bonus_events)
+        events.extend(building_hired_events)
         events.extend(output_building_bonus_events)
         if duty_deferred_event is not None and not construct_events:
             events.append(duty_deferred_event)
@@ -1943,6 +2063,171 @@ def _next_incomplete_setup_player(
         if candidate not in completed_set:
             return candidate
     return None
+
+
+def _legal_action_variants_for_resolution(
+    *,
+    state: GameState,
+    config: GameConfig,
+    origin: int,
+    route: tuple[int, ...],
+    selected_duty: int,
+    resolution: TurnResolutionType,
+) -> tuple[FullTurnAction, ...]:
+    """Return deterministic action variants for one duty-resolution option."""
+    building_key = _SIMPLE_BONUS_BUILDING_BY_ACTION.get(resolution)
+    if building_key is None:
+        return (
+            FullTurnAction(
+                origin=origin,
+                route=route,
+                selected_duty=selected_duty,
+                resolution=resolution,
+            ),
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=building_key,
+    )
+    if source.source_type in ("live_market_hire", "opponent_active_hire") and source.usable:
+        hire_context = BuildingHireTurnContext()
+        if not can_hire_building_this_turn(hire_context, building_key=building_key):
+            return (
+                FullTurnAction(
+                    origin=origin,
+                    route=route,
+                    selected_duty=selected_duty,
+                    resolution=resolution,
+                ),
+            )
+        hire_context = record_hired_building_this_turn(
+            hire_context,
+            building_key=building_key,
+        )
+        if not validate_hire_sequence_for_turn(hire_context.hired_buildings):
+            return (
+                FullTurnAction(
+                    origin=origin,
+                    route=route,
+                    selected_duty=selected_duty,
+                    resolution=resolution,
+                ),
+            )
+        return (
+            FullTurnAction(
+                origin=origin,
+                route=route,
+                selected_duty=selected_duty,
+                resolution=resolution,
+                hired_building_id=hire_context.hired_buildings[0],
+                hired_building_source=_hired_building_source_label(source),
+            ),
+        )
+
+    # own_active uses the free source without a dedicated hire suffix.
+    return (
+        FullTurnAction(
+            origin=origin,
+            route=route,
+            selected_duty=selected_duty,
+            resolution=resolution,
+        ),
+    )
+
+
+def _resolved_simple_bonus_source_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+    building_key: str,
+) -> BuildingAbilitySource | None:
+    """Resolve and validate simple building-bonus source against action hire fields."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=building_key,
+    )
+    action_has_hire_fields = action.hired_building_id is not None
+
+    if source.source_type == "own_active" and source.usable:
+        if action_has_hire_fields:
+            raise TransitionValidationError(
+                f"{building_key} is own-active; action must not include hired building fields."
+            )
+        return source
+
+    if source.source_type in ("live_market_hire", "opponent_active_hire") and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if not action_has_hire_fields:
+            raise TransitionValidationError(
+                f"{building_key} is hire-usable; action must include hired building fields."
+            )
+        if action.hired_building_id != building_key:
+            raise TransitionValidationError(
+                f"Action hired_building_id must be {building_key} for this resolution."
+            )
+        if action.hired_building_source != expected_source_label:
+            raise TransitionValidationError(
+                "Action hired_building_source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+        return source
+
+    if action_has_hire_fields:
+        raise TransitionValidationError(
+            f"{building_key} is not hire-usable in current state."
+        )
+    return None
+
+
+def _hired_building_source_label(source: BuildingAbilitySource) -> str:
+    if source.source_type == "live_market_hire":
+        return "market"
+    if source.source_type == "opponent_active_hire":
+        return source.owner or "unknown"
+    return source.source_type
+
+
+def _is_hired_simple_source(source: BuildingAbilitySource) -> bool:
+    return source.source_type in ("live_market_hire", "opponent_active_hire")
+
+
+def _building_hired_event(
+    *,
+    source: BuildingAbilitySource,
+    payment: BuildingHirePayment,
+    actor: PlayerId,
+    action_id: str,
+    config: GameConfig,
+) -> GameEvent:
+    building_name = config.buildings.name_for_id(source.building_key)
+    return GameEvent(
+        event_type=EventType.BUILDING_HIRED,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building_id=source.building_key,
+            building_name=building_name,
+            source=_hired_building_source_label(source),
+            payee=payment.payee,
+            resource=payment.resource or "none",
+            amount=payment.amount,
+        ),
+    )
+
+
+def _resource_delta_between(before, after) -> tuple[int, int, int]:
+    return (
+        after.stone - before.stone,
+        after.silver - before.silver,
+        after.wheat - before.wheat,
+    )
 
 
 def _construct_road_only_plans(

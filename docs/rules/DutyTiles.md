@@ -122,8 +122,10 @@ Duty tile categories are not action names. Use the following concrete action nam
 - Produce building bonuses are now implemented:
   - Well adds `+1 wheat` to `produce_wheat`
   - Quarry adds `+1 stone` to `produce_stone`
-- Produce building bonuses apply only from `active_buildings` and stack with matching
-  Special Activity bonuses.
+- Produce building bonuses now resolve from:
+  - own active building (free), or
+  - usable hired source (live market or opponent active)
+- Hired produce bonuses still stack with matching Special Activity bonuses.
 - For `give_alms`, paid actions still pay silver/wheat equal to effective duty value and move
   that many rows.
 - `give_alms_donate_building` always donates exactly one active building and advances Alms by
@@ -147,8 +149,9 @@ Duty tile categories are not action names. Use the following concrete action nam
 - For `clerical`:
   - Mint adds `+1 silver` to `clerical_silversmith`
   - Chapel adds `+1 piety` to `clerical_devotion`
-  - these bonuses apply only from `active_buildings`
+  - these bonuses now resolve from own-active or usable hired sources
   - these bonuses stack with matching Special Activity bonuses (Engraver / Vestry)
+  - Merchant on Taxation (`resource: none`) prevents hired-source clerical bonuses
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
 - Active Infirmary now adds `+1 effective Duty Value` to Allocation:
