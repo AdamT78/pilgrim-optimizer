@@ -102,6 +102,11 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Produce duty value cannot be split across resources in one action.
 - Produce special-activity bonuses (Fields / Stone Mason) add produced resources and do not
   change duty value.
+- Produce building bonuses are now implemented:
+  - Well adds `+1 wheat` to `produce_wheat`
+  - Quarry adds `+1 stone` to `produce_stone`
+- Produce building bonuses apply only from `active_buildings` and stack with matching
+  Special Activity bonuses.
 - For `give_alms`, paid actions still pay silver/wheat equal to effective duty value and move
   that many rows.
 - `donate_building` always donates exactly one active building and advances Alms by exactly one
@@ -115,6 +120,11 @@ Deferred category systems (valid in layout, no non-tithe action yet):
 - Ordination steps are validated sequentially, so `ordain; mission` is legal at duty value 2 even
   when Abbey starts empty.
 - Each ordination step must be legal when reached and costs 1 wheat.
+- For `clerical`:
+  - Mint adds `+1 silver` to `clerical_silversmith`
+  - Chapel adds `+1 piety` to `clerical_devotion`
+  - these bonuses apply only from `active_buildings`
+  - these bonuses stack with matching Special Activity bonuses (Engraver / Vestry)
 - For `allocation`, duty value controls how many allocation moves can be sequenced in one
   action (1..duty value) between Abbey and Special Activities.
 - For `build_roads`:

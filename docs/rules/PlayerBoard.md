@@ -164,6 +164,21 @@ For a central Duty-action enhancement index (Special Activities plus known build
   `SPECIAL_ACTIVITY_BONUS`
 - no runtime road/bridge placement is performed for Construct in this milestone
 
+## Implemented active-building Duty bonuses
+
+These building bonuses are now implemented in the Duty transition paths:
+
+- Well: `produce_wheat` gains `+1 wheat`
+- Quarry: `produce_stone` gains `+1 stone`
+- Mint: `clerical_silversmith` gains `+1 silver`
+- Chapel: `clerical_devotion` gains `+1 piety`
+
+Rules for these bonuses:
+
+- only `active_buildings` apply
+- `donated_buildings` do not apply
+- bonuses stack with matching Special Activity bonuses
+
 ## Validation and invariants
 
 Validation now additionally enforces Special Activity structure integrity.

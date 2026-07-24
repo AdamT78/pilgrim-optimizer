@@ -342,6 +342,87 @@ def test_cli_apply_stone_mason_bonus_does_not_raise_effective_duty_value(capsys)
     assert "RESOURCE_DELTA: player_one stone +3" in output
 
 
+def test_cli_apply_well_building_bonus_event_is_visible(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/produce_wheat_well_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "BUILDING_BONUS: well added wheat +1 to produce_wheat" in output
+    assert "RESOURCE_DELTA: player_one wheat +3" in output
+
+
+def test_cli_apply_well_and_fields_bonus_events_both_visible(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/produce_wheat_fields_and_well_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "SPECIAL_ACTIVITY_BONUS: fields added wheat +1 to produce_wheat" in output
+    assert "BUILDING_BONUS: well added wheat +1 to produce_wheat" in output
+    assert "RESOURCE_DELTA: player_one wheat +4" in output
+    assert "effective duty value 4" not in output
+
+
+def test_cli_apply_clerical_devotion_vestry_and_chapel_uses_bonus_events_not_effective_dv(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/clerical_devotion_vestry_and_chapel_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert (
+        "DUTY_RESOLUTION: selected north (clerical); relation majority; duty value 2; silver cost 0; "
+        "action clerical_devotion"
+    ) in output
+    assert "SPECIAL_ACTIVITY_BONUS: vestry added piety +1 to clerical_devotion" in output
+    assert "BUILDING_BONUS: chapel added piety +1 to clerical_devotion" in output
+    assert "PIETY_DELTA: player_one piety 0 -> 4" in output
+    assert "effective duty value 4" not in output
+
+
+def test_cli_apply_clerical_silversmith_mint_bonus_does_not_show_effective_dv(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/clerical_silversmith_mint_001.json",
+            "--action-index",
+            "2",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert (
+        "DUTY_RESOLUTION: selected north (clerical); relation majority; duty value 2; silver cost 0; "
+        "action clerical_silversmith"
+    ) in output
+    assert "BUILDING_BONUS: mint added silver +1 to clerical_silversmith" in output
+    assert "RESOURCE_DELTA: player_one silver +3" in output
+    assert "effective duty value" not in output
+
+
 def test_cli_apply_donate_building_verbose_shows_donation_events_and_slot_state(capsys) -> None:
     exit_code = main(
         [

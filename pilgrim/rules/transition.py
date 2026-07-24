@@ -23,7 +23,14 @@ from pilgrim.rules.alms import (
     resolve_donate_building_alms,
     resolve_give_alms,
 )
-from pilgrim.rules.buildings import donate_active_building, validate_building_state
+from pilgrim.rules.buildings import (
+    clerical_devotion_chapel_bonus,
+    clerical_silversmith_mint_bonus,
+    donate_active_building,
+    produce_stone_quarry_bonus,
+    produce_wheat_well_bonus,
+    validate_building_state,
+)
 from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import (
     action_options_for_duty_category,
@@ -544,6 +551,7 @@ def _apply_full_turn_action(
         available_silver = state_after_sow.player_state(player).resources.silver
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
         special_bonus_events: list[GameEvent] = []
+        building_bonus_events: list[GameEvent] = []
         effective_duty_value = duty_value
         give_alms_resolution = None
         donate_building_alms_resolution = None
@@ -1028,7 +1036,7 @@ def _apply_full_turn_action(
                 produce_resource_bonus = 0
                 if action.resolution is TurnResolutionType.PRODUCE_WHEAT:
                     wheat_bonus = produce_wheat_fields_bonus(state_after_sow.player_state(player))
-                    produce_resource_bonus = wheat_bonus
+                    produce_resource_bonus += wheat_bonus
                     if wheat_bonus:
                         special_bonus_events.append(
                             GameEvent(
@@ -1042,11 +1050,26 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
+                    well_bonus = produce_wheat_well_bonus(state_after_sow.player_state(player))
+                    produce_resource_bonus += well_bonus
+                    if well_bonus:
+                        building_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.BUILDING_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    building="well",
+                                    action=action.resolution.value,
+                                    wheat_bonus=well_bonus,
+                                ),
+                            )
+                        )
                 else:
                     stone_bonus = produce_stone_mason_bonus(
                         state_after_sow.player_state(player)
                     )
-                    produce_resource_bonus = stone_bonus
+                    produce_resource_bonus += stone_bonus
                     if stone_bonus:
                         special_bonus_events.append(
                             GameEvent(
@@ -1057,6 +1080,23 @@ def _apply_full_turn_action(
                                     activity="stone_mason",
                                     action=action.resolution.value,
                                     stone_bonus=stone_bonus,
+                                ),
+                            )
+                        )
+                    quarry_bonus = produce_stone_quarry_bonus(
+                        state_after_sow.player_state(player)
+                    )
+                    produce_resource_bonus += quarry_bonus
+                    if quarry_bonus:
+                        building_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.BUILDING_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    building="quarry",
+                                    action=action.resolution.value,
+                                    stone_bonus=quarry_bonus,
                                 ),
                             )
                         )
@@ -1072,9 +1112,10 @@ def _apply_full_turn_action(
                 old_piety_position = state_after_sow.player_state(player).piety
                 new_piety_position = state_after_sow.player_state(player).piety
             else:
+                clerical_output_bonus = 0
                 if action.resolution is TurnResolutionType.CLERICAL_SILVERSMITH:
                     bonus = clerical_silversmith_bonus(state_after_sow.player_state(player))
-                    effective_duty_value += bonus
+                    clerical_output_bonus += bonus
                     if bonus:
                         special_bonus_events.append(
                             GameEvent(
@@ -1088,9 +1129,26 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
+                    mint_bonus = clerical_silversmith_mint_bonus(
+                        state_after_sow.player_state(player)
+                    )
+                    clerical_output_bonus += mint_bonus
+                    if mint_bonus:
+                        building_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.BUILDING_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    building="mint",
+                                    action=action.resolution.value,
+                                    silver_bonus=mint_bonus,
+                                ),
+                            )
+                        )
                 elif action.resolution is TurnResolutionType.CLERICAL_DEVOTION:
                     bonus = clerical_devotion_bonus(state_after_sow.player_state(player))
-                    effective_duty_value += bonus
+                    clerical_output_bonus += bonus
                     if bonus:
                         special_bonus_events.append(
                             GameEvent(
@@ -1104,6 +1162,23 @@ def _apply_full_turn_action(
                                 ),
                             )
                         )
+                    chapel_bonus = clerical_devotion_chapel_bonus(
+                        state_after_sow.player_state(player)
+                    )
+                    clerical_output_bonus += chapel_bonus
+                    if chapel_bonus:
+                        building_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.BUILDING_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(
+                                    building="chapel",
+                                    action=action.resolution.value,
+                                    piety_bonus=chapel_bonus,
+                                ),
+                            )
+                        )
                 try:
                     (
                         new_player_state,
@@ -1113,7 +1188,7 @@ def _apply_full_turn_action(
                     ) = apply_duty_effect(
                         state_after_sow.player_state(player),
                         effect=effect_for_resolution(action.resolution),
-                        duty_value=effective_duty_value,
+                        duty_value=duty_value + clerical_output_bonus,
                         silver_cost=silver_cost,
                         piety_config=config.piety,
                     )
@@ -1151,6 +1226,7 @@ def _apply_full_turn_action(
             )
         )
         events.extend(special_bonus_events)
+        events.extend(building_bonus_events)
         if duty_deferred_event is not None:
             events.append(duty_deferred_event)
         events.append(

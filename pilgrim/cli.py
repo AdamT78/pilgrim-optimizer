@@ -482,6 +482,22 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         amount = int(details.get("amount", 0))
         return f"{event_name}: {actor_name} moved {amount} acolyte {from_pool} -> {to_pool}"
 
+    if event.event_type is EventType.BUILDING_BONUS:
+        building = str(details.get("building", "unknown"))
+        action_name = str(details.get("action", "unknown"))
+        bonuses: list[str] = []
+        if "wheat_bonus" in details:
+            bonuses.append(f"wheat +{int(details['wheat_bonus'])}")
+        if "stone_bonus" in details:
+            bonuses.append(f"stone +{int(details['stone_bonus'])}")
+        if "silver_bonus" in details:
+            bonuses.append(f"silver +{int(details['silver_bonus'])}")
+        if "piety_bonus" in details:
+            bonuses.append(f"piety +{int(details['piety_bonus'])}")
+        if bonuses:
+            return f"{event_name}: {building} added {', '.join(bonuses)} to {action_name}"
+        return f"{event_name}: {building} applied to {action_name}"
+
     if event.event_type is EventType.SPECIAL_ACTIVITY_BONUS:
         activity = str(details.get("activity", "unknown"))
         action_name = str(details.get("action", "unknown"))
