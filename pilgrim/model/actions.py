@@ -40,6 +40,10 @@ class FullTurnAction:
     start_turn_building_source: str | None = None
     start_turn_relocation_from: int | None = None
     start_turn_relocation_to: int | None = None
+    end_turn_building_id: str | None = None
+    end_turn_building_source: str | None = None
+    end_turn_relocation_from: int | None = None
+    end_turn_relocation_to: int | str | None = None
     sow_route_building_id: str | None = None
     sow_route_building_source: str | None = None
     hired_building_id: str | None = None
@@ -149,6 +153,19 @@ def action_id(action: GameAction) -> str:
             f":from:{action.start_turn_relocation_from if action.start_turn_relocation_from is not None else 'none'}"
             f":to:{action.start_turn_relocation_to if action.start_turn_relocation_to is not None else 'none'}"
         )
+    end_turn_suffix = ""
+    if (
+        action.end_turn_building_id is not None
+        or action.end_turn_building_source is not None
+        or action.end_turn_relocation_from is not None
+        or action.end_turn_relocation_to is not None
+    ):
+        end_turn_suffix = (
+            f":end_turn_building:{action.end_turn_building_id or 'none'}"
+            f":source:{action.end_turn_building_source or 'unknown'}"
+            f":from:{action.end_turn_relocation_from if action.end_turn_relocation_from is not None else 'none'}"
+            f":to:{action.end_turn_relocation_to if action.end_turn_relocation_to is not None else 'none'}"
+        )
     sow_route_suffix = ""
     if action.sow_route_building_id is not None or action.sow_route_building_source is not None:
         sow_route_suffix = (
@@ -166,6 +183,7 @@ def action_id(action: GameAction) -> str:
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
+        f"{end_turn_suffix}"
         f"{sow_route_suffix}{hire_suffix}"
     )
 
@@ -266,6 +284,25 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
                 f"from {action.start_turn_building_source}"
             )
         summary = f"{start_summary} | {summary}"
+    if (
+        action.end_turn_building_id is not None
+        and action.end_turn_relocation_from is not None
+        and action.end_turn_relocation_to is not None
+        and action.end_turn_building_source is not None
+    ):
+        from_name = position_name(action.end_turn_relocation_from, positions)
+        to_value = action.end_turn_relocation_to
+        to_name = (
+            to_value
+            if isinstance(to_value, str)
+            else position_name(to_value, positions)
+        )
+        summary += f" | end: {action.end_turn_building_id} {from_name} -> {to_name}"
+        if action.end_turn_building_source != "own_active":
+            summary += (
+                f" | hire building: {action.end_turn_building_id} "
+                f"from {action.end_turn_building_source}"
+            )
     return summary
 
 

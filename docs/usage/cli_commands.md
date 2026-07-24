@@ -451,7 +451,7 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
-## Building Turn-Modifier Registry (v3.3-v3.5)
+## Building Turn-Modifier Registry (v3.3-v3.6)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:
   - `kogge`, `cloisters`, `dormitory`, `inquisition`, `library`
@@ -474,8 +474,15 @@ Position mapping used by the current sandbox:
     - `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`
     - `START_TURN_RELOCATION: player_one moved 1 acolyte east -> city using Dormitory`
     - `START_TURN_RELOCATION: player_one moved 1 acolyte city -> west using Inquisition`
+  - `library` is implemented as an end-turn relocation suffix:
+    - `Turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> west`
+    - `Turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> abbey | hire building: library from market`
+  - verbose apply output includes:
+    - `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `END_TURN_RELOCATION`
+    - `END_TURN_RELOCATION: player_one moved 1 acolyte city -> west using Library`
+    - `END_TURN_RELOCATION: player_one moved 1 acolyte city -> abbey using Library`
 - Remaining scaffold:
-  - `cloisters` and `library` still have no runtime behavior
+  - `cloisters` still has no runtime behavior
   - no dedicated CLI command is added for turn-modifier registry inspection
 
 ## Produce Options and Fields Rename (v1.4)

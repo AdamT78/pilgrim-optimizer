@@ -381,7 +381,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_BONUS`
   - action-specific events (`ORDINATION` steps / Alms events)
 
-## Building Turn-Modifier Registry (v3.3-v3.5)
+## Building Turn-Modifier Registry (v3.3-v3.6)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
   non-duty-output building effects that target movement/turn phases.
@@ -389,13 +389,16 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - during sow route modifiers: `kogge`, `cloisters`
   - start-of-turn relocations: `dormitory`, `inquisition`
   - end-of-turn relocation: `library`
-- Runtime status in v3.5:
+- Runtime status in v3.6:
   - `kogge` is implemented as an explicit sow-route modifier
     (`city -> east` and `city -> west` starts from City)
   - `dormitory` and `inquisition` are implemented as optional start-turn relocation prefixes
     attached to a normal full-turn action
-  - `cloisters` and `library` remain scaffolded
-- Kogge/Dormitory/Inquisition source/payment semantics reuse existing building-hire infrastructure:
+  - `library` is implemented as an optional end-turn relocation suffix attached to a normal
+    full-turn action
+  - `cloisters` remains scaffolded
+- Kogge/Dormitory/Inquisition/Library source/payment semantics reuse existing building-hire
+  infrastructure:
   - own active (free)
   - opponent active hire (pay owner)
   - live market hire (pay bank)
@@ -403,6 +406,10 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Start-turn relocation timing:
   - relocation applies before sowing
   - hired path ordering is `BUILDING_HIRED` -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`
+- End-turn relocation timing (Library):
+  - relocation applies after `ACOLYTE_RECALL` and before `TURN_ADVANCE`
+  - hired path ordering is `ACOLYTE_RECALL` -> `BUILDING_HIRED` -> `BUILDING_BONUS` ->
+    `END_TURN_RELOCATION` -> `TURN_ADVANCE`
 - Separation of concerns remains:
   - Duty-output modifiers stay in `duty_enhancements`
   - turn-phase movement modifiers live in `building_turn_modifiers`
