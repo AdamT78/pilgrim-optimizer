@@ -385,9 +385,8 @@ Position mapping used by the current sandbox:
   unavailable there.
 - A given building can be hired at most once in one player turn (pure helper/context scaffold).
 - Different live buildings can each be hired once in the same turn if each cost is payable.
-- Existing CLI action generation/apply flow is intentionally unchanged in this milestone:
-  - existing building bonuses still apply from own active buildings only
-  - no new user-facing hire action command is introduced yet
+- No standalone hire command exists; hiring is attached to actions that consume the building
+  ability.
 
 ## Hire Sources for Simple Building Bonuses (v3.1a)
 
@@ -406,7 +405,7 @@ Position mapping used by the current sandbox:
   - hired variants are not generated
   - own-active bonus variants remain available
 - Scope boundary remains:
-  - Chapter House and Mill are not wired to hire sources yet.
+  - Chapter House is not wired to hire sources yet.
 
 ## Hire Sources for Infirmary Duty Bonuses (v3.1b)
 
@@ -429,6 +428,28 @@ Position mapping used by the current sandbox:
   - `BUILDING_BONUS`
   - `ALLOCATION`/`ORDINATION` step events
 - Merchant at Taxation still has resource `none`, so hired Infirmary variants are not generated.
+
+## Mill Wheat-Cost Rule (v3.2)
+
+- `give_alms_paid` and `ordination` now consume Mill from:
+  - own active (free)
+  - live market hire (`pay Merchant resource 1 to bank`)
+  - opponent active hire (`pay Merchant resource 1 to owner`)
+- Action summaries for hired Mill variants include both hire context and Mill spend context, for
+  example:
+  - `... | action: give_alms_paid | ... | hire building: mill from market | mill wheat spent=1`
+  - `... | action: ordination | ... | hire building: mill from player_two | mill wheat spent=1`
+- Mill wheat transform:
+  - `mill_waiver = min(2, required_wheat)`
+  - `actual_wheat_spent = max(0, required_wheat - 2)`
+  - applies only to action wheat costs (`give_alms_paid` wheat + Alms House extra wheat, and
+    Ordination step wheat)
+  - does not waive silver costs, minority silver, tithe, or Mill hire payment
+- Verbose apply output now includes Mill-specific bonus text:
+  - `BUILDING_BONUS: mill waived wheat cost 2 for give_alms_paid`
+  - `BUILDING_BONUS: mill waived wheat cost 2 for ordination`
+- Hired Mill ordering remains:
+  - `BUILDING_HIRED` before `BUILDING_BONUS`
 
 ## Produce Options and Fields Rename (v1.4)
 

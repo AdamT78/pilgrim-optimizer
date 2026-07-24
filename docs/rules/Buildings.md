@@ -150,7 +150,7 @@ Notes:
 
 Important scope boundary:
 
-- Chapter House and Mill are still not wired to hire sources.
+- Chapter House is still not wired to hire sources.
 
 ## Infirmary hire wiring (v3.1b)
 
@@ -181,6 +181,61 @@ Unavailable source rules remain enforced:
 - not-live market Infirmary
 - Merchant on Taxation (`resource = none`)
 - insufficient hire payment resource
+
+## Mill wheat-cost rule (v3.2)
+
+Mill now applies to:
+
+- `give_alms_paid`
+- `ordination`
+
+Mill source resolution follows the existing building-hire source model:
+
+- own active Mill -> free
+- live market Mill -> hire from bank
+- opponent active Mill -> hire from owner
+
+Wheat waiver rule:
+
+- Mill waives up to the first `2` required wheat from the action's own wheat costs
+- formula:
+  - `mill_waiver = min(2, required_wheat)`
+  - `actual_wheat_spent = max(0, required_wheat - 2)`
+
+Reference table:
+
+- `required 1 -> waived 1 -> spent 0`
+- `required 2 -> waived 2 -> spent 0`
+- `required 3 -> waived 2 -> spent 1`
+- `required 4 -> waived 2 -> spent 2`
+- `required 5 -> waived 2 -> spent 3`
+
+```text
+Required wheat | Mill waiver | Actual wheat spent
+1              | 1           | 0
+2              | 2           | 0
+3              | 2           | 1
+4              | 2           | 2
+5              | 2           | 3
+```
+
+Scope details:
+
+- waived wheat includes:
+  - `give_alms_paid` wheat payment
+  - `give_alms_paid` Alms House extra wheat payment
+  - Ordination step wheat costs
+- not waived:
+  - minority silver
+  - any silver costs
+  - Mill hire payment
+  - `give_alms_donate_building`
+  - tithe
+
+Event semantics:
+
+- hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
+- Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
 ## Player-board slots
 

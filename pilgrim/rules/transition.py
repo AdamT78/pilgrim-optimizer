@@ -36,6 +36,8 @@ from pilgrim.rules.buildings import (
     donate_active_building,
     has_available_player_board_slot,
     is_building_live,
+    mill_actual_wheat_cost,
+    mill_wheat_waiver,
     player_has_active_chapter_house,
     record_hired_building_this_turn,
     used_player_board_slots,
@@ -120,10 +122,14 @@ _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.CLERICAL_SILVERSMITH: "mint",
     TurnResolutionType.CLERICAL_DEVOTION: "chapel",
 }
-_HIRED_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
-    **_SIMPLE_BONUS_BUILDING_BY_ACTION,
-    TurnResolutionType.ALLOCATION: "infirmary",
-    TurnResolutionType.ORDINATION: "infirmary",
+_HIRED_BUILDINGS_BY_ACTION: dict[TurnResolutionType, frozenset[str]] = {
+    TurnResolutionType.PRODUCE_WHEAT: frozenset({"well"}),
+    TurnResolutionType.PRODUCE_STONE: frozenset({"quarry"}),
+    TurnResolutionType.CLERICAL_SILVERSMITH: frozenset({"mint"}),
+    TurnResolutionType.CLERICAL_DEVOTION: frozenset({"chapel"}),
+    TurnResolutionType.ALLOCATION: frozenset({"infirmary"}),
+    TurnResolutionType.GIVE_ALMS_PAID: frozenset({"mill"}),
+    TurnResolutionType.ORDINATION: frozenset({"infirmary", "mill"}),
 }
 
 
@@ -188,56 +194,87 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     duty_value, silver_cost = duty_value_and_silver_cost(strength)
                     available_silver = player_resources.silver - silver_cost
                     if available_silver >= 0:
+                        mill_source = building_ability_source(
+                            state,
+                            config,
+                            acting_player=state.active_player,
+                            building_key="mill",
+                        )
+                        extra_payment_options: list[tuple[int, int]] = []
                         if can_use_alms_house_bonus(player_state):
                             alms_house_bonus_cap = alms_house_duty_value_bonus_capacity(
                                 player_state
                             )
-                            for extra_silver, extra_wheat in alms_house_extra_payment_options(
-                                player_resources,
-                                max_bonus=alms_house_bonus_cap,
+                            extra_payment_options.extend(
+                                _all_alms_house_extra_payment_options(
+                                    max_bonus=alms_house_bonus_cap
+                                )
+                            )
+                        extra_payment_options.append((0, 0))
+
+                        for extra_silver, extra_wheat in extra_payment_options:
+                            alms_house_bonus = extra_silver + extra_wheat
+                            effective_alms_value = duty_value + alms_house_bonus
+                            for payment in _alms_payment_options(
+                                duty_value=effective_alms_value,
+                                available_silver=effective_alms_value,
+                                available_wheat=effective_alms_value,
                             ):
-                                alms_house_bonus = extra_silver + extra_wheat
-                                if alms_house_bonus <= 0:
-                                    continue
-                                available_silver_after_extra = available_silver - extra_silver
-                                available_wheat_after_extra = player_resources.wheat - extra_wheat
-                                if (
-                                    available_silver_after_extra < 0
-                                    or available_wheat_after_extra < 0
-                                ):
-                                    continue
-                                for payment in _alms_payment_options(
-                                    duty_value=duty_value + alms_house_bonus,
-                                    available_silver=available_silver_after_extra,
-                                    available_wheat=available_wheat_after_extra,
-                                ):
-                                    actions.append(
-                                        FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                            alms_payment_silver=payment.silver,
-                                            alms_payment_wheat=payment.wheat,
-                                            alms_house_extra_silver=extra_silver,
-                                            alms_house_extra_wheat=extra_wheat,
-                                        )
-                                    )
-                        for payment in _alms_payment_options(
-                            duty_value=duty_value,
-                            available_silver=available_silver,
-                            available_wheat=player_resources.wheat,
-                        ):
-                            actions.append(
-                                FullTurnAction(
+                                required_silver = silver_cost + extra_silver + payment.silver
+                                required_wheat = extra_wheat + payment.wheat
+                                base_action = FullTurnAction(
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
                                     resolution=TurnResolutionType.GIVE_ALMS_PAID,
                                     alms_payment_silver=payment.silver,
                                     alms_payment_wheat=payment.wheat,
+                                    alms_house_extra_silver=extra_silver,
+                                    alms_house_extra_wheat=extra_wheat,
                                 )
-                            )
+
+                                if _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=required_silver,
+                                    required_wheat=required_wheat,
+                                ) and base_action not in actions:
+                                    actions.append(base_action)
+
+                                if required_wheat <= 0:
+                                    continue
+
+                                mill_wheat_spent = mill_actual_wheat_cost(required_wheat)
+                                if mill_source.source_type == "own_active" and mill_source.usable:
+                                    if _can_afford_resolution_costs(
+                                        player_state,
+                                        required_silver=required_silver,
+                                        required_wheat=mill_wheat_spent,
+                                    ) and base_action not in actions:
+                                        actions.append(base_action)
+                                elif _is_hired_source(mill_source) and mill_source.usable:
+                                    if not _can_afford_resolution_costs(
+                                        player_state,
+                                        required_silver=required_silver,
+                                        required_wheat=mill_wheat_spent,
+                                        hired_source=mill_source,
+                                    ):
+                                        continue
+                                    hired_action = FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                        alms_payment_silver=payment.silver,
+                                        alms_payment_wheat=payment.wheat,
+                                        alms_house_extra_silver=extra_silver,
+                                        alms_house_extra_wheat=extra_wheat,
+                                        hired_building_id="mill",
+                                        hired_building_source=_hired_building_source_label(
+                                            mill_source
+                                        ),
+                                    )
+                                    if hired_action not in actions:
+                                        actions.append(hired_action)
                         if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
                             for building_id in _legal_give_alms_donation_buildings(
                                 player_state,
@@ -302,11 +339,10 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                         if (
                             _is_hired_source(infirmary_source)
                             and infirmary_source.usable
-                            and _can_afford_hire_with_resolution_costs(
+                            and _can_afford_resolution_costs(
                                 player_state,
-                                source=infirmary_source,
-                                minority_silver_cost=silver_cost,
-                                ordination_step_count=0,
+                                required_silver=silver_cost,
+                                hired_source=infirmary_source,
                             )
                         ):
                             for move_sequence in _allocation_move_sequences(
@@ -401,57 +437,108 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     if available_silver < 0:
                         continue
 
-                    base_sequences = legal_ordination_step_sequences(
-                        player_state,
-                        max_steps=duty_value,
-                    )
-                    for step_sequence in base_sequences:
-                        actions.append(
-                            FullTurnAction(
-                                origin=origin,
-                                route=route,
-                                selected_duty=duty_position,
-                                resolution=TurnResolutionType.ORDINATION,
-                                ordination_steps=step_sequence,
-                            )
-                        )
-
                     infirmary_source = building_ability_source(
                         state,
                         config,
                         acting_player=state.active_player,
                         building_key="infirmary",
                     )
-                    bonus_sequences = legal_ordination_step_sequences(
-                        player_state,
-                        max_steps=duty_value + 1,
+                    mill_source = building_ability_source(
+                        state,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="mill",
                     )
-                    if infirmary_source.source_type == "own_active" and infirmary_source.usable:
-                        for step_sequence in bonus_sequences:
-                            if len(step_sequence) <= duty_value:
+
+                    owns_active_infirmary = (
+                        infirmary_source.source_type == "own_active" and infirmary_source.usable
+                    )
+                    owns_active_mill = mill_source.source_type == "own_active" and mill_source.usable
+                    no_hire_mill_active = owns_active_mill
+                    no_hire_player_state = _player_state_with_wheat_delta(
+                        player_state,
+                        wheat_delta=2 if no_hire_mill_active else 0,
+                    )
+                    if no_hire_player_state is not None:
+                        base_sequences = legal_ordination_step_sequences(
+                            no_hire_player_state,
+                            max_steps=duty_value,
+                        )
+                        for step_sequence in base_sequences:
+                            required_wheat = _ordination_wheat_cost(
+                                len(step_sequence),
+                                mill_active=no_hire_mill_active,
+                            )
+                            if not _can_afford_resolution_costs(
+                                player_state,
+                                required_silver=silver_cost,
+                                required_wheat=required_wheat,
+                            ):
                                 continue
-                            actions.append(
-                                FullTurnAction(
+                            base_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ORDINATION,
+                                ordination_steps=step_sequence,
+                            )
+                            if base_action not in actions:
+                                actions.append(base_action)
+
+                        if owns_active_infirmary:
+                            bonus_sequences = legal_ordination_step_sequences(
+                                no_hire_player_state,
+                                max_steps=duty_value + 1,
+                            )
+                            for step_sequence in bonus_sequences:
+                                if len(step_sequence) <= duty_value:
+                                    continue
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=no_hire_mill_active,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                ):
+                                    continue
+                                bonus_action = FullTurnAction(
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
                                     resolution=TurnResolutionType.ORDINATION,
                                     ordination_steps=step_sequence,
                                 )
+                                if bonus_action not in actions:
+                                    actions.append(bonus_action)
+
+                    if _is_hired_source(infirmary_source) and infirmary_source.usable:
+                        hired_infirmary_player_state = _player_state_with_wheat_delta(
+                            player_state,
+                            wheat_delta=(2 if owns_active_mill else 0)
+                            - _hire_wheat_cost(infirmary_source),
+                        )
+                        if hired_infirmary_player_state is not None:
+                            bonus_sequences = legal_ordination_step_sequences(
+                                hired_infirmary_player_state,
+                                max_steps=duty_value + 1,
                             )
-                    elif _is_hired_source(infirmary_source) and infirmary_source.usable:
-                        for step_sequence in bonus_sequences:
-                            if len(step_sequence) <= duty_value:
-                                continue
-                            if not _can_afford_hire_with_resolution_costs(
-                                player_state,
-                                source=infirmary_source,
-                                minority_silver_cost=silver_cost,
-                                ordination_step_count=len(step_sequence),
-                            ):
-                                continue
-                            actions.append(
-                                FullTurnAction(
+                            for step_sequence in bonus_sequences:
+                                if len(step_sequence) <= duty_value:
+                                    continue
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=owns_active_mill,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                    hired_source=infirmary_source,
+                                ):
+                                    continue
+                                hired_infirmary_action = FullTurnAction(
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
@@ -462,7 +549,77 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                                         infirmary_source
                                     ),
                                 )
+                                if hired_infirmary_action not in actions:
+                                    actions.append(hired_infirmary_action)
+
+                    if _is_hired_source(mill_source) and mill_source.usable:
+                        hired_mill_player_state = _player_state_with_wheat_delta(
+                            player_state,
+                            wheat_delta=2 - _hire_wheat_cost(mill_source),
+                        )
+                        if hired_mill_player_state is not None:
+                            base_sequences = legal_ordination_step_sequences(
+                                hired_mill_player_state,
+                                max_steps=duty_value,
                             )
+                            for step_sequence in base_sequences:
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=True,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                    hired_source=mill_source,
+                                ):
+                                    continue
+                                hired_mill_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                    hired_building_id="mill",
+                                    hired_building_source=_hired_building_source_label(
+                                        mill_source
+                                    ),
+                                )
+                                if hired_mill_action not in actions:
+                                    actions.append(hired_mill_action)
+
+                            if owns_active_infirmary:
+                                bonus_sequences = legal_ordination_step_sequences(
+                                    hired_mill_player_state,
+                                    max_steps=duty_value + 1,
+                                )
+                                for step_sequence in bonus_sequences:
+                                    if len(step_sequence) <= duty_value:
+                                        continue
+                                    required_wheat = _ordination_wheat_cost(
+                                        len(step_sequence),
+                                        mill_active=True,
+                                    )
+                                    if not _can_afford_resolution_costs(
+                                        player_state,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                        hired_source=mill_source,
+                                    ):
+                                        continue
+                                    hired_mill_bonus_action = FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.ORDINATION,
+                                        ordination_steps=step_sequence,
+                                        hired_building_id="mill",
+                                        hired_building_source=_hired_building_source_label(
+                                            mill_source
+                                        ),
+                                    )
+                                    if hired_mill_bonus_action not in actions:
+                                        actions.append(hired_mill_bonus_action)
                 elif TurnResolutionType.TAXATION in category_actions:
                     player_count = sowed_vector[duty_position]
                     opponent_counts = _competing_counts(
@@ -737,6 +894,8 @@ def _apply_full_turn_action(
         effective_duty_value = duty_value
         give_alms_resolution = None
         donate_building_alms_resolution = None
+        alms_payment_actual_silver: int | None = None
+        alms_payment_actual_wheat: int | None = None
         duty_deferred_event: GameEvent | None = None
         updated_building_market = state_after_sow.building_market
         state_after_resolution: GameState | None = None
@@ -803,15 +962,16 @@ def _apply_full_turn_action(
                 "hired_building_id and hired_building_source must be set together."
             )
         if action.hired_building_id is not None:
-            if action.resolution not in _HIRED_BUILDING_BY_ACTION:
+            allowed_hire_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution)
+            if allowed_hire_buildings is None:
                 raise TransitionValidationError(
                     "This action cannot include hired building fields."
                 )
-            expected_hire_building = _HIRED_BUILDING_BY_ACTION[action.resolution]
-            if action.hired_building_id != expected_hire_building:
+            if action.hired_building_id not in allowed_hire_buildings:
+                expected_buildings = ", ".join(sorted(allowed_hire_buildings))
                 raise TransitionValidationError(
-                    "hired_building_id does not match action resolution expected building: "
-                    f"{expected_hire_building}."
+                    "hired_building_id does not match action resolution expected building(s): "
+                    f"{expected_buildings}."
                 )
             hire_context = BuildingHireTurnContext()
             if not can_hire_building_this_turn(
@@ -834,6 +994,46 @@ def _apply_full_turn_action(
                 )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
+            required_mill_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
+            mill_source = _resolved_mill_source_for_action(
+                state=state_after_sow,
+                config=config,
+                player=player,
+                action=action,
+                required_wheat=required_mill_wheat,
+                silver_cost=silver_cost,
+                additional_silver_cost=action.alms_payment_silver + action.alms_house_extra_silver,
+            )
+            mill_waiver = mill_wheat_waiver(required_mill_wheat) if mill_source is not None else 0
+            mill_actual_wheat_spent = (
+                mill_actual_wheat_cost(required_mill_wheat)
+                if mill_source is not None
+                else required_mill_wheat
+            )
+            alms_payment_actual_silver = action.alms_payment_silver
+            alms_payment_actual_wheat = action.alms_payment_wheat
+            if mill_waiver:
+                credited_wheat_waiver = min(action.alms_payment_wheat, mill_waiver)
+                alms_payment_actual_wheat = action.alms_payment_wheat - credited_wheat_waiver
+            state_for_give_alms = state_after_sow
+            if mill_source is not None and _is_hired_source(mill_source):
+                try:
+                    state_for_give_alms, hire_payment = apply_building_hire_payment(
+                        state_for_give_alms,
+                        acting_player=player,
+                        source=mill_source,
+                    )
+                except ValueError as exc:
+                    raise TransitionValidationError(str(exc)) from exc
+                building_hired_events.append(
+                    _building_hired_event(
+                        source=mill_source,
+                        payment=hire_payment,
+                        actor=player,
+                        action_id=transition_action_id,
+                        config=config,
+                    )
+                )
             alms_house_bonus = action.alms_house_extra_silver + action.alms_house_extra_wheat
             use_alms_house = (
                 action.alms_house_extra_silver != 0 or action.alms_house_extra_wheat != 0
@@ -848,9 +1048,14 @@ def _apply_full_turn_action(
                     raise TransitionValidationError(
                         "Alms House extra payment exceeds occupied Alms House capacity."
                     )
-                current_resources = state_after_sow.player_state(player).resources
+                current_resources = state_for_give_alms.player_state(player).resources
+                resources_for_extra_validation = current_resources
+                if mill_waiver:
+                    resources_for_extra_validation = resources_for_extra_validation.add(
+                        wheat=mill_waiver
+                    )
                 valid_extra_options = alms_house_extra_payment_options(
-                    current_resources,
+                    resources_for_extra_validation,
                     max_bonus=alms_house_bonus_cap,
                 )
                 if (action.alms_house_extra_silver, action.alms_house_extra_wheat) not in (
@@ -868,15 +1073,21 @@ def _apply_full_turn_action(
                         "Insufficient silver for minority/alms payment plus Alms House cost."
                     )
                 if (
-                    current_resources.wheat
+                    current_resources.wheat + mill_waiver
                     < action.alms_payment_wheat + action.alms_house_extra_wheat
                 ):
                     raise TransitionValidationError(
                         "Insufficient wheat for alms payment plus Alms House cost."
                     )
+            give_alms_player_state = state_for_give_alms.player_state(player)
+            if mill_waiver:
+                give_alms_player_state = replace(
+                    give_alms_player_state,
+                    resources=give_alms_player_state.resources.add(wheat=mill_waiver),
+                )
             try:
                 give_alms_resolution = resolve_give_alms(
-                    state_after_sow.player_state(player),
+                    give_alms_player_state,
                     duty_value=effective_duty_value,
                     payment=AlmsPayment(
                         silver=action.alms_payment_silver,
@@ -912,10 +1123,25 @@ def _apply_full_turn_action(
                         ),
                     )
                 )
-            resource_delta = (
-                give_alms_resolution.resource_delta[0],
-                give_alms_resolution.resource_delta[1] - action.alms_house_extra_silver,
-                give_alms_resolution.resource_delta[2] - action.alms_house_extra_wheat,
+            if mill_waiver:
+                building_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.BUILDING_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            building="mill",
+                            action=action.resolution.value,
+                            wheat_waived=mill_waiver,
+                            required_wheat=required_mill_wheat,
+                            actual_wheat_spent=mill_actual_wheat_spent,
+                        ),
+                    )
+                )
+            state_after_resolution = state_for_give_alms.with_player_state(player, new_player_state)
+            resource_delta = _resource_delta_between(
+                state_after_sow.player_state(player).resources,
+                new_player_state.resources,
             )
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
@@ -1250,6 +1476,21 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Ordination action must include at least 1 ordination step."
                 )
+            required_mill_wheat = len(action.ordination_steps)
+            mill_source = _resolved_mill_source_for_action(
+                state=state_after_sow,
+                config=config,
+                player=player,
+                action=action,
+                required_wheat=required_mill_wheat,
+                silver_cost=silver_cost,
+            )
+            mill_waiver = mill_wheat_waiver(required_mill_wheat) if mill_source is not None else 0
+            mill_actual_wheat_spent = (
+                mill_actual_wheat_cost(required_mill_wheat)
+                if mill_source is not None
+                else required_mill_wheat
+            )
             ordination_source = _resolved_infirmary_source_for_action(
                 state=state_after_sow,
                 config=config,
@@ -1257,6 +1498,7 @@ def _apply_full_turn_action(
                 action=action,
                 duty_value=duty_value,
                 silver_cost=silver_cost,
+                ordination_wheat_cost=mill_actual_wheat_spent,
                 mode="ordination",
             )
             ordination_cap_bonus = 1 if ordination_source is not None else 0
@@ -1281,33 +1523,62 @@ def _apply_full_turn_action(
                         ),
                     )
                 )
+            if mill_waiver:
+                building_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.BUILDING_BONUS,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            building="mill",
+                            action=action.resolution.value,
+                            wheat_waived=mill_waiver,
+                            required_wheat=required_mill_wheat,
+                            actual_wheat_spent=mill_actual_wheat_spent,
+                        ),
+                    )
+                )
 
             state_for_ordination = state_after_sow
             new_player_state = state_for_ordination.player_state(player)
+            hired_ordination_source = None
             if ordination_source is not None and _is_hired_source(ordination_source):
+                hired_ordination_source = ordination_source
+            elif mill_source is not None and _is_hired_source(mill_source):
+                hired_ordination_source = mill_source
+            if hired_ordination_source is not None:
                 try:
                     state_for_ordination, hire_payment = apply_building_hire_payment(
                         state_for_ordination,
                         acting_player=player,
-                        source=ordination_source,
+                        source=hired_ordination_source,
                     )
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
                 new_player_state = state_for_ordination.player_state(player)
                 building_hired_events.append(
                     _building_hired_event(
-                        source=ordination_source,
+                        source=hired_ordination_source,
                         payment=hire_payment,
                         actor=player,
                         action_id=transition_action_id,
                         config=config,
                     )
                 )
+            if mill_waiver:
+                new_player_state = replace(
+                    new_player_state,
+                    resources=new_player_state.resources.add(wheat=mill_waiver),
+                )
+            remaining_mill_waiver = mill_waiver
             for step in action.ordination_steps:
+                wheat_paid = 0 if remaining_mill_waiver > 0 else 1
                 try:
                     new_player_state = apply_ordination_step(new_player_state, step)
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
+                if remaining_mill_waiver > 0:
+                    remaining_mill_waiver -= 1
                 if step == ORDINATION_ORDAIN:
                     special_bonus_events.append(
                         GameEvent(
@@ -1320,7 +1591,7 @@ def _apply_full_turn_action(
                                 to_pool="abbey",
                                 unit="serf",
                                 amount=1,
-                                wheat_paid=1,
+                                wheat_paid=wheat_paid,
                             ),
                         )
                     )
@@ -1336,7 +1607,7 @@ def _apply_full_turn_action(
                                 to_pool="city",
                                 unit="acolyte",
                                 amount=1,
-                                wheat_paid=1,
+                                wheat_paid=wheat_paid,
                             ),
                         )
                     )
@@ -1867,8 +2138,8 @@ def _apply_full_turn_action(
         events.extend(building_hired_events)
         events.extend(duty_value_building_bonus_events)
         events.extend(allocation_capacity_building_bonus_events)
-        events.extend(special_bonus_events)
         events.extend(output_building_bonus_events)
+        events.extend(special_bonus_events)
         if duty_deferred_event is not None and not construct_events:
             events.append(duty_deferred_event)
         events.append(
@@ -1890,16 +2161,33 @@ def _apply_full_turn_action(
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             if give_alms_resolution is None:
                 raise TransitionValidationError("Missing Give Alms resolution payload.")
+            alms_payment_details = {
+                "silver": action.alms_payment_silver,
+                "wheat": action.alms_payment_wheat,
+                "minority_silver_cost": silver_cost,
+            }
+            if (
+                alms_payment_actual_silver is not None
+                and alms_payment_actual_wheat is not None
+                and (
+                    alms_payment_actual_silver != action.alms_payment_silver
+                    or alms_payment_actual_wheat != action.alms_payment_wheat
+                )
+            ):
+                alms_payment_details.update(
+                    {
+                        "credited_silver": action.alms_payment_silver,
+                        "credited_wheat": action.alms_payment_wheat,
+                        "actual_paid_silver": alms_payment_actual_silver,
+                        "actual_paid_wheat": alms_payment_actual_wheat,
+                    }
+                )
             events.append(
                 GameEvent(
                     event_type=EventType.ALMS_PAYMENT,
                     actor=player,
                     action_id=transition_action_id,
-                    details=make_event_details(
-                        silver=action.alms_payment_silver,
-                        wheat=action.alms_payment_wheat,
-                        minority_silver_cost=silver_cost,
-                    ),
+                    details=make_event_details(**alms_payment_details),
                 )
             )
             events.append(
@@ -2353,6 +2641,7 @@ def _resolved_infirmary_source_for_action(
     action: FullTurnAction,
     duty_value: int,
     silver_cost: int,
+    ordination_wheat_cost: int = 0,
     mode: str,
 ) -> BuildingAbilitySource | None:
     """Resolve/validate Infirmary source for allocation or ordination actions."""
@@ -2362,11 +2651,11 @@ def _resolved_infirmary_source_for_action(
         acting_player=player,
         building_key="infirmary",
     )
-    action_has_hire_fields = action.hired_building_id is not None
+    action_hires_infirmary = action.hired_building_id == "infirmary"
     uses_infirmary_bonus = False
     if mode == "allocation":
         uses_infirmary_bonus = True
-        if _is_hired_source(source):
+        if action_hires_infirmary:
             uses_infirmary_bonus = len(action.allocation_moves) > duty_value
     elif mode == "ordination":
         uses_infirmary_bonus = len(action.ordination_steps) > duty_value
@@ -2374,14 +2663,14 @@ def _resolved_infirmary_source_for_action(
         raise TransitionValidationError(f"Unknown infirmary action mode: {mode}.")
 
     if source.source_type == "own_active" and source.usable:
-        if action_has_hire_fields:
+        if action_hires_infirmary:
             raise TransitionValidationError(
                 "Infirmary is own-active; action must not include hired building fields."
             )
         return source if uses_infirmary_bonus else None
 
     if _is_hired_source(source) and source.usable:
-        if not action_has_hire_fields:
+        if not action_hires_infirmary:
             return None
         expected_source_label = _hired_building_source_label(source)
         if action.hired_building_id != "infirmary":
@@ -2397,19 +2686,19 @@ def _resolved_infirmary_source_for_action(
             raise TransitionValidationError(
                 "Infirmary hire fields are only legal when action uses the extra Infirmary bonus."
             )
-        ordination_steps = len(action.ordination_steps) if mode == "ordination" else 0
-        if not _can_afford_hire_with_resolution_costs(
+        required_wheat = ordination_wheat_cost if mode == "ordination" else 0
+        if not _can_afford_resolution_costs(
             state.player_state(player),
-            source=source,
-            minority_silver_cost=silver_cost,
-            ordination_step_count=ordination_steps,
+            required_silver=silver_cost,
+            required_wheat=required_wheat,
+            hired_source=source,
         ):
             raise TransitionValidationError(
                 "Infirmary hire plus duty costs are not affordable for this action."
             )
         return source
 
-    if action_has_hire_fields:
+    if action_hires_infirmary:
         raise TransitionValidationError("Infirmary is not hire-usable in current state.")
     return None
 
@@ -2426,26 +2715,90 @@ def _is_hired_source(source: BuildingAbilitySource) -> bool:
     return source.source_type in ("live_market_hire", "opponent_active_hire")
 
 
-def _can_afford_hire_with_resolution_costs(
+def _resolved_mill_source_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+    required_wheat: int,
+    silver_cost: int,
+    additional_silver_cost: int = 0,
+    additional_wheat_cost: int = 0,
+) -> BuildingAbilitySource | None:
+    """Resolve/validate Mill source for Give Alms paid or Ordination actions."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key="mill",
+    )
+    action_hires_mill = action.hired_building_id == "mill"
+    if required_wheat < 0:
+        raise TransitionValidationError("Mill required wheat cannot be negative.")
+    uses_mill_bonus = required_wheat > 0
+    mill_wheat_cost = mill_actual_wheat_cost(required_wheat)
+
+    if source.source_type == "own_active" and source.usable:
+        if action_hires_mill:
+            raise TransitionValidationError(
+                "Mill is own-active; action must not include hired Mill fields."
+            )
+        return source if uses_mill_bonus else None
+
+    if _is_hired_source(source) and source.usable:
+        if not action_hires_mill:
+            return None
+        expected_source_label = _hired_building_source_label(source)
+        if action.hired_building_source != expected_source_label:
+            raise TransitionValidationError(
+                "Action hired_building_source does not match resolved Mill source: "
+                f"expected {expected_source_label}."
+            )
+        if not uses_mill_bonus:
+            raise TransitionValidationError(
+                "Mill hire fields are only legal when wheat cost is present."
+            )
+        if not _can_afford_resolution_costs(
+            state.player_state(player),
+            required_silver=silver_cost + additional_silver_cost,
+            required_wheat=mill_wheat_cost + additional_wheat_cost,
+            hired_source=source,
+        ):
+            raise TransitionValidationError(
+                "Mill hire plus duty costs are not affordable for this action."
+            )
+        return source
+
+    if action_hires_mill:
+        raise TransitionValidationError("Mill is not hire-usable in current state.")
+    return None
+
+
+def _can_afford_resolution_costs(
     player_state,
     *,
-    source: BuildingAbilitySource,
-    minority_silver_cost: int,
-    ordination_step_count: int,
+    required_stone: int = 0,
+    required_silver: int = 0,
+    required_wheat: int = 0,
+    hired_source: BuildingAbilitySource | None = None,
 ) -> bool:
-    """Return True when hire + duty costs are jointly affordable."""
-    required_stone = 0
-    required_silver = max(0, minority_silver_cost)
-    required_wheat = max(0, ordination_step_count)
-    if _is_hired_source(source):
-        if source.hire_resource is None or source.hire_cost <= 0:
+    """Return True when total resolution costs are jointly affordable."""
+    required_stone = max(0, required_stone)
+    required_silver = max(0, required_silver)
+    required_wheat = max(0, required_wheat)
+
+    if hired_source is not None and _is_hired_source(hired_source):
+        if not hired_source.usable:
             return False
-        if source.hire_resource == "stone":
-            required_stone += source.hire_cost
-        elif source.hire_resource == "silver":
-            required_silver += source.hire_cost
-        elif source.hire_resource == "wheat":
-            required_wheat += source.hire_cost
+        if hired_source.hire_resource is None or hired_source.hire_cost <= 0:
+            return False
+        if hired_source.hire_resource == "stone":
+            required_stone += hired_source.hire_cost
+        elif hired_source.hire_resource == "silver":
+            required_silver += hired_source.hire_cost
+        elif hired_source.hire_resource == "wheat":
+            required_wheat += hired_source.hire_cost
         else:
             return False
 
@@ -2487,6 +2840,40 @@ def _resource_delta_between(before, after) -> tuple[int, int, int]:
         after.silver - before.silver,
         after.wheat - before.wheat,
     )
+
+
+def _all_alms_house_extra_payment_options(*, max_bonus: int) -> tuple[tuple[int, int], ...]:
+    options: list[tuple[int, int]] = []
+    if max_bonus <= 0:
+        return ()
+    for duty_value_bonus in range(max_bonus, 0, -1):
+        for extra_silver in range(duty_value_bonus, -1, -1):
+            extra_wheat = duty_value_bonus - extra_silver
+            options.append((extra_silver, extra_wheat))
+    return tuple(options)
+
+
+def _ordination_wheat_cost(step_count: int, *, mill_active: bool) -> int:
+    if step_count < 0:
+        raise ValueError("step_count cannot be negative.")
+    if not mill_active:
+        return step_count
+    return mill_actual_wheat_cost(step_count)
+
+
+def _hire_wheat_cost(source: BuildingAbilitySource) -> int:
+    if not _is_hired_source(source):
+        return 0
+    if source.hire_resource == "wheat":
+        return source.hire_cost
+    return 0
+
+
+def _player_state_with_wheat_delta(player_state, *, wheat_delta: int):
+    resources = player_state.resources.add(wheat=wheat_delta)
+    if resources.wheat < 0:
+        return None
+    return replace(player_state, resources=resources)
 
 
 def _construct_road_only_plans(

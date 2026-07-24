@@ -317,6 +317,20 @@ def ordination_infirmary_duty_value_bonus(
     return 1 if player_has_active_building(player_state, "infirmary") else 0
 
 
+def mill_wheat_waiver(required_wheat: int) -> int:
+    """Return Mill wheat waiver amount for one action wheat requirement."""
+    if required_wheat < 0:
+        raise ValueError("required_wheat cannot be negative.")
+    return min(2, required_wheat)
+
+
+def mill_actual_wheat_cost(required_wheat: int) -> int:
+    """Return wheat actually spent after applying Mill waiver."""
+    if required_wheat < 0:
+        raise ValueError("required_wheat cannot be negative.")
+    return max(0, required_wheat - 2)
+
+
 def used_player_board_slots(player_state: PlayerState) -> int:
     """Return number of occupied shared board slots."""
     slots = player_state.player_board_slots
