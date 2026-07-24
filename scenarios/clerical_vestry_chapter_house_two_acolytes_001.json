@@ -17,6 +17,20 @@
     "north_west": "taxation"
   },
   "initial_state": {
+    "building_market": [
+      "confession_box",
+      "chapel",
+      "infirmary",
+      "guild",
+      "brewery",
+      "cloisters",
+      "dormitory",
+      "grain_store",
+      "bank",
+      "customs_house",
+      "inquisition",
+      "kogge"
+    ],
     "players": {
       "player_one": {
         "resources": {

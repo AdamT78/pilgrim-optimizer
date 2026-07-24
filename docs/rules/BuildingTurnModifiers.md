@@ -1,16 +1,16 @@
-# Building Turn Modifiers (v3.3)
+# Building Turn Modifiers (v3.4)
 
 ## Purpose
 
-`pilgrim/rules/building_turn_modifiers.py` is a metadata-only scaffold registry for buildings
-that modify turn phases or sow movement layers rather than directly modifying one duty output.
+`pilgrim/rules/building_turn_modifiers.py` classifies buildings that modify turn phases or sow
+movement layers rather than directly modifying one duty output.
 
-This registry is intentionally declarative:
+This registry remains declarative metadata, but entries can now be marked `implemented`
+once explicit runtime wiring exists:
 
-- it does **not** execute runtime behavior
-- it does **not** alter legal action generation
-- it does **not** add new actions
-- transition behavior remains unchanged until future implementation milestones
+- it does **not** auto-execute generic behavior
+- it does **not** add a generic modifier engine
+- runtime behavior is implemented explicitly in transition helpers per building
 
 ## Why a separate registry
 
@@ -51,15 +51,16 @@ Current statuses:
 - `implemented`
 - `deferred_spatial`
 
-## Scaffolded entries in v3.3
-
-All five entries below are currently `scaffolded`:
+## Entries in v3.4
 
 - `kogge`
   - category: `sow_route_modifier`
   - phase: `during_sow`
   - effect: adds city -> east and city -> west sow options
-  - notes: actual route generation deferred
+  - status: `implemented`
+  - notes: implemented in transition sow-route generation and apply validation/events
+
+The following entries remain `scaffolded`:
 - `cloisters`
   - category: `sow_route_modifier`
   - phase: `during_sow`

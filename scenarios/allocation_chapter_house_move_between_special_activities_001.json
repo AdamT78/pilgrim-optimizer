@@ -28,6 +28,20 @@
       "season_number": 1,
       "turn_in_round": 0
     },
+    "building_market": [
+      "confession_box",
+      "chapel",
+      "infirmary",
+      "guild",
+      "brewery",
+      "cloisters",
+      "dormitory",
+      "grain_store",
+      "bank",
+      "customs_house",
+      "inquisition",
+      "kogge"
+    ],
     "players": {
       "player_one": {
         "resources": {

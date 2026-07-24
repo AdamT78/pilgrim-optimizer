@@ -237,9 +237,9 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
-## Building turn-modifier scaffold (v3.3)
+## Building turn-modifier registry (v3.3/v3.4)
 
-Five movement/turn-phase buildings are now classified in a dedicated metadata registry:
+Five movement/turn-phase buildings are classified in a dedicated metadata registry:
 
 - `kogge`
 - `cloisters`
@@ -252,9 +252,9 @@ These are tracked in `pilgrim/rules/building_turn_modifiers.py` and documented i
 
 Scope in this milestone:
 
-- classification and lookup scaffolding only
-- no runtime movement effects implemented yet
-- no legal-action generation changes from these entries
+- classification and lookup registry
+- runtime wiring now implemented for Kogge sow-route expansion
+- no generic runtime modifier engine
 
 Category mapping:
 
@@ -262,7 +262,20 @@ Category mapping:
 - `start_turn_relocation`: Dormitory, Inquisition
 - `end_turn_relocation`: Library
 
-All five entries are currently `scaffolded`.
+Status:
+
+- `kogge` is now `implemented`
+- `cloisters`, `dormitory`, `inquisition`, and `library` remain `scaffolded`
+
+Kogge runtime behavior:
+
+- Kogge adds sow starts `city -> east` and `city -> west` only
+- source resolution follows normal building source priority:
+  - own active Kogge (free)
+  - opponent active hire (pay owner)
+  - live market hire (pay bank)
+- hired Kogge is unavailable when Merchant resource is `none` (Taxation), insufficient, donated,
+  or not live
 
 ## Player-board slots
 

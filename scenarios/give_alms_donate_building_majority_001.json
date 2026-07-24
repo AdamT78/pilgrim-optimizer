@@ -7,6 +7,20 @@
   "player_count": 2,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
+    "building_market": [
+      "confession_box",
+      "chapel",
+      "chapter_house",
+      "guild",
+      "brewery",
+      "cloisters",
+      "dormitory",
+      "grain_store",
+      "mill",
+      "customs_house",
+      "inquisition",
+      "kogge"
+    ],
     "players": {
       "player_one": {
         "alms_position": 0,

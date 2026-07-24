@@ -553,6 +553,9 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         if building == "mill" and "wheat_waived" in details:
             wheat_waived = int(details.get("wheat_waived", 0))
             return f"{event_name}: mill waived wheat cost {wheat_waived} for {action_name}"
+        if building == "kogge" and "enabled_route" in details:
+            enabled_route = str(details.get("enabled_route", "")).strip()
+            return f"{event_name}: kogge enabled {enabled_route} sow route"
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")

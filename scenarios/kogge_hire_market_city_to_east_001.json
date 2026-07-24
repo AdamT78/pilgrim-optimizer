@@ -1,58 +1,36 @@
 {
-  "scenario_id": "allocation_chapter_house_donated_001",
+  "scenario_id": "kogge_hire_market_city_to_east_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
   },
   "player_count": 2,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
-  "duty_tiles": {
-    "north": "allocation",
-    "north_east": "clerical",
-    "east": "build_roads",
-    "south_east": "construct",
-    "south": "give_alms",
-    "south_west": "ordination",
-    "west": "taxation",
-    "north_west": "produce"
-  },
   "initial_state": {
-    "start_player_id": "player_one",
-    "merchant_position": 0,
-    "ship_position": 0,
-    "completed_rounds": 0,
-    "game_over": false,
+    "merchant_position": 1,
     "timing": {
       "absolute_turn": 0,
-      "round_number": 1,
+      "round_number": 3,
       "season_number": 1,
       "turn_in_round": 0
     },
     "building_market": [
-      "confession_box",
-      "chapel",
-      "infirmary",
-      "guild",
-      "brewery",
-      "cloisters",
-      "dormitory",
-      "grain_store",
-      "bank",
-      "customs_house",
-      "inquisition",
       "kogge"
     ],
+    "building_availability": {
+      "kogge": 2
+    },
     "players": {
       "player_one": {
         "resources": {
           "stone": 0,
           "silver": 1,
-          "wheat": 0
+          "wheat": 1
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 1],
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 8,
-          "abbey": 1,
+          "abbey": 3,
           "committed": {
             "roads": 0,
             "shrines": 0,
@@ -60,14 +38,6 @@
             "pilgrimage_sites": 0,
             "alms_table": 0
           }
-        },
-        "player_board_slots": {
-          "active_buildings": [],
-          "donated_buildings": ["chapter_house"],
-          "cardinal_favor_tiles": 0
-        },
-        "special_activities": {
-          "vestry": 1
         }
       },
       "player_two": {
@@ -87,8 +57,7 @@
             "pilgrimage_sites": 0,
             "alms_table": 0
           }
-        },
-        "special_activities": {}
+        }
       }
     }
   }

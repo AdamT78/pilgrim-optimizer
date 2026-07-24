@@ -1,5 +1,5 @@
 {
-  "scenario_id": "build_roads_chapter_house_two_road_engineers_001",
+  "scenario_id": "kogge_active_city_to_west_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -10,7 +10,7 @@
     "building_market": [
       "confession_box",
       "chapel",
-      "infirmary",
+      "chapter_house",
       "guild",
       "brewery",
       "cloisters",
@@ -19,7 +19,7 @@
       "bank",
       "customs_house",
       "inquisition",
-      "kogge"
+      "mill"
     ],
     "players": {
       "player_one": {
@@ -29,16 +29,21 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 1, 0, 0, 0, 0, 0, 0],
-          "village": 0,
-          "abbey": 0
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 8,
+          "abbey": 3,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
         },
         "player_board_slots": {
-          "active_buildings": ["chapter_house"],
-          "donated_buildings": []
-        },
-        "special_activities": {
-          "road_engineer": 2
+          "active_buildings": ["kogge"],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
         }
       },
       "player_two": {
@@ -50,9 +55,15 @@
         "workforce": {
           "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
           "village": 0,
-          "abbey": 0
-        },
-        "special_activities": {}
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
       }
     }
   }

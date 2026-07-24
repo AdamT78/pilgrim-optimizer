@@ -36,6 +36,8 @@ class FullTurnAction:
     allocation_moves: tuple[AllocationMove, ...] = ()
     construct_plan: str | None = None
     construct_building_id: str | None = None
+    sow_route_building_id: str | None = None
+    sow_route_building_source: str | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -130,6 +132,12 @@ def action_id(action: GameAction) -> str:
             + ":construct_plan:"
             + plan.replace(" + ", "+").replace(" ", "_")
         )
+    sow_route_suffix = ""
+    if action.sow_route_building_id is not None or action.sow_route_building_source is not None:
+        sow_route_suffix = (
+            f":sow_route_building:{action.sow_route_building_id or 'none'}"
+            f":from:{action.sow_route_building_source or 'unknown'}"
+        )
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -140,7 +148,7 @@ def action_id(action: GameAction) -> str:
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
-        f"{taxation_suffix}{allocation_suffix}{construct_suffix}{hire_suffix}"
+        f"{taxation_suffix}{allocation_suffix}{construct_suffix}{sow_route_suffix}{hire_suffix}"
     )
 
 
@@ -203,6 +211,14 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED:
         summary += f" | building: {action.construct_building_id or 'unknown'}"
         summary += f" | deferred plan: {action.construct_plan or 'none'}"
+    if action.sow_route_building_id and action.sow_route_building_source:
+        if action.sow_route_building_source == "own_active":
+            summary += f" | use building: {action.sow_route_building_id}"
+        else:
+            summary += (
+                f" | hire building: {action.sow_route_building_id} "
+                f"from {action.sow_route_building_source}"
+            )
     if action.hired_building_id and action.hired_building_source:
         summary += (
             f" | hire building: {action.hired_building_id} "
