@@ -84,6 +84,11 @@ Implemented action systems:
 - `taxation`:
   - `taxation` (step-1 chosen resource + step-2 bonus resources from other majority tiles)
 
+Enhancement mapping reference:
+
+- `docs/rules/DutyEnhancements.md` documents Duty-related Special Activity/building effects as
+  metadata registry entries (including implemented vs deferred status).
+
 Deferred category systems (valid in layout, no non-tithe action yet):
 
 - none

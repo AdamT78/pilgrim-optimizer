@@ -112,6 +112,9 @@ Capacity rule:
 
 Helpers are available for occupied/available activity queries and counts.
 
+For a central Duty-action enhancement index (Special Activities plus known building effects), see
+`docs/rules/DutyEnhancements.md`.
+
 ## Implemented Special Activity effects
 
 ### Fields

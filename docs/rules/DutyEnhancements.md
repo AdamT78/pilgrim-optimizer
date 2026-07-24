@@ -1,0 +1,75 @@
+# Duty Enhancements (v2.3)
+
+## Purpose
+
+`pilgrim/rules/duty_enhancements.py` is a metadata-only registry that records which Special
+Activities and buildings are expected to affect Duty actions.
+
+Important scope boundaries:
+
+- It does **not** auto-apply effects during transitions.
+- It does **not** replace duty-specific hooks in the rules engine.
+- It does **not** implement building effects.
+- Gameplay behavior continues to come from existing action generation and transition logic.
+
+## Registry fields
+
+Each entry records:
+
+- `duty`
+- `action_key`
+- `source_type`
+- `source_key`
+- `effect`
+- `status`
+- `notes`
+
+Status values currently used:
+
+- `implemented`
+- `implemented_scaffolded`
+- `known_unimplemented`
+- `deferred_special_activity_system`
+
+## Registry entries
+
+Format:
+
+`duty | action_key | source_type | source_key | effect | status | notes`
+
+### Produce
+
+- `produce | produce_wheat | special_activity | fields | +1 wheat | implemented | Applied by produce_wheat_fields_bonus() hook.`
+- `produce | produce_stone | special_activity | stone_mason | +1 stone | implemented | Applied by produce_stone_mason_bonus() hook.`
+- `produce | produce_wheat | building | well | +1 wheat | known_unimplemented | Documented only; not currently applied.`
+- `produce | produce_stone | building | quarry | +1 stone | known_unimplemented | Documented only; not currently applied.`
+
+### Clerical
+
+- `clerical | clerical_devotion | special_activity | vestry | +1 piety | implemented | Applied by clerical_devotion_bonus() hook.`
+- `clerical | clerical_silversmith | special_activity | engraver | +1 silver | implemented | Applied by clerical_silversmith_bonus() hook.`
+- `clerical | clerical_silversmith | building | mint | +1 silver | known_unimplemented | Documented only; not currently applied.`
+- `clerical | clerical_devotion | building | chapel | +1 piety | known_unimplemented | Documented only; not currently applied.`
+
+### Give Alms
+
+- `give_alms | give_alms | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus requires paying exactly 1 extra silver or wheat.`
+- `give_alms | give_alms | building | mill | deferred | known_unimplemented | Give Alms building interaction is not implemented yet.`
+
+### Build Roads
+
+- `build_roads | build_roads_deferred | special_activity | road_engineer | +1 effective Duty Value | implemented_scaffolded | Current Build Roads runtime is deferred/scaffolded.`
+
+### Construct
+
+- `construct | construct_deferred | special_activity | road_engineer | extra deferred road only if road already included | implemented_scaffolded | Construct does not use generic duty-value +1 from Road Engineer.`
+
+### Allocation
+
+- `allocation | allocation | building | infirmary | +1 effective Duty Value | known_unimplemented | Documented only; no runtime building bonus is applied yet.`
+- `allocation | all_special_activity_spaces | building | chapter_house | affects all Special Activity spaces | deferred_special_activity_system | Deferred until broader special-activity building system is implemented.`
+
+### Ordination
+
+- `ordination | ordination | building | mill | deferred | known_unimplemented | Ordination building interaction is not implemented yet.`
+- `ordination | ordination | building | infirmary | +1 effective Duty Value if wheat cost is paid | known_unimplemented | Conditional wheat-payment interaction is not implemented yet.`

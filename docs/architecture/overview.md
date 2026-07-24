@@ -196,6 +196,18 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - preserves turn-0 timing scaffold
 - Validation includes setup-state invariants so malformed setup progression fails fast.
 
+## Duty Enhancement Registry (v2.3)
+
+- `pilgrim.rules.duty_enhancements` now provides a deterministic metadata registry of Duty
+  enhancements by:
+  - duty category + action key
+  - source type/key (Special Activity or building)
+  - effect text and implementation status
+- This registry is intentionally non-executable documentation/scaffolding:
+  - gameplay transitions do not auto-consume it
+  - existing duty-specific hooks remain authoritative runtime behavior
+  - known unimplemented building effects are tracked without changing rules execution
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.
