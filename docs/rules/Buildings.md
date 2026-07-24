@@ -237,6 +237,33 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
+## Building turn-modifier scaffold (v3.3)
+
+Five movement/turn-phase buildings are now classified in a dedicated metadata registry:
+
+- `kogge`
+- `cloisters`
+- `dormitory`
+- `inquisition`
+- `library`
+
+These are tracked in `pilgrim/rules/building_turn_modifiers.py` and documented in
+`docs/rules/BuildingTurnModifiers.md`.
+
+Scope in this milestone:
+
+- classification and lookup scaffolding only
+- no runtime movement effects implemented yet
+- no legal-action generation changes from these entries
+
+Category mapping:
+
+- `sow_route_modifier`: Kogge, Cloisters
+- `start_turn_relocation`: Dormitory, Inquisition
+- `end_turn_relocation`: Library
+
+All five entries are currently `scaffolded`.
+
 ## Player-board slots
 
 Each player has shared slot occupancy state:

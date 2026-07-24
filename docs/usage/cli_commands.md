@@ -451,6 +451,19 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
+## Building Turn-Modifier Scaffold (v3.3)
+
+- A metadata-only registry now tracks deferred movement/turn-phase building modifiers:
+  - `kogge`, `cloisters`, `dormitory`, `inquisition`, `library`
+- Registry location:
+  - `pilgrim/rules/building_turn_modifiers.py`
+- Rule documentation:
+  - `docs/rules/BuildingTurnModifiers.md`
+- Scope boundary:
+  - no runtime behavior is wired yet
+  - no legal-action output changes are expected from these entries in this milestone
+  - no dedicated CLI command is added yet; this is scaffolding only
+
 ## Produce Options and Fields Rename (v1.4)
 
 - Produce duty now exposes exactly two explicit actions:
