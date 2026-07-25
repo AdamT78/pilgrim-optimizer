@@ -451,7 +451,7 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
-## Building Turn-Modifier Registry (v3.3-v3.6)
+## Building Turn-Modifier Registry (v3.3-v3.7)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:
   - `kogge`, `cloisters`, `dormitory`, `inquisition`, `library`
@@ -467,6 +467,14 @@ Position mapping used by the current sandbox:
   - verbose apply output includes:
     - `BUILDING_HIRED` before sowing for hired Kogge routes
     - `BUILDING_BONUS: kogge enabled city -> east|west sow route`
+  - `cloisters` is implemented as a skip-route sow modifier:
+    - action summary includes `| skip <location> with cloisters`
+    - hired summaries include `| hire building: cloisters from <market|player_two>`
+  - verbose apply output includes:
+    - `BUILDING_HIRED` before sowing for hired Cloisters routes
+    - `BUILDING_BONUS: cloisters skipped <location> during sow route`
+    - `SOWING: ...; skipped <location> with Cloisters`
+  - combined Kogge + Cloisters sow-route modifiers are deferred in v3.7
   - `dormitory` and `inquisition` are implemented as start-turn relocation prefixes:
     - `start: dormitory east -> city | turn: sow city -> north | action: produce_wheat`
     - `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
@@ -482,7 +490,7 @@ Position mapping used by the current sandbox:
     - `END_TURN_RELOCATION: player_one moved 1 acolyte city -> west using Library`
     - `END_TURN_RELOCATION: player_one moved 1 acolyte city -> abbey using Library`
 - Remaining scaffold:
-  - `cloisters` still has no runtime behavior
+  - all five turn-modifier buildings are now implemented
   - no dedicated CLI command is added for turn-modifier registry inspection
 
 ## Produce Options and Fields Rename (v1.4)

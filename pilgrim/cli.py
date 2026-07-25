@@ -258,10 +258,14 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         picked_up = details.get("picked_up", "?")
         route_text = str(details.get("route", ""))
         route = _parse_route(route_text)
-        return (
+        text = (
             f"{event_name}: picked up {picked_up} from {position_name(source, positions)}; "
             f"route {readable_route(source, route, positions=positions)}"
         )
+        skipped = details.get("skipped")
+        if skipped is not None and str(details.get("route_modifier", "")) == "cloisters":
+            text += f"; skipped {position_name(int(skipped), positions)} with Cloisters"
+        return text
 
     if event.event_type is EventType.SETUP_SOWING:
         source = int(details.get("source", -1))
@@ -581,6 +585,9 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         if building == "kogge" and "enabled_route" in details:
             enabled_route = str(details.get("enabled_route", "")).strip()
             return f"{event_name}: kogge enabled {enabled_route} sow route"
+        if building == "cloisters" and "skipped_location" in details:
+            skipped_location = str(details.get("skipped_location", "unknown"))
+            return f"{event_name}: cloisters skipped {skipped_location} during sow route"
         if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details

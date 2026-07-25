@@ -1,4 +1,4 @@
-# Building Turn Modifiers (v3.6)
+# Building Turn Modifiers (v3.7)
 
 ## Purpose
 
@@ -51,7 +51,7 @@ Current statuses:
 - `implemented`
 - `deferred_spatial`
 
-## Entries in v3.6
+## Entries in v3.7
 
 - `kogge`
   - category: `sow_route_modifier`
@@ -59,6 +59,14 @@ Current statuses:
   - effect: adds city -> east and city -> west sow options
   - status: `implemented`
   - notes: implemented in transition sow-route generation and apply validation/events
+
+- `cloisters`
+  - category: `sow_route_modifier`
+  - phase: `during_sow`
+  - effect: may skip one Duty tile or the city when moving acolytes to Duty actions
+  - status: `implemented`
+  - notes: implemented as optional sow-route skip modifier using candidate N+1 placements with
+    one omitted placement
 
 - `dormitory`
   - category: `start_turn_relocation`
@@ -91,6 +99,20 @@ Start-turn relocation runtime semantics:
 - hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
   hire payment is unaffordable
 
+Sow-route skip (Cloisters) runtime semantics:
+
+- suffixes a normal full-turn sow route (not a standalone turn)
+- pick up `N`, generate candidate placements length `N+1`, omit exactly one City/Duty placement,
+  then place on the remaining `N`
+- skipped location receives no acolyte
+- selected Duty must still be a non-city Duty tile with at least one non-omitted placement
+- supports own active, live market hire, and opponent active hire sources
+- hired variants emit `BUILDING_HIRED` then `BUILDING_BONUS`, then `SOWING`
+- own-active variants omit `BUILDING_HIRED`
+- hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
+  hire payment is unaffordable
+- Kogge + Cloisters in one combined sow route is intentionally deferred in this milestone
+
 End-turn relocation (Library) runtime semantics:
 
 - suffixes a normal full-turn action (not a standalone turn)
@@ -102,12 +124,7 @@ End-turn relocation (Library) runtime semantics:
 - hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
   hire payment is unaffordable
 
-The following entries remain `scaffolded`:
-- `cloisters`
-  - category: `sow_route_modifier`
-  - phase: `during_sow`
-  - effect: may skip one Duty tile or the city when moving acolytes to Duty actions
-  - notes: skip-route logic deferred
+Scaffolded entries remaining: none
 
 ## Action-shape examples
 
@@ -115,5 +132,7 @@ Implemented examples:
 
 - `start: dormitory east -> city | turn: sow city -> north -> north_east | action: produce_wheat`
 - `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
+- `turn: sow north -> east -> south_east | skip north_east with cloisters | selected duty: east (build_roads) | action: build_roads_deferred`
+- `turn: sow east -> north | skip city with cloisters | selected duty: north (produce) | action: produce_wheat | hire building: cloisters from player_two`
 - `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> west`
 - `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> abbey`
