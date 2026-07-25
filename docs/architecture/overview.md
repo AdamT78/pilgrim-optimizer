@@ -381,7 +381,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_BONUS`
   - action-specific events (`ORDINATION` steps / Alms events)
 
-## Building Turn-Modifier Registry (v3.3-v3.7)
+## Building Turn-Modifier Registry (v3.3-v3.8)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
   non-duty-output building effects that target movement/turn phases.
@@ -410,6 +410,9 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `SOWING`
 - combined Kogge + Cloisters route modifiers are deferred; a single sow-route modifier is attached
   per action in v3.7
+- Route-calculation refactor in v3.8:
+  - sow-route generation/validation helpers are factored into `pilgrim/rules/sow_routes.py`
+  - `transition.py` remains the orchestration layer for full-turn legal generation and apply
 - Start-turn relocation timing:
   - relocation applies before sowing
   - hired path ordering is `BUILDING_HIRED` -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`

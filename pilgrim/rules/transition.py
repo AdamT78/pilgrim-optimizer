@@ -13,7 +13,7 @@ from pilgrim.model.actions import (
     action_id,
     readable_route,
 )
-from pilgrim.model.config import BoardConfig, GameConfig
+from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
@@ -72,6 +72,15 @@ from pilgrim.rules.round_end import (
     select_next_start_player,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
+from pilgrim.rules.sow_routes import (
+    cloisters_route_variants,
+    is_legal_route_with_cloisters_skip as _is_legal_route_with_cloisters_skip,
+    kogge_city_start_routes,
+    normal_sow_routes,
+    route_requires_kogge as _route_requires_kogge_for_origin_route,
+    sow_vector_from_route as _sow_vector_from_route,
+    sow_vector_with_optional_city_kogge as _sow_vector_with_optional_city_kogge,
+)
 from pilgrim.rules.special_activities import (
     alms_house_duty_value_bonus_capacity,
     alms_house_extra_payment_options,
@@ -293,7 +302,9 @@ def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> 
                     origin=origin,
                     route=route,
                     board=config.board,
-                    kogge_source=route_modifier_source,
+                    allows_kogge_city_step=(
+                        route_modifier_source is not None and route_modifier_source.usable
+                    ),
                 )
             for duty_position in config.duty_positions():
                 if sowed_vector[duty_position] <= 0:
@@ -1096,7 +1107,7 @@ def _apply_full_turn_action(
             origin=action.origin,
             route=action.route,
             board=config.board,
-            kogge_source=kogge_source,
+            allows_kogge_city_step=kogge_source is not None and kogge_source.usable,
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
@@ -3181,7 +3192,7 @@ def _city_acolytes_after_action_for_end_turn(
             origin=action.origin,
             route=action.route,
             board=config.board,
-            kogge_source=kogge_source,
+            allows_kogge_city_step=kogge_source is not None and kogge_source.usable,
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
@@ -3263,32 +3274,35 @@ def _legal_sow_routes_for_origin(
     if picked_up <= 0:
         return ()
 
-    city_position = config.board.index_for_name("city")
-    east_position = config.board.index_for_name("east")
-    west_position = config.board.index_for_name("west")
-    if origin == city_position:
-        kogge_source = building_ability_source(
-            state,
-            config,
-            acting_player=state.active_player,
-            building_key="kogge",
+    kogge_source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key="kogge",
+    )
+    if origin == config.board.index_for_name("city") and kogge_source.usable and (
+        kogge_source.source_type == "own_active" or _is_hired_source(kogge_source)
+    ):
+        routes.extend(
+            _SowRouteOption(
+                route=route,
+                building_id=_ROUTE_BUILDING_KOGGE,
+                source=kogge_source,
+            )
+            for route in kogge_city_start_routes(
+                origin=origin,
+                picked_up=picked_up,
+                board=config.board,
+            )
         )
-        if kogge_source.usable and (
-            kogge_source.source_type == "own_active" or _is_hired_source(kogge_source)
-        ):
-            for first_step in (east_position, west_position):
-                for suffix_route in generate_routes(first_step, picked_up - 1, config.board):
-                    routes.append(
-                        _SowRouteOption(
-                            route=(first_step, *suffix_route),
-                            building_id=_ROUTE_BUILDING_KOGGE,
-                            source=kogge_source,
-                        )
-                    )
 
     routes.extend(
         _SowRouteOption(route=route)
-        for route in generate_routes(origin, picked_up, config.board)
+        for route in normal_sow_routes(
+            origin=origin,
+            picked_up=picked_up,
+            board=config.board,
+        )
     )
     routes.extend(
         _legal_cloisters_route_options(
@@ -3322,25 +3336,19 @@ def _legal_cloisters_route_options(
     ):
         return ()
 
-    dedupe: dict[tuple[tuple[int, ...], int], _SowRouteOption] = {}
-    for candidate_route in generate_routes(origin, picked_up + 1, config.board):
-        for omitted_index, omitted_location in enumerate(candidate_route):
-            if omitted_location == origin:
-                continue
-            route = (
-                *candidate_route[:omitted_index],
-                *candidate_route[omitted_index + 1 :],
-            )
-            key = (route, omitted_location)
-            if key in dedupe:
-                continue
-            dedupe[key] = _SowRouteOption(
-                route=route,
-                building_id=_ROUTE_BUILDING_CLOISTERS,
-                source=source,
-                omitted_location=omitted_location,
-            )
-    return tuple(dedupe.values())
+    return tuple(
+        _SowRouteOption(
+            route=variant.route,
+            building_id=_ROUTE_BUILDING_CLOISTERS,
+            source=source,
+            omitted_location=variant.omitted_location,
+        )
+        for variant in cloisters_route_variants(
+            origin=origin,
+            picked_up=picked_up,
+            board=config.board,
+        )
+    )
 
 
 def _with_kogge_route_fields(
@@ -3384,135 +3392,6 @@ def _with_cloisters_route_fields(
             sow_route_omitted_location=omitted_location,
         )
     raise ValueError("Cloisters route source must be own-active or hired.")
-
-
-def _sow_vector_from_route(
-    vector: tuple[int, ...],
-    *,
-    origin: int,
-    route: tuple[int, ...],
-) -> tuple[int, ...]:
-    if origin < 0 or origin >= len(vector):
-        raise ValueError(f"Invalid source position: {origin}")
-    picked_up = vector[origin]
-    if picked_up <= 0:
-        raise ValueError("Sowing source must contain at least one acolyte.")
-    if len(route) != picked_up:
-        raise ValueError("Route length must equal number of picked-up acolytes.")
-
-    updated = list(vector)
-    updated[origin] = 0
-    for position in route:
-        if position < 0 or position >= len(vector):
-            raise ValueError(f"Invalid route position: {position}")
-        updated[position] += 1
-    return tuple(updated)
-
-
-def _sow_vector_with_optional_city_kogge(
-    vector: tuple[int, ...],
-    *,
-    origin: int,
-    route: tuple[int, ...],
-    board: BoardConfig,
-    kogge_source: BuildingAbilitySource | None,
-    cloisters_omitted_location: int | None = None,
-) -> tuple[int, ...]:
-    sowed_vector = _sow_vector_from_route(
-        vector,
-        origin=origin,
-        route=route,
-    )
-    picked_up = vector[origin]
-
-    if cloisters_omitted_location is not None:
-        if not _is_legal_route_with_cloisters_skip(
-            origin=origin,
-            route=route,
-            board=board,
-            omitted_location=cloisters_omitted_location,
-        ):
-            raise ValueError("Route is not legal for Cloisters skip-route modifier.")
-        return sowed_vector
-
-    allows_kogge_city_step = kogge_source is not None and kogge_source.usable
-    if not _is_legal_route_with_optional_city_kogge(
-        origin,
-        route,
-        board=board,
-        allows_kogge_city_step=allows_kogge_city_step,
-    ):
-        raise ValueError("Route is not legal for the board graph.")
-
-    if len(route) != picked_up:
-        raise ValueError("Route length must equal number of picked-up acolytes.")
-    return sowed_vector
-
-
-def _is_legal_route_with_optional_city_kogge(
-    origin: int,
-    route: tuple[int, ...],
-    *,
-    board: BoardConfig,
-    allows_kogge_city_step: bool,
-) -> bool:
-    current = origin
-    city_position = board.index_for_name("city")
-    east_position = board.index_for_name("east")
-    west_position = board.index_for_name("west")
-
-    for index, next_position in enumerate(route):
-        if next_position in board.neighbors(current):
-            current = next_position
-            continue
-        if (
-            allows_kogge_city_step
-            and index == 0
-            and current == city_position
-            and next_position in (east_position, west_position)
-        ):
-            current = next_position
-            continue
-        return False
-    return True
-
-
-def _is_legal_route_with_cloisters_skip(
-    *,
-    origin: int,
-    route: tuple[int, ...],
-    board: BoardConfig,
-    omitted_location: int,
-) -> bool:
-    city_position = board.index_for_name("city")
-    duty_positions = {
-        board.index_for_name("north"),
-        board.index_for_name("north_east"),
-        board.index_for_name("east"),
-        board.index_for_name("south_east"),
-        board.index_for_name("south"),
-        board.index_for_name("south_west"),
-        board.index_for_name("west"),
-        board.index_for_name("north_west"),
-    }
-    allowed_skips = {city_position, *duty_positions}
-    if omitted_location == origin:
-        return False
-    if omitted_location not in allowed_skips:
-        return False
-
-    candidate_length = len(route) + 1
-    for candidate_route in generate_routes(origin, candidate_length, board):
-        for omitted_index, candidate_position in enumerate(candidate_route):
-            if candidate_position != omitted_location:
-                continue
-            actual_route = (
-                *candidate_route[:omitted_index],
-                *candidate_route[omitted_index + 1 :],
-            )
-            if actual_route == route:
-                return True
-    return False
 
 
 def _legal_action_variants_for_resolution(
@@ -3822,17 +3701,11 @@ def _apply_end_turn_relocation_to_state(
 
 
 def _route_requires_kogge(action: FullTurnAction, config: GameConfig) -> bool:
-    if not action.route:
-        return False
-    city_position = config.board.index_for_name("city")
-    if action.origin != city_position:
-        return False
-    first_step = action.route[0]
-    east_position = config.board.index_for_name("east")
-    west_position = config.board.index_for_name("west")
-    if first_step in config.board.neighbors(city_position):
-        return False
-    return first_step in (east_position, west_position)
+    return _route_requires_kogge_for_origin_route(
+        origin=action.origin,
+        route=action.route,
+        board=config.board,
+    )
 
 
 def _resolved_cloisters_route_for_action(
