@@ -1,4 +1,4 @@
-# Buildings (v1.9 Sandbox Scope)
+# Buildings (v1.9-v4.0 Sandbox Scope)
 
 ## Implemented now
 
@@ -27,7 +27,7 @@ Each definition includes:
 - `level`
 - `stone_cost`
 - `donation_vp`
-- `effect_status` (currently `deferred`)
+- `effect_status` (`deferred` or `implemented`)
 
 ### Cost and donation VP rules
 
@@ -237,6 +237,43 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
+## Grain Store wheat/silver conversion (v4.0)
+
+Grain Store now applies as an optional economic modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Grain Store -> free
+- live market Grain Store -> hire from bank
+- opponent active Grain Store -> hire from owner
+
+Conversion rule:
+
+- sell wheat: pay `X` wheat, gain `X` silver
+- buy wheat: pay `X` silver, gain `X` wheat
+- `X >= 1`
+- conversion rate is always `1:1`
+
+Timing:
+
+- if Grain Store is hired, hire payment resolves first
+- conversion resolves next
+- sowing and selected Duty resolve after conversion
+- conversion cannot be used to pay Grain Store's own hire cost
+
+Legal generation behavior:
+
+- normal full-turn actions remain legal
+- Grain Store variants are added when source is usable and resources are available after hire:
+  - sell variants for amounts `1..available_wheat_after_hire`
+  - buy variants for amounts `1..available_silver_after_hire`
+- no zero-amount conversion variants are generated
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+
 ## Building turn-modifier registry (v3.3-v3.9)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:
@@ -397,7 +434,7 @@ Catalogue validation enforces:
 - stone cost equals level
 - donation VP is 2/4/6 by level
 - unique ids and names
-- all `effect_status = "deferred"` for now
+- `effect_status` must be `deferred` or `implemented`
 
 Market validation enforces:
 

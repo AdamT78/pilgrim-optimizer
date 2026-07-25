@@ -451,6 +451,31 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
+## Grain Store Wheat/Silver Conversion (v4.0)
+
+- Grain Store is available as an optional full-turn conversion modifier (not a standalone action):
+  - `sell_wheat`: `wheat -X`, `silver +X`
+  - `buy_wheat`: `silver -X`, `wheat +X`
+  - `X >= 1`, fixed `1:1` rate
+- Source resolution uses existing building-source priority:
+  - own active Grain Store (free)
+  - opponent active Grain Store (hire from owner)
+  - live market Grain Store (hire from bank)
+- Action summary examples:
+  - `... | use building: grain_store to sell 2 wheat for 2 silver | ...`
+  - `... | use building: grain_store to buy 1 wheat for 1 silver | ...`
+  - hired variants append `| hire building: grain_store from <market|player_two>`
+- Legal generation:
+  - normal non-Grain Store actions remain legal
+  - sell variants are generated for amounts `1..available_wheat_after_hire`
+  - buy variants are generated for amounts `1..available_silver_after_hire`
+  - no zero-amount variants
+- `apply --verbose` ordering for Grain Store conversion:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: grain_store sold/bought ...`
+  - conversion `RESOURCE_DELTA`
+  - `SOWING`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

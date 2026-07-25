@@ -589,6 +589,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             skipped_location = str(details.get("skipped_location", "unknown"))
             return f"{event_name}: cloisters skipped {skipped_location} during sow route"
         if (
+            building == "grain_store"
+            and "conversion_direction" in details
+            and "amount" in details
+        ):
+            amount = int(details.get("amount", 0))
+            direction = str(details.get("conversion_direction", "unknown"))
+            if direction == "sell_wheat":
+                return (
+                    f"{event_name}: grain_store sold {amount} wheat for {amount} silver"
+                )
+            if direction == "buy_wheat":
+                return (
+                    f"{event_name}: grain_store bought {amount} wheat for {amount} silver"
+                )
+        if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details
             and "start_turn_to" in details
