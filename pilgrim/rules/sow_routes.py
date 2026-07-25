@@ -166,6 +166,53 @@ def cloisters_route_variants(
     return dedupe_sow_route_variants(variants)
 
 
+def kogge_cloisters_candidate_placements(
+    *,
+    origin: int,
+    picked_up: int,
+    board: BoardConfig,
+) -> tuple[tuple[int, ...], ...]:
+    """Return Kogge-enabled candidate placements of length N+1 for Cloisters omission."""
+    if picked_up <= 0:
+        return ()
+    return kogge_city_start_routes(
+        origin=origin,
+        picked_up=picked_up + 1,
+        board=board,
+    )
+
+
+def combined_kogge_cloisters_route_variants(
+    *,
+    origin: int,
+    picked_up: int,
+    board: BoardConfig,
+) -> tuple[SowRouteVariant, ...]:
+    """Return combined Kogge+Cloisters actual routes with one omitted placement."""
+    if picked_up <= 0:
+        return ()
+    allowed_locations = _allowed_cloisters_omission_locations(board)
+    variants: list[SowRouteVariant] = []
+    for candidate_route in kogge_cloisters_candidate_placements(
+        origin=origin,
+        picked_up=picked_up,
+        board=board,
+    ):
+        for omitted_index, omitted_location in enumerate(candidate_route):
+            if omitted_location not in allowed_locations:
+                continue
+            variants.append(
+                SowRouteVariant(
+                    route=cloisters_actual_placements_after_omission(
+                        candidate_route,
+                        omitted_index=omitted_index,
+                    ),
+                    omitted_location=omitted_location,
+                )
+            )
+    return dedupe_sow_route_variants(variants)
+
+
 def sow_vector_from_route(
     vector: tuple[int, ...],
     *,
@@ -198,6 +245,7 @@ def sow_vector_with_optional_city_kogge(
     board: BoardConfig,
     allows_kogge_city_step: bool,
     cloisters_omitted_location: int | None = None,
+    cloisters_with_kogge: bool = False,
 ) -> tuple[int, ...]:
     """Apply sowing while validating optional Kogge or Cloisters route semantics."""
     sowed_vector = sow_vector_from_route(
@@ -208,7 +256,27 @@ def sow_vector_with_optional_city_kogge(
     picked_up = vector[origin]
 
     if cloisters_omitted_location is not None:
-        if not is_legal_route_with_cloisters_skip(
+        if cloisters_with_kogge:
+            if not is_legal_route_with_kogge_and_cloisters_skip(
+                origin=origin,
+                route=route,
+                board=board,
+                omitted_location=cloisters_omitted_location,
+            ):
+                raise ValueError("Route is not legal for combined Kogge+Cloisters modifier.")
+        elif allows_kogge_city_step and route_requires_kogge(
+            origin=origin,
+            route=route,
+            board=board,
+        ):
+            if not is_legal_route_with_kogge_and_cloisters_skip(
+                origin=origin,
+                route=route,
+                board=board,
+                omitted_location=cloisters_omitted_location,
+            ):
+                raise ValueError("Route is not legal for combined Kogge+Cloisters modifier.")
+        elif not is_legal_route_with_cloisters_skip(
             origin=origin,
             route=route,
             board=board,
@@ -290,6 +358,35 @@ def is_legal_route_with_cloisters_skip(
     return False
 
 
+def is_legal_route_with_kogge_and_cloisters_skip(
+    *,
+    origin: int,
+    route: tuple[int, ...],
+    board: BoardConfig,
+    omitted_location: int,
+) -> bool:
+    """Validate combined Kogge-start candidate route with one Cloisters omission."""
+    if omitted_location not in _allowed_cloisters_omission_locations(board):
+        return False
+
+    candidate_length = len(route) + 1
+    for candidate_route in kogge_city_start_routes(
+        origin=origin,
+        picked_up=candidate_length,
+        board=board,
+    ):
+        for omitted_index, candidate_location in enumerate(candidate_route):
+            if candidate_location != omitted_location:
+                continue
+            actual_route = cloisters_actual_placements_after_omission(
+                candidate_route,
+                omitted_index=omitted_index,
+            )
+            if actual_route == route:
+                return True
+    return False
+
+
 def route_requires_kogge(
     *,
     origin: int,
@@ -332,9 +429,12 @@ __all__ = [
     "cloisters_candidate_omissions",
     "cloisters_candidate_placements",
     "cloisters_route_variants",
+    "combined_kogge_cloisters_route_variants",
     "dedupe_sow_route_variants",
+    "is_legal_route_with_kogge_and_cloisters_skip",
     "is_legal_route_with_cloisters_skip",
     "is_legal_route_with_optional_city_kogge",
+    "kogge_cloisters_candidate_placements",
     "kogge_city_start_routes",
     "normal_sow_routes",
     "route_requires_kogge",

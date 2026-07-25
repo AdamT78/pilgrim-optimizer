@@ -451,7 +451,7 @@ Position mapping used by the current sandbox:
 - Hired Mill ordering remains:
   - `BUILDING_HIRED` before `BUILDING_BONUS`
 
-## Building Turn-Modifier Registry (v3.3-v3.7)
+## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:
   - `kogge`, `cloisters`, `dormitory`, `inquisition`, `library`
@@ -474,7 +474,16 @@ Position mapping used by the current sandbox:
     - `BUILDING_HIRED` before sowing for hired Cloisters routes
     - `BUILDING_BONUS: cloisters skipped <location> during sow route`
     - `SOWING: ...; skipped <location> with Cloisters`
-  - combined Kogge + Cloisters sow-route modifiers are deferred in v3.7
+  - Kogge + Cloisters can combine in one action:
+    - Kogge contributes City-start candidate route edges
+    - Cloisters omits one City/Duty placement from that Kogge-enabled candidate route
+    - summaries include both modifiers (Kogge source and Cloisters skip)
+  - verbose apply output for combined routes includes deterministic ordering:
+    - `BUILDING_HIRED` Kogge (if hired)
+    - `BUILDING_HIRED` Cloisters (if hired)
+    - `BUILDING_BONUS` Kogge
+    - `BUILDING_BONUS` Cloisters
+    - `SOWING`
   - `dormitory` and `inquisition` are implemented as start-turn relocation prefixes:
     - `start: dormitory east -> city | turn: sow city -> north | action: produce_wheat`
     - `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
