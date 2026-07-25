@@ -381,7 +381,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_BONUS`
   - action-specific events (`ORDINATION` steps / Alms events)
 
-## Building Turn-Modifier Registry (v3.3-v3.8)
+## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
   non-duty-output building effects that target movement/turn phases.
@@ -389,7 +389,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - during sow route modifiers: `kogge`, `cloisters`
   - start-of-turn relocations: `dormitory`, `inquisition`
   - end-of-turn relocation: `library`
-- Runtime status in v3.7:
+- Runtime status in v3.9:
   - `kogge` is implemented as an explicit sow-route modifier
     (`city -> east` and `city -> west` starts from City)
   - `cloisters` is implemented as an explicit sow-route skip modifier
@@ -408,11 +408,17 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - unavailable when donated, not live, merchant none, or insufficient hire resource
 - During-sow ordering for Cloisters:
   - `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `SOWING`
-- combined Kogge + Cloisters route modifiers are deferred; a single sow-route modifier is attached
-  per action in v3.7
 - Route-calculation refactor in v3.8:
   - sow-route generation/validation helpers are factored into `pilgrim/rules/sow_routes.py`
   - `transition.py` remains the orchestration layer for full-turn legal generation and apply
+- Combined Kogge + Cloisters in v3.9:
+  - one action may include both route modifiers
+  - Kogge provides City-start candidate route edges (`city -> east` / `city -> west`)
+  - Cloisters applies one omission on the Kogge candidate (`N+1` candidate placements -> `N`
+    actual placements)
+  - source and hire resolution stays independent per building
+  - when both are hired, two deterministic `BUILDING_HIRED` events are emitted before route bonus
+    events
 - Start-turn relocation timing:
   - relocation applies before sowing
   - hired path ordering is `BUILDING_HIRED` -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`

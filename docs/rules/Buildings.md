@@ -237,7 +237,7 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
-## Building turn-modifier registry (v3.3-v3.7)
+## Building turn-modifier registry (v3.3-v3.9)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:
 
@@ -293,8 +293,12 @@ Cloisters runtime behavior:
 - hired Cloisters is unavailable when Merchant resource is `none` (Taxation), insufficient,
   donated, or not live
 - event ordering: `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `SOWING`
-- combined Kogge + Cloisters sow-route actions are deferred; one sow-route modifier is used per
-  action in v3.7
+- Kogge + Cloisters can combine in one sow action:
+  - Kogge enables City-start candidate routes (`city -> east` / `city -> west`)
+  - Cloisters applies the `N+1` candidate placement omission model on that Kogge-enabled route
+  - both building sources resolve independently
+  - if both are hired, total hire payment is two Merchant resources
+  - selected Duty must still be an actual non-omitted non-city Duty placement
 
 Dormitory runtime behavior:
 

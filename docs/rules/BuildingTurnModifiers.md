@@ -1,4 +1,4 @@
-# Building Turn Modifiers (v3.7)
+# Building Turn Modifiers (v3.9)
 
 ## Purpose
 
@@ -51,7 +51,7 @@ Current statuses:
 - `implemented`
 - `deferred_spatial`
 
-## Entries in v3.7
+## Entries in v3.9
 
 - `kogge`
   - category: `sow_route_modifier`
@@ -111,7 +111,23 @@ Sow-route skip (Cloisters) runtime semantics:
 - own-active variants omit `BUILDING_HIRED`
 - hired variants are unavailable when source is donated, not live, merchant resource is `none`, or
   hire payment is unaffordable
-- Kogge + Cloisters in one combined sow route is intentionally deferred in this milestone
+
+Combined Kogge + Cloisters sow-route semantics (v3.9):
+
+- one full-turn action may include both route modifiers
+- Kogge enables City-start candidate routes (`city -> east` / `city -> west`)
+- Cloisters then applies candidate length `N+1` and omits one City/Duty placement from that Kogge
+  candidate route
+- actual placements remain `N`; selected Duty must still be an actual non-omitted non-city Duty
+  placement
+- Kogge and Cloisters sources resolve independently (own active / opponent hire / market hire)
+- when both are hired, total hire payment is two Merchant resources
+- deterministic pre-sow ordering for combined use:
+  - `BUILDING_HIRED` Kogge (if hired)
+  - `BUILDING_HIRED` Cloisters (if hired)
+  - `BUILDING_BONUS` Kogge
+  - `BUILDING_BONUS` Cloisters
+  - `SOWING`
 
 End-turn relocation (Library) runtime semantics:
 
@@ -134,5 +150,7 @@ Implemented examples:
 - `start: inquisition city -> west | hire building: inquisition from market | turn: sow city -> north | action: produce_wheat`
 - `turn: sow north -> east -> south_east | skip north_east with cloisters | selected duty: east (build_roads) | action: build_roads_deferred`
 - `turn: sow east -> north | skip city with cloisters | selected duty: north (produce) | action: produce_wheat | hire building: cloisters from player_two`
+- `turn: sow city -> south_east -> south | skip east with cloisters | selected duty: south (give_alms) | action: tithe | use building: kogge`
+- `turn: sow city -> east -> south | skip south_east with cloisters | selected duty: south (give_alms) | action: tithe | hire building: kogge from market | hire building: cloisters from market`
 - `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> west`
 - `turn: sow city -> north | selected duty: north (produce) | action: produce_wheat | end: library city -> abbey`
