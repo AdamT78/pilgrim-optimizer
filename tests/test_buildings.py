@@ -76,7 +76,11 @@ def test_building_catalogue_cost_vp_and_effect_metadata() -> None:
         names.append(building.name)
         assert building.stone_cost == building.level
         assert building.donation_vp == expected_vp[building.level]
-        assert building.effect_status == "deferred"
+        assert building.effect_status in {"deferred", "implemented"}
+    grain_store = next(
+        building for building in scenario.config.buildings.catalogue if building.id == "grain_store"
+    )
+    assert grain_store.effect_status == "implemented"
     assert len(set(ids)) == len(ids)
     assert len(set(names)) == len(names)
 

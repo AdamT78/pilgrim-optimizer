@@ -145,9 +145,9 @@ def validate_building_catalogue(config: BuildingsConfig) -> None:
             raise TransitionValidationError(
                 f"Building {building.id} donation_vp must be {expected_vp}."
             )
-        if building.effect_status != "deferred":
+        if building.effect_status not in {"deferred", "implemented"}:
             raise TransitionValidationError(
-                f"Building {building.id} effect_status must be 'deferred'."
+                f"Building {building.id} effect_status must be deferred or implemented."
             )
 
 

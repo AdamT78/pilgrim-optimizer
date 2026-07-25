@@ -381,6 +381,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `BUILDING_BONUS`
   - action-specific events (`ORDINATION` steps / Alms events)
 
+## Grain Store Wheat/Silver Conversion (v4.0)
+
+- Transition/runtime wiring now supports Grain Store as an optional full-turn economic modifier.
+- Source resolution reuses the shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none, insufficient payment resource)
+- Conversion semantics:
+  - `sell_wheat`: `wheat -X`, `silver +X`
+  - `buy_wheat`: `silver -X`, `wheat +X`
+  - `X >= 1`, fixed `1:1` rate
+- Legal-action generation adds deterministic variants:
+  - sell `1..available_wheat_after_hire`
+  - buy `1..available_silver_after_hire`
+  - no zero-amount variants
+- Apply-time ordering for Grain Store modifier:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (conversion description)
+  - conversion `RESOURCE_DELTA`
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Converted resources are available to the selected Duty resolution in the same action because
+  conversion applies before sowing/duty resolution.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for

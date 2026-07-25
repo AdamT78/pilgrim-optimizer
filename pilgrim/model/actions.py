@@ -49,6 +49,10 @@ class FullTurnAction:
     sow_route_secondary_building_id: str | None = None
     sow_route_secondary_building_source: str | None = None
     sow_route_omitted_location: int | None = None
+    building_conversion_id: str | None = None
+    building_conversion_source: str | None = None
+    building_conversion_direction: str | None = None
+    building_conversion_amount: int | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -191,6 +195,19 @@ def action_id(action: GameAction) -> str:
             )
         if action.sow_route_omitted_location is not None:
             sow_route_suffix += f":skip:{action.sow_route_omitted_location}"
+    conversion_suffix = ""
+    if (
+        action.building_conversion_id is not None
+        or action.building_conversion_source is not None
+        or action.building_conversion_direction is not None
+        or action.building_conversion_amount is not None
+    ):
+        conversion_suffix = (
+            f":building_conversion:{action.building_conversion_id or 'none'}"
+            f":from:{action.building_conversion_source or 'unknown'}"
+            f":direction:{action.building_conversion_direction or 'unknown'}"
+            f":amount:{action.building_conversion_amount if action.building_conversion_amount is not None else 'none'}"
+        )
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -203,7 +220,7 @@ def action_id(action: GameAction) -> str:
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
-        f"{sow_route_suffix}{hire_suffix}"
+        f"{sow_route_suffix}{conversion_suffix}{hire_suffix}"
     )
 
 
@@ -255,6 +272,22 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             f" | skip {position_name(action.sow_route_omitted_location, positions)} "
             "with cloisters"
         )
+    if (
+        action.building_conversion_id == "grain_store"
+        and action.building_conversion_direction is not None
+        and action.building_conversion_amount is not None
+    ):
+        amount = action.building_conversion_amount
+        if action.building_conversion_direction == "sell_wheat":
+            route_summary += (
+                " | use building: grain_store "
+                f"to sell {amount} wheat for {amount} silver"
+            )
+        elif action.building_conversion_direction == "buy_wheat":
+            route_summary += (
+                " | use building: grain_store "
+                f"to buy {amount} wheat for {amount} silver"
+            )
     summary = (
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
@@ -323,6 +356,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             f" | hire building: {action.hired_building_id} "
             f"from {action.hired_building_source}"
+        )
+    if (
+        action.building_conversion_id == "grain_store"
+        and action.building_conversion_source is not None
+        and action.building_conversion_source != "own_active"
+    ):
+        summary += (
+            " | hire building: grain_store "
+            f"from {action.building_conversion_source}"
         )
     if action.hired_building_id == "mill":
         required_wheat = 0
