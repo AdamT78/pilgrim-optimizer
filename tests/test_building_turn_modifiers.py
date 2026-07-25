@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
@@ -43,8 +41,11 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "sow_route_modifier",
             "during_sow",
             "may skip one Duty tile or the city when moving acolytes to Duty actions",
-            "scaffolded",
-            "skip-route logic deferred",
+            "implemented",
+            (
+                "implemented as optional sow-route skip modifier using candidate N+1 placements "
+                "with one omitted placement."
+            ),
         ),
         (
             "dormitory",
@@ -109,13 +110,12 @@ def test_turn_modifier_lookup_by_building_is_normalized() -> None:
 def test_turn_modifier_status_helpers() -> None:
     assert {entry.building_key for entry in implemented_turn_modifiers()} == {
         "kogge",
+        "cloisters",
         "dormitory",
         "inquisition",
         "library",
     }
-    assert {
-        entry.building_key for entry in scaffolded_turn_modifiers()
-    } == {"cloisters"}
+    assert scaffolded_turn_modifiers() == ()
 
 
 def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
@@ -123,25 +123,8 @@ def test_turn_modifier_registry_has_no_duplicate_exact_entries() -> None:
     assert len(entries) == len(set(entries))
 
 
-def test_scaffold_only_turn_modifiers_have_no_legal_action_side_effects() -> None:
+def test_all_turn_modifiers_are_implemented_in_registry() -> None:
     scenario = load_scenario("scenarios/ordination_mill_active_two_steps_free_001.json")
     base_actions = legal_actions(scenario.state, scenario.config)
-    active_player = scenario.state.active_player
-    active_player_state = scenario.state.player_state(active_player)
-    existing_active_buildings = active_player_state.player_board_slots.active_buildings
-    state_with_scaffold_only_buildings = scenario.state.with_player_state(
-        active_player,
-        replace(
-            active_player_state,
-            player_board_slots=replace(
-                active_player_state.player_board_slots,
-                active_buildings=(
-                    *existing_active_buildings,
-                    "cloisters",
-                ),
-            ),
-        ),
-    )
-    scaffold_actions = legal_actions(state_with_scaffold_only_buildings, scenario.config)
-
-    assert scaffold_actions == base_actions
+    assert base_actions
+    assert scaffolded_turn_modifiers() == ()

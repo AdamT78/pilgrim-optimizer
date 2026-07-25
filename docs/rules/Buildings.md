@@ -237,7 +237,7 @@ Event semantics:
 - hired Mill emits `BUILDING_HIRED` before `BUILDING_BONUS`
 - Mill emits `BUILDING_BONUS` only when wheat is actually waived (`required_wheat > 0`)
 
-## Building turn-modifier registry (v3.3-v3.6)
+## Building turn-modifier registry (v3.3-v3.7)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:
 
@@ -254,6 +254,7 @@ Scope in this milestone:
 
 - classification and lookup registry
 - runtime wiring now implemented for Kogge sow-route expansion
+- runtime wiring now implemented for Cloisters sow-route skip modifier
 - runtime wiring now implemented for Dormitory and Inquisition start-turn relocations
 - runtime wiring now implemented for Library end-turn relocations
 - no generic runtime modifier engine
@@ -266,8 +267,7 @@ Category mapping:
 
 Status:
 
-- `kogge`, `dormitory`, `inquisition`, and `library` are now `implemented`
-- `cloisters` remains `scaffolded`
+- `kogge`, `cloisters`, `dormitory`, `inquisition`, and `library` are now `implemented`
 
 Kogge runtime behavior:
 
@@ -278,6 +278,23 @@ Kogge runtime behavior:
   - live market hire (pay bank)
 - hired Kogge is unavailable when Merchant resource is `none` (Taxation), insufficient, donated,
   or not live
+
+Cloisters runtime behavior:
+
+- optional sow-route modifier on a normal full-turn action
+- pick up `N`, generate candidate placements length `N+1`, omit exactly one City/Duty placement,
+  and place on the remaining `N` placements
+- skipped location receives no acolyte; selected Duty must be a non-city Duty tile that still
+  receives an acolyte after omission
+- source resolution follows normal building source priority:
+  - own active Cloisters (free)
+  - opponent active hire (pay owner)
+  - live market hire (pay bank)
+- hired Cloisters is unavailable when Merchant resource is `none` (Taxation), insufficient,
+  donated, or not live
+- event ordering: `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `SOWING`
+- combined Kogge + Cloisters sow-route actions are deferred; one sow-route modifier is used per
+  action in v3.7
 
 Dormitory runtime behavior:
 

@@ -112,7 +112,7 @@ def test_unusable_kogge_does_not_add_city_east_or_west_routes(scenario_path: str
     assert "east" not in first_steps
     assert "west" not in first_steps
     assert {"north", "south"}.issubset(first_steps)
-    assert all(action.sow_route_building_id is None for action in actions)
+    assert all(action.sow_route_building_id != "kogge" for action in actions)
 
 
 def test_own_active_kogge_bonus_emits_before_sowing_without_hired_event() -> None:
@@ -167,13 +167,12 @@ def test_kogge_does_not_modify_non_city_sow_origins() -> None:
     assert all(action.sow_route_building_id is None for action in actions)
 
 
-def test_turn_modifier_registry_marks_library_as_implemented() -> None:
+def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> None:
     assert {entry.building_key for entry in implemented_turn_modifiers()} == {
         "kogge",
+        "cloisters",
         "dormitory",
         "inquisition",
         "library",
     }
-    assert {
-        entry.building_key for entry in scaffolded_turn_modifiers()
-    } == {"cloisters"}
+    assert scaffolded_turn_modifiers() == ()

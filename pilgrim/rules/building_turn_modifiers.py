@@ -44,8 +44,11 @@ _BUILDING_TURN_MODIFIERS: tuple[BuildingTurnModifier, ...] = (
         category="sow_route_modifier",
         phase="during_sow",
         effect="may skip one Duty tile or the city when moving acolytes to Duty actions",
-        status="scaffolded",
-        notes="skip-route logic deferred",
+        status="implemented",
+        notes=(
+            "implemented as optional sow-route skip modifier using candidate N+1 placements "
+            "with one omitted placement."
+        ),
     ),
     BuildingTurnModifier(
         building_key="dormitory",

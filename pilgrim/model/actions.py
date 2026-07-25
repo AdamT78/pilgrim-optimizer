@@ -46,6 +46,7 @@ class FullTurnAction:
     end_turn_relocation_to: int | str | None = None
     sow_route_building_id: str | None = None
     sow_route_building_source: str | None = None
+    sow_route_omitted_location: int | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -167,11 +168,17 @@ def action_id(action: GameAction) -> str:
             f":to:{action.end_turn_relocation_to if action.end_turn_relocation_to is not None else 'none'}"
         )
     sow_route_suffix = ""
-    if action.sow_route_building_id is not None or action.sow_route_building_source is not None:
+    if (
+        action.sow_route_building_id is not None
+        or action.sow_route_building_source is not None
+        or action.sow_route_omitted_location is not None
+    ):
         sow_route_suffix = (
             f":sow_route_building:{action.sow_route_building_id or 'none'}"
             f":from:{action.sow_route_building_source or 'unknown'}"
         )
+        if action.sow_route_omitted_location is not None:
+            sow_route_suffix += f":skip:{action.sow_route_omitted_location}"
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -208,8 +215,14 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     # Full-turn actions only below.
     selected_duty = position_name(action.selected_duty, positions)
     duty_category = duty_category_at_position(config, action.selected_duty)
+    route_summary = f"Turn: sow {readable_route(action.origin, action.route, positions=positions)}"
+    if action.sow_route_building_id == "cloisters" and action.sow_route_omitted_location is not None:
+        route_summary += (
+            f" | skip {position_name(action.sow_route_omitted_location, positions)} "
+            "with cloisters"
+        )
     summary = (
-        f"Turn: sow {readable_route(action.origin, action.route, positions=positions)} | "
+        f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
     )
     if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
@@ -248,9 +261,18 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += f" | building: {action.construct_building_id or 'unknown'}"
         summary += f" | deferred plan: {action.construct_plan or 'none'}"
     if action.sow_route_building_id and action.sow_route_building_source:
-        if action.sow_route_building_source == "own_active":
-            summary += f" | use building: {action.sow_route_building_id}"
-        else:
+        if action.sow_route_building_id == "kogge":
+            if action.sow_route_building_source == "own_active":
+                summary += f" | use building: {action.sow_route_building_id}"
+            else:
+                summary += (
+                    f" | hire building: {action.sow_route_building_id} "
+                    f"from {action.sow_route_building_source}"
+                )
+        elif (
+            action.sow_route_building_id == "cloisters"
+            and action.sow_route_building_source != "own_active"
+        ):
             summary += (
                 f" | hire building: {action.sow_route_building_id} "
                 f"from {action.sow_route_building_source}"
