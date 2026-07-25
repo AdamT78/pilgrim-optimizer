@@ -455,6 +455,16 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - Duty-output modifiers stay in `duty_enhancements`
   - turn-phase movement modifiers live in `building_turn_modifiers`
 
+## Developer Audits (v4.2)
+
+- Added reporting-only audit script:
+  - `tools/audits/building_status_branching_audit.py`
+- Audit output includes:
+  - building implementation-status grouping (best effort from catalogue + runtime registries)
+  - safe-next-candidate guidance
+  - legal-action branching counts for representative scenarios
+- See: `docs/audits/building_status_branching_audit.md`
+
 ## Intentionally Deferred
 
 - Full Pilgrim rule set and board systems.
