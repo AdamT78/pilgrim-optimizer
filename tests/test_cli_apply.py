@@ -117,11 +117,11 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "Total sandbox evaluation:" in output
 
 
-def test_cli_apply_round_end_pilgrimage_scenario_shows_deferred_season_event(capsys) -> None:
+def test_cli_apply_round_end_pilgrimage_scenario_shows_alms_season_end_scoring(capsys) -> None:
     exit_code = main(
         [
             "apply",
-            "scenarios/round_end_pilgrimage_deferred_001.json",
+            "scenarios/alms_season_end_unique_leader_001.json",
             "--action-index",
             "1",
             "--verbose",
@@ -131,16 +131,16 @@ def test_cli_apply_round_end_pilgrimage_scenario_shows_deferred_season_event(cap
 
     assert exit_code == 0
     assert "ROUND_ADVANCE:" in output
-    assert "SEASON_END_DEFERRED:" in output
+    assert "ALMS_SEASON_END:" in output
+    assert "ALMS_SEASON_REWARD:" in output
+    assert "ALMS_RESET:" in output
     assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat" in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
-    assert "ALMS_SEASON_REWARD:" not in output
-    assert "ALMS_RESET:" not in output
     assert "SEASON_ADVANCE:" not in output
     assert "INVARIANT_CHECK:" in output
     assert "passed for all players" in output
-    assert "player_one=1" in output
-    assert "player_two=1" in output
+    assert "player_one=2" in output
+    assert "player_two=2" in output
     assert "Next active player: player_two" in output
     assert "Resource: wheat" in output
 
@@ -181,6 +181,7 @@ def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> Non
     assert "ALMS_RESET:" not in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
     assert "MERCHANT_ADVANCE:" not in output
+    assert "TURN_ADVANCE:" not in output
     assert "State after action:" in output
     assert "Next active player: none (game over)" in output
     assert "Game over: true" in output

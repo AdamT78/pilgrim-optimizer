@@ -53,7 +53,7 @@ def test_round_end_emits_excess_ship_merchant_start_player_and_round_advance() -
     assert EventType.MERCHANT_ADVANCE in event_types
     assert EventType.START_PLAYER_SELECTION in event_types
     assert EventType.ROUND_ADVANCE in event_types
-    assert EventType.SEASON_END_DEFERRED not in event_types
+    assert EventType.ALMS_SEASON_END not in event_types
     assert EventType.SEASON_END not in event_types
     assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
     assert result.state.ship_position == 2
@@ -75,12 +75,12 @@ def test_round_end_excess_caps_stone_and_wheat_only() -> None:
     assert player_two.resources.wheat == 4
 
 
-def test_season_end_deferred_uses_incremented_round_with_metadata() -> None:
-    event_types, result = _event_types("scenarios/round_end_pilgrimage_deferred_001.json")
+def test_season_end_scoring_uses_incremented_round_with_metadata() -> None:
+    event_types, result = _event_types("scenarios/alms_season_end_unique_leader_001.json")
     assert EventType.ROUND_ADVANCE in event_types
-    assert EventType.SEASON_END_DEFERRED in event_types
-    assert EventType.ALMS_SEASON_REWARD not in event_types
-    assert EventType.ALMS_RESET not in event_types
+    assert EventType.ALMS_SEASON_END in event_types
+    assert EventType.ALMS_SEASON_REWARD in event_types
+    assert EventType.ALMS_RESET in event_types
     assert EventType.SEASON_END not in event_types
     assert EventType.SEASON_ADVANCE not in event_types
     assert result.state.timing.round_number == 10
@@ -93,13 +93,14 @@ def test_game_end_triggers_on_final_nw_return_and_blocks_future_actions() -> Non
     result = apply_action(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.SHIP_ADVANCE in event_types
-    assert EventType.SEASON_END_DEFERRED not in event_types
+    assert EventType.ALMS_SEASON_END not in event_types
     assert EventType.SEASON_END not in event_types
     assert EventType.ALMS_SEASON_REWARD not in event_types
     assert EventType.ALMS_RESET not in event_types
     assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
     assert EventType.GAME_END in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
+    assert EventType.TURN_ADVANCE not in event_types
     assert result.state.ship_position == 0
     assert result.state.game_over is True
     assert legal_actions(result.state, scenario.config) == ()
@@ -123,7 +124,7 @@ def test_scenarios_validate_with_round_end_state_fields() -> None:
         "scenarios/season_end_alms_001.json",
         "scenarios/round_end_excess_001.json",
         "scenarios/round_end_excess_caps_001.json",
-        "scenarios/round_end_pilgrimage_deferred_001.json",
+        "scenarios/alms_season_end_unique_leader_001.json",
         "scenarios/game_end_nw_site_001.json",
         "scenarios/start_player_selection_001.json",
     ):

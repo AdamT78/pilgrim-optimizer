@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.enums import EventType, PlayerId
+from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
@@ -18,7 +18,7 @@ def test_non_round_ending_turn_does_not_run_round_end_phases() -> None:
     assert EventType.START_PLAYER_SELECTION not in event_types
     assert EventType.EXCESS_RESOURCE_CAP not in event_types
     assert EventType.ROUND_ADVANCE not in event_types
-    assert EventType.SEASON_END_DEFERRED not in event_types
+    assert EventType.ALMS_SEASON_END not in event_types
 
 
 def test_round_ending_turn_runs_expected_sequence_and_state_updates() -> None:
@@ -99,31 +99,41 @@ def test_merchant_moves_once_at_round_end_only() -> None:
     assert round_end_result.state.merchant_position == round_end_scenario.state.merchant_position + 1
 
 
-def test_season_end_deferred_uses_incremented_round_and_has_no_alms_scoring_events() -> None:
-    scenario = load_scenario("scenarios/round_end_pilgrimage_deferred_001.json")
-    action = legal_actions(scenario.state, scenario.config)[0]
+def test_season_end_scoring_uses_incremented_round_and_orders_events_before_merchant() -> None:
+    scenario = load_scenario("scenarios/alms_season_end_unique_leader_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.TITHE
+    )
     result = apply_action(scenario.state, action, scenario.config)
 
     assert result.state.timing.round_number == 10
     round_advance_index = _event_index(result.events, EventType.ROUND_ADVANCE)
-    season_deferred_index = _event_index(result.events, EventType.SEASON_END_DEFERRED)
+    season_end_index = _event_index(result.events, EventType.ALMS_SEASON_END)
+    season_reward_index = _event_index(result.events, EventType.ALMS_SEASON_REWARD)
+    season_reset_index = _event_index(result.events, EventType.ALMS_RESET)
     merchant_index = _event_index(result.events, EventType.MERCHANT_ADVANCE)
-    assert round_advance_index < season_deferred_index < merchant_index
+    assert round_advance_index < season_end_index < season_reward_index < season_reset_index < merchant_index
 
     event_types = {event.event_type for event in result.events}
-    assert EventType.ALMS_SEASON_REWARD not in event_types
-    assert EventType.ALMS_RESET not in event_types
-    assert EventType.SEASON_END not in event_types
-    assert EventType.SEASON_ADVANCE not in event_types
+    assert EventType.ALMS_SEASON_REWARD in event_types
+    assert EventType.ALMS_RESET in event_types
 
 
-def test_no_season_end_deferred_when_round_has_no_pilgrimage_metadata() -> None:
-    scenario = load_scenario("scenarios/round_end_excess_001.json")
-    action = legal_actions(scenario.state, scenario.config)[0]
+def test_no_season_end_when_round_has_no_pilgrimage_metadata() -> None:
+    scenario = load_scenario("scenarios/alms_season_end_no_metadata_no_trigger_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.TITHE
+    )
     result = apply_action(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
 
-    assert EventType.SEASON_END_DEFERRED not in event_types
+    assert EventType.ALMS_SEASON_END not in event_types
+    assert EventType.ALMS_SEASON_REWARD not in event_types
+    assert EventType.ALMS_RESET not in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
     assert EventType.START_PLAYER_SELECTION in event_types
 

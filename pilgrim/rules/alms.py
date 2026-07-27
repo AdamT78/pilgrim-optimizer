@@ -69,6 +69,14 @@ class AlmsSeasonEndResult:
     events: tuple[GameEvent, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _AlmsLeaderSelection:
+    winner: PlayerId
+    tie_break: str
+    winning_alms_position: int
+    winning_piety: int
+
+
 def clamp_alms_position(position: int, config: AlmsConfig) -> int:
     """Clamp an Alms row to the configured track range."""
     return config.clamp(position)
@@ -243,26 +251,37 @@ def resolve_donate_building_alms(
     )
 
 
-def resolve_alms_season_end(state: GameState, config: AlmsConfig) -> AlmsSeasonEndResult:
+def resolve_alms_season_end(
+    state: GameState,
+    config: AlmsConfig,
+    *,
+    actor: PlayerId | None = None,
+    action_id: str = "alms:season_end",
+    round_number: int | None = None,
+    season_site_index: int | None = None,
+) -> AlmsSeasonEndResult:
     """
     Resolve season-end Alms reward with deterministic tie-breakers.
 
     Tie-break model for this milestone:
     1) highest Alms position
     2) highest piety position
-    3) earliest in current turn order (active player first)
+    3) earliest in current turn order (start player first)
     """
-    winner = _determine_alms_leader(state, config)
+    leader = _determine_alms_leader(state, config)
+    winner = leader.winner
+    event_actor = winner if actor is None else actor
+    effective_round = state.round_number if round_number is None else round_number
     updated_state = state
     events: list[GameEvent] = []
+    winner_state_before = updated_state.player_state(winner)
 
-    winner_state = updated_state.player_state(winner)
     moved_to_alms_table = False
-    if winner_state.workforce.abbey > 0:
-        committed = winner_state.workforce.committed
+    if winner_state_before.workforce.abbey > 0:
+        committed = winner_state_before.workforce.committed
         workforce = replace(
-            winner_state.workforce,
-            abbey=winner_state.workforce.abbey - 1,
+            winner_state_before.workforce,
+            abbey=winner_state_before.workforce.abbey - 1,
             committed=CommittedAcolytes(
                 roads=committed.roads,
                 shrines=committed.shrines,
@@ -273,11 +292,57 @@ def resolve_alms_season_end(state: GameState, config: AlmsConfig) -> AlmsSeasonE
         )
         updated_state = updated_state.with_player_state(
             winner,
-            replace(winner_state, workforce=workforce),
+            replace(winner_state_before, workforce=workforce),
         )
         moved_to_alms_table = True
 
-    for player_id in PlayerId:
+    details: dict[str, str | int | bool] = {
+        "winner": winner.name.lower(),
+        "winning_alms_position": leader.winning_alms_position,
+        "winning_piety": leader.winning_piety,
+        "tie_break": leader.tie_break,
+        "round": effective_round,
+    }
+    if season_site_index is not None:
+        details["season_site"] = season_site_index
+    events.append(
+        GameEvent(
+            event_type=EventType.ALMS_SEASON_END,
+            actor=event_actor,
+            action_id=action_id,
+            details=make_event_details(**details),
+        )
+    )
+
+    winner_state_after_reward = updated_state.player_state(winner)
+    alms_table_after = winner_state_after_reward.workforce.committed.alms_table
+    end_game_vp = score_alms_table(alms_table_after, config)
+    reward_details: dict[str, str | int | bool] = {
+        "winner": winner.name.lower(),
+        "moved": moved_to_alms_table,
+    }
+    if moved_to_alms_table:
+        reward_details.update(
+            {
+                "from_pool": "abbey",
+                "to_pool": "alms_table",
+                "alms_table_acolytes": alms_table_after,
+                "end_game_vp": end_game_vp,
+            }
+        )
+    else:
+        reward_details["forfeited"] = True
+        reward_details["reason"] = "no_abbey_acolyte"
+    events.append(
+        GameEvent(
+            event_type=EventType.ALMS_SEASON_REWARD,
+            actor=event_actor,
+            action_id=action_id,
+            details=make_event_details(**reward_details),
+        )
+    )
+
+    for player_id in (PlayerId(index) for index in range(state.player_count)):
         player_state = updated_state.player_state(player_id)
         if player_state.alms_position != 0:
             updated_state = updated_state.with_player_state(
@@ -287,20 +352,9 @@ def resolve_alms_season_end(state: GameState, config: AlmsConfig) -> AlmsSeasonE
 
     events.append(
         GameEvent(
-            event_type=EventType.ALMS_SEASON_REWARD,
-            actor=winner,
-            action_id="alms:season_end",
-            details=make_event_details(
-                winner=winner.name.lower(),
-                moved=moved_to_alms_table,
-            ),
-        )
-    )
-    events.append(
-        GameEvent(
             event_type=EventType.ALMS_RESET,
-            actor=winner,
-            action_id="alms:season_end",
+            actor=event_actor,
+            action_id=action_id,
             details=make_event_details(reset_to=0),
         )
     )
@@ -313,21 +367,58 @@ def resolve_alms_season_end(state: GameState, config: AlmsConfig) -> AlmsSeasonE
     )
 
 
-def _determine_alms_leader(state: GameState, config: AlmsConfig) -> PlayerId:
-    turn_order = _current_turn_order(state.active_player)
-    order_index = {player_id: index for index, player_id in enumerate(turn_order)}
+def _determine_alms_leader(state: GameState, config: AlmsConfig) -> _AlmsLeaderSelection:
+    players = tuple(PlayerId(index) for index in range(state.player_count))
+    highest_alms = max(
+        clamp_alms_position(state.player_state(player).alms_position, config)
+        for player in players
+    )
+    alms_tied = tuple(
+        player
+        for player in players
+        if clamp_alms_position(state.player_state(player).alms_position, config) == highest_alms
+    )
+    if len(alms_tied) == 1:
+        winner = alms_tied[0]
+        return _AlmsLeaderSelection(
+            winner=winner,
+            tie_break="highest_alms_position",
+            winning_alms_position=highest_alms,
+            winning_piety=state.player_state(winner).piety,
+        )
 
-    return max(
-        PlayerId,
-        key=lambda player_id: (
-            clamp_alms_position(state.player_state(player_id).alms_position, config),
-            state.player_state(player_id).piety,
-            -order_index[player_id],
-        ),
+    highest_piety = max(state.player_state(player).piety for player in alms_tied)
+    piety_tied = tuple(
+        player for player in alms_tied if state.player_state(player).piety == highest_piety
+    )
+    if len(piety_tied) == 1:
+        winner = piety_tied[0]
+        return _AlmsLeaderSelection(
+            winner=winner,
+            tie_break="higher_piety",
+            winning_alms_position=highest_alms,
+            winning_piety=highest_piety,
+        )
+
+    turn_order = _current_turn_order_from_start_player(
+        start_player=state.start_player,
+        player_count=state.player_count,
+    )
+    winner = next(player for player in turn_order if player in piety_tied)
+    return _AlmsLeaderSelection(
+        winner=winner,
+        tie_break="turn_order",
+        winning_alms_position=highest_alms,
+        winning_piety=highest_piety,
     )
 
 
-def _current_turn_order(active_player: PlayerId) -> tuple[PlayerId, PlayerId]:
-    if active_player is PlayerId.PLAYER_ONE:
-        return (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO)
-    return (PlayerId.PLAYER_TWO, PlayerId.PLAYER_ONE)
+def _current_turn_order_from_start_player(
+    *,
+    start_player: PlayerId,
+    player_count: int,
+) -> tuple[PlayerId, ...]:
+    return tuple(
+        PlayerId((int(start_player) + offset) % player_count)
+        for offset in range(player_count)
+    )
