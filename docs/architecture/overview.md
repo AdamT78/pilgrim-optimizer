@@ -494,6 +494,29 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Converted stone/silver is available to later same-turn effects because conversion resolves
   pre-sowing (for example, Construct affordability checks on the selected action).
 
+## Brewery Wheat-to-Silver Conversion (v5.2)
+
+- Transition/runtime wiring now supports Brewery as an optional full-turn economic modifier.
+- Source resolution reuses the shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none, insufficient payment resource)
+- Conversion semantics:
+  - `sell_wheat_for_silver`: `wheat -1`, `silver +2`
+  - fixed exact amount (`1`) and one-way direction (no buy path)
+- Legal-action generation adds at most one Brewery variant per eligible base action:
+  - generated only when wheat remains at least `1` after any required hire payment
+  - non-Brewery actions remain available unchanged
+- Apply-time ordering for the Brewery modifier:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (conversion description)
+  - conversion `RESOURCE_DELTA`
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Converted silver is available to later same-turn effects because conversion resolves
+  pre-sowing.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
