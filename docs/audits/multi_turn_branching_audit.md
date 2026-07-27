@@ -1,4 +1,4 @@
-# Multi-Turn Branching Audit (v4.8)
+# Multi-Turn Branching Audit (v4.9)
 
 ## Purpose
 
@@ -11,6 +11,7 @@ It helps answer:
 - where branching spikes appear
 - whether duplicate action IDs appear
 - how often key branching contributors (hiring, route modifiers, Grain Store conversion) occur
+- how much branching comes from base sow/action expansion (origins/routes/duties/pickups)
 
 This audit does **not** change rules, action generation, event wording, or search behavior.
 
@@ -51,7 +52,34 @@ Each trace step reports:
   - `actions_with_end_turn_modifier`
   - `actions_with_building_conversion`
   - `actions_with_grain_store_conversion`
+- base sow/action breakdown counts:
+  - `setup_sow_actions`
+  - `full_turn_actions`
+  - `distinct_sow_origins`
+  - `distinct_routes`
+  - `distinct_actual_routes`
+  - `distinct_selected_duties`
+  - `distinct_duty_actions`
+  - `max_picked_up_acolytes`
+  - `avg_picked_up_acolytes`
+  - `max_route_length`
+  - `avg_route_length`
 - chosen deterministic action (`selected_action_id` + `selected_action_summary`)
+
+The report prints:
+
+- a `Branching totals` table
+- a `Base sow/action breakdown` table
+- a per-trace `Summary` and `Base branching summary` section
+
+The base summary includes a deterministic likely-driver heuristic (reporting only):
+
+- `base sow/duty expansion`
+- `combined route modifiers`
+- `building conversion quantities`
+- `route/start/end modifiers`
+- `hired-building variants`
+- `mixed / low`
 
 ## Determinism
 
@@ -66,6 +94,8 @@ Each trace step reports:
 - Counts are field-based classification of generated actions; they are useful diagnostics, not
   semantic proof of play quality.
 - Generated 3p/4p traces use fixed seeds and normal-play overrides to probe branching in turn flow.
+- Current action model stores one route tuple on actions; there is no separate candidate-vs-actual
+  route field. `distinct_actual_routes` therefore uses the same route tuple as `distinct_routes`.
 
 ## Scope boundary
 
