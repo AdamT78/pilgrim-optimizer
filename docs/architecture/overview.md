@@ -495,11 +495,14 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 
 - Added reporting-only audit script:
   - `tools/audits/building_status_branching_audit.py`
+- Added scripted multi-turn branching audit:
+  - `tools/audits/multi_turn_branching_audit.py`
 - Audit output includes:
   - building implementation-status grouping (best effort from catalogue + runtime registries)
   - safe-next-candidate guidance
   - legal-action branching counts for representative scenarios
 - See: `docs/audits/building_status_branching_audit.md`
+- See: `docs/audits/multi_turn_branching_audit.md`
 
 ## Intentionally Deferred
 
