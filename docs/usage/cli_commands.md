@@ -479,6 +479,33 @@ Position mapping used by the current sandbox:
   - conversion `RESOURCE_DELTA`
   - `SOWING`
 
+## Indulgences Piety/Silver Conversion (v5.0)
+
+- Indulgences is available as an optional full-turn conversion modifier (not a standalone action):
+  - `sell_piety`: `piety -X`, `silver +X`
+  - `buy_piety`: `silver -X`, `piety +X`
+  - `X >= 1`, fixed `1:1` rate
+- Source resolution uses existing building-source priority:
+  - own active Indulgences (free)
+  - opponent active Indulgences (hire from owner)
+  - live market Indulgences (hire from bank)
+- Action summary examples:
+  - `... | use building: indulgences to sell 2 piety for 2 silver | ...`
+  - `... | use building: indulgences to buy 1 piety for 1 silver | ...`
+  - hired variants append `| hire building: indulgences from <market|player_two>`
+- Legal generation:
+  - normal non-Indulgences actions remain legal
+  - sell variants are generated for amounts `1..current_piety_after_hire`
+  - buy variants are generated for amounts
+    `1..min(available_silver_after_hire, piety_track_remaining_space)`
+  - no zero-amount variants
+  - no buy variants are generated at piety cap
+- `apply --verbose` ordering for Indulgences conversion:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: indulgences sold/bought ...`
+  - conversion `RESOURCE_DELTA` (shows both `silver` and `piety` deltas)
+  - `SOWING`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

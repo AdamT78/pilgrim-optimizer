@@ -288,6 +288,22 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
                 " | use building: grain_store "
                 f"to buy {amount} wheat for {amount} silver"
             )
+    if (
+        action.building_conversion_id == "indulgences"
+        and action.building_conversion_direction is not None
+        and action.building_conversion_amount is not None
+    ):
+        amount = action.building_conversion_amount
+        if action.building_conversion_direction == "sell_piety":
+            route_summary += (
+                " | use building: indulgences "
+                f"to sell {amount} piety for {amount} silver"
+            )
+        elif action.building_conversion_direction == "buy_piety":
+            route_summary += (
+                " | use building: indulgences "
+                f"to buy {amount} piety for {amount} silver"
+            )
     summary = (
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
@@ -358,12 +374,12 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             f"from {action.hired_building_source}"
         )
     if (
-        action.building_conversion_id == "grain_store"
+        action.building_conversion_id in ("grain_store", "indulgences")
         and action.building_conversion_source is not None
         and action.building_conversion_source != "own_active"
     ):
         summary += (
-            " | hire building: grain_store "
+            f" | hire building: {action.building_conversion_id} "
             f"from {action.building_conversion_source}"
         )
     if action.hired_building_id == "mill":

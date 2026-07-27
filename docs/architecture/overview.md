@@ -442,6 +442,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Converted resources are available to the selected Duty resolution in the same action because
   conversion applies before sowing/duty resolution.
 
+## Indulgences Piety/Silver Conversion (v5.0)
+
+- Transition/runtime wiring now supports Indulgences as an optional full-turn piety/resource modifier.
+- Source resolution reuses the shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none, insufficient payment resource)
+- Conversion semantics:
+  - `sell_piety`: `piety -X`, `silver +X`
+  - `buy_piety`: `silver -X`, `piety +X`
+  - `X >= 1`, fixed `1:1` rate
+- Piety bounds are enforced both in legal generation and apply-time validation:
+  - sell `1..current_piety_after_hire`
+  - buy `1..min(available_silver_after_hire, piety_track_remaining_space_after_hire)`
+  - no buy variants at piety cap
+- Apply-time ordering for the Indulgences modifier:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (conversion description)
+  - conversion `RESOURCE_DELTA` (including piety delta)
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Converted piety/silver is available to later same-turn effects because conversion resolves
+  pre-sowing.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
