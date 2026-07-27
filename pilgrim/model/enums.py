@@ -31,18 +31,28 @@ class PlayerId(IntEnum):
 
     PLAYER_ONE = 0
     PLAYER_TWO = 1
+    PLAYER_THREE = 2
+    PLAYER_FOUR = 3
 
     def opponent(self) -> PlayerId:
         """Return the opposing player in a two-player sandbox."""
-        return PlayerId.PLAYER_TWO if self is PlayerId.PLAYER_ONE else PlayerId.PLAYER_ONE
+        if self is PlayerId.PLAYER_ONE:
+            return PlayerId.PLAYER_TWO
+        if self is PlayerId.PLAYER_TWO:
+            return PlayerId.PLAYER_ONE
+        raise ValueError("opponent() is only defined for two-player states.")
 
     @classmethod
     def from_string(cls, value: str) -> PlayerId:
         mapping = {
             "player_one": cls.PLAYER_ONE,
             "player_two": cls.PLAYER_TWO,
+            "player_three": cls.PLAYER_THREE,
+            "player_four": cls.PLAYER_FOUR,
             "1": cls.PLAYER_ONE,
             "2": cls.PLAYER_TWO,
+            "3": cls.PLAYER_THREE,
+            "4": cls.PLAYER_FOUR,
         }
         try:
             return mapping[value]

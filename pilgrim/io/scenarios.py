@@ -135,14 +135,8 @@ def _game_state_from_dict(
 ) -> GameState:
     players_raw = raw["players"]
     acolytes_raw = raw.get("acolytes")
-    player_one = _player_state_from_dict(
-        players_raw["player_one"],
-        legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_one"),
-    )
-    player_two = _player_state_from_dict(
-        players_raw["player_two"],
-        legacy_mancala=_legacy_mancala_for_player(acolytes_raw, "player_two"),
-    )
+    parsed_players = _players_from_dict(players_raw, acolytes_raw=acolytes_raw)
+    player_states = tuple(player_state for _, player_state in parsed_players)
     timing = _timing_state_from_dict(raw)
     merchant_position = _merchant_position_from_dict(raw)
     ship_position = int(raw.get("ship_position", ship_start_position))
@@ -181,7 +175,7 @@ def _game_state_from_dict(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         start_player=start_player,
         phase=phase,
-        players=(player_one, player_two),
+        players=player_states,
         timing=timing,
         table_player_count=table_player_count,
         dummy_acolytes=dummy_acolytes,
@@ -196,6 +190,48 @@ def _game_state_from_dict(
         building_availability=building_availability,
         pilgrimage_rounds=pilgrimage_rounds,
     )
+
+
+def _players_from_dict(
+    raw: Any,
+    *,
+    acolytes_raw: Any,
+) -> tuple[tuple[PlayerId, PlayerState], ...]:
+    if not isinstance(raw, Mapping):
+        raise ValueError("initial_state.players must be an object.")
+
+    parsed: list[tuple[PlayerId, PlayerState]] = []
+    for player_key, player_state_raw in raw.items():
+        if not isinstance(player_state_raw, Mapping):
+            raise ValueError(f"initial_state.players.{player_key} must be an object.")
+        player_id = _player_id_from_any(player_key)
+        parsed.append(
+            (
+                player_id,
+                _player_state_from_dict(
+                    player_state_raw,
+                    legacy_mancala=_legacy_mancala_for_player(
+                        acolytes_raw,
+                        str(player_key),
+                    ),
+                ),
+            )
+        )
+
+    if not parsed:
+        raise ValueError("initial_state.players must include at least two players.")
+
+    parsed.sort(key=lambda pair: int(pair[0]))
+    ordered_ids = tuple(int(player_id) for player_id, _ in parsed)
+    expected_ids = tuple(range(len(parsed)))
+    if ordered_ids != expected_ids:
+        raise ValueError(
+            "initial_state.players keys must be contiguous from player_one in order "
+            f"(player_one, player_two, ...). Got ids: {ordered_ids}."
+        )
+    if len(parsed) < 2 or len(parsed) > 4:
+        raise ValueError("initial_state.players must include between 2 and 4 real players.")
+    return tuple(parsed)
 
 
 def _player_state_from_dict(
@@ -531,8 +567,18 @@ def _tithe_counters_from_dict(raw: Any) -> Mapping[str, Any] | None:
 def _player_count_from_dict(raw: Mapping[str, Any]) -> int:
     player_count_raw = raw.get("player_count")
     if player_count_raw is None:
+        initial_state_raw = raw.get("initial_state")
+        if isinstance(initial_state_raw, Mapping):
+            players_raw = initial_state_raw.get("players")
+            if isinstance(players_raw, Mapping):
+                inferred = len(players_raw)
+                if inferred in (2, 3, 4):
+                    return inferred
         return 2
-    return int(player_count_raw)
+    parsed = int(player_count_raw)
+    if parsed not in (2, 3, 4):
+        raise ValueError("player_count must be one of: 2, 3, 4.")
+    return parsed
 
 
 def _opponent_model_from_dict(raw: Mapping[str, Any]) -> OpponentModel:

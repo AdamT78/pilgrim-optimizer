@@ -378,9 +378,23 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
 
     if event.event_type is EventType.INVARIANT_CHECK:
         if details.get("acolytes_conserved") is True:
-            total_workforce_p1 = details.get("total_workforce_player_one")
-            total_workforce_p2 = details.get("total_workforce_player_two")
-            if isinstance(total_workforce_p1, int) and isinstance(total_workforce_p2, int):
+            workforce_entries = [
+                (str(key), value)
+                for key, value in details.items()
+                if str(key).startswith("total_workforce_player_") and isinstance(value, int)
+            ]
+            if workforce_entries:
+                player_order = {
+                    "total_workforce_player_one": 0,
+                    "total_workforce_player_two": 1,
+                    "total_workforce_player_three": 2,
+                    "total_workforce_player_four": 3,
+                }
+                workforce_entries.sort(key=lambda item: player_order.get(item[0], 999))
+                workforce_text = ", ".join(
+                    f"{key.replace('total_workforce_', '', 1)}={value}"
+                    for key, value in workforce_entries
+                )
                 conserved_label = (
                     "serfs/acolytes conserved"
                     if details.get("serfs_non_negative") is True
@@ -389,7 +403,7 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                 return (
                     f"{event_name}: passed for all players "
                     f"({conserved_label}; total workforce by player: "
-                    f"player_one={total_workforce_p1}, player_two={total_workforce_p2})"
+                    f"{workforce_text})"
                 )
             total_workforce = details.get("total_workforce")
             if isinstance(total_workforce, int):
@@ -1136,7 +1150,7 @@ def _format_building_availability_summary(
     future_market_text = ", ".join(market_future_text_parts) if market_future_text_parts else "none"
 
     owned_live_parts: list[str] = []
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in (PlayerId(index) for index in range(state.player_count)):
         player_label = player_id.name.lower()
         slots = state.player_state(player_id).player_board_slots
         owned_ids = (*slots.active_buildings, *slots.donated_buildings)

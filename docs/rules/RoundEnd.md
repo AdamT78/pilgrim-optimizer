@@ -4,6 +4,12 @@
 
 The sandbox now executes an explicit round-end phase pipeline after the last player turn in a round.
 
+Normal-round cadence:
+
+- each real player acts once per round
+- round length equals real player count (`2..4`)
+- round-end pipeline runs only after the last real player turn.
+
 Setup-sow exception:
 
 - `setup_sow` actions do not run this round-end pipeline.
