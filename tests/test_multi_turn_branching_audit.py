@@ -12,8 +12,11 @@ def test_audit_report_contains_expected_headings() -> None:
 
     assert "Multi-Turn Branching Audit" in report
     assert "Trace: basic_2p_round_flow" in report
+    assert "Branching totals:" in report
+    assert "Base sow/action breakdown:" in report
     assert "Selected actions:" in report
     assert "Summary:" in report
+    assert "Base branching summary:" in report
     assert "Overall summary:" in report
 
 
@@ -74,6 +77,10 @@ def test_trace_rows_are_deterministic_and_have_no_duplicate_action_ids() -> None
     assert all(row.legal_action_count > 0 for row in rows)
     assert all(row.duplicate_action_id_count == 0 for row in rows)
     assert all(row.unique_action_id_count == row.legal_action_count for row in rows)
+    assert all(row.full_turn_actions > 0 for row in rows)
+    assert all(row.distinct_routes > 0 for row in rows)
+    assert all(row.distinct_selected_duties > 0 for row in rows)
+    assert all(row.max_picked_up_acolytes > 0 for row in rows)
 
 
 def test_generated_setup_three_and_four_player_traces_run() -> None:
@@ -88,6 +95,10 @@ def test_generated_setup_three_and_four_player_traces_run() -> None:
     assert all(result.rows for result in results)
     assert all(row.legal_action_count > 0 for result in results for row in result.rows)
     assert all(row.duplicate_action_id_count == 0 for result in results for row in result.rows)
+    assert all(row.full_turn_actions > 0 for result in results for row in result.rows)
+    assert all(row.distinct_routes > 0 for result in results for row in result.rows)
+    assert all(row.distinct_selected_duties > 0 for result in results for row in result.rows)
+    assert all(row.max_picked_up_acolytes > 0 for result in results for row in result.rows)
 
     three_players = {row.active_player for row in results[0].rows}
     four_players = {row.active_player for row in results[1].rows}

@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from pilgrim.io.scenarios import LoadedScenario, load_scenario
-from pilgrim.model.actions import FullTurnAction, GameAction, action_id, action_summary
+from pilgrim.model.actions import (
+    FullTurnAction,
+    GameAction,
+    SetupSowAction,
+    action_id,
+    action_summary,
+)
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.model.state import GameState
@@ -61,6 +67,17 @@ class TraceStepRow:
     legal_action_count: int
     unique_action_id_count: int
     duplicate_action_id_count: int
+    setup_sow_actions: int
+    full_turn_actions: int
+    distinct_sow_origins: int
+    distinct_routes: int
+    distinct_actual_routes: int
+    distinct_selected_duties: int
+    distinct_duty_actions: int
+    max_picked_up_acolytes: int
+    avg_picked_up_acolytes: float
+    max_route_length: int
+    avg_route_length: float
     actions_with_hired_building: int
     actions_with_two_or_more_hired_buildings: int
     actions_with_route_modifier: int
@@ -268,7 +285,14 @@ def _run_trace_rows(
                 f"Selector returned non-legal action at trace={trace_name} step={step}: {selected_id}"
             )
 
+        setup_sow_actions = [action for action in actions if isinstance(action, SetupSowAction)]
         full_turn_actions = [action for action in actions if isinstance(action, FullTurnAction)]
+        route_lengths = [len(action.route) for action in full_turn_actions]
+        picked_up_counts = list(route_lengths)
+        distinct_routes = {action.route for action in full_turn_actions}
+        distinct_actual_routes = {
+            _actual_route_for_branching_metrics(action) for action in full_turn_actions
+        }
         row = TraceStepRow(
             trace_name=trace_name,
             step=step,
@@ -280,6 +304,21 @@ def _run_trace_rows(
             legal_action_count=len(actions),
             unique_action_id_count=len(set(action_ids)),
             duplicate_action_id_count=len(action_ids) - len(set(action_ids)),
+            setup_sow_actions=len(setup_sow_actions),
+            full_turn_actions=len(full_turn_actions),
+            distinct_sow_origins=len({action.origin for action in full_turn_actions}),
+            distinct_routes=len(distinct_routes),
+            distinct_actual_routes=len(distinct_actual_routes),
+            distinct_selected_duties=len({action.selected_duty for action in full_turn_actions}),
+            distinct_duty_actions=len({action.resolution.value for action in full_turn_actions}),
+            max_picked_up_acolytes=max(picked_up_counts) if picked_up_counts else 0,
+            avg_picked_up_acolytes=(
+                sum(picked_up_counts) / len(picked_up_counts) if picked_up_counts else 0.0
+            ),
+            max_route_length=max(route_lengths) if route_lengths else 0,
+            avg_route_length=(
+                sum(route_lengths) / len(route_lengths) if route_lengths else 0.0
+            ),
             actions_with_hired_building=_count_matching(full_turn_actions, action_has_hire),
             actions_with_two_or_more_hired_buildings=_count_matching(
                 full_turn_actions,
@@ -320,10 +359,21 @@ def _count_matching(
     return sum(1 for action in actions if predicate(action))
 
 
+def _actual_route_for_branching_metrics(action: FullTurnAction) -> tuple[int, ...]:
+    """
+    Return actual route approximation used for base-branching metrics.
+
+    Current action model stores one route tuple on `FullTurnAction`. There is no separate
+    candidate-vs-actual route field, so this helper returns that tuple directly.
+    """
+    return action.route
+
+
 def _format_trace_result(result: TraceResult) -> list[str]:
     lines = [
         f"Trace: {result.definition.name}",
         f"Description: {result.definition.description}",
+        "Branching totals:",
         (
             "Step  AbsTurn  Round  Season  TIR  Player       Legal  Unique  Dups  "
             "Hired  2+Hired  RouteMod  Kogge  Cloisters  K+C  StartMod  EndMod  Conv  GrainStore"
@@ -355,6 +405,34 @@ def _format_trace_result(result: TraceResult) -> list[str]:
             f"{row.actions_with_building_conversion:>4}  "
             f"{row.actions_with_grain_store_conversion:>10}"
         )
+    lines.extend(
+        [
+            "Base sow/action breakdown:",
+            (
+                "Step  SetupSow  FullTurn  Origins  Routes  ActualRoutes  Duties  DutyActions  "
+                "MaxPickup  AvgPickup  MaxRoute  AvgRoute"
+            ),
+            (
+                "----  --------  --------  -------  ------  ------------  ------  -----------  "
+                "---------  ---------  --------  --------"
+            ),
+        ]
+    )
+    for row in result.rows:
+        lines.append(
+            f"{row.step:>4}  "
+            f"{row.setup_sow_actions:>8}  "
+            f"{row.full_turn_actions:>8}  "
+            f"{row.distinct_sow_origins:>7}  "
+            f"{row.distinct_routes:>6}  "
+            f"{row.distinct_actual_routes:>12}  "
+            f"{row.distinct_selected_duties:>6}  "
+            f"{row.distinct_duty_actions:>11}  "
+            f"{row.max_picked_up_acolytes:>9}  "
+            f"{row.avg_picked_up_acolytes:>9.2f}  "
+            f"{row.max_route_length:>8}  "
+            f"{row.avg_route_length:>8.2f}"
+        )
     lines.append("Selected actions:")
     for row in result.rows:
         lines.append(f"- step {row.step}: {row.selected_action_id}")
@@ -371,6 +449,10 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
     max_hired = max(rows, key=lambda row: row.actions_with_hired_building)
     max_combined = max(rows, key=lambda row: row.actions_with_kogge_cloisters_combined)
     max_grain_store = max(rows, key=lambda row: row.actions_with_grain_store_conversion)
+    max_routes = max(rows, key=lambda row: row.distinct_routes)
+    max_duties = max(rows, key=lambda row: row.distinct_selected_duties)
+    max_pickup = max(rows, key=lambda row: row.max_picked_up_acolytes)
+    likely_driver = _likely_branching_driver(max_legal)
     return [
         "Summary:",
         f"- max legal actions: {max_legal.legal_action_count} at step {max_legal.step}",
@@ -384,7 +466,40 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
             "- max Grain Store conversion actions: "
             f"{max_grain_store.actions_with_grain_store_conversion} at step {max_grain_store.step}"
         ),
+        "Base branching summary:",
+        f"- max distinct routes: {max_routes.distinct_routes} at step {max_routes.step}",
+        (
+            "- max distinct selected duties: "
+            f"{max_duties.distinct_selected_duties} at step {max_duties.step}"
+        ),
+        (
+            "- max picked-up acolytes: "
+            f"{max_pickup.max_picked_up_acolytes} at step {max_pickup.step}"
+        ),
+        (
+            "- likely driver at max-branching step "
+            f"{max_legal.step}: {likely_driver}"
+        ),
     ]
+
+
+def _likely_branching_driver(row: TraceStepRow) -> str:
+    if (
+        row.legal_action_count >= 100
+        and row.actions_with_hired_building == 0
+        and row.actions_with_route_modifier == 0
+        and row.actions_with_grain_store_conversion == 0
+    ):
+        return "base sow/duty expansion"
+    if row.actions_with_kogge_cloisters_combined > 0:
+        return "combined route modifiers"
+    if row.actions_with_grain_store_conversion > 0:
+        return "building conversion quantities"
+    if row.actions_with_route_modifier > 0:
+        return "route/start/end modifiers"
+    if row.actions_with_hired_building > 0:
+        return "hired-building variants"
+    return "mixed / low"
 
 
 def _format_overall_summary(results: tuple[TraceResult, ...]) -> list[str]:
