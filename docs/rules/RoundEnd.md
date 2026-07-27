@@ -1,24 +1,29 @@
-# Round End (v1.0 Sandbox Scope)
+# Round End (v4.4 Sandbox Scope)
 
 ## Implemented scope
 
 The sandbox now executes an explicit round-end phase pipeline after the last player turn in a round.
 
+Setup-sow exception:
+
+- `setup_sow` actions do not run this round-end pipeline.
+- setup rotation remains `next incomplete setup player` until setup completes.
+
 Implemented now:
 
 - Excess resource cap (`stone` and `wheat` capped at 6 for each player)
+- Round increment at round end (`ROUND_ADVANCE`)
+- Season-end pilgrimage check as deferred metadata-driven event
+  (`SEASON_END_DEFERRED`)
 - Abstract Ship marker movement on a 26-step path
-- Season-end trigger when Ship reaches a configured pilgrimage-site position
-- Existing Alms season-end leader reward/reset integration
-- Existing dummy-acolyte season-end movement integration
 - Game-end trigger when Ship returns to NW pilgrimage site after 26 completed rounds
 - Merchant movement once per round (not once per turn)
-- Trade-route income placeholder hook (`TRADE_ROUTE_INCOME_SKIPPED`)
 - Deterministic start-player selection placeholder policy (`highest_piety_selects_self`)
 
 Deferred:
 
-- Confession Box use/hire decisions
+- Alms season-end leader reward/reset integration at round end
+- Dummy-acolyte automatic season-end movement in transition pipeline
 - Real trade-route income
 - Player choice for who the deciding player selects as next start player
 - Spatial board geometry and map-space calculations
@@ -32,22 +37,16 @@ For non-round-ending turns, the timing tail is minimal:
 
 For round-ending turns, event order is:
 
-1. `TURN_ADVANCE`
-2. `ROUND_END`
-3. `EXCESS_DISCARD` (or `EXCESS_CHECK` when no discards)
-4. `SHIP_ADVANCE`
-5. `SEASON_END` (only if Ship reached a pilgrimage site)
-6. `ALMS_SEASON_REWARD` (season end only)
-7. `ALMS_RESET` (season end only)
-8. `GAME_END` (only on final NW return after 26 completed rounds; if emitted, pipeline stops)
-9. `DUMMY_ACOLYTE_MOVE` (season end only, per dummy group, and only when game is not over)
-10. `MERCHANT_ADVANCE` (only if game not over)
-11. `TRADE_ROUTE_INCOME_SKIPPED` (only if game not over)
-12. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
-13. `START_PLAYER_SELECTION` (only if game not over)
-14. `ROUND_ADVANCE` (only if game not over)
-15. `SEASON_ADVANCE` (season end + game not over)
-16. `INVARIANT_CHECK`
+1. `EXCESS_RESOURCE_CAP` (emitted per player only when stone/wheat were actually capped)
+2. `SHIP_ADVANCE`
+3. `GAME_END` (only on final NW return after 26 completed rounds; if emitted, pipeline stops)
+4. `ROUND_ADVANCE`
+5. `SEASON_END_DEFERRED` (only when the new round matches optional pilgrimage-round metadata)
+6. `MERCHANT_ADVANCE` (only if game not over)
+7. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
+8. `START_PLAYER_SELECTION` (only if game not over)
+9. `TURN_ADVANCE` (from acting player to selected next active player)
+10. `INVARIANT_CHECK`
 
 ## Excess cap
 
@@ -59,7 +58,7 @@ At round end, each real player is checked:
 
 Example event:
 
-`EXCESS_DISCARD: player_one wheat 9 -> 6; returned 3 to supply`
+`EXCESS_RESOURCE_CAP: player_one stone 8 -> 6; wheat 9 -> 6`
 
 ## Ship marker model
 
@@ -75,24 +74,19 @@ The abstract path already excludes non-stopping spaces (for example circular Mar
 
 ## Season end and game end
 
-Season end now depends on Ship position, not only round counts:
+Round-end season checking is currently metadata-driven and deferred:
 
-- after `SHIP_ADVANCE`, season ends when new `ship_position` is in `pilgrimage_site_positions`
+- if generated/setup metadata exposes pilgrimage rounds, and the **new** round number
+  (after `ROUND_ADVANCE`) matches one of those rounds, emit:
+  - `SEASON_END_DEFERRED`
+- deferred mode does not apply Alms season-end rewards/resets and does not change VP/resources.
 
 Game ends when all are true:
 
-- season ended this round
 - Ship is at NW pilgrimage site
 - `completed_rounds >= path_length` (26)
 
-This prevents ending at setup and ensures the game ends on the full loop return.
-
-Season-end behavior differs by case:
-
-- normal season end: `ALMS_SEASON_REWARD -> ALMS_RESET -> DUMMY_ACOLYTE_MOVE -> SEASON_ADVANCE`
-- final NW game-ending season end: `ALMS_SEASON_REWARD -> ALMS_RESET -> GAME_END`
-
-Dummy acolytes do not move on the final NW game-ending round because no further turns/seasons occur.
+When this game-end condition is reached, merchant/start-player/round-advance tail steps are skipped.
 
 ## Start player placeholder policy
 

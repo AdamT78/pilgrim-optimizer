@@ -65,6 +65,7 @@ class GameState:
     setup_sow_completed_by: tuple[PlayerId, ...] = ()
     building_market: tuple[str, ...] = ()
     building_availability: tuple[tuple[str, int], ...] = ()
+    pilgrimage_rounds: tuple[int, ...] = ()
     turn: int = 0
 
     def __post_init__(self) -> None:
@@ -108,6 +109,11 @@ class GameState:
                 raise ValueError("building_availability cannot contain empty building ids.")
             if live_round < 0:
                 raise ValueError("building_availability live rounds cannot be negative.")
+        if len(set(self.pilgrimage_rounds)) != len(self.pilgrimage_rounds):
+            raise ValueError("pilgrimage_rounds cannot contain duplicate entries.")
+        for round_number in self.pilgrimage_rounds:
+            if round_number < 1:
+                raise ValueError("pilgrimage_rounds must be positive round numbers.")
 
     def player_state(self, player_id: PlayerId) -> PlayerState:
         return self.players[int(player_id)]
@@ -176,6 +182,12 @@ class GameState:
         building_availability: tuple[tuple[str, int], ...],
     ) -> GameState:
         return replace(self, building_availability=building_availability)
+
+    def with_pilgrimage_rounds(
+        self,
+        pilgrimage_rounds: tuple[int, ...],
+    ) -> GameState:
+        return replace(self, pilgrimage_rounds=pilgrimage_rounds)
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)

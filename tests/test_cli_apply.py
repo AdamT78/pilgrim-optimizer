@@ -117,11 +117,11 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "Total sandbox evaluation:" in output
 
 
-def test_cli_apply_season_end_scenario_shows_season_and_alms_events(capsys) -> None:
+def test_cli_apply_round_end_pilgrimage_scenario_shows_deferred_season_event(capsys) -> None:
     exit_code = main(
         [
             "apply",
-            "scenarios/season_end_alms_001.json",
+            "scenarios/round_end_pilgrimage_deferred_001.json",
             "--action-index",
             "1",
             "--verbose",
@@ -130,21 +130,22 @@ def test_cli_apply_season_end_scenario_shows_season_and_alms_events(capsys) -> N
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "SEASON_END:" in output
+    assert "ROUND_ADVANCE:" in output
+    assert "SEASON_END_DEFERRED:" in output
     assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat" in output
-    assert "DUMMY_ACOLYTE_MOVE:" in output
-    assert "ALMS_SEASON_REWARD:" in output
-    assert "ALMS_RESET:" in output
-    assert "SEASON_ADVANCE:" in output
+    assert "DUMMY_ACOLYTE_MOVE:" not in output
+    assert "ALMS_SEASON_REWARD:" not in output
+    assert "ALMS_RESET:" not in output
+    assert "SEASON_ADVANCE:" not in output
     assert "INVARIANT_CHECK:" in output
     assert "passed for all players" in output
-    assert "player_one=2" in output
+    assert "player_one=1" in output
     assert "player_two=1" in output
     assert "Next active player: player_two" in output
     assert "Resource: wheat" in output
 
 
-def test_cli_apply_dummy_season_move_scenario_shows_dummy_events(capsys) -> None:
+def test_cli_apply_dummy_season_move_scenario_no_longer_shows_dummy_events(capsys) -> None:
     exit_code = main(
         [
             "apply",
@@ -158,13 +159,7 @@ def test_cli_apply_dummy_season_move_scenario_shows_dummy_events(capsys) -> None
 
     assert exit_code == 0
     assert "Apply result for scenario 'dummy_season_move_001'" in output
-    assert "DUMMY_ACOLYTE_MOVE:" in output
-    assert "north_group before [north, north_east, east]" in output
-    assert "moved north -> south_east" in output
-    assert "after [north_east, east, south_east]" in output
-    assert "south_group before [south, south_west, west]" in output
-    assert "moved south -> north_west" in output
-    assert "after [south_west, west, north_west]" in output
+    assert "DUMMY_ACOLYTE_MOVE:" not in output
 
 
 def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> None:
@@ -182,8 +177,8 @@ def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> Non
     assert exit_code == 0
     assert "Apply result for scenario 'game_end_nw_site_001'" in output
     assert "GAME_END:" in output
-    assert "ALMS_SEASON_REWARD:" in output
-    assert "ALMS_RESET:" in output
+    assert "ALMS_SEASON_REWARD:" not in output
+    assert "ALMS_RESET:" not in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
     assert "MERCHANT_ADVANCE:" not in output
     assert "State after action:" in output
@@ -204,9 +199,9 @@ def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) ->
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "ROUND_END:" in output
-    assert "EXCESS_DISCARD:" in output
+    assert "EXCESS_RESOURCE_CAP:" in output
     assert "SHIP_ADVANCE:" in output
+    assert "ROUND_ADVANCE:" in output
     assert "MERCHANT_ADVANCE:" in output
     assert "START_PLAYER_SELECTION:" in output
 

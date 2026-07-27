@@ -40,6 +40,7 @@ def state_to_record(state: GameState) -> dict[str, Any]:
         "building_availability": {
             building_id: live_round for building_id, live_round in state.building_availability
         },
+        "pilgrimage_rounds": list(state.pilgrimage_rounds),
         "dummy_acolytes": {
             "north_group": list(state.dummy_acolytes.north_group),
             "south_group": list(state.dummy_acolytes.south_group),

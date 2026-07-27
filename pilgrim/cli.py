@@ -703,6 +703,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             return f"{event_name}: no excess resources"
         return f"{event_name}: {details}"
 
+    if event.event_type is EventType.EXCESS_RESOURCE_CAP:
+        player = str(details.get("player", "unknown"))
+        parts: list[str] = []
+        if "stone_before" in details and "stone_after" in details:
+            parts.append(
+                f"stone {int(details['stone_before'])} -> {int(details['stone_after'])}"
+            )
+        if "wheat_before" in details and "wheat_after" in details:
+            parts.append(
+                f"wheat {int(details['wheat_before'])} -> {int(details['wheat_after'])}"
+            )
+        if not parts:
+            return f"{event_name}: {player} had capped resources"
+        return f"{event_name}: {player} " + "; ".join(parts)
+
     if event.event_type is EventType.EXCESS_DISCARD:
         player = str(details.get("player", "unknown"))
         resource = str(details.get("resource", "unknown"))
@@ -794,6 +809,13 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.SEASON_END:
         season_number = int(details.get("season", 0))
         return f"{event_name}: season {season_number} complete"
+
+    if event.event_type is EventType.SEASON_END_DEFERRED:
+        round_number = int(details.get("round", 0))
+        return (
+            f"{event_name}: round {round_number} reached pilgrimage site; "
+            "Alms leader assessment deferred"
+        )
 
     if event.event_type is EventType.SEASON_ADVANCE:
         from_season = int(details.get("from_season", 0))
