@@ -558,6 +558,32 @@ Position mapping used by the current sandbox:
   - conversion `RESOURCE_DELTA` (`silver +2; wheat -1`)
   - `SOWING`
 
+## Guild Merchant Advance (v5.3)
+
+- Guild is available as an optional pre-sow Merchant modifier (not a standalone action):
+  - move Merchant exactly `+1` clockwise
+  - no amount variants and no direction variants
+- Source resolution uses existing building-source priority:
+  - own active Guild (free)
+  - opponent active Guild (hire from owner)
+  - live market Guild (hire from bank)
+- Action summary examples:
+  - `... | use building: guild to move merchant +1 | ...`
+  - hired variants append `| hire building: guild from <market|player_two>`
+- Legal generation:
+  - normal non-Guild actions remain legal
+  - Guild variants are generated only when Guild source is usable and (if hired) payment is affordable
+  - conservative scope: mixed Guild + other same-turn hire-dependent modifier combinations are deferred
+- `apply --verbose` ordering for Guild:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: guild moved Merchant clockwise +1`
+  - `MERCHANT_ADVANCE: <from> -> <to>; current resource=<resource>; cause=guild`
+  - `SOWING`
+- Round-end interaction:
+  - Guild Merchant movement is separate from round-end Merchant movement.
+  - On a round-ending Guild turn, output may contain two `MERCHANT_ADVANCE` lines
+    (one with `cause=guild`, one round-end advance without cause).
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

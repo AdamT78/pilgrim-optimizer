@@ -46,7 +46,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "infirmary",

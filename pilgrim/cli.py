@@ -687,6 +687,8 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_wheat_for_silver":
                 return f"{event_name}: brewery sold 1 wheat for 2 silver"
+        if building == "guild" and action_name == "merchant_advance":
+            return f"{event_name}: guild moved Merchant clockwise +1"
         if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details
@@ -844,10 +846,14 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_duty = str(details.get("from_duty", "unknown"))
         to_duty = str(details.get("to_duty", "unknown"))
         current_resource = str(details.get("current_resource", "none"))
-        return (
+        text = (
             f"{event_name}: {from_duty} -> {to_duty}; "
             f"current resource={current_resource}"
         )
+        cause = details.get("cause")
+        if cause is not None:
+            text += f"; cause={str(cause)}"
+        return text
 
     if event.event_type is EventType.TRADE_ROUTE_INCOME_SKIPPED:
         return f"{event_name}: trade routes not implemented"

@@ -183,6 +183,22 @@ class _ResolvedGrainStoreConversion:
 
 
 @dataclass(frozen=True, slots=True)
+class _GuildMerchantAdvanceOption:
+    """Pre-sow merchant-advance variant for one legal Guild use."""
+
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedGuildMerchantAdvance:
+    """Validated pre-sow Guild merchant-advance directive from one action."""
+
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
 class _ResolvedEndTurnRelocation:
     """Validated end-turn relocation directive from one action."""
 
@@ -211,6 +227,7 @@ _STONE_YARD_BUY_STONE = "buy_stone"
 _STONE_YARD_SELL_STONE = "sell_stone"
 _BUILDING_BREWERY = "brewery"
 _BREWERY_SELL_WHEAT_FOR_SILVER = "sell_wheat_for_silver"
+_BUILDING_GUILD = "guild"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_WHEAT: "well",
     TurnResolutionType.PRODUCE_STONE: "quarry",
@@ -267,7 +284,11 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
     for start_turn_option in _legal_start_turn_relocation_options(state, config):
         start_turn_state = state if start_turn_option is None else start_turn_option.state
         library_source = _resolved_library_source_for_state(start_turn_state, config)
-        variant_actions = _legal_full_turn_actions_for_state(start_turn_state, config)
+        variant_actions = _legal_full_turn_actions_for_state(
+            start_turn_state,
+            config,
+            allow_guild_modifier=start_turn_option is None,
+        )
         for variant_action in variant_actions:
             if not isinstance(variant_action, FullTurnAction):
                 if variant_action not in actions:
@@ -283,6 +304,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                 actions.append(action)
             if library_source is None:
                 continue
+            if action.merchant_advance_building_id == _BUILDING_GUILD:
+                # Defer mixed Guild+Library hire-order interactions for this milestone.
+                continue
             for library_action in _library_suffix_variants_for_action(
                 original_state=state,
                 state_for_turn=start_turn_state,
@@ -295,7 +319,12 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
     return tuple(actions)
 
 
-def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
+def _legal_full_turn_actions_for_state(
+    state: GameState,
+    config: GameConfig,
+    *,
+    allow_guild_modifier: bool,
+) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     base_player_state = state.player_state(state.active_player)
     chapter_house_active = player_has_active_chapter_house(base_player_state)
@@ -896,6 +925,30 @@ def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> 
                                     option=conversion_option,
                                 )
                             actions[index] = action
+    if allow_guild_modifier:
+        guild_options = _legal_guild_merchant_advance_options(state, config)
+        if guild_options:
+            guild_option = guild_options[0]
+            state_after_guild = _state_after_guild_merchant_advance_for_legal_generation(
+                state,
+                option=guild_option,
+                config=config,
+            )
+            for action in _legal_full_turn_actions_for_state(
+                state_after_guild,
+                config,
+                allow_guild_modifier=False,
+            ):
+                if not isinstance(action, FullTurnAction):
+                    continue
+                if not _is_guild_modifier_eligible_action(action):
+                    continue
+                guild_action = _with_guild_merchant_advance_fields(
+                    action,
+                    option=guild_option,
+                )
+                if guild_action not in actions:
+                    actions.append(guild_action)
     return tuple(actions)
 
 
@@ -1223,6 +1276,45 @@ def _apply_full_turn_action(
         )
         resolution_resource_delta_baseline = state_for_sow.player_state(player).resources
 
+    guild_merchant_advance = _resolved_guild_merchant_advance_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if guild_merchant_advance is not None:
+        if _is_hired_source(guild_merchant_advance.source):
+            try:
+                state_for_sow, guild_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=guild_merchant_advance.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=guild_merchant_advance.source,
+                    payment=guild_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _guild_merchant_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+            )
+        )
+        state_for_sow, merchant_advance_event = _apply_guild_merchant_advance_to_state(
+            state_for_sow,
+            actor=player,
+            action_id=transition_action_id,
+            config=config,
+        )
+        pre_sowing_events.append(merchant_advance_event)
+
     player_vector = state_for_sow.player_vector(player)
     picked_up = player_vector[action.origin]
     if picked_up <= 0:
@@ -1521,6 +1613,37 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Brewery conversion amount must be exactly 1."
                 )
+        merchant_advance_fields = (
+            action.merchant_advance_building_id,
+            action.merchant_advance_building_source,
+        )
+        merchant_advance_field_count = sum(
+            field is not None for field in merchant_advance_fields
+        )
+        if merchant_advance_field_count not in (0, len(merchant_advance_fields)):
+            raise TransitionValidationError(
+                "merchant_advance_building_id and merchant_advance_building_source must be set together."
+            )
+        has_guild_merchant_modifier = merchant_advance_field_count == len(
+            merchant_advance_fields
+        )
+        if has_guild_merchant_modifier:
+            if action.merchant_advance_building_id != _BUILDING_GUILD:
+                raise TransitionValidationError(
+                    "Only Guild is supported for merchant_advance_building fields."
+                )
+            if conversion_field_count == len(conversion_fields):
+                raise TransitionValidationError(
+                    "Combining Guild Merchant movement with building conversion modifiers is deferred."
+                )
+            if has_route_building_id or has_secondary_route_building_id:
+                raise TransitionValidationError(
+                    "Combining Guild Merchant movement with sow-route modifiers is deferred."
+                )
+            if start_turn_relocation is not None:
+                raise TransitionValidationError(
+                    "Combining Guild Merchant movement with start-turn relocation modifiers is deferred."
+                )
         end_turn_fields = (
             action.end_turn_building_id,
             action.end_turn_building_source,
@@ -1539,6 +1662,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Only Library is supported for end-turn relocation fields."
             )
+        if has_guild_merchant_modifier and end_turn_field_count == len(end_turn_fields):
+            raise TransitionValidationError(
+                "Combining Guild Merchant movement with end-turn relocation modifiers is deferred."
+            )
 
         hire_context = BuildingHireTurnContext()
         if (action.hired_building_id is None) != (action.hired_building_source is None):
@@ -1546,6 +1673,10 @@ def _apply_full_turn_action(
                 "hired_building_id and hired_building_source must be set together."
             )
         if action.hired_building_id is not None:
+            if has_guild_merchant_modifier:
+                raise TransitionValidationError(
+                    "Combining Guild Merchant movement with resolution-level hired building fields is deferred."
+                )
             allowed_hire_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution)
             if allowed_hire_buildings is None:
                 raise TransitionValidationError(
@@ -1568,6 +1699,22 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=action.hired_building_id,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if (
+            has_guild_merchant_modifier
+            and action.merchant_advance_building_source is not None
+            and action.merchant_advance_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_GUILD):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_GUILD,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -3175,15 +3322,12 @@ def _resolve_round_end_phases(
         to_duty = current_merchant_duty(next_state, config.merchant)
         current_resource = current_merchant_resource(next_state, config.merchant)
         events.append(
-            GameEvent(
-                event_type=EventType.MERCHANT_ADVANCE,
+            _merchant_advance_event(
                 actor=actor,
                 action_id=action_id,
-                details=make_event_details(
-                    from_duty=from_duty,
-                    to_duty=to_duty,
-                    current_resource=current_resource if current_resource is not None else "none",
-                ),
+                from_duty=from_duty,
+                to_duty=to_duty,
+                current_resource=current_resource,
             )
         )
 
@@ -4077,6 +4221,88 @@ def _legal_brewery_conversion_options(
     )
 
 
+def _legal_guild_merchant_advance_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_GuildMerchantAdvanceOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_GUILD,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+    if _is_hired_source(source):
+        try:
+            _paid_state, _payment = apply_building_hire_payment(
+                state,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+    return (
+        _GuildMerchantAdvanceOption(
+            building_id=_BUILDING_GUILD,
+            source=source,
+        ),
+    )
+
+
+def _state_after_guild_merchant_advance_for_legal_generation(
+    state: GameState,
+    *,
+    option: _GuildMerchantAdvanceOption,
+    config: GameConfig,
+) -> GameState:
+    state_after_hire = state
+    if _is_hired_source(option.source):
+        state_after_hire, _payment = apply_building_hire_payment(
+            state_after_hire,
+            acting_player=state.active_player,
+            source=option.source,
+        )
+    next_merchant_position = advance_merchant_position(
+        state_after_hire.merchant_position,
+        config.merchant,
+    )
+    return state_after_hire.with_merchant_position(next_merchant_position)
+
+
+def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
+    return (
+        action.sow_route_building_id is None
+        and action.sow_route_secondary_building_id is None
+        and action.sow_route_omitted_location is None
+        and action.building_conversion_id is None
+        and action.hired_building_id is None
+        and action.start_turn_building_id is None
+        and action.end_turn_building_id is None
+        and action.merchant_advance_building_id is None
+        and action.merchant_advance_building_source is None
+    )
+
+
+def _with_guild_merchant_advance_fields(
+    action: FullTurnAction,
+    *,
+    option: _GuildMerchantAdvanceOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        merchant_advance_building_id=option.building_id,
+        merchant_advance_building_source=source_label,
+    )
+
+
 def _with_grain_store_conversion_fields(
     action: FullTurnAction,
     *,
@@ -4427,6 +4653,62 @@ def _action_route_building_source_label(
     if action.sow_route_secondary_building_id == building_id:
         return action.sow_route_secondary_building_source
     return None
+
+
+def _resolved_guild_merchant_advance_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedGuildMerchantAdvance | None:
+    fields = (
+        action.merchant_advance_building_id,
+        action.merchant_advance_building_source,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "merchant_advance_building_id and merchant_advance_building_source must be set together."
+        )
+
+    building_id = action.merchant_advance_building_id
+    source_label = action.merchant_advance_building_source
+    assert building_id is not None
+    assert source_label is not None
+
+    if building_id != _BUILDING_GUILD:
+        raise TransitionValidationError(
+            "Only Guild is supported for merchant_advance_building fields."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_GUILD,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                "Own-active Guild merchant movement must set source=own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "Guild merchant movement source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError("Guild is unavailable in current state.")
+
+    return _ResolvedGuildMerchantAdvance(
+        building_id=_BUILDING_GUILD,
+        source=source,
+    )
 
 
 def _resolved_grain_store_conversion_for_action(
@@ -4917,6 +5199,56 @@ def _can_afford_resolution_costs(
     )
 
 
+def _merchant_advance_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    from_duty: str,
+    to_duty: str,
+    current_resource: str | None,
+    cause: str | None = None,
+) -> GameEvent:
+    details: dict[str, str] = {
+        "from_duty": from_duty,
+        "to_duty": to_duty,
+        "current_resource": current_resource if current_resource is not None else "none",
+    }
+    if cause is not None:
+        details["cause"] = cause
+    return GameEvent(
+        event_type=EventType.MERCHANT_ADVANCE,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(**details),
+    )
+
+
+def _apply_guild_merchant_advance_to_state(
+    state: GameState,
+    *,
+    actor: PlayerId,
+    action_id: str,
+    config: GameConfig,
+) -> tuple[GameState, GameEvent]:
+    from_duty = current_merchant_duty(state, config.merchant)
+    next_merchant_position = advance_merchant_position(
+        state.merchant_position,
+        config.merchant,
+    )
+    next_state = state.with_merchant_position(next_merchant_position)
+    to_duty = current_merchant_duty(next_state, config.merchant)
+    current_resource = current_merchant_resource(next_state, config.merchant)
+    event = _merchant_advance_event(
+        actor=actor,
+        action_id=action_id,
+        from_duty=from_duty,
+        to_duty=to_duty,
+        current_resource=current_resource,
+        cause="guild",
+    )
+    return next_state, event
+
+
 def _building_hired_event(
     *,
     source: BuildingAbilitySource,
@@ -5118,6 +5450,24 @@ def _grain_store_conversion_bonus_event(
             action="conversion",
             conversion_direction=conversion.direction,
             amount=conversion.amount,
+        ),
+    )
+
+
+def _guild_merchant_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=_BUILDING_GUILD,
+            action="merchant_advance",
+            steps=1,
+            direction="clockwise",
         ),
     )
 

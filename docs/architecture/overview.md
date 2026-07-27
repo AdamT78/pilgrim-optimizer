@@ -517,6 +517,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Converted silver is available to later same-turn effects because conversion resolves
   pre-sowing.
 
+## Guild Merchant Advance (v5.3)
+
+- Transition/runtime wiring now supports Guild as an optional pre-sow Merchant-position modifier.
+- Source resolution reuses the shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none, insufficient payment resource)
+- Guild semantics:
+  - no amount/direction payload
+  - move Merchant exactly one step clockwise on the configured Merchant path
+  - update Merchant resource context for the resulting post-action state
+- Apply-time ordering for the Guild modifier:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (`guild moved Merchant clockwise +1`)
+  - `MERCHANT_ADVANCE` (with `cause=guild`)
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Round-end interaction:
+  - Guild movement is separate from round-end Merchant movement.
+  - On a round-ending Guild turn, Merchant can move twice total (Guild pre-sow + round-end phase).
+- Conservative composition in this milestone:
+  - Guild is generated for ordinary full-turn variants.
+  - Mixed Guild + other same-turn hire-dependent building modifiers are deferred.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
