@@ -163,7 +163,7 @@ class _ResolvedCloistersRoute:
 
 @dataclass(frozen=True, slots=True)
 class _BuildingConversionOption:
-    """Pre-sow resource-conversion variant for one legal Grain Store use."""
+    """Pre-sow conversion variant for one legal building conversion use."""
 
     state: GameState
     building_id: str
@@ -174,8 +174,9 @@ class _BuildingConversionOption:
 
 @dataclass(frozen=True, slots=True)
 class _ResolvedGrainStoreConversion:
-    """Validated Grain Store conversion directive from one action."""
+    """Validated pre-sow building conversion directive from one action."""
 
+    building_id: str
     source: BuildingAbilitySource
     direction: str
     amount: int
@@ -202,6 +203,9 @@ _ROUTE_BUILDING_CLOISTERS = "cloisters"
 _BUILDING_GRAIN_STORE = "grain_store"
 _GRAIN_STORE_BUY_WHEAT = "buy_wheat"
 _GRAIN_STORE_SELL_WHEAT = "sell_wheat"
+_BUILDING_INDULGENCES = "indulgences"
+_INDULGENCES_BUY_PIETY = "buy_piety"
+_INDULGENCES_SELL_PIETY = "sell_piety"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_WHEAT: "well",
     TurnResolutionType.PRODUCE_STONE: "quarry",
@@ -345,6 +349,7 @@ def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> 
             conversion_options: tuple[_BuildingConversionOption | None, ...] = (
                 None,
                 *_legal_grain_store_conversion_options(route_state, config),
+                *_legal_indulgences_conversion_options(route_state, config),
             )
             for conversion_option in conversion_options:
                 state_for_turn = (
@@ -1176,6 +1181,7 @@ def _apply_full_turn_action(
             state_for_sow, conversion_delta = _apply_grain_store_conversion_to_state(
                 state_for_sow,
                 player=player,
+                config=config,
                 conversion=grain_store_conversion,
             )
         except ValueError as exc:
@@ -1193,9 +1199,18 @@ def _apply_full_turn_action(
                 actor=player,
                 action_id=transition_action_id,
                 details=make_event_details(
-                    stone=conversion_delta[0],
-                    silver=conversion_delta[1],
-                    wheat=conversion_delta[2],
+                    **(
+                        {
+                            "stone": conversion_delta[0],
+                            "silver": conversion_delta[1],
+                            "wheat": conversion_delta[2],
+                        }
+                        | (
+                            {"piety": conversion_delta[3]}
+                            if conversion_delta[3] != 0
+                            else {}
+                        )
+                    )
                 ),
             )
         )
@@ -1439,21 +1454,38 @@ def _apply_full_turn_action(
                 "building_conversion fields must be set together."
             )
         if conversion_field_count == len(conversion_fields):
-            if action.building_conversion_id != _BUILDING_GRAIN_STORE:
-                raise TransitionValidationError(
-                    "Only Grain Store is supported for building_conversion fields."
-                )
-            if action.building_conversion_direction not in (
-                _GRAIN_STORE_BUY_WHEAT,
-                _GRAIN_STORE_SELL_WHEAT,
+            conversion_building_id = action.building_conversion_id
+            if conversion_building_id not in (
+                _BUILDING_GRAIN_STORE,
+                _BUILDING_INDULGENCES,
             ):
                 raise TransitionValidationError(
-                    "Grain Store conversion direction must be buy_wheat or sell_wheat."
+                    "Only Grain Store and Indulgences are supported for building_conversion fields."
+                )
+            conversion_direction = action.building_conversion_direction
+            if conversion_building_id == _BUILDING_GRAIN_STORE:
+                if conversion_direction not in (
+                    _GRAIN_STORE_BUY_WHEAT,
+                    _GRAIN_STORE_SELL_WHEAT,
+                ):
+                    raise TransitionValidationError(
+                        "Grain Store conversion direction must be buy_wheat or sell_wheat."
+                    )
+            elif conversion_building_id == _BUILDING_INDULGENCES and conversion_direction not in (
+                _INDULGENCES_BUY_PIETY,
+                _INDULGENCES_SELL_PIETY,
+            ):
+                raise TransitionValidationError(
+                    "Indulgences conversion direction must be buy_piety or sell_piety."
                 )
             amount = action.building_conversion_amount
             if amount is None or amount <= 0:
+                if conversion_building_id == _BUILDING_GRAIN_STORE:
+                    raise TransitionValidationError(
+                        "Grain Store conversion amount must be at least 1."
+                    )
                 raise TransitionValidationError(
-                    "Grain Store conversion amount must be at least 1."
+                    "Indulgences conversion amount must be at least 1."
                 )
         end_turn_fields = (
             action.end_turn_building_id,
@@ -1538,13 +1570,14 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
         if (
-            action.building_conversion_id == _BUILDING_GRAIN_STORE
+            action.building_conversion_id in (_BUILDING_GRAIN_STORE, _BUILDING_INDULGENCES)
             and action.building_conversion_source is not None
             and action.building_conversion_source != "own_active"
         ):
+            assert action.building_conversion_id is not None
             if not can_hire_building_this_turn(
                 hire_context,
-                building_key=_BUILDING_GRAIN_STORE,
+                building_key=action.building_conversion_id,
             ):
                 raise TransitionValidationError(
                     "Same building cannot be hired more than once in one turn."
@@ -1552,7 +1585,7 @@ def _apply_full_turn_action(
             try:
                 hire_context = record_hired_building_this_turn(
                     hire_context,
-                    building_key=_BUILDING_GRAIN_STORE,
+                    building_key=action.building_conversion_id,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -3813,6 +3846,80 @@ def _legal_grain_store_conversion_options(
     return tuple(options)
 
 
+def _legal_indulgences_conversion_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_BuildingConversionOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_INDULGENCES,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _hire_payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    player_state = state_after_hire.player_state(state.active_player)
+    resources = player_state.resources
+    piety_position = player_state.piety
+    piety_space = max(0, config.piety.max_position - piety_position)
+    options: list[_BuildingConversionOption] = []
+
+    for amount in range(1, piety_position + 1):
+        converted_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(
+                player_state,
+                piety=piety_position - amount,
+                resources=resources.add(silver=amount),
+            ),
+        )
+        options.append(
+            _BuildingConversionOption(
+                state=converted_state,
+                building_id=_BUILDING_INDULGENCES,
+                source=source,
+                direction=_INDULGENCES_SELL_PIETY,
+                amount=amount,
+            )
+        )
+
+    max_buy_amount = min(resources.silver, piety_space)
+    for amount in range(1, max_buy_amount + 1):
+        converted_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(
+                player_state,
+                piety=piety_position + amount,
+                resources=resources.add(silver=-amount),
+            ),
+        )
+        options.append(
+            _BuildingConversionOption(
+                state=converted_state,
+                building_id=_BUILDING_INDULGENCES,
+                source=source,
+                direction=_INDULGENCES_BUY_PIETY,
+                amount=amount,
+            )
+        )
+
+    return tuple(options)
+
+
 def _with_grain_store_conversion_fields(
     action: FullTurnAction,
     *,
@@ -4195,41 +4302,58 @@ def _resolved_grain_store_conversion_for_action(
     assert direction is not None
     assert amount is not None
 
-    if building_id != _BUILDING_GRAIN_STORE:
+    building_name: str
+    valid_directions: tuple[str, str]
+    if building_id == _BUILDING_GRAIN_STORE:
+        building_name = "Grain Store"
+        valid_directions = (_GRAIN_STORE_BUY_WHEAT, _GRAIN_STORE_SELL_WHEAT)
+    elif building_id == _BUILDING_INDULGENCES:
+        building_name = "Indulgences"
+        valid_directions = (_INDULGENCES_BUY_PIETY, _INDULGENCES_SELL_PIETY)
+    else:
         raise TransitionValidationError(
-            "Only Grain Store is supported for building_conversion fields."
+            "Only Grain Store and Indulgences are supported for building_conversion fields."
         )
-    if direction not in (_GRAIN_STORE_BUY_WHEAT, _GRAIN_STORE_SELL_WHEAT):
+    if direction not in valid_directions:
+        if building_id == _BUILDING_GRAIN_STORE:
+            raise TransitionValidationError(
+                "Grain Store conversion direction must be buy_wheat or sell_wheat."
+            )
         raise TransitionValidationError(
-            "Grain Store conversion direction must be buy_wheat or sell_wheat."
+            "Indulgences conversion direction must be buy_piety or sell_piety."
         )
     if amount <= 0:
+        if building_id == _BUILDING_GRAIN_STORE:
+            raise TransitionValidationError(
+                "Grain Store conversion amount must be at least 1."
+            )
         raise TransitionValidationError(
-            "Grain Store conversion amount must be at least 1."
+            "Indulgences conversion amount must be at least 1."
         )
 
     source = building_ability_source(
         state,
         config,
         acting_player=player,
-        building_key=_BUILDING_GRAIN_STORE,
+        building_key=building_id,
     )
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
-                "Own-active Grain Store conversion must set source=own_active."
+                f"Own-active {building_name} conversion must set source=own_active."
             )
     elif _is_hired_source(source) and source.usable:
         expected_source_label = _hired_building_source_label(source)
         if source_label != expected_source_label:
             raise TransitionValidationError(
-                "Grain Store conversion source does not match resolved source: "
+                f"{building_name} conversion source does not match resolved source: "
                 f"expected {expected_source_label}."
             )
     else:
-        raise TransitionValidationError("Grain Store is unavailable in current state.")
+        raise TransitionValidationError(f"{building_name} is unavailable in current state.")
 
     return _ResolvedGrainStoreConversion(
+        building_id=building_id,
         source=source,
         direction=direction,
         amount=amount,
@@ -4685,30 +4809,76 @@ def _apply_grain_store_conversion_to_state(
     state: GameState,
     *,
     player: PlayerId,
+    config: GameConfig,
     conversion: _ResolvedGrainStoreConversion,
-) -> tuple[GameState, tuple[int, int, int]]:
+) -> tuple[GameState, tuple[int, int, int, int]]:
     player_state = state.player_state(player)
     resources = player_state.resources
+    piety_position = player_state.piety
     amount = conversion.amount
     if amount <= 0:
-        raise ValueError("Grain Store conversion amount must be at least 1.")
+        if conversion.building_id == _BUILDING_GRAIN_STORE:
+            raise ValueError("Grain Store conversion amount must be at least 1.")
+        raise ValueError("Indulgences conversion amount must be at least 1.")
 
-    if conversion.direction == _GRAIN_STORE_SELL_WHEAT:
-        if resources.wheat < amount:
-            raise ValueError("Grain Store sell conversion requires enough wheat after hire payment.")
-        next_resources = resources.add(wheat=-amount, silver=amount)
-        delta = (0, amount, -amount)
-    elif conversion.direction == _GRAIN_STORE_BUY_WHEAT:
-        if resources.silver < amount:
-            raise ValueError("Grain Store buy conversion requires enough silver after hire payment.")
-        next_resources = resources.add(silver=-amount, wheat=amount)
-        delta = (0, -amount, amount)
+    if conversion.building_id == _BUILDING_GRAIN_STORE:
+        if conversion.direction == _GRAIN_STORE_SELL_WHEAT:
+            if resources.wheat < amount:
+                raise ValueError(
+                    "Grain Store sell conversion requires enough wheat after hire payment."
+                )
+            next_player_state = replace(
+                player_state,
+                resources=resources.add(wheat=-amount, silver=amount),
+            )
+            delta = (0, amount, -amount, 0)
+        elif conversion.direction == _GRAIN_STORE_BUY_WHEAT:
+            if resources.silver < amount:
+                raise ValueError(
+                    "Grain Store buy conversion requires enough silver after hire payment."
+                )
+            next_player_state = replace(
+                player_state,
+                resources=resources.add(silver=-amount, wheat=amount),
+            )
+            delta = (0, -amount, amount, 0)
+        else:
+            raise ValueError("Grain Store conversion direction must be buy_wheat or sell_wheat.")
+    elif conversion.building_id == _BUILDING_INDULGENCES:
+        if conversion.direction == _INDULGENCES_SELL_PIETY:
+            if piety_position < amount:
+                raise ValueError(
+                    "Indulgences sell conversion requires enough piety after hire payment."
+                )
+            next_player_state = replace(
+                player_state,
+                piety=piety_position - amount,
+                resources=resources.add(silver=amount),
+            )
+            delta = (0, amount, 0, -amount)
+        elif conversion.direction == _INDULGENCES_BUY_PIETY:
+            if resources.silver < amount:
+                raise ValueError(
+                    "Indulgences buy conversion requires enough silver after hire payment."
+                )
+            if piety_position + amount > config.piety.max_position:
+                raise ValueError("Indulgences buy conversion exceeds piety track maximum.")
+            next_player_state = replace(
+                player_state,
+                piety=piety_position + amount,
+                resources=resources.add(silver=-amount),
+            )
+            delta = (0, -amount, 0, amount)
+        else:
+            raise ValueError("Indulgences conversion direction must be buy_piety or sell_piety.")
     else:
-        raise ValueError("Grain Store conversion direction must be buy_wheat or sell_wheat.")
+        raise ValueError(
+            "Only Grain Store and Indulgences are supported for building conversions."
+        )
 
     next_state = state.with_player_state(
         player,
-        replace(player_state, resources=next_resources),
+        next_player_state,
     )
     return next_state, delta
 
@@ -4724,7 +4894,7 @@ def _grain_store_conversion_bonus_event(
         actor=actor,
         action_id=action_id,
         details=make_event_details(
-            building=_BUILDING_GRAIN_STORE,
+            building=conversion.building_id,
             action="conversion",
             conversion_direction=conversion.direction,
             amount=conversion.amount,

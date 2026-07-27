@@ -118,7 +118,7 @@
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "library",

@@ -1,4 +1,4 @@
-# Buildings (v1.9-v4.0 Sandbox Scope)
+# Buildings (v1.9-v5.0 Sandbox Scope)
 
 ## Implemented now
 
@@ -273,6 +273,49 @@ Event semantics before sowing:
 
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+
+## Indulgences piety/silver conversion (v5.0)
+
+Indulgences now applies as an optional economic/piety modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Indulgences -> free
+- live market Indulgences -> hire from bank
+- opponent active Indulgences -> hire from owner
+
+Conversion rule:
+
+- sell piety: pay `X` piety, gain `X` silver
+- buy piety: pay `X` silver, gain `X` piety
+- `X >= 1`
+- conversion rate is always `1:1`
+
+Timing:
+
+- if Indulgences is hired, hire payment resolves first
+- conversion resolves next
+- sowing and selected Duty resolve after conversion
+- conversion cannot be used to pay Indulgences' own hire cost
+
+Piety bounds:
+
+- sell variants: `1..current_piety_after_hire`
+- buy variants: `1..min(available_silver_after_hire, piety_track_remaining_space)`
+- no buy variants are generated at piety cap
+- no sell variants are generated at piety position `0`
+
+Legal generation behavior:
+
+- normal full-turn actions remain legal
+- Indulgences variants are added when source is usable and post-hire bounds allow conversion
+- no zero-amount conversion variants are generated
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- conversion deltas include `piety` and `silver` changes explicitly
 
 ## Building turn-modifier registry (v3.3-v3.9)
 

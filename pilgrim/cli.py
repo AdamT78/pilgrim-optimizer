@@ -342,6 +342,7 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         stone = int(details.get("stone", 0))
         silver = int(details.get("silver", 0))
         wheat = int(details.get("wheat", 0))
+        piety = int(details.get("piety", 0))
         fragments: list[str] = []
         if stone != 0:
             fragments.append(f"stone {stone:+d}")
@@ -349,6 +350,8 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             fragments.append(f"silver {silver:+d}")
         if wheat != 0:
             fragments.append(f"wheat {wheat:+d}")
+        if piety != 0:
+            fragments.append(f"piety {piety:+d}")
         if not fragments:
             return None
         return f"{event_name}: {actor_name} {'; '.join(fragments)}"
@@ -645,6 +648,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             if direction == "buy_wheat":
                 return (
                     f"{event_name}: grain_store bought {amount} wheat for {amount} silver"
+                )
+        if (
+            building == "indulgences"
+            and "conversion_direction" in details
+            and "amount" in details
+        ):
+            amount = int(details.get("amount", 0))
+            direction = str(details.get("conversion_direction", "unknown"))
+            if direction == "sell_piety":
+                return (
+                    f"{event_name}: indulgences sold {amount} piety for {amount} silver"
+                )
+            if direction == "buy_piety":
+                return (
+                    f"{event_name}: indulgences bought {amount} piety for {amount} silver"
                 )
         if (
             building in ("dormitory", "inquisition")
