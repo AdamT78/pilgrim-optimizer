@@ -1223,6 +1223,7 @@ def _format_generated_setup_summary(
     building_availability = initial_state.get("building_availability")
     if not isinstance(building_availability, dict):
         raise ValueError("Generated scenario missing initial_state.building_availability object.")
+    setup_timeline_lines = _format_generated_setup_timeline_summary(metadata)
     return (
         f"Generated setup scenario: {output_path.as_posix()}",
         f"Players: {player_count}",
@@ -1232,8 +1233,63 @@ def _format_generated_setup_summary(
         f"Tithe counters: {len(tithe_counters)} counters; taxation has none",
         f"Building market: {len(building_market)} buildings",
         f"Building availability: {len(building_availability)} entries",
+        *setup_timeline_lines,
         f"Dummy acolytes: {player_count}-player setup",
         f"Setup sow required: {setup_sow_required}",
+    )
+
+
+def _format_generated_setup_timeline_summary(metadata: dict[str, object]) -> tuple[str, ...]:
+    setup_timeline = metadata.get("setup_timeline")
+    if not isinstance(setup_timeline, dict):
+        return ()
+
+    pilgrimage_rolls = setup_timeline.get("pilgrimage_rolls")
+    if not isinstance(pilgrimage_rolls, dict):
+        raise ValueError("Generated scenario missing setup_timeline.pilgrimage_rolls object.")
+    pilgrimage_rounds = setup_timeline.get("pilgrimage_rounds")
+    if not isinstance(pilgrimage_rounds, dict):
+        raise ValueError("Generated scenario missing setup_timeline.pilgrimage_rounds object.")
+    building_live_rounds = setup_timeline.get("building_live_rounds")
+    if not isinstance(building_live_rounds, dict):
+        raise ValueError("Generated scenario missing setup_timeline.building_live_rounds object.")
+
+    nw = int(pilgrimage_rolls["nw"])
+    ne = int(pilgrimage_rolls["ne"])
+    se = int(pilgrimage_rolls["se"])
+    sw = int(pilgrimage_rolls["sw"])
+    site_1_round = int(pilgrimage_rounds["site_1"])
+    site_2_round = int(pilgrimage_rounds["site_2"])
+    site_3_round = int(pilgrimage_rounds["site_3"])
+    site_4_round = int(pilgrimage_rounds["site_4"])
+
+    level_lines: list[str] = []
+    for key, label in (("level_1", "Level 1"), ("level_2", "Level 2"), ("level_3", "Level 3")):
+        level_mapping = building_live_rounds.get(key)
+        if not isinstance(level_mapping, dict):
+            raise ValueError(
+                "Generated scenario setup_timeline.building_live_rounds is missing "
+                f"{key!r} mapping."
+            )
+        if not level_mapping:
+            level_lines.append(f"  {label}: none")
+            continue
+        formatted = ", ".join(
+            f"{building_id}=round {int(live_round)}"
+            for building_id, live_round in level_mapping.items()
+        )
+        level_lines.append(f"  {label}: {formatted}")
+
+    return (
+        "Pilgrimage d6 rolls:",
+        f"  NW={nw}, NE={ne}, SE={se}, SW={sw}",
+        "Pilgrimage rounds:",
+        f"  Site 1: round {site_1_round}",
+        f"  Site 2: round {site_2_round}",
+        f"  Site 3: round {site_3_round}",
+        f"  Site 4: round {site_4_round}",
+        "Building live rounds:",
+        *level_lines,
     )
 
 

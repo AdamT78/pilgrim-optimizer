@@ -593,9 +593,18 @@ Current behavior:
   - randomized duty layout
   - randomized Tithe counters (Taxation tile excluded)
   - randomized 12-building market (4 per level)
+  - pilgrimage d6 rolls (`NW/NE/SE/SW`)
+  - pilgrimage rounds derived from the abstract 26-round border timeline
+  - `building_availability` derived from that timeline (not independent per-building sampling)
   - explicit dummy acolyte setup for `player_count`
   - explicit setup state (`initial_state.setup`)
-  - setup metadata marking setup sow as required and implemented
+  - setup metadata marking setup sow as required and implemented, including timeline details
+
+`generate-setup` summary output now also shows:
+
+- pilgrimage d6 rolls (`NW`, `NE`, `SE`, `SW`)
+- pilgrimage rounds (`Site 1..4`)
+- building live rounds grouped by level (`Level 1`, `Level 2`, `Level 3`)
 
 Setup sow behavior:
 

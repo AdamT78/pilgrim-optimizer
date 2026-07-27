@@ -290,6 +290,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Hiring remains deferred:
   - no bank-hire or other-player-hire runtime behavior is implemented yet
 
+## Abstract Setup Timeline (v4.3)
+
+- Seeded setup generation now derives building live rounds from an abstract 26-round border
+  timeline in `pilgrim.setup.timeline`:
+  - pilgrimage d6 rolls: `NW`, `NE`, `SE`, `SW` (`1..6` each)
+  - pilgrimage rounds computed from fixed quadrant offsets (`0`, `6`, `13`, `19`)
+  - timeline slots reserve:
+    - pilgrimage rounds
+    - post-pilgrimage empty rounds
+    - post-level empty rounds
+    - building placements
+- Building placement sequencing remains level-ordered:
+  - all selected Level 1 buildings
+  - then Level 2
+  - then Level 3
+  - market order within each level is preserved
+- Level-start gates are explicit:
+  - Level 1 starts after site 1 gap
+  - Level 2 starts after Level 1 gap and site 2 gap
+  - Level 3 starts after Level 2 gap and site 3 gap
+- Runtime semantics remain unchanged:
+  - scenarios still use `initial_state.building_availability`
+  - loader fallback for missing availability remains live round `2` per selected market building
+  - no spatial road/map system is introduced by this abstraction
+
 ## Building Hire Infrastructure (v3.0)
 
 - Rules now include a deterministic building-ability source resolver:

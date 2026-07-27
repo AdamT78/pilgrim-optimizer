@@ -26,10 +26,23 @@ def test_cli_generate_setup_writes_file_and_prints_summary(capsys, tmp_path: Pat
     assert "Seed: 123" in output
     assert "Taxation tile:" in output
     assert "Building availability: 12 entries" in output
+    assert "Pilgrimage d6 rolls:" in output
+    assert "Pilgrimage rounds:" in output
+    assert "  Site 1: round 1" in output
+    assert "Building live rounds:" in output
+    assert "  Level 1:" in output
+    assert "  Level 2:" in output
+    assert "  Level 3:" in output
     assert "Setup sow required: true" in output
     generated = json.loads(output_path.read_text(encoding="utf-8"))
     assert generated["root_player_id"] == "player_one"
     assert generated["setup_metadata"]["setup_sow_implemented"] is True
+    assert set(generated["setup_metadata"]["setup_timeline"]["pilgrimage_rolls"]) == {
+        "nw",
+        "ne",
+        "se",
+        "sw",
+    }
     assert generated["initial_state"]["setup"] == {
         "setup_sow_required": True,
         "setup_sow_complete": False,

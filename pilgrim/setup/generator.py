@@ -9,6 +9,13 @@ from typing import Any
 
 from pilgrim.model.duties import DUTY_CATEGORIES, DUTY_POSITIONS
 from pilgrim.rules.dummy import seed_dummy_groups
+from pilgrim.setup.timeline import (
+    assign_building_live_rounds,
+    build_abstract_setup_timeline,
+    generate_pilgrimage_rolls,
+    grouped_live_rounds_by_level,
+    pilgrimage_rounds_from_rolls,
+)
 
 SUPPORTED_PLAYER_COUNTS: tuple[int, ...] = (2, 3, 4)
 SETUP_TITHE_COUNTER_POOL: tuple[str, ...] = (
@@ -36,8 +43,25 @@ def generate_setup_scenario(
     rng = random.Random(seed)
     duty_tiles = _generate_duty_tiles(rng)
     tithe_counters = _generate_tithe_counters(rng, duty_tiles)
-    building_market = _generate_building_market(rng)
-    building_availability = _generate_building_availability(rng, building_market)
+    building_ids_by_level = _building_ids_by_level_from_default_catalogue()
+    building_level_lookup = _building_level_lookup_from_grouped_ids(building_ids_by_level)
+    building_market = _generate_building_market(rng, by_level=building_ids_by_level)
+    pilgrimage_rolls = generate_pilgrimage_rolls(rng)
+    pilgrimage_rounds = pilgrimage_rounds_from_rolls(pilgrimage_rolls)
+    setup_timeline = build_abstract_setup_timeline(
+        pilgrimage_rounds=pilgrimage_rounds,
+        building_market=building_market,
+        building_levels=building_level_lookup,
+    )
+    building_availability = assign_building_live_rounds(
+        timeline=setup_timeline,
+        building_market=building_market,
+    )
+    grouped_live_rounds = grouped_live_rounds_by_level(
+        building_market=building_market,
+        building_levels=building_level_lookup,
+        building_live_rounds=building_availability,
+    )
     dummy_groups = seed_dummy_groups(player_count)
     player_ids = _player_ids_for_count(player_count)
     scenario_id = scenario_name or f"generated_setup_{player_count}p_seed_{seed}"
@@ -67,6 +91,11 @@ def generate_setup_scenario(
             "player_count": player_count,
             "setup_sow_required": True,
             "setup_sow_implemented": True,
+            "setup_timeline": {
+                "pilgrimage_rolls": pilgrimage_rolls,
+                "pilgrimage_rounds": pilgrimage_rounds,
+                "building_live_rounds": grouped_live_rounds,
+            },
             "note": (
                 "Generated setup is deterministic. "
                 "Each real player must complete setup sow before normal play."
@@ -128,26 +157,17 @@ def _generate_tithe_counters(
     return dict(zip(non_taxation_positions, counters, strict=True))
 
 
-def _generate_building_market(rng: random.Random) -> list[str]:
-    by_level = _building_ids_by_level_from_default_catalogue()
+def _generate_building_market(
+    rng: random.Random,
+    *,
+    by_level: dict[int, tuple[str, ...]],
+) -> list[str]:
     market: list[str] = []
     for level in (1, 2, 3):
         pool = list(by_level[level])
         rng.shuffle(pool)
         market.extend(pool[:4])
     return market
-
-
-def _generate_building_availability(
-    rng: random.Random,
-    building_market: list[str],
-) -> dict[str, int]:
-    available_rounds = list(range(2, 27))
-    sampled_rounds = sorted(rng.sample(available_rounds, len(building_market)))
-    return {
-        building_id: live_round
-        for building_id, live_round in zip(building_market, sampled_rounds, strict=True)
-    }
 
 
 def _building_ids_by_level_from_default_catalogue() -> dict[int, tuple[str, ...]]:
@@ -175,6 +195,16 @@ def _building_ids_by_level_from_default_catalogue() -> dict[int, tuple[str, ...]
                 f"found {len(by_level[level])} at level {level}."
             )
     return {level: tuple(ids) for level, ids in by_level.items()}
+
+
+def _building_level_lookup_from_grouped_ids(
+    grouped_ids: dict[int, tuple[str, ...]],
+) -> dict[str, int]:
+    lookup: dict[str, int] = {}
+    for level, building_ids in grouped_ids.items():
+        for building_id in building_ids:
+            lookup[building_id] = level
+    return lookup
 
 
 def _player_ids_for_count(player_count: int) -> tuple[str, ...]:
