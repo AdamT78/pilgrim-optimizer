@@ -20,6 +20,7 @@ from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import (
     AlmsPayment,
+    resolve_alms_season_end,
     resolve_donate_building_alms,
     resolve_give_alms,
 )
@@ -94,7 +95,7 @@ from pilgrim.rules.special_activities import (
     special_activity_capacity,
     special_activity_count,
 )
-from pilgrim.rules.timing import advance_timing, resolve_round_end
+from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -2954,14 +2955,15 @@ def _apply_full_turn_action(
             completed_round_number=completed_round_number,
         )
         events.extend(round_end_events)
-        events.append(
-            _turn_advance_event(
-                actor=player,
-                action_id=transition_action_id,
-                from_player=player,
-                to_player=next_state.active_player,
+        if not next_state.game_over:
+            events.append(
+                _turn_advance_event(
+                    actor=player,
+                    action_id=transition_action_id,
+                    from_player=player,
+                    to_player=next_state.active_player,
+                )
             )
-        )
     else:
         events.extend(timing_result.events)
 
@@ -3070,19 +3072,35 @@ def _resolve_round_end_phases(
         )
     )
 
-    # 4) Season-end check is metadata-driven and currently deferred.
-    if _is_pilgrimage_round(next_state):
-        events.append(
-            GameEvent(
-                event_type=EventType.SEASON_END_DEFERRED,
-                actor=actor,
-                action_id=action_id,
-                details=make_event_details(
-                    round=next_state.timing.round_number,
-                    reason="alms_leader_assessment_deferred",
-                ),
-            )
+    # 4) Season-end Alms scoring from metadata pilgrimage rounds.
+    season_site_index = _pilgrimage_site_index_for_round(next_state)
+    if season_site_index is not None:
+        alms_result = resolve_alms_season_end(
+            next_state,
+            config.alms,
+            actor=actor,
+            action_id=action_id,
+            round_number=next_state.timing.round_number,
+            season_site_index=season_site_index,
         )
+        next_state = alms_result.state
+        events.extend(alms_result.events)
+        next_state = resolve_season_end(next_state, config.timing)
+        if _is_final_season_site(next_state, season_site_index=season_site_index):
+            next_state = next_state.with_game_over(True)
+            events.append(
+                GameEvent(
+                    event_type=EventType.GAME_END,
+                    actor=actor,
+                    action_id=action_id,
+                    details=make_event_details(
+                        reason=(
+                            "fourth season ended after pilgrimage site 4"
+                        )
+                    ),
+                )
+            )
+            return next_state, tuple(events)
 
     # 5) Merchant advances once at round end.
     if config.merchant.advance_at_round_end:
@@ -3117,10 +3135,19 @@ def _resolve_round_end_phases(
     return next_state, tuple(events)
 
 
-def _is_pilgrimage_round(state: GameState) -> bool:
+def _pilgrimage_site_index_for_round(state: GameState) -> int | None:
+    if not state.pilgrimage_rounds:
+        return None
+    for index, round_number in enumerate(state.pilgrimage_rounds, start=1):
+        if state.timing.round_number == round_number:
+            return index
+    return None
+
+
+def _is_final_season_site(state: GameState, *, season_site_index: int) -> bool:
     if not state.pilgrimage_rounds:
         return False
-    return state.timing.round_number in state.pilgrimage_rounds
+    return season_site_index >= 4
 
 
 def _turn_advance_event(

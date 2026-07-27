@@ -291,6 +291,7 @@ def test_season_end_highest_alms_wins_and_resets_track() -> None:
         PlayerId.PLAYER_TWO
     )
     assert {event.event_type for event in result.events} == {
+        EventType.ALMS_SEASON_END,
         EventType.ALMS_SEASON_REWARD,
         EventType.ALMS_RESET,
     }
@@ -320,7 +321,11 @@ def test_season_end_uses_piety_then_turn_order_for_tie_breaks() -> None:
         turn=0,
     )
     turn_order_winner = resolve_alms_season_end(full_tie_state, scenario.config.alms).winner
-    assert turn_order_winner is PlayerId.PLAYER_TWO
+    assert turn_order_winner is PlayerId.PLAYER_ONE
+
+    holder_swapped = full_tie_state.with_start_player(PlayerId.PLAYER_TWO)
+    swapped_winner = resolve_alms_season_end(holder_swapped, scenario.config.alms).winner
+    assert swapped_winner is PlayerId.PLAYER_TWO
 
 
 def test_season_end_no_abbey_acolyte_does_not_add_alms_table_acolyte() -> None:
@@ -338,7 +343,7 @@ def test_season_end_no_abbey_acolyte_does_not_add_alms_table_acolyte() -> None:
     assert result.winner is PlayerId.PLAYER_ONE
     assert result.moved_to_alms_table is False
     assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.committed.alms_table == 0
-    details = dict(result.events[0].details)
+    details = dict(result.events[1].details)
     assert details["moved"] is False
 
 

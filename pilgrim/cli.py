@@ -524,11 +524,40 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         moved = bool(details.get("moved", False))
         return f"{event_name}: crossed row {threshold}; reward={reward}; moved={moved}"
 
+    if event.event_type is EventType.ALMS_SEASON_END:
+        winner = str(details.get("winner", "unknown"))
+        round_number = int(details.get("round", 0))
+        site = details.get("season_site")
+        tie_break = str(details.get("tie_break", ""))
+        winner_alms = int(details.get("winning_alms_position", 0))
+        winner_piety = int(details.get("winning_piety", 0))
+        site_text = f" site {int(site)}" if site is not None else ""
+        tie_break_text = {
+            "highest_alms_position": "highest Alms position",
+            "higher_piety": "higher piety",
+            "turn_order": "current turn order",
+        }.get(tie_break, tie_break or "tie-break")
+        return (
+            f"{event_name}: round {round_number} reached pilgrimage{site_text}; "
+            f"leader {winner} by {tie_break_text} "
+            f"(alms={winner_alms}, piety={winner_piety})"
+        )
+
     if event.event_type is EventType.ALMS_SEASON_REWARD:
-        winner = details.get("winner")
+        winner = str(details.get("winner", "unknown"))
         moved = bool(details.get("moved", False))
         if moved:
-            return f"{event_name}: {winner} moved 1 acolyte abbey -> alms_table"
+            acolytes = int(details.get("alms_table_acolytes", 0))
+            end_game_vp = int(details.get("end_game_vp", 0))
+            return (
+                f"{event_name}: {winner} moved 1 acolyte abbey -> alms_table; "
+                f"alms table acolytes {acolytes}; end-game VP {end_game_vp}"
+            )
+        if bool(details.get("forfeited", False)):
+            return (
+                f"{event_name}: {winner} won Alms season end but had no Abbey acolyte; "
+                "reward forfeited"
+            )
         return f"{event_name}: {winner} had no abbey acolyte to move"
 
     if event.event_type is EventType.ALMS_RESET:

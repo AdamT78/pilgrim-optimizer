@@ -156,6 +156,7 @@ class EventType(Enum):
     BUILDING_BONUS = "building_bonus"
     ALMS_PROGRESS = "alms_progress"
     ALMS_THRESHOLD_REWARD = "alms_threshold_reward"
+    ALMS_SEASON_END = "alms_season_end"
     ALMS_SEASON_REWARD = "alms_season_reward"
     ALMS_RESET = "alms_reset"
     ALLOCATION = "allocation"

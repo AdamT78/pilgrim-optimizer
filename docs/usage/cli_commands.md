@@ -120,7 +120,7 @@ What it does right now:
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
-- Verbose apply may also include round-end pipeline events (`EXCESS_RESOURCE_CAP`, `SHIP_ADVANCE`, `ROUND_ADVANCE`, `SEASON_END_DEFERRED`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
+- Verbose apply may also include round-end pipeline events (`EXCESS_RESOURCE_CAP`, `SHIP_ADVANCE`, `ROUND_ADVANCE`, `ALMS_SEASON_END`, `ALMS_SEASON_REWARD`, `ALMS_RESET`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
 - Verbose state summary always includes a `Setup` section (`required`, `complete`, `completed by`).
 
 Why this matters:
@@ -286,7 +286,7 @@ Position mapping used by the current sandbox:
   - `ROUND_ADVANCE`
   - `EXCESS_RESOURCE_CAP`
   - `SHIP_ADVANCE`
-  - `SEASON_END_DEFERRED` (metadata-driven, no scoring side effects)
+  - `ALMS_SEASON_END` / `ALMS_SEASON_REWARD` / `ALMS_RESET` (metadata-driven pilgrimage rounds)
   - `MERCHANT_ADVANCE` (round end only)
   - `START_PLAYER_SELECTION` (and tie-break event when relevant)
 
@@ -308,8 +308,8 @@ Position mapping used by the current sandbox:
   - `north_group`
   - `south_group`
   - `total`
-- Round-end transition flow currently does not auto-emit `DUMMY_ACOLYTE_MOVE` while
-  season-end scoring is deferred.
+- Round-end transition flow currently does not auto-emit `DUMMY_ACOLYTE_MOVE`; that behavior is
+  deferred for a later milestone.
 
 ## Round-End Phase Structure (v1.0)
 
@@ -318,9 +318,11 @@ Position mapping used by the current sandbox:
   - `EXCESS_RESOURCE_CAP` (only when one or more players were capped)
   - `SHIP_ADVANCE`
   - `ROUND_ADVANCE`
-  - `SEASON_END_DEFERRED` (when optional pilgrimage-round metadata matches new round)
+  - `ALMS_SEASON_END`
+  - `ALMS_SEASON_REWARD`
+  - `ALMS_RESET`
   - `START_PLAYER_SELECTION` (and optional tie-break event)
-  - `GAME_END` when Ship returns to NW after the full 26-round loop
+  - `GAME_END` at fourth season-end pilgrimage site (and still on legacy NW full-loop return)
 - `game_over: true` is shown in verbose state summaries, and legal-action generation returns no actions.
 
 ## Building Catalogue and Slots (v1.1)
