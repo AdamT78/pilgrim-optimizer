@@ -56,6 +56,17 @@ For round-ending turns, event order is:
 12. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
 13. `INVARIANT_CHECK`
 
+Guild interaction (v5.3):
+
+- Guild Merchant movement is separate from round-end Merchant movement.
+- When Guild is used during a turn, its `MERCHANT_ADVANCE` is emitted in the pre-sowing
+  building-modifier window with `cause=guild`.
+- If that same turn is also round-ending, round-end still performs its normal single
+  Merchant advance later in this sequence.
+- Result: a round-ending Guild turn can emit two Merchant advances total:
+  - one pre-sowing from Guild
+  - one in round-end step 9
+
 ## Excess cap
 
 At round end, each real player is checked:

@@ -53,6 +53,8 @@ class FullTurnAction:
     building_conversion_source: str | None = None
     building_conversion_direction: str | None = None
     building_conversion_amount: int | None = None
+    merchant_advance_building_id: str | None = None
+    merchant_advance_building_source: str | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -208,6 +210,15 @@ def action_id(action: GameAction) -> str:
             f":direction:{action.building_conversion_direction or 'unknown'}"
             f":amount:{action.building_conversion_amount if action.building_conversion_amount is not None else 'none'}"
         )
+    merchant_advance_suffix = ""
+    if (
+        action.merchant_advance_building_id is not None
+        or action.merchant_advance_building_source is not None
+    ):
+        merchant_advance_suffix = (
+            f":merchant_advance_building:{action.merchant_advance_building_id or 'none'}"
+            f":from:{action.merchant_advance_building_source or 'unknown'}"
+        )
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -220,7 +231,7 @@ def action_id(action: GameAction) -> str:
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
-        f"{sow_route_suffix}{conversion_suffix}{hire_suffix}"
+        f"{sow_route_suffix}{conversion_suffix}{merchant_advance_suffix}{hire_suffix}"
     )
 
 
@@ -327,6 +338,8 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     ):
         if action.building_conversion_direction == "sell_wheat_for_silver":
             route_summary += " | use building: brewery to sell 1 wheat for 2 silver"
+    if action.merchant_advance_building_id == "guild":
+        route_summary += " | use building: guild to move merchant +1"
     summary = (
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
@@ -405,6 +418,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             f" | hire building: {action.building_conversion_id} "
             f"from {action.building_conversion_source}"
+        )
+    if (
+        action.merchant_advance_building_id == "guild"
+        and action.merchant_advance_building_source is not None
+        and action.merchant_advance_building_source != "own_active"
+    ):
+        summary += (
+            " | hire building: guild "
+            f"from {action.merchant_advance_building_source}"
         )
     if action.hired_building_id == "mill":
         required_wheat = 0

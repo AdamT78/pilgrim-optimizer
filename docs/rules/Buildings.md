@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.2 Sandbox Scope)
+# Buildings (v1.9-v5.3 Sandbox Scope)
 
 ## Implemented now
 
@@ -402,6 +402,48 @@ Event semantics before sowing:
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - Brewery conversion delta is always `wheat -1`, `silver +2`
+
+## Guild merchant advance (v5.3)
+
+Guild now applies as an optional pre-sow Merchant-position modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Guild -> free
+- live market Guild -> hire from bank
+- opponent active Guild -> hire from owner
+
+Merchant movement rule:
+
+- move Merchant exactly one Duty tile clockwise
+- movement is player-triggered and optional
+- this is not the round-end Merchant phase
+
+Timing:
+
+- if Guild is hired, hire payment resolves first
+- Guild Merchant movement resolves next
+- sowing and selected Duty resolve after the Merchant move
+- Guild movement cannot change the resource required to pay Guild's own hire
+
+Resource and availability behavior:
+
+- own active Guild works even when Merchant resource is `none`
+- hired Guild sources are unavailable when Merchant resource is `none`
+- hired Guild sources require payment affordability before movement
+- donated/not-live Guild remains unavailable
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `MERCHANT_ADVANCE` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> `MERCHANT_ADVANCE` -> `SOWING`
+- Guild `MERCHANT_ADVANCE` events include `cause=guild` in event details
+
+Conservative composition scope in this milestone:
+
+- Guild variants are generated only for ordinary full-turn actions
+- mixed Guild + other same-turn hire-dependent building modifiers are deferred
+  to avoid ambiguous hire-cost ordering on post-Guild Merchant resources
 
 ## Building turn-modifier registry (v3.3-v3.9)
 
