@@ -535,6 +535,29 @@ Position mapping used by the current sandbox:
   - conversion `RESOURCE_DELTA` (shows `stone` and `silver` deltas)
   - `SOWING`
 
+## Brewery Wheat-to-Silver Conversion (v5.2)
+
+- Brewery is available as an optional full-turn conversion modifier (not a standalone action):
+  - `sell_wheat_for_silver`: `wheat -1`, `silver +2`
+  - exact-one conversion only (no amount variants)
+  - one-direction only (no buy variants)
+- Source resolution uses existing building-source priority:
+  - own active Brewery (free)
+  - opponent active Brewery (hire from owner)
+  - live market Brewery (hire from bank)
+- Action summary examples:
+  - `... | use building: brewery to sell 1 wheat for 2 silver | ...`
+  - hired variants append `| hire building: brewery from <market|player_two>`
+- Legal generation:
+  - normal non-Brewery actions remain legal
+  - Brewery variants are generated only when at least `1` wheat remains after any hire payment
+  - at most one Brewery conversion variant is generated per eligible base action
+- `apply --verbose` ordering for Brewery conversion:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: brewery sold 1 wheat for 2 silver`
+  - conversion `RESOURCE_DELTA` (`silver +2; wheat -1`)
+  - `SOWING`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

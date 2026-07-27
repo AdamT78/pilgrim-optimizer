@@ -680,6 +680,14 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                     f"{event_name}: stone_yard bought {amount} stone for {amount} silver"
                 )
         if (
+            building == "brewery"
+            and "conversion_direction" in details
+            and "amount" in details
+        ):
+            direction = str(details.get("conversion_direction", "unknown"))
+            if direction == "sell_wheat_for_silver":
+                return f"{event_name}: brewery sold 1 wheat for 2 silver"
+        if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details
             and "start_turn_to" in details

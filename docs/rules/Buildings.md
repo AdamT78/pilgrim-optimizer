@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.1 Sandbox Scope)
+# Buildings (v1.9-v5.2 Sandbox Scope)
 
 ## Implemented now
 
@@ -360,6 +360,48 @@ Event semantics before sowing:
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - conversion deltas include `stone` and `silver` changes explicitly
+
+## Brewery wheat-to-silver conversion (v5.2)
+
+Brewery now applies as an optional economic/resource modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Brewery -> free
+- live market Brewery -> hire from bank
+- opponent active Brewery -> hire from owner
+
+Conversion rule:
+
+- sell exactly `1` wheat: gain `2` silver
+- conversion is one-direction only (`sell_wheat_for_silver`)
+- no buy variants and no variable-amount variants are legal
+
+Timing:
+
+- if Brewery is hired, hire payment resolves first
+- conversion resolves next
+- sowing and selected Duty resolve after conversion
+- conversion cannot be used to pay Brewery's own hire cost
+
+Resource bounds:
+
+- conversion requires at least `1` wheat after any required hire payment
+- wheat cannot go below `0`
+- silver is uncapped
+- round-end wheat caps remain unchanged
+
+Legal generation behavior:
+
+- normal full-turn actions remain legal
+- Brewery variants are added when source is usable and post-hire wheat is at least `1`
+- each eligible base action gets at most one Brewery variant (`amount = 1`)
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- Brewery conversion delta is always `wheat -1`, `silver +2`
 
 ## Building turn-modifier registry (v3.3-v3.9)
 
