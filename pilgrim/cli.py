@@ -665,6 +665,21 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                     f"{event_name}: indulgences bought {amount} piety for {amount} silver"
                 )
         if (
+            building == "stone_yard"
+            and "conversion_direction" in details
+            and "amount" in details
+        ):
+            amount = int(details.get("amount", 0))
+            direction = str(details.get("conversion_direction", "unknown"))
+            if direction == "sell_stone":
+                return (
+                    f"{event_name}: stone_yard sold {amount} stone for {amount} silver"
+                )
+            if direction == "buy_stone":
+                return (
+                    f"{event_name}: stone_yard bought {amount} stone for {amount} silver"
+                )
+        if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details
             and "start_turn_to" in details

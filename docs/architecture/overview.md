@@ -467,6 +467,33 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Converted piety/silver is available to later same-turn effects because conversion resolves
   pre-sowing.
 
+## Stone Yard Stone/Silver Conversion (v5.1)
+
+- Transition/runtime wiring now supports Stone Yard as an optional full-turn resource modifier.
+- Source resolution reuses the shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none, insufficient payment resource)
+- Conversion semantics:
+  - `sell_stone`: `stone -X`, `silver +X`
+  - `buy_stone`: `silver -X`, `stone +X`
+  - `X >= 1`, fixed `1:1` rate
+- Resource bounds are enforced in legal generation and apply-time validation:
+  - sell `1..available_stone_after_hire`
+  - buy `1..available_silver_after_hire`
+  - no zero-amount variants
+- Stone can exceed 6 during turn resolution; existing round-end excess-cap logic still applies
+  later in the pipeline.
+- Apply-time ordering for the Stone Yard modifier:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (conversion description)
+  - conversion `RESOURCE_DELTA`
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Converted stone/silver is available to later same-turn effects because conversion resolves
+  pre-sowing (for example, Construct affordability checks on the selected action).
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for

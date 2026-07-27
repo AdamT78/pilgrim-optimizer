@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.0 Sandbox Scope)
+# Buildings (v1.9-v5.1 Sandbox Scope)
 
 ## Implemented now
 
@@ -316,6 +316,50 @@ Event semantics before sowing:
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - conversion deltas include `piety` and `silver` changes explicitly
+
+## Stone Yard stone/silver conversion (v5.1)
+
+Stone Yard now applies as an optional economic/resource modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Stone Yard -> free
+- live market Stone Yard -> hire from bank
+- opponent active Stone Yard -> hire from owner
+
+Conversion rule:
+
+- sell stone: pay `X` stone, gain `X` silver
+- buy stone: pay `X` silver, gain `X` stone
+- `X >= 1`
+- conversion rate is always `1:1`
+
+Timing:
+
+- if Stone Yard is hired, hire payment resolves first
+- conversion resolves next
+- sowing and selected Duty resolve after conversion
+- conversion cannot be used to pay Stone Yard's own hire cost
+
+Resource bounds:
+
+- sell variants: `1..available_stone_after_hire`
+- buy variants: `1..available_silver_after_hire`
+- stone and silver are never allowed to go below `0`
+- silver is uncapped
+- stone can exceed `6` during the turn; round-end excess caps still apply later
+
+Legal generation behavior:
+
+- normal full-turn actions remain legal
+- Stone Yard variants are added when source is usable and post-hire resources allow conversion
+- no zero-amount conversion variants are generated
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
+- conversion deltas include `stone` and `silver` changes explicitly
 
 ## Building turn-modifier registry (v3.3-v3.9)
 
