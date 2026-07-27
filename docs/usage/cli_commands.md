@@ -506,6 +506,35 @@ Position mapping used by the current sandbox:
   - conversion `RESOURCE_DELTA` (shows both `silver` and `piety` deltas)
   - `SOWING`
 
+## Stone Yard Stone/Silver Conversion (v5.1)
+
+- Stone Yard is available as an optional full-turn conversion modifier (not a standalone action):
+  - `sell_stone`: `stone -X`, `silver +X`
+  - `buy_stone`: `silver -X`, `stone +X`
+  - `X >= 1`, fixed `1:1` rate
+- Source resolution uses existing building-source priority:
+  - own active Stone Yard (free)
+  - opponent active Stone Yard (hire from owner)
+  - live market Stone Yard (hire from bank)
+- Action summary examples:
+  - `... | use building: stone_yard to sell 2 stone for 2 silver | ...`
+  - `... | use building: stone_yard to buy 1 stone for 1 silver | ...`
+  - hired variants append `| hire building: stone_yard from <market|player_two>`
+- Legal generation:
+  - normal non-Stone-Yard actions remain legal
+  - sell variants are generated for amounts `1..available_stone_after_hire`
+  - buy variants are generated for amounts `1..available_silver_after_hire`
+  - no zero-amount variants
+- Resource bounds:
+  - stone and silver cannot go below `0`
+  - silver is uncapped
+  - stone can exceed `6` during turn resolution and is capped later only by round-end excess rules
+- `apply --verbose` ordering for Stone Yard conversion:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: stone_yard sold/bought ...`
+  - conversion `RESOURCE_DELTA` (shows `stone` and `silver` deltas)
+  - `SOWING`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

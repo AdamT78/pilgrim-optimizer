@@ -206,6 +206,9 @@ _GRAIN_STORE_SELL_WHEAT = "sell_wheat"
 _BUILDING_INDULGENCES = "indulgences"
 _INDULGENCES_BUY_PIETY = "buy_piety"
 _INDULGENCES_SELL_PIETY = "sell_piety"
+_BUILDING_STONE_YARD = "stone_yard"
+_STONE_YARD_BUY_STONE = "buy_stone"
+_STONE_YARD_SELL_STONE = "sell_stone"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_WHEAT: "well",
     TurnResolutionType.PRODUCE_STONE: "quarry",
@@ -350,6 +353,7 @@ def _legal_full_turn_actions_for_state(state: GameState, config: GameConfig) -> 
                 None,
                 *_legal_grain_store_conversion_options(route_state, config),
                 *_legal_indulgences_conversion_options(route_state, config),
+                *_legal_stone_yard_conversion_options(route_state, config),
             )
             for conversion_option in conversion_options:
                 state_for_turn = (
@@ -1458,9 +1462,10 @@ def _apply_full_turn_action(
             if conversion_building_id not in (
                 _BUILDING_GRAIN_STORE,
                 _BUILDING_INDULGENCES,
+                _BUILDING_STONE_YARD,
             ):
                 raise TransitionValidationError(
-                    "Only Grain Store and Indulgences are supported for building_conversion fields."
+                    "Only Grain Store, Indulgences, and Stone Yard are supported for building_conversion fields."
                 )
             conversion_direction = action.building_conversion_direction
             if conversion_building_id == _BUILDING_GRAIN_STORE:
@@ -1478,14 +1483,25 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Indulgences conversion direction must be buy_piety or sell_piety."
                 )
+            elif conversion_building_id == _BUILDING_STONE_YARD and conversion_direction not in (
+                _STONE_YARD_BUY_STONE,
+                _STONE_YARD_SELL_STONE,
+            ):
+                raise TransitionValidationError(
+                    "Stone Yard conversion direction must be buy_stone or sell_stone."
+                )
             amount = action.building_conversion_amount
             if amount is None or amount <= 0:
                 if conversion_building_id == _BUILDING_GRAIN_STORE:
                     raise TransitionValidationError(
                         "Grain Store conversion amount must be at least 1."
                     )
+                if conversion_building_id == _BUILDING_INDULGENCES:
+                    raise TransitionValidationError(
+                        "Indulgences conversion amount must be at least 1."
+                    )
                 raise TransitionValidationError(
-                    "Indulgences conversion amount must be at least 1."
+                    "Stone Yard conversion amount must be at least 1."
                 )
         end_turn_fields = (
             action.end_turn_building_id,
@@ -1570,7 +1586,11 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
         if (
-            action.building_conversion_id in (_BUILDING_GRAIN_STORE, _BUILDING_INDULGENCES)
+            action.building_conversion_id in (
+                _BUILDING_GRAIN_STORE,
+                _BUILDING_INDULGENCES,
+                _BUILDING_STONE_YARD,
+            )
             and action.building_conversion_source is not None
             and action.building_conversion_source != "own_active"
         ):
@@ -3920,6 +3940,75 @@ def _legal_indulgences_conversion_options(
     return tuple(options)
 
 
+def _legal_stone_yard_conversion_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_BuildingConversionOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_STONE_YARD,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _hire_payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    player_state = state_after_hire.player_state(state.active_player)
+    resources = player_state.resources
+    options: list[_BuildingConversionOption] = []
+
+    for amount in range(1, resources.stone + 1):
+        converted_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(
+                player_state,
+                resources=resources.add(stone=-amount, silver=amount),
+            ),
+        )
+        options.append(
+            _BuildingConversionOption(
+                state=converted_state,
+                building_id=_BUILDING_STONE_YARD,
+                source=source,
+                direction=_STONE_YARD_SELL_STONE,
+                amount=amount,
+            )
+        )
+
+    for amount in range(1, resources.silver + 1):
+        converted_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(
+                player_state,
+                resources=resources.add(silver=-amount, stone=amount),
+            ),
+        )
+        options.append(
+            _BuildingConversionOption(
+                state=converted_state,
+                building_id=_BUILDING_STONE_YARD,
+                source=source,
+                direction=_STONE_YARD_BUY_STONE,
+                amount=amount,
+            )
+        )
+
+    return tuple(options)
+
+
 def _with_grain_store_conversion_fields(
     action: FullTurnAction,
     *,
@@ -4310,25 +4399,36 @@ def _resolved_grain_store_conversion_for_action(
     elif building_id == _BUILDING_INDULGENCES:
         building_name = "Indulgences"
         valid_directions = (_INDULGENCES_BUY_PIETY, _INDULGENCES_SELL_PIETY)
+    elif building_id == _BUILDING_STONE_YARD:
+        building_name = "Stone Yard"
+        valid_directions = (_STONE_YARD_BUY_STONE, _STONE_YARD_SELL_STONE)
     else:
         raise TransitionValidationError(
-            "Only Grain Store and Indulgences are supported for building_conversion fields."
+            "Only Grain Store, Indulgences, and Stone Yard are supported for building_conversion fields."
         )
     if direction not in valid_directions:
         if building_id == _BUILDING_GRAIN_STORE:
             raise TransitionValidationError(
                 "Grain Store conversion direction must be buy_wheat or sell_wheat."
             )
+        if building_id == _BUILDING_INDULGENCES:
+            raise TransitionValidationError(
+                "Indulgences conversion direction must be buy_piety or sell_piety."
+            )
         raise TransitionValidationError(
-            "Indulgences conversion direction must be buy_piety or sell_piety."
+            "Stone Yard conversion direction must be buy_stone or sell_stone."
         )
     if amount <= 0:
         if building_id == _BUILDING_GRAIN_STORE:
             raise TransitionValidationError(
                 "Grain Store conversion amount must be at least 1."
             )
+        if building_id == _BUILDING_INDULGENCES:
+            raise TransitionValidationError(
+                "Indulgences conversion amount must be at least 1."
+            )
         raise TransitionValidationError(
-            "Indulgences conversion amount must be at least 1."
+            "Stone Yard conversion amount must be at least 1."
         )
 
     source = building_ability_source(
@@ -4819,7 +4919,9 @@ def _apply_grain_store_conversion_to_state(
     if amount <= 0:
         if conversion.building_id == _BUILDING_GRAIN_STORE:
             raise ValueError("Grain Store conversion amount must be at least 1.")
-        raise ValueError("Indulgences conversion amount must be at least 1.")
+        if conversion.building_id == _BUILDING_INDULGENCES:
+            raise ValueError("Indulgences conversion amount must be at least 1.")
+        raise ValueError("Stone Yard conversion amount must be at least 1.")
 
     if conversion.building_id == _BUILDING_GRAIN_STORE:
         if conversion.direction == _GRAIN_STORE_SELL_WHEAT:
@@ -4871,9 +4973,32 @@ def _apply_grain_store_conversion_to_state(
             delta = (0, -amount, 0, amount)
         else:
             raise ValueError("Indulgences conversion direction must be buy_piety or sell_piety.")
+    elif conversion.building_id == _BUILDING_STONE_YARD:
+        if conversion.direction == _STONE_YARD_SELL_STONE:
+            if resources.stone < amount:
+                raise ValueError(
+                    "Stone Yard sell conversion requires enough stone after hire payment."
+                )
+            next_player_state = replace(
+                player_state,
+                resources=resources.add(stone=-amount, silver=amount),
+            )
+            delta = (-amount, amount, 0, 0)
+        elif conversion.direction == _STONE_YARD_BUY_STONE:
+            if resources.silver < amount:
+                raise ValueError(
+                    "Stone Yard buy conversion requires enough silver after hire payment."
+                )
+            next_player_state = replace(
+                player_state,
+                resources=resources.add(silver=-amount, stone=amount),
+            )
+            delta = (amount, -amount, 0, 0)
+        else:
+            raise ValueError("Stone Yard conversion direction must be buy_stone or sell_stone.")
     else:
         raise ValueError(
-            "Only Grain Store and Indulgences are supported for building conversions."
+            "Only Grain Store, Indulgences, and Stone Yard are supported for building conversions."
         )
 
     next_state = state.with_player_state(
