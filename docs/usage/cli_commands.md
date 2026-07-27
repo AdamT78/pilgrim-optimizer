@@ -59,6 +59,7 @@ What it does right now:
 - Asks the current rules engine to generate legal actions for the current phase.
 - In normal `sow` phase, each action is one complete simplified turn: sow + selected duty/tithe resolution.
 - In `setup_sow` phase, actions are setup sow actions only (`Setup sow: ...`).
+- In normal play, round length is based on real players in scenario state (`2..4`), not a fixed 2-player cadence.
 - Give Alms actions include explicit payment details (`pay silver=..., wheat=...`).
 - If the acting player has active buildings, Give Alms can also show:
   - `action: give_alms_donate_building | building: <building_id>`

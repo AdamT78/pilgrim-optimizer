@@ -105,6 +105,8 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `ship_position`
   - `completed_rounds`
   - `game_over`
+- Normal round length now follows real players in `GameState.players` (`2..4`), while
+  `table_player_count` remains independent for dummy-group setup.
 - Round-end sequence is tightened in v4.5:
   - excess cap
   - ship advance / legacy NW game-end short-circuit

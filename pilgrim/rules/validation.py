@@ -61,7 +61,7 @@ def ensure_non_negative_resources(state: GameState) -> None:
 
 
 def ensure_valid_workforce(state: GameState) -> None:
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         workforce = state.player_state(player_id).workforce
         if len(workforce.mancala) != MANCALA_POSITION_COUNT:
             raise TransitionValidationError(
@@ -104,7 +104,12 @@ def ensure_valid_workforce(state: GameState) -> None:
 
 
 def ensure_acolyte_conservation(before: GameState, after: GameState) -> None:
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    if before.player_count != after.player_count:
+        raise TransitionValidationError(
+            "Real player count changed across transition: "
+            f"{before.player_count} -> {after.player_count}."
+        )
+    for player_id in _real_players(before):
         if before.total_acolytes(player_id) != after.total_acolytes(player_id):
             raise TransitionValidationError(
                 f"Acolyte count changed for {player_id.name}: "
@@ -170,7 +175,7 @@ def ensure_valid_dummy_state(state: GameState) -> None:
 
 
 def ensure_valid_player_board_slots_structure(state: GameState) -> None:
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         slots = state.player_state(player_id).player_board_slots
         if slots.cardinal_favor_tiles < 0:
             raise TransitionValidationError(
@@ -193,7 +198,7 @@ def ensure_valid_player_board_slots_structure(state: GameState) -> None:
 
 
 def ensure_valid_special_activities_state(state: GameState) -> None:
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         player_state = state.player_state(player_id)
         activities = state.player_state(player_id).special_activities
         chapter_house_active = "chapter_house" in player_state.player_board_slots.active_buildings
@@ -272,3 +277,7 @@ def validate_state_invariants(state: GameState) -> None:
     ensure_valid_special_activities_state(state)
     ensure_valid_player_board_slots_structure(state)
     ensure_valid_setup_state(state)
+
+
+def _real_players(state: GameState) -> tuple[PlayerId, ...]:
+    return tuple(PlayerId(index) for index in range(state.player_count))

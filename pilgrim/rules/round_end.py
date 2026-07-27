@@ -103,7 +103,11 @@ def select_next_start_player(
     if len(tied) == 1:
         deciding_player = tied[0]
     else:
-        deciding_player = _clockwise_tie_break(tied_players=tied, current_start=state.start_player)
+        deciding_player = _clockwise_tie_break(
+            tied_players=tied,
+            current_start=state.start_player,
+            player_count=state.player_count,
+        )
         events.append(
             GameEvent(
                 event_type=EventType.START_PLAYER_TIE_BREAK,
@@ -156,10 +160,11 @@ def _clockwise_tie_break(
     *,
     tied_players: tuple[PlayerId, ...],
     current_start: PlayerId,
+    player_count: int,
 ) -> PlayerId:
     candidate_order = tuple(
-        PlayerId((int(current_start) + offset) % len(PlayerId))
-        for offset in range(1, len(PlayerId) + 1)
+        PlayerId((int(current_start) + offset) % player_count)
+        for offset in range(1, player_count + 1)
     )
     for player in candidate_order:
         if player in tied_players:

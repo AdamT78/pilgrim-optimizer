@@ -51,7 +51,7 @@ class GameState:
 
     active_player: PlayerId
     phase: TurnPhase
-    players: tuple[PlayerState, PlayerState]
+    players: tuple[PlayerState, ...]
     start_player: PlayerId = PlayerId.PLAYER_ONE
     timing: TimingState = field(default_factory=TimingState)
     table_player_count: int = 4
@@ -69,8 +69,8 @@ class GameState:
     turn: int = 0
 
     def __post_init__(self) -> None:
-        if len(self.players) != 2:
-            raise ValueError("Exactly two players are required.")
+        if len(self.players) < 2 or len(self.players) > 4:
+            raise ValueError("Real player count must be between 2 and 4.")
         if self.turn < 0:
             raise ValueError("Turn cannot be negative.")
 
@@ -86,6 +86,8 @@ class GameState:
 
         if self.timing.turn_in_round >= len(self.players):
             raise ValueError("turn_in_round must be less than number of players.")
+        if int(self.active_player) >= len(self.players):
+            raise ValueError("active_player must be one of the real players in state.")
         if int(self.start_player) >= len(self.players):
             raise ValueError("start_player must be one of the real players in state.")
         if self.table_player_count not in (2, 3, 4):
@@ -122,11 +124,11 @@ class GameState:
         return self.player_state(player_id).workforce.mancala
 
     @property
-    def acolytes(self) -> tuple[PlayerVector, PlayerVector]:
+    def acolytes(self) -> tuple[PlayerVector, ...]:
         """Backward-compatible acolyte vectors from workforce mancala pools."""
-        return (
-            self.players[int(PlayerId.PLAYER_ONE)].workforce.mancala,
-            self.players[int(PlayerId.PLAYER_TWO)].workforce.mancala,
+        return tuple(
+            self.players[int(player_id)].workforce.mancala
+            for player_id in (PlayerId(index) for index in range(self.player_count))
         )
 
     def total_acolytes(self, player_id: PlayerId) -> int:
@@ -225,6 +227,7 @@ class GameState:
         if next_turn_in_round >= len(self.players):
             next_round_number += 1
             next_turn_in_round = 0
+        next_player = PlayerId((int(self.active_player) + 1) % self.player_count)
         next_timing = TimingState(
             absolute_turn=self.timing.absolute_turn + 1,
             round_number=next_round_number,
@@ -233,7 +236,7 @@ class GameState:
         )
         return replace(
             self,
-            active_player=self.active_player.opponent(),
+            active_player=next_player,
             phase=TurnPhase.SOW,
             timing=next_timing,
             turn=next_timing.absolute_turn,

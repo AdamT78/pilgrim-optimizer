@@ -389,7 +389,7 @@ def validate_building_state(state: GameState, config: GameConfig) -> None:
     """Validate market + per-player slot occupancy against building config."""
     validate_building_catalogue(config.buildings)
     validate_building_market(state.building_market, config.buildings)
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         validate_player_board_slots(
             state.player_state(player_id).player_board_slots,
             config.buildings,
@@ -407,7 +407,7 @@ def validate_building_availability(state: GameState, config: GameConfig) -> None
         )
 
     selected_building_ids = set(state.building_market)
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         slots = state.player_state(player_id).player_board_slots
         selected_building_ids.update(slots.active_buildings)
         selected_building_ids.update(slots.donated_buildings)
@@ -447,7 +447,7 @@ def _validate_unique_building_locations(state: GameState) -> None:
     for building_id in state.building_market:
         building_locations.setdefault(building_id, []).append("building_market")
 
-    for player_id in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for player_id in _real_players(state):
         player_slots = state.player_state(player_id).player_board_slots
         player_label = _player_label(player_id)
         for building_id in player_slots.active_buildings:
@@ -829,7 +829,7 @@ def _opponent_active_owner(
     acting_player: PlayerId,
     building_key: str,
 ) -> str | None:
-    for candidate in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for candidate in _real_players(state):
         if candidate is acting_player:
             continue
         candidate_slots = state.player_state(candidate).player_board_slots
@@ -839,7 +839,7 @@ def _opponent_active_owner(
 
 
 def _donated_owner(state: GameState, building_key: str) -> str | None:
-    for candidate in (PlayerId.PLAYER_ONE, PlayerId.PLAYER_TWO):
+    for candidate in _real_players(state):
         candidate_slots = state.player_state(candidate).player_board_slots
         if building_key in candidate_slots.donated_buildings:
             return _player_label(candidate)
@@ -851,11 +851,10 @@ def _player_label(player_id: PlayerId) -> str:
 
 
 def _player_id_from_label(label: str) -> PlayerId | None:
-    if label == "player_one":
-        return PlayerId.PLAYER_ONE
-    if label == "player_two":
-        return PlayerId.PLAYER_TWO
-    return None
+    try:
+        return PlayerId.from_string(label)
+    except ValueError:
+        return None
 
 
 def _resource_amount(resources: Resources, resource: str) -> int:
@@ -880,6 +879,10 @@ def _apply_resource_delta(resources: Resources, *, resource: str, delta: int) ->
 
 def _building_availability_map(state: GameState) -> dict[str, int]:
     return {building_id: live_round for building_id, live_round in state.building_availability}
+
+
+def _real_players(state: GameState) -> tuple[PlayerId, ...]:
+    return tuple(PlayerId(index) for index in range(state.player_count))
 
 
 def _remove_first_occurrence(values: tuple[str, ...], target: str) -> tuple[str, ...]:

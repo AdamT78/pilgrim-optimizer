@@ -30,9 +30,20 @@ def advance_active_player(state: GameState, config: TimingConfig) -> PlayerId:
     return PlayerId(next_index)
 
 
-def is_round_end(timing: TimingState, config: TimingConfig) -> bool:
+def is_round_end(
+    timing: TimingState,
+    config: TimingConfig,
+    *,
+    players_per_round: int | None = None,
+) -> bool:
     """Return true when the current turn will complete the round."""
-    return timing.turn_in_round + 1 >= config.players_per_round
+    expected_players = config.players_per_round if players_per_round is None else players_per_round
+    return timing.turn_in_round + 1 >= expected_players
+
+
+def is_round_end_for_state(state: GameState, config: TimingConfig) -> bool:
+    """Return true when the current turn will complete the round for this state."""
+    return is_round_end(state.timing, config, players_per_round=state.player_count)
 
 
 def is_season_end(timing: TimingState, config: TimingConfig) -> bool:
@@ -83,7 +94,11 @@ def advance_timing(
     _ensure_timing_config_compatible(state, config)
     actor = state.active_player
     next_player = advance_active_player(state, config)
-    round_ended = is_round_end(state.timing, config)
+    round_ended = is_round_end(
+        state.timing,
+        config,
+        players_per_round=state.player_count,
+    )
     season_ended = False
     completed_round_number: int | None = None
     completed_season_number: int | None = None
@@ -153,8 +168,7 @@ def advance_timing(
 
 
 def _ensure_timing_config_compatible(state: GameState, config: TimingConfig) -> None:
-    if state.player_count != config.players_per_round:
+    if state.player_count < 2 or state.player_count > 4:
         raise ValueError(
-            "Timing config players_per_round does not match state player count: "
-            f"{config.players_per_round} vs {state.player_count}."
+            "Real player count must be between 2 and 4 for timing progression."
         )

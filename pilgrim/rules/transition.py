@@ -1004,12 +1004,7 @@ def _apply_setup_sow_action(
                 acolytes_conserved=True,
                 serfs_non_negative=True,
                 invariant_scope="all_players",
-                total_workforce_player_one=next_state.total_acolytes(PlayerId.PLAYER_ONE),
-                total_workforce_player_two=next_state.total_acolytes(PlayerId.PLAYER_TWO),
-                total_workforce_all_players=(
-                    next_state.total_acolytes(PlayerId.PLAYER_ONE)
-                    + next_state.total_acolytes(PlayerId.PLAYER_TWO)
-                ),
+                **_invariant_workforce_details(next_state),
                 dummy_north_group_total=next_state.dummy_acolytes.north_total,
                 dummy_south_group_total=next_state.dummy_acolytes.south_total,
                 dummy_total=next_state.dummy_total,
@@ -2985,12 +2980,7 @@ def _apply_full_turn_action(
                 acolytes_conserved=True,
                 serfs_non_negative=True,
                 invariant_scope="all_players",
-                total_workforce_player_one=next_state.total_acolytes(PlayerId.PLAYER_ONE),
-                total_workforce_player_two=next_state.total_acolytes(PlayerId.PLAYER_TWO),
-                total_workforce_all_players=(
-                    next_state.total_acolytes(PlayerId.PLAYER_ONE)
-                    + next_state.total_acolytes(PlayerId.PLAYER_TWO)
-                ),
+                **_invariant_workforce_details(next_state),
                 dummy_north_group_total=next_state.dummy_acolytes.north_total,
                 dummy_south_group_total=next_state.dummy_acolytes.south_total,
                 dummy_total=next_state.dummy_total,
@@ -3169,9 +3159,7 @@ def _turn_advance_event(
 
 
 def _player_label(player: PlayerId) -> str:
-    if player is PlayerId.PLAYER_ONE:
-        return "player_one"
-    return "player_two"
+    return player.name.lower()
 
 
 def _next_incomplete_setup_player(
@@ -4992,10 +4980,12 @@ def _constructible_building_ids(
     return tuple(affordable_buildings)
 
 
-def _opponents(player: PlayerId) -> tuple[PlayerId, ...]:
-    if player is PlayerId.PLAYER_ONE:
-        return (PlayerId.PLAYER_TWO,)
-    return (PlayerId.PLAYER_ONE,)
+def _opponents(state: GameState, player: PlayerId) -> tuple[PlayerId, ...]:
+    return tuple(
+        candidate
+        for candidate in (PlayerId(index) for index in range(state.player_count))
+        if candidate != player
+    )
 
 
 def _competing_counts(
@@ -5005,10 +4995,22 @@ def _competing_counts(
     duty_position: int,
 ) -> tuple[int, ...]:
     opponent_counts = [
-        state.player_vector(opponent_id)[duty_position] for opponent_id in _opponents(player)
+        state.player_vector(opponent_id)[duty_position]
+        for opponent_id in _opponents(state, player)
     ]
     opponent_counts.append(state.dummy_at_position(duty_position))
     return tuple(opponent_counts)
+
+
+def _invariant_workforce_details(state: GameState) -> dict[str, int]:
+    details: dict[str, int] = {}
+    total = 0
+    for player_id in (PlayerId(index) for index in range(state.player_count)):
+        workforce_total = state.total_acolytes(player_id)
+        details[f"total_workforce_{_player_label(player_id)}"] = workforce_total
+        total += workforce_total
+    details["total_workforce_all_players"] = total
+    return details
 
 
 def _alms_payment_options(
