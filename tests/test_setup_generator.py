@@ -164,6 +164,13 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
     assert metadata["generated"] is True
     assert metadata["setup_sow_required"] is True
     assert metadata["setup_sow_implemented"] is True
+    assert set(metadata["setup_timeline"]["pilgrimage_rolls"]) == {"nw", "ne", "se", "sw"}
+    assert metadata["setup_timeline"]["pilgrimage_rounds"]["site_1"] == 1
+    assert set(metadata["setup_timeline"]["building_live_rounds"]) == {
+        "level_1",
+        "level_2",
+        "level_3",
+    }
     assert "note" in metadata
 
     for player_id in ("player_one", "player_two"):
