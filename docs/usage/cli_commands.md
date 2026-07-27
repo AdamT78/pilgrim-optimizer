@@ -120,7 +120,7 @@ What it does right now:
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
-- Verbose apply may also include round-end pipeline events (`EXCESS_*`, `SHIP_ADVANCE`, `SEASON_END`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
+- Verbose apply may also include round-end pipeline events (`EXCESS_RESOURCE_CAP`, `SHIP_ADVANCE`, `ROUND_ADVANCE`, `SEASON_END_DEFERRED`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
 - Verbose state summary always includes a `Setup` section (`required`, `complete`, `completed by`).
 
 Why this matters:
@@ -283,14 +283,12 @@ Position mapping used by the current sandbox:
   - `Ship` status
 - `apply --verbose` is especially useful for inspecting automatic boundary events:
   - `TURN_ADVANCE`
-  - `ROUND_END` / `ROUND_ADVANCE`
-  - `EXCESS_CHECK` / `EXCESS_DISCARD`
+  - `ROUND_ADVANCE`
+  - `EXCESS_RESOURCE_CAP`
   - `SHIP_ADVANCE`
-  - `SEASON_END` / `SEASON_ADVANCE`
-  - `DUMMY_ACOLYTE_MOVE` (on season boundaries)
+  - `SEASON_END_DEFERRED` (metadata-driven, no scoring side effects)
   - `MERCHANT_ADVANCE` (round end only)
   - `START_PLAYER_SELECTION` (and tie-break event when relevant)
-  - season-end Alms events when a season closes
 
 ## Merchant Context (v0.8)
 
@@ -310,15 +308,17 @@ Position mapping used by the current sandbox:
   - `north_group`
   - `south_group`
   - `total`
-- On season-end turns, verbose event output includes `DUMMY_ACOLYTE_MOVE`.
+- Round-end transition flow currently does not auto-emit `DUMMY_ACOLYTE_MOVE` while
+  season-end scoring is deferred.
 
 ## Round-End Phase Structure (v1.0)
 
 - Merchant no longer advances after every turn; it advances once per round end.
 - Round-end verbose traces now include:
-  - `EXCESS_CHECK` / `EXCESS_DISCARD`
+  - `EXCESS_RESOURCE_CAP` (only when one or more players were capped)
   - `SHIP_ADVANCE`
-  - `TRADE_ROUTE_INCOME_SKIPPED` (placeholder)
+  - `ROUND_ADVANCE`
+  - `SEASON_END_DEFERRED` (when optional pilgrimage-round metadata matches new round)
   - `START_PLAYER_SELECTION` (and optional tie-break event)
   - `GAME_END` when Ship returns to NW after the full 26-round loop
 - `game_over: true` is shown in verbose state summaries, and legal-action generation returns no actions.

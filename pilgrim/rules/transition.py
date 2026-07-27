@@ -20,7 +20,6 @@ from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import GameState
 from pilgrim.rules.alms import (
     AlmsPayment,
-    resolve_alms_season_end,
     resolve_donate_building_alms,
     resolve_give_alms,
 )
@@ -44,7 +43,6 @@ from pilgrim.rules.buildings import (
     validate_hire_sequence_for_turn,
     validate_building_state,
 )
-from pilgrim.rules.dummy import move_dummy_acolytes_end_of_season
 from pilgrim.rules.duties import (
     action_options_for_duty_category,
     apply_duty_effect,
@@ -68,7 +66,6 @@ from pilgrim.rules.ordination import (
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
-    resolve_trade_route_income,
     select_next_start_player,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
@@ -97,7 +94,7 @@ from pilgrim.rules.special_activities import (
     special_activity_capacity,
     special_activity_count,
 )
-from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
+from pilgrim.rules.timing import advance_timing, resolve_round_end
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -2945,7 +2942,6 @@ def _apply_full_turn_action(
         raise TransitionValidationError(str(exc)) from exc
 
     next_state = timing_result.state
-    events.extend(timing_result.events)
     if timing_result.round_ended:
         completed_round_number = timing_result.completed_round_number
         if completed_round_number is None:
@@ -2958,6 +2954,16 @@ def _apply_full_turn_action(
             completed_round_number=completed_round_number,
         )
         events.extend(round_end_events)
+        events.append(
+            _turn_advance_event(
+                actor=player,
+                action_id=transition_action_id,
+                from_player=player,
+                to_player=next_state.active_player,
+            )
+        )
+    else:
+        events.extend(timing_result.events)
 
     ensure_non_negative_resources(next_state)
     validate_building_state(next_state, config)
@@ -3011,7 +3017,7 @@ def _resolve_round_end_phases(
     )
     events.extend(excess_events)
 
-    # 2) Ship advance
+    # 2) Ship advance and completed-rounds tracking.
     from_ship = next_state.ship_position
     to_ship = advance_ship_position(from_ship, config.ship)
     next_state = next_state.with_ship_position(to_ship)
@@ -3033,29 +3039,8 @@ def _resolve_round_end_phases(
         )
     )
 
-    # 3) Season end from ship marker
-    season_ended = ship_at_pilgrimage
-    if season_ended:
-        completed_season_number = next_state.timing.season_number
-        events.append(
-            GameEvent(
-                event_type=EventType.SEASON_END,
-                actor=actor,
-                action_id=action_id,
-                details=make_event_details(season=completed_season_number),
-            )
-        )
-        alms_result = resolve_alms_season_end(next_state, config.alms)
-        next_state = alms_result.state
-        events.extend(alms_result.events)
-
     # Final NW pilgrimage-site return after full 26-round loop ends the game.
-    game_over = (
-        season_ended
-        and ship_at_nw
-        and next_state.completed_rounds >= config.ship.path_length
-    )
-    if game_over:
+    if ship_at_nw and next_state.completed_rounds >= config.ship.path_length:
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -3064,23 +3049,42 @@ def _resolve_round_end_phases(
                 action_id=action_id,
                 details=make_event_details(
                     reason=(
-                        "ship returned to NW Pilgrimage Site after final Alms Table assessment"
+                        "ship returned to NW Pilgrimage Site after full 26-round loop"
                     )
                 ),
             )
         )
         return next_state, tuple(events)
 
-    # Dummy acolytes move on normal season ends only, not on final game-ending NW return.
-    if season_ended:
-        next_state, dummy_move_events = move_dummy_acolytes_end_of_season(
-            next_state,
+    # 3) Round advance.
+    next_state = resolve_round_end(next_state, config.timing)
+    events.append(
+        GameEvent(
+            event_type=EventType.ROUND_ADVANCE,
             actor=actor,
             action_id=action_id,
+            details=make_event_details(
+                from_round=completed_round_number,
+                to_round=next_state.timing.round_number,
+            ),
         )
-        events.extend(dummy_move_events)
+    )
 
-    # 4) Merchant advances once at round end.
+    # 4) Season-end check is metadata-driven and currently deferred.
+    if _is_pilgrimage_round(next_state):
+        events.append(
+            GameEvent(
+                event_type=EventType.SEASON_END_DEFERRED,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    round=next_state.timing.round_number,
+                    reason="alms_leader_assessment_deferred",
+                ),
+            )
+        )
+
+    # 5) Merchant advances once at round end.
     if config.merchant.advance_at_round_end:
         from_duty = current_merchant_duty(next_state, config.merchant)
         next_merchant_position = advance_merchant_position(
@@ -3103,14 +3107,6 @@ def _resolve_round_end_phases(
             )
         )
 
-    # 5) Trade-route placeholder hook.
-    next_state, trade_route_events = resolve_trade_route_income(
-        next_state,
-        actor=actor,
-        action_id=action_id,
-    )
-    events.extend(trade_route_events)
-
     # 6) Start-player placeholder policy.
     next_state, start_player_events, _ = select_next_start_player(
         next_state,
@@ -3118,35 +3114,31 @@ def _resolve_round_end_phases(
         action_id=action_id,
     )
     events.extend(start_player_events)
-
-    # 7) Round advance and potential season advance.
-    next_state = resolve_round_end(next_state, config.timing)
-    events.append(
-        GameEvent(
-            event_type=EventType.ROUND_ADVANCE,
-            actor=actor,
-            action_id=action_id,
-            details=make_event_details(
-                from_round=completed_round_number,
-                to_round=next_state.timing.round_number,
-            ),
-        )
-    )
-    if season_ended:
-        completed_season_number = next_state.timing.season_number
-        next_state = resolve_season_end(next_state, config.timing)
-        events.append(
-            GameEvent(
-                event_type=EventType.SEASON_ADVANCE,
-                actor=actor,
-                action_id=action_id,
-                details=make_event_details(
-                    from_season=completed_season_number,
-                    to_season=next_state.timing.season_number,
-                ),
-            )
-        )
     return next_state, tuple(events)
+
+
+def _is_pilgrimage_round(state: GameState) -> bool:
+    if not state.pilgrimage_rounds:
+        return False
+    return state.timing.round_number in state.pilgrimage_rounds
+
+
+def _turn_advance_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    from_player: PlayerId,
+    to_player: PlayerId,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.TURN_ADVANCE,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            from_player=from_player.name.lower(),
+            to_player=to_player.name.lower(),
+        ),
+    )
 
 
 def _player_label(player: PlayerId) -> str:

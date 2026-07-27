@@ -166,18 +166,18 @@ def test_dummy_season_movement_wraps_clockwise() -> None:
     assert moved_state.dummy_acolytes.north_group == (0, 0, 1, 0, 0, 0, 0, 1, 1)
 
 
-def test_season_end_transition_emits_dummy_moves_and_conserves_totals() -> None:
+def test_round_end_transition_does_not_auto_move_dummy_groups() -> None:
     scenario = load_scenario("scenarios/dummy_season_move_001.json")
     before = scenario.state
     action = legal_actions(before, scenario.config)[0]
     result = apply_action(before, action, scenario.config)
 
     event_types = [event.event_type for event in result.events]
-    assert EventType.SEASON_END in event_types
-    assert EventType.DUMMY_ACOLYTE_MOVE in event_types
-    assert event_types.count(EventType.DUMMY_ACOLYTE_MOVE) == 2
-    assert result.state.dummy_acolytes.north_group == (0, 0, 1, 1, 1, 0, 0, 0, 0)
-    assert result.state.dummy_acolytes.south_group == (0, 0, 0, 0, 0, 0, 1, 1, 1)
+    assert EventType.SEASON_END_DEFERRED not in event_types
+    assert EventType.SEASON_END not in event_types
+    assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
+    assert result.state.dummy_acolytes.north_group == before.dummy_acolytes.north_group
+    assert result.state.dummy_acolytes.south_group == before.dummy_acolytes.south_group
     assert result.state.dummy_total == before.dummy_total
 
 

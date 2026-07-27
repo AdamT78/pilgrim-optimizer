@@ -163,6 +163,10 @@ def _game_state_from_dict(
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     building_market = _building_market_from_dict(raw, buildings_config)
     building_availability = _building_availability_from_dict(raw, building_market)
+    pilgrimage_rounds = _pilgrimage_rounds_from_dict(
+        raw,
+        scenario_raw=scenario_raw,
+    )
     if merchant_position >= merchant_path_length:
         raise ValueError(
             "Scenario merchant_position must be within Merchant path bounds: "
@@ -190,6 +194,7 @@ def _game_state_from_dict(
         setup_sow_completed_by=setup_sow_completed_by,
         building_market=building_market,
         building_availability=building_availability,
+        pilgrimage_rounds=pilgrimage_rounds,
     )
 
 
@@ -403,6 +408,49 @@ def _building_availability_from_dict(
         for building_id, live_round in availability_raw.items()
     )
     return tuple(sorted(entries))
+
+
+def _pilgrimage_rounds_from_dict(
+    initial_state_raw: Mapping[str, Any],
+    *,
+    scenario_raw: Mapping[str, Any],
+) -> tuple[int, ...]:
+    explicit_rounds = initial_state_raw.get("pilgrimage_rounds")
+    if explicit_rounds is not None:
+        return _parse_pilgrimage_rounds_mapping(explicit_rounds)
+
+    setup_metadata = scenario_raw.get("setup_metadata")
+    if not isinstance(setup_metadata, Mapping):
+        return ()
+    setup_timeline = setup_metadata.get("setup_timeline")
+    if not isinstance(setup_timeline, Mapping):
+        return ()
+    metadata_rounds = setup_timeline.get("pilgrimage_rounds")
+    if metadata_rounds is None:
+        return ()
+    return _parse_pilgrimage_rounds_mapping(metadata_rounds)
+
+
+def _parse_pilgrimage_rounds_mapping(raw: Any) -> tuple[int, ...]:
+    if not isinstance(raw, Mapping):
+        raise ValueError("pilgrimage_rounds must be an object mapping site keys to rounds.")
+    parsed_pairs: list[tuple[int, int]] = []
+    for site_key, round_number in raw.items():
+        site_text = str(site_key).strip().lower()
+        if not site_text.startswith("site_"):
+            raise ValueError(
+                "pilgrimage_rounds keys must be site identifiers like 'site_1'."
+            )
+        try:
+            site_index = int(site_text.split("_", maxsplit=1)[1])
+        except ValueError as exc:
+            raise ValueError(
+                "pilgrimage_rounds keys must be site identifiers like 'site_1'."
+            ) from exc
+        parsed_pairs.append((site_index, int(round_number)))
+
+    parsed_pairs.sort(key=lambda pair: pair[0])
+    return tuple(round_number for _, round_number in parsed_pairs)
 
 
 def _player_board_slots_from_dict(raw: Any) -> PlayerBoardSlots:

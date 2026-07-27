@@ -91,21 +91,29 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - 3 players: 2+2 seeded dummies
   - 4 players: no dummies
 - Dummy totals are included in Duty strength comparison as neutral competition.
-- Season-end flow now includes deterministic dummy leap-frog movement before `SEASON_ADVANCE`.
+- End-of-season dummy movement helper remains available in rules helpers, but round-end transition
+  flow no longer auto-applies dummy moves while season-end scoring is deferred.
 - Search remains rules-agnostic: dummy behavior is encapsulated in rules/state transition code.
 
 ## Round-End Phase Pipeline (v1.0)
 
 - Round-end orchestration is now explicit in `pilgrim.rules.transition` and helper modules:
-  - `pilgrim.rules.round_end` for excess caps, start-player policy, trade-route placeholder
+  - `pilgrim.rules.round_end` for excess caps and start-player policy
   - `pilgrim.rules.ship` for abstract Ship marker movement and site checks
 - `GameState` now tracks:
   - `start_player`
   - `ship_position`
   - `completed_rounds`
   - `game_over`
-- Season-end trigger now comes from Ship pilgrimage-site positions, not only round cadence.
-- Game end occurs when Ship returns to NW pilgrimage site after 26 completed rounds, after final season-end Alms resolution.
+- Round-end sequence is tightened in v4.4:
+  - excess cap
+  - ship advance / game-end check
+  - round advance
+  - metadata-driven `SEASON_END_DEFERRED` check (no Alms scoring side effects)
+  - merchant advance
+  - start-player selection
+  - final `TURN_ADVANCE` event
+- Game end occurs when Ship returns to NW pilgrimage site after 26 completed rounds.
 - When `game_over` becomes true, `legal_actions()` returns no actions, keeping search/CLI behavior deterministic.
 
 ## Building Catalogue and Slots (v1.1)

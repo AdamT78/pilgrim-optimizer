@@ -48,30 +48,21 @@ def apply_excess_resource_caps(
             player_id,
             replace(player_state, resources=new_resources),
         )
-
-        for resource_name, (before, after) in resource_updates.items():
-            events.append(
-                GameEvent(
-                    event_type=EventType.EXCESS_DISCARD,
-                    actor=actor,
-                    action_id=action_id,
-                    details=make_event_details(
-                        player=player_id.name.lower(),
-                        resource=resource_name,
-                        before=before,
-                        after=after,
-                        returned=before - after,
-                    ),
-                )
-            )
-
-    if not events:
+        details: dict[str, str | int | bool] = {"player": player_id.name.lower()}
+        if "stone" in resource_updates:
+            stone_before, stone_after = resource_updates["stone"]
+            details["stone_before"] = stone_before
+            details["stone_after"] = stone_after
+        if "wheat" in resource_updates:
+            wheat_before, wheat_after = resource_updates["wheat"]
+            details["wheat_before"] = wheat_before
+            details["wheat_after"] = wheat_after
         events.append(
             GameEvent(
-                event_type=EventType.EXCESS_CHECK,
+                event_type=EventType.EXCESS_RESOURCE_CAP,
                 actor=actor,
                 action_id=action_id,
-                details=make_event_details(no_excess=True),
+                details=make_event_details(**details),
             )
         )
     return updated_state, tuple(events)
