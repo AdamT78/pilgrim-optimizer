@@ -584,6 +584,35 @@ Position mapping used by the current sandbox:
   - On a round-ending Guild turn, output may contain two `MERCHANT_ADVANCE` lines
     (one with `cause=guild`, one round-end advance without cause).
 
+## Pulpit Free Serf Move (v5.4)
+
+- Pulpit is available as an optional pre-sow workforce modifier (not a standalone action):
+  - move exactly `1` serf `village -> abbey`
+  - Pulpit movement is always free (`wheat_paid=0`)
+  - no amount/direction variants are generated
+- Source resolution uses existing building-source priority:
+  - own active Pulpit (free)
+  - opponent active Pulpit (hire from owner)
+  - live market Pulpit (hire from bank)
+- Action summary examples:
+  - `... | use building: pulpit to move 1 serf village -> abbey for free | ...`
+  - hired variants append `| hire building: pulpit from <market|player_two>`
+- Legal generation:
+  - normal non-Pulpit actions remain legal
+  - Pulpit variants are generated only when source is usable and acting player has at least one
+    Village serf after any required hire payment
+  - no Pulpit variants are generated when `Village serfs = 0`
+- `apply --verbose` ordering for Pulpit:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: pulpit moved 1 serf village -> abbey for free`
+  - `WORKFORCE_MOVE: player_one moved 1 serf village -> abbey; for free`
+  - `SOWING`
+- Infirmary interaction:
+  - Pulpit is independent from Ordination Duty Value.
+  - Pulpit remains exactly one free move even if Infirmary is active/hired.
+  - Infirmary can still affect separate Ordination extra-step actions normally (extra step remains
+    paid wheat).
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

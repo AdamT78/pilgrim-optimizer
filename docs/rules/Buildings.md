@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.3 Sandbox Scope)
+# Buildings (v1.9-v5.4 Sandbox Scope)
 
 ## Implemented now
 
@@ -444,6 +444,53 @@ Conservative composition scope in this milestone:
 - Guild variants are generated only for ordinary full-turn actions
 - mixed Guild + other same-turn hire-dependent building modifiers are deferred
   to avoid ambiguous hire-cost ordering on post-Guild Merchant resources
+
+## Pulpit free serf move (v5.4)
+
+Pulpit now applies as an optional pre-sow workforce modifier attached to a normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Pulpit -> free
+- live market Pulpit -> hire from bank
+- opponent active Pulpit -> hire from owner
+
+Pulpit rule:
+
+- move exactly `1` serf from Village to Abbey
+- wheat cost is always `0` for the Pulpit move itself
+- no amount/direction payload is used
+
+Timing:
+
+- if Pulpit is hired, hire payment resolves first
+- Pulpit movement resolves next
+- sowing and selected Duty resolve after the movement
+- Pulpit cannot be used to create a Village/Abbey workforce change before paying its own hire
+
+Infirmary and Ordination distinction:
+
+- Pulpit is independent from Ordination Duty value and step budgets
+- Pulpit does not consume Duty Value
+- Pulpit does not add Duty Value
+- Infirmary cannot increase Pulpit from one free move to two free moves
+- when both are present:
+  - Pulpit still performs exactly one free Village -> Abbey move
+  - Infirmary can still modify the separate Ordination action (extra paid step) as usual
+
+Availability and gating:
+
+- own active Pulpit works even when Merchant resource is `none`
+- hired Pulpit sources are unavailable when Merchant resource is `none`
+- hired Pulpit sources require payment affordability before movement
+- donated/not-live Pulpit remains unavailable
+- no Pulpit variant is generated when acting player has `Village serfs = 0` after any hire payment
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `WORKFORCE_MOVE` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> `WORKFORCE_MOVE` -> `SOWING`
+- `WORKFORCE_MOVE` reports `amount=1`, `unit=serf`, `from_pool=village`, `to_pool=abbey`, `wheat_paid=0`
 
 ## Building turn-modifier registry (v3.3-v3.9)
 

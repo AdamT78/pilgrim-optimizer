@@ -92,11 +92,15 @@ def test_building_catalogue_cost_vp_and_effect_metadata() -> None:
     guild = next(
         building for building in scenario.config.buildings.catalogue if building.id == "guild"
     )
+    pulpit = next(
+        building for building in scenario.config.buildings.catalogue if building.id == "pulpit"
+    )
     assert grain_store.effect_status == "implemented"
     assert indulgences.effect_status == "implemented"
     assert stone_yard.effect_status == "implemented"
     assert brewery.effect_status == "implemented"
     assert guild.effect_status == "implemented"
+    assert pulpit.effect_status == "implemented"
     assert len(set(ids)) == len(ids)
     assert len(set(names)) == len(names)
 

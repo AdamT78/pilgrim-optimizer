@@ -199,6 +199,23 @@ class _ResolvedGuildMerchantAdvance:
 
 
 @dataclass(frozen=True, slots=True)
+class _PulpitWorkforceMoveOption:
+    """Pre-sow workforce-move variant for one legal Pulpit use."""
+
+    state: GameState
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedPulpitWorkforceMove:
+    """Validated pre-sow Pulpit workforce-move directive from one action."""
+
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
 class _ResolvedEndTurnRelocation:
     """Validated end-turn relocation directive from one action."""
 
@@ -228,6 +245,7 @@ _STONE_YARD_SELL_STONE = "sell_stone"
 _BUILDING_BREWERY = "brewery"
 _BREWERY_SELL_WHEAT_FOR_SILVER = "sell_wheat_for_silver"
 _BUILDING_GUILD = "guild"
+_BUILDING_PULPIT = "pulpit"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_WHEAT: "well",
     TurnResolutionType.PRODUCE_STONE: "quarry",
@@ -288,6 +306,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             start_turn_state,
             config,
             allow_guild_modifier=start_turn_option is None,
+            allow_pulpit_modifier=start_turn_option is None,
         )
         for variant_action in variant_actions:
             if not isinstance(variant_action, FullTurnAction):
@@ -307,6 +326,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             if action.merchant_advance_building_id == _BUILDING_GUILD:
                 # Defer mixed Guild+Library hire-order interactions for this milestone.
                 continue
+            if action.workforce_move_building_id == _BUILDING_PULPIT:
+                # Defer mixed Pulpit+Library hire-order interactions for this milestone.
+                continue
             for library_action in _library_suffix_variants_for_action(
                 original_state=state,
                 state_for_turn=start_turn_state,
@@ -324,6 +346,7 @@ def _legal_full_turn_actions_for_state(
     config: GameConfig,
     *,
     allow_guild_modifier: bool,
+    allow_pulpit_modifier: bool,
 ) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     base_player_state = state.player_state(state.active_player)
@@ -925,6 +948,26 @@ def _legal_full_turn_actions_for_state(
                                     option=conversion_option,
                                 )
                             actions[index] = action
+    if allow_pulpit_modifier:
+        pulpit_options = _legal_pulpit_workforce_move_options(state, config)
+        if pulpit_options:
+            pulpit_option = pulpit_options[0]
+            for action in _legal_full_turn_actions_for_state(
+                pulpit_option.state,
+                config,
+                allow_guild_modifier=False,
+                allow_pulpit_modifier=False,
+            ):
+                if not isinstance(action, FullTurnAction):
+                    continue
+                if not _is_pulpit_modifier_eligible_action(action):
+                    continue
+                pulpit_action = _with_pulpit_workforce_move_fields(
+                    action,
+                    option=pulpit_option,
+                )
+                if pulpit_action not in actions:
+                    actions.append(pulpit_action)
     if allow_guild_modifier:
         guild_options = _legal_guild_merchant_advance_options(state, config)
         if guild_options:
@@ -938,6 +981,7 @@ def _legal_full_turn_actions_for_state(
                 state_after_guild,
                 config,
                 allow_guild_modifier=False,
+                allow_pulpit_modifier=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -1315,6 +1359,47 @@ def _apply_full_turn_action(
         )
         pre_sowing_events.append(merchant_advance_event)
 
+    pulpit_workforce_move = _resolved_pulpit_workforce_move_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if pulpit_workforce_move is not None:
+        if _is_hired_source(pulpit_workforce_move.source):
+            try:
+                state_for_sow, pulpit_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=pulpit_workforce_move.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=pulpit_workforce_move.source,
+                    payment=pulpit_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        try:
+            state_for_sow, pulpit_workforce_event = _apply_pulpit_workforce_move_to_state(
+                state_for_sow,
+                actor=player,
+                action_id=transition_action_id,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        pre_sowing_events.append(
+            _pulpit_workforce_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+            )
+        )
+        pre_sowing_events.append(pulpit_workforce_event)
+
     player_vector = state_for_sow.player_vector(player)
     picked_up = player_vector[action.origin]
     if picked_up <= 0:
@@ -1644,6 +1729,41 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Guild Merchant movement with start-turn relocation modifiers is deferred."
                 )
+        workforce_move_fields = (
+            action.workforce_move_building_id,
+            action.workforce_move_building_source,
+        )
+        workforce_move_field_count = sum(
+            field is not None for field in workforce_move_fields
+        )
+        if workforce_move_field_count not in (0, len(workforce_move_fields)):
+            raise TransitionValidationError(
+                "workforce_move_building_id and workforce_move_building_source must be set together."
+            )
+        has_pulpit_workforce_modifier = workforce_move_field_count == len(
+            workforce_move_fields
+        )
+        if has_pulpit_workforce_modifier:
+            if action.workforce_move_building_id != _BUILDING_PULPIT:
+                raise TransitionValidationError(
+                    "Only Pulpit is supported for workforce_move_building fields."
+                )
+            if conversion_field_count == len(conversion_fields):
+                raise TransitionValidationError(
+                    "Combining Pulpit free serf movement with building conversion modifiers is deferred."
+                )
+            if has_route_building_id or has_secondary_route_building_id:
+                raise TransitionValidationError(
+                    "Combining Pulpit free serf movement with sow-route modifiers is deferred."
+                )
+            if start_turn_relocation is not None:
+                raise TransitionValidationError(
+                    "Combining Pulpit free serf movement with start-turn relocation modifiers is deferred."
+                )
+        if has_guild_merchant_modifier and has_pulpit_workforce_modifier:
+            raise TransitionValidationError(
+                "Combining Guild and Pulpit pre-sow building modifiers in one action is deferred."
+            )
         end_turn_fields = (
             action.end_turn_building_id,
             action.end_turn_building_source,
@@ -1665,6 +1785,10 @@ def _apply_full_turn_action(
         if has_guild_merchant_modifier and end_turn_field_count == len(end_turn_fields):
             raise TransitionValidationError(
                 "Combining Guild Merchant movement with end-turn relocation modifiers is deferred."
+            )
+        if has_pulpit_workforce_modifier and end_turn_field_count == len(end_turn_fields):
+            raise TransitionValidationError(
+                "Combining Pulpit free serf movement with end-turn relocation modifiers is deferred."
             )
 
         hire_context = BuildingHireTurnContext()
@@ -1715,6 +1839,22 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=_BUILDING_GUILD,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if (
+            has_pulpit_workforce_modifier
+            and action.workforce_move_building_source is not None
+            and action.workforce_move_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_PULPIT):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_PULPIT,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4252,6 +4392,53 @@ def _legal_guild_merchant_advance_options(
     )
 
 
+def _legal_pulpit_workforce_move_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_PulpitWorkforceMoveOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_PULPIT,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    player_state = state_after_hire.player_state(state.active_player)
+    if player_state.workforce.village < 1:
+        return ()
+    moved_workforce = replace(
+        player_state.workforce,
+        village=player_state.workforce.village - 1,
+        abbey=player_state.workforce.abbey + 1,
+    )
+    moved_state = state_after_hire.with_player_state(
+        state.active_player,
+        replace(player_state, workforce=moved_workforce),
+    )
+    return (
+        _PulpitWorkforceMoveOption(
+            state=moved_state,
+            building_id=_BUILDING_PULPIT,
+            source=source,
+        ),
+    )
+
+
 def _state_after_guild_merchant_advance_for_legal_generation(
     state: GameState,
     *,
@@ -4283,6 +4470,23 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.end_turn_building_id is None
         and action.merchant_advance_building_id is None
         and action.merchant_advance_building_source is None
+        and action.workforce_move_building_id is None
+        and action.workforce_move_building_source is None
+    )
+
+
+def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
+    return (
+        action.sow_route_building_id is None
+        and action.sow_route_secondary_building_id is None
+        and action.sow_route_omitted_location is None
+        and action.building_conversion_id is None
+        and action.start_turn_building_id is None
+        and action.end_turn_building_id is None
+        and action.merchant_advance_building_id is None
+        and action.merchant_advance_building_source is None
+        and action.workforce_move_building_id is None
+        and action.workforce_move_building_source is None
     )
 
 
@@ -4300,6 +4504,23 @@ def _with_guild_merchant_advance_fields(
         action,
         merchant_advance_building_id=option.building_id,
         merchant_advance_building_source=source_label,
+    )
+
+
+def _with_pulpit_workforce_move_fields(
+    action: FullTurnAction,
+    *,
+    option: _PulpitWorkforceMoveOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        workforce_move_building_id=option.building_id,
+        workforce_move_building_source=source_label,
     )
 
 
@@ -4707,6 +4928,62 @@ def _resolved_guild_merchant_advance_for_action(
 
     return _ResolvedGuildMerchantAdvance(
         building_id=_BUILDING_GUILD,
+        source=source,
+    )
+
+
+def _resolved_pulpit_workforce_move_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedPulpitWorkforceMove | None:
+    fields = (
+        action.workforce_move_building_id,
+        action.workforce_move_building_source,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "workforce_move_building_id and workforce_move_building_source must be set together."
+        )
+
+    building_id = action.workforce_move_building_id
+    source_label = action.workforce_move_building_source
+    assert building_id is not None
+    assert source_label is not None
+
+    if building_id != _BUILDING_PULPIT:
+        raise TransitionValidationError(
+            "Only Pulpit is supported for workforce_move_building fields."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_PULPIT,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                "Own-active Pulpit free move must set source=own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "Pulpit free move source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError("Pulpit is unavailable in current state.")
+
+    return _ResolvedPulpitWorkforceMove(
+        building_id=_BUILDING_PULPIT,
         source=source,
     )
 
@@ -5249,6 +5526,43 @@ def _apply_guild_merchant_advance_to_state(
     return next_state, event
 
 
+def _apply_pulpit_workforce_move_to_state(
+    state: GameState,
+    *,
+    actor: PlayerId,
+    action_id: str,
+) -> tuple[GameState, GameEvent]:
+    player_state = state.player_state(actor)
+    workforce = player_state.workforce
+    if workforce.village < 1:
+        raise ValueError(
+            "Pulpit free move requires at least 1 serf in Village after hire payment."
+        )
+    moved_workforce = replace(
+        workforce,
+        village=workforce.village - 1,
+        abbey=workforce.abbey + 1,
+    )
+    next_state = state.with_player_state(
+        actor,
+        replace(player_state, workforce=moved_workforce),
+    )
+    workforce_event = GameEvent(
+        event_type=EventType.WORKFORCE_MOVE,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            amount=1,
+            unit="serf",
+            from_pool="village",
+            to_pool="abbey",
+            wheat_paid=0,
+            building=_BUILDING_PULPIT,
+        ),
+    )
+    return next_state, workforce_event
+
+
 def _building_hired_event(
     *,
     source: BuildingAbilitySource,
@@ -5468,6 +5782,26 @@ def _guild_merchant_bonus_event(
             action="merchant_advance",
             steps=1,
             direction="clockwise",
+        ),
+    )
+
+
+def _pulpit_workforce_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=_BUILDING_PULPIT,
+            action="workforce_move",
+            amount=1,
+            from_pool="village",
+            to_pool="abbey",
+            wheat_paid=0,
         ),
     )
 
