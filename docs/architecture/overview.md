@@ -15,6 +15,11 @@
 - Static game data should live in `configs/` JSON files.
 - Every transition emits structured events to support replay and debugging.
 
+## Related Architecture Docs
+
+- `docs/architecture/player_choice_model.md`: inventory of player choices, flattened action
+  representation, and current simplifications/deferred choice areas.
+
 ## Search Perspective Model (v0.3)
 
 - **Game state**: immutable snapshot with active player, resources, piety position, and mancala vectors.
