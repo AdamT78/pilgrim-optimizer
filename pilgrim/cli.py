@@ -705,6 +705,11 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_wheat_for_silver":
                 return f"{event_name}: brewery sold 1 wheat for 2 silver"
+        if building == "scriptorium" and action_name == "effective_acolyte_bonus":
+            return (
+                f"{event_name}: scriptorium added +1 effective acolyte "
+                "on occupied Duty tiles this turn"
+            )
         if building == "guild" and action_name == "merchant_advance":
             return f"{event_name}: guild moved Merchant clockwise +1"
         if building == "pulpit" and action_name == "workforce_move":
@@ -1199,6 +1204,7 @@ def _format_building_availability_summary(
     config: GameConfig,
 ) -> tuple[str, ...]:
     live_set = set(live_buildings(state))
+    availability_map = {building_id: live_round for building_id, live_round in state.building_availability}
     market_set = set(state.building_market)
     market_live_ids = tuple(building_id for building_id in state.building_market if building_id in live_set)
     market_future_entries = tuple(
@@ -1222,7 +1228,11 @@ def _format_building_availability_summary(
         slots = state.player_state(player_id).player_board_slots
         owned_ids = (*slots.active_buildings, *slots.donated_buildings)
         for building_id in owned_ids:
-            if building_id in market_set or building_id not in live_set:
+            if building_id in market_set:
+                continue
+            # Legacy scenarios may omit live-round entries for owned-only buildings.
+            # Treat those as currently live for this summary to match board ownership display.
+            if building_id not in live_set and building_id in availability_map:
                 continue
             building_name = config.buildings.name_for_id(building_id)
             owned_live_parts.append(f"{building_name} ({player_label})")

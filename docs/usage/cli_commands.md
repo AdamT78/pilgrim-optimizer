@@ -613,6 +613,33 @@ Position mapping used by the current sandbox:
   - Infirmary can still affect separate Ordination extra-step actions normally (extra step remains
     paid wheat).
 
+## Scriptorium Effective Acolyte Modifier (v5.5)
+
+- Scriptorium is available as an optional pre-sow duty-relation modifier (not a standalone action):
+  - add `+1` effective acolyte on each occupied Duty tile for the acting player
+  - applies only where the acting player already has at least one real acolyte
+  - virtual-count effect only (no physical acolyte placement)
+- Source resolution uses existing building-source priority:
+  - own active Scriptorium (free)
+  - opponent active Scriptorium (hire from owner)
+  - live market Scriptorium (hire from bank)
+- Action summary examples:
+  - `... | use building: scriptorium for +1 effective acolyte on occupied Duty tiles | ...`
+  - hired variants append `| hire building: scriptorium from <market|player_two>`
+- Legal generation:
+  - normal non-Scriptorium actions remain legal
+  - Scriptorium variants are generated when source is usable and post-hire costs are affordable
+  - selected Duty and Taxation majority checks for those variants use effective counts
+- `apply --verbose` ordering for Scriptorium:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: scriptorium added +1 effective acolyte on occupied Duty tiles this turn`
+  - `SOWING`
+  - `DUTY_RESOLUTION` (relation can differ from the non-Scriptorium variant)
+- Taxation interaction:
+  - Scriptorium affects both selected Taxation relation and other Duty-tile majority checks used by
+    Taxation step 2.
+  - No extra real acolytes are created; recall and workforce totals still reflect real board counts.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

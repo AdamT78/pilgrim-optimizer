@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.4 Sandbox Scope)
+# Buildings (v1.9-v5.5 Sandbox Scope)
 
 ## Implemented now
 
@@ -491,6 +491,49 @@ Event semantics before sowing:
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `WORKFORCE_MOVE` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> `WORKFORCE_MOVE` -> `SOWING`
 - `WORKFORCE_MOVE` reports `amount=1`, `unit=serf`, `from_pool=village`, `to_pool=abbey`, `wheat_paid=0`
+
+## Scriptorium effective acolyte modifier (v5.5)
+
+Scriptorium now applies as an optional pre-sow duty-relation modifier attached to a normal
+full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Scriptorium -> free
+- live market Scriptorium -> hire from bank
+- opponent active Scriptorium -> hire from owner
+
+Scriptorium rule:
+
+- for this action only, each occupied Duty tile for the acting player counts as `+1` effective
+  acolyte
+- applies only where the acting player already has at least one real acolyte
+- no real acolytes are placed
+
+Virtual-count scope:
+
+- affects majority/parity/minority relation checks on selected Duty
+- affects Taxation majority checks on other Duty tiles
+- does not affect sowing pickup/placement, recall, workforce totals, dummy counts, or conservation
+
+Timing:
+
+- if Scriptorium is hired, hire payment resolves first
+- Scriptorium effective-count context resolves next
+- sowing and selected Duty resolve after that, using Scriptorium-adjusted effective counts
+
+Availability and gating:
+
+- own active Scriptorium works even when Merchant resource is `none`
+- hired Scriptorium sources are unavailable when Merchant resource is `none`
+- hired Scriptorium sources require payment affordability before effect
+- donated/not-live Scriptorium remains unavailable
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> `SOWING`
+- `BUILDING_BONUS`: `scriptorium added +1 effective acolyte on occupied Duty tiles this turn`
 
 ## Building turn-modifier registry (v3.3-v3.9)
 

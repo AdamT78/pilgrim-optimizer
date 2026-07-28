@@ -567,6 +567,34 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Conservative composition in this milestone:
   - mixed Pulpit + other pre-sow hire-order-sensitive modifiers remain deferred.
 
+## Scriptorium Effective Acolyte Modifier (v5.5)
+
+- Transition/runtime wiring now supports Scriptorium as an optional pre-sow duty-relation modifier.
+- Source resolution reuses shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none for hired sources, insufficient payment resource)
+- Scriptorium semantics:
+  - no amount/direction payload
+  - no physical workforce movement
+  - for this action only, occupied Duty tiles for the acting player count as `+1` effective
+    acolyte
+- Relation and Taxation integration:
+  - selected Duty strength (majority/parity/minority) uses effective counts
+  - Taxation majority checks on other Duty tiles use the same effective-count context
+  - tiles with `0` acting-player real acolytes do not receive the virtual `+1`
+- Apply-time ordering for Scriptorium:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (`scriptorium added +1 effective acolyte on occupied Duty tiles this turn`)
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Virtual-only boundary:
+  - no temporary acolytes are added to board state
+  - sowing/recall/workforce totals and conservation invariants continue to use real counts only
+- Conservative composition in this milestone:
+  - mixed Scriptorium + other pre-sow hire-order-sensitive modifiers remain deferred.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for

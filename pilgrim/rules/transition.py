@@ -199,6 +199,23 @@ class _ResolvedGuildMerchantAdvance:
 
 
 @dataclass(frozen=True, slots=True)
+class _ScriptoriumEffectiveAcolyteOption:
+    """Pre-sow state plus relation-context metadata for one Scriptorium use."""
+
+    state: GameState
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedScriptoriumEffectiveAcolyte:
+    """Validated pre-sow Scriptorium effective-acolyte modifier directive."""
+
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
 class _PulpitWorkforceMoveOption:
     """Pre-sow workforce-move variant for one legal Pulpit use."""
 
@@ -226,6 +243,14 @@ class _ResolvedEndTurnRelocation:
     to_pool: str
 
 
+@dataclass(frozen=True, slots=True)
+class _DutyRelationModifierContext:
+    """Per-action context for virtual duty-relation count modifiers."""
+
+    acting_player: PlayerId
+    uses_scriptorium: bool = False
+
+
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
 _CONSTRUCT_PLAN_ROAD = "road"
 _CONSTRUCT_PLAN_EXTRA_ROAD = "road_engineer_extra_road"
@@ -244,6 +269,7 @@ _STONE_YARD_BUY_STONE = "buy_stone"
 _STONE_YARD_SELL_STONE = "sell_stone"
 _BUILDING_BREWERY = "brewery"
 _BREWERY_SELL_WHEAT_FOR_SILVER = "sell_wheat_for_silver"
+_BUILDING_SCRIPTORIUM = "scriptorium"
 _BUILDING_GUILD = "guild"
 _BUILDING_PULPIT = "pulpit"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
@@ -307,6 +333,8 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             config,
             allow_guild_modifier=start_turn_option is None,
             allow_pulpit_modifier=start_turn_option is None,
+            allow_scriptorium_modifier=start_turn_option is None,
+            uses_scriptorium_effective_counts=False,
         )
         for variant_action in variant_actions:
             if not isinstance(variant_action, FullTurnAction):
@@ -329,6 +357,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             if action.workforce_move_building_id == _BUILDING_PULPIT:
                 # Defer mixed Pulpit+Library hire-order interactions for this milestone.
                 continue
+            if action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM:
+                # Defer mixed Scriptorium+Library hire-order interactions for this milestone.
+                continue
             for library_action in _library_suffix_variants_for_action(
                 original_state=state,
                 state_for_turn=start_turn_state,
@@ -347,11 +378,17 @@ def _legal_full_turn_actions_for_state(
     *,
     allow_guild_modifier: bool,
     allow_pulpit_modifier: bool,
+    allow_scriptorium_modifier: bool,
+    uses_scriptorium_effective_counts: bool,
 ) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     base_player_state = state.player_state(state.active_player)
     chapter_house_active = player_has_active_chapter_house(base_player_state)
     activity_capacity = special_activity_capacity(chapter_house_active=chapter_house_active)
+    duty_relation_context = _DutyRelationModifierContext(
+        acting_player=state.active_player,
+        uses_scriptorium=uses_scriptorium_effective_counts,
+    )
     actions: list[GameAction] = []
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
@@ -421,26 +458,28 @@ def _legal_full_turn_actions_for_state(
                     if sowed_vector[duty_position] <= 0:
                         continue
                     actions_before_duty = len(actions)
-                    player_count = sowed_vector[duty_position]
-                    opponent_counts = _competing_counts(
+                    strength = _duty_strength_for_position(
                         state,
+                        config,
                         player=state.active_player,
                         duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
                     )
-                    strength = duty_strength(player_count, opponent_counts)
                     _duty_value, silver_cost = duty_value_and_silver_cost(strength)
                     if player_resources.silver < silver_cost:
                         continue
                     duty_category = config.duty_category_for_position(duty_position)
                     category_actions = action_options_for_duty_category(duty_category)
                     if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
-                        player_count = sowed_vector[duty_position]
-                        opponent_counts = _competing_counts(
+                        strength = _duty_strength_for_position(
                             state,
+                            config,
                             player=state.active_player,
                             duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
                         )
-                        strength = duty_strength(player_count, opponent_counts)
                         duty_value, silver_cost = duty_value_and_silver_cost(strength)
                         available_silver = player_resources.silver - silver_cost
                         if available_silver >= 0:
@@ -543,13 +582,14 @@ def _legal_full_turn_actions_for_state(
                                         )
                                     )
                     elif TurnResolutionType.ALLOCATION in category_actions:
-                        player_count = sowed_vector[duty_position]
-                        opponent_counts = _competing_counts(
+                        strength = _duty_strength_for_position(
                             state,
+                            config,
                             player=state.active_player,
                             duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
                         )
-                        strength = duty_strength(player_count, opponent_counts)
                         duty_value, silver_cost = duty_value_and_silver_cost(strength)
                         base_move_sequences = _allocation_move_sequences(
                             player_state,
@@ -619,13 +659,14 @@ def _legal_full_turn_actions_for_state(
                                         )
                                     )
                     elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
-                        player_count = sowed_vector[duty_position]
-                        opponent_counts = _competing_counts(
+                        strength = _duty_strength_for_position(
                             state,
+                            config,
                             player=state.active_player,
                             duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
                         )
-                        strength = duty_strength(player_count, opponent_counts)
                         duty_value, silver_cost = duty_value_and_silver_cost(strength)
                         road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
                             player_state
@@ -678,13 +719,14 @@ def _legal_full_turn_actions_for_state(
                                         )
                                     )
                     elif TurnResolutionType.ORDINATION in category_actions:
-                        player_count = sowed_vector[duty_position]
-                        opponent_counts = _competing_counts(
+                        strength = _duty_strength_for_position(
                             state,
+                            config,
                             player=state.active_player,
                             duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
                         )
-                        strength = duty_strength(player_count, opponent_counts)
                         duty_value, silver_cost = duty_value_and_silver_cost(strength)
                         available_silver = player_resources.silver - silver_cost
                         if available_silver < 0:
@@ -876,13 +918,14 @@ def _legal_full_turn_actions_for_state(
                                         if hired_mill_bonus_action not in actions:
                                             actions.append(hired_mill_bonus_action)
                     elif TurnResolutionType.TAXATION in category_actions:
-                        player_count = sowed_vector[duty_position]
-                        opponent_counts = _competing_counts(
+                        strength = _duty_strength_for_position(
                             state,
+                            config,
                             player=state.active_player,
                             duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
                         )
-                        strength = duty_strength(player_count, opponent_counts)
                         duty_value, silver_cost = duty_value_and_silver_cost(strength)
                         available_silver = player_resources.silver - silver_cost
                         if available_silver < 0:
@@ -893,6 +936,7 @@ def _legal_full_turn_actions_for_state(
                             player=state.active_player,
                             sowed_vector=sowed_vector,
                             selected_duty=duty_position,
+                            relation_context=duty_relation_context,
                         )
                         for step_1_resource in _TAXATION_RESOURCE_TYPES:
                             for step_2_resources in _taxation_bonus_resource_choices(
@@ -948,6 +992,30 @@ def _legal_full_turn_actions_for_state(
                                     option=conversion_option,
                                 )
                             actions[index] = action
+    if allow_scriptorium_modifier:
+        scriptorium_options = _legal_scriptorium_effective_acolyte_options(state, config)
+        if scriptorium_options:
+            scriptorium_option = scriptorium_options[0]
+            for action in _legal_full_turn_actions_for_state(
+                scriptorium_option.state,
+                config,
+                allow_guild_modifier=False,
+                allow_pulpit_modifier=False,
+                allow_scriptorium_modifier=False,
+                uses_scriptorium_effective_counts=True,
+            ):
+                if not isinstance(action, FullTurnAction):
+                    continue
+                if not _is_scriptorium_modifier_eligible_action(action):
+                    continue
+                if not _scriptorium_can_affect_action(action):
+                    continue
+                scriptorium_action = _with_scriptorium_effective_acolyte_fields(
+                    action,
+                    option=scriptorium_option,
+                )
+                if scriptorium_action not in actions:
+                    actions.append(scriptorium_action)
     if allow_pulpit_modifier:
         pulpit_options = _legal_pulpit_workforce_move_options(state, config)
         if pulpit_options:
@@ -957,6 +1025,8 @@ def _legal_full_turn_actions_for_state(
                 config,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
+                allow_scriptorium_modifier=False,
+                uses_scriptorium_effective_counts=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -982,6 +1052,8 @@ def _legal_full_turn_actions_for_state(
                 config,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
+                allow_scriptorium_modifier=False,
+                uses_scriptorium_effective_counts=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -1143,6 +1215,7 @@ def _apply_full_turn_action(
         action=action,
     )
     state_for_sow = state
+    duty_relation_context = _DutyRelationModifierContext(acting_player=player)
     pre_sowing_events: list[GameEvent] = []
     if start_turn_relocation is not None:
         if _is_hired_source(start_turn_relocation.source):
@@ -1400,6 +1473,42 @@ def _apply_full_turn_action(
         )
         pre_sowing_events.append(pulpit_workforce_event)
 
+    scriptorium_effective_acolyte = _resolved_scriptorium_effective_acolyte_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if scriptorium_effective_acolyte is not None:
+        if _is_hired_source(scriptorium_effective_acolyte.source):
+            try:
+                state_for_sow, scriptorium_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=scriptorium_effective_acolyte.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=scriptorium_effective_acolyte.source,
+                    payment=scriptorium_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _scriptorium_effective_acolyte_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+            )
+        )
+        duty_relation_context = replace(
+            duty_relation_context,
+            uses_scriptorium=True,
+        )
+
     player_vector = state_for_sow.player_vector(player)
     picked_up = player_vector[action.origin]
     if picked_up <= 0:
@@ -1475,13 +1584,14 @@ def _apply_full_turn_action(
             )
             raise TransitionValidationError(message)
 
-        player_count = sowed_vector[action.selected_duty]
-        opponent_counts = _competing_counts(
+        strength = _duty_strength_for_position(
             state,
+            config,
             player=player,
             duty_position=action.selected_duty,
+            sowed_vector=sowed_vector,
+            relation_context=duty_relation_context,
         )
-        strength = duty_strength(player_count, opponent_counts)
         duty_value, silver_cost = duty_value_and_silver_cost(strength)
         available_silver = state_after_sow.player_state(player).resources.silver
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
@@ -1729,6 +1839,41 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Guild Merchant movement with start-turn relocation modifiers is deferred."
                 )
+        effective_acolyte_fields = (
+            action.effective_acolyte_building_id,
+            action.effective_acolyte_building_source,
+        )
+        effective_acolyte_field_count = sum(
+            field is not None for field in effective_acolyte_fields
+        )
+        if effective_acolyte_field_count not in (0, len(effective_acolyte_fields)):
+            raise TransitionValidationError(
+                "effective_acolyte_building_id and effective_acolyte_building_source must be set together."
+            )
+        has_scriptorium_effective_modifier = effective_acolyte_field_count == len(
+            effective_acolyte_fields
+        )
+        if has_scriptorium_effective_modifier:
+            if action.effective_acolyte_building_id != _BUILDING_SCRIPTORIUM:
+                raise TransitionValidationError(
+                    "Only Scriptorium is supported for effective_acolyte_building fields."
+                )
+            if conversion_field_count == len(conversion_fields):
+                raise TransitionValidationError(
+                    "Combining Scriptorium effective-acolyte modifier with building conversion modifiers is deferred."
+                )
+            if has_route_building_id or has_secondary_route_building_id:
+                raise TransitionValidationError(
+                    "Combining Scriptorium effective-acolyte modifier with sow-route modifiers is deferred."
+                )
+            if start_turn_relocation is not None:
+                raise TransitionValidationError(
+                    "Combining Scriptorium effective-acolyte modifier with start-turn relocation modifiers is deferred."
+                )
+            if has_guild_merchant_modifier:
+                raise TransitionValidationError(
+                    "Combining Guild and Scriptorium pre-sow building modifiers in one action is deferred."
+                )
         workforce_move_fields = (
             action.workforce_move_building_id,
             action.workforce_move_building_source,
@@ -1764,6 +1909,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Combining Guild and Pulpit pre-sow building modifiers in one action is deferred."
             )
+        if has_scriptorium_effective_modifier and has_pulpit_workforce_modifier:
+            raise TransitionValidationError(
+                "Combining Pulpit and Scriptorium pre-sow building modifiers in one action is deferred."
+            )
         end_turn_fields = (
             action.end_turn_building_id,
             action.end_turn_building_source,
@@ -1785,6 +1934,10 @@ def _apply_full_turn_action(
         if has_guild_merchant_modifier and end_turn_field_count == len(end_turn_fields):
             raise TransitionValidationError(
                 "Combining Guild Merchant movement with end-turn relocation modifiers is deferred."
+            )
+        if has_scriptorium_effective_modifier and end_turn_field_count == len(end_turn_fields):
+            raise TransitionValidationError(
+                "Combining Scriptorium effective-acolyte modifier with end-turn relocation modifiers is deferred."
             )
         if has_pulpit_workforce_modifier and end_turn_field_count == len(end_turn_fields):
             raise TransitionValidationError(
@@ -1839,6 +1992,24 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=_BUILDING_GUILD,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if (
+            has_scriptorium_effective_modifier
+            and action.effective_acolyte_building_source is not None
+            and action.effective_acolyte_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(
+                hire_context, building_key=_BUILDING_SCRIPTORIUM
+            ):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_SCRIPTORIUM,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -2604,6 +2775,7 @@ def _apply_full_turn_action(
                 player=player,
                 sowed_vector=sowed_vector,
                 selected_duty=action.selected_duty,
+                relation_context=duty_relation_context,
             )
             legal_step_2_choices = _taxation_bonus_resource_choices(
                 bonus_resource_types,
@@ -4392,6 +4564,41 @@ def _legal_guild_merchant_advance_options(
     )
 
 
+def _legal_scriptorium_effective_acolyte_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_ScriptoriumEffectiveAcolyteOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_SCRIPTORIUM,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    return (
+        _ScriptoriumEffectiveAcolyteOption(
+            state=state_after_hire,
+            building_id=_BUILDING_SCRIPTORIUM,
+            source=source,
+        ),
+    )
+
+
 def _legal_pulpit_workforce_move_options(
     state: GameState,
     config: GameConfig,
@@ -4472,6 +4679,8 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
+        and action.effective_acolyte_building_id is None
+        and action.effective_acolyte_building_source is None
     )
 
 
@@ -4487,6 +4696,33 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
+        and action.effective_acolyte_building_id is None
+        and action.effective_acolyte_building_source is None
+    )
+
+
+def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
+    return (
+        action.sow_route_building_id is None
+        and action.sow_route_secondary_building_id is None
+        and action.sow_route_omitted_location is None
+        and action.building_conversion_id is None
+        and action.start_turn_building_id is None
+        and action.end_turn_building_id is None
+        and action.merchant_advance_building_id is None
+        and action.merchant_advance_building_source is None
+        and action.workforce_move_building_id is None
+        and action.workforce_move_building_source is None
+        and action.effective_acolyte_building_id is None
+        and action.effective_acolyte_building_source is None
+    )
+
+
+def _scriptorium_can_affect_action(action: FullTurnAction) -> bool:
+    """Return True when Scriptorium can change this action's outcome."""
+    return action.resolution not in (
+        TurnResolutionType.TITHE,
+        TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
     )
 
 
@@ -4504,6 +4740,23 @@ def _with_guild_merchant_advance_fields(
         action,
         merchant_advance_building_id=option.building_id,
         merchant_advance_building_source=source_label,
+    )
+
+
+def _with_scriptorium_effective_acolyte_fields(
+    action: FullTurnAction,
+    *,
+    option: _ScriptoriumEffectiveAcolyteOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        effective_acolyte_building_id=option.building_id,
+        effective_acolyte_building_source=source_label,
     )
 
 
@@ -4928,6 +5181,62 @@ def _resolved_guild_merchant_advance_for_action(
 
     return _ResolvedGuildMerchantAdvance(
         building_id=_BUILDING_GUILD,
+        source=source,
+    )
+
+
+def _resolved_scriptorium_effective_acolyte_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedScriptoriumEffectiveAcolyte | None:
+    fields = (
+        action.effective_acolyte_building_id,
+        action.effective_acolyte_building_source,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "effective_acolyte_building_id and effective_acolyte_building_source must be set together."
+        )
+
+    building_id = action.effective_acolyte_building_id
+    source_label = action.effective_acolyte_building_source
+    assert building_id is not None
+    assert source_label is not None
+
+    if building_id != _BUILDING_SCRIPTORIUM:
+        raise TransitionValidationError(
+            "Only Scriptorium is supported for effective_acolyte_building fields."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_SCRIPTORIUM,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                "Own-active Scriptorium modifier must set source=own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "Scriptorium modifier source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError("Scriptorium is unavailable in current state.")
+
+    return _ResolvedScriptoriumEffectiveAcolyte(
+        building_id=_BUILDING_SCRIPTORIUM,
         source=source,
     )
 
@@ -5786,6 +6095,24 @@ def _guild_merchant_bonus_event(
     )
 
 
+def _scriptorium_effective_acolyte_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=_BUILDING_SCRIPTORIUM,
+            action="effective_acolyte_bonus",
+            duty_relation_bonus=1,
+            virtual_only=True,
+        ),
+    )
+
+
 def _pulpit_workforce_bonus_event(
     *,
     actor: PlayerId,
@@ -6076,6 +6403,45 @@ def _competing_counts(
     return tuple(opponent_counts)
 
 
+def _effective_player_acolytes_for_duty_position(
+    *,
+    base_count: int,
+    duty_position: int,
+    relation_context: _DutyRelationModifierContext,
+    config: GameConfig,
+) -> int:
+    if not relation_context.uses_scriptorium:
+        return base_count
+    if base_count <= 0:
+        return base_count
+    if duty_position not in config.duty_positions():
+        return base_count
+    return base_count + 1
+
+
+def _duty_strength_for_position(
+    state: GameState,
+    config: GameConfig,
+    *,
+    player: PlayerId,
+    duty_position: int,
+    sowed_vector: tuple[int, ...],
+    relation_context: _DutyRelationModifierContext,
+) -> DutyStrength:
+    player_count = _effective_player_acolytes_for_duty_position(
+        base_count=sowed_vector[duty_position],
+        duty_position=duty_position,
+        relation_context=relation_context,
+        config=config,
+    )
+    opponent_counts = _competing_counts(
+        state,
+        player=player,
+        duty_position=duty_position,
+    )
+    return duty_strength(player_count, opponent_counts)
+
+
 def _invariant_workforce_details(state: GameState) -> dict[str, int]:
     details: dict[str, int] = {}
     total = 0
@@ -6127,6 +6493,7 @@ def _taxation_bonus_resource_types(
     player: PlayerId,
     sowed_vector: tuple[int, ...],
     selected_duty: int,
+    relation_context: _DutyRelationModifierContext,
 ) -> tuple[str, ...]:
     unlocked_resources: set[str] = set()
     for duty_position in config.duty_positions():
@@ -6134,9 +6501,13 @@ def _taxation_bonus_resource_types(
             continue
         if config.duty_category_for_position(duty_position) == "taxation":
             continue
-        strength = duty_strength(
-            sowed_vector[duty_position],
-            _competing_counts(state, player=player, duty_position=duty_position),
+        strength = _duty_strength_for_position(
+            state,
+            config,
+            player=player,
+            duty_position=duty_position,
+            sowed_vector=sowed_vector,
+            relation_context=relation_context,
         )
         if strength is not DutyStrength.MAJORITY:
             continue
