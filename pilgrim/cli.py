@@ -485,6 +485,24 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             )
         return f"{event_name}: {actor_name} used {hired_label} from {source}; no payment"
 
+    if event.event_type is EventType.WORKFORCE_MOVE:
+        amount = int(details.get("amount", 1))
+        unit = str(details.get("unit", "worker"))
+        from_pool = str(details.get("from_pool", "unknown"))
+        to_pool = str(details.get("to_pool", "unknown"))
+        wheat_paid = int(details.get("wheat_paid", 0))
+        building = str(details.get("building", "")).strip().lower()
+        if wheat_paid == 0 and building == "pulpit":
+            return (
+                f"{event_name}: {actor_name} moved {amount} {unit} "
+                f"{from_pool} -> {to_pool} for free with Pulpit"
+            )
+        paid_suffix = "for free" if wheat_paid == 0 else f"paid wheat={wheat_paid}"
+        return (
+            f"{event_name}: {actor_name} moved {amount} {unit} "
+            f"{from_pool} -> {to_pool}; {paid_suffix}"
+        )
+
     if event.event_type is EventType.ORDINATION:
         step = str(details.get("step", "")).strip()
         amount = int(details.get("amount", 1))
@@ -689,6 +707,8 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                 return f"{event_name}: brewery sold 1 wheat for 2 silver"
         if building == "guild" and action_name == "merchant_advance":
             return f"{event_name}: guild moved Merchant clockwise +1"
+        if building == "pulpit" and action_name == "workforce_move":
+            return f"{event_name}: pulpit moved 1 serf village -> abbey for free"
         if (
             building in ("dormitory", "inquisition")
             and "start_turn_from" in details

@@ -156,6 +156,7 @@ class EventType(Enum):
     DUTY_DEFERRED = "duty_deferred"
     RESOURCE_DELTA = "resource_delta"
     PIETY_DELTA = "piety_delta"
+    WORKFORCE_MOVE = "workforce_move"
     ACOLYTE_RECALL = "acolyte_recall"
     ORDINATION = "ordination"
     TAXATION = "taxation"

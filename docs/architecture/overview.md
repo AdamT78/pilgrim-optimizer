@@ -542,6 +542,31 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - Guild is generated for ordinary full-turn variants.
   - Mixed Guild + other same-turn hire-dependent building modifiers are deferred.
 
+## Pulpit Free Serf Move (v5.4)
+
+- Transition/runtime wiring now supports Pulpit as an optional pre-sow workforce modifier.
+- Source resolution reuses shared building source/hire infrastructure:
+  - own active (free)
+  - live market hire (pay bank)
+  - opponent active hire (pay owner)
+  - unavailable (donated, not live, merchant none for hired sources, insufficient payment resource)
+- Pulpit semantics:
+  - no amount/direction payload
+  - move exactly `1` serf `village -> abbey`
+  - no wheat payment for the Pulpit move
+- Apply-time ordering for Pulpit:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS` (`pulpit moved 1 serf village -> abbey for free`)
+  - `WORKFORCE_MOVE` (`serf village -> abbey`, `wheat_paid=0`)
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Infirmary interaction boundary:
+  - Pulpit is not modeled as a Duty Value modifier.
+  - Infirmary does not boost Pulpit movement count.
+  - Infirmary can still modify the separate Ordination resolution path (extra paid step) when legal.
+- Conservative composition in this milestone:
+  - mixed Pulpit + other pre-sow hire-order-sensitive modifiers remain deferred.
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for

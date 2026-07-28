@@ -55,6 +55,8 @@ class FullTurnAction:
     building_conversion_amount: int | None = None
     merchant_advance_building_id: str | None = None
     merchant_advance_building_source: str | None = None
+    workforce_move_building_id: str | None = None
+    workforce_move_building_source: str | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -219,6 +221,15 @@ def action_id(action: GameAction) -> str:
             f":merchant_advance_building:{action.merchant_advance_building_id or 'none'}"
             f":from:{action.merchant_advance_building_source or 'unknown'}"
         )
+    workforce_move_suffix = ""
+    if (
+        action.workforce_move_building_id is not None
+        or action.workforce_move_building_source is not None
+    ):
+        workforce_move_suffix = (
+            f":workforce_move_building:{action.workforce_move_building_id or 'none'}"
+            f":from:{action.workforce_move_building_source or 'unknown'}"
+        )
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -231,7 +242,7 @@ def action_id(action: GameAction) -> str:
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
-        f"{sow_route_suffix}{conversion_suffix}{merchant_advance_suffix}{hire_suffix}"
+        f"{sow_route_suffix}{conversion_suffix}{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
     )
 
 
@@ -340,6 +351,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             route_summary += " | use building: brewery to sell 1 wheat for 2 silver"
     if action.merchant_advance_building_id == "guild":
         route_summary += " | use building: guild to move merchant +1"
+    if action.workforce_move_building_id == "pulpit":
+        route_summary += (
+            " | use building: pulpit "
+            "to move 1 serf village -> abbey for free"
+        )
     summary = (
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
@@ -427,6 +443,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             " | hire building: guild "
             f"from {action.merchant_advance_building_source}"
+        )
+    if (
+        action.workforce_move_building_id == "pulpit"
+        and action.workforce_move_building_source is not None
+        and action.workforce_move_building_source != "own_active"
+    ):
+        summary += (
+            " | hire building: pulpit "
+            f"from {action.workforce_move_building_source}"
         )
     if action.hired_building_id == "mill":
         required_wheat = 0
