@@ -92,3 +92,24 @@ def test_cli_apply_building_availability_none_future_when_all_live(capsys) -> No
     assert exit_code == 0
     assert "Building availability:" in output
     assert "Future market: none" in output
+
+
+def test_cli_apply_building_availability_shows_owned_live_for_active_owned_building(capsys) -> None:
+    action_index = _action_index(
+        "scenarios/scriptorium_active_majority_selected_duty_001.json",
+        resolution=TurnResolutionType.CLERICAL_DEVOTION,
+    )
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/scriptorium_active_majority_selected_duty_001.json",
+            "--action-index",
+            str(action_index),
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Building availability:" in output
+    assert "Owned/live: Scriptorium (player_one)" in output
