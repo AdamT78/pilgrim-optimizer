@@ -343,6 +343,8 @@ Confession Box start-player notes:
   - `start-player Confession Box: player_two hires Confession Box from market`
 - bonus is temporary (`+2` effective piety) for start-player determination only
 - real piety position/VP values shown in state summaries remain unchanged
+- legal-actions output intentionally prunes Confession Box variants that cannot change the
+  resolved next `start_player` under current deterministic self-selection policy
 
 ## Building Catalogue and Slots (v1.1)
 

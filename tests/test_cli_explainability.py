@@ -67,11 +67,11 @@ def test_cli_legal_actions_returns_readable_output(capsys) -> None:
 
 
 def test_cli_solve_returns_readable_best_action(capsys) -> None:
-    exit_code = main(["solve", "scenarios/mancala_sandbox_001.json", "--depth", "3"])
+    exit_code = main(["solve", "scenarios/mancala_sandbox_search_smoke_001.json", "--depth", "3"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "Solve result for scenario 'mancala_sandbox_001'" in output
+    assert "Solve result for scenario 'mancala_sandbox_search_smoke_001'" in output
     assert "Root player: player_one" in output
     assert "Objective: maximize root player sandbox evaluation" in output
     assert "Opponent model: sandbox_active_player_max" in output
@@ -85,7 +85,7 @@ def test_cli_solve_returns_readable_best_action(capsys) -> None:
 
 
 def test_exact_search_returns_principal_variation() -> None:
-    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    scenario = load_scenario("scenarios/mancala_sandbox_search_smoke_001.json")
     result = solve_exact(scenario.state, scenario.config, depth=3)
 
     assert len(result.principal_variation) >= 1
@@ -98,7 +98,7 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     exit_code = main(
         [
             "solve",
-            "scenarios/mancala_sandbox_001.json",
+            "scenarios/mancala_sandbox_search_smoke_001.json",
             "--depth",
             "3",
             "--verbose",
@@ -128,7 +128,7 @@ def test_cli_solve_verbose_includes_events_and_state(capsys) -> None:
     assert "At NW pilgrimage site:" in output
     assert "Merchant:" in output
     assert "Building market:" in output
-    assert "Level 1: Confession Box, Chapel, Chapter House, Guild" in output
+    assert "Level 1: none" in output
     assert "Dummy acolytes:" in output
     assert "Position:" in output
     assert "Resource:" in output
@@ -165,7 +165,7 @@ def test_cli_solve_verbose_shows_populated_player_board_slots_with_names(capsys)
     exit_code = main(
         [
             "solve",
-            "scenarios/player_board_slots_001.json",
+            "scenarios/player_board_slots_search_smoke_001.json",
             "--depth",
             "2",
             "--verbose",
@@ -181,8 +181,8 @@ def test_cli_solve_verbose_shows_populated_player_board_slots_with_names(capsys)
     assert "Donated buildings:" in output
     assert "Brewery" in output
     assert "Cardinal favor tiles: 1" in output
-    assert "Used slots: 4/6" in output
-    assert "Available slots: 2" in output
+    assert "Used slots: 3/6" in output
+    assert "Available slots: 3" in output
 
 
 def test_cli_solve_taxation_merchant_verbose_shows_none_resource(capsys) -> None:

@@ -4,10 +4,10 @@
   "opponent_model": {
     "type": "sandbox_active_player_max"
   },
-  "player_count": 2,
+  "player_count": 3,
   "setup_file": "configs/setups/basic_mancala_sandbox.json",
   "initial_state": {
-    "active_player": "player_two",
+    "active_player": "player_one",
     "start_player_id": "player_two",
     "phase": "sow",
     "merchant_position": 0,
@@ -15,10 +15,10 @@
     "completed_rounds": 1,
     "game_over": false,
     "timing": {
-      "absolute_turn": 3,
+      "absolute_turn": 5,
       "round_number": 2,
       "season_number": 1,
-      "turn_in_round": 1
+      "turn_in_round": 2
     },
     "building_market": [],
     "building_availability": {
@@ -26,14 +26,14 @@
     },
     "players": {
       "player_one": {
-        "piety": 7,
+        "piety": 8,
         "resources": {
           "stone": 0,
           "silver": 0,
           "wheat": 0
         },
         "workforce": {
-          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
           "village": 0,
           "abbey": 0,
           "committed": {
@@ -51,14 +51,34 @@
         }
       },
       "player_two": {
-        "piety": 8,
+        "piety": 7,
         "resources": {
           "stone": 0,
           "silver": 0,
           "wheat": 1
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_three": {
+        "piety": 9,
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 1, 0, 0, 0, 0, 0, 0, 0],
           "village": 0,
           "abbey": 0,
           "committed": {

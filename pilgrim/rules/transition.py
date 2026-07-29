@@ -319,6 +319,7 @@ _BUILDING_GUILD = "guild"
 _BUILDING_PULPIT = "pulpit"
 _BUILDING_WAGON_YARD = "wagon_yard"
 _BUILDING_CONFESSION_BOX = "confession_box"
+_CONFESSION_BOX_TEMPORARY_PIETY_BONUS = 2
 _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS: frozenset[str] = frozenset(
     {
         _BUILDING_GRAIN_STORE,
@@ -1280,9 +1281,28 @@ def _start_player_confession_box_variants_for_action(
         config=config,
         ordered_players=ordered_players,
     )
+    state_before_start_player_selection = replace(
+        preview_result.state,
+        start_player=state.start_player,
+        active_player=state.start_player,
+    )
+    baseline_next_start_player = _resolved_next_start_player_for_confession_uses(
+        state=state_before_start_player_selection,
+        uses=(),
+    )
+    kept_use_combinations: list[tuple[StartPlayerConfessionBoxUse, ...]] = [()]
+    for use_combination in use_combinations:
+        if not use_combination:
+            continue
+        candidate_next_start_player = _resolved_next_start_player_for_confession_uses(
+            state=state_before_start_player_selection,
+            uses=use_combination,
+        )
+        if candidate_next_start_player != baseline_next_start_player:
+            kept_use_combinations.append(use_combination)
     return tuple(
         _with_start_player_confession_box_uses(base_action, use_combination)
-        for use_combination in use_combinations
+        for use_combination in kept_use_combinations
     )
 
 
@@ -1382,6 +1402,55 @@ def _confession_box_source_is_live_for_start_player_phase(
     if live_round is None:
         return True
     return is_building_live(state, _BUILDING_CONFESSION_BOX)
+
+
+def _resolved_next_start_player_for_confession_uses(
+    *,
+    state: GameState,
+    uses: tuple[StartPlayerConfessionBoxUse, ...],
+) -> PlayerId:
+    temporary_bonus_players = {use.player for use in uses}
+    players = tuple(PlayerId(index) for index in range(state.player_count))
+    highest_effective_piety = max(
+        state.player_state(player_id).piety
+        + (
+            _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
+            if player_id in temporary_bonus_players
+            else 0
+        )
+        for player_id in players
+    )
+    tied_players = tuple(
+        player_id
+        for player_id in players
+        if state.player_state(player_id).piety
+        + (
+            _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
+            if player_id in temporary_bonus_players
+            else 0
+        )
+        == highest_effective_piety
+    )
+    if len(tied_players) == 1:
+        return tied_players[0]
+    return _clockwise_start_player_tie_break(
+        tied_players=tied_players,
+        current_start=state.start_player,
+        player_count=state.player_count,
+    )
+
+
+def _clockwise_start_player_tie_break(
+    *,
+    tied_players: tuple[PlayerId, ...],
+    current_start: PlayerId,
+    player_count: int,
+) -> PlayerId:
+    for offset in range(1, player_count + 1):
+        candidate = PlayerId((int(current_start) + offset) % player_count)
+        if candidate in tied_players:
+            return candidate
+    raise TransitionValidationError("No tied player found during Confession Box pruning.")
 
 
 def _apply_setup_sow_action(
