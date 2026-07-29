@@ -19,7 +19,8 @@ Use:
 Important distinction:
 
 - official score sheet is separate from sandbox/search evaluation
-- this does not change solve/search objective
+- sandbox remains the default search objective
+- exact search can optionally use implemented official score as its objective
 
 ## API
 
@@ -123,25 +124,27 @@ python3 -m pilgrim.cli score scenarios/<scenario>.json
 ```
 
 The command prints one score sheet per real player plus deferred categories.
-# Scoring
 
-Current search evaluation uses a sandbox-only `EvaluationBreakdown`:
+## Search objectives (v5.11)
 
-- victory points (placeholder field on player state)
-- piety track VP
-- Alms-table VP
-- resource total (`stone + silver + wheat`)
+Exact search objective selection is separate from official scoring rules:
 
-Current sandbox formula:
+- default objective: `sandbox`
+- optional objective: `implemented_official_score`
+- optional hybrid: `sandbox_with_official_terminal`
 
-`victory_points + piety_track_vp + alms_table_vp + resource_total`
+CLI spellings:
 
-This is not final Pilgrim scoring and exists only to support deterministic search/debugging in the current milestone.
+- `sandbox`
+- `implemented-official-score`
+- `sandbox-with-official-terminal`
 
-Deferred full-scoring components include:
+Objective behavior:
 
-- Pilgrim trails and pilgrimage-site systems
-- Building and trade-route scoring
-- Cardinal/bonus systems
-- Remaining acolyte and endgame conversions
-- Final tie-break rules
+- `sandbox` uses `evaluate_player(...).total`
+- `implemented_official_score` uses `score_breakdown(...).implemented_total`
+- `sandbox_with_official_terminal` uses sandbox scoring except terminal states
+  (`state.game_over == true`), where it uses implemented official score
+
+The official score-sheet categories and formulas in this document are unchanged by search objective
+selection.

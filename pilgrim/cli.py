@@ -34,12 +34,19 @@ from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resou
 from pilgrim.rules.scoring import (
     DEFERRED_SCORING_CATEGORIES,
     ScoreBreakdown,
+    score_breakdown,
     score_all_players,
 )
 from pilgrim.rules.special_activities import format_special_activities
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
-from pilgrim.search.exact import solve_exact
+from pilgrim.search.exact import SearchResult, solve_exact
+from pilgrim.search.objectives import (
+    SearchObjective,
+    objective_cli_choices,
+    objective_description,
+    objective_from_cli_name,
+)
 from pilgrim.setup.generator import generate_setup_scenario
 
 
@@ -76,6 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
     solve_parser = subparsers.add_parser("solve", help="Run placeholder exact search.")
     solve_parser.add_argument("scenario", help="Path to scenario JSON file.")
     solve_parser.add_argument("--depth", type=int, default=3, help="Search depth (default: 3).")
+    solve_parser.add_argument(
+        "--objective",
+        default="sandbox",
+        choices=objective_cli_choices(),
+        help=(
+            "Search objective: sandbox, implemented-official-score, "
+            "or sandbox-with-official-terminal (default: sandbox)."
+        ),
+    )
     solve_parser.add_argument(
         "--verbose",
         action="store_true",
@@ -192,17 +208,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "solve":
+        search_objective = objective_from_cli_name(args.objective)
         result = solve_exact(
             scenario.state,
             scenario.config,
             args.depth,
             root_player_id=scenario.root_player_id,
             opponent_model_type=scenario.opponent_model.type,
+            objective=search_objective,
         )
         root_player_name = scenario.root_player_id.name.lower()
         print(f"Solve result for scenario '{scenario.scenario_id}'")
         print(f"Root player: {root_player_name}")
-        print("Objective: maximize root player sandbox evaluation")
+        print(f"Objective: {objective_description(search_objective)}")
         print(f"Opponent model: {scenario.opponent_model.type.value}")
         print(f"Depth: {args.depth}")
         print(f"Best score: {result.best_score}")
@@ -212,12 +230,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         best_action_heading = "Best first full turn:"
         events_heading = "Events for best first full turn:"
         state_heading = "State after best first full turn:"
-        evaluation_heading = "Root-player evaluation after best first full turn:"
+        evaluation_heading = _solve_transition_report_heading(
+            search_objective,
+            is_setup_sow=False,
+        )
         if isinstance(result.best_action, SetupSowAction):
             best_action_heading = "Best first setup sow:"
             events_heading = "Events for best first setup sow:"
             state_heading = "State after best first setup sow:"
-            evaluation_heading = "Root-player evaluation after best first setup sow:"
+            evaluation_heading = _solve_transition_report_heading(
+                search_objective,
+                is_setup_sow=True,
+            )
 
         print(best_action_heading)
         if result.best_action is None:
@@ -239,8 +263,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"{action_summary(action, scenario.config)}"
                 )
             print()
-            print("Best-line final evaluation:")
-            for line in _format_evaluation_breakdown(result.best_line_final_breakdown):
+            print(_solve_best_line_final_heading(search_objective))
+            for line in _format_solve_best_line_breakdown(
+                result,
+                objective=search_objective,
+            ):
                 print(line)
 
         if args.verbose and result.best_action is not None:
@@ -255,6 +282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 events_heading=events_heading,
                 state_heading=state_heading,
                 evaluation_heading=evaluation_heading,
+                objective=search_objective,
             )
         return 0
 
@@ -1006,6 +1034,7 @@ def _print_transition_report(
     events_heading: str,
     state_heading: str,
     evaluation_heading: str,
+    objective: SearchObjective = SearchObjective.SANDBOX,
 ) -> None:
     print(events_heading)
     for event in events:
@@ -1022,14 +1051,19 @@ def _print_transition_report(
     ):
         print(line)
 
-    breakdown = evaluate_root_player(
-        next_state,
-        root_player_id=root_player_id,
-        config=config,
-    )
+    score_breakdown_for_root = score_breakdown(next_state, root_player_id, config)
     print()
     print(evaluation_heading)
-    for line in _format_evaluation_breakdown(breakdown):
+    for line in _format_transition_breakdown_for_objective(
+        objective,
+        sandbox_breakdown=evaluate_root_player(
+            next_state,
+            root_player_id=root_player_id,
+            config=config,
+        ),
+        implemented_breakdown=score_breakdown_for_root,
+        state_is_terminal=next_state.game_over,
+    ):
         print(line)
 
 
@@ -1220,6 +1254,81 @@ def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, .
     return format_evaluation_breakdown_lines(breakdown)
 
 
+def _solve_transition_report_heading(
+    objective: SearchObjective,
+    *,
+    is_setup_sow: bool,
+) -> str:
+    transition_target = "setup sow" if is_setup_sow else "full turn"
+    if objective is SearchObjective.SANDBOX:
+        return f"Root-player evaluation after best first {transition_target}:"
+    if objective is SearchObjective.IMPLEMENTED_OFFICIAL_SCORE:
+        return f"Root-player implemented official score after best first {transition_target}:"
+    return (
+        "Root-player objective score after best first "
+        f"{transition_target} (sandbox unless game over):"
+    )
+
+
+def _solve_best_line_final_heading(objective: SearchObjective) -> str:
+    if objective is SearchObjective.SANDBOX:
+        return "Best-line final evaluation:"
+    if objective is SearchObjective.IMPLEMENTED_OFFICIAL_SCORE:
+        return "Best-line final implemented official score:"
+    return "Best-line final objective score (sandbox unless game over):"
+
+
+def _format_solve_best_line_breakdown(
+    result: SearchResult,
+    *,
+    objective: SearchObjective,
+) -> tuple[str, ...]:
+    if objective is SearchObjective.SANDBOX:
+        return _format_evaluation_breakdown(result.best_line_final_breakdown)
+    if objective is SearchObjective.IMPLEMENTED_OFFICIAL_SCORE:
+        return _format_score_breakdown_with_player(result.best_line_final_score_breakdown)
+
+    # Hybrid objective: only terminal states switch to official score.
+    if not result.best_line_final_state_game_over:
+        return (
+            "Scoring mode: sandbox",
+            *_format_evaluation_breakdown(result.best_line_final_breakdown),
+        )
+    player_name = (
+        result.best_line_final_breakdown.player_name
+        if result.best_line_final_breakdown.player_name is not None
+        else result.root_player_id.name.lower()
+    )
+    return (
+        "Scoring mode: implemented official score (terminal)",
+        f"Player: {player_name}",
+        f"Objective score: {result.best_score}",
+        *_format_score_breakdown_lines(result.best_line_final_score_breakdown),
+    )
+
+
+def _format_transition_breakdown_for_objective(
+    objective: SearchObjective,
+    *,
+    sandbox_breakdown: EvaluationBreakdown,
+    implemented_breakdown: ScoreBreakdown,
+    state_is_terminal: bool,
+) -> tuple[str, ...]:
+    if objective is SearchObjective.SANDBOX:
+        return _format_evaluation_breakdown(sandbox_breakdown)
+    if objective is SearchObjective.IMPLEMENTED_OFFICIAL_SCORE:
+        return _format_score_breakdown_with_player(implemented_breakdown)
+    if state_is_terminal:
+        return (
+            "Scoring mode: implemented official score (terminal)",
+            *_format_score_breakdown_with_player(implemented_breakdown),
+        )
+    return (
+        "Scoring mode: sandbox",
+        *_format_evaluation_breakdown(sandbox_breakdown),
+    )
+
+
 def _print_score_sheet(state: GameState, config: GameConfig, scenario_id: str) -> None:
     score_by_player = score_all_players(state, config)
     print(f"Score sheet for scenario '{scenario_id}'")
@@ -1249,6 +1358,13 @@ def _format_score_breakdown_lines(breakdown: ScoreBreakdown) -> tuple[str, ...]:
         f"  Donated buildings: {breakdown.donated_buildings_vp} VP",
         f"  Resources: {breakdown.resources_vp} VP",
         f"  Total implemented score: {breakdown.implemented_total} VP",
+    )
+
+
+def _format_score_breakdown_with_player(breakdown: ScoreBreakdown) -> tuple[str, ...]:
+    return (
+        f"Player: {breakdown.player.name.lower()}",
+        *_format_score_breakdown_lines(breakdown),
     )
 
 

@@ -149,7 +149,7 @@ What it does right now:
 
 Why this matters:
 
-- `solve` chooses the best action under current sandbox evaluation.
+- `solve` chooses the best action under the selected search objective (`sandbox` by default).
 - `apply` is deterministic debugging: you choose the exact legal action to inspect.
 - This is especially useful for `give_alms` debugging when solver policy picks another line.
 
@@ -174,7 +174,20 @@ What it does right now:
 
 - Runs the current exact-search prototype.
 - Searches to the specified depth in **full turns** (`--depth 3` means 3 complete turns).
-- Uses a temporary placeholder evaluation function.
+- Uses selectable search objectives (`--objective`) for leaf scoring.
+
+Objective options:
+
+- `sandbox` (default)
+- `implemented-official-score`
+- `sandbox-with-official-terminal`
+
+Examples:
+
+```bash
+python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3 --objective sandbox
+python3 -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3 --objective implemented-official-score
+```
 
 Example output:
 
@@ -201,7 +214,10 @@ Best line:
 - The old machine-oriented token `best_action=sow:0:1->2->3` is now shown in readable form.
 - `city -> north -> north_east -> east` corresponds to position IDs `0 -> 1 -> 2 -> 3`.
 - `nodes_expanded` means the number of search nodes explored.
-- `best_score` is still a value under a **temporary placeholder sandbox evaluation**, not true final Pilgrim VP.
+- `best_score` follows the selected objective:
+  - `sandbox`: sandbox evaluation
+  - `implemented-official-score`: implemented official score-sheet total
+  - `sandbox-with-official-terminal`: sandbox, except terminal states use implemented official score
 - `best line` is now a sequence of full turns, not alternating sow/resolve sub-actions.
 - `root player` is whose outcome is being optimized.
 - `active player` is whose turn is currently applied in a simulated state.
