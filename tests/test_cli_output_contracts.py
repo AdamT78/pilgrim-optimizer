@@ -123,6 +123,59 @@ def test_cli_scriptorium_apply_contract_taxation_majority_bonus_is_virtual_only(
     )
 
 
+def test_cli_customs_house_legal_actions_contract_prunes_non_taxation_variants_output(capsys) -> None:
+    scenario_path = "scenarios/customs_house_active_taxation_majority_001.json"
+    output = _run_cli(["legal-actions", scenario_path], capsys)
+    customs_house_lines = _matching_lines(
+        output,
+        contains="use building: customs_house for Taxation majority on occupied Duty tiles",
+    )
+
+    assert customs_house_lines
+    assert all("| action: taxation" in line for line in customs_house_lines)
+    assert all("| action: tithe" not in line for line in customs_house_lines)
+    assert any(
+        "| action: tithe" in line and "use building: customs_house" not in line
+        for line in output.splitlines()
+    )
+
+
+def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order(capsys) -> None:
+    output, _index = _apply_verbose_output(
+        "scenarios/customs_house_hire_market_taxation_majority_001.json",
+        predicate=lambda action: (
+            action.taxation_majority_building_id == "customs_house"
+            and action.taxation_majority_building_source == "market"
+            and action.resolution is TurnResolutionType.TAXATION
+            and action.taxation_step1_resource == "wheat"
+            and action.taxation_step2_resources == ("stone", "silver")
+        ),
+        capsys=capsys,
+    )
+
+    assert (
+        "BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn"
+        in output
+    )
+    assert (
+        "DUTY_RESOLUTION: selected north (taxation); relation majority; duty value 2; "
+        "silver cost 0; action taxation"
+    ) in output
+    assert "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles" in output
+    assert "INVARIANT_CHECK: passed" in output
+    _assert_in_order(
+        output,
+        [
+            "BUILDING_HIRED: player_one hired Customs House from market; paid wheat 1 to bank",
+            "BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn",
+            "SOWING:",
+            "DUTY_RESOLUTION: selected north (taxation); relation majority",
+            "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles",
+            "RESOURCE_DELTA:",
+        ],
+    )
+
+
 def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
     legal_output = _run_cli(
         ["legal-actions", "scenarios/pulpit_active_move_serf_001.json"],

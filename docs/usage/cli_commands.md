@@ -640,6 +640,31 @@ Position mapping used by the current sandbox:
     Taxation step 2.
   - No extra real acolytes are created; recall and workforce totals still reflect real board counts.
 
+## Customs House Taxation Majority Override (v5.6)
+
+- Customs House is available as an optional pre-sow Taxation-only relation modifier
+  (not a standalone action):
+  - occupied Duty tiles for the acting player are treated as majority-controlled for Taxation
+  - applies to selected Taxation relation/value and Taxation step-2 bonus eligibility checks
+  - virtual effect only (no physical acolyte placement)
+- Source resolution uses existing building-source priority:
+  - own active Customs House (free)
+  - opponent active Customs House (hire from owner)
+  - live market Customs House (hire from bank)
+- Action summary examples:
+  - `... | use building: customs_house for Taxation majority on occupied Duty tiles | ...`
+  - hired variants append `| hire building: customs_house from <market|player_two>`
+- Legal generation:
+  - normal non-Customs-House actions remain legal
+  - Customs House variants are generated for Taxation actions only
+  - no Customs House + tithe/non-Taxation variants are generated
+- `apply --verbose` ordering for Customs House:
+  - `BUILDING_HIRED` (if hired)
+  - `BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn`
+  - `SOWING`
+  - `DUTY_RESOLUTION` (Taxation relation can differ from non-Customs-House variant)
+  - `TAXATION`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:

@@ -216,6 +216,23 @@ class _ResolvedScriptoriumEffectiveAcolyte:
 
 
 @dataclass(frozen=True, slots=True)
+class _CustomsHouseTaxationOption:
+    """Pre-sow state plus Taxation-majority context for one Customs House use."""
+
+    state: GameState
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedCustomsHouseTaxation:
+    """Validated pre-sow Customs House Taxation-majority override directive."""
+
+    building_id: str
+    source: BuildingAbilitySource
+
+
+@dataclass(frozen=True, slots=True)
 class _PulpitWorkforceMoveOption:
     """Pre-sow workforce-move variant for one legal Pulpit use."""
 
@@ -249,6 +266,7 @@ class _DutyRelationModifierContext:
 
     acting_player: PlayerId
     uses_scriptorium: bool = False
+    uses_customs_house: bool = False
 
 
 _TAXATION_RESOURCE_TYPES: tuple[str, ...] = ("stone", "silver", "wheat")
@@ -270,6 +288,7 @@ _STONE_YARD_SELL_STONE = "sell_stone"
 _BUILDING_BREWERY = "brewery"
 _BREWERY_SELL_WHEAT_FOR_SILVER = "sell_wheat_for_silver"
 _BUILDING_SCRIPTORIUM = "scriptorium"
+_BUILDING_CUSTOMS_HOUSE = "customs_house"
 _BUILDING_GUILD = "guild"
 _BUILDING_PULPIT = "pulpit"
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
@@ -334,7 +353,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             allow_guild_modifier=start_turn_option is None,
             allow_pulpit_modifier=start_turn_option is None,
             allow_scriptorium_modifier=start_turn_option is None,
+            allow_customs_house_modifier=start_turn_option is None,
             uses_scriptorium_effective_counts=False,
+            uses_customs_house_taxation_override=False,
         )
         for variant_action in variant_actions:
             if not isinstance(variant_action, FullTurnAction):
@@ -360,6 +381,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             if action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM:
                 # Defer mixed Scriptorium+Library hire-order interactions for this milestone.
                 continue
+            if action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE:
+                # Defer mixed Customs House+Library hire-order interactions for this milestone.
+                continue
             for library_action in _library_suffix_variants_for_action(
                 original_state=state,
                 state_for_turn=start_turn_state,
@@ -379,7 +403,9 @@ def _legal_full_turn_actions_for_state(
     allow_guild_modifier: bool,
     allow_pulpit_modifier: bool,
     allow_scriptorium_modifier: bool,
+    allow_customs_house_modifier: bool,
     uses_scriptorium_effective_counts: bool,
+    uses_customs_house_taxation_override: bool,
 ) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
     base_player_state = state.player_state(state.active_player)
@@ -388,6 +414,7 @@ def _legal_full_turn_actions_for_state(
     duty_relation_context = _DutyRelationModifierContext(
         acting_player=state.active_player,
         uses_scriptorium=uses_scriptorium_effective_counts,
+        uses_customs_house=uses_customs_house_taxation_override,
     )
     actions: list[GameAction] = []
     for origin in occupied_positions(player_vector):
@@ -458,6 +485,7 @@ def _legal_full_turn_actions_for_state(
                     if sowed_vector[duty_position] <= 0:
                         continue
                     actions_before_duty = len(actions)
+                    duty_category = config.duty_category_for_position(duty_position)
                     strength = _duty_strength_for_position(
                         state,
                         config,
@@ -466,10 +494,18 @@ def _legal_full_turn_actions_for_state(
                         sowed_vector=sowed_vector,
                         relation_context=duty_relation_context,
                     )
+                    if duty_category == "taxation":
+                        strength = _taxation_duty_strength_for_position(
+                            state,
+                            config,
+                            player=state.active_player,
+                            duty_position=duty_position,
+                            sowed_vector=sowed_vector,
+                            relation_context=duty_relation_context,
+                        )
                     _duty_value, silver_cost = duty_value_and_silver_cost(strength)
                     if player_resources.silver < silver_cost:
                         continue
-                    duty_category = config.duty_category_for_position(duty_position)
                     category_actions = action_options_for_duty_category(duty_category)
                     if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
                         strength = _duty_strength_for_position(
@@ -918,7 +954,7 @@ def _legal_full_turn_actions_for_state(
                                         if hired_mill_bonus_action not in actions:
                                             actions.append(hired_mill_bonus_action)
                     elif TurnResolutionType.TAXATION in category_actions:
-                        strength = _duty_strength_for_position(
+                        strength = _taxation_duty_strength_for_position(
                             state,
                             config,
                             player=state.active_player,
@@ -1002,7 +1038,9 @@ def _legal_full_turn_actions_for_state(
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
+                allow_customs_house_modifier=False,
                 uses_scriptorium_effective_counts=True,
+                uses_customs_house_taxation_override=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -1026,7 +1064,9 @@ def _legal_full_turn_actions_for_state(
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
+                allow_customs_house_modifier=False,
                 uses_scriptorium_effective_counts=False,
+                uses_customs_house_taxation_override=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -1038,6 +1078,32 @@ def _legal_full_turn_actions_for_state(
                 )
                 if pulpit_action not in actions:
                     actions.append(pulpit_action)
+    if allow_customs_house_modifier:
+        customs_house_options = _legal_customs_house_taxation_options(state, config)
+        if customs_house_options:
+            customs_house_option = customs_house_options[0]
+            for action in _legal_full_turn_actions_for_state(
+                customs_house_option.state,
+                config,
+                allow_guild_modifier=False,
+                allow_pulpit_modifier=False,
+                allow_scriptorium_modifier=False,
+                allow_customs_house_modifier=False,
+                uses_scriptorium_effective_counts=False,
+                uses_customs_house_taxation_override=True,
+            ):
+                if not isinstance(action, FullTurnAction):
+                    continue
+                if not _is_customs_house_modifier_eligible_action(action):
+                    continue
+                if not _customs_house_can_affect_action(action):
+                    continue
+                customs_house_action = _with_customs_house_taxation_fields(
+                    action,
+                    option=customs_house_option,
+                )
+                if customs_house_action not in actions:
+                    actions.append(customs_house_action)
     if allow_guild_modifier:
         guild_options = _legal_guild_merchant_advance_options(state, config)
         if guild_options:
@@ -1053,7 +1119,9 @@ def _legal_full_turn_actions_for_state(
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
+                allow_customs_house_modifier=False,
                 uses_scriptorium_effective_counts=False,
+                uses_customs_house_taxation_override=False,
             ):
                 if not isinstance(action, FullTurnAction):
                     continue
@@ -1509,6 +1577,42 @@ def _apply_full_turn_action(
             uses_scriptorium=True,
         )
 
+    customs_house_taxation = _resolved_customs_house_taxation_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if customs_house_taxation is not None:
+        if _is_hired_source(customs_house_taxation.source):
+            try:
+                state_for_sow, customs_house_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=customs_house_taxation.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=customs_house_taxation.source,
+                    payment=customs_house_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _customs_house_taxation_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+            )
+        )
+        duty_relation_context = replace(
+            duty_relation_context,
+            uses_customs_house=True,
+        )
+
     player_vector = state_for_sow.player_vector(player)
     picked_up = player_vector[action.origin]
     if picked_up <= 0:
@@ -1584,14 +1688,24 @@ def _apply_full_turn_action(
             )
             raise TransitionValidationError(message)
 
-        strength = _duty_strength_for_position(
-            state,
-            config,
-            player=player,
-            duty_position=action.selected_duty,
-            sowed_vector=sowed_vector,
-            relation_context=duty_relation_context,
-        )
+        if action.resolution is TurnResolutionType.TAXATION:
+            strength = _taxation_duty_strength_for_position(
+                state,
+                config,
+                player=player,
+                duty_position=action.selected_duty,
+                sowed_vector=sowed_vector,
+                relation_context=duty_relation_context,
+            )
+        else:
+            strength = _duty_strength_for_position(
+                state,
+                config,
+                player=player,
+                duty_position=action.selected_duty,
+                sowed_vector=sowed_vector,
+                relation_context=duty_relation_context,
+            )
         duty_value, silver_cost = duty_value_and_silver_cost(strength)
         available_silver = state_after_sow.player_state(player).resources.silver
         ensure_affordable_minority(available_silver=available_silver, silver_cost=silver_cost)
@@ -1874,6 +1988,49 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Guild and Scriptorium pre-sow building modifiers in one action is deferred."
                 )
+        taxation_majority_fields = (
+            action.taxation_majority_building_id,
+            action.taxation_majority_building_source,
+        )
+        taxation_majority_field_count = sum(
+            field is not None for field in taxation_majority_fields
+        )
+        if taxation_majority_field_count not in (0, len(taxation_majority_fields)):
+            raise TransitionValidationError(
+                "taxation_majority_building_id and taxation_majority_building_source must be set together."
+            )
+        has_customs_house_taxation_modifier = taxation_majority_field_count == len(
+            taxation_majority_fields
+        )
+        if has_customs_house_taxation_modifier:
+            if action.taxation_majority_building_id != _BUILDING_CUSTOMS_HOUSE:
+                raise TransitionValidationError(
+                    "Only Customs House is supported for taxation_majority_building fields."
+                )
+            if action.resolution is not TurnResolutionType.TAXATION:
+                raise TransitionValidationError(
+                    "Customs House Taxation modifier can only be used with taxation actions."
+                )
+            if conversion_field_count == len(conversion_fields):
+                raise TransitionValidationError(
+                    "Combining Customs House Taxation modifier with building conversion modifiers is deferred."
+                )
+            if has_route_building_id or has_secondary_route_building_id:
+                raise TransitionValidationError(
+                    "Combining Customs House Taxation modifier with sow-route modifiers is deferred."
+                )
+            if start_turn_relocation is not None:
+                raise TransitionValidationError(
+                    "Combining Customs House Taxation modifier with start-turn relocation modifiers is deferred."
+                )
+            if has_guild_merchant_modifier:
+                raise TransitionValidationError(
+                    "Combining Guild and Customs House pre-sow building modifiers in one action is deferred."
+                )
+            if has_scriptorium_effective_modifier:
+                raise TransitionValidationError(
+                    "Combining Scriptorium and Customs House pre-sow building modifiers in one action is deferred."
+                )
         workforce_move_fields = (
             action.workforce_move_building_id,
             action.workforce_move_building_source,
@@ -1913,6 +2070,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Combining Pulpit and Scriptorium pre-sow building modifiers in one action is deferred."
             )
+        if has_customs_house_taxation_modifier and has_pulpit_workforce_modifier:
+            raise TransitionValidationError(
+                "Combining Pulpit and Customs House pre-sow building modifiers in one action is deferred."
+            )
         end_turn_fields = (
             action.end_turn_building_id,
             action.end_turn_building_source,
@@ -1942,6 +2103,10 @@ def _apply_full_turn_action(
         if has_pulpit_workforce_modifier and end_turn_field_count == len(end_turn_fields):
             raise TransitionValidationError(
                 "Combining Pulpit free serf movement with end-turn relocation modifiers is deferred."
+            )
+        if has_customs_house_taxation_modifier and end_turn_field_count == len(end_turn_fields):
+            raise TransitionValidationError(
+                "Combining Customs House Taxation modifier with end-turn relocation modifiers is deferred."
             )
 
         hire_context = BuildingHireTurnContext()
@@ -2010,6 +2175,24 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=_BUILDING_SCRIPTORIUM,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if (
+            has_customs_house_taxation_modifier
+            and action.taxation_majority_building_source is not None
+            and action.taxation_majority_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(
+                hire_context, building_key=_BUILDING_CUSTOMS_HOUSE
+            ):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_CUSTOMS_HOUSE,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4599,6 +4782,41 @@ def _legal_scriptorium_effective_acolyte_options(
     )
 
 
+def _legal_customs_house_taxation_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_CustomsHouseTaxationOption, ...]:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_CUSTOMS_HOUSE,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    return (
+        _CustomsHouseTaxationOption(
+            state=state_after_hire,
+            building_id=_BUILDING_CUSTOMS_HOUSE,
+            source=source,
+        ),
+    )
+
+
 def _legal_pulpit_workforce_move_options(
     state: GameState,
     config: GameConfig,
@@ -4681,6 +4899,8 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
+        and action.taxation_majority_building_id is None
+        and action.taxation_majority_building_source is None
     )
 
 
@@ -4698,6 +4918,8 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
+        and action.taxation_majority_building_id is None
+        and action.taxation_majority_building_source is None
     )
 
 
@@ -4715,6 +4937,27 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
+        and action.taxation_majority_building_id is None
+        and action.taxation_majority_building_source is None
+    )
+
+
+def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
+    return (
+        action.sow_route_building_id is None
+        and action.sow_route_secondary_building_id is None
+        and action.sow_route_omitted_location is None
+        and action.building_conversion_id is None
+        and action.start_turn_building_id is None
+        and action.end_turn_building_id is None
+        and action.merchant_advance_building_id is None
+        and action.merchant_advance_building_source is None
+        and action.workforce_move_building_id is None
+        and action.workforce_move_building_source is None
+        and action.effective_acolyte_building_id is None
+        and action.effective_acolyte_building_source is None
+        and action.taxation_majority_building_id is None
+        and action.taxation_majority_building_source is None
     )
 
 
@@ -4724,6 +4967,11 @@ def _scriptorium_can_affect_action(action: FullTurnAction) -> bool:
         TurnResolutionType.TITHE,
         TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
     )
+
+
+def _customs_house_can_affect_action(action: FullTurnAction) -> bool:
+    """Return True when Customs House can change this action's outcome."""
+    return action.resolution is TurnResolutionType.TAXATION
 
 
 def _with_guild_merchant_advance_fields(
@@ -4757,6 +5005,23 @@ def _with_scriptorium_effective_acolyte_fields(
         action,
         effective_acolyte_building_id=option.building_id,
         effective_acolyte_building_source=source_label,
+    )
+
+
+def _with_customs_house_taxation_fields(
+    action: FullTurnAction,
+    *,
+    option: _CustomsHouseTaxationOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        taxation_majority_building_id=option.building_id,
+        taxation_majority_building_source=source_label,
     )
 
 
@@ -5237,6 +5502,67 @@ def _resolved_scriptorium_effective_acolyte_for_action(
 
     return _ResolvedScriptoriumEffectiveAcolyte(
         building_id=_BUILDING_SCRIPTORIUM,
+        source=source,
+    )
+
+
+def _resolved_customs_house_taxation_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedCustomsHouseTaxation | None:
+    fields = (
+        action.taxation_majority_building_id,
+        action.taxation_majority_building_source,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "taxation_majority_building_id and taxation_majority_building_source must be set together."
+        )
+
+    building_id = action.taxation_majority_building_id
+    source_label = action.taxation_majority_building_source
+    assert building_id is not None
+    assert source_label is not None
+
+    if action.resolution is not TurnResolutionType.TAXATION:
+        raise TransitionValidationError(
+            "Customs House Taxation modifier can only be used with taxation actions."
+        )
+
+    if building_id != _BUILDING_CUSTOMS_HOUSE:
+        raise TransitionValidationError(
+            "Only Customs House is supported for taxation_majority_building fields."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_CUSTOMS_HOUSE,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                "Own-active Customs House Taxation modifier must set source=own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "Customs House Taxation modifier source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError("Customs House is unavailable in current state.")
+
+    return _ResolvedCustomsHouseTaxation(
+        building_id=_BUILDING_CUSTOMS_HOUSE,
         source=source,
     )
 
@@ -6113,6 +6439,24 @@ def _scriptorium_effective_acolyte_bonus_event(
     )
 
 
+def _customs_house_taxation_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=_BUILDING_CUSTOMS_HOUSE,
+            action="taxation_majority_override",
+            duty_scope="occupied_duty_tiles",
+            virtual_only=True,
+        ),
+    )
+
+
 def _pulpit_workforce_bonus_event(
     *,
     actor: PlayerId,
@@ -6442,6 +6786,50 @@ def _duty_strength_for_position(
     return duty_strength(player_count, opponent_counts)
 
 
+def _has_customs_house_taxation_majority(
+    *,
+    player: PlayerId,
+    duty_position: int,
+    sowed_vector: tuple[int, ...],
+    relation_context: _DutyRelationModifierContext,
+    config: GameConfig,
+) -> bool:
+    if not relation_context.uses_customs_house:
+        return False
+    if player != relation_context.acting_player:
+        return False
+    if duty_position not in config.duty_positions():
+        return False
+    return sowed_vector[duty_position] > 0
+
+
+def _taxation_duty_strength_for_position(
+    state: GameState,
+    config: GameConfig,
+    *,
+    player: PlayerId,
+    duty_position: int,
+    sowed_vector: tuple[int, ...],
+    relation_context: _DutyRelationModifierContext,
+) -> DutyStrength:
+    if _has_customs_house_taxation_majority(
+        player=player,
+        duty_position=duty_position,
+        sowed_vector=sowed_vector,
+        relation_context=relation_context,
+        config=config,
+    ):
+        return DutyStrength.MAJORITY
+    return _duty_strength_for_position(
+        state,
+        config,
+        player=player,
+        duty_position=duty_position,
+        sowed_vector=sowed_vector,
+        relation_context=relation_context,
+    )
+
+
 def _invariant_workforce_details(state: GameState) -> dict[str, int]:
     details: dict[str, int] = {}
     total = 0
@@ -6501,7 +6889,7 @@ def _taxation_bonus_resource_types(
             continue
         if config.duty_category_for_position(duty_position) == "taxation":
             continue
-        strength = _duty_strength_for_position(
+        strength = _taxation_duty_strength_for_position(
             state,
             config,
             player=player,
