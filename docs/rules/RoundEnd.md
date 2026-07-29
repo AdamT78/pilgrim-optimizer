@@ -26,7 +26,9 @@ Implemented now:
 - Legacy game-end trigger when Ship returns to NW pilgrimage site after 26 completed rounds
 - Merchant movement once per round (not once per turn)
 - Trade-route income after round-end Merchant movement
+- Confession Box temporary piety choices at start-player-selection time
 - Deterministic start-player selection placeholder policy (`highest_piety_selects_self`)
+  using effective piety when Confession Box bonuses are present
 
 Deferred:
 
@@ -53,10 +55,12 @@ For round-ending turns, event order is:
 8. `GAME_END` (fourth pilgrimage-site season end, or deferred NW full-loop fallback after the Alms block; if emitted, pipeline stops)
 9. `MERCHANT_ADVANCE` (only if game not over)
 10. `TRADE_ROUTE_INCOME` (one event per gaining player; emitted only when Merchant resource exists and trade route count is positive)
-11. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
-12. `START_PLAYER_SELECTION` (only if game not over)
-13. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
-14. `INVARIANT_CHECK`
+11. `BUILDING_HIRED` (only when Confession Box is hired during start-player phase)
+12. `CONFESSION_BOX_BONUS` (one per Confession Box user/hirer in start-player turn order)
+13. `START_PLAYER_TIE_BREAK` (only when highest effective-piety tie occurs)
+14. `START_PLAYER_SELECTION` (only if game not over)
+15. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
+16. `INVARIANT_CHECK`
 
 Guild interaction (v5.3):
 
@@ -87,6 +91,22 @@ Trade-route income phase interaction:
 - excess cap remains the first round-end phase
 - no second excess cap runs after trade-route income
 - trade-route income can therefore move stone/wheat above 6 until the next round-end cap
+
+## Start-player Confession Box
+
+At the beginning of start-player selection:
+
+- players are evaluated in start-player turn order from current `start_player`
+- each player may decline or use/hire Confession Box if available by source priority
+  (`own_active`, then `opponent_active_hire`, then `live_market_hire`)
+- hired uses pay current Merchant resource (`1`) to bank/owner before bonus event
+- each use grants temporary `+2` effective piety for this start-player decision only
+
+Temporary piety notes:
+
+- effective piety can exceed the piety-track cap
+- real piety and piety-track VP are unchanged
+- no temporary piety state persists into later rounds
 
 ## Trade-route income
 
@@ -152,10 +172,12 @@ Legacy NW return game end remains:
 
 At round end (if game not over):
 
-1. find highest piety among real players
-2. if unique highest piety: that player is deciding player
-3. if tie: choose deciding player clockwise away from current `start_player`
-4. placeholder policy: deciding player selects themselves as next start player
-5. set both `start_player` and next `active_player` to that selected player
+1. resolve any selected Confession Box uses/hires in start-player turn order
+2. compute effective piety = real piety + temporary Confession Box bonus (`+2` when used/hired)
+3. find highest effective piety among real players
+4. if unique highest effective piety: that player is deciding player
+5. if tie: choose deciding player clockwise away from current `start_player`
+6. placeholder policy: deciding player selects themselves as next start player
+7. set both `start_player` and next `active_player` to that selected player
 
 This is deterministic scaffolding until full player choice is modelled.

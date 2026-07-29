@@ -43,7 +43,7 @@ def test_building_status_includes_known_implemented_and_partial() -> None:
     assert status_by_id["wagon_yard"] == "implemented"
     assert status_by_id["scriptorium"] == "implemented"
     assert status_by_id["chapter_house"] == "partial"
-    assert status_by_id["confession_box"] == "deferred"
+    assert status_by_id["confession_box"] == "implemented"
     assert status_by_id["reliquary"] == "deferred"
     assert status_by_id["bank"] == "deferred"
 

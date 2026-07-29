@@ -6,10 +6,18 @@ from dataclasses import dataclass, field
 
 from pilgrim.model.config import GameConfig
 from pilgrim.model.duties import duty_category_at_position
-from pilgrim.model.enums import ActionType, DutyEffect, TurnResolutionType, position_name
+from pilgrim.model.enums import ActionType, DutyEffect, PlayerId, TurnResolutionType, position_name
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
 
 _ALLOCATION_SOURCE_PREFIX = "abbey"
+
+
+@dataclass(frozen=True, slots=True)
+class StartPlayerConfessionBoxUse:
+    """One start-player-phase Confession Box use/hire selection."""
+
+    player: PlayerId
+    source: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +72,7 @@ class FullTurnAction:
     merchant_advance_building_source: str | None = None
     workforce_move_building_id: str | None = None
     workforce_move_building_source: str | None = None
+    start_player_confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...] = ()
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -269,6 +278,12 @@ def action_id(action: GameAction) -> str:
             f":workforce_move_building:{action.workforce_move_building_id or 'none'}"
             f":from:{action.workforce_move_building_source or 'unknown'}"
         )
+    if action.start_player_confession_box_uses:
+        confession_box_suffix = ":start_player_confession_box:" + ",".join(
+            f"{use.player.name.lower()}@{use.source}" for use in action.start_player_confession_box_uses
+        )
+    else:
+        confession_box_suffix = ""
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -283,7 +298,7 @@ def action_id(action: GameAction) -> str:
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{conversion_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
-        f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
+        f"{merchant_advance_suffix}{workforce_move_suffix}{confession_box_suffix}{hire_suffix}"
     )
 
 
@@ -532,6 +547,23 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             " | hire building: pulpit "
             f"from {action.workforce_move_building_source}"
         )
+    if action.start_player_confession_box_uses:
+        confession_parts: list[str] = []
+        for use in action.start_player_confession_box_uses:
+            player_label = use.player.name.lower()
+            if use.source == "own_active":
+                confession_parts.append(
+                    f"{player_label} uses own active Confession Box"
+                )
+            elif use.source == "market":
+                confession_parts.append(
+                    f"{player_label} hires Confession Box from market"
+                )
+            else:
+                confession_parts.append(
+                    f"{player_label} hires Confession Box from {use.source}"
+                )
+        summary += " | start-player Confession Box: " + "; ".join(confession_parts)
     if action.hired_building_id == "mill":
         required_wheat = 0
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:

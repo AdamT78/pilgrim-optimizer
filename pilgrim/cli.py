@@ -901,6 +901,26 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"from {trade_routes} {route_label}"
         )
 
+    if event.event_type is EventType.CONFESSION_BOX_BONUS:
+        player = str(details.get("player", actor_name))
+        source = str(details.get("source", "unknown"))
+        base_piety = int(details.get("base_piety", 0))
+        temporary_bonus = int(details.get("temporary_bonus", 0))
+        effective_piety = int(details.get("effective_piety", base_piety + temporary_bonus))
+        source_text = (
+            "own active Confession Box"
+            if source == "own_active"
+            else (
+                "Confession Box from market"
+                if source == "market"
+                else f"Confession Box from {source}"
+            )
+        )
+        return (
+            f"{event_name}: {player} used {source_text}; temporary piety "
+            f"{base_piety} + {temporary_bonus} = {effective_piety} for start-player selection"
+        )
+
     if event.event_type is EventType.TRADE_ROUTE_INCOME_SKIPPED:
         return f"{event_name}: trade routes not implemented"
 

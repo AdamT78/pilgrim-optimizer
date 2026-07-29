@@ -174,6 +174,7 @@ class EventType(Enum):
     SPECIAL_ACTIVITY_BONUS = "special_activity_bonus"
     DUMMY_ACOLYTE_MOVE = "dummy_acolyte_move"
     MERCHANT_ADVANCE = "merchant_advance"
+    CONFESSION_BOX_BONUS = "confession_box_bonus"
     EXCESS_RESOURCE_CAP = "excess_resource_cap"
     EXCESS_CHECK = "excess_check"
     EXCESS_DISCARD = "excess_discard"

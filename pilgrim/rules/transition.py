@@ -10,6 +10,7 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     SetupSowAction,
+    StartPlayerConfessionBoxUse,
     action_id,
     readable_route,
 )
@@ -96,7 +97,12 @@ from pilgrim.rules.special_activities import (
     special_activity_capacity,
     special_activity_count,
 )
-from pilgrim.rules.timing import advance_timing, resolve_round_end, resolve_season_end
+from pilgrim.rules.timing import (
+    advance_timing,
+    is_round_end_for_state,
+    resolve_round_end,
+    resolve_season_end,
+)
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -312,6 +318,7 @@ _BUILDING_CUSTOMS_HOUSE = "customs_house"
 _BUILDING_GUILD = "guild"
 _BUILDING_PULPIT = "pulpit"
 _BUILDING_WAGON_YARD = "wagon_yard"
+_BUILDING_CONFESSION_BOX = "confession_box"
 _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS: frozenset[str] = frozenset(
     {
         _BUILDING_GRAIN_STORE,
@@ -430,7 +437,26 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             ):
                 if library_action not in actions:
                     actions.append(library_action)
-    return tuple(actions)
+    if not is_round_end_for_state(state, config.timing):
+        return tuple(actions)
+
+    if not _confession_box_is_selected_in_state(state):
+        return tuple(actions)
+
+    expanded_actions: list[GameAction] = []
+    for candidate in actions:
+        if not isinstance(candidate, FullTurnAction):
+            if candidate not in expanded_actions:
+                expanded_actions.append(candidate)
+            continue
+        for variant in _start_player_confession_box_variants_for_action(
+            state=state,
+            config=config,
+            action=candidate,
+        ):
+            if variant not in expanded_actions:
+                expanded_actions.append(variant)
+    return tuple(expanded_actions)
 
 
 def _legal_full_turn_actions_for_state(
@@ -1218,6 +1244,146 @@ def _legal_full_turn_actions_for_state(
     return tuple(actions)
 
 
+def _confession_box_is_selected_in_state(state: GameState) -> bool:
+    if _BUILDING_CONFESSION_BOX in state.building_market:
+        return True
+    for player_id in (PlayerId(index) for index in range(state.player_count)):
+        slots = state.player_state(player_id).player_board_slots
+        if _BUILDING_CONFESSION_BOX in slots.active_buildings:
+            return True
+        if _BUILDING_CONFESSION_BOX in slots.donated_buildings:
+            return True
+    return False
+
+
+def _start_player_confession_box_variants_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    action: FullTurnAction,
+) -> tuple[FullTurnAction, ...]:
+    base_action = _with_start_player_confession_box_uses(action, ())
+    preview_result = _apply_full_turn_action(state, base_action, config)
+    if preview_result.state.game_over:
+        return (base_action,)
+    if not any(
+        event.event_type is EventType.START_PLAYER_SELECTION for event in preview_result.events
+    ):
+        return (base_action,)
+
+    ordered_players = _start_player_turn_order(
+        start_player=state.start_player,
+        player_count=state.player_count,
+    )
+    use_combinations = _legal_start_player_confession_box_use_combinations(
+        state=preview_result.state,
+        config=config,
+        ordered_players=ordered_players,
+    )
+    return tuple(
+        _with_start_player_confession_box_uses(base_action, use_combination)
+        for use_combination in use_combinations
+    )
+
+
+def _start_player_turn_order(
+    *,
+    start_player: PlayerId,
+    player_count: int,
+) -> tuple[PlayerId, ...]:
+    return tuple(
+        PlayerId((int(start_player) + offset) % player_count)
+        for offset in range(player_count)
+    )
+
+
+def _legal_start_player_confession_box_use_combinations(
+    *,
+    state: GameState,
+    config: GameConfig,
+    ordered_players: tuple[PlayerId, ...],
+) -> tuple[tuple[StartPlayerConfessionBoxUse, ...], ...]:
+    combinations: list[tuple[StartPlayerConfessionBoxUse, ...]] = []
+
+    def _recurse(
+        index: int,
+        state_after_payments: GameState,
+        selected: tuple[StartPlayerConfessionBoxUse, ...],
+    ) -> None:
+        if index >= len(ordered_players):
+            combinations.append(selected)
+            return
+        player_id = ordered_players[index]
+        _recurse(index + 1, state_after_payments, selected)
+        source = building_ability_source(
+            state_after_payments,
+            config,
+            acting_player=player_id,
+            building_key=_BUILDING_CONFESSION_BOX,
+        )
+        if not source.usable:
+            return
+        if not _confession_box_source_is_live_for_start_player_phase(
+            state_after_payments,
+            source,
+        ):
+            return
+        source_label = _confession_box_source_label_for_ability_source(source)
+        use = StartPlayerConfessionBoxUse(player=player_id, source=source_label)
+        if source.source_type == "own_active":
+            _recurse(index + 1, state_after_payments, (*selected, use))
+            return
+        if source.source_type not in ("live_market_hire", "opponent_active_hire"):
+            return
+        try:
+            paid_state, _payment = apply_building_hire_payment(
+                state_after_payments,
+                acting_player=player_id,
+                source=source,
+            )
+        except ValueError:
+            return
+        _recurse(index + 1, paid_state, (*selected, use))
+
+    _recurse(0, state, ())
+    return tuple(combinations)
+
+
+def _with_start_player_confession_box_uses(
+    action: FullTurnAction,
+    uses: tuple[StartPlayerConfessionBoxUse, ...],
+) -> FullTurnAction:
+    return replace(action, start_player_confession_box_uses=uses)
+
+
+def _confession_box_source_label_for_ability_source(source: BuildingAbilitySource) -> str:
+    if source.source_type == "own_active":
+        return "own_active"
+    if source.source_type == "live_market_hire":
+        return "market"
+    if source.source_type == "opponent_active_hire":
+        if source.owner is None:
+            raise TransitionValidationError(
+                "Confession Box opponent-hire source is missing owner label."
+            )
+        return source.owner
+    raise TransitionValidationError(
+        f"Confession Box source cannot be used from {source.source_type}."
+    )
+
+
+def _confession_box_source_is_live_for_start_player_phase(
+    state: GameState,
+    source: BuildingAbilitySource,
+) -> bool:
+    if source.source_type not in {"own_active", "opponent_active_hire"}:
+        return True
+    live_round = building_live_round(state, _BUILDING_CONFESSION_BOX)
+    if live_round is None:
+        return True
+    return is_building_live(state, _BUILDING_CONFESSION_BOX)
+
+
 def _apply_setup_sow_action(
     state: GameState,
     action: SetupSowAction,
@@ -1353,6 +1519,12 @@ def _apply_full_turn_action(
     if state.game_over:
         raise TransitionValidationError("Cannot apply action: game is already over.")
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
+    if action.start_player_confession_box_uses and not is_round_end_for_state(
+        state, config.timing
+    ):
+        raise TransitionValidationError(
+            "Confession Box start-player directives are only valid on round-ending actions."
+        )
 
     player = state.active_player
     turn_start_resources = state.player_state(player).resources
@@ -3836,6 +4008,7 @@ def _apply_full_turn_action(
             actor=player,
             action_id=transition_action_id,
             completed_round_number=completed_round_number,
+            action=action,
         )
         events.extend(round_end_events)
         if not next_state.game_over:
@@ -3885,6 +4058,7 @@ def _resolve_round_end_phases(
     actor: PlayerId,
     action_id: str,
     completed_round_number: int,
+    action: FullTurnAction,
 ) -> tuple[GameState, tuple[GameEvent, ...]]:
     events: list[GameEvent] = []
     next_state = state
@@ -3929,6 +4103,7 @@ def _resolve_round_end_phases(
     # Legacy full-loop game end still applies, but if the next round is a configured
     # pilgrimage round then that season-end block must resolve before GAME_END.
     if full_loop_nw_return and projected_pilgrimage_site_index is None:
+        _ensure_no_start_player_confession_box_uses_before_game_end(action)
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -3973,6 +4148,7 @@ def _resolve_round_end_phases(
         events.extend(alms_result.events)
         next_state = resolve_season_end(next_state, config.timing)
         if _is_final_season_site(next_state, season_site_index=season_site_index):
+            _ensure_no_start_player_confession_box_uses_before_game_end(action)
             next_state = next_state.with_game_over(True)
             events.append(
                 GameEvent(
@@ -3989,6 +4165,7 @@ def _resolve_round_end_phases(
             return next_state, tuple(events)
 
     if full_loop_nw_return:
+        _ensure_no_start_player_confession_box_uses_before_game_end(action)
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -4036,8 +4213,10 @@ def _resolve_round_end_phases(
     # 7) Start-player placeholder policy.
     next_state, start_player_events, _ = select_next_start_player(
         next_state,
+        config=config,
         actor=actor,
         action_id=action_id,
+        confession_box_uses=action.start_player_confession_box_uses,
     )
     events.extend(start_player_events)
     return next_state, tuple(events)
@@ -4045,6 +4224,16 @@ def _resolve_round_end_phases(
 
 def _pilgrimage_site_index_for_round(state: GameState) -> int | None:
     return _pilgrimage_site_index_for_round_number(state, state.timing.round_number)
+
+
+def _ensure_no_start_player_confession_box_uses_before_game_end(
+    action: FullTurnAction,
+) -> None:
+    if not action.start_player_confession_box_uses:
+        return
+    raise TransitionValidationError(
+        "Confession Box start-player directives are invalid when game ends before start-player selection."
+    )
 
 
 def _pilgrimage_site_index_for_round_number(state: GameState, round_number: int) -> int | None:
