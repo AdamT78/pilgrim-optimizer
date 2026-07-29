@@ -13,6 +13,11 @@ It tracks:
 - deterministic/strategic simplifications
 - deferred or partially implemented choice areas
 
+Related:
+
+- `docs/architecture/search_and_pruning_model.md` for search-contract and branching-pruning
+  details.
+
 ## Core engine model: flattened legal actions
 
 The current engine generally does not prompt choices step-by-step during execution.
