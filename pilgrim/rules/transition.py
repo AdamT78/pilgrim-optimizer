@@ -3897,7 +3897,7 @@ def _resolve_round_end_phases(
     )
     events.extend(excess_events)
 
-    # 2) Ship advance and completed-rounds tracking.
+    # 2) Ship (round-marker) advance and completed-rounds tracking.
     from_ship = next_state.ship_position
     to_ship = advance_ship_position(from_ship, config.ship)
     next_state = next_state.with_ship_position(to_ship)
@@ -3919,8 +3919,16 @@ def _resolve_round_end_phases(
         )
     )
 
-    # Final NW pilgrimage-site return after full 26-round loop ends the game.
-    if ship_at_nw and next_state.completed_rounds >= config.ship.path_length:
+    full_loop_nw_return = ship_at_nw and next_state.completed_rounds >= config.ship.path_length
+    projected_round_after_advance = completed_round_number + 1
+    projected_pilgrimage_site_index = _pilgrimage_site_index_for_round_number(
+        next_state,
+        projected_round_after_advance,
+    )
+
+    # Legacy full-loop game end still applies, but if the next round is a configured
+    # pilgrimage round then that season-end block must resolve before GAME_END.
+    if full_loop_nw_return and projected_pilgrimage_site_index is None:
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -3980,6 +3988,22 @@ def _resolve_round_end_phases(
             )
             return next_state, tuple(events)
 
+    if full_loop_nw_return:
+        next_state = next_state.with_game_over(True)
+        events.append(
+            GameEvent(
+                event_type=EventType.GAME_END,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    reason=(
+                        "ship returned to NW Pilgrimage Site after full 26-round loop"
+                    )
+                ),
+            )
+        )
+        return next_state, tuple(events)
+
     # 5) Merchant advances once at round end.
     if config.merchant.advance_at_round_end:
         from_duty = current_merchant_duty(next_state, config.merchant)
@@ -4020,10 +4044,14 @@ def _resolve_round_end_phases(
 
 
 def _pilgrimage_site_index_for_round(state: GameState) -> int | None:
+    return _pilgrimage_site_index_for_round_number(state, state.timing.round_number)
+
+
+def _pilgrimage_site_index_for_round_number(state: GameState, round_number: int) -> int | None:
     if not state.pilgrimage_rounds:
         return None
-    for index, round_number in enumerate(state.pilgrimage_rounds, start=1):
-        if state.timing.round_number == round_number:
+    for index, pilgrimage_round in enumerate(state.pilgrimage_rounds, start=1):
+        if round_number == pilgrimage_round:
             return index
     return None
 

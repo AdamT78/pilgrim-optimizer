@@ -1,0 +1,74 @@
+{
+  "scenario_id": "round_end_final_pilgrimage_alms_before_game_end_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "setup_metadata": {
+    "generated": true,
+    "seed": 5801,
+    "player_count": 2,
+    "setup_sow_required": false,
+    "setup_timeline": {
+      "pilgrimage_rounds": {
+        "site_1": 6,
+        "site_2": 12,
+        "site_3": 18,
+        "site_4": 26
+      }
+    }
+  },
+  "initial_state": {
+    "active_player": "player_two",
+    "start_player_id": "player_one",
+    "phase": "sow",
+    "merchant_position": 0,
+    "ship_position": 25,
+    "completed_rounds": 25,
+    "game_over": false,
+    "timing": {
+      "absolute_turn": 49,
+      "round_number": 25,
+      "season_number": 3,
+      "turn_in_round": 1
+    },
+    "players": {
+      "player_one": {
+        "piety": 6,
+        "alms_position": 4,
+        "trade_routes_count": 2,
+        "workforce": {
+          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 1,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_two": {
+        "piety": 5,
+        "alms_position": 2,
+        "trade_routes_count": 1,
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      }
+    }
+  }
+}
