@@ -178,6 +178,7 @@ class EventType(Enum):
     EXCESS_CHECK = "excess_check"
     EXCESS_DISCARD = "excess_discard"
     SHIP_ADVANCE = "ship_advance"
+    TRADE_ROUTE_INCOME = "trade_route_income"
     TRADE_ROUTE_INCOME_SKIPPED = "trade_route_income_skipped"
     START_PLAYER_TIE_BREAK = "start_player_tie_break"
     START_PLAYER_SELECTION = "start_player_selection"

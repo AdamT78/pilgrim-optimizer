@@ -34,10 +34,13 @@ class PlayerState:
     victory_points: int = 0
     special_activities: SpecialActivities = field(default_factory=SpecialActivities)
     player_board_slots: PlayerBoardSlots = field(default_factory=PlayerBoardSlots)
+    trade_routes_count: int = 0
 
     def __post_init__(self) -> None:
         if self.piety < 0 or self.victory_points < 0 or self.alms_position < 0:
             raise ValueError("Piety, Alms position, and victory points cannot be negative.")
+        if self.trade_routes_count < 0:
+            raise ValueError("trade_routes_count cannot be negative.")
 
     @property
     def mancala_acolytes(self) -> PlayerVector:

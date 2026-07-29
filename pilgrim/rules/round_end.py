@@ -1,13 +1,15 @@
-"""Round-end phase helpers for excess, trade-route placeholders, and start player."""
+"""Round-end phase helpers for excess, trade-route income, and start player."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
+from pilgrim.model.config import MerchantConfig
 from pilgrim.model.enums import EventType, PlayerId
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState
+from pilgrim.rules.merchant import trade_route_income_resource
 
 EXCESS_RESOURCE_CAP = 6
 START_PLAYER_POLICY = "highest_piety_selects_self"
@@ -71,17 +73,48 @@ def apply_excess_resource_caps(
 def resolve_trade_route_income(
     state: GameState,
     *,
+    merchant_config: MerchantConfig,
     actor: PlayerId,
     action_id: str,
 ) -> tuple[GameState, tuple[GameEvent, ...]]:
-    """No-op placeholder for deferred trade-route income phase."""
-    event = GameEvent(
-        event_type=EventType.TRADE_ROUTE_INCOME_SKIPPED,
-        actor=actor,
-        action_id=action_id,
-        details=make_event_details(reason="trade routes not implemented"),
-    )
-    return state, (event,)
+    """Apply post-merchant trade-route income by current Merchant resource."""
+    resource = trade_route_income_resource(state, merchant_config)
+    if resource is None:
+        return state, ()
+
+    next_state = state
+    events: list[GameEvent] = []
+    for player_id in _real_players(state):
+        player_state = next_state.player_state(player_id)
+        trade_routes_count = player_state.trade_routes_count
+        if trade_routes_count <= 0:
+            continue
+        if resource == "wheat":
+            next_resources = player_state.resources.add(wheat=trade_routes_count)
+        elif resource == "silver":
+            next_resources = player_state.resources.add(silver=trade_routes_count)
+        elif resource == "stone":
+            next_resources = player_state.resources.add(stone=trade_routes_count)
+        else:
+            raise ValueError(f"Unknown trade-route income resource: {resource}.")
+        next_state = next_state.with_player_state(
+            player_id,
+            replace(player_state, resources=next_resources),
+        )
+        events.append(
+            GameEvent(
+                event_type=EventType.TRADE_ROUTE_INCOME,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    player=player_id.name.lower(),
+                    resource=resource,
+                    amount=trade_routes_count,
+                    trade_routes=trade_routes_count,
+                ),
+            )
+        )
+    return next_state, tuple(events)
 
 
 def select_next_start_player(
