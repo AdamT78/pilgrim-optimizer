@@ -22,8 +22,17 @@ def test_building_status_includes_known_implemented_and_partial() -> None:
     rows = audit.collect_building_status_rows()
     status_by_id = {row.building_id: row.status for row in rows}
 
+    assert status_by_id["well"] == "implemented"
+    assert status_by_id["quarry"] == "implemented"
+    assert status_by_id["mint"] == "implemented"
+    assert status_by_id["chapel"] == "implemented"
+    assert status_by_id["infirmary"] == "implemented"
     assert status_by_id["kogge"] == "implemented"
     assert status_by_id["cloisters"] == "implemented"
+    assert status_by_id["dormitory"] == "implemented"
+    assert status_by_id["inquisition"] == "implemented"
+    assert status_by_id["library"] == "implemented"
+    assert status_by_id["mill"] == "implemented"
     assert status_by_id["grain_store"] == "implemented"
     assert status_by_id["indulgences"] == "implemented"
     assert status_by_id["stone_yard"] == "implemented"
@@ -34,6 +43,9 @@ def test_building_status_includes_known_implemented_and_partial() -> None:
     assert status_by_id["wagon_yard"] == "implemented"
     assert status_by_id["scriptorium"] == "implemented"
     assert status_by_id["chapter_house"] == "partial"
+    assert status_by_id["confession_box"] == "deferred"
+    assert status_by_id["reliquary"] == "deferred"
+    assert status_by_id["bank"] == "deferred"
 
 
 def test_branching_rows_are_deterministic_for_representative_subset() -> None:

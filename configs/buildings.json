@@ -30,7 +30,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "chapter_house",
@@ -38,7 +38,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "guild",
@@ -54,7 +54,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "mint",
@@ -62,7 +62,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "quarry",
@@ -70,7 +70,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "well",
@@ -78,7 +78,7 @@
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "brewery",
@@ -94,7 +94,7 @@
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "dormitory",
@@ -102,7 +102,7 @@
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "grain_store",
@@ -126,7 +126,7 @@
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "reliquary",
@@ -166,7 +166,7 @@
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "kogge",
@@ -174,7 +174,7 @@
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "mill",
@@ -182,7 +182,7 @@
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     },
     {
       "id": "pulpit",
