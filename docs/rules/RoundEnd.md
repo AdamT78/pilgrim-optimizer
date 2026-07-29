@@ -188,3 +188,13 @@ At round end (if game not over):
 7. set both `start_player` and next `active_player` to that selected player
 
 This is deterministic scaffolding until full player choice is modelled.
+
+## Official score sheet
+
+Round-end events update `GameState`, and official scoring is derived from that state when needed.
+
+- There is no mutable running "current score" field in `GameState`.
+- Use `python3 -m pilgrim.cli score <scenario>` for current/end-game score snapshots.
+- Confession Box temporary start-player piety bonus is not persisted and is not counted in score.
+
+See `docs/rules/Scoring.md` for implemented and deferred scoring categories.

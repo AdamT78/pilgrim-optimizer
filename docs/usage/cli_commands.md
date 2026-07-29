@@ -47,6 +47,29 @@ Typical output:
 Scenario 'mancala_sandbox_001' is valid.
 ```
 
+## Score sheet snapshot (official scoring)
+
+```bash
+python3 -m pilgrim.cli score scenarios/scoring_basic_breakdown_001.json
+```
+
+What it does right now:
+
+- Loads a scenario state and prints an official score sheet for each real player.
+- Uses the derived scoring model from `GameState` (no mutable running score state).
+- Includes implemented categories:
+  - acolytes in Abbey/City/Duty tiles
+  - piety track VP
+  - Alms table VP
+  - donated buildings VP
+  - resources VP (`(wheat + stone + silver) // 3`)
+- Prints deferred scoring categories separately and excludes them from implemented totals.
+
+Important distinction:
+
+- `score` reports official score-sheet totals.
+- `solve` still reports sandbox evaluation totals for search/debugging.
+
 ## Command 2: List legal actions
 
 ```bash

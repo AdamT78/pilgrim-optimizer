@@ -21,6 +21,7 @@
   representation, and current simplifications/deferred choice areas.
 - `docs/architecture/search_and_pruning_model.md`: search contract and current legal-branch
   pruning/canonicalization rules.
+- `docs/rules/Scoring.md`: official derived score-sheet categories and deferred scoring scope.
 
 ## Search Perspective Model (v0.3)
 
