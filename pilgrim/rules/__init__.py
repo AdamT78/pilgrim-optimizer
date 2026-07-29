@@ -82,6 +82,12 @@ from pilgrim.rules.round_end import (
     resolve_trade_route_income,
     select_next_start_player,
 )
+from pilgrim.rules.scoring import (
+    DEFERRED_SCORING_CATEGORIES,
+    ScoreBreakdown,
+    score_all_players,
+    score_breakdown,
+)
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.special_activities import (
     alms_house_duty_value_bonus_capacity,
@@ -219,6 +225,10 @@ __all__ = [
     "resolve_round_end",
     "resolve_season_end",
     "score_piety",
+    "DEFERRED_SCORING_CATEGORIES",
+    "ScoreBreakdown",
+    "score_all_players",
+    "score_breakdown",
     "trade_route_income_resource",
     "TransitionResult",
     "TransitionValidationError",

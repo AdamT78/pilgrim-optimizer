@@ -1,0 +1,53 @@
+{
+  "scenario_id": "scoring_resources_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "building_market": [],
+    "building_availability": {},
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 2,
+          "silver": 2,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 1,
+          "silver": 1,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      }
+    }
+  }
+}

@@ -31,6 +31,11 @@ from pilgrim.rules.buildings import (
     used_player_board_slots,
 )
 from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
+from pilgrim.rules.scoring import (
+    DEFERRED_SCORING_CATEGORIES,
+    ScoreBreakdown,
+    score_all_players,
+)
 from pilgrim.rules.special_activities import format_special_activities
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.rules.validation import validate_state_invariants
@@ -44,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_parser = subparsers.add_parser("validate", help="Validate a JSON scenario.")
     validate_parser.add_argument("scenario", help="Path to scenario JSON file.")
+
+    score_parser = subparsers.add_parser(
+        "score",
+        help="Print official implemented score breakdown.",
+    )
+    score_parser.add_argument("scenario", help="Path to scenario JSON file.")
 
     legal_parser = subparsers.add_parser("legal-actions", help="List readable legal actions.")
     legal_parser.add_argument("scenario", help="Path to scenario JSON file.")
@@ -116,6 +127,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "validate":
         validate_state_invariants(scenario.state)
         print(f"Scenario '{scenario.scenario_id}' is valid.")
+        return 0
+
+    if args.command == "score":
+        _print_score_sheet(scenario.state, scenario.config, scenario.scenario_id)
         return 0
 
     if args.command == "legal-actions":
@@ -1203,6 +1218,38 @@ def _format_player_state(
 
 def _format_evaluation_breakdown(breakdown: EvaluationBreakdown) -> tuple[str, ...]:
     return format_evaluation_breakdown_lines(breakdown)
+
+
+def _print_score_sheet(state: GameState, config: GameConfig, scenario_id: str) -> None:
+    score_by_player = score_all_players(state, config)
+    print(f"Score sheet for scenario '{scenario_id}'")
+    print()
+    for player_index, (player_id, breakdown) in enumerate(score_by_player.items()):
+        print(player_id.name.lower())
+        for line in _format_score_breakdown_lines(breakdown):
+            print(line)
+        if player_index < len(score_by_player) - 1:
+            print()
+    print()
+    print("Deferred / not yet implemented:")
+    deferred = (
+        next(iter(score_by_player.values())).deferred_categories
+        if score_by_player
+        else DEFERRED_SCORING_CATEGORIES
+    )
+    for category in deferred:
+        print(f"  {category}")
+
+
+def _format_score_breakdown_lines(breakdown: ScoreBreakdown) -> tuple[str, ...]:
+    return (
+        f"  Acolytes in Abbey / City / Duty tiles: {breakdown.acolytes_vp} VP",
+        f"  Piety track: {breakdown.piety_vp} VP",
+        f"  Alms table: {breakdown.alms_vp} VP",
+        f"  Donated buildings: {breakdown.donated_buildings_vp} VP",
+        f"  Resources: {breakdown.resources_vp} VP",
+        f"  Total implemented score: {breakdown.implemented_total} VP",
+    )
 
 
 def _annotate_actions_with_active_players(
