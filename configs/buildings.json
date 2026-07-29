@@ -206,7 +206,7 @@
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
-      "effect_status": "deferred"
+      "effect_status": "implemented"
     }
   ]
 }

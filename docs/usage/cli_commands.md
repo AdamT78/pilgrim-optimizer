@@ -665,6 +665,31 @@ Position mapping used by the current sandbox:
   - `DUTY_RESOLUTION` (Taxation relation can differ from non-Customs-House variant)
   - `TAXATION`
 
+## Wagon Yard Free Hire (v5.7)
+
+- Wagon Yard is available as an optional pre-sow free-hire enabler (not a standalone action):
+  - own active Wagon Yard can hire one eligible live target building for free
+  - target source may be `market` or `player_two`/other opponent id
+  - Wagon Yard itself is not hireable for its own effect in this scope
+- Action summary examples:
+  - `... | use building: wagon_yard to hire brewery from market for free | use building: brewery to sell 1 wheat for 2 silver | ...`
+  - `... | use building: wagon_yard to hire brewery from player_two for free | use building: brewery to sell 1 wheat for 2 silver | ...`
+- Verbose apply output now uses explicit free-hire wording:
+  - `BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard`
+  - `BUILDING_HIRED: player_one hired Brewery from player_two for free with Wagon Yard`
+- No hire payment line appears for Wagon Yard free hire:
+  - no bank payment
+  - no opponent-owner payment
+- Merchant interaction:
+  - Wagon Yard free-hire variants remain legal when Merchant is on Taxation (`resource = none`)
+  - Wagon Yard free-hire does not require Merchant affordability/resource checks
+- Current supported free-hire targets in engine scope:
+  - Grain Store, Indulgences, Stone Yard, Brewery, Guild, Pulpit, Scriptorium, Customs House
+- Event ordering for free-hire target effects remains pre-sow:
+  - `BUILDING_HIRED` (free via Wagon Yard)
+  - target `BUILDING_BONUS` (and conversion `RESOURCE_DELTA` where applicable)
+  - `SOWING`
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - A dedicated registry tracks movement/turn-phase building modifiers:
