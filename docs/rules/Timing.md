@@ -32,7 +32,8 @@ After every full turn:
 
 1. `TURN_ADVANCE` is emitted.
 2. If this turn does **not** end the round, processing goes directly to `INVARIANT_CHECK`.
-3. If this turn ends the round, run the full round-end pipeline (see `docs/rules/RoundEnd.md`).
+3. If this turn ends the round, run the full round-end pipeline (see `docs/rules/RoundEnd.md`),
+   including Merchant advance then trade-route income before start-player selection.
 
 Key correction in v1.0:
 
@@ -69,3 +70,4 @@ Game end can occur during round-end processing:
 - Confession Box round-end behavior and temporary piety bonuses.
 - Start-player free choice by the deciding player (placeholder policy currently auto-selects self).
 - Spatial/hex movement details for Ship and map geometry.
+- Spatial-map trade-route creation (current runtime only consumes per-player `trade_routes_count`).

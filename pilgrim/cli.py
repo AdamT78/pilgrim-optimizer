@@ -890,6 +890,17 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             text += f"; cause={str(cause)}"
         return text
 
+    if event.event_type is EventType.TRADE_ROUTE_INCOME:
+        player = str(details.get("player", actor_name))
+        resource = str(details.get("resource", "unknown"))
+        amount = int(details.get("amount", 0))
+        trade_routes = int(details.get("trade_routes", 0))
+        route_label = "trade route" if trade_routes == 1 else "trade routes"
+        return (
+            f"{event_name}: {player} gained {resource} +{amount} "
+            f"from {trade_routes} {route_label}"
+        )
+
     if event.event_type is EventType.TRADE_ROUTE_INCOME_SKIPPED:
         return f"{event_name}: trade routes not implemented"
 

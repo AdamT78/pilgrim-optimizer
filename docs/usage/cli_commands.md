@@ -121,7 +121,7 @@ What it does right now:
 - Applies exactly one transition.
 - In non-verbose mode, prints selected action and next active player.
 - In verbose mode, prints transition events, resulting state summary, and `Root-player evaluation after action`.
-- Verbose apply may also include round-end pipeline events (`EXCESS_RESOURCE_CAP`, `SHIP_ADVANCE`, `ROUND_ADVANCE`, `ALMS_SEASON_END`, `ALMS_SEASON_REWARD`, `ALMS_RESET`, `MERCHANT_ADVANCE`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
+- Verbose apply may also include round-end pipeline events (`EXCESS_RESOURCE_CAP`, `SHIP_ADVANCE`, `ROUND_ADVANCE`, `ALMS_SEASON_END`, `ALMS_SEASON_REWARD`, `ALMS_RESET`, `MERCHANT_ADVANCE`, `TRADE_ROUTE_INCOME`, `START_PLAYER_SELECTION`, etc.) when boundaries are crossed.
 - Verbose state summary always includes a `Setup` section (`required`, `complete`, `completed by`).
 
 Why this matters:
@@ -322,9 +322,18 @@ Position mapping used by the current sandbox:
   - `ALMS_SEASON_END`
   - `ALMS_SEASON_REWARD`
   - `ALMS_RESET`
+  - `TRADE_ROUTE_INCOME` (after `MERCHANT_ADVANCE`, one event per gaining player)
   - `START_PLAYER_SELECTION` (and optional tie-break event)
   - `GAME_END` at fourth season-end pilgrimage site (and still on legacy NW full-loop return)
 - `game_over: true` is shown in verbose state summaries, and legal-action generation returns no actions.
+
+Trade-route income notes:
+
+- each player has scalar `trade_routes_count` on state (default `0`)
+- at round end, after `MERCHANT_ADVANCE`, each player gains
+  `trade_routes_count * current_merchant_resource`
+- if Merchant resource is `none` (Taxation), no `TRADE_ROUTE_INCOME` event is emitted
+- no extra resource-cap pass runs after this income; capped resources may exceed cap until next round-end
 
 ## Building Catalogue and Slots (v1.1)
 

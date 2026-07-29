@@ -258,6 +258,7 @@ def _player_state_from_dict(
         victory_points=int(raw.get("victory_points", 0)),
         special_activities=_special_activities_from_dict(raw.get("special_activities")),
         player_board_slots=_player_board_slots_from_dict(raw.get("player_board_slots")),
+        trade_routes_count=int(raw.get("trade_routes_count", 0)),
     )
 
 

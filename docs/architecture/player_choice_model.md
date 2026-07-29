@@ -60,6 +60,7 @@ Status labels used here:
 | Alms threshold effects (rows 2/4/6) | Threshold rewards may create optional or strategic choices | Current rewards auto-resolve if possible; row-4 abbey->city can be strategically sensitive | Step 2/6: Deterministic simplification; Step 4: Strategic simplification | Consider explicit optionality for row-4 effect |
 | Season-end Alms reward | Winner may move abbey acolyte to Alms table or decline/forfeit | Mandatory if possible: auto-move exactly 1 abbey acolyte; if none, reward forfeits | Deterministic simplification | Add explicit yes/no season-end choice if desired |
 | Round-end start-player selection | Highest-piety decider chooses next start player | Highest piety determines deciding player; tie-break clockwise from current `start_player`; placeholder policy: decider selects themselves | Strategic simplification | Add explicit selected-player choice dimension |
+| Round-end trade-route income | No direct player choice at resolution time; outcome depends on prior route network and Merchant marker | Deterministic phase after round-end `MERCHANT_ADVANCE`; each player gains `trade_routes_count` of the Merchant's current resource, with no income when Merchant resource is `none` | Deterministic simplification | Spatial route creation remains deferred; current milestone consumes scalar `trade_routes_count` only |
 | Future building-specific choices | Future buildings may add source/target/amount/timing option sets | Tracked building-by-building as they are implemented | Deferred / not implemented | Extend this inventory per building milestone |
 
 ## Detailed notes by choice area
@@ -284,6 +285,8 @@ choice shape is not yet fully audited in this document.
 
 - Season-end Alms reward is currently mandatory if possible.
 - Round-end start-player selection currently self-selects the deciding player.
+- Round-end trade-route income currently depends on scalar `trade_routes_count`; map-based
+  trade-route creation is still deferred.
 - Duty Value intensity is generally maximal-use when legal.
 - Allocation move-space semantics (especially partial-use strategic options) should be audited.
 - Alms row-4 effect may warrant explicit optionality.

@@ -67,6 +67,7 @@ from pilgrim.rules.ordination import (
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
+    resolve_trade_route_income,
     select_next_start_player,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
@@ -3999,7 +4000,16 @@ def _resolve_round_end_phases(
             )
         )
 
-    # 6) Start-player placeholder policy.
+    # 6) Trade-route income from Merchant's current resource.
+    next_state, trade_route_income_events = resolve_trade_route_income(
+        next_state,
+        merchant_config=config.merchant,
+        actor=actor,
+        action_id=action_id,
+    )
+    events.extend(trade_route_income_events)
+
+    # 7) Start-player placeholder policy.
     next_state, start_player_events, _ = select_next_start_player(
         next_state,
         actor=actor,

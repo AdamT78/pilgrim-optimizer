@@ -554,6 +554,25 @@ def test_cli_give_alms_and_season_end_contracts_are_clear(capsys) -> None:
     )
 
 
+def test_cli_round_end_trade_route_income_contract_orders_after_merchant(capsys) -> None:
+    output, _index = _apply_verbose_output(
+        "scenarios/round_end_trade_route_income_basic_001.json",
+        predicate=lambda action: action.resolution is TurnResolutionType.TITHE,
+        capsys=capsys,
+    )
+
+    assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" in output
+    _assert_in_order(
+        output,
+        [
+            "MERCHANT_ADVANCE:",
+            "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route",
+            "START_PLAYER_SELECTION:",
+            "TURN_ADVANCE:",
+        ],
+    )
+
+
 def test_cli_building_availability_contract_shows_owned_live_scriptorium(capsys) -> None:
     output, _index = _apply_verbose_output(
         "scenarios/scriptorium_active_majority_selected_duty_001.json",

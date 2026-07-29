@@ -1,4 +1,4 @@
-# Round End (v4.5 Sandbox Scope)
+# Round End (v5.8 Sandbox Scope)
 
 ## Implemented scope
 
@@ -24,12 +24,12 @@ Implemented now:
 - Game-end trigger on fourth season-end pilgrimage site
 - Legacy game-end trigger when Ship returns to NW pilgrimage site after 26 completed rounds
 - Merchant movement once per round (not once per turn)
+- Trade-route income after round-end Merchant movement
 - Deterministic start-player selection placeholder policy (`highest_piety_selects_self`)
 
 Deferred:
 
 - Dummy-acolyte automatic season-end movement in transition pipeline
-- Real trade-route income
 - Player choice for who the deciding player selects as next start player
 - Spatial board geometry and map-space calculations
 
@@ -51,10 +51,11 @@ For round-ending turns, event order is:
 7. `ALMS_RESET` (all Alms markers to row 0)
 8. `GAME_END` (fourth pilgrimage-site season end; if emitted, pipeline stops)
 9. `MERCHANT_ADVANCE` (only if game not over)
-10. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
-11. `START_PLAYER_SELECTION` (only if game not over)
-12. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
-13. `INVARIANT_CHECK`
+10. `TRADE_ROUTE_INCOME` (one event per gaining player; emitted only when Merchant resource exists and trade route count is positive)
+11. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
+12. `START_PLAYER_SELECTION` (only if game not over)
+13. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
+14. `INVARIANT_CHECK`
 
 Guild interaction (v5.3):
 
@@ -63,6 +64,7 @@ Guild interaction (v5.3):
   building-modifier window with `cause=guild`.
 - If that same turn is also round-ending, round-end still performs its normal single
   Merchant advance later in this sequence.
+- Trade-route income then uses the Merchant resource after that round-end Merchant advance.
 - Result: a round-ending Guild turn can emit two Merchant advances total:
   - one pre-sowing from Guild
   - one in round-end step 9
@@ -78,6 +80,22 @@ At round end, each real player is checked:
 Example event:
 
 `EXCESS_RESOURCE_CAP: player_one stone 8 -> 6; wheat 9 -> 6`
+
+Trade-route income phase interaction:
+
+- excess cap remains the first round-end phase
+- no second excess cap runs after trade-route income
+- trade-route income can therefore move stone/wheat above 6 until the next round-end cap
+
+## Trade-route income
+
+Round-end trade-route income resolves immediately after `MERCHANT_ADVANCE`:
+
+- each real player gains `trade_routes_count` of the Merchant's current resource
+- if Merchant resource is `none` (for example Taxation), no trade-route income is emitted
+- if `trade_routes_count` is `0`, that player receives no income event
+- this milestone uses scalar `trade_routes_count` on `PlayerState`; spatial route creation remains
+  deferred
 
 ## Ship marker model
 
