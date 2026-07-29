@@ -6,8 +6,8 @@ import pytest
 
 from pilgrim.cli import main
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction
-from pilgrim.model.enums import TurnResolutionType
+from pilgrim.model.actions import FullTurnAction, StartPlayerConfessionBoxUse
+from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.rules.transition import legal_actions
 
 
@@ -569,6 +569,30 @@ def test_cli_round_end_trade_route_income_contract_orders_after_merchant(capsys)
             "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route",
             "START_PLAYER_SELECTION:",
             "TURN_ADVANCE:",
+        ],
+    )
+
+
+def test_cli_confession_box_start_player_contract_hire_bonus_and_selection_order(capsys) -> None:
+    output, _index = _apply_verbose_output(
+        "scenarios/confession_box_hire_market_start_player_001.json",
+        predicate=lambda action: action.start_player_confession_box_uses
+        == (
+            StartPlayerConfessionBoxUse(
+                player=PlayerId.PLAYER_TWO,
+                source="market",
+            ),
+        ),
+        capsys=capsys,
+    )
+
+    assert "CONFESSION_BOX_BONUS:" in output
+    _assert_in_order(
+        output,
+        [
+            "BUILDING_HIRED: player_two hired Confession Box from market; paid wheat 1 to bank",
+            "CONFESSION_BOX_BONUS: player_two used Confession Box from market; temporary piety 9 + 2 = 11 for start-player selection",
+            "START_PLAYER_SELECTION: player_two selected player_two as next start player",
         ],
     )
 

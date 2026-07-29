@@ -837,9 +837,44 @@ Player-board slot validation enforces:
 - all listed ids exist in catalogue
 - used slots cannot exceed 6
 
+## Confession Box (v5.9)
+
+Confession Box is a round-end start-player modifier.
+
+Timing:
+
+- resolves at the start of start-player selection after `MERCHANT_ADVANCE` and
+  `TRADE_ROUTE_INCOME`
+- each real player may decline or use/hire Confession Box in start-player turn order
+  from the current `start_player`
+
+Sources:
+
+- own active Confession Box (`own_active`): free
+- opponent active Confession Box: hire from owner
+- live market Confession Box: hire from bank
+
+Temporary piety model:
+
+- grants temporary `+2` piety only for deciding who selects next start player
+- effective piety can exceed the normal piety-track max
+- real `piety` value and piety-track VP do not change
+- temporary bonus is not stored in `GameState`
+
+Hire/payment constraints:
+
+- hire cost is `1` of current Merchant resource at start-player-selection time
+- if Merchant resource is `none`, hired Confession Box is unavailable
+- own active source still works when Merchant resource is `none`
+
+Selection policy remains unchanged in this milestone:
+
+- highest effective piety decides
+- ties break clockwise from current `start_player`
+- deciding player still auto-selects themselves as next `start_player`
+
 ## Deferred in later milestones
 
 - building purchase/hire actions
-- Confession Box and all other building effects
 - Cardinal favor gain logic
 - trade-route/trail/building-system interactions
