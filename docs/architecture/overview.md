@@ -59,7 +59,11 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - The canonical model is `EvaluationBreakdown` (player identity + scoring components + total).
 - Current sandbox-only formula:
   - `victory_points + piety_track_vp + alms_table_vp + resource_total`
-- Search optimizes `EvaluationBreakdown.total` for the configured root player.
+- Exact search now supports selectable leaf-scoring objectives:
+  - `sandbox` (default)
+  - `implemented_official_score`
+  - `sandbox_with_official_terminal`
+- Search objective selection does not change rules transitions or official scoring rules.
 - CLI `solve --verbose` and `apply --verbose` use the same evaluation breakdown formatter.
 - This is still an early proxy objective, not full Pilgrim final scoring.
 

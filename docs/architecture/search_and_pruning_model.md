@@ -24,6 +24,31 @@ Practical implication:
 - if a branch should be deterministic and replayable, it must be expressed in `apply_action`
   state transitions and events
 
+## Search objective selection (v5.11)
+
+Exact search now supports selectable leaf-scoring objectives via `solve_exact(..., objective=...)`.
+
+Supported objectives:
+
+- `sandbox` (default): uses sandbox evaluation from `evaluate_player(...).total`
+- `implemented_official_score`: uses official score-sheet implemented total from
+  `score_breakdown(...).implemented_total`
+- `sandbox_with_official_terminal`: uses sandbox during play and switches to implemented official
+  score only when `state.game_over` is true
+
+Objective selection changes only leaf scoring. It does not change:
+
+- legal action generation
+- transition/apply behavior
+- pruning rules
+- round-end/start-player policy
+
+Important distinction:
+
+- official score sheet remains owned by rules scoring (`pilgrim/rules/scoring.py`)
+- sandbox evaluation remains owned by evaluation (`pilgrim/evaluation/breakdown.py`)
+- search objective chooses which scoring model to apply at leaf states
+
 ## FullTurnAction expansion model
 
 Normal play search branches over complete `FullTurnAction` variants.
