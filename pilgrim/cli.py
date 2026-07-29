@@ -710,6 +710,11 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
                 f"{event_name}: scriptorium added +1 effective acolyte "
                 "on occupied Duty tiles this turn"
             )
+        if building == "customs_house" and action_name == "taxation_majority_override":
+            return (
+                f"{event_name}: customs_house claimed Taxation majority "
+                "on occupied Duty tiles this turn"
+            )
         if building == "guild" and action_name == "merchant_advance":
             return f"{event_name}: guild moved Merchant clockwise +1"
         if building == "pulpit" and action_name == "workforce_move":

@@ -55,6 +55,8 @@ class FullTurnAction:
     building_conversion_amount: int | None = None
     effective_acolyte_building_id: str | None = None
     effective_acolyte_building_source: str | None = None
+    taxation_majority_building_id: str | None = None
+    taxation_majority_building_source: str | None = None
     merchant_advance_building_id: str | None = None
     merchant_advance_building_source: str | None = None
     workforce_move_building_id: str | None = None
@@ -226,6 +228,16 @@ def action_id(action: GameAction) -> str:
     else:
         effective_acolyte_suffix = ""
     if (
+        action.taxation_majority_building_id is not None
+        or action.taxation_majority_building_source is not None
+    ):
+        taxation_majority_suffix = (
+            f":taxation_majority_building:{action.taxation_majority_building_id or 'none'}"
+            f":from:{action.taxation_majority_building_source or 'unknown'}"
+        )
+    else:
+        taxation_majority_suffix = ""
+    if (
         action.merchant_advance_building_id is not None
         or action.merchant_advance_building_source is not None
     ):
@@ -255,6 +267,7 @@ def action_id(action: GameAction) -> str:
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{conversion_suffix}{effective_acolyte_suffix}"
+        f"{taxation_majority_suffix}"
         f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
     )
 
@@ -367,6 +380,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             " | use building: scriptorium "
             "for +1 effective acolyte on occupied Duty tiles"
         )
+    if action.taxation_majority_building_id == "customs_house":
+        route_summary += (
+            " | use building: customs_house "
+            "for Taxation majority on occupied Duty tiles"
+        )
     if action.merchant_advance_building_id == "guild":
         route_summary += " | use building: guild to move merchant +1"
     if action.workforce_move_building_id == "pulpit":
@@ -461,6 +479,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             " | hire building: scriptorium "
             f"from {action.effective_acolyte_building_source}"
+        )
+    if (
+        action.taxation_majority_building_id == "customs_house"
+        and action.taxation_majority_building_source is not None
+        and action.taxation_majority_building_source != "own_active"
+    ):
+        summary += (
+            " | hire building: customs_house "
+            f"from {action.taxation_majority_building_source}"
         )
     if (
         action.merchant_advance_building_id == "guild"

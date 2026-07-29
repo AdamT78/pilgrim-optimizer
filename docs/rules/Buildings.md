@@ -535,6 +535,55 @@ Event semantics before sowing:
 - own active source: `BUILDING_BONUS` -> `SOWING`
 - `BUILDING_BONUS`: `scriptorium added +1 effective acolyte on occupied Duty tiles this turn`
 
+## Customs House Taxation majority override (v5.6)
+
+Customs House now applies as an optional pre-sow Taxation-specific majority override attached to a
+normal full-turn action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Customs House -> free
+- live market Customs House -> hire from bank
+- opponent active Customs House -> hire from owner
+
+Customs House rule:
+
+- applies only when resolving `taxation`
+- for this action only, any occupied Duty tile for the acting player counts as majority-controlled
+  for Taxation purposes
+- this includes:
+  - selected Taxation Duty relation/value
+  - Taxation step-2 bonus checks on other occupied Duty tiles
+- no real acolytes are placed
+
+Virtual-override scope:
+
+- affects Taxation majority checks only
+- does not affect non-Taxation actions, sowing pickup/placement, recall, workforce totals, dummy
+  counts, or conservation
+- unlike Scriptorium, this is not an effective-acolyte count boost; it is a Taxation-only majority
+  override on occupied Duty tiles
+
+Timing:
+
+- if Customs House is hired, hire payment resolves first
+- Customs House Taxation-majority context resolves next
+- sowing and selected Duty resolve after that
+
+Availability and gating:
+
+- own active Customs House works even when Merchant resource is `none`
+- hired Customs House sources are unavailable when Merchant resource is `none`
+- hired Customs House sources require payment affordability before effect
+- donated/not-live Customs House remains unavailable
+- Customs House variants are generated for Taxation actions only
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> `SOWING`
+- `BUILDING_BONUS`: `customs_house claimed Taxation majority on occupied Duty tiles this turn`
+
 ## Building turn-modifier registry (v3.3-v3.9)
 
 Five movement/turn-phase buildings are classified in a dedicated metadata registry:

@@ -269,6 +269,7 @@ These should be added to this document as each building is implemented/audited.
 | Guild | yes | own / market / opponent | move Merchant +1 | fixed | pre-sow modifier; can combine with normal duty flow |
 | Pulpit | yes | own / market / opponent | move serf Village -> Abbey | fixed `1` | free workforce move; independent modifier |
 | Scriptorium | yes | own / market / opponent | `+1` effective acolyte on occupied Duty tiles | fixed | virtual relation modifier; affects selected duty and Taxation majority checks |
+| Customs House | yes | own / market / opponent | Taxation majority override on occupied Duty tiles | fixed | virtual Taxation-only majority control; selected Taxation + Taxation bonus checks |
 | Kogge | yes | own / market / opponent | route enablement | fixed effect | route modifier shape |
 | Cloisters | yes | own / market / opponent | route skip location | selected location | route modifier shape |
 | Infirmary | yes | own / market / opponent | duty-value bonus contexts | fixed bonus shape | affects Allocation/Ordination contexts |
