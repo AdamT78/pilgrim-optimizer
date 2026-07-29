@@ -475,6 +475,11 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         building_id = str(details.get("building_id", "")).strip()
         hired_label = building_name if building_name else building_id
         source = str(details.get("source", "unknown"))
+        if details.get("free_with_wagon_yard") is True:
+            return (
+                f"{event_name}: {actor_name} hired {hired_label} from {source} "
+                "for free with Wagon Yard"
+            )
         payee = str(details.get("payee", "unknown"))
         resource = str(details.get("resource", "none"))
         amount = int(details.get("amount", 0))

@@ -176,6 +176,47 @@ def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order(capsys) 
     )
 
 
+def test_cli_wagon_yard_legal_actions_contract_labels_free_hire_target(capsys) -> None:
+    scenario_path = "scenarios/wagon_yard_active_free_hire_market_brewery_001.json"
+    output = _run_cli(["legal-actions", scenario_path], capsys)
+    wagon_lines = _matching_lines(
+        output,
+        contains="use building: wagon_yard to hire brewery from market for free",
+    )
+
+    assert wagon_lines
+    assert all("use building: brewery to sell 1 wheat for 2 silver" in line for line in wagon_lines)
+
+
+def test_cli_wagon_yard_apply_contract_free_hire_bonus_and_order(capsys) -> None:
+    output, _index = _apply_verbose_output(
+        "scenarios/wagon_yard_active_free_hire_market_brewery_001.json",
+        predicate=lambda action: (
+            action.free_hire_enabler_building_id == "wagon_yard"
+            and action.free_hire_target_building_id == "brewery"
+            and action.free_hire_target_building_source == "market"
+            and action.building_conversion_id == "brewery"
+            and action.resolution is TurnResolutionType.TITHE
+        ),
+        capsys=capsys,
+    )
+
+    assert "BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard" in output
+    assert "BUILDING_BONUS: brewery sold 1 wheat for 2 silver" in output
+    assert "RESOURCE_DELTA: player_one silver +2; wheat -1" in output
+    assert "paid wheat 1 to bank" not in output
+    _assert_in_order(
+        output,
+        [
+            "BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard",
+            "BUILDING_BONUS: brewery sold 1 wheat for 2 silver",
+            "RESOURCE_DELTA: player_one silver +2; wheat -1",
+            "SOWING:",
+            "DUTY_RESOLUTION:",
+        ],
+    )
+
+
 def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
     legal_output = _run_cli(
         ["legal-actions", "scenarios/pulpit_active_move_serf_001.json"],

@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.5 Sandbox Scope)
+# Buildings (v1.9-v5.7 Sandbox Scope)
 
 ## Implemented now
 
@@ -583,6 +583,73 @@ Event semantics before sowing:
 - hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `SOWING`
 - own active source: `BUILDING_BONUS` -> `SOWING`
 - `BUILDING_BONUS`: `customs_house claimed Taxation majority on occupied Duty tiles this turn`
+
+## Wagon Yard free hire (v5.7)
+
+Wagon Yard now applies as an optional pre-sow free-hire enabler attached to a normal full-turn
+action.
+
+Wagon Yard source behavior in this engine scope:
+
+- own active Wagon Yard -> usable
+- live market Wagon Yard -> Wagon Yard effect not generated
+- opponent active Wagon Yard -> Wagon Yard effect not generated
+- donated/not-live Wagon Yard -> unavailable
+
+Target selection rule:
+
+- choose exactly one eligible live target building
+- eligible target source:
+  - live market building
+  - opponent active building
+- ineligible target source:
+  - acting player's own building
+  - donated building
+  - not-live/future building
+  - Wagon Yard itself
+
+Current supported free-hire target effects:
+
+- Grain Store
+- Indulgences
+- Stone Yard
+- Brewery
+- Guild
+- Pulpit
+- Scriptorium
+- Customs House
+
+Payment behavior:
+
+- Wagon Yard target hire cost is always `0`
+- no bank payment is made
+- no opponent-owner payment is made
+- target effect resolves exactly as normal after source validation, but without hire payment
+
+Merchant interaction:
+
+- Wagon Yard free hire ignores Merchant resource and Merchant position
+- Wagon Yard free-hire target variants remain legal when Merchant is on Taxation (`resource = none`)
+
+Timing:
+
+- `BUILDING_HIRED` (free Wagon Yard wording) for selected target
+- target building `BUILDING_BONUS` (if any)
+- any target conversion `RESOURCE_DELTA` (if any)
+- `SOWING` and selected Duty resolution
+
+Example event line:
+
+- `BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard`
+
+Conservative composition scope in this milestone:
+
+- supported shape: own active Wagon Yard + exactly one target building effect
+- deferred/pruned:
+  - Wagon Yard hired for its own effect
+  - Wagon Yard targeting Wagon Yard
+  - nested hire chains (for example hire Wagon Yard, then free-hire another building)
+  - Wagon Yard + additional same-turn paid-hire building effects
 
 ## Building turn-modifier registry (v3.3-v3.9)
 

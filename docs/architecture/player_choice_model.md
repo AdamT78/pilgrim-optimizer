@@ -112,6 +112,8 @@ Current implemented shapes include:
 - Guild: fixed `Merchant +1` pre-sow modifier
 - Pulpit: fixed `1 serf Village -> Abbey` pre-sow modifier
 - Scriptorium: fixed virtual `+1 effective acolyte` relation modifier on occupied Duty tiles
+- Customs House: fixed Taxation-only majority override modifier on occupied Duty tiles
+- Wagon Yard: fixed free-hire enabler with explicit target building/source choice
 
 ### 5) Selected Duty tile after sowing
 
@@ -270,6 +272,7 @@ These should be added to this document as each building is implemented/audited.
 | Pulpit | yes | own / market / opponent | move serf Village -> Abbey | fixed `1` | free workforce move; independent modifier |
 | Scriptorium | yes | own / market / opponent | `+1` effective acolyte on occupied Duty tiles | fixed | virtual relation modifier; affects selected duty and Taxation majority checks |
 | Customs House | yes | own / market / opponent | Taxation majority override on occupied Duty tiles | fixed | virtual Taxation-only majority control; selected Taxation + Taxation bonus checks |
+| Wagon Yard | yes | own active only (enabler); target source: market/opponent | free-hire one eligible live target building | fixed one target | no hire payment; ignores Merchant resource/position; nested hire chains deferred |
 | Kogge | yes | own / market / opponent | route enablement | fixed effect | route modifier shape |
 | Cloisters | yes | own / market / opponent | route skip location | selected location | route modifier shape |
 | Infirmary | yes | own / market / opponent | duty-value bonus contexts | fixed bonus shape | affects Allocation/Ordination contexts |

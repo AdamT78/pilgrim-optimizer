@@ -57,6 +57,9 @@ class FullTurnAction:
     effective_acolyte_building_source: str | None = None
     taxation_majority_building_id: str | None = None
     taxation_majority_building_source: str | None = None
+    free_hire_enabler_building_id: str | None = None
+    free_hire_target_building_id: str | None = None
+    free_hire_target_building_source: str | None = None
     merchant_advance_building_id: str | None = None
     merchant_advance_building_source: str | None = None
     workforce_move_building_id: str | None = None
@@ -238,6 +241,18 @@ def action_id(action: GameAction) -> str:
     else:
         taxation_majority_suffix = ""
     if (
+        action.free_hire_enabler_building_id is not None
+        or action.free_hire_target_building_id is not None
+        or action.free_hire_target_building_source is not None
+    ):
+        free_hire_suffix = (
+            f":free_hire_enabler:{action.free_hire_enabler_building_id or 'none'}"
+            f":target:{action.free_hire_target_building_id or 'none'}"
+            f":target_source:{action.free_hire_target_building_source or 'unknown'}"
+        )
+    else:
+        free_hire_suffix = ""
+    if (
         action.merchant_advance_building_id is not None
         or action.merchant_advance_building_source is not None
     ):
@@ -267,7 +282,7 @@ def action_id(action: GameAction) -> str:
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{conversion_suffix}{effective_acolyte_suffix}"
-        f"{taxation_majority_suffix}"
+        f"{taxation_majority_suffix}{free_hire_suffix}"
         f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
     )
 
@@ -319,6 +334,16 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         route_summary += (
             f" | skip {position_name(action.sow_route_omitted_location, positions)} "
             "with cloisters"
+        )
+    if (
+        action.free_hire_enabler_building_id == "wagon_yard"
+        and action.free_hire_target_building_id is not None
+        and action.free_hire_target_building_source is not None
+    ):
+        route_summary += (
+            " | use building: wagon_yard to hire "
+            f"{action.free_hire_target_building_id} "
+            f"from {action.free_hire_target_building_source} for free"
         )
     if (
         action.building_conversion_id == "grain_store"

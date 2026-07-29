@@ -629,6 +629,38 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 - Conservative composition in this milestone:
   - mixed Customs House + other pre-sow hire-order-sensitive modifiers remain deferred.
 
+## Wagon Yard Free Hire (v5.7)
+
+- Transition/runtime wiring now supports Wagon Yard as an optional pre-sow free-hire enabler.
+- Wagon Yard source behavior in this scope:
+  - own active Wagon Yard is usable
+  - market/opponent Wagon Yard does not generate Wagon Yard effect variants
+  - donated/not-live Wagon Yard is unavailable
+- Wagon Yard target behavior:
+  - choose one eligible live target building from:
+    - live market
+    - opponent active
+  - target cannot be:
+    - acting player's own building
+    - donated or not live
+    - Wagon Yard itself
+- Implemented target-effect support in this milestone:
+  - Grain Store, Indulgences, Stone Yard, Brewery, Guild, Pulpit, Scriptorium, Customs House
+- Merchant interaction:
+  - Wagon Yard free hire ignores Merchant resource/position
+  - variants remain legal when Merchant is on Taxation (`resource=none`)
+- Payment semantics:
+  - selected target hire cost is `0`
+  - no bank payment and no opponent-owner payment
+- Apply-time ordering for Wagon Yard free-hire target actions:
+  - `BUILDING_HIRED` (`... for free with Wagon Yard`)
+  - target building `BUILDING_BONUS` (and conversion `RESOURCE_DELTA` where applicable)
+  - `SOWING`
+  - `DUTY_RESOLUTION` and later normal turn events
+- Conservative composition in this milestone:
+  - supported shape is own active Wagon Yard + exactly one target building effect
+  - nested hire chains and mixed Wagon Yard + additional paid-hire modifier paths are deferred
+
 ## Building Turn-Modifier Registry (v3.3-v3.9)
 
 - Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for

@@ -233,6 +233,25 @@ class _ResolvedCustomsHouseTaxation:
 
 
 @dataclass(frozen=True, slots=True)
+class _WagonYardFreeHireOption:
+    """One Wagon Yard free-hire target option with temporary active target state."""
+
+    state: GameState
+    target_building_id: str
+    target_source: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedWagonYardFreeHire:
+    """Validated Wagon Yard free-hire directive for one target building/source."""
+
+    enabler_building_id: str
+    target_building_id: str
+    target_source: str
+    target_was_temporary_added: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _PulpitWorkforceMoveOption:
     """Pre-sow workforce-move variant for one legal Pulpit use."""
 
@@ -291,6 +310,19 @@ _BUILDING_SCRIPTORIUM = "scriptorium"
 _BUILDING_CUSTOMS_HOUSE = "customs_house"
 _BUILDING_GUILD = "guild"
 _BUILDING_PULPIT = "pulpit"
+_BUILDING_WAGON_YARD = "wagon_yard"
+_WAGON_YARD_SUPPORTED_TARGET_BUILDINGS: frozenset[str] = frozenset(
+    {
+        _BUILDING_GRAIN_STORE,
+        _BUILDING_INDULGENCES,
+        _BUILDING_STONE_YARD,
+        _BUILDING_BREWERY,
+        _BUILDING_GUILD,
+        _BUILDING_PULPIT,
+        _BUILDING_SCRIPTORIUM,
+        _BUILDING_CUSTOMS_HOUSE,
+    }
+)
 _SIMPLE_BONUS_BUILDING_BY_ACTION: dict[TurnResolutionType, str] = {
     TurnResolutionType.PRODUCE_WHEAT: "well",
     TurnResolutionType.PRODUCE_STONE: "quarry",
@@ -354,6 +386,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             allow_pulpit_modifier=start_turn_option is None,
             allow_scriptorium_modifier=start_turn_option is None,
             allow_customs_house_modifier=start_turn_option is None,
+            allow_wagon_yard_modifier=start_turn_option is None,
             uses_scriptorium_effective_counts=False,
             uses_customs_house_taxation_override=False,
         )
@@ -384,6 +417,9 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             if action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE:
                 # Defer mixed Customs House+Library hire-order interactions for this milestone.
                 continue
+            if action.free_hire_enabler_building_id == _BUILDING_WAGON_YARD:
+                # Defer mixed Wagon Yard+Library hire-order interactions for this milestone.
+                continue
             for library_action in _library_suffix_variants_for_action(
                 original_state=state,
                 state_for_turn=start_turn_state,
@@ -404,6 +440,7 @@ def _legal_full_turn_actions_for_state(
     allow_pulpit_modifier: bool,
     allow_scriptorium_modifier: bool,
     allow_customs_house_modifier: bool,
+    allow_wagon_yard_modifier: bool,
     uses_scriptorium_effective_counts: bool,
     uses_customs_house_taxation_override: bool,
 ) -> tuple[GameAction, ...]:
@@ -1039,6 +1076,7 @@ def _legal_full_turn_actions_for_state(
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
+                allow_wagon_yard_modifier=False,
                 uses_scriptorium_effective_counts=True,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1065,6 +1103,7 @@ def _legal_full_turn_actions_for_state(
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
+                allow_wagon_yard_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1089,6 +1128,7 @@ def _legal_full_turn_actions_for_state(
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
+                allow_wagon_yard_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=True,
             ):
@@ -1104,6 +1144,46 @@ def _legal_full_turn_actions_for_state(
                 )
                 if customs_house_action not in actions:
                     actions.append(customs_house_action)
+    if allow_wagon_yard_modifier:
+        wagon_yard_options = _legal_wagon_yard_free_hire_options(state, config)
+        for wagon_yard_option in wagon_yard_options:
+            for action in _legal_full_turn_actions_for_state(
+                wagon_yard_option.state,
+                config,
+                allow_guild_modifier=(
+                    wagon_yard_option.target_building_id == _BUILDING_GUILD
+                ),
+                allow_pulpit_modifier=(
+                    wagon_yard_option.target_building_id == _BUILDING_PULPIT
+                ),
+                allow_scriptorium_modifier=(
+                    wagon_yard_option.target_building_id == _BUILDING_SCRIPTORIUM
+                ),
+                allow_customs_house_modifier=(
+                    wagon_yard_option.target_building_id == _BUILDING_CUSTOMS_HOUSE
+                ),
+                allow_wagon_yard_modifier=False,
+                uses_scriptorium_effective_counts=False,
+                uses_customs_house_taxation_override=False,
+            ):
+                if not isinstance(action, FullTurnAction):
+                    continue
+                if not _wagon_yard_action_uses_target_building(
+                    action,
+                    target_building_id=wagon_yard_option.target_building_id,
+                ):
+                    continue
+                if not _wagon_yard_action_is_supported_composition(
+                    action,
+                    target_building_id=wagon_yard_option.target_building_id,
+                ):
+                    continue
+                wagon_yard_action = _with_wagon_yard_free_hire_fields(
+                    action,
+                    option=wagon_yard_option,
+                )
+                if wagon_yard_action not in actions:
+                    actions.append(wagon_yard_action)
     if allow_guild_modifier:
         guild_options = _legal_guild_merchant_advance_options(state, config)
         if guild_options:
@@ -1120,6 +1200,7 @@ def _legal_full_turn_actions_for_state(
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
+                allow_wagon_yard_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1326,6 +1407,28 @@ def _apply_full_turn_action(
                 actor=player,
                 action_id=transition_action_id,
                 relocation=start_turn_relocation,
+                config=config,
+            )
+        )
+
+    wagon_yard_free_hire = _resolved_wagon_yard_free_hire_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if wagon_yard_free_hire is not None:
+        state_for_sow, _ = _state_with_temporary_active_building(
+            state_for_sow,
+            player=player,
+            building_id=wagon_yard_free_hire.target_building_id,
+        )
+        pre_sowing_events.append(
+            _wagon_yard_free_hire_event(
+                actor=player,
+                action_id=transition_action_id,
+                target_building_id=wagon_yard_free_hire.target_building_id,
+                target_source=wagon_yard_free_hire.target_source,
                 config=config,
             )
         )
@@ -1611,6 +1714,13 @@ def _apply_full_turn_action(
         duty_relation_context = replace(
             duty_relation_context,
             uses_customs_house=True,
+        )
+
+    if wagon_yard_free_hire is not None and wagon_yard_free_hire.target_was_temporary_added:
+        state_for_sow = _state_without_temporary_active_building(
+            state_for_sow,
+            player=player,
+            building_id=wagon_yard_free_hire.target_building_id,
         )
 
     player_vector = state_for_sow.player_vector(player)
@@ -2030,6 +2140,69 @@ def _apply_full_turn_action(
             if has_scriptorium_effective_modifier:
                 raise TransitionValidationError(
                     "Combining Scriptorium and Customs House pre-sow building modifiers in one action is deferred."
+                )
+        free_hire_fields = (
+            action.free_hire_enabler_building_id,
+            action.free_hire_target_building_id,
+            action.free_hire_target_building_source,
+        )
+        free_hire_field_count = sum(field is not None for field in free_hire_fields)
+        if free_hire_field_count not in (0, len(free_hire_fields)):
+            raise TransitionValidationError(
+                "free_hire_enabler_building_id, free_hire_target_building_id, and free_hire_target_building_source must be set together."
+            )
+        has_wagon_yard_free_hire_modifier = free_hire_field_count == len(free_hire_fields)
+        if has_wagon_yard_free_hire_modifier:
+            if action.free_hire_enabler_building_id != _BUILDING_WAGON_YARD:
+                raise TransitionValidationError(
+                    "Only Wagon Yard is supported for free_hire_enabler_building_id."
+                )
+            target_building_id = action.free_hire_target_building_id
+            target_source = action.free_hire_target_building_source
+            assert target_building_id is not None
+            assert target_source is not None
+            if (
+                target_building_id not in _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS
+                or target_building_id == _BUILDING_WAGON_YARD
+            ):
+                raise TransitionValidationError(
+                    "Wagon Yard free-hire target building is unsupported."
+                )
+            if target_source in ("own_active", _player_label(player)):
+                raise TransitionValidationError(
+                    "Wagon Yard free-hire target source cannot be own active building."
+                )
+            opponent_labels = {_player_label(opponent) for opponent in _opponents(state, player)}
+            if target_source != "market" and target_source not in opponent_labels:
+                raise TransitionValidationError(
+                    "Wagon Yard free-hire target source must be market or an opponent id."
+                )
+            if not _wagon_yard_own_active_is_usable(state, config):
+                raise TransitionValidationError("Wagon Yard is unavailable in current state.")
+            legal_target_sources = set(
+                _wagon_yard_target_sources_for_building(
+                    state,
+                    config,
+                    target_building_id=target_building_id,
+                )
+            )
+            if target_source not in legal_target_sources:
+                raise TransitionValidationError(
+                    "Wagon Yard free-hire target source is unavailable in current state."
+                )
+            if not _wagon_yard_action_uses_target_building(
+                action,
+                target_building_id=target_building_id,
+            ):
+                raise TransitionValidationError(
+                    "Wagon Yard free-hire action must use the selected target building effect."
+                )
+            if not _wagon_yard_action_is_supported_composition(
+                action,
+                target_building_id=target_building_id,
+            ):
+                raise TransitionValidationError(
+                    "Combining Wagon Yard free-hire with additional hired/modifier effects is deferred."
                 )
         workforce_move_fields = (
             action.workforce_move_building_id,
@@ -4817,6 +4990,37 @@ def _legal_customs_house_taxation_options(
     )
 
 
+def _legal_wagon_yard_free_hire_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_WagonYardFreeHireOption, ...]:
+    if not _wagon_yard_own_active_is_usable(state, config):
+        return ()
+
+    options: list[_WagonYardFreeHireOption] = []
+    for target_building_id in sorted(_WAGON_YARD_SUPPORTED_TARGET_BUILDINGS):
+        if target_building_id == _BUILDING_WAGON_YARD:
+            continue
+        for target_source in _wagon_yard_target_sources_for_building(
+            state,
+            config,
+            target_building_id=target_building_id,
+        ):
+            borrowed_state, _temporarily_added = _state_with_temporary_active_building(
+                state,
+                player=state.active_player,
+                building_id=target_building_id,
+            )
+            options.append(
+                _WagonYardFreeHireOption(
+                    state=borrowed_state,
+                    target_building_id=target_building_id,
+                    target_source=target_source,
+                )
+            )
+    return tuple(options)
+
+
 def _legal_pulpit_workforce_move_options(
     state: GameState,
     config: GameConfig,
@@ -4884,6 +5088,114 @@ def _state_after_guild_merchant_advance_for_legal_generation(
     return state_after_hire.with_merchant_position(next_merchant_position)
 
 
+def _wagon_yard_own_active_is_usable(
+    state: GameState,
+    config: GameConfig,
+) -> bool:
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_WAGON_YARD,
+    )
+    if source.source_type != "own_active" or not source.usable:
+        return False
+    if (
+        building_live_round(state, _BUILDING_WAGON_YARD) is not None
+        and not is_building_live(state, _BUILDING_WAGON_YARD)
+    ):
+        return False
+    return True
+
+
+def _wagon_yard_target_sources_for_building(
+    state: GameState,
+    config: GameConfig,
+    *,
+    target_building_id: str,
+) -> tuple[str, ...]:
+    if target_building_id not in _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS:
+        return ()
+    if target_building_id == _BUILDING_WAGON_YARD:
+        return ()
+
+    player_slots = state.player_state(state.active_player).player_board_slots
+    if (
+        target_building_id in player_slots.active_buildings
+        or target_building_id in player_slots.donated_buildings
+    ):
+        return ()
+    if any(
+        target_building_id in state.player_state(candidate).player_board_slots.donated_buildings
+        for candidate in (PlayerId(index) for index in range(state.player_count))
+    ):
+        return ()
+
+    sources: list[str] = []
+    if (
+        target_building_id in state.building_market
+        and is_building_live(state, target_building_id)
+    ):
+        sources.append("market")
+
+    for opponent in _opponents(state, state.active_player):
+        opponent_slots = state.player_state(opponent).player_board_slots
+        if target_building_id not in opponent_slots.active_buildings:
+            continue
+        if (
+            building_live_round(state, target_building_id) is not None
+            and not is_building_live(state, target_building_id)
+        ):
+            continue
+        sources.append(_player_label(opponent))
+    return tuple(sources)
+
+
+def _state_with_temporary_active_building(
+    state: GameState,
+    *,
+    player: PlayerId,
+    building_id: str,
+) -> tuple[GameState, bool]:
+    player_state = state.player_state(player)
+    if building_id in player_state.player_board_slots.active_buildings:
+        return state, False
+    updated_slots = replace(
+        player_state.player_board_slots,
+        active_buildings=(*player_state.player_board_slots.active_buildings, building_id),
+    )
+    return (
+        state.with_player_state(
+            player,
+            replace(player_state, player_board_slots=updated_slots),
+        ),
+        True,
+    )
+
+
+def _state_without_temporary_active_building(
+    state: GameState,
+    *,
+    player: PlayerId,
+    building_id: str,
+) -> GameState:
+    player_state = state.player_state(player)
+    if building_id not in player_state.player_board_slots.active_buildings:
+        return state
+    updated_slots = replace(
+        player_state.player_board_slots,
+        active_buildings=tuple(
+            current_building
+            for current_building in player_state.player_board_slots.active_buildings
+            if current_building != building_id
+        ),
+    )
+    return state.with_player_state(
+        player,
+        replace(player_state, player_board_slots=updated_slots),
+    )
+
+
 def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
     return (
         action.sow_route_building_id is None
@@ -4901,6 +5213,9 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.free_hire_enabler_building_id is None
+        and action.free_hire_target_building_id is None
+        and action.free_hire_target_building_source is None
     )
 
 
@@ -4920,6 +5235,9 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.free_hire_enabler_building_id is None
+        and action.free_hire_target_building_id is None
+        and action.free_hire_target_building_source is None
     )
 
 
@@ -4939,6 +5257,9 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.free_hire_enabler_building_id is None
+        and action.free_hire_target_building_id is None
+        and action.free_hire_target_building_source is None
     )
 
 
@@ -4958,6 +5279,9 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.free_hire_enabler_building_id is None
+        and action.free_hire_target_building_id is None
+        and action.free_hire_target_building_source is None
     )
 
 
@@ -4972,6 +5296,78 @@ def _scriptorium_can_affect_action(action: FullTurnAction) -> bool:
 def _customs_house_can_affect_action(action: FullTurnAction) -> bool:
     """Return True when Customs House can change this action's outcome."""
     return action.resolution is TurnResolutionType.TAXATION
+
+
+def _wagon_yard_action_uses_target_building(
+    action: FullTurnAction,
+    *,
+    target_building_id: str,
+) -> bool:
+    if target_building_id in (
+        _BUILDING_GRAIN_STORE,
+        _BUILDING_INDULGENCES,
+        _BUILDING_STONE_YARD,
+        _BUILDING_BREWERY,
+    ):
+        return (
+            action.building_conversion_id == target_building_id
+            and action.building_conversion_source == "own_active"
+        )
+    if target_building_id == _BUILDING_GUILD:
+        return (
+            action.merchant_advance_building_id == _BUILDING_GUILD
+            and action.merchant_advance_building_source == "own_active"
+        )
+    if target_building_id == _BUILDING_PULPIT:
+        return (
+            action.workforce_move_building_id == _BUILDING_PULPIT
+            and action.workforce_move_building_source == "own_active"
+        )
+    if target_building_id == _BUILDING_SCRIPTORIUM:
+        return (
+            action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM
+            and action.effective_acolyte_building_source == "own_active"
+        )
+    if target_building_id == _BUILDING_CUSTOMS_HOUSE:
+        return (
+            action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE
+            and action.taxation_majority_building_source == "own_active"
+        )
+    return False
+
+
+def _wagon_yard_action_is_supported_composition(
+    action: FullTurnAction,
+    *,
+    target_building_id: str,
+) -> bool:
+    if action.start_turn_building_id is not None or action.end_turn_building_id is not None:
+        return False
+    if action.sow_route_building_id is not None or action.sow_route_secondary_building_id is not None:
+        return False
+    if action.hired_building_id is not None or action.hired_building_source is not None:
+        return False
+
+    if target_building_id != _BUILDING_GUILD and action.merchant_advance_building_id is not None:
+        return False
+    if target_building_id != _BUILDING_PULPIT and action.workforce_move_building_id is not None:
+        return False
+    if target_building_id != _BUILDING_SCRIPTORIUM and action.effective_acolyte_building_id is not None:
+        return False
+    if target_building_id != _BUILDING_CUSTOMS_HOUSE and action.taxation_majority_building_id is not None:
+        return False
+    if (
+        target_building_id
+        not in (
+            _BUILDING_GRAIN_STORE,
+            _BUILDING_INDULGENCES,
+            _BUILDING_STONE_YARD,
+            _BUILDING_BREWERY,
+        )
+        and action.building_conversion_id is not None
+    ):
+        return False
+    return True
 
 
 def _with_guild_merchant_advance_fields(
@@ -5022,6 +5418,19 @@ def _with_customs_house_taxation_fields(
         action,
         taxation_majority_building_id=option.building_id,
         taxation_majority_building_source=source_label,
+    )
+
+
+def _with_wagon_yard_free_hire_fields(
+    action: FullTurnAction,
+    *,
+    option: _WagonYardFreeHireOption,
+) -> FullTurnAction:
+    return replace(
+        action,
+        free_hire_enabler_building_id=_BUILDING_WAGON_YARD,
+        free_hire_target_building_id=option.target_building_id,
+        free_hire_target_building_source=option.target_source,
     )
 
 
@@ -5564,6 +5973,87 @@ def _resolved_customs_house_taxation_for_action(
     return _ResolvedCustomsHouseTaxation(
         building_id=_BUILDING_CUSTOMS_HOUSE,
         source=source,
+    )
+
+
+def _resolved_wagon_yard_free_hire_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedWagonYardFreeHire | None:
+    fields = (
+        action.free_hire_enabler_building_id,
+        action.free_hire_target_building_id,
+        action.free_hire_target_building_source,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "free_hire_enabler_building_id, free_hire_target_building_id, and free_hire_target_building_source must be set together."
+        )
+
+    enabler_building_id = action.free_hire_enabler_building_id
+    target_building_id = action.free_hire_target_building_id
+    target_source = action.free_hire_target_building_source
+    assert enabler_building_id is not None
+    assert target_building_id is not None
+    assert target_source is not None
+
+    if enabler_building_id != _BUILDING_WAGON_YARD:
+        raise TransitionValidationError(
+            "Only Wagon Yard is supported for free_hire_enabler_building_id."
+        )
+    if (
+        target_building_id not in _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS
+        or target_building_id == _BUILDING_WAGON_YARD
+    ):
+        raise TransitionValidationError("Wagon Yard free-hire target building is unsupported.")
+    if target_source in ("own_active", _player_label(player)):
+        raise TransitionValidationError(
+            "Wagon Yard free-hire target source cannot be own active building."
+        )
+    if not _wagon_yard_own_active_is_usable(state, config):
+        raise TransitionValidationError("Wagon Yard is unavailable in current state.")
+
+    legal_sources = set(
+        _wagon_yard_target_sources_for_building(
+            state,
+            config,
+            target_building_id=target_building_id,
+        )
+    )
+    if target_source not in legal_sources:
+        raise TransitionValidationError(
+            "Wagon Yard free-hire target source is unavailable in current state."
+        )
+    if not _wagon_yard_action_uses_target_building(
+        action,
+        target_building_id=target_building_id,
+    ):
+        raise TransitionValidationError(
+            "Wagon Yard free-hire action must use the selected target building effect."
+        )
+    if not _wagon_yard_action_is_supported_composition(
+        action,
+        target_building_id=target_building_id,
+    ):
+        raise TransitionValidationError(
+            "Combining Wagon Yard free-hire with additional hired/modifier effects is deferred."
+        )
+
+    target_was_temporary_added = (
+        target_building_id
+        not in state.player_state(player).player_board_slots.active_buildings
+    )
+    return _ResolvedWagonYardFreeHire(
+        enabler_building_id=_BUILDING_WAGON_YARD,
+        target_building_id=target_building_id,
+        target_source=target_source,
+        target_was_temporary_added=target_was_temporary_added,
     )
 
 
@@ -6218,6 +6708,32 @@ def _building_hired_event(
             payee=payment.payee,
             resource=payment.resource or "none",
             amount=payment.amount,
+        ),
+    )
+
+
+def _wagon_yard_free_hire_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    target_building_id: str,
+    target_source: str,
+    config: GameConfig,
+) -> GameEvent:
+    building_name = config.buildings.name_for_id(target_building_id)
+    return GameEvent(
+        event_type=EventType.BUILDING_HIRED,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building_id=target_building_id,
+            building_name=building_name,
+            source=target_source,
+            payee="none",
+            resource="none",
+            amount=0,
+            free_with_wagon_yard=True,
+            enabler_building=_BUILDING_WAGON_YARD,
         ),
     )
 
