@@ -9,6 +9,7 @@ Normal-round cadence:
 - each real player acts once per round
 - round length equals real player count (`2..4`)
 - round-end pipeline runs only after the last real player turn.
+- the Ship marker is the round marker in engine terms (`SHIP_ADVANCE`).
 
 Setup-sow exception:
 
@@ -44,12 +45,12 @@ For round-ending turns, event order is:
 
 1. `EXCESS_RESOURCE_CAP` (emitted per player only when stone/wheat were actually capped)
 2. `SHIP_ADVANCE`
-3. `GAME_END` (only on final NW return after 26 completed rounds; if emitted, pipeline stops)
+3. `GAME_END` (legacy NW full-loop fallback only when no metadata pilgrimage block is pending for the next round; if emitted, pipeline stops)
 4. `ROUND_ADVANCE`
 5. `ALMS_SEASON_END` (only when the new round matches optional pilgrimage-round metadata)
 6. `ALMS_SEASON_REWARD` (move/forfeit outcome)
 7. `ALMS_RESET` (all Alms markers to row 0)
-8. `GAME_END` (fourth pilgrimage-site season end; if emitted, pipeline stops)
+8. `GAME_END` (fourth pilgrimage-site season end, or deferred NW full-loop fallback after the Alms block; if emitted, pipeline stops)
 9. `MERCHANT_ADVANCE` (only if game not over)
 10. `TRADE_ROUTE_INCOME` (one event per gaining player; emitted only when Merchant resource exists and trade route count is positive)
 11. `START_PLAYER_TIE_BREAK` (only when highest-piety tie occurs)
@@ -142,8 +143,10 @@ Fourth-season game end:
 
 Legacy NW return game end remains:
 
-- if Ship returns to NW pilgrimage site after full 26-round loop, game ends before the
-  round-advance/season-end tail.
+- if Ship returns to NW pilgrimage site after full 26-round loop and no metadata pilgrimage
+  round is pending, game ends immediately as a fallback.
+- if that NW full-loop return coincides with a metadata pilgrimage round, season-end Alms
+  scoring/reset resolves first, then game ends before Merchant/start-player continuation steps.
 
 ## Start player placeholder policy
 

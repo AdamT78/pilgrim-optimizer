@@ -14,7 +14,7 @@ The sandbox tracks timing explicitly and now includes a round-end phase pipeline
 `GameState` adds round-end context fields:
 
 - `start_player`: current holder of the start-player marker
-- `ship_position`: abstract Ship marker position
+- `ship_position`: abstract Ship marker position (the round marker/meeple in engine terms)
 - `completed_rounds`: count of completed rounds
 - `game_over`: blocks future legal actions when true
 
@@ -62,7 +62,8 @@ Game end can occur during round-end processing:
 - condition: Ship returns to NW pilgrimage site after at least 26 completed rounds
 - event: `GAME_END`
 - after this point, legal action generation returns no actions
-- on this final NW season end, Alms still resolves/resets first, then game ends immediately
+- when this NW return also matches a metadata pilgrimage round, Alms resolves/resets first, then
+  game ends immediately
 - dummy acolytes do not move on the final game-ending NW round
 
 ## Deferred
