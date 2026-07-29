@@ -77,42 +77,33 @@ def test_building_catalogue_cost_vp_and_effect_metadata() -> None:
         assert building.stone_cost == building.level
         assert building.donation_vp == expected_vp[building.level]
         assert building.effect_status in {"deferred", "implemented"}
-    grain_store = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "grain_store"
-    )
-    indulgences = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "indulgences"
-    )
-    stone_yard = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "stone_yard"
-    )
-    brewery = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "brewery"
-    )
-    guild = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "guild"
-    )
-    pulpit = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "pulpit"
-    )
-    customs_house = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "customs_house"
-    )
-    wagon_yard = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "wagon_yard"
-    )
-    scriptorium = next(
-        building for building in scenario.config.buildings.catalogue if building.id == "scriptorium"
-    )
-    assert grain_store.effect_status == "implemented"
-    assert indulgences.effect_status == "implemented"
-    assert stone_yard.effect_status == "implemented"
-    assert brewery.effect_status == "implemented"
-    assert guild.effect_status == "implemented"
-    assert pulpit.effect_status == "implemented"
-    assert customs_house.effect_status == "implemented"
-    assert wagon_yard.effect_status == "implemented"
-    assert scriptorium.effect_status == "implemented"
+    status_by_id = {
+        building.id: building.effect_status for building in scenario.config.buildings.catalogue
+    }
+    assert status_by_id["well"] == "implemented"
+    assert status_by_id["quarry"] == "implemented"
+    assert status_by_id["mint"] == "implemented"
+    assert status_by_id["chapel"] == "implemented"
+    assert status_by_id["infirmary"] == "implemented"
+    assert status_by_id["chapter_house"] == "implemented"
+    assert status_by_id["kogge"] == "implemented"
+    assert status_by_id["cloisters"] == "implemented"
+    assert status_by_id["dormitory"] == "implemented"
+    assert status_by_id["inquisition"] == "implemented"
+    assert status_by_id["library"] == "implemented"
+    assert status_by_id["mill"] == "implemented"
+    assert status_by_id["grain_store"] == "implemented"
+    assert status_by_id["indulgences"] == "implemented"
+    assert status_by_id["stone_yard"] == "implemented"
+    assert status_by_id["brewery"] == "implemented"
+    assert status_by_id["guild"] == "implemented"
+    assert status_by_id["pulpit"] == "implemented"
+    assert status_by_id["customs_house"] == "implemented"
+    assert status_by_id["wagon_yard"] == "implemented"
+    assert status_by_id["scriptorium"] == "implemented"
+    assert status_by_id["confession_box"] == "deferred"
+    assert status_by_id["reliquary"] == "deferred"
+    assert status_by_id["bank"] == "deferred"
     assert len(set(ids)) == len(ids)
     assert len(set(names)) == len(names)
 
