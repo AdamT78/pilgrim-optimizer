@@ -1,5 +1,5 @@
 {
-  "scenario_id": "confession_box_owned_temp_piety_above_12_001",
+  "scenario_id": "confession_box_owned_no_outcome_change_pruned_001",
   "root_player_id": 0,
   "opponent_model": {
     "type": "sandbox_active_player_max"
@@ -26,7 +26,7 @@
     },
     "players": {
       "player_one": {
-        "piety": 12,
+        "piety": 4,
         "resources": {
           "stone": 0,
           "silver": 0,
@@ -51,7 +51,7 @@
         }
       },
       "player_two": {
-        "piety": 12,
+        "piety": 10,
         "resources": {
           "stone": 0,
           "silver": 0,

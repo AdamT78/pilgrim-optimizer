@@ -102,6 +102,13 @@ At the beginning of start-player selection:
 - hired uses pay current Merchant resource (`1`) to bank/owner before bonus event
 - each use grants temporary `+2` effective piety for this start-player decision only
 
+Branch-pruning policy for legal action generation:
+
+- no-use Confession Box variant is always retained
+- Confession Box use/hire variants are generated only when the temporary `+2` bonuses
+  can change the resolved next `start_player` under the current deterministic
+  "deciding player selects self" policy
+
 Temporary piety notes:
 
 - effective piety can exceed the piety-track cap

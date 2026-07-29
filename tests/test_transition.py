@@ -149,7 +149,7 @@ def test_acolyte_conservation_after_full_turn_transition() -> None:
 
 
 def test_exact_search_depth_corresponds_to_full_turns() -> None:
-    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    scenario = load_scenario("scenarios/mancala_sandbox_search_smoke_001.json")
     result = solve_exact(scenario.state, scenario.config, depth=3)
     assert isinstance(result.best_score, int)
     assert result.nodes_expanded > 0

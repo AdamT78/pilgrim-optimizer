@@ -29,6 +29,40 @@ def _first_action(actions, predicate):
     return next(action for action in actions if predicate(action))
 
 
+def _confession_uses(actions):
+    return [action.start_player_confession_box_uses for action in actions]
+
+
+def test_confession_box_no_use_variant_remains_legal() -> None:
+    _scenario, actions = _round_ending_tithe_actions(
+        "scenarios/confession_box_owned_start_player_001.json"
+    )
+    assert () in _confession_uses(actions)
+
+
+def test_confession_box_variant_generated_when_bonus_changes_start_player() -> None:
+    _scenario, actions = _round_ending_tithe_actions(
+        "scenarios/confession_box_owned_start_player_001.json"
+    )
+    assert (
+        StartPlayerConfessionBoxUse(player=PlayerId.PLAYER_ONE, source="own_active"),
+    ) in _confession_uses(actions)
+
+
+def test_confession_box_variant_pruned_when_bonus_does_not_change_start_player() -> None:
+    _scenario, actions = _round_ending_tithe_actions(
+        "scenarios/confession_box_owned_no_outcome_change_pruned_001.json"
+    )
+    assert _confession_uses(actions) == [()]
+
+
+def test_hired_confession_box_variant_pruned_when_bonus_does_not_change_start_player() -> None:
+    _scenario, actions = _round_ending_tithe_actions(
+        "scenarios/confession_box_hire_market_no_outcome_change_pruned_001.json"
+    )
+    assert _confession_uses(actions) == [()]
+
+
 def test_temporary_piety_bonus_can_exceed_twelve_and_does_not_persist() -> None:
     scenario, actions = _round_ending_tithe_actions(
         "scenarios/confession_box_owned_temp_piety_above_12_001.json"
@@ -197,6 +231,9 @@ def test_tie_break_uses_effective_piety_after_confession_box_bonus() -> None:
     scenario, actions = _round_ending_tithe_actions(
         "scenarios/confession_box_effective_piety_tie_break_001.json"
     )
+    assert (
+        StartPlayerConfessionBoxUse(player=PlayerId.PLAYER_ONE, source="own_active"),
+    ) in _confession_uses(actions)
     action = _first_action(
         actions,
         lambda candidate: candidate.start_player_confession_box_uses
