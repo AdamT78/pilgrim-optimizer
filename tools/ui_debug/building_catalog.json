@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "color_groups": [
+    { "id": "light_blue", "label": "Light Blue", "level": 1 },
+    { "id": "light_red", "label": "Light Red", "level": 2 },
+    { "id": "light_green", "label": "Light Green", "level": 3 }
+  ],
+  "buildings": [
+    { "id": "confession_box", "name": "Confession Box", "level": 1, "color_group": "light_blue" },
+    { "id": "chapel", "name": "Chapel", "level": 1, "color_group": "light_blue" },
+    { "id": "chapter_house", "name": "Chapter House", "level": 1, "color_group": "light_blue" },
+    { "id": "guild", "name": "Guild", "level": 1, "color_group": "light_blue" },
+    { "id": "infirmary", "name": "Infirmary", "level": 1, "color_group": "light_blue" },
+    { "id": "mint", "name": "Mint", "level": 1, "color_group": "light_blue" },
+    { "id": "quarry", "name": "Quarry", "level": 1, "color_group": "light_blue" },
+    { "id": "well", "name": "Well", "level": 1, "color_group": "light_blue" },
+
+    { "id": "brewery", "name": "Brewery", "level": 2, "color_group": "light_red" },
+    { "id": "cloisters", "name": "Cloisters", "level": 2, "color_group": "light_red" },
+    { "id": "dormitory", "name": "Dormitory", "level": 2, "color_group": "light_red" },
+    { "id": "grain_store", "name": "Grain Store", "level": 2, "color_group": "light_red" },
+    { "id": "indulgences", "name": "Indulgences", "level": 2, "color_group": "light_red" },
+    { "id": "library", "name": "Library", "level": 2, "color_group": "light_red" },
+    { "id": "reliquary", "name": "Reliquary", "level": 2, "color_group": "light_red" },
+    { "id": "stone_yard", "name": "Stone Yard", "level": 2, "color_group": "light_red" },
+
+    { "id": "bank", "name": "Bank", "level": 3, "color_group": "light_green" },
+    { "id": "customs_house", "name": "Customs House", "level": 3, "color_group": "light_green" },
+    { "id": "inquisition", "name": "Inquisition", "level": 3, "color_group": "light_green" },
+    { "id": "kogge", "name": "Kogge", "level": 3, "color_group": "light_green" },
+    { "id": "mill", "name": "Mill", "level": 3, "color_group": "light_green" },
+    { "id": "pulpit", "name": "Pulpit", "level": 3, "color_group": "light_green" },
+    { "id": "scriptorium", "name": "Scriptorium", "level": 3, "color_group": "light_green" },
+    { "id": "wagon_yard", "name": "Wagon Yard", "level": 3, "color_group": "light_green" }
+  ]
+}
