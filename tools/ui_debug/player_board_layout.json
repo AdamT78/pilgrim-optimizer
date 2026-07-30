@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "board": {
+    "width": 373,
+    "height": 361,
+    "view_box": "0 0 373 361",
+    "corner_radius": 12,
+    "background": "#E4D9BC",
+    "stroke": "#B8A97C",
+    "stroke_width": 2
+  },
+  "palette": {
+    "banner_fill": "#F1E7CE",
+    "banner_stroke": "#B8A97C",
+    "panel_fill": "#EFE4C6",
+    "line": "#8B7B4E",
+    "ink": "#3A2F1E",
+    "token_fill": "#FFFFFF",
+    "slot_fill": "#D8CCA9",
+    "slot_stroke": "#A99A6E"
+  },
+  "banners": [
+    { "id": "village", "label": "Village", "x": 36.0, "y": 19.0, "width": 97.0, "height": 22.0 },
+    { "id": "abbey", "label": "Abbey", "x": 143.0, "y": 19.0, "width": 97.0, "height": 22.0 },
+    { "id": "player", "label": "Player: 1", "x": 250.0, "y": 19.0, "width": 97.0, "height": 22.0 }
+  ],
+  "banner_notch": 7.7,
+  "banner_text_offset": 14.9,
+  "token_radius": 6.0,
+  "village_slots": [
+    { "cx": 57.5, "cy": 59.0 },
+    { "cx": 75.5, "cy": 59.0 },
+    { "cx": 93.5, "cy": 59.0 },
+    { "cx": 111.5, "cy": 59.0 },
+    { "cx": 57.5, "cy": 77.0 },
+    { "cx": 75.5, "cy": 77.0 },
+    { "cx": 93.5, "cy": 77.0 },
+    { "cx": 111.5, "cy": 77.0 }
+  ],
+  "abbey_slots": [
+    { "cx": 164.5, "cy": 59.0 },
+    { "cx": 182.5, "cy": 59.0 },
+    { "cx": 200.5, "cy": 59.0 },
+    { "cx": 218.5, "cy": 59.0 },
+    { "cx": 164.5, "cy": 77.0 },
+    { "cx": 182.5, "cy": 77.0 },
+    { "cx": 200.5, "cy": 77.0 },
+    { "cx": 218.5, "cy": 77.0 }
+  ],
+  "resource_radius": 19.0,
+  "resource_count_offset": 13.0,
+  "resources": [
+    { "id": "wheat", "label": "Wheat", "icon": "wheat", "cx": 84.5, "cy": 126.0 },
+    { "id": "stone", "label": "Stone", "icon": "stone", "cx": 191.5, "cy": 126.0 },
+    { "id": "silver", "label": "Silver", "icon": "silver", "cx": 298.5, "cy": 126.0 }
+  ],
+  "hex_radius": 34.0,
+  "special_activity_label_offset": 17.75,
+  "special_activity_line_height": 9.0,
+  "special_activity_token_offset": -14.7,
+  "special_activity_token_spacing": 18.0,
+  "special_activities": [
+    { "id": "fields", "label": "Fields", "cx": 59.0, "cy": 194.4444 },
+    { "id": "road_engineer", "label": "Road Engineer", "cx": 110.0, "cy": 223.8889 },
+    { "id": "stone_mason", "label": "Stone Mason", "cx": 161.0, "cy": 194.4444 },
+    { "id": "alms_house", "label": "Alms House", "cx": 212.0, "cy": 223.8889 },
+    { "id": "engraver", "label": "Engraver", "cx": 263.0, "cy": 194.4444 },
+    { "id": "vestry", "label": "Vestry", "cx": 314.0, "cy": 223.8889 }
+  ],
+  "building_slots": [
+    { "id": "building_slot_1", "cx": 59.0, "cy": 282.7778 },
+    { "id": "building_slot_2", "cx": 110.0, "cy": 312.2222 },
+    { "id": "building_slot_3", "cx": 161.0, "cy": 282.7778 },
+    { "id": "building_slot_4", "cx": 212.0, "cy": 312.2222 },
+    { "id": "building_slot_5", "cx": 263.0, "cy": 282.7778 },
+    { "id": "building_slot_6", "cx": 314.0, "cy": 312.2222 }
+  ],
+  "building_slot_dash_array": "5,3"
+}
