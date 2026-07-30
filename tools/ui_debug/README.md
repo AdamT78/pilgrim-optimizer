@@ -45,3 +45,27 @@ This writes `generated/player_board.html`, which is not committed.
 
 The renderer draws a mock player state (see `default_player_state()`), so it still does not
 connect to `GameState` and still does not implement game rules.
+
+## Generated overview
+
+To build every generated view at once, plus an overview page linking them together:
+
+```bash
+python3 tools/ui_debug/generate_debug_overview.py
+```
+
+This writes:
+
+```text
+tools/ui_debug/generated/building_tiles.html
+tools/ui_debug/generated/player_board.html
+tools/ui_debug/generated/debug_overview.html
+```
+
+Notes:
+
+- `generated/*.html` files are ignored by git; they are local debug artifacts only.
+- The generated links in `index.html` are dead until a generator has been run.
+- The map remains prototype/baseline-only for now; there is no map renderer yet.
+- There is still no `GameState` integration.
+- No gameplay or rules logic belongs in the UI debug layer.
