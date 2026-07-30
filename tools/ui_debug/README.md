@@ -7,6 +7,47 @@ They should be used as visual reference before future renderer extraction.
 
 Future work can extract structured geometry/layout data one prototype at a time while preserving visual parity.
 
+## Source of truth
+
+Each kind of file here has one job, and mixing them up is how this layer starts to drift:
+
+- **Prototype HTML** (`prototypes/*.html`) are visual baselines. Once a prototype lands it is
+  not edited; renderers are judged against it.
+- **Layout/catalog JSON** (`*_layout.json`, `*_catalog.json`) are structured renderer inputs.
+  They describe what to draw, reverse-engineered from the baseline.
+- **Generated HTML** (`generated/*.html`) are local debug artifacts. They are git-ignored,
+  rebuilt on demand, and never hand-edited or committed.
+- **`GameState`** remains the source of truth for gameplay once integration begins.
+- **UI debug renderers are derived views only.** They read data and draw it. They never decide
+  anything about the game.
+
+## Component extraction checklist
+
+The building tiles, player board, and map extractions all worked the same way: reverse-engineer
+the baseline, then reproduce it. None of them redesigned anything. Follow the same steps when
+adding a new component:
+
+1. Add the untouched prototype HTML under `tools/ui_debug/prototypes/`.
+2. Do not alter existing prototype baselines.
+3. Add structured layout/catalog data only after the prototype baseline exists.
+4. Add a deterministic renderer that targets visual parity with the prototype.
+5. Add a generator script that writes to `tools/ui_debug/generated/`.
+6. Keep generated HTML ignored by git.
+7. Update `tools/ui_debug/index.html` with separate baseline and generated links.
+8. Update `tools/ui_debug/generate_debug_overview.py` only after the generated view exists.
+9. Add lightweight tests for file existence, key labels, expected IDs, and generation.
+10. Do not snapshot full generated HTML unless explicitly required.
+11. Do not add `GameState` integration unless explicitly requested.
+12. Do not put gameplay/rules logic in the UI debug layer.
+
+For upcoming boards such as the piety track and the alms board, prefer splitting the work
+across PRs in this order:
+
+1. Add the prototype baseline first.
+2. Verify it opens and looks correct.
+3. Extract the renderer in a separate PR.
+4. Wire it into the generated overview only after renderer parity is acceptable.
+
 ## Building tiles renderer extraction
 
 `prototypes/building_tiles.html` is the untouched visual baseline for the building tiles.
