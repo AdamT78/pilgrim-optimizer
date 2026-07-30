@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "layout": "flat_top_axial",
+  "hex_size": 46.0,
+  "edge_length": 6,
+  "board": {
+    "background": "#000000",
+    "margin": 69.0,
+    "edge_hex_radius": 505.67,
+    "edge_hex_fill": "#8FBF6B",
+    "edge_hex_stroke": "#8FBF6B",
+    "edge_hex_stroke_width": 4
+  },
+  "default_stroke": "#2B2B26",
+  "hidden_edge_stroke": "#B9B9B4",
+  "edge_stroke_width": 2,
+  "label_font_size": 10.5,
+  "label_offset_x": -28.5,
+  "label_offset_y": -23.0,
+  "color_groups": {
+    "yellow": { "fill": "#F5D94E", "label_color": "#7A6A14" },
+    "gray": { "fill": "#B9B9B4", "label_color": "#55554F" },
+    "green": { "fill": "#8FBF6B", "label_color": "#3D5C28" }
+  },
+  "default_color_group": "yellow",
+  "color_overrides": {
+    "B6": "gray",
+    "F1": "gray",
+    "G11": "gray",
+    "L6": "gray",
+    "F5": "gray",
+    "F6": "gray",
+    "F7": "gray",
+    "G5": "gray",
+    "G6": "gray",
+    "G7": "gray",
+    "H6": "gray",
+    "C6": "green",
+    "D6": "green",
+    "E6": "green",
+    "I6": "green",
+    "J6": "green",
+    "K6": "green",
+    "G2": "green",
+    "G3": "green",
+    "G4": "green",
+    "G8": "green",
+    "F9": "green",
+    "G10": "green"
+  },
+  "hidden_labels": ["F5", "F6", "F7", "G5", "G6", "G7", "H6"],
+  "river_stroke": "#3E7CA6",
+  "river_stroke_width": 7,
+  "river_halo_stroke": "#8FBEDB",
+  "river_halo_stroke_width": 16,
+  "river_halo_opacity": 0.85,
+  "rivers": [
+    { "hexes": ["C6", "D6", "E6"], "from_edge": 4, "to_edge": 1 },
+    { "hexes": ["I6", "J6", "K6"], "from_edge": 4, "to_edge": 1 }
+  ],
+  "track_segments": [
+    { "label": "G2", "from_edge": 3, "to_edge": 0 },
+    { "label": "G4", "from_edge": 2, "to_edge": 5 },
+    { "label": "G8", "from_edge": 2, "to_edge": 5 },
+    { "label": "G10", "from_edge": 3, "to_edge": 0 }
+  ],
+  "curve_segments": [
+    { "label": "G3", "from_edge": 3, "to_edge": 5, "control_edge": 1 },
+    { "label": "F9", "from_edge": 2, "to_edge": 0, "control_edge": 4 }
+  ]
+}

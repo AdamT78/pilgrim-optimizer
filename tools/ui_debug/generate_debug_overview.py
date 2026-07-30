@@ -23,6 +23,12 @@ from tools.ui_debug.generate_buildings import (  # noqa: E402
 from tools.ui_debug.generate_buildings import (  # noqa: E402
     generate_building_tiles_page,
 )
+from tools.ui_debug.generate_map import (  # noqa: E402
+    OUTPUT_FILENAME as MAP_FILENAME,
+)
+from tools.ui_debug.generate_map import (  # noqa: E402
+    generate_map_page,
+)
 from tools.ui_debug.generate_player_board import (  # noqa: E402
     OUTPUT_FILENAME as PLAYER_BOARD_FILENAME,
 )
@@ -35,7 +41,7 @@ OVERVIEW_FILENAME = "debug_overview.html"
 TITLE = "Pilgrim UI Debug — Generated Views"
 
 NOTES = (
-    "Map rendering is still baseline-only.",
+    "Generated map rendering is visual/debug only and is not connected to GameState yet.",
     "No GameState integration yet.",
     "No gameplay rules are implemented in the UI layer.",
 )
@@ -43,12 +49,13 @@ NOTES = (
 
 @dataclass(frozen=True)
 class GeneratedViews:
+    map_page: Path
     building_tiles: Path
     player_board: Path
     overview: Path
 
-    def as_tuple(self) -> tuple[Path, Path, Path]:
-        return (self.building_tiles, self.player_board, self.overview)
+    def as_tuple(self) -> tuple[Path, Path, Path, Path]:
+        return (self.map_page, self.building_tiles, self.player_board, self.overview)
 
 
 def default_output_dir() -> Path:
@@ -79,6 +86,7 @@ def render_debug_overview_html() -> str:
 <body>
   <h1>{TITLE}</h1>
   <ul>
+    <li><a href="{MAP_FILENAME}">Generated map</a></li>
     <li><a href="{BUILDING_TILES_FILENAME}">Generated building tiles</a></li>
     <li><a href="{PLAYER_BOARD_FILENAME}">Generated player board</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
@@ -95,6 +103,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     destination_dir = default_output_dir() if output_dir is None else Path(output_dir)
     destination_dir.mkdir(parents=True, exist_ok=True)
 
+    map_page = generate_map_page(output_path=destination_dir / MAP_FILENAME)
     building_tiles = generate_building_tiles_page(
         output_path=destination_dir / BUILDING_TILES_FILENAME
     )
@@ -104,6 +113,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
 
     return GeneratedViews(
+        map_page=map_page,
         building_tiles=building_tiles,
         player_board=player_board,
         overview=overview,

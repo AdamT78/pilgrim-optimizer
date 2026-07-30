@@ -17,9 +17,10 @@ def test_overview_generator_script_exists() -> None:
     assert default_output_dir() == UI_DEBUG_DIR / "generated"
 
 
-def test_generator_writes_all_three_pages_to_a_temp_directory(tmp_path: Path) -> None:
+def test_generator_writes_all_pages_to_a_temp_directory(tmp_path: Path) -> None:
     written = generate_debug_views(output_dir=tmp_path)
 
+    assert written.map_page == tmp_path / "map.html"
     assert written.building_tiles == tmp_path / "building_tiles.html"
     assert written.player_board == tmp_path / "player_board.html"
     assert written.overview == tmp_path / "debug_overview.html"
@@ -38,6 +39,7 @@ def test_generator_creates_missing_output_directory(tmp_path: Path) -> None:
 def test_generated_pages_contain_their_own_views(tmp_path: Path) -> None:
     written = generate_debug_views(output_dir=tmp_path)
 
+    assert "PILGRIM — Hex Grid" in written.map_page.read_text(encoding="utf-8")
     assert "PILGRIM — Building Tiles" in written.building_tiles.read_text(encoding="utf-8")
     assert "PILGRIM — Player Board" in written.player_board.read_text(encoding="utf-8")
 
@@ -48,6 +50,7 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
 
     assert "Pilgrim UI Debug" in content
     assert "Generated Views" in content
+    assert 'href="map.html"' in content
     assert 'href="building_tiles.html"' in content
     assert 'href="player_board.html"' in content
 
@@ -55,7 +58,8 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
 def test_overview_page_states_current_limitations() -> None:
     content = render_debug_overview_html()
 
-    assert "Map rendering is still baseline-only." in content
+    assert "Generated map rendering is visual/debug only" in content
+    assert "Map rendering is still baseline-only." not in content
     assert "No GameState integration yet." in content
     assert "No gameplay rules are implemented in the UI layer." in content
 
@@ -70,6 +74,7 @@ def test_prototype_index_links_to_generated_overview() -> None:
     assert "generated/debug_overview.html" in content
     assert "Generated debug overview" in content
     assert "prototypes/map.html" in content
+    assert "generated/map.html" in content
     assert "prototypes/building_tiles.html" in content
     assert "generated/building_tiles.html" in content
     assert "prototypes/player_board.html" in content
