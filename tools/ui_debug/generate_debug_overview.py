@@ -23,6 +23,12 @@ from tools.ui_debug.generate_buildings import (  # noqa: E402
 from tools.ui_debug.generate_buildings import (  # noqa: E402
     generate_building_tiles_page,
 )
+from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
+    OUTPUT_FILENAME as DONATED_BUILDING_TILES_FILENAME,
+)
+from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
+    generate_donated_building_tiles_page,
+)
 from tools.ui_debug.generate_map import (  # noqa: E402
     OUTPUT_FILENAME as MAP_FILENAME,
 )
@@ -52,10 +58,17 @@ class GeneratedViews:
     map_page: Path
     building_tiles: Path
     player_board: Path
+    donated_building_tiles: Path
     overview: Path
 
-    def as_tuple(self) -> tuple[Path, Path, Path, Path]:
-        return (self.map_page, self.building_tiles, self.player_board, self.overview)
+    def as_tuple(self) -> tuple[Path, ...]:
+        return (
+            self.map_page,
+            self.building_tiles,
+            self.player_board,
+            self.donated_building_tiles,
+            self.overview,
+        )
 
 
 def default_output_dir() -> Path:
@@ -89,6 +102,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{MAP_FILENAME}">Generated map</a></li>
     <li><a href="{BUILDING_TILES_FILENAME}">Generated building tiles</a></li>
     <li><a href="{PLAYER_BOARD_FILENAME}">Generated player board</a></li>
+    <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">
@@ -108,6 +122,9 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         output_path=destination_dir / BUILDING_TILES_FILENAME
     )
     player_board = generate_player_board_page(output_path=destination_dir / PLAYER_BOARD_FILENAME)
+    donated_building_tiles = generate_donated_building_tiles_page(
+        output_path=destination_dir / DONATED_BUILDING_TILES_FILENAME
+    )
 
     overview = destination_dir / OVERVIEW_FILENAME
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
@@ -116,6 +133,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         map_page=map_page,
         building_tiles=building_tiles,
         player_board=player_board,
+        donated_building_tiles=donated_building_tiles,
         overview=overview,
     )
 

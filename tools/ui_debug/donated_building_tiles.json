@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "tiles": [
+    {
+      "id": "level_1_donated_building",
+      "level": 1,
+      "color_group": "light_blue",
+      "vp": 2
+    },
+    {
+      "id": "level_2_donated_building",
+      "level": 2,
+      "color_group": "light_red",
+      "vp": 4
+    },
+    {
+      "id": "level_3_donated_building",
+      "level": 3,
+      "color_group": "light_green",
+      "vp": 6
+    }
+  ]
+}
