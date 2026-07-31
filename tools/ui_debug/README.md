@@ -199,6 +199,42 @@ python3 tools/ui_debug/generate_piety_track.py
 The generated overview below also produces it. Reading the piety table is not `GameState`
 integration: this is still a static view, and it still does not implement game rules.
 
+## Game setup debug view
+
+`generated/game_setup.html` is the first composed view: it has no prototype baseline of its own
+and no renderer module of its own. `generate_game_setup.py` puts the generated map and the
+generated 3-4 player piety track on one page and adds a little client-side interaction.
+
+It uses the `three_four_player` variant only, because the page has controls for four players. The
+2-player track is intentionally not shown here; `generate_piety_track.py` still produces both
+variants for the standalone piety tracks page.
+
+What moves, and what it means:
+
+- The ship rides the edge hexes clockwise from `J3`, sitting in the upper part of a tile the way
+  the ship marker tiles draw it. It hops over the four special corner hexes `F1`, `B6`, `G11`, and
+  `L6`, which leaves 26 stops — the engine's round track length. `SHIP_HEX_PATH` lists those stops
+  by map label and they are resolved through the map's own label table, so the route cannot drift
+  away from the board. When the ship actually moves is still a rules question this page does not
+  answer.
+- Each player has one disc on the piety track. `+1 piety` and `-1 piety` move it one position and
+  clamp at the ends of the track.
+- The four discs are the movable copy of the track's own starting tokens, so their colours come
+  from `piety_track_layout.json` (white, red, yellow, blue) rather than being restated here.
+
+All of it is visual only. The buttons change SVG attributes; they do not touch `GameState`, call
+`apply_action`, pick legal actions, or write scenario state. The view exists to check layout and
+to confirm markers can move before any of that is wired up.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_game_setup.py
+```
+
+The generated overview below also produces it. Until one of the two has been run, the
+`generated/game_setup.html` link in `index.html` is dead like the other generated links.
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
@@ -216,6 +252,7 @@ tools/ui_debug/generated/player_board.html
 tools/ui_debug/generated/donated_building_tiles.html
 tools/ui_debug/generated/ship_marker.html
 tools/ui_debug/generated/piety_tracks.html
+tools/ui_debug/generated/game_setup.html
 tools/ui_debug/generated/debug_overview.html
 ```
 

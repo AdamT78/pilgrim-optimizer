@@ -29,6 +29,12 @@ from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
 from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
     generate_donated_building_tiles_page,
 )
+from tools.ui_debug.generate_game_setup import (  # noqa: E402
+    OUTPUT_FILENAME as GAME_SETUP_FILENAME,
+)
+from tools.ui_debug.generate_game_setup import (  # noqa: E402
+    write_game_setup_page,
+)
 from tools.ui_debug.generate_map import (  # noqa: E402
     OUTPUT_FILENAME as MAP_FILENAME,
 )
@@ -73,6 +79,7 @@ class GeneratedViews:
     donated_building_tiles: Path
     ship_marker: Path
     piety_tracks: Path
+    game_setup: Path
     overview: Path
 
     def as_tuple(self) -> tuple[Path, ...]:
@@ -83,6 +90,7 @@ class GeneratedViews:
             self.donated_building_tiles,
             self.ship_marker,
             self.piety_tracks,
+            self.game_setup,
             self.overview,
         )
 
@@ -121,6 +129,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
+    <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">
@@ -145,6 +154,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     )
     ship_marker = generate_ship_marker_page(output_path=destination_dir / SHIP_MARKER_FILENAME)
     piety_tracks = generate_piety_track_page(output_path=destination_dir / PIETY_TRACKS_FILENAME)
+    game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
@@ -156,6 +166,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         donated_building_tiles=donated_building_tiles,
         ship_marker=ship_marker,
         piety_tracks=piety_tracks,
+        game_setup=game_setup,
         overview=overview,
     )
 
