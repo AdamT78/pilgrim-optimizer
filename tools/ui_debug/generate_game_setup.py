@@ -1,9 +1,11 @@
 """Write the generated game setup debug page.
 
-The page composes three existing renderers — the map, the 3-4 player piety track, and the building
-tiles — and adds a ship marker plus one piety disc per player, moved by plain buttons.
+The page composes four existing renderers — the map, the 3-4 player piety track, the building
+tiles, and the pilgrimage sites — and adds a ship marker plus one piety disc per player, moved by
+plain buttons.
 
-The setup slots are a hard-coded example schedule, not the output of `pilgrim.setup.generator`.
+The setup slots are a hard-coded example schedule, not the output of `pilgrim.setup.generator`:
+the sites are always the first four in file order, never drawn at random.
 Everything here is visual only: nothing reads or writes `GameState`, picks legal actions, or
 applies any rule, and moving a marker changes an SVG attribute and nothing else.
 
@@ -48,6 +50,16 @@ from tools.ui_debug.render_piety_track import (  # noqa: E402
     render_piety_track_variant_svg,
     track_geometry,
     variant_by_id,
+)
+from tools.ui_debug.render_pilgrimage_sites import (  # noqa: E402
+    DATA_FILENAME as SITE_DATA_FILENAME,
+)
+from tools.ui_debug.render_pilgrimage_sites import (  # noqa: E402
+    SITE_FILL,
+    SITE_STROKE,
+    load_pilgrimage_sites,
+    render_pilgrimage_site_contents,
+    site_by_index,
 )
 from tools.ui_debug.render_ship_marker import (  # noqa: E402
     SHIP_ANCHOR_OFFSET_Y as TILE_SHIP_ANCHOR_OFFSET_Y,
@@ -143,11 +155,8 @@ SETUP_SLOTS = (
     (26, "Empty", "empty"),
 )
 
-# Pilgrimage site tiles do not exist yet, so a site slot only tints its hex.
-SITE_TINT_COLOR = "#C0392B"
-SITE_TINT_OPACITY = 0.3
-
 _SETUP_BUILDING_LABEL = re.compile(r"^(?P<name>.+) \(level (?P<level>\d+)\)$")
+_SETUP_SITE_LABEL = re.compile(r"^Pilgrimage site (?P<number>\d+)$")
 
 
 def default_output_path() -> Path:
@@ -197,12 +206,26 @@ def parse_setup_building_label(label: str) -> tuple[str, int]:
     return match["name"], int(match["level"])
 
 
+def parse_setup_site_label(label: str) -> int:
+    """`"Pilgrimage site 2"` -> `2`, the site's place in the schedule."""
+    match = _SETUP_SITE_LABEL.match(label)
+    if match is None:
+        raise ValueError(f"not a setup site label: {label!r}")
+    return int(match["number"])
+
+
 def building_by_name(catalog: dict) -> dict[str, dict]:
     return {building["name"]: building for building in catalog["buildings"]}
 
 
-def setup_placements(start_roll: int, catalog: dict | None = None) -> list[dict]:
-    """One entry per setup slot, resolved onto the edge hex it occupies for this start roll."""
+def setup_placements(
+    start_roll: int, catalog: dict | None = None, site_data: dict | list | None = None
+) -> list[dict]:
+    """One entry per setup slot, resolved onto the edge hex it occupies for this start roll.
+
+    The four site slots take the first four sites in file order. Drawing sites at random is a job
+    for the real setup generator, which this page does not call.
+    """
     buildings = building_by_name(catalog) if catalog is not None else {}
     path = rotated_edge_path(start_hex_for_roll(start_roll))
 
@@ -214,6 +237,7 @@ def setup_placements(start_roll: int, catalog: dict | None = None) -> list[dict]
             "kind": kind,
             "hex": path[round_number - 1],
             "building": None,
+            "site": None,
         }
         if kind == "building" and buildings:
             name, level = parse_setup_building_label(label)
@@ -221,14 +245,16 @@ def setup_placements(start_roll: int, catalog: dict | None = None) -> list[dict]
             if building["level"] != level:
                 raise ValueError(f"{name} is level {building['level']}, not level {level}")
             placement["building"] = building
+        if kind == "site" and site_data is not None:
+            placement["site"] = site_by_index(site_data, parse_setup_site_label(label) - 1)
         placements.append(placement)
     return placements
 
 
-def _hex_polygon(map_layout: dict, fill: str, extra: str = "") -> str:
+def _hex_polygon(map_layout: dict, fill: str) -> str:
     """The map's own hex shape around the origin, filled and unstroked."""
     points = " ".join(f"{x:.2f},{y:.2f}" for x, y in hex_vertices(0.0, 0.0, map_layout["hex_size"]))
-    return f'<polygon points="{points}" fill="{fill}" stroke="none"{extra}/>'
+    return f'<polygon points="{points}" fill="{fill}" stroke="none"/>'
 
 
 def render_setup_building_fill(map_layout: dict, building: dict) -> str:
@@ -237,7 +263,17 @@ def render_setup_building_fill(map_layout: dict, building: dict) -> str:
 
 
 def render_setup_site_fill(map_layout: dict) -> str:
-    return _hex_polygon(map_layout, SITE_TINT_COLOR, extra=f' fill-opacity="{SITE_TINT_OPACITY}"')
+    """A site slot recolours its hex too, in the pilgrimage site orange."""
+    return _hex_polygon(map_layout, SITE_FILL)
+
+
+def render_setup_site_contents(map_layout: dict, site: dict) -> str:
+    """The site tile's star and values, scaled from the tile hex down to the map hex.
+
+    The site's own dark orange is the ink here, the way a placed building writes in its palette's
+    stroke colour, so the values read as part of the recoloured hex rather than as a tile on it.
+    """
+    return render_pilgrimage_site_contents(site, scale=_tile_ratio(map_layout), ink=SITE_STROKE)
 
 
 def render_setup_building_label(map_layout: dict, building: dict) -> str:
@@ -274,30 +310,35 @@ def render_setup_fill_layer(map_layout: dict, placements: list[dict]) -> str:
     """The recoloured hexes, drawn onto the map's tile fills and under its own edges and labels."""
     groups = []
     for placement in placements:
-        if placement["kind"] == "empty":
-            continue
         if placement["building"] is not None:
             body = render_setup_building_fill(map_layout, placement["building"])
             class_name = "setup-building-fill"
-        else:
+        elif placement["kind"] == "site":
             body = render_setup_site_fill(map_layout)
             class_name = "setup-site-fill"
+        else:
+            continue
         groups.append(_placed(map_layout, placement, class_name, body))
     return f'<g id="setup-fills">{"".join(groups)}</g>'
 
 
 def render_setup_label_layer(map_layout: dict, placements: list[dict]) -> str:
-    """The building names, drawn over the finished map so the hex edges do not cut through them."""
-    groups = [
-        _placed(
-            map_layout,
-            placement,
-            "setup-building-label",
-            render_setup_building_label(map_layout, placement["building"]),
-        )
-        for placement in placements
-        if placement["building"] is not None
-    ]
+    """What each slot says: building names and site values, drawn over the finished map.
+
+    Both sit in the lower half of their hex, so the map's own edges and labels stay readable and
+    the ship still has the upper half to itself.
+    """
+    groups = []
+    for placement in placements:
+        if placement["building"] is not None:
+            body = render_setup_building_label(map_layout, placement["building"])
+            class_name = "setup-building-label"
+        elif placement["site"] is not None:
+            body = render_setup_site_contents(map_layout, placement["site"])
+            class_name = "setup-site-content"
+        else:
+            continue
+        groups.append(_placed(map_layout, placement, class_name, body))
     return f'<g id="setup-labels">{"".join(groups)}</g>'
 
 
@@ -469,7 +510,11 @@ def render_start_roll_controls(start_roll: int) -> str:
 
 
 def render_game_setup_html(
-    map_layout: dict, piety_layout: dict, piety_config: dict, catalog: dict
+    map_layout: dict,
+    piety_layout: dict,
+    piety_config: dict,
+    catalog: dict,
+    site_data: dict | list,
 ) -> str:
     variant = variant_by_id(piety_layout, PIETY_VARIANT_ID)
     vp_values = piety_vp_values(piety_config)
@@ -483,7 +528,7 @@ def render_game_setup_html(
         track_svg, render_piety_disc_overlay(piety_layout, discs, start_position)
     )
 
-    placements = setup_placements(DEFAULT_START_ROLL, catalog)
+    placements = setup_placements(DEFAULT_START_ROLL, catalog, site_data)
     occupied = [placement["round"] for placement in placements if placement["kind"] != "empty"]
     centers = hex_centers(map_layout)
 
@@ -622,8 +667,9 @@ def render_game_setup_html(
         <strong id="start-hex">{DEFAULT_START_ROLL} / {placements[0]["hex"]}</strong></p>
 {render_start_roll_controls(DEFAULT_START_ROLL)}
       <p class="slot-list">{len(occupied)} of {len(SETUP_SLOTS)} slots are taken; the rest stay
-        empty. Sites are a red tint and buildings recolour their hex in the catalog palette,
-        under the map's own borders and labels.</p>
+        empty. Buildings recolour their hex in the catalog palette and the four sites in
+        pilgrimage site orange, under the map's own borders and labels. The sites are always the
+        first four in {SITE_DATA_FILENAME}: they are not drawn at random yet.</p>
     </div>
     <div class="panel">
       <h2>Ship controls</h2>
@@ -653,6 +699,7 @@ def write_game_setup_page(
     piety_layout_path: Path | None = None,
     piety_config_path: Path | None = None,
     catalog_path: Path | None = None,
+    site_data_path: Path | None = None,
 ) -> Path:
     destination = default_output_path() if output_path is None else Path(output_path)
     html = render_game_setup_html(
@@ -660,6 +707,7 @@ def write_game_setup_page(
         load_piety_track_layout(piety_layout_path),
         load_piety_config(piety_config_path),
         load_building_catalog(catalog_path),
+        load_pilgrimage_sites(site_data_path),
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(html, encoding="utf-8")

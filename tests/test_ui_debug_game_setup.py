@@ -12,14 +12,15 @@ from tools.ui_debug.generate_game_setup import (
     SETUP_SLOTS,
     SHIP_COLOR,
     SHIP_POSITION_COUNT,
-    SITE_TINT_COLOR,
     SKIPPED_HEXES,
     START_HEX_BY_ROLL,
     building_by_name,
     default_output_path,
     hex_centers,
     parse_setup_building_label,
+    parse_setup_site_label,
     render_setup_building_fill,
+    render_setup_site_fill,
     rotated_edge_path,
     setup_placements,
     ship_anchor_offset_y,
@@ -31,6 +32,7 @@ from tools.ui_debug.render_buildings import (
     load_building_catalog,
     render_building_tile,
 )
+from tools.ui_debug.render_donated_buildings import STAR_FILL, STAR_STROKE
 from tools.ui_debug.render_map import (
     hex_center,
     hex_vertices,
@@ -45,6 +47,12 @@ from tools.ui_debug.render_piety_track import (
     position_center_x,
     track_geometry,
     variant_by_id,
+)
+from tools.ui_debug.render_pilgrimage_sites import (
+    SITE_FILL,
+    SITE_STROKE,
+    load_pilgrimage_sites,
+    sites_of,
 )
 from tools.ui_debug.render_ship_marker import HULL_OUTLINE, MASTS, render_ship_icon
 
@@ -110,13 +118,21 @@ def test_page_embeds_the_generated_map_svg(page: str) -> None:
         assert element.strip() in page
 
 
+def _piety_panel(page: str) -> str:
+    pattern = rf'<div class="panel" data-piety-variant="{PIETY_VARIANT_ID}">.*?</div>'
+    match = re.search(pattern, page, re.S)
+    assert match is not None
+    return match.group(0)
+
+
 def test_page_embeds_the_rendered_piety_track(page: str) -> None:
     """One VP star per piety position, labelled from the piety config."""
     vp_values = piety_vp_values(load_piety_config())
+    panel = _piety_panel(page)
 
     for vp in vp_values:
-        assert f">{vp}</text>" in page
-    stars = re.findall(r'<path d="M [^"]*" fill="#F4D03F"', page)
+        assert f">{vp}</text>" in panel
+    stars = re.findall(rf'<path d="M [^"]*" fill="{STAR_FILL}"', panel)
     assert len(stars) == len(vp_values)
 
 
@@ -422,23 +438,117 @@ def test_page_does_not_number_the_setup_slots(page: str) -> None:
     for round_number, class_name, body in groups:
         assert "<circle" not in body, f"slot {round_number} still draws a number badge"
         assert f">{round_number}</text>" not in body.split("</g>")[0]
-        assert class_name in ("setup-building-fill", "setup-site-fill", "setup-building-label")
+        assert class_name in (
+            "setup-building-fill",
+            "setup-site-fill",
+            "setup-building-label",
+            "setup-site-content",
+        )
 
 
-def test_page_marks_pilgrimage_sites_with_a_tint_and_nothing_else(page: str) -> None:
-    site_rounds = [round_number for round_number, _, kind in SETUP_SLOTS if kind == "site"]
-    tinted = {
+SITE_ROUNDS = (1, 7, 15, 19)
+
+
+def _site_slots() -> list[tuple[int, str, str]]:
+    return [slot for slot in SETUP_SLOTS if slot[2] == "site"]
+
+
+def test_setup_site_slots_take_the_first_four_sites_in_file_order() -> None:
+    sites = sites_of(load_pilgrimage_sites())
+    placements = setup_placements(3, load_building_catalog(), load_pilgrimage_sites())
+    placed = [placement for placement in placements if placement["kind"] == "site"]
+
+    assert [round_number for round_number, _, _ in _site_slots()] == list(SITE_ROUNDS)
+    assert parse_setup_site_label("Pilgrimage site 2") == 2
+    with pytest.raises(ValueError):
+        parse_setup_site_label("Guild (level 1)")
+
+    assert len(placed) == 4
+    for index, placement in enumerate(placed):
+        assert placement["site"] == sites[index]
+    # The fifth site is left in the box for now.
+    assert sites[4] not in [placement["site"] for placement in placed]
+    assert [placement["site"]["vp"] for placement in placed] == [5, 5, 5, 6]
+
+
+def test_setup_placements_leave_sites_unresolved_without_the_site_data() -> None:
+    """The site data is optional, the way the catalog is: the slots still know where they sit."""
+    placements = setup_placements(3)
+
+    assert all(placement["site"] is None for placement in placements)
+    assert [placement["hex"] for placement in placements][:3] == ["D2", "C3", "C4"]
+
+
+def test_page_fills_the_site_hexes_in_pilgrimage_site_orange(page: str) -> None:
+    layout = load_map_layout()
+    filled = {
         round_number: body
         for round_number, class_name, body in _slot_groups(page)
         if class_name == "setup-site-fill"
     }
 
-    assert site_rounds == [1, 7, 15, 19]
-    assert set(tinted) == set(site_rounds)
-    for round_number, body in tinted.items():
-        tint = re.search(rf'<polygon points="[^"]*" fill="{SITE_TINT_COLOR}"[^>]*/>', body)
-        assert tint is not None, f"site slot {round_number} has no tint"
-        assert "<text" not in body.split("</g>")[0], "sites do not get an invented tile"
+    points = " ".join(f"{x:.2f},{y:.2f}" for x, y in hex_vertices(0.0, 0.0, layout["hex_size"]))
+
+    assert set(filled) == set(SITE_ROUNDS)
+    # The map's own hex, recoloured: no inset tile, no second outline.
+    assert (
+        render_setup_site_fill(layout)
+        == f'<polygon points="{points}" fill="{SITE_FILL}" stroke="none"/>'
+    )
+    for round_number, body in filled.items():
+        fill = re.search(rf'<polygon points="[^"]*" fill="{SITE_FILL}" stroke="none"/>', body)
+        assert fill is not None, f"site slot {round_number} does not recolour its hex"
+
+
+def test_page_draws_the_site_star_and_values_inside_the_hex(page: str) -> None:
+    sites = sites_of(load_pilgrimage_sites())[:4]
+    contents = {
+        round_number: body.split("</g>")[0]
+        for round_number, class_name, body in _slot_groups(page)
+        if class_name == "setup-site-content"
+    }
+
+    assert set(contents) == set(SITE_ROUNDS)
+    for site, round_number in zip(sites, SITE_ROUNDS, strict=True):
+        body = contents[round_number]
+        assert f'fill="{STAR_FILL}" stroke="{STAR_STROKE}"' in body
+        for value in (site["vp"], site["piety"], "P", site["stone"], "S"):
+            assert f">{value}</text>" in body
+        assert f'fill="{SITE_STROKE}"' in body, "the values are written in the site's own ink"
+    for color in (SITE_FILL, SITE_STROKE, STAR_FILL, STAR_STROKE):
+        assert color in page
+
+
+def test_site_values_read_the_way_the_standalone_tiles_do(page: str) -> None:
+    """P over S, first three sites 3/3, 3/3, 4/4, then 3/4."""
+    sites = sites_of(load_pilgrimage_sites())[:4]
+
+    assert [(site["piety"], site["stone"]) for site in sites] == [(3, 3), (3, 3), (4, 4), (3, 4)]
+    contents = {
+        round_number: body.split("</g>")[0]
+        for round_number, class_name, body in _slot_groups(page)
+        if class_name == "setup-site-content"
+    }
+    for site, round_number in zip(sites, SITE_ROUNDS, strict=True):
+        texts = re.findall(r">([^<]+)</text>", contents[round_number])
+        assert texts == [str(site["vp"]), str(site["piety"]), "P", str(site["stone"]), "S"]
+
+
+def test_site_content_stays_in_the_lower_half_of_its_hex(page: str) -> None:
+    """The upper half belongs to the map's hex label and the ship, as it does for buildings."""
+    layout = load_map_layout()
+    apothem = layout["hex_size"] * math.sin(math.radians(60.0))
+    bodies = [
+        body.split("</g>")[0]
+        for _, class_name, body in _slot_groups(page)
+        if class_name == "setup-site-content"
+    ]
+
+    assert bodies
+    for body in bodies:
+        for x, y in re.findall(r'<text x="(-?[\d.]+)" y="(-?[\d.]+)"', body):
+            assert 0.0 < float(y) < apothem
+            assert abs(float(x)) < layout["hex_size"]
 
 
 def test_page_leaves_empty_slots_and_skipped_hexes_alone(page: str) -> None:
@@ -449,8 +559,8 @@ def test_page_leaves_empty_slots_and_skipped_hexes_alone(page: str) -> None:
     assert placed.isdisjoint(empty_rounds)
     for skipped in SKIPPED_HEXES:
         assert skipped not in data["hexCenters"]
-    # Pilgrimage sites are a tint only: no invented tile, no label text.
-    assert "Pilgrimage site" not in page
+    # A site shows the values off its tile, not the slot's own bookkeeping label.
+    assert ">Pilgrimage site" not in page
 
 
 def test_page_draws_the_ship_above_the_setup_slots(page: str) -> None:

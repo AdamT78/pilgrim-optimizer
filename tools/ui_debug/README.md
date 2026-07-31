@@ -222,16 +222,16 @@ python3 tools/ui_debug/generate_pilgrimage_sites.py
 The generated overview below also produces it.
 
 This is still a picture of five tiles. It does not connect to `GameState`, does not draw
-pilgrimage sites at random, is not wired into setup generation, and implements no game rules.
-Later work can use these tiles for the visual setup slots: the game setup view currently only
-tints the hex a site lands on, because site tiles did not exist when it was built.
+pilgrimage sites at random, is not wired into setup generation, and implements no game rules. The
+game setup view below reuses the tile contents for its four site slots, always taking the first
+four sites in file order.
 
 ## Game setup debug view
 
 `generated/game_setup.html` is the first composed view: it has no prototype baseline of its own
 and no renderer module of its own. `generate_game_setup.py` puts the generated map, the generated
-3-4 player piety track, and generated building tiles on one page and adds a little client-side
-interaction.
+3-4 player piety track, generated building tiles, and generated pilgrimage sites on one page and
+adds a little client-side interaction.
 
 It uses the `three_four_player` variant only, because the page has controls for four players. The
 2-player track is intentionally not shown here; `generate_piety_track.py` still produces both
@@ -256,9 +256,13 @@ What moves, and what it means:
   in through `render_map_svg(layout, tile_overlay=...)`, which drops a fragment onto the tile fills
   before the map draws its rivers, hex edges, and labels, so a placed building keeps every line and
   label the map would have drawn there. `render_buildings.py` and the standalone building tiles
-  page are untouched and still draw full tiles. A pilgrimage site slot only tints its hex, because
-  site tiles do not exist yet, and an empty slot draws nothing. Which round a slot belongs to is
-  not written on the map.
+  page are untouched and still draw full tiles. An empty slot draws nothing. Which round a slot
+  belongs to is not written on the map.
+- A pilgrimage site slot is filled the same way: its hex takes the site orange and carries the
+  site's star, VP value, and `P`/`S` values, scaled from `render_pilgrimage_sites.py` down to the
+  map hex. The four site slots always take the first four sites in `pilgrimage_sites.json`, in
+  file order. That is deterministic debug behaviour only; drawing sites at random is not
+  implemented yet, and the fifth site is unused.
 - Each player has one disc on the piety track. `+1 piety` and `-1 piety` move it one position and
   clamp at the ends of the track.
 - The four discs are the movable copy of the track's own starting tokens, so their colours come
