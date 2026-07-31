@@ -26,6 +26,7 @@ ROW_LABEL_GUTTER = 222.0
 
 TILE_TEXT_TOP_OFFSET = 16.5
 TILE_TEXT_LINE_HEIGHT = 12.0
+TILE_TEXT_FONT_SIZE = 10.0
 
 MARGIN_X = 68.0
 MARGIN_Y = 75.0
@@ -96,7 +97,8 @@ def _hex_path_data(x: float, y: float) -> str:
     return f"{head} {tail} Z"
 
 
-def _tile_text_lines(building: dict) -> list[str]:
+def tile_text_lines(building: dict) -> list[str]:
+    """The label as the tile wraps it: the level numeral, then one line per word of the name."""
     return [level_numeral(building["level"]), *building["name"].split()]
 
 
@@ -107,11 +109,12 @@ def render_building_tile(building: dict, x: float, y: float) -> str:
         f'<path d="{_hex_path_data(x, y)}" fill="{palette.fill}" stroke="{palette.stroke}"'
         ' stroke-width="2.5" stroke-linejoin="round"/>'
     ]
-    for index, line in enumerate(_tile_text_lines(building)):
+    for index, line in enumerate(tile_text_lines(building)):
         text_y = y + TILE_TEXT_TOP_OFFSET + index * TILE_TEXT_LINE_HEIGHT
         parts.append(
             f'<text x="{x:.1f}" y="{text_y:.1f}" text-anchor="middle"'
-            ' font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="600"'
+            ' font-family="Helvetica, Arial, sans-serif"'
+            f' font-size="{TILE_TEXT_FONT_SIZE:g}" font-weight="600"'
             f' fill="{palette.stroke}">{escape(line)}</text>'
         )
     return "".join(parts)

@@ -244,7 +244,12 @@ def _render_curve_segments(layout: dict, centers: dict) -> list[str]:
     return parts
 
 
-def render_map_svg(layout: dict) -> str:
+def render_map_svg(layout: dict, tile_overlay: str = "") -> str:
+    """The board. `tile_overlay` is an extra fragment drawn straight onto the tile fills.
+
+    It goes in before the rivers, the hex edges, and the labels, so a caller can recolour a tile
+    without drawing over the lines the map puts on top of it. Left out, the map is unchanged.
+    """
     hexes = generate_hexes(layout)
     centers = {item["label"]: (item["cx"], item["cy"]) for item in hexes}
     hidden_coords = {(item["q"], item["r"]) for item in hexes if item["hidden"]}
@@ -256,6 +261,8 @@ def render_map_svg(layout: dict) -> str:
         _render_board_edge_hex(layout),
     ]
     parts.extend(_render_tile(item, layout) for item in hexes)
+    if tile_overlay:
+        parts.append(tile_overlay)
     parts.extend(_render_rivers(layout, centers))
     for item in hexes:
         parts.extend(_render_tile_edges(item, layout, hidden_coords))
