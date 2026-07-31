@@ -48,6 +48,25 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
+## Baseline-only prototypes
+
+These prototypes are visual baselines with no renderer extraction yet:
+
+- `prototypes/donated_building_tiles.html`: flipped/donated building tile markers with star VP
+  values, one hex per building colour.
+- `prototypes/ship_marker.html`: ship marker / ship-on-tile visual examples, one per building
+  colour.
+
+For both of them there is currently:
+
+- no renderer extraction
+- no generated output
+- no `GameState` integration
+- no rules logic
+
+`index.html` links to them as baselines only. Renderer extraction for these should happen in
+separate PRs, following the component extraction checklist above.
+
 ## Building tiles renderer extraction
 
 `prototypes/building_tiles.html` is the untouched visual baseline for the building tiles.
