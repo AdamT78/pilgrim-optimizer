@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "sites": [
+    {
+      "id": "pilgrimage_site_1",
+      "vp": 5,
+      "piety": 3,
+      "stone": 3
+    },
+    {
+      "id": "pilgrimage_site_2",
+      "vp": 5,
+      "piety": 3,
+      "stone": 3
+    },
+    {
+      "id": "pilgrimage_site_3",
+      "vp": 5,
+      "piety": 4,
+      "stone": 4
+    },
+    {
+      "id": "pilgrimage_site_4",
+      "vp": 6,
+      "piety": 3,
+      "stone": 4
+    },
+    {
+      "id": "pilgrimage_site_5",
+      "vp": 7,
+      "piety": 4,
+      "stone": 5
+    }
+  ]
+}

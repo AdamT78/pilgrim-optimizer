@@ -116,14 +116,6 @@ def test_pilgrimage_sites_prototype_source_is_the_generator_code() -> None:
     assert "N_TILES = 5" in content
 
 
-def test_pilgrimage_sites_have_no_renderer_or_generated_output_yet() -> None:
-    """This component is baseline-only: extraction is a separate PR."""
-    assert not (UI_DEBUG_DIR / "render_pilgrimage_sites.py").exists()
-    assert not (UI_DEBUG_DIR / "generate_pilgrimage_sites.py").exists()
-    assert not (UI_DEBUG_DIR / "pilgrimage_site_layout.json").exists()
-    assert "generated/pilgrimage_sites.html" not in INDEX_HTML.read_text(encoding="utf-8")
-
-
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
