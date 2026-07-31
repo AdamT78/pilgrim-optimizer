@@ -50,22 +50,20 @@ across PRs in this order:
 
 ## Baseline-only prototypes
 
-These prototypes are visual baselines with no renderer extraction yet:
+This prototype is a visual baseline with no renderer extraction yet:
 
-- `prototypes/donated_building_tiles.html`: flipped/donated building tile markers with star VP
-  values, one hex per building colour.
 - `prototypes/ship_marker.html`: ship marker / ship-on-tile visual examples, one per building
   colour.
 
-For both of them there is currently:
+For it there is currently:
 
 - no renderer extraction
 - no generated output
 - no `GameState` integration
 - no rules logic
 
-`index.html` links to them as baselines only. Renderer extraction for these should happen in
-separate PRs, following the component extraction checklist above.
+`index.html` links to it as a baseline only. Renderer extraction should happen in a separate
+PR, following the component extraction checklist above.
 
 ## Building tiles renderer extraction
 
@@ -126,6 +124,33 @@ python3 tools/ui_debug/generate_map.py
 The generated overview below also produces it. Like the other renderers, this still does not
 connect to `GameState` and still does not implement game rules.
 
+## Donated building tiles renderer extraction
+
+`prototypes/donated_building_tiles.html` is the untouched visual baseline for the
+donated/flipped building tiles.
+
+`donated_building_tiles.json` and `render_donated_buildings.py` are the structured renderer
+extraction. These tiles are the VP markers shown when a building is donated (flipped), one per
+building level/colour:
+
+```text
+level I  (light blue)  = 2 VP
+level II (light red)   = 4 VP
+level III (light green) = 6 VP
+```
+
+The tile colours are imported from `render_buildings.py` rather than repeated, so the donated
+tiles cannot drift away from the regular building tiles.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_donated_buildings.py
+```
+
+The generated overview below also produces it. Like the other renderers, this still does not
+connect to `GameState` and still does not implement game rules.
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
@@ -140,6 +165,7 @@ This writes:
 tools/ui_debug/generated/map.html
 tools/ui_debug/generated/building_tiles.html
 tools/ui_debug/generated/player_board.html
+tools/ui_debug/generated/donated_building_tiles.html
 tools/ui_debug/generated/debug_overview.html
 ```
 
