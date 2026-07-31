@@ -17,7 +17,11 @@ Each kind of file here has one job, and mixing them up is how this layer starts 
   scripts that drew a baseline. They are kept as `.txt` on purpose: they are read for intent when
   reverse-engineering, never imported, run, or refactored.
 - **Layout/catalog JSON** (`*_layout.json`, `*_catalog.json`) are structured renderer inputs.
-  They describe what to draw, reverse-engineered from the baseline.
+  They describe what to draw, reverse-engineered from the baseline. They hold geometry, not
+  gameplay numbers.
+- **Game config** (`configs/*.json`) stays the source of truth for any real game value a view
+  happens to print, such as the piety VP table. Copying those numbers into layout JSON is how the
+  UI starts lying about the game.
 - **Generated HTML** (`generated/*.html`) are local debug artifacts. They are git-ignored,
   rebuilt on demand, and never hand-edited or committed.
 - **`GameState`** remains the source of truth for gameplay once integration begins.
@@ -51,23 +55,8 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-## Baseline-only prototypes
-
-`prototypes/piety_tracks.html` is the untouched visual baseline for the piety tracks. It holds
-both variants in one page: the 3-4 player track on top and the 2 player track below.
-
-`prototype_sources/piety_tracks.py.txt` preserves the Python code that generated it, as reference
-material for a later extraction.
-
-For the piety tracks there is currently:
-
-- no renderer extraction
-- no generated output
-- no `GameState` integration
-- no rules logic
-
-`index.html` links to the baseline only. Renderer extraction should happen in a separate PR,
-following the component extraction checklist above.
+Every prototype currently in `prototypes/` has been through this checklist, so there are no
+baseline-only prototypes left. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -184,6 +173,32 @@ python3 tools/ui_debug/generate_ship_marker.py
 The generated overview below also produces it. Like the other renderers, this still does not
 connect to `GameState` and still does not implement game rules.
 
+## Piety track renderer extraction
+
+`prototypes/piety_tracks.html` is the untouched visual baseline for the piety tracks, and
+`prototype_sources/piety_tracks.py.txt` is the reference-only copy of the script that drew it.
+That script is read for intent; it is never imported or executed.
+
+`piety_track_layout.json` and `render_piety_track.py` are the structured renderer extraction. The
+page shows the same strip twice, so the layout describes the geometry once and lists the two
+variants: `three_four_player` with two token rows and `two_player` with one. Dropping a row
+shortens the strip by exactly that row, which is why the two tracks have different heights.
+
+The VP numbers on the stars are **not** in the layout JSON. They are read from
+`configs/piety.json`, parsed with the game's own `piety_from_dict`, so the drawn track cannot
+disagree with the scoring the engine uses. The renderer fails loudly if the config stops matching
+the number of positions the layout draws. The yellow star itself is imported from
+`render_donated_buildings.py` rather than reimplemented.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_piety_track.py
+```
+
+The generated overview below also produces it. Reading the piety table is not `GameState`
+integration: this is still a static view, and it still does not implement game rules.
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
@@ -200,6 +215,7 @@ tools/ui_debug/generated/building_tiles.html
 tools/ui_debug/generated/player_board.html
 tools/ui_debug/generated/donated_building_tiles.html
 tools/ui_debug/generated/ship_marker.html
+tools/ui_debug/generated/piety_tracks.html
 tools/ui_debug/generated/debug_overview.html
 ```
 

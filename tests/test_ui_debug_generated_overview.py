@@ -25,6 +25,7 @@ def test_generator_writes_all_pages_to_a_temp_directory(tmp_path: Path) -> None:
     assert written.player_board == tmp_path / "player_board.html"
     assert written.donated_building_tiles == tmp_path / "donated_building_tiles.html"
     assert written.ship_marker == tmp_path / "ship_marker.html"
+    assert written.piety_tracks == tmp_path / "piety_tracks.html"
     assert written.overview == tmp_path / "debug_overview.html"
     for path in written.as_tuple():
         assert path.is_file()
@@ -46,6 +47,7 @@ def test_generated_pages_contain_their_own_views(tmp_path: Path) -> None:
     assert "PILGRIM — Player Board" in written.player_board.read_text(encoding="utf-8")
     assert "PILGRIM — Special Tiles" in written.donated_building_tiles.read_text(encoding="utf-8")
     assert "PILGRIM — Ship Building Tiles" in written.ship_marker.read_text(encoding="utf-8")
+    assert "Piety tracks" in written.piety_tracks.read_text(encoding="utf-8")
 
 
 def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
@@ -59,6 +61,7 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
     assert 'href="player_board.html"' in content
     assert 'href="donated_building_tiles.html"' in content
     assert 'href="ship_marker.html"' in content
+    assert 'href="piety_tracks.html"' in content
 
 
 def test_overview_page_states_current_limitations() -> None:
@@ -89,3 +92,5 @@ def test_prototype_index_links_to_generated_overview() -> None:
     assert "generated/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content
     assert "generated/ship_marker.html" in content
+    assert "prototypes/piety_tracks.html" in content
+    assert "generated/piety_tracks.html" in content
