@@ -55,9 +55,8 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype in `prototypes/` has been through this checklist except the pilgrimage sites, which
-are at step 1 and stay there until their renderer gets its own PR. New prototypes start at step 1
-again.
+Every prototype currently in `prototypes/` has been through this checklist, so there are no
+baseline-only prototypes left. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -200,21 +199,32 @@ python3 tools/ui_debug/generate_piety_track.py
 The generated overview below also produces it. Reading the piety table is not `GameState`
 integration: this is still a static view, and it still does not implement game rules.
 
-## Pilgrimage sites prototype baseline
+## Pilgrimage site renderer extraction
 
 `prototypes/pilgrimage_sites.html` is the untouched visual baseline for the Pilgrimage Site tiles:
 five orange tiles in one row, each with a piety-track star in its lower half and a P value and an S
 value beside it. `prototype_sources/pilgrimage_sites.py.txt` is the reference-only copy of the
-script that drew it, kept for intent when the tiles are reverse-engineered later. It is never
-imported or executed.
+script that drew it. That script is read for intent; it is never imported or executed.
 
-This component stops at step 1 of the checklist above. There is no layout JSON, no renderer, no
-generator, and no generated page for it yet, so `index.html` links the baseline only. Extracting a
-renderer is a separate PR that should follow the checklist from step 3.
+`pilgrimage_sites.json` and `render_pilgrimage_sites.py` are the structured renderer extraction.
+The JSON holds only what the tiles print — the VP value on the star and the two values beside it —
+while the geometry lives in the renderer, the same split the building tiles use. Nothing is
+redrawn from scratch: the hex comes from `render_buildings.py` at the same 52 unit radius, so the
+sites read as the same kind of piece, and the star comes from `render_donated_buildings.py`. The
+rendered SVG is byte-identical to the baseline, and a test keeps it that way.
 
-These tiles are what a pilgrimage site slot will eventually draw in the game setup view, which
-currently only tints the hex a site lands on. Nothing here is wired into setup generation, and
-`pilgrim.setup.generator` is not involved: this is a picture of five tiles.
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_pilgrimage_sites.py
+```
+
+The generated overview below also produces it.
+
+This is still a picture of five tiles. It does not connect to `GameState`, does not draw
+pilgrimage sites at random, is not wired into setup generation, and implements no game rules.
+Later work can use these tiles for the visual setup slots: the game setup view currently only
+tints the hex a site lands on, because site tiles did not exist when it was built.
 
 ## Game setup debug view
 

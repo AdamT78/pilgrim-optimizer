@@ -47,6 +47,12 @@ from tools.ui_debug.generate_piety_track import (  # noqa: E402
 from tools.ui_debug.generate_piety_track import (  # noqa: E402
     generate_piety_track_page,
 )
+from tools.ui_debug.generate_pilgrimage_sites import (  # noqa: E402
+    OUTPUT_FILENAME as PILGRIMAGE_SITES_FILENAME,
+)
+from tools.ui_debug.generate_pilgrimage_sites import (  # noqa: E402
+    generate_pilgrimage_sites_page,
+)
 from tools.ui_debug.generate_player_board import (  # noqa: E402
     OUTPUT_FILENAME as PLAYER_BOARD_FILENAME,
 )
@@ -79,6 +85,7 @@ class GeneratedViews:
     donated_building_tiles: Path
     ship_marker: Path
     piety_tracks: Path
+    pilgrimage_sites: Path
     game_setup: Path
     overview: Path
 
@@ -90,6 +97,7 @@ class GeneratedViews:
             self.donated_building_tiles,
             self.ship_marker,
             self.piety_tracks,
+            self.pilgrimage_sites,
             self.game_setup,
             self.overview,
         )
@@ -129,6 +137,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
+    <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
     <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
@@ -154,6 +163,9 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     )
     ship_marker = generate_ship_marker_page(output_path=destination_dir / SHIP_MARKER_FILENAME)
     piety_tracks = generate_piety_track_page(output_path=destination_dir / PIETY_TRACKS_FILENAME)
+    pilgrimage_sites = generate_pilgrimage_sites_page(
+        output_path=destination_dir / PILGRIMAGE_SITES_FILENAME
+    )
     game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
@@ -166,6 +178,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         donated_building_tiles=donated_building_tiles,
         ship_marker=ship_marker,
         piety_tracks=piety_tracks,
+        pilgrimage_sites=pilgrimage_sites,
         game_setup=game_setup,
         overview=overview,
     )
