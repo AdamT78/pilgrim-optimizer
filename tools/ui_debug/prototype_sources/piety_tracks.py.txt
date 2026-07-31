@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+"""
+Horizontal 12-square score/progress track for Pilgrim. Each square has
+rounded corners and is sized to fit a 2x2 grid of circles using the same
+circle radius as the resource circles on the player board (r=19). Numbers
+1-12 are printed above each square.
+
+Two visual variants are rendered:
+  A) uniform parchment squares with empty (dashed) circle slots
+  B) alternating two-tone squares with solid white circle slots (same
+     look as the starting-worker tokens on the player board)
+"""
+
+import math
+
+# ---------------------------------------------------------------------------
+# Palette -- reused from player_board.py
+# ---------------------------------------------------------------------------
+
+INK = "#3A2F1E"
+PARCHMENT = "#F1E7CE"
+PARCHMENT_EDGE = "#B8A97C"
+PANEL_BG = "#E4D9BC"
+SLOT_EMPTY = "#D8CCA9"
+SLOT_EMPTY_EDGE = "#A99A6E"
+WORKER_FILL = "#EFE4C6"
+WORKER_EDGE = "#8B7B4E"
+ALT_BG = "#D8CBA0"  # slightly darker parchment, for the alternating variant
+
+# same grey used for the middle-cluster hexes on pilgrim_map.html
+MAP_GREY = "#B9B9B4"
+MAP_GREY_EDGE = "#55554F"
+
+# game board's width (viewBox width in pilgrim_map.html) -- the fused
+# piety track is scaled to display at this same width
+MAP_BOARD_WIDTH = 1013.8
+
+# same small white worker-token circles used on the player board
+TOKEN_R = 6
+TOKEN_GAP = 6
+TOKEN_FILL = "#FFFFFF"
+
+# same 5-point star used on special_tiles.py
+STAR_FILL = "#F4D03F"
+STAR_EDGE = "#B8960C"
+
+# colored token-circle overrides (box 1's circles)
+CIRCLE_RED = "#C0392B"
+CIRCLE_RED_EDGE = "#7A2020"
+CIRCLE_YELLOW = STAR_FILL
+CIRCLE_YELLOW_EDGE = STAR_EDGE
+CIRCLE_BLUE = "#2E86C1"
+CIRCLE_BLUE_EDGE = "#1B4F72"
+
+def star_path_d(cx, cy, outer_r, inner_r, points=5, rotation_deg=-90):
+    pts = []
+    angle_step = math.pi / points
+    start = math.radians(rotation_deg)
+    for i in range(points * 2):
+        r = outer_r if i % 2 == 0 else inner_r
+        a = start + i * angle_step
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return "M " + " L ".join(f"{x:.2f},{y:.2f}" for x, y in pts) + " Z"
+
+def star_extent(outer_r, inner_r, points=5, rotation_deg=-90):
+    """(min_y, max_y) of the star's points, relative to its own center."""
+    angle_step = math.pi / points
+    start = math.radians(rotation_deg)
+    ys = []
+    for i in range(points * 2):
+        r = outer_r if i % 2 == 0 else inner_r
+        a = start + i * angle_step
+        ys.append(r * math.sin(a))
+    return min(ys), max(ys)
+
+# ---------------------------------------------------------------------------
+# Sizing -- squares sized to fit a 2x2 grid of circles at the same radius
+# used for the resource circles on the player board
+# ---------------------------------------------------------------------------
+
+RES_R = 19          # same circle radius as the player board resource circles
+CIRCLE_GAP = 8
+GRID_W = 2 * (2 * RES_R) + CIRCLE_GAP   # 2x2 grid width/height
+
+PAD = 13
+SQUARE = GRID_W + 2 * PAD               # square side length (boxes 2-12)
+
+# fused-track box width: sized to fit only the small 2x2 token circles,
+# with the margin between a box's outer circle and its edge equal to
+# TOKEN_GAP, so that once boxes are pushed together the gap between
+# circles across a box boundary is 2x the gap between circles within the
+# same row (TOKEN_GAP on each side of the shared edge)
+GRID_W_TOKEN = 2 * (2 * TOKEN_R) + TOKEN_GAP
+FUSED_BOX_PAD = TOKEN_GAP
+SQUARE_1 = GRID_W_TOKEN + 2 * FUSED_BOX_PAD   # uniform fused-track box width
+
+# stroke widths used by the fused strip -- the outer track border is drawn
+# thicker than the token circles' border, which eats into the margin more
+# than a token circle's border eats into the within-row gap. OUTER_PAD
+# compensates for that difference so the *visible* space from the track's
+# left/right edge to the nearest circle actually matches the *visible*
+# space between two circles in the same row, not just the raw numbers.
+FUSED_RECT_STROKE = 2.5
+TOKEN_STROKE = 1.2
+OUTER_PAD = FUSED_BOX_PAD + (FUSED_RECT_STROKE - TOKEN_STROKE) / 2
+
+CORNER_R = 16
+SQUARE_GAP = 14
+N = 12
+
+# fused track has one extra box added to the right of the original 12, so
+# it gets its own box count and number lists (above-track label, star
+# number) rather than reusing N/TRACK_NUMBERS for the A/B variants
+N_FUSED = 13
+ABOVE_NUMBERS = [str(i) for i in range(12)] + ["12"]
+TRACK_NUMBERS = ["-5", "-4", "-3", "-2", "-1", "0", "1", "2", "3", "4", "5", "7", "9"]
+
+STEP = SQUARE + SQUARE_GAP
+
+def square_x(i):
+    return i * STEP
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def draw_circle_grid(cx, cy, filled, fill, edge, dash=False, r=RES_R, gap=CIRCLE_GAP, color_overrides=None, rows=(-1, 1)):
+    """2x2 (or, with rows=(0,), a single row of 2) circles centered on
+    (cx, cy). color_overrides maps (row, col) -- row -1/1 = row 1/2 (or 0
+    for the single-row case), col -1/1 = circle 1/2 in that row -- to a
+    (fill, edge) tuple to override the default colors."""
+    parts = []
+    step = 2 * r + gap
+    offset = step / 2
+    for row in rows:
+        for col in (-1, 1):
+            x = cx + col * offset
+            y = cy + row * offset
+            dash_attr = ' stroke-dasharray="5,3"' if dash else ""
+            this_fill, this_edge = fill, edge
+            if color_overrides and (row, col) in color_overrides:
+                this_fill, this_edge = color_overrides[(row, col)]
+            parts.append(
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" '
+                f'fill="{this_fill}" stroke="{this_edge}" stroke-width="{"1.2" if r==TOKEN_R else "2"}"{dash_attr}/>'
+            )
+    return "".join(parts)
+
+def render_variant(alternating, dashed_circles, title, subtitle, filename):
+    parts = []
+    for i in range(N):
+        x = square_x(i)
+        cx = x + SQUARE / 2
+        cy = SQUARE / 2
+
+        # number label above the square
+        parts.append(
+            f'<text x="{cx:.1f}" y="-14" text-anchor="middle" '
+            f'font-family="Georgia, serif" font-size="20" font-weight="bold" '
+            f'fill="#F2EEDF">{i + 1}</text>'
+        )
+
+        # square with rounded corners
+        if alternating and i % 2 == 1:
+            fill = ALT_BG
+        else:
+            fill = PARCHMENT
+        parts.append(
+            f'<rect x="{x:.1f}" y="0" width="{SQUARE}" height="{SQUARE}" '
+            f'rx="{CORNER_R}" ry="{CORNER_R}" fill="{fill}" '
+            f'stroke="{PARCHMENT_EDGE}" stroke-width="2.5"/>'
+        )
+
+        # 2x2 circle slots
+        if dashed_circles:
+            parts.append(draw_circle_grid(cx, cy, False, SLOT_EMPTY, SLOT_EMPTY_EDGE, dash=True))
+        else:
+            parts.append(draw_circle_grid(cx, cy, True, "#FFFFFF", WORKER_EDGE, dash=False))
+
+    total_w = N * SQUARE + (N - 1) * SQUARE_GAP
+    pad_top, pad_bottom, pad_side = 40, 20, 20
+    min_x, min_y = -pad_side, -pad_top
+    width = total_w + 2 * pad_side
+    height = SQUARE + pad_top + pad_bottom
+
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="{min_x} {min_y} {width} {height}" width="{width}" height="{height}">
+  <rect x="{min_x}" y="{min_y}" width="{width}" height="{height}" fill="#000000"/>
+  {''.join(parts)}
+</svg>'''
+
+    html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim — Score Track</title>
+<style>
+  body {{
+    margin: 0;
+    background: #000000;
+    font-family: Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 40px;
+    box-sizing: border-box;
+  }}
+  h1 {{
+    font-family: Georgia, serif;
+    font-size: 26px;
+    color: #F2EEDF;
+    margin: 0 0 2px;
+  }}
+  p.subtitle {{
+    color: #A8A296;
+    font-size: 14px;
+    margin: 0 0 18px;
+    text-align: center;
+    max-width: 640px;
+  }}
+  .board-wrap {{
+    background: #000000;
+    border: 1px solid #333333;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    padding: 10px;
+  }}
+  svg {{ display: block; max-width: 95vw; height: auto; }}
+</style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <p class="subtitle">{subtitle}</p>
+  <div class="board-wrap">
+    {svg}
+  </div>
+</body>
+</html>
+'''
+    with open(filename, "w") as f:
+        f.write(html)
+    print(f"Wrote {filename}")
+
+def render_fused(title, subtitle, filename, circle_rows=2):
+    """Variant A, fused into one solid strip: no gaps and no divider lines
+    between boxes -- just one continuous rounded rect with the box numbers
+    above it and a 2x2 grid of small white token circles (same as the
+    player board's starting-worker tokens) marking each box's position.
+    circle_rows=1 drops circle row 2 (box 1's yellow/blue circles) and
+    shortens the box height to match, keeping the same top/bottom margins
+    and the same gap rhythm (number -> circles -> star)."""
+    parts = []
+
+    # every box is the same width (sized to the small 2x2 token circles);
+    # the whole strip additionally gets extra padding on its far left and
+    # far right so the outer margin matches the within-row circle gap
+    outer_extra = OUTER_PAD - FUSED_BOX_PAD
+
+    def box_left(i):
+        return outer_extra + i * SQUARE_1
+
+    total_w = 2 * outer_extra + N_FUSED * SQUARE_1
+
+    # vertical layout, stacked top to bottom: top margin, above-track
+    # number, gap, circles, gap, star -- with the top margin (box top
+    # to the numbers) equal to the bottom margin (star's lower tip to box
+    # bottom), so the box is only as tall as its content needs.
+    GAP_CIRCLES_TO_STAR = 6
+    # measured via getBBox() in a headless render: for this font stack at
+    # font-size 9 weight 600, the rendered glyph top/bottom sit these far
+    # from the text's y (baseline) -- rule-of-thumb font-metric ratios
+    # undershot this, which is why margins/gaps didn't actually match
+    # until calibrated against the real rendered glyph box.
+    CAP_HEIGHT_RENDERED = 8.1
+    NUM_BOTTOM_OFFSET = 1.74  # baseline to the glyph's true rendered bottom
+    star_outer_r = 16
+    star_inner_r = star_outer_r * 0.45
+    star_min_y, star_max_y = star_extent(star_outer_r, star_inner_r)
+
+    top_margin = 9  # box top to the top of the number glyph == bottom margin
+    num_display_y = top_margin + CAP_HEIGHT_RENDERED
+    num_bottom = num_display_y + NUM_BOTTOM_OFFSET
+
+    # gap between the numbers and circle row 1 matches the gap between the
+    # last circle row and the star exactly (both = GAP_CIRCLES_TO_STAR),
+    # anchored off the number's actual rendered bottom, not a nominal one
+    row1_top_edge = num_bottom + GAP_CIRCLES_TO_STAR
+    circles_top = row1_top_edge + TOKEN_R  # row 1 (top row) circle center
+    circles_cy = circles_top + (2 * TOKEN_R + TOKEN_GAP) / 2
+
+    if circle_rows == 2:
+        circles_bottom = circles_cy + (2 * TOKEN_R + TOKEN_GAP) / 2 + TOKEN_R
+    else:
+        # single row only -- circles_cy collapses onto row 1 itself, and
+        # the box is shorter by exactly the row-2 spacing that's no
+        # longer needed
+        circles_cy = circles_top
+        circles_bottom = circles_cy + TOKEN_R
+    star_cy = circles_bottom + GAP_CIRCLES_TO_STAR - star_min_y
+    star_bottom = star_cy + star_max_y
+    fused_height = star_bottom + top_margin
+
+    # one continuous rounded-rect body for the whole strip -- same grey as
+    # the middle-cluster hexes on the map
+    parts.append(
+        f'<rect x="0" y="0" width="{total_w}" height="{fused_height:.1f}" '
+        f'rx="{CORNER_R}" ry="{CORNER_R}" fill="{MAP_GREY}" '
+        f'stroke="{MAP_GREY}" stroke-width="{FUSED_RECT_STROKE}"/>'
+    )
+
+    for i in range(N_FUSED):
+        left = box_left(i)
+        cx = left + SQUARE_1 / 2
+        cy = circles_cy
+        parts.append(
+            f'<text x="{cx:.1f}" y="{num_display_y:.1f}" text-anchor="middle" '
+            f'font-family="Helvetica, Arial, sans-serif" font-size="9" font-weight="600" '
+            f'fill="{INK}">{ABOVE_NUMBERS[i]}</text>'
+        )
+        # same small white worker-token circles (same size) as on the
+        # player board, only in box 1 (the "0" box) -- 3 of its 4 circles
+        # are recolored: circle 2 on row 1 red, circle 1 on row 2 yellow,
+        # circle 2 on row 2 blue. Boxes "1" through "12" show no circles.
+        # circle_rows=1 drops row 2 (yellow/blue) entirely.
+        if i == 0:
+            if circle_rows == 2:
+                overrides = {
+                    (-1, 1): (CIRCLE_RED, CIRCLE_RED_EDGE),
+                    (1, -1): (CIRCLE_YELLOW, CIRCLE_YELLOW_EDGE),
+                    (1, 1): (CIRCLE_BLUE, CIRCLE_BLUE_EDGE),
+                }
+                parts.append(draw_circle_grid(cx, cy, False, TOKEN_FILL, WORKER_EDGE, dash=False, r=TOKEN_R, gap=TOKEN_GAP, color_overrides=overrides))
+            else:
+                overrides = {(0, 1): (CIRCLE_RED, CIRCLE_RED_EDGE)}
+                parts.append(draw_circle_grid(cx, cy, False, TOKEN_FILL, WORKER_EDGE, dash=False, r=TOKEN_R, gap=TOKEN_GAP, color_overrides=overrides, rows=(0,)))
+
+        # same yellow star as on special_tiles.py, in the remaining space
+        # below the circles
+        parts.append(
+            f'<path d="{star_path_d(cx, star_cy, star_outer_r, star_inner_r)}" '
+            f'fill="{STAR_FILL}" stroke="{STAR_EDGE}" stroke-width="1.5" stroke-linejoin="round"/>'
+        )
+        parts.append(
+            f'<text x="{cx:.1f}" y="{star_cy + 3.0:.1f}" text-anchor="middle" '
+            f'font-family="Helvetica, Arial, sans-serif" font-size="9" font-weight="600" '
+            f'fill="#000000">{TRACK_NUMBERS[i]}</text>'
+        )
+
+    pad_top, pad_bottom, pad_side = 14, 20, 20
+    min_x, min_y = -pad_side, -pad_top
+    width = total_w + 2 * pad_side
+    height = fused_height + pad_top + pad_bottom
+
+    # scale the rendered track (via the outer width/height only -- the
+    # viewBox / internal coordinates are untouched) so its displayed width
+    # matches the game board's width in pilgrim_map.html
+    display_scale = MAP_BOARD_WIDTH / width
+    display_w = width * display_scale
+    display_h = height * display_scale
+
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="{min_x} {min_y} {width} {height}" width="{display_w:.1f}" height="{display_h:.1f}">
+  <rect x="{min_x}" y="{min_y}" width="{width}" height="{height}" fill="#000000"/>
+  {''.join(parts)}
+</svg>'''
+
+    html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim — Score Track</title>
+<style>
+  body {{
+    margin: 0;
+    background: #000000;
+    font-family: Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 40px;
+    box-sizing: border-box;
+  }}
+  h1 {{
+    font-family: Georgia, serif;
+    font-size: 26px;
+    color: #F2EEDF;
+    margin: 0 0 2px;
+  }}
+  p.subtitle {{
+    color: #A8A296;
+    font-size: 14px;
+    margin: 0 0 18px;
+    text-align: center;
+    max-width: 640px;
+  }}
+  .board-wrap {{
+    background: #000000;
+    border: 1px solid #333333;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    padding: 10px;
+  }}
+  svg {{ display: block; max-width: 95vw; height: auto; }}
+</style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <p class="subtitle">{subtitle}</p>
+  <div class="board-wrap">
+    {svg}
+  </div>
+</body>
+</html>
+'''
+    with open(filename, "w") as f:
+        f.write(html)
+    print(f"Wrote {filename}")
+
+render_variant(
+    alternating=False, dashed_circles=True,
+    title="PILGRIM — Score Track (A)",
+    subtitle="12 uniform parchment squares, numbered above, each fitting a 2x2 grid of empty circle slots.",
+    filename="score_track_a.html",
+)
+
+render_variant(
+    alternating=True, dashed_circles=False,
+    title="PILGRIM — Score Track (B)",
+    subtitle="12 alternating-tone squares, numbered above, each fitting a 2x2 grid of solid worker-token circles.",
+    filename="score_track_b.html",
+)
+
+render_fused(
+    title="PILGRIM — Score Track (A, fused)",
+    subtitle="Variant A pushed into one solid strip -- rounded corners only at the far left of box 1 and far right of box 12.",
+    filename="score_track_a_fused.html",
+)
+
+render_fused(
+    title="PILGRIM — Score Track (A, fused, single circle row)",
+    subtitle="Same as above, with circle row 2 removed from box 1 and the height shortened to match, keeping the same top/bottom margins.",
+    filename="score_track_a_fused_row1.html",
+    circle_rows=1,
+)

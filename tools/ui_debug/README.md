@@ -13,6 +13,9 @@ Each kind of file here has one job, and mixing them up is how this layer starts 
 
 - **Prototype HTML** (`prototypes/*.html`) are visual baselines. Once a prototype lands it is
   not edited; renderers are judged against it.
+- **Prototype sources** (`prototype_sources/*.py.txt`) are reference copies of the throwaway
+  scripts that drew a baseline. They are kept as `.txt` on purpose: they are read for intent when
+  reverse-engineering, never imported, run, or refactored.
 - **Layout/catalog JSON** (`*_layout.json`, `*_catalog.json`) are structured renderer inputs.
   They describe what to draw, reverse-engineered from the baseline.
 - **Generated HTML** (`generated/*.html`) are local debug artifacts. They are git-ignored,
@@ -48,8 +51,23 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype currently in `prototypes/` has been through this checklist, so there are no
-baseline-only prototypes left. New prototypes start at step 1 again.
+## Baseline-only prototypes
+
+`prototypes/piety_tracks.html` is the untouched visual baseline for the piety tracks. It holds
+both variants in one page: the 3-4 player track on top and the 2 player track below.
+
+`prototype_sources/piety_tracks.py.txt` preserves the Python code that generated it, as reference
+material for a later extraction.
+
+For the piety tracks there is currently:
+
+- no renderer extraction
+- no generated output
+- no `GameState` integration
+- no rules logic
+
+`index.html` links to the baseline only. Renderer extraction should happen in a separate PR,
+following the component extraction checklist above.
 
 ## Building tiles renderer extraction
 
