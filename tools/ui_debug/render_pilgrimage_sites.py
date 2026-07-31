@@ -68,6 +68,11 @@ def sites_of(data: dict | list) -> list[dict]:
     return list(data) if isinstance(data, list) else list(data["sites"])
 
 
+def site_by_index(data: dict | list, index: int) -> dict:
+    """The nth site in file order, which is the order the sites are handed out."""
+    return sites_of(data)[index]
+
+
 def _hex_path_data(cx: float, cy: float) -> str:
     points = hex_points(cx, cy)
     head = f"M {points[0][0]:.2f},{points[0][1]:.2f}"
@@ -75,18 +80,18 @@ def _hex_path_data(cx: float, cy: float) -> str:
     return f"{head} {tail} Z"
 
 
-def star_center(cx: float, cy: float) -> tuple[float, float]:
+def star_center(cx: float, cy: float, scale: float = 1.0) -> tuple[float, float]:
     """The middle of the hex's lower half, lifted by `STAR_LIFT`."""
     apothem = HEX_RADIUS * math.sin(math.radians(60.0))
-    return cx, cy + apothem * 0.5 - STAR_LIFT
+    return cx, cy + (apothem * 0.5 - STAR_LIFT) * scale
 
 
-def _text(x: float, y: float, value: str) -> str:
+def _text(x: float, y: float, value: str, font_size: float, ink: str) -> str:
     return (
         f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="middle"'
         ' font-family="Helvetica, Arial, sans-serif"'
-        f' font-size="{TEXT_FONT_SIZE:g}" font-weight="600"'
-        f' fill="{TEXT_FILL}">{escape(value)}</text>'
+        f' font-size="{round(font_size, 2):g}" font-weight="600"'
+        f' fill="{ink}">{escape(value)}</text>'
     )
 
 
@@ -97,31 +102,41 @@ def render_pilgrimage_site_hex(x: float, y: float) -> str:
     )
 
 
-def render_pilgrimage_site_star(site: dict, x: float, y: float) -> str:
-    """The star with its VP value, and the piety and stone values stacked on either side."""
-    star_x, star_y = star_center(x, y)
-    top = star_y - STAR_OUTER_RADIUS + LABEL_CAP_TOP_OFFSET
-    bottom = top + LABEL_LINE_HEIGHT
-    left = star_x - STAR_OUTER_RADIUS - LABEL_GAP
-    right = star_x + STAR_OUTER_RADIUS + LABEL_GAP
+def render_pilgrimage_site_contents(
+    site: dict,
+    x: float = 0.0,
+    y: float = 0.0,
+    scale: float = 1.0,
+    ink: str = TEXT_FILL,
+) -> str:
+    """Everything a site tile carries: the star with its VP value, and the P and S values.
+
+    Drawn without the hex around it, so a caller that already has a hex — the game setup view
+    recolours a map hex instead of stacking a tile on it — can reuse the contents at its own size.
+    """
+    star_x, star_y = star_center(x, y, scale)
+    outer = STAR_OUTER_RADIUS * scale
+    top = star_y - outer + LABEL_CAP_TOP_OFFSET * scale
+    bottom = top + LABEL_LINE_HEIGHT * scale
+    left = star_x - outer - LABEL_GAP * scale
+    right = star_x + outer + LABEL_GAP * scale
+    font_size = TEXT_FONT_SIZE * scale
 
     return "".join(
         [
-            render_star_path(
-                star_x, star_y, STAR_OUTER_RADIUS, STAR_OUTER_RADIUS * STAR_INNER_RATIO
-            ),
-            _text(star_x, star_y + VP_TEXT_OFFSET, str(site["vp"])),
-            _text(left, top, str(site["piety"])),
-            _text(left, bottom, PIETY_LABEL),
-            _text(right, top, str(site["stone"])),
-            _text(right, bottom, STONE_LABEL),
+            render_star_path(star_x, star_y, outer, outer * STAR_INNER_RATIO),
+            _text(star_x, star_y + VP_TEXT_OFFSET * scale, str(site["vp"]), font_size, ink),
+            _text(left, top, str(site["piety"]), font_size, ink),
+            _text(left, bottom, PIETY_LABEL, font_size, ink),
+            _text(right, top, str(site["stone"]), font_size, ink),
+            _text(right, bottom, STONE_LABEL, font_size, ink),
         ]
     )
 
 
 def render_pilgrimage_site_tile(site: dict, x: float, y: float) -> str:
     """Render one pilgrimage site tile (hex, star, values) centred on (x, y)."""
-    return render_pilgrimage_site_hex(x, y) + render_pilgrimage_site_star(site, x, y)
+    return render_pilgrimage_site_hex(x, y) + render_pilgrimage_site_contents(site, x, y)
 
 
 def _view_box(site_count: int) -> tuple[float, float, float, float]:
@@ -143,7 +158,8 @@ def render_pilgrimage_sites_svg(data: dict | list) -> str:
     # Hexes first, then every star: the baseline draws the row in those two passes.
     hexes = "".join(render_pilgrimage_site_hex(x, 0.0) for x in centers)
     stars = "".join(
-        render_pilgrimage_site_star(site, x, 0.0) for site, x in zip(sites, centers, strict=True)
+        render_pilgrimage_site_contents(site, x, 0.0)
+        for site, x in zip(sites, centers, strict=True)
     )
     return (
         '<svg xmlns="http://www.w3.org/2000/svg"'
