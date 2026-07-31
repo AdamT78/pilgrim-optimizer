@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "tiles": [
+    {
+      "id": "ship_marker_level_1",
+      "building_id": "confession_box",
+      "name": "Confession Box",
+      "level": 1,
+      "level_label": "I",
+      "color_group": "light_blue"
+    },
+    {
+      "id": "ship_marker_level_2",
+      "building_id": "brewery",
+      "name": "Brewery",
+      "level": 2,
+      "level_label": "II",
+      "color_group": "light_red"
+    },
+    {
+      "id": "ship_marker_level_3",
+      "building_id": "bank",
+      "name": "Bank",
+      "level": 3,
+      "level_label": "III",
+      "color_group": "light_green"
+    }
+  ]
+}

@@ -48,22 +48,8 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-## Baseline-only prototypes
-
-This prototype is a visual baseline with no renderer extraction yet:
-
-- `prototypes/ship_marker.html`: ship marker / ship-on-tile visual examples, one per building
-  colour.
-
-For it there is currently:
-
-- no renderer extraction
-- no generated output
-- no `GameState` integration
-- no rules logic
-
-`index.html` links to it as a baseline only. Renderer extraction should happen in a separate
-PR, following the component extraction checklist above.
+Every prototype currently in `prototypes/` has been through this checklist, so there are no
+baseline-only prototypes left. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -151,6 +137,35 @@ python3 tools/ui_debug/generate_donated_buildings.py
 The generated overview below also produces it. Like the other renderers, this still does not
 connect to `GameState` and still does not implement game rules.
 
+## Ship marker renderer extraction
+
+`prototypes/ship_marker.html` is the untouched visual baseline for the ship marker examples: the
+first building tile of each colour with a ship silhouette in the upper part of the hex.
+
+`ship_marker_examples.json` and `render_ship_marker.py` are the structured renderer extraction.
+The three example tiles are described as data, and the tile colours, hex radius, and label layout
+are imported from `render_buildings.py` so they cannot drift away from the regular building tiles.
+
+The ship itself is deliberately a reusable SVG primitive rather than part of the tile:
+
+```python
+render_ship_icon(cx, cy, scale=0.85, color="#000000")
+```
+
+It returns a self-contained fragment (hull, bowsprit, three masts, sails, pennant) anchored at the
+middle of the hull at the waterline, so a later map-edge or round-track view can drop the same
+ship in without pulling tile geometry along. The ship is a marker drawn on a tile, not a rule
+about the tile.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_ship_marker.py
+```
+
+The generated overview below also produces it. Like the other renderers, this still does not
+connect to `GameState` and still does not implement game rules.
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
@@ -166,6 +181,7 @@ tools/ui_debug/generated/map.html
 tools/ui_debug/generated/building_tiles.html
 tools/ui_debug/generated/player_board.html
 tools/ui_debug/generated/donated_building_tiles.html
+tools/ui_debug/generated/ship_marker.html
 tools/ui_debug/generated/debug_overview.html
 ```
 

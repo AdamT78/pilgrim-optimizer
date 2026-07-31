@@ -41,6 +41,12 @@ from tools.ui_debug.generate_player_board import (  # noqa: E402
 from tools.ui_debug.generate_player_board import (  # noqa: E402
     generate_player_board_page,
 )
+from tools.ui_debug.generate_ship_marker import (  # noqa: E402
+    OUTPUT_FILENAME as SHIP_MARKER_FILENAME,
+)
+from tools.ui_debug.generate_ship_marker import (  # noqa: E402
+    generate_ship_marker_page,
+)
 
 GENERATED_DIRNAME = "generated"
 OVERVIEW_FILENAME = "debug_overview.html"
@@ -59,6 +65,7 @@ class GeneratedViews:
     building_tiles: Path
     player_board: Path
     donated_building_tiles: Path
+    ship_marker: Path
     overview: Path
 
     def as_tuple(self) -> tuple[Path, ...]:
@@ -67,6 +74,7 @@ class GeneratedViews:
             self.building_tiles,
             self.player_board,
             self.donated_building_tiles,
+            self.ship_marker,
             self.overview,
         )
 
@@ -103,6 +111,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{BUILDING_TILES_FILENAME}">Generated building tiles</a></li>
     <li><a href="{PLAYER_BOARD_FILENAME}">Generated player board</a></li>
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
+    <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">
@@ -125,6 +134,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     donated_building_tiles = generate_donated_building_tiles_page(
         output_path=destination_dir / DONATED_BUILDING_TILES_FILENAME
     )
+    ship_marker = generate_ship_marker_page(output_path=destination_dir / SHIP_MARKER_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
@@ -134,6 +144,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         building_tiles=building_tiles,
         player_board=player_board,
         donated_building_tiles=donated_building_tiles,
+        ship_marker=ship_marker,
         overview=overview,
     )
 
