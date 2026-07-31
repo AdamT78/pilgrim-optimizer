@@ -35,6 +35,12 @@ from tools.ui_debug.generate_map import (  # noqa: E402
 from tools.ui_debug.generate_map import (  # noqa: E402
     generate_map_page,
 )
+from tools.ui_debug.generate_piety_track import (  # noqa: E402
+    OUTPUT_FILENAME as PIETY_TRACKS_FILENAME,
+)
+from tools.ui_debug.generate_piety_track import (  # noqa: E402
+    generate_piety_track_page,
+)
 from tools.ui_debug.generate_player_board import (  # noqa: E402
     OUTPUT_FILENAME as PLAYER_BOARD_FILENAME,
 )
@@ -66,6 +72,7 @@ class GeneratedViews:
     player_board: Path
     donated_building_tiles: Path
     ship_marker: Path
+    piety_tracks: Path
     overview: Path
 
     def as_tuple(self) -> tuple[Path, ...]:
@@ -75,6 +82,7 @@ class GeneratedViews:
             self.player_board,
             self.donated_building_tiles,
             self.ship_marker,
+            self.piety_tracks,
             self.overview,
         )
 
@@ -112,6 +120,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{PLAYER_BOARD_FILENAME}">Generated player board</a></li>
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
+    <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">
@@ -135,6 +144,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         output_path=destination_dir / DONATED_BUILDING_TILES_FILENAME
     )
     ship_marker = generate_ship_marker_page(output_path=destination_dir / SHIP_MARKER_FILENAME)
+    piety_tracks = generate_piety_track_page(output_path=destination_dir / PIETY_TRACKS_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
@@ -145,6 +155,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         player_board=player_board,
         donated_building_tiles=donated_building_tiles,
         ship_marker=ship_marker,
+        piety_tracks=piety_tracks,
         overview=overview,
     )
 

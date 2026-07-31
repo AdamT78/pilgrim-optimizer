@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "title": "Piety tracks",
+  "subtitle": "Top: 3-4 player track. Bottom: 2 player track.",
+  "page_background": "#000000",
+  "display_width": 1013.8,
+  "padding": {
+    "top": 14,
+    "bottom": 20,
+    "side": 20
+  },
+  "track": {
+    "position_count": 13,
+    "box_width": 42,
+    "outer_extra": 0.65,
+    "corner_radius": 16,
+    "fill": "#B9B9B4",
+    "stroke": "#B9B9B4",
+    "stroke_width": 2.5,
+    "top_margin": 9,
+    "row_gap": 6,
+    "token_position": 0,
+    "position_label": {
+      "cap_height": 8.1,
+      "descent": 1.74,
+      "fill": "#3A2F1E"
+    },
+    "token": {
+      "radius": 6,
+      "gap": 6,
+      "stroke_width": 1.2
+    },
+    "star": {
+      "outer_radius": 16,
+      "inner_ratio": 0.45,
+      "label_offset": 3.0,
+      "label_fill": "#000000"
+    }
+  },
+  "variants": [
+    {
+      "id": "three_four_player",
+      "label": "3-4 player track",
+      "token_rows": 2,
+      "tokens": [
+        { "row": -1, "col": -1, "fill": "#FFFFFF", "stroke": "#8B7B4E" },
+        { "row": -1, "col": 1, "fill": "#C0392B", "stroke": "#7A2020" },
+        { "row": 1, "col": -1, "fill": "#F4D03F", "stroke": "#B8960C" },
+        { "row": 1, "col": 1, "fill": "#2E86C1", "stroke": "#1B4F72" }
+      ]
+    },
+    {
+      "id": "two_player",
+      "label": "2 player track",
+      "token_rows": 1,
+      "tokens": [
+        { "row": 0, "col": -1, "fill": "#FFFFFF", "stroke": "#8B7B4E" },
+        { "row": 0, "col": 1, "fill": "#C0392B", "stroke": "#7A2020" }
+      ]
+    }
+  ]
+}
