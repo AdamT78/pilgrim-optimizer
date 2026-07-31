@@ -102,7 +102,16 @@ def track_geometry(layout: dict, token_rows: int) -> dict:
     }
 
 
-def _box_center_x(layout: dict, index: int) -> float:
+def variant_by_id(layout: dict, variant_id: str) -> dict:
+    for variant in layout["variants"]:
+        if variant["id"] == variant_id:
+            return variant
+    known = ", ".join(variant["id"] for variant in layout["variants"])
+    raise KeyError(f"unknown piety track variant: {variant_id} (have {known})")
+
+
+def position_center_x(layout: dict, index: int) -> float:
+    """Centre of the box drawn for one piety position, in track coordinates."""
     track = layout["track"]
     return track["outer_extra"] + index * track["box_width"] + track["box_width"] / 2
 
@@ -110,7 +119,7 @@ def _box_center_x(layout: dict, index: int) -> float:
 def render_position_label(layout: dict, geometry: dict, index: int, text: str) -> str:
     fill = layout["track"]["position_label"]["fill"]
     return (
-        f'<text x="{_box_center_x(layout, index):.1f}"'
+        f'<text x="{position_center_x(layout, index):.1f}"'
         f' y="{geometry["number_baseline_y"]:.1f}" text-anchor="middle" {LABEL_FONT}'
         f' fill="{fill}">{escape(text)}</text>'
     )
@@ -118,7 +127,7 @@ def render_position_label(layout: dict, geometry: dict, index: int, text: str) -
 
 def render_tokens(layout: dict, geometry: dict, index: int, tokens: list[dict]) -> str:
     token = layout["track"]["token"]
-    center_x = _box_center_x(layout, index)
+    center_x = position_center_x(layout, index)
     offset = geometry["token_offset"]
     return "".join(
         f'<circle cx="{center_x + entry["col"] * offset:.1f}"'
@@ -131,7 +140,7 @@ def render_tokens(layout: dict, geometry: dict, index: int, tokens: list[dict]) 
 
 def render_star(layout: dict, geometry: dict, index: int, vp: int) -> str:
     star = layout["track"]["star"]
-    center_x = _box_center_x(layout, index)
+    center_x = position_center_x(layout, index)
     star_cy = geometry["star_cy"]
     outer_r = star["outer_radius"]
     label_y = star_cy + star["label_offset"]

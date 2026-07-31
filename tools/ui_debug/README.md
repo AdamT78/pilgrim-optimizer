@@ -202,8 +202,9 @@ integration: this is still a static view, and it still does not implement game r
 ## Game setup debug view
 
 `generated/game_setup.html` is the first composed view: it has no prototype baseline of its own
-and no renderer module of its own. `generate_game_setup.py` puts the generated map and the
-generated 3-4 player piety track on one page and adds a little client-side interaction.
+and no renderer module of its own. `generate_game_setup.py` puts the generated map, the generated
+3-4 player piety track, and generated building tiles on one page and adds a little client-side
+interaction.
 
 It uses the `three_four_player` variant only, because the page has controls for four players. The
 2-player track is intentionally not shown here; `generate_piety_track.py` still produces both
@@ -211,12 +212,26 @@ variants for the standalone piety tracks page.
 
 What moves, and what it means:
 
-- The ship rides the edge hexes clockwise from `J3`, sitting in the upper part of a tile the way
-  the ship marker tiles draw it. It hops over the four special corner hexes `F1`, `B6`, `G11`, and
-  `L6`, which leaves 26 stops — the engine's round track length. `SHIP_HEX_PATH` lists those stops
-  by map label and they are resolved through the map's own label table, so the route cannot drift
-  away from the board. When the ship actually moves is still a rules question this page does not
-  answer.
+- `EDGE_HEX_PATH` lists the eligible edge hexes clockwise from `J3` by map label. It hops over the
+  four special corner hexes `F1`, `B6`, `G11`, and `L6`, which leaves 26 hexes — the engine's round
+  track length. Both the setup slots and the ship ride that path, and the labels are resolved
+  through the map's own label table, so neither can drift away from the board.
+- The ship sits in the upper part of a hex the way the ship marker tiles draw it, and starts on the
+  hex that carries setup slot 1. When the ship actually moves is still a rules question this page
+  does not answer.
+- `Start roll` 1-6 picks the hex setup slot 1 sits on (`E1`, `D1`, `D2`, `C3`, `C4`, `B5`), and the
+  rest of the slots follow it clockwise. Changing the roll re-places every slot and sends the ship
+  back to the new first hex.
+- The slots themselves are `SETUP_SLOTS`, one hard-coded example schedule of 26 rounds. This page
+  deliberately does not call `pilgrim.setup.generator`, so the layout can be looked at without a
+  seed or a scenario. A building slot recolours its map hex in the catalog palette and writes the
+  tile's own wrapped label into it; it does not lay a second hex on top of the board. The fill goes
+  in through `render_map_svg(layout, tile_overlay=...)`, which drops a fragment onto the tile fills
+  before the map draws its rivers, hex edges, and labels, so a placed building keeps every line and
+  label the map would have drawn there. `render_buildings.py` and the standalone building tiles
+  page are untouched and still draw full tiles. A pilgrimage site slot only tints its hex, because
+  site tiles do not exist yet, and an empty slot draws nothing. Which round a slot belongs to is
+  not written on the map.
 - Each player has one disc on the piety track. `+1 piety` and `-1 piety` move it one position and
   clamp at the ends of the track.
 - The four discs are the movable copy of the track's own starting tokens, so their colours come
