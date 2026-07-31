@@ -55,8 +55,9 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype currently in `prototypes/` has been through this checklist, so there are no
-baseline-only prototypes left. New prototypes start at step 1 again.
+Every prototype in `prototypes/` has been through this checklist except the pilgrimage sites, which
+are at step 1 and stay there until their renderer gets its own PR. New prototypes start at step 1
+again.
 
 ## Building tiles renderer extraction
 
@@ -198,6 +199,22 @@ python3 tools/ui_debug/generate_piety_track.py
 
 The generated overview below also produces it. Reading the piety table is not `GameState`
 integration: this is still a static view, and it still does not implement game rules.
+
+## Pilgrimage sites prototype baseline
+
+`prototypes/pilgrimage_sites.html` is the untouched visual baseline for the Pilgrimage Site tiles:
+five orange tiles in one row, each with a piety-track star in its lower half and a P value and an S
+value beside it. `prototype_sources/pilgrimage_sites.py.txt` is the reference-only copy of the
+script that drew it, kept for intent when the tiles are reverse-engineered later. It is never
+imported or executed.
+
+This component stops at step 1 of the checklist above. There is no layout JSON, no renderer, no
+generator, and no generated page for it yet, so `index.html` links the baseline only. Extracting a
+renderer is a separate PR that should follow the checklist from step 3.
+
+These tiles are what a pilgrimage site slot will eventually draw in the game setup view, which
+currently only tints the hex a site lands on. Nothing here is wired into setup generation, and
+`pilgrim.setup.generator` is not involved: this is a picture of five tiles.
 
 ## Game setup debug view
 

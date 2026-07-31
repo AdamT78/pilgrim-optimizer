@@ -14,6 +14,8 @@ DONATED_BUILDING_TILES_HTML = PROTOTYPES_DIR / "donated_building_tiles.html"
 SHIP_MARKER_HTML = PROTOTYPES_DIR / "ship_marker.html"
 PIETY_TRACKS_HTML = PROTOTYPES_DIR / "piety_tracks.html"
 PIETY_TRACKS_SOURCE = PROTOTYPE_SOURCES_DIR / "piety_tracks.py.txt"
+PILGRIMAGE_SITES_HTML = PROTOTYPES_DIR / "pilgrimage_sites.html"
+PILGRIMAGE_SITES_SOURCE = PROTOTYPE_SOURCES_DIR / "pilgrimage_sites.py.txt"
 
 
 def test_ui_debug_index_page_exists() -> None:
@@ -90,6 +92,38 @@ def test_piety_tracks_prototype_source_is_the_generator_code() -> None:
     assert "render_fused" in content
 
 
+def test_pilgrimage_sites_prototype_page_and_source_exist() -> None:
+    assert PILGRIMAGE_SITES_HTML.is_file()
+    assert PILGRIMAGE_SITES_SOURCE.is_file()
+
+
+def test_pilgrimage_sites_prototype_is_identifiable() -> None:
+    content = PILGRIMAGE_SITES_HTML.read_text(encoding="utf-8")
+    assert "Pilgrim" in content
+    assert "Pilgrimage Sites" in content
+    assert "PILGRIM — Pilgrimage Sites" in content
+
+
+def test_pilgrimage_sites_prototype_shows_five_site_tiles() -> None:
+    content = PILGRIMAGE_SITES_HTML.read_text(encoding="utf-8")
+    assert "5 special" in content
+    assert "Pilgrimage Site" in content
+
+
+def test_pilgrimage_sites_prototype_source_is_the_generator_code() -> None:
+    content = PILGRIMAGE_SITES_SOURCE.read_text(encoding="utf-8")
+    assert 'Generate the Pilgrim "Pilgrimage Sites" special tiles' in content
+    assert "N_TILES = 5" in content
+
+
+def test_pilgrimage_sites_have_no_renderer_or_generated_output_yet() -> None:
+    """This component is baseline-only: extraction is a separate PR."""
+    assert not (UI_DEBUG_DIR / "render_pilgrimage_sites.py").exists()
+    assert not (UI_DEBUG_DIR / "generate_pilgrimage_sites.py").exists()
+    assert not (UI_DEBUG_DIR / "pilgrimage_site_layout.json").exists()
+    assert "generated/pilgrimage_sites.html" not in INDEX_HTML.read_text(encoding="utf-8")
+
+
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
@@ -98,3 +132,5 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "prototypes/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content
     assert "prototypes/piety_tracks.html" in content
+    assert "prototypes/pilgrimage_sites.html" in content
+    assert "Pilgrimage sites prototype baseline" in content
