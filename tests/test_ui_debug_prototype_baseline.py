@@ -3,6 +3,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
 PROTOTYPES_DIR = UI_DEBUG_DIR / "prototypes"
+PROTOTYPE_SOURCES_DIR = UI_DEBUG_DIR / "prototype_sources"
 
 INDEX_HTML = UI_DEBUG_DIR / "index.html"
 README_MD = UI_DEBUG_DIR / "README.md"
@@ -11,6 +12,8 @@ BUILDING_TILES_HTML = PROTOTYPES_DIR / "building_tiles.html"
 PLAYER_BOARD_HTML = PROTOTYPES_DIR / "player_board.html"
 DONATED_BUILDING_TILES_HTML = PROTOTYPES_DIR / "donated_building_tiles.html"
 SHIP_MARKER_HTML = PROTOTYPES_DIR / "ship_marker.html"
+PIETY_TRACKS_HTML = PROTOTYPES_DIR / "piety_tracks.html"
+PIETY_TRACKS_SOURCE = PROTOTYPE_SOURCES_DIR / "piety_tracks.py.txt"
 
 
 def test_ui_debug_index_page_exists() -> None:
@@ -63,6 +66,30 @@ def test_ship_marker_prototype_is_identifiable() -> None:
     assert "PILGRIM — Ship Building Tiles" in content
 
 
+def test_piety_tracks_prototype_page_and_source_exist() -> None:
+    assert PIETY_TRACKS_HTML.is_file()
+    assert PIETY_TRACKS_SOURCE.is_file()
+
+
+def test_piety_tracks_prototype_is_identifiable() -> None:
+    content = PIETY_TRACKS_HTML.read_text(encoding="utf-8")
+    assert "Pilgrim" in content
+    assert "Piety tracks" in content
+    assert "Pilgrim — Piety Tracks" in content
+
+
+def test_piety_tracks_prototype_shows_both_player_count_variants() -> None:
+    content = PIETY_TRACKS_HTML.read_text(encoding="utf-8")
+    assert "3-4 player" in content
+    assert "2 player" in content
+
+
+def test_piety_tracks_prototype_source_is_the_generator_code() -> None:
+    content = PIETY_TRACKS_SOURCE.read_text(encoding="utf-8")
+    assert "Horizontal 12-square score/progress track" in content
+    assert "render_fused" in content
+
+
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
@@ -70,3 +97,4 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "prototypes/player_board.html" in content
     assert "prototypes/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content
+    assert "prototypes/piety_tracks.html" in content
