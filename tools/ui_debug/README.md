@@ -55,9 +55,8 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-`prototypes/player_boards_v2.html` is the only baseline-only prototype right now: it has been
-through step 1 and nothing else. Every other prototype has been through the whole checklist. New
-prototypes start at step 1 again.
+Every prototype currently in `prototypes/` has been through this checklist, so there are no
+baseline-only prototypes left. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -98,24 +97,41 @@ This writes `generated/player_board.html`, which is not committed.
 The renderer draws a mock player state (see `default_player_state()`), so it still does not
 connect to `GameState` and still does not implement game rules.
 
-## Player boards v2 prototype baseline
+## Player boards v2 renderer extraction
 
 `prototypes/player_boards_v2.html` is the untouched visual baseline for player board v2. It holds
 all four player boards on one page — white, red, yellow, and blue — instead of the single board
-v1 draws, and the first-player marker is printed on the first/white board as a visual example.
-The marker is part of the picture here, not a piece of state: making it follow whoever actually
-has it is a job for the renderer, not the baseline.
+v1 draws, and the first-player marker sits on the first/white board.
+`prototype_sources/player_boards_v2.py.txt` is the reference-only copy of the script that drew it,
+read for intent while reverse-engineering the layout, never imported or run.
 
-`prototype_sources/player_boards_v2.py.txt` is the reference-only copy of the script that drew
-it, kept for intent when the layout is reverse-engineered. It is never imported or run.
+`player_boards_v2_layout.json` and `render_player_boards_v2.py` are the structured renderer
+extraction. The split between them is worth knowing: the JSON says what a board carries (the four
+players and their colours, the palette, the Village/Abbey banners and how many starting workers
+each shows, the six worker roles, the three resource readouts, which roles already hold workers),
+and the module says where it all goes. The geometry stays in the module because it is derived
+rather than chosen: one zigzag chain of six hexes, spread apart horizontally, gives the x-centres
+that the banners, worker circles, and building slots all share, and the panel sizes itself around
+the result. The four generated SVGs are byte-identical to the baseline's, which is what the parity
+test pins.
 
-This is baseline only. There is no v2 layout JSON, no v2 renderer, no generated v2 page, and no
-`GameState` integration or gameplay logic of any kind. `player_board_layout.json`,
-`render_player_board.py`, and `prototypes/player_board.html` are untouched: v2 does not replace
-the current player board renderer, and both baselines stand side by side until it does.
+Generate the output page with:
 
-Extracting a renderer for it belongs in a separate PR, following the component extraction
-checklist above from step 3.
+```bash
+python3 tools/ui_debug/generate_player_boards_v2.py
+```
+
+The generated overview below also produces it. Both write `generated/player_boards_v2.html`, which
+is not committed.
+
+The first-player marker is renderer-driven, not `GameState`-driven:
+`render_player_boards_v2_html(layout, first_player="player_two")` moves the card to the red board.
+Nothing here decides who the first player actually is, and there are no start-player rules.
+
+This does not replace the v1 player board. `player_board_layout.json`, `render_player_board.py`,
+`generate_player_board.py`, and `prototypes/player_board.html` are untouched, and both views are
+generated and linked side by side until v2 takes over. Like every other view here, it does not
+connect to `GameState` and implements no gameplay rules.
 
 ## Map renderer extraction
 
@@ -315,6 +331,7 @@ This writes:
 tools/ui_debug/generated/map.html
 tools/ui_debug/generated/building_tiles.html
 tools/ui_debug/generated/player_board.html
+tools/ui_debug/generated/player_boards_v2.html
 tools/ui_debug/generated/donated_building_tiles.html
 tools/ui_debug/generated/ship_marker.html
 tools/ui_debug/generated/piety_tracks.html

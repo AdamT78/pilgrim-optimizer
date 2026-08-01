@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "page": {
+    "title": "PILGRIM — Player Board",
+    "subtitle": "Player boards for up to 4 players and first player marker (shown on the first/white player board)."
+  },
+  "grid": { "rows": 2, "columns": 2, "gap": 60 },
+  "palette": {
+    "ink": "#3A2F1E",
+    "parchment": "#F1E7CE",
+    "parchment_edge": "#B8A97C",
+    "panel_background": "#E4D9BC",
+    "slot_fill": "#D8CCA9",
+    "slot_stroke": "#A99A6E",
+    "worker_fill": "#EFE4C6",
+    "worker_edge": "#8B7B4E",
+    "marker_fill": "#CDD3D8",
+    "marker_stroke": "#84898E"
+  },
+  "players": [
+    {
+      "id": "player_one",
+      "label": "Player 1",
+      "color": "white",
+      "fill": "#FFFFFF",
+      "stroke": "#8B7B4E"
+    },
+    {
+      "id": "player_two",
+      "label": "Player 2",
+      "color": "red",
+      "fill": "#B7382E",
+      "stroke": "#7A241C"
+    },
+    {
+      "id": "player_three",
+      "label": "Player 3",
+      "color": "yellow",
+      "fill": "#D9B33B",
+      "stroke": "#8A6B1E"
+    },
+    {
+      "id": "player_four",
+      "label": "Player 4",
+      "color": "blue",
+      "fill": "#3B6EA5",
+      "stroke": "#254A73"
+    }
+  ],
+  "banners": [
+    { "id": "village", "label": "Village", "first_role_index": 0, "visible_workers": 8 },
+    { "id": "abbey", "label": "Abbey", "first_role_index": 2, "visible_workers": 3 }
+  ],
+  "starting_worker_grid": { "rows": 2, "columns": 4 },
+  "worker_roles": [
+    { "id": "fields", "label": "Fields" },
+    { "id": "road_engineer", "label": "Road Engineer" },
+    { "id": "stone_mason", "label": "Stone Mason" },
+    { "id": "alms_house", "label": "Alms House" },
+    { "id": "engraver", "label": "Engraver" },
+    { "id": "vestry", "label": "Vestry" }
+  ],
+  "placed_workers": { "stone_mason": 1, "vestry": 2 },
+  "resources": [
+    { "id": "wheat", "label": "Wheat", "icon": "wheat", "count": 1 },
+    { "id": "stone", "label": "Stone", "icon": "cube", "count": 1 },
+    { "id": "silver", "label": "Silver", "icon": "coin", "count": 1 }
+  ],
+  "building_slot_count": 6,
+  "first_player_marker": { "label": "First player marker" }
+}

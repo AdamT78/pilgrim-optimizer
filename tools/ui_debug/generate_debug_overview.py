@@ -59,6 +59,12 @@ from tools.ui_debug.generate_player_board import (  # noqa: E402
 from tools.ui_debug.generate_player_board import (  # noqa: E402
     generate_player_board_page,
 )
+from tools.ui_debug.generate_player_boards_v2 import (  # noqa: E402
+    OUTPUT_FILENAME as PLAYER_BOARDS_V2_FILENAME,
+)
+from tools.ui_debug.generate_player_boards_v2 import (  # noqa: E402
+    generate_player_boards_v2_page,
+)
 from tools.ui_debug.generate_ship_marker import (  # noqa: E402
     OUTPUT_FILENAME as SHIP_MARKER_FILENAME,
 )
@@ -82,6 +88,7 @@ class GeneratedViews:
     map_page: Path
     building_tiles: Path
     player_board: Path
+    player_boards_v2: Path
     donated_building_tiles: Path
     ship_marker: Path
     piety_tracks: Path
@@ -94,6 +101,7 @@ class GeneratedViews:
             self.map_page,
             self.building_tiles,
             self.player_board,
+            self.player_boards_v2,
             self.donated_building_tiles,
             self.ship_marker,
             self.piety_tracks,
@@ -134,6 +142,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{MAP_FILENAME}">Generated map</a></li>
     <li><a href="{BUILDING_TILES_FILENAME}">Generated building tiles</a></li>
     <li><a href="{PLAYER_BOARD_FILENAME}">Generated player board</a></li>
+    <li><a href="{PLAYER_BOARDS_V2_FILENAME}">Generated player boards v2</a></li>
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
@@ -158,6 +167,9 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         output_path=destination_dir / BUILDING_TILES_FILENAME
     )
     player_board = generate_player_board_page(output_path=destination_dir / PLAYER_BOARD_FILENAME)
+    player_boards_v2 = generate_player_boards_v2_page(
+        output_path=destination_dir / PLAYER_BOARDS_V2_FILENAME
+    )
     donated_building_tiles = generate_donated_building_tiles_page(
         output_path=destination_dir / DONATED_BUILDING_TILES_FILENAME
     )
@@ -175,6 +187,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         map_page=map_page,
         building_tiles=building_tiles,
         player_board=player_board,
+        player_boards_v2=player_boards_v2,
         donated_building_tiles=donated_building_tiles,
         ship_marker=ship_marker,
         piety_tracks=piety_tracks,
