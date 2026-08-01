@@ -26,6 +26,11 @@ from xml.sax.saxutils import escape
 LAYOUT_FILENAME = "player_boards_v2_layout.json"
 PAGE_BACKGROUND = "#000000"
 BOARD_GAP = 60
+DEFAULT_FIRST_PLAYER = "player_one"
+
+# Cubes are serfs while they sit in the Village and acolytes once they reach the Abbey or a role
+# circle. A role circle holds at most two acolytes: one centred, two side by side.
+ROLE_ACOLYTE_LIMIT = 2
 
 # Flat-top hex chain: the size of one building slot, and the extra breathing room put between
 # neighbouring columns so the worker circles above them do not touch.
@@ -106,6 +111,34 @@ def player_by_id(layout: dict, player_id: str) -> dict:
         if player["id"] == player_id:
             return player
     raise KeyError(f"unknown player: {player_id!r}")
+
+
+def banner_by_id(layout: dict, banner_id: str) -> dict:
+    for banner in layout["banners"]:
+        if banner["id"] == banner_id:
+            return banner
+    raise KeyError(f"unknown banner: {banner_id!r}")
+
+
+def default_player_board_v2_state(layout: dict) -> dict:
+    """The board the baseline draws: serfs in the Village, acolytes in the Abbey and on two roles.
+
+    One of these per player is all the state a board has. Nothing here is `GameState`; it is what
+    a debug page moves cubes around in.
+    """
+    roles = {role["id"]: 0 for role in layout["worker_roles"]}
+    roles.update({role_id: int(count) for role_id, count in layout["placed_workers"].items()})
+    return {
+        "village_serfs": int(banner_by_id(layout, "village")["visible_workers"]),
+        "abbey_acolytes": int(banner_by_id(layout, "abbey")["visible_workers"]),
+        "roles": roles,
+    }
+
+
+def token_slot_count(layout: dict) -> int:
+    """How many cubes the Village or Abbey grid has room for."""
+    grid = layout["starting_worker_grid"]
+    return int(grid["rows"]) * int(grid["columns"])
 
 
 def wrap_label(label: str) -> list[str]:
@@ -234,17 +267,25 @@ def _render_banner(cx: float, width: float, label: str, palette: dict) -> str:
     )
 
 
-def _render_square_token(cx: float, cy: float, player: dict, opacity: int = 1) -> str:
+def _render_square_token(
+    cx: float, cy: float, player: dict, opacity: int = 1, tags: str = ""
+) -> str:
     side = 2 * TOKEN_RADIUS
     return (
         f'<rect x="{cx - TOKEN_RADIUS:.1f}" y="{cy - TOKEN_RADIUS:.1f}" width="{side:.1f}"'
         f' height="{side:.1f}" fill="{player["fill"]}" stroke="{player["stroke"]}"'
-        f' stroke-width="1.2" opacity="{opacity:g}"/>'
+        f' stroke-width="1.2" opacity="{opacity:g}"{tags}/>'
     )
 
 
 def _render_token_grid(
-    cx: float, top_y: float, rows: int, columns: int, visible: int, player: dict
+    cx: float,
+    top_y: float,
+    rows: int,
+    columns: int,
+    visible: int,
+    player: dict,
+    tag: str = "",
 ) -> str:
     """The starting workers. Hidden tokens keep their slot so both grids stay the same shape."""
     step = 2 * TOKEN_RADIUS + TOKEN_GAP
@@ -255,9 +296,14 @@ def _render_token_grid(
         token_y = top_y + TOKEN_RADIUS + row * step
         for column in range(columns):
             index = row * columns + column
+            tags = f' data-token="{tag}" data-token-index="{index}"' if tag else ""
             tokens.append(
                 _render_square_token(
-                    first_x + column * step, token_y, player, 1 if index < visible else 0
+                    first_x + column * step,
+                    token_y,
+                    player,
+                    1 if index < visible else 0,
+                    tags,
                 )
             )
     return "".join(tokens)
@@ -432,12 +478,37 @@ def _render_worker_circle(cx: float, cy: float, palette: dict) -> str:
     )
 
 
-def _render_placed_workers(cx: float, cy: float, count: int, player: dict) -> str:
-    """Workers already standing on a role, as a centred row of the player's own square tokens."""
+def _render_role_acolytes(
+    cx: float,
+    cy: float,
+    count: int,
+    player: dict,
+    role_id: str = "",
+    interactive: bool = False,
+) -> str:
+    """Acolytes standing on a role: one centred, two side by side, never more than the limit.
+
+    An interactive board draws every slot a role can use — the centred one and the pair — and
+    hides the ones this count does not need, so a page can move an acolyte by flipping opacity
+    instead of redrawing the board.
+    """
     step = 2 * TOKEN_RADIUS + TOKEN_GAP
-    first_x = cx - (count - 1) * step / 2
+    count = min(count, ROLE_ACOLYTE_LIMIT)
+    if not interactive:
+        first_x = cx - (count - 1) * step / 2
+        return "".join(
+            _render_square_token(first_x + index * step, cy, player) for index in range(count)
+        )
+    slots = ((cx, "single", 1), (cx - step / 2, "pair", 2), (cx + step / 2, "pair", 2))
     return "".join(
-        _render_square_token(first_x + index * step, cy, player) for index in range(count)
+        _render_square_token(
+            x,
+            cy,
+            player,
+            1 if count == shown_at else 0,
+            f' data-token="role" data-role="{role_id}" data-role-slot="{slot}"',
+        )
+        for x, slot, shown_at in slots
     )
 
 
@@ -469,14 +540,28 @@ def _render_corner_tag(geometry: dict, player: dict) -> str:
 
 
 def render_player_board_v2_svg(
-    layout: dict, player: dict, include_first_player_marker: bool = False
+    layout: dict,
+    player: dict,
+    include_first_player_marker: bool = False,
+    board_state: dict | None = None,
+    interactive: bool = False,
 ) -> str:
-    """One player's board. The marker card is drawn only when this player has it."""
+    """One player's board, holding `board_state` (the starting board when none is given).
+
+    `interactive` tags the cubes and the marker card and draws every slot they can occupy, hidden
+    where the state does not need them, so a page can move a cube by flipping opacity. Left off,
+    the board is exactly the one the baseline prototype draws.
+    """
     palette = layout["palette"]
     roles = layout["worker_roles"]
     grid = layout["starting_worker_grid"]
-    placed = layout["placed_workers"]
+    state = default_player_board_v2_state(layout) if board_state is None else board_state
+    capacity = token_slot_count(layout)
     geometry = board_geometry(len(roles))
+    visible_cubes = {
+        "village": min(int(state["village_serfs"]), capacity),
+        "abbey": min(int(state["abbey_acolytes"]), capacity),
+    }
 
     parts = [_render_panel(geometry, palette)]
     for banner in layout["banners"]:
@@ -490,18 +575,24 @@ def render_player_board_v2_svg(
                 geometry["token_grid_top"],
                 grid["rows"],
                 grid["columns"],
-                banner["visible_workers"],
+                visible_cubes[banner["id"]],
                 player,
+                banner["id"] if interactive else "",
             )
         )
 
     resource_x = resource_centers(layout, geometry)
-    if include_first_player_marker:
-        parts.append(
-            _render_first_player_marker(
-                resource_x[2], palette, layout["first_player_marker"]["label"]
-            )
+    if include_first_player_marker or interactive:
+        marker = _render_first_player_marker(
+            resource_x[2], palette, layout["first_player_marker"]["label"]
         )
+        if interactive:
+            shown = "true" if include_first_player_marker else "false"
+            marker = (
+                f'<g data-first-player-marker="{shown}"'
+                f' opacity="{1 if include_first_player_marker else 0:g}">{marker}</g>'
+            )
+        parts.append(marker)
     for cx, resource in zip(resource_x, layout["resources"], strict=True):
         parts.append(_render_resource(cx, geometry["resource_cy"], resource, palette))
 
@@ -511,9 +602,9 @@ def render_player_board_v2_svg(
         parts.append(_render_worker_circle(cx, role_cy, palette))
         parts.append(_render_role_label(cx, label_baseline, role["label"], palette["ink"]))
     for cx, role in zip(geometry["role_x"], roles, strict=True):
-        count = int(placed.get(role["id"], 0))
-        if count:
-            parts.append(_render_placed_workers(cx, role_cy, count, player))
+        count = int(state["roles"].get(role["id"], 0))
+        if count or interactive:
+            parts.append(_render_role_acolytes(cx, role_cy, count, player, role["id"], interactive))
 
     for cx, cy in zip(geometry["role_x"], geometry["building_y"], strict=True):
         parts.append(_render_building_slot(cx, cy, palette))
