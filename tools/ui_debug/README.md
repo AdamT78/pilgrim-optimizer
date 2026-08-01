@@ -55,8 +55,9 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype currently in `prototypes/` has been through this checklist, so there are no
-baseline-only prototypes left. New prototypes start at step 1 again.
+`prototypes/player_boards_v2.html` is the only baseline-only prototype right now: it has been
+through step 1 and nothing else. Every other prototype has been through the whole checklist. New
+prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -96,6 +97,25 @@ This writes `generated/player_board.html`, which is not committed.
 
 The renderer draws a mock player state (see `default_player_state()`), so it still does not
 connect to `GameState` and still does not implement game rules.
+
+## Player boards v2 prototype baseline
+
+`prototypes/player_boards_v2.html` is the untouched visual baseline for player board v2. It holds
+all four player boards on one page — white, red, yellow, and blue — instead of the single board
+v1 draws, and the first-player marker is printed on the first/white board as a visual example.
+The marker is part of the picture here, not a piece of state: making it follow whoever actually
+has it is a job for the renderer, not the baseline.
+
+`prototype_sources/player_boards_v2.py.txt` is the reference-only copy of the script that drew
+it, kept for intent when the layout is reverse-engineered. It is never imported or run.
+
+This is baseline only. There is no v2 layout JSON, no v2 renderer, no generated v2 page, and no
+`GameState` integration or gameplay logic of any kind. `player_board_layout.json`,
+`render_player_board.py`, and `prototypes/player_board.html` are untouched: v2 does not replace
+the current player board renderer, and both baselines stand side by side until it does.
+
+Extracting a renderer for it belongs in a separate PR, following the component extraction
+checklist above from step 3.
 
 ## Map renderer extraction
 
