@@ -10,6 +10,8 @@ README_MD = UI_DEBUG_DIR / "README.md"
 MAP_HTML = PROTOTYPES_DIR / "map.html"
 BUILDING_TILES_HTML = PROTOTYPES_DIR / "building_tiles.html"
 PLAYER_BOARD_HTML = PROTOTYPES_DIR / "player_board.html"
+PLAYER_BOARDS_V2_HTML = PROTOTYPES_DIR / "player_boards_v2.html"
+PLAYER_BOARDS_V2_SOURCE = PROTOTYPE_SOURCES_DIR / "player_boards_v2.py.txt"
 DONATED_BUILDING_TILES_HTML = PROTOTYPES_DIR / "donated_building_tiles.html"
 SHIP_MARKER_HTML = PROTOTYPES_DIR / "ship_marker.html"
 PIETY_TRACKS_HTML = PROTOTYPES_DIR / "piety_tracks.html"
@@ -47,6 +49,42 @@ def test_building_tiles_prototype_is_identifiable() -> None:
 def test_player_board_prototype_is_identifiable() -> None:
     content = PLAYER_BOARD_HTML.read_text(encoding="utf-8")
     assert "Player Board" in content
+
+
+def test_player_boards_v2_prototype_page_and_source_exist() -> None:
+    assert PLAYER_BOARDS_V2_HTML.is_file()
+    assert PLAYER_BOARDS_V2_SOURCE.is_file()
+    # v2 is a second baseline, not a replacement: v1 stays where it is.
+    assert PLAYER_BOARD_HTML.is_file()
+
+
+def test_player_boards_v2_prototype_is_identifiable() -> None:
+    content = PLAYER_BOARDS_V2_HTML.read_text(encoding="utf-8")
+    assert "Pilgrim" in content
+    assert "Player Board" in content
+    assert "PILGRIM — Player Board" in content
+
+
+def test_player_boards_v2_prototype_shows_four_boards_and_the_first_player_marker() -> None:
+    content = PLAYER_BOARDS_V2_HTML.read_text(encoding="utf-8")
+    assert "Player boards for up to 4 players" in content
+    assert "first player marker" in content
+    assert content.count("<svg") == 4
+
+
+def test_player_boards_v2_prototype_source_is_the_generator_code() -> None:
+    content = PLAYER_BOARDS_V2_SOURCE.read_text(encoding="utf-8")
+    assert "Produces a 2x2 grid of player boards" in content
+    assert "first player marker" in content
+    assert "red/yellow/blue cubes" in content
+
+
+def test_player_boards_v2_has_no_renderer_or_generated_output_yet() -> None:
+    """This prototype is baseline only; extraction is a separate PR."""
+    for name in ("render_player_board_v2.py", "generate_player_board_v2.py"):
+        assert not (UI_DEBUG_DIR / name).exists()
+    assert not (UI_DEBUG_DIR / "player_board_v2_layout.json").exists()
+    assert "generated/player_boards_v2.html" not in INDEX_HTML.read_text(encoding="utf-8")
 
 
 def test_special_marker_prototype_pages_exist() -> None:
@@ -121,6 +159,8 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "prototypes/map.html" in content
     assert "prototypes/building_tiles.html" in content
     assert "prototypes/player_board.html" in content
+    assert "prototypes/player_boards_v2.html" in content
+    assert "Player boards v2 prototype baseline" in content
     assert "prototypes/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content
     assert "prototypes/piety_tracks.html" in content

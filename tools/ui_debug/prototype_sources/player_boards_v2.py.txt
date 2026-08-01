@@ -1,0 +1,558 @@
+#!/usr/bin/env python3
+"""
+Generate the Pilgrim player board.
+
+Produces a 2x2 grid of player boards (player_board_stacked.html): a
+default board with the first player marker and white cubes, plus three
+more in red/yellow/blue cubes (no marker) -- one board per player color.
+
+Layout notes:
+  - the 6 building hex slots are edge-connected (edge 5 of tile i touches
+    edge 2 of tile i+1) into a zigzag chain, then spread apart
+    horizontally for breathing room.
+  - worker-role circles sit on one flat horizontal line above the
+    building hexes, sharing the same (spread) x-centers so everything
+    lines up in columns.
+  - Village/Abbey banners and the starting-worker token grids sit above
+    the worker-role circles; the 3 resource readouts sit centered in the
+    gap between the token grids and the role-label text.
+
+Run this file to (re)generate player_board_stacked.html.
+"""
+
+import math
+
+# ---------------------------------------------------------------------------
+# Hex geometry (flat-top hexagons) -- same convention as the other files
+# ---------------------------------------------------------------------------
+
+def hex_corners(cx, cy, size):
+    pts = []
+    for i in range(6):
+        angle = math.radians(60 * i)
+        pts.append((cx + size * math.cos(angle), cy + size * math.sin(angle)))
+    return pts
+
+def hex_path_d(cx, cy, size):
+    pts = hex_corners(cx, cy, size)
+    return "M " + " L ".join(f"{x:.2f},{y:.2f}" for x, y in pts) + " Z"
+
+# edge index -> axial neighbor direction (dq, dr); 0 bottom, clockwise
+# (same numbering as generate_map.py: 0 bottom, 1 lower-left, 2 upper-left,
+# 3 top, 4 upper-right, 5 lower-right).
+EDGE_DIRECTIONS = {0: (0, 1), 1: (-1, 1), 2: (-1, 0), 3: (0, -1), 4: (1, -1), 5: (1, 0)}
+
+def axial_to_pixel(q, r, size):
+    return size * 1.5 * q, size * math.sqrt(3) * (r + q / 2)
+
+def connected_hex_centers(n, size, edge_cycle=(5, 4)):
+    """Centers for n hexes chained edge-to-edge, cycling through
+    `edge_cycle` for each successive connection. edge_cycle=(5,4) means:
+    tile1->tile2 shares tile1's edge 5 (tile2's edge 2), tile2->tile3
+    shares tile2's edge 4 (tile3's edge 1), then the pattern repeats --
+    this alternation keeps the strip roughly level (zigzag) instead of
+    drifting continuously in one direction like a single repeated edge
+    would."""
+    q = r = 0
+    pts = [axial_to_pixel(q, r, size)]
+    for i in range(n - 1):
+        edge = edge_cycle[i % len(edge_cycle)]
+        dq, dr = EDGE_DIRECTIONS[edge]
+        q += dq
+        r += dr
+        pts.append(axial_to_pixel(q, r, size))
+    return pts
+
+def place_chain_top(pts, size, target_cx, target_top_y):
+    """Shift a chain of hex centers so it's horizontally centered on
+    target_cx and its topmost hex edge sits at target_top_y (rather than
+    centering the whole bounding box, which is what you want for a chain
+    that descends a lot -- you want to control where it *starts*)."""
+    apothem = size * math.sqrt(3) / 2
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    bbox_cx = (min(xs) + max(xs)) / 2
+    top_y = min(ys) - apothem
+    sx, sy = target_cx - bbox_cx, target_top_y - top_y
+    return [(x + sx, y + sy) for x, y in pts]
+
+# ---------------------------------------------------------------------------
+# Palette
+# ---------------------------------------------------------------------------
+
+INK = "#3A2F1E"
+PARCHMENT = "#F1E7CE"
+PARCHMENT_EDGE = "#B8A97C"
+PANEL_BG = "#E4D9BC"
+SLOT_EMPTY = "#D8CCA9"
+SLOT_EMPTY_EDGE = "#A99A6E"
+WORKER_FILL = "#EFE4C6"
+WORKER_EDGE = "#8B7B4E"
+SILVER_FILL = "#CDD3D8"
+SILVER_EDGE = "#84898E"
+RED_FILL = "#B7382E"
+RED_EDGE = "#7A241C"
+YELLOW_FILL = "#D9B33B"
+YELLOW_EDGE = "#8A6B1E"
+BLUE_FILL = "#3B6EA5"
+BLUE_EDGE = "#254A73"
+
+# ---------------------------------------------------------------------------
+# Small pictogram icons -- used for the 3 resource readouts
+# ---------------------------------------------------------------------------
+
+def icon_wheat(cx, cy, r, color=INK):
+    parts = []
+    base = (cx, cy + r * 0.55)
+    tips = [(-0.55, -0.65), (-0.25, -0.85), (0.05, -0.9), (0.35, -0.8), (0.6, -0.55)]
+    for dx, dy in tips:
+        tx, ty = cx + dx * r, cy + dy * r
+        parts.append(f'<line x1="{base[0]:.1f}" y1="{base[1]:.1f}" x2="{tx:.1f}" y2="{ty:.1f}" '
+                      f'stroke="{color}" stroke-width="{max(r*0.09,1.2):.2f}" stroke-linecap="round"/>')
+        parts.append(f'<ellipse cx="{tx:.1f}" cy="{ty:.1f}" rx="{r*0.13:.2f}" ry="{r*0.22:.2f}" '
+                      f'fill="{color}" transform="rotate({dx*40:.0f} {tx:.1f} {ty:.1f})"/>')
+    parts.append(f'<line x1="{base[0]-r*0.3:.1f}" y1="{base[1]+r*0.05:.1f}" '
+                  f'x2="{base[0]+r*0.3:.1f}" y2="{base[1]+r*0.05:.1f}" '
+                  f'stroke="{color}" stroke-width="{max(r*0.1,1.2):.2f}"/>')
+    return parts
+
+def icon_cube(cx, cy, r, color=INK):
+    s = r * 0.62
+    top = [(cx, cy - s), (cx + s * 0.87, cy - s * 0.5), (cx, cy), (cx - s * 0.87, cy - s * 0.5)]
+    right = [(cx + s * 0.87, cy - s * 0.5), (cx + s * 0.87, cy + s * 0.5), (cx, cy + s), (cx, cy)]
+    left = [(cx - s * 0.87, cy - s * 0.5), (cx, cy), (cx, cy + s), (cx - s * 0.87, cy + s * 0.5)]
+    def poly(pts, fill_op):
+        d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in pts) + " Z"
+        return f'<path d="{d}" fill="{color}" fill-opacity="{fill_op}" stroke="{color}" stroke-width="1" stroke-linejoin="round"/>'
+    return [poly(top, 0.9), poly(right, 0.55), poly(left, 0.75)]
+
+def icon_coin(cx, cy, r, color=INK):
+    """Silver coin: outer + inner rim circles, plus a small sparkle
+    suggesting a polished shine."""
+    rr = r * 0.62
+    parts = [f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{rr:.2f}" fill="none" '
+              f'stroke="{color}" stroke-width="{max(rr*0.16,1.3):.2f}"/>']
+    parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{rr*0.68:.2f}" fill="none" '
+                  f'stroke="{color}" stroke-width="{max(rr*0.08,0.9):.2f}"/>')
+    # small 4-point sparkle, upper-left of the coin face
+    sx, sy = cx + rr * 0.42, cy - rr * 0.5
+    s = rr * 0.22
+    parts.append(f'<line x1="{sx-s:.1f}" y1="{sy:.1f}" x2="{sx+s:.1f}" y2="{sy:.1f}" stroke="{color}" stroke-width="1" stroke-linecap="round"/>')
+    parts.append(f'<line x1="{sx:.1f}" y1="{sy-s:.1f}" x2="{sx:.1f}" y2="{sy+s:.1f}" stroke="{color}" stroke-width="1" stroke-linecap="round"/>')
+    return parts
+
+ICONS = {"wheat": icon_wheat, "cube": icon_cube, "coin": icon_coin}
+
+def draw_icon(name, cx, cy, r, color=INK):
+    return "".join(ICONS[name](cx, cy, r, color))
+
+# ---------------------------------------------------------------------------
+# First player marker -- solid scallop shell (the classic pilgrimage
+# symbol), sized to fit a wxh box
+# ---------------------------------------------------------------------------
+
+def marker_shell_solid(cx, cy, w, h, color=INK):
+    parts = []
+    hinge = (cx, cy + h * 0.42)
+    outer_w = w * 0.46
+    top_y = cy - h * 0.42
+    n_scallops = 6
+    pts = [hinge]
+    for i in range(n_scallops + 1):
+        t = i / n_scallops
+        x = hinge[0] - outer_w + t * 2 * outer_w
+        bulge = math.sin(t * math.pi)
+        y = top_y - bulge * h * 0.10
+        notch = 0 if i in (0, n_scallops) else (h * 0.05 if i % 2 == 0 else 0)
+        pts.append((x, y + notch))
+    d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in pts) + " Z"
+    parts.append(f'<path d="{d}" fill="{color}" stroke="{color}" stroke-width="1" stroke-linejoin="round"/>')
+    for i in range(1, n_scallops):
+        t = i / n_scallops
+        rx = hinge[0] - outer_w + t * 2 * outer_w
+        ry = top_y - math.sin(t * math.pi) * h * 0.10
+        parts.append(f'<line x1="{hinge[0]:.1f}" y1="{hinge[1]:.1f}" x2="{rx:.1f}" y2="{ry:.1f}" '
+                      f'stroke="{PARCHMENT}" stroke-width="0.8" stroke-opacity="0.55"/>')
+    return parts
+
+# ---------------------------------------------------------------------------
+# Ribbon banner: rounded rect with small triangular notches cut into each end
+# ---------------------------------------------------------------------------
+
+def ribbon(cx, cy, w, h, text, font_size=14):
+    x0, y0 = cx - w / 2, cy - h / 2
+    notch = h * 0.35
+    d = (f"M {x0:.1f},{y0:.1f} L {x0+w:.1f},{y0:.1f} "
+         f"L {x0+w-notch:.1f},{y0+h/2:.1f} L {x0+w:.1f},{y0+h:.1f} "
+         f"L {x0:.1f},{y0+h:.1f} L {x0+notch:.1f},{y0+h/2:.1f} Z")
+    return (
+        f'<path d="{d}" fill="{PARCHMENT}" stroke="{PARCHMENT_EDGE}" stroke-width="1.5" stroke-linejoin="round"/>'
+        f'<text x="{cx:.1f}" y="{cy+font_size*0.35:.1f}" text-anchor="middle" '
+        f'font-family="Georgia, serif" font-size="{font_size}" font-weight="bold" '
+        f'fill="{INK}">{text}</text>'
+    )
+
+def worker_hex_label(role):
+    """Balanced 1-2 line wrap for a role/label name."""
+    words = role.split()
+    if len(words) == 1:
+        return [role]
+    best = None
+    for i in range(1, len(words)):
+        line1, line2 = " ".join(words[:i]), " ".join(words[i:])
+        m = max(len(line1), len(line2))
+        if best is None or m < best[0]:
+            best = (m, [line1, line2])
+    return best[1]
+
+WORKERS = ["Fields", "Road Engineer", "Stone Mason", "Alms House", "Engraver", "Vestry"]
+RES = [("wheat", "1"), ("cube", "1"), ("coin", "1")]
+
+def draw_worker_circle(parts, wx, wy, r, role):
+    """Worker-assignment circle: an empty (token-ready) circle -- the role
+    label is drawn separately, above the circle, by draw_role_label_straight."""
+    parts.append(f'<circle cx="{wx:.1f}" cy="{wy:.1f}" r="{r}" fill="{WORKER_FILL}" '
+                  f'stroke="{WORKER_EDGE}" stroke-width="2"/>')
+
+ROLE_FONT_SIZE = 10
+ROLE_LINE_HEIGHT = 11
+
+def draw_role_label_straight(parts, wx, wy, r, role, gap=4):
+    """Role name, straight horizontal line(s), sitting just above the
+    circle at (wx, wy). Wraps to 2 lines when the name has more than one
+    word; the line closest to the circle is always `gap` above its rim."""
+    lines = worker_hex_label(role)
+    n = len(lines)
+    bottom_baseline = wy - r - gap
+    for li, line in enumerate(lines):
+        baseline = bottom_baseline - (n - 1 - li) * ROLE_LINE_HEIGHT
+        parts.append(f'<text x="{wx:.1f}" y="{baseline:.1f}" text-anchor="middle" '
+                      f'font-family="Helvetica, Arial, sans-serif" font-size="{ROLE_FONT_SIZE}" '
+                      f'font-weight="700" fill="{INK}">{line}</text>')
+
+def draw_square_token(cx, cy, r, fill="#FFFFFF", edge=WORKER_EDGE, opacity=1):
+    """Small flat square, centered at (cx, cy) with side 2r."""
+    x0, y0 = cx - r, cy - r
+    return (f'<rect x="{x0:.1f}" y="{y0:.1f}" width="{2*r:.1f}" height="{2*r:.1f}" '
+            f'fill="{fill}" stroke="{edge}" stroke-width="1.2" opacity="{opacity}"/>')
+
+def draw_token_grid(parts, cx, top_y, rows, cols, r=7, gap=6, fill="#FFFFFF", edge=WORKER_EDGE, visible=None, shape="circle"):
+    """Small tokens (starting worker tokens) arranged rows x cols,
+    horizontally centered on cx, with the grid's top edge at top_y.
+    `shape` picks "circle" (default) or "square". If `visible` is given,
+    only the first `visible` tokens (row-major order) are drawn opaque --
+    the rest still reserve their grid slot (so the layout matches a full
+    grid) but are rendered fully transparent. Returns the y-coordinate of
+    the grid's bottom edge, so callers can reserve enough room below it."""
+    col_step = 2 * r + gap
+    row_step = 2 * r + gap
+    grid_w = cols * 2 * r + (cols - 1) * gap
+    x0 = cx - grid_w / 2 + r
+    idx = 0
+    for ri in range(rows):
+        cy = top_y + r + ri * row_step
+        for ci in range(cols):
+            cxi = x0 + ci * col_step
+            opacity = 1 if (visible is None or idx < visible) else 0
+            if shape == "square":
+                parts.append(draw_square_token(cxi, cy, r, fill=fill, edge=edge, opacity=opacity))
+            else:
+                parts.append(f'<circle cx="{cxi:.1f}" cy="{cy:.1f}" r="{r}" fill="{fill}" '
+                              f'stroke="{edge}" stroke-width="1.2" opacity="{opacity}"/>')
+            idx += 1
+    return top_y + rows * 2 * r + (rows - 1) * gap
+
+def draw_square_tokens(parts, cx, cy, count, r=7, gap=6, fill="#FFFFFF", edge=WORKER_EDGE):
+    """A horizontal row of `count` square tokens centered on (cx, cy)."""
+    step = 2 * r + gap
+    start_x = cx - (count - 1) * step / 2
+    for i in range(count):
+        x = start_x + i * step
+        parts.append(draw_square_token(x, cy, r, fill=fill, edge=edge))
+
+def wrap_svg_grid(svg_rows, title, subtitle, gap=60):
+    """A grid of boards -- svg_rows is a list of rows, each row a list of
+    svg strings; boards are laid out with `gap` px between them both
+    across and down."""
+    rows_html = "\n".join(
+        '  <div class="board-row">\n' +
+        "\n".join(f'    <div class="board-wrap">{svg}</div>' for svg in row) +
+        "\n  </div>"
+        for row in svg_rows
+    )
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim — Player Board</title>
+<style>
+  body {{
+    margin: 0;
+    background: #000000;
+    font-family: Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 40px;
+    box-sizing: border-box;
+  }}
+  h1 {{ font-family: Georgia, serif; font-size: 24px; color: #F2EEDF; margin: 0 0 2px; }}
+  p.subtitle {{ color: #A8A296; font-size: 13px; margin: 0 0 18px; text-align: center; max-width: 640px; }}
+  .board-col {{
+    display: flex;
+    flex-direction: column;
+    gap: {gap}px;
+  }}
+  .board-row {{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: {gap}px;
+  }}
+  .board-wrap {{
+    background: #000000; border: 1px solid #333333; border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5); padding: 10px;
+  }}
+  svg {{ display: block; max-width: 95vw; height: auto; }}
+</style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <p class="subtitle">{subtitle}</p>
+  <div class="board-col">
+{rows_html}
+  </div>
+</body>
+</html>
+'''
+
+# ---------------------------------------------------------------------------
+# Board builder
+# ---------------------------------------------------------------------------
+
+def build_stacked(include_marker=True, cube_fill="#FFFFFF", cube_edge=WORKER_EDGE):
+    SIZE = 34  # building hexes and the worker-role circles above them are
+               # still sized/positioned off this shared hex chain
+    ribbon_h, rfont = 22, 11
+    res_r = 27
+    circle_r = SIZE  # worker-role circles: diameter (2*SIZE) matches the
+                       # width of a hex tile below
+    GAP_EXTRA = 24  # extra horizontal gap between adjacent tile centers
+                     # (shared by the circle row and the building row) --
+                     # wide enough that the bigger circles don't overlap
+    parts = []
+
+    # base zigzag chain -- still used to derive: (a) evenly-spaced x
+    # positions shared by the banners, the worker-role circles, and the
+    # building hexes, and (b) the building row's up/down rhythm
+    raw = connected_hex_centers(6, SIZE)
+    raw_xs = [p[0] for p in raw]
+    n_tiles = len(raw)
+    snake_width = (max(raw_xs) - min(raw_xs)) + 2 * SIZE
+    building_width = snake_width + (n_tiles - 1) * GAP_EXTRA
+    PANEL_W = max(snake_width, building_width) + 50
+
+    # absolute x-centers of the 6 hex tiles (worker/building pair shares x)
+    bbox_cx = (min(raw_xs) + max(raw_xs)) / 2
+    sx = PANEL_W / 2 - bbox_cx
+    tile_x = [x + sx for x in raw_xs]
+
+    # spread (gapped) x-centers -- same ones the worker-role circles and
+    # building hexes use below. Computed here too (only x depends on
+    # PANEL_W/GAP_EXTRA, not on any y-position) so the banners can align
+    # to the leftmost circle.
+    spread_x = [x + (i - (n_tiles - 1) / 2) * GAP_EXTRA for i, x in enumerate(tile_x)]
+
+    y = 30
+
+    # Each banner spans exactly 2 worker-role circles -- left edge of the
+    # first to right edge of the second -- so with the circles evenly
+    # spaced, all 3 banners come out the same width automatically.
+    def pair_span(i):
+        left = spread_x[i] - circle_r
+        right = spread_x[i + 1] + circle_r
+        return left, right, right - left, (left + right) / 2
+
+    # Village: circles 1-2
+    _, _, village_w, village_cx = pair_span(0)
+    parts.append(ribbon(village_cx, y, village_w, ribbon_h, "Village", rfont))
+
+    # Abbey: circles 3-4
+    _, _, abbey_w, abbey_cx = pair_span(2)
+    parts.append(ribbon(abbey_cx, y, abbey_w, ribbon_h, "Abbey", rfont))
+
+    # starting worker tokens: 4x2 under Village, 1x3 under Abbey -- drawn
+    # as squares instead of plain circles
+    token_top = y + ribbon_h / 2 + 12
+    village_tokens_bottom = draw_token_grid(parts, village_cx, token_top, 2, 4, shape="square", fill=cube_fill, edge=cube_edge)
+    abbey_tokens_bottom = draw_token_grid(parts, abbey_cx, token_top, 2, 4, visible=3, shape="square", fill=cube_fill, edge=cube_edge)
+    tokens_bottom = max(village_tokens_bottom, abbey_tokens_bottom)
+
+    label_gap = 10  # gap between the circle's rim and the label baseline
+    LABEL_ASCENT = 9.1  # measured: how far the label glyphs' top sits
+                          # above their own baseline, for this font/size/weight
+
+    # first player marker: solid scallop shell inside a small labeled
+    # card -- "First player marker" text above the icon (same font/size
+    # as the worker-role labels above the circles) with a bordered
+    # rectangle enclosing both, horizontally centered above the 3rd
+    # resource circle (same x-spacing rhythm as the other 2), card's top
+    # aligned with the Village/Abbey ribbon banners -- only drawn for
+    # boards that have the marker (include_marker=False skips it entirely)
+    if include_marker:
+        CUBE = 14  # matches the square token size (2 * r)
+        marker_w, marker_h = 3 * CUBE, 2 * CUBE
+        third_circle_x = abbey_cx + (abbey_cx - village_cx)
+        marker_cx = third_circle_x
+
+        card_pad_x = 10
+        card_pad_top = 8
+        card_pad_bottom = 8
+        text_to_icon_gap = 6
+
+        marker_label_lines = worker_hex_label("First player marker")
+        n_marker_lines = len(marker_label_lines)
+
+        card_top = y - ribbon_h / 2  # aligned with the top edge of the
+                                       # Village/Abbey ribbon banners
+        marker_text_top = card_top + card_pad_top
+        marker_first_baseline = marker_text_top + LABEL_ASCENT
+        marker_icon_top = marker_first_baseline + (n_marker_lines - 1) * ROLE_LINE_HEIGHT + text_to_icon_gap
+        marker_cy = marker_icon_top + marker_h / 2
+        card_bottom = marker_icon_top + marker_h + card_pad_bottom
+        card_h = card_bottom - card_top
+        card_w = max(marker_w, 92) + 2 * card_pad_x
+
+        parts.append(f'<rect x="{marker_cx-card_w/2:.1f}" y="{card_top:.1f}" width="{card_w:.1f}" height="{card_h:.1f}" '
+                      f'rx="6" fill="{SILVER_FILL}" stroke="{SILVER_EDGE}" stroke-width="1.5"/>')
+        for li, line in enumerate(marker_label_lines):
+            baseline = marker_first_baseline + li * ROLE_LINE_HEIGHT
+            parts.append(f'<text x="{marker_cx:.1f}" y="{baseline:.1f}" text-anchor="middle" '
+                          f'font-family="Helvetica, Arial, sans-serif" font-size="{ROLE_FONT_SIZE}" '
+                          f'font-weight="700" fill="{INK}">{line}</text>')
+        parts.extend(marker_shell_solid(marker_cx, marker_cy, marker_w, marker_h))
+
+    # The role-label text row's position is fixed relative to the token
+    # grid (independent of the resource icons -- see below), so the
+    # resource icons can be placed at the midpoint between the two
+    # without a circular dependency.
+    TEXT_ROW_GAP_FROM_TOKENS = 130  # fixed vertical gap from the row-2
+                                      # token squares down to the top of
+                                      # the worker-role circles -- pushes
+                                      # the label/circle/hex block down a
+                                      # bit; the resource circles below
+                                      # re-center automatically since
+                                      # their position is derived from
+                                      # this gap
+    y_worker_top = tokens_bottom + TEXT_ROW_GAP_FROM_TOKENS
+    text_baseline = y_worker_top - label_gap  # bottom line's baseline
+    max_label_lines = max(len(worker_hex_label(w)) for w in WORKERS)
+    top_line_baseline = text_baseline - (max_label_lines - 1) * ROLE_LINE_HEIGHT
+    text_top = top_line_baseline - LABEL_ASCENT
+
+    # resource circles: centered at the midpoint between the bottom of
+    # the row-2 token squares and the top of the role-label text below
+    circle_y = (tokens_bottom + text_top) / 2
+    circle_step = abbey_cx - village_cx
+    circle_xs = [village_cx, abbey_cx, abbey_cx + circle_step]
+    resource_icon_y = circle_y - 6  # the y each icon glyph is actually drawn at
+    for (icon_name, value), rx in zip(RES, circle_xs):
+        parts.append(f'<circle cx="{rx:.1f}" cy="{circle_y:.1f}" r="{res_r}" fill="{WORKER_FILL}" stroke="{WORKER_EDGE}" stroke-width="2"/>')
+        # wheat's own lowest drawn point sits 0.6*r below its cy; cube/coin's
+        # lowest point sits 0.62*r below the same cy -- pick their r so that
+        # offset matches wheat's, aligning all 3 icons' bottoms
+        icon_size = 14 if icon_name == "wheat" else (0.6 * 14) / 0.62
+        parts.append(draw_icon(icon_name, rx, resource_icon_y, icon_size))
+        parts.append(f'<text x="{rx:.1f}" y="{circle_y+19:.1f}" text-anchor="middle" '
+                      f'font-family="Helvetica, Arial, sans-serif" font-size="13" '
+                      f'font-weight="700" fill="{INK}">{value}</text>')
+
+    # base zigzag positions -- no longer drawn as hexes themselves, just
+    # used as a coordinate source: their y zigzag for the building row
+    # below, and (after spreading) the shared x-centers for both the
+    # circle row and the building row, so the two line up vertically.
+    worker_centers_zigzag = place_chain_top(raw, SIZE, PANEL_W / 2, y_worker_top)
+    # (spread_x was already computed above, alongside tile_x)
+
+    # worker-role circles: same (spread) x-centers as the building hexes
+    # below them, but all placed on one flat horizontal line instead of
+    # zigzagging. Role labels sit straight, just above each circle.
+    circle_cy = y_worker_top + circle_r
+    circle_centers = [(x, circle_cy) for x in spread_x]
+    for (wx, wy), role in zip(circle_centers, WORKERS):
+        draw_worker_circle(parts, wx, wy, circle_r, role)
+        draw_role_label_straight(parts, wx, wy, circle_r, role, label_gap)
+
+    # a couple of pre-placed worker tokens: 1 on "Stone Mason", 2 on
+    # "Vestry" -- same square tokens as under Village/Abbey, centered in
+    # the circle (which is now free of label text)
+    stone_mason_wx, stone_mason_wy = circle_centers[2]
+    vestry_wx, vestry_wy = circle_centers[5]
+
+    draw_square_tokens(parts, stone_mason_wx, stone_mason_wy, 1, fill=cube_fill, edge=cube_edge)
+    draw_square_tokens(parts, vestry_wx, vestry_wy, 2, fill=cube_fill, edge=cube_edge)
+
+    # building hexes: keep the same up/down zigzag rhythm as before
+    # (shifted down from the worker row), now pulled in much closer to
+    # the circle row above, and spread apart horizontally instead of
+    # touching edge-to-edge
+    apothem = SIZE * math.sqrt(3) / 2
+    row_shift = apothem * 2.65
+    building_centers = [(bx, yy + row_shift) for bx, (_, yy) in zip(spread_x, worker_centers_zigzag)]
+
+    for (bx, by) in building_centers:
+        parts.append(f'<path d="{hex_path_d(bx, by, SIZE)}" fill="{SLOT_EMPTY}" stroke="{SLOT_EMPTY_EDGE}" stroke-width="2" stroke-dasharray="5,3" stroke-linejoin="round"/>')
+
+    # bottom margin (edge 0 of the lowest building hexes down to the panel
+    # bottom) set equal to the top margin (panel top to the top of the
+    # banners)
+    top_margin = y - ribbon_h / 2
+    hex_bottom_edge = max(c[1] for c in building_centers) + apothem
+    PANEL_H = hex_bottom_edge + top_margin
+
+    # small color-indicator triangle folded into the top-right corner of
+    # the board, in this board's cube color -- just big enough to read
+    # as a player-color tag, not a major design element. Clipped to the
+    # panel's own rounded-corner shape so it fully fills that corner
+    # region right up to the rounded edge, without poking past it.
+    # The panel's own corner is rounded (rx=12), so a 45-degree-hypotenuse
+    # triangle has to reach far enough past the sharp corner for its
+    # straight edge to clear the rounding arc entirely -- otherwise a
+    # sliver of the rounded corner falls outside the triangle and shows
+    # the plain panel color through the gap. (Distance from the arc's
+    # center to the hypotenuse must exceed the 12-unit corner radius.)
+    corner_s = 48
+    overshoot = 2  # extend past the panel edges slightly so the clip
+                    # (not the raw triangle geometry/antialiasing) is
+                    # what defines the visible edge -- avoids a hairline
+                    # gap right at the sharp corner
+    corner_d = (f"M {PANEL_W+overshoot:.1f},{-overshoot:.1f} "
+                f"L {PANEL_W+overshoot:.1f},{corner_s:.1f} "
+                f"L {PANEL_W-corner_s:.1f},{-overshoot:.1f} Z")
+    panel_clip_id = f"panelClip_{cube_fill.lstrip('#')}"
+    # The clip rect is inflated slightly past the panel's own outline --
+    # the panel rect's 2px stroke straddles that outline (1px in, 1px
+    # out), so clipping exactly at the outline left a hairline ring of
+    # that stroke's tan color showing at the rounded corner. Inflating
+    # the clip by the stroke's half-width covers that ring too.
+    clip_pad = 1
+    parts.append(f'<clipPath id="{panel_clip_id}"><rect x="{-clip_pad}" y="{-clip_pad}" width="{PANEL_W+2*clip_pad:.0f}" height="{PANEL_H+2*clip_pad:.0f}" rx="{12+clip_pad}"/></clipPath>')
+    parts.append(f'<path d="{corner_d}" fill="{cube_fill}" stroke="{cube_edge}" stroke-width="1.5" stroke-linejoin="miter" clip-path="url(#{panel_clip_id})"/>')
+
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PANEL_W:.0f} {PANEL_H:.0f}" width="{PANEL_W:.0f}" height="{PANEL_H:.0f}">' \
+          f'<rect x="0" y="0" width="{PANEL_W:.0f}" height="{PANEL_H:.0f}" rx="12" fill="{PANEL_BG}" stroke="{PARCHMENT_EDGE}" stroke-width="2"/>' \
+          f'{"".join(parts)}</svg>'
+    return svg, PANEL_W, PANEL_H
+
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    svg1, w1, h1 = build_stacked()
+    svg2, w2, h2 = build_stacked(include_marker=False, cube_fill=RED_FILL, cube_edge=RED_EDGE)
+    svg3, w3, h3 = build_stacked(include_marker=False, cube_fill=YELLOW_FILL, cube_edge=YELLOW_EDGE)
+    svg4, w4, h4 = build_stacked(include_marker=False, cube_fill=BLUE_FILL, cube_edge=BLUE_EDGE)
+    with open("player_board_stacked.html", "w") as f:
+        f.write(wrap_svg_grid([[svg1, svg2], [svg3, svg4]], "PILGRIM — Player Board",
+                          "Player boards for up to 4 players and first player marker (shown on the first/white player board)."))
+
+    print("Wrote player_board_stacked.html")
