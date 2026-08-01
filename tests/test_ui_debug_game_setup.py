@@ -15,13 +15,24 @@ from tools.ui_debug.generate_game_setup import (
     SKIPPED_HEXES,
     START_HEX_BY_ROLL,
     acolyte_places,
+    available_setup_buildings,
     building_by_name,
+    building_ownership_state,
+    buy_building,
+    can_donate_building_slot,
     default_output_path,
+    donate_building,
+    donated_vp_by_level,
+    first_empty_building_slot,
     hex_centers,
     parse_setup_building_label,
     parse_setup_site_label,
     player_board_ui_state,
+    render_board_slot_building,
+    render_board_slot_donated,
+    render_board_slot_fill,
     render_setup_building_fill,
+    render_setup_building_label,
     render_setup_site_fill,
     rotated_edge_path,
     setup_placements,
@@ -33,8 +44,14 @@ from tools.ui_debug.render_buildings import (
     COLOR_GROUP_PALETTES,
     load_building_catalog,
     render_building_tile,
+    tile_text_lines,
 )
-from tools.ui_debug.render_donated_buildings import STAR_FILL, STAR_STROKE
+from tools.ui_debug.render_donated_buildings import (
+    STAR_FILL,
+    STAR_STROKE,
+    load_donated_building_tiles,
+    tiles_of,
+)
 from tools.ui_debug.render_map import (
     hex_center,
     hex_vertices,
@@ -57,14 +74,18 @@ from tools.ui_debug.render_pilgrimage_sites import (
     sites_of,
 )
 from tools.ui_debug.render_player_boards_v2 import (
+    BUILDING_SLOT_DASH_ARRAY,
     DEFAULT_FIRST_PLAYER,
     ROLE_ACOLYTE_LIMIT,
+    building_slot_centers,
     default_player_board_v2_state,
+    hex_path_data,
     load_player_boards_v2_layout,
     players_of,
     render_player_board_v2_svg,
     token_slot_count,
 )
+from tools.ui_debug.render_player_boards_v2 import HEX_SIZE as BOARD_HEX_SIZE
 from tools.ui_debug.render_ship_marker import HULL_OUTLINE, MASTS, render_ship_icon
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -758,6 +779,282 @@ def test_page_hands_the_boards_their_limits(page: str) -> None:
     assert boards["abbeyId"] == "abbey"
     assert boards["roles"] == [role["id"] for role in layout["worker_roles"]]
     assert boards["state"] == player_board_ui_state(layout)
+
+
+SETUP_BUILDING_NAMES = (
+    "Guild",
+    "Mint",
+    "Chapter House",
+    "Infirmary",
+    "Dormitory",
+    "Cloisters",
+    "Brewery",
+    "Stone Yard",
+    "Pulpit",
+    "Inquisition",
+    "Wagon Yard",
+    "Kogge",
+)
+
+
+def _placements(start_roll: int = DEFAULT_START_ROLL) -> list[dict]:
+    return setup_placements(start_roll, load_building_catalog(), load_pilgrimage_sites())
+
+
+def _ownership_state() -> dict:
+    return building_ownership_state(load_player_boards_v2_layout(), _placements())
+
+
+def _select_options(page: str, select_id: str) -> str:
+    match = re.search(rf'<select id="{select_id}">(.*?)</select>', page, re.S)
+    assert match is not None, f"no {select_id} dropdown"
+    return match.group(1)
+
+
+def test_page_offers_buy_and_donate_controls(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+
+    assert "Buy building" in page
+    assert "Donate building" in page
+    for select in ("buy-player", "buy-building", "donate-player", "donate-slot"):
+        assert f'<select id="{select}">' in page
+    for player, label in zip(players_of(layout), PLAYER_LABELS, strict=True):
+        for select in ("buy-player", "donate-player"):
+            assert f'<option value="{player["id"]}"' in _select_options(page, select)
+        assert label in page
+    slots = _select_options(page, "donate-slot")
+    for number in range(1, int(layout["building_slot_count"]) + 1):
+        assert f'<option value="{number}"' in slots
+        assert f">Slot {number}</option>" in slots
+
+
+def test_available_buildings_are_the_building_slots_only(page: str) -> None:
+    """Empty slots have nothing to sell and site slots hold a pilgrimage site, not a building."""
+    available = available_setup_buildings(_placements())
+    building_rounds = [round_number for round_number, _, kind in SETUP_SLOTS if kind == "building"]
+    options = _select_options(page, "buy-building")
+
+    assert [building["name"] for building in available] == list(SETUP_BUILDING_NAMES)
+    assert [building["setupSlot"] for building in available] == building_rounds
+    for building in available:
+        assert f'<option value="{building["setupSlot"]}"' in options
+        assert f">{building['label']}</option>" in options
+    assert ">Empty</option>" not in options
+    assert ">Pilgrimage site" not in options
+
+
+def test_donated_buildings_are_worth_two_four_and_six(page: str) -> None:
+    mapping = donated_vp_by_level(load_donated_building_tiles())
+    exposed = _setup_data(page)["buildingOwnership"]["donatedVpByLevel"]
+
+    assert mapping == {1: 2, 2: 4, 3: 6}
+    assert exposed == {"1": 2, "2": 4, "3": 6}
+
+
+def test_first_empty_building_slot_walks_the_board() -> None:
+    state = _ownership_state()
+    slots = state["players"]["player_one"]["buildingSlots"]
+
+    assert first_empty_building_slot(slots) == 1
+    assert buy_building(state, "player_one", 3) == 1
+    assert first_empty_building_slot(slots) == 2
+    for setup_slot in (4, 5, 6, 9, 10):
+        buy_building(state, "player_one", setup_slot)
+    assert first_empty_building_slot(slots) is None
+    # A full board buys nothing, and the building it could not take stays on the map.
+    assert buy_building(state, "player_one", 11) is None
+    assert "11" in state["available"]
+
+
+def test_buying_takes_a_building_off_the_map_for_one_player_only() -> None:
+    state = _ownership_state()
+
+    assert buy_building(state, "player_two", 22) == 1
+    entry = state["players"]["player_two"]["buildingSlots"][0]
+
+    assert entry == {
+        "setupSlot": 22,
+        "buildingId": "kogge",
+        "name": "Kogge",
+        "level": 3,
+        "donated": False,
+    }
+    assert "22" not in state["available"]
+    assert state["players"]["player_one"]["buildingSlots"] == [None] * 6
+    # The same building cannot be bought twice.
+    assert buy_building(state, "player_one", 22) is None
+
+
+def test_donating_flips_a_bought_building_once() -> None:
+    state = _ownership_state()
+    slots = state["players"]["player_one"]["buildingSlots"]
+    buy_building(state, "player_one", 3)
+
+    assert can_donate_building_slot(slots, 1) is True
+    assert donate_building(state, "player_one", 1) is True
+    assert slots[0]["donated"] is True
+    # Once flipped it stays in its slot, and it cannot be flipped again.
+    assert slots[0]["setupSlot"] == 3
+    assert can_donate_building_slot(slots, 1) is False
+    assert donate_building(state, "player_one", 1) is False
+    # An empty slot has nothing to donate.
+    assert can_donate_building_slot(slots, 2) is False
+    assert donate_building(state, "player_one", 2) is False
+    assert can_donate_building_slot(slots, 7) is False
+
+
+def test_a_bought_building_is_keyed_to_its_setup_slot_not_its_hex() -> None:
+    """Changing the start roll moves a building around the map; it does not give it back."""
+    state = _ownership_state()
+    buy_building(state, "player_one", 3)
+    entry = state["players"]["player_one"]["buildingSlots"][0]
+
+    rotated = {placement["round"]: placement for placement in _placements(3)}
+    original = {placement["round"]: placement for placement in _placements()}
+
+    assert rotated[3]["hex"] != original[3]["hex"]
+    assert rotated[entry["setupSlot"]]["building"]["id"] == entry["buildingId"]
+    assert "3" not in state["available"]
+
+
+def test_setup_building_overlays_name_the_building_they_draw(page: str) -> None:
+    """Both layers carry the building's id, so a bought building can leave the map by name."""
+    catalog = building_by_name(load_building_catalog())
+    named = re.findall(
+        r'<g class="setup-(building|site)-(?:fill|label|content)" data-slot="(\d+)"'
+        r'(?: data-building-id="([\w_]+)")?',
+        page,
+    )
+    buildings = {slot: building_id for kind, slot, building_id in named if kind == "building"}
+    sites = {slot: building_id for kind, slot, building_id in named if kind == "site"}
+
+    assert len(buildings) == len(SETUP_BUILDING_NAMES)
+    assert set(sites.values()) == {""}, "a pilgrimage site is not a building and is not for sale"
+    for placement in _placements():
+        if placement["building"] is None:
+            continue
+        name, _ = parse_setup_building_label(placement["label"])
+        assert buildings[str(placement["round"])] == catalog[name]["id"]
+
+
+def _defs(page: str) -> str:
+    match = re.search(r"<defs>(.*?)</defs>", page, re.S)
+    assert match is not None
+    return match.group(1)
+
+
+def test_page_defines_the_content_a_board_slot_can_show(page: str) -> None:
+    """Every building and every donated level is drawn once and pointed at by reference."""
+    available = available_setup_buildings(_placements())
+    defs = _defs(page)
+
+    for building in available:
+        assert f'<g id="bought-{building["buildingId"]}">' in defs
+        assert f">{building['name'].split()[0]}</text>" in defs
+    for level, vp in donated_vp_by_level(load_donated_building_tiles()).items():
+        donated = re.search(rf'<g id="donated-level-{level}">(.*?)</g>', defs, re.S)
+        assert donated is not None
+        assert f'fill="{STAR_FILL}"' in donated.group(1)
+        assert f">{vp}</text>" in donated.group(1)
+
+
+def test_board_slot_content_recolours_the_slot_without_a_tile_border(page: str) -> None:
+    """A bought or donated building fills the slot's own hex and draws no border of its own."""
+    defs = _defs(page)
+    slot_hex = hex_path_data(0.0, 0.0, BOARD_HEX_SIZE)
+    fills = re.findall(rf'<path d="{re.escape(slot_hex)}"[^>]*/>', defs)
+
+    assert len(fills) == len(SETUP_BUILDING_NAMES) + len(tiles_of(load_donated_building_tiles()))
+    for fill in fills:
+        assert 'stroke="none"' in fill
+        assert "stroke-width" not in fill
+    # A tile's own border colour is never stroked here; the labels only write in it.
+    for palette in COLOR_GROUP_PALETTES.values():
+        assert f'stroke="{palette.stroke}"' not in defs
+
+
+def test_bought_slot_content_is_the_tile_colour_and_label_only() -> None:
+    building = building_by_name(load_building_catalog())["Guild"]
+    palette = COLOR_GROUP_PALETTES[building["color_group"]]
+    content = render_board_slot_building(building)
+
+    assert content.startswith(render_board_slot_fill(palette.fill))
+    assert f'stroke="{palette.stroke}"' not in content
+    assert f">{building['name']}</text>" in content
+
+
+def _label_baselines(content: str) -> list[float]:
+    return [float(y) for y in re.findall(r'<text x="0" y="(-?[\d.]+)"', content)]
+
+
+def test_a_bought_building_labels_the_lower_half_of_its_slot() -> None:
+    """The slot reads like a map hex: every line below the centre, none of it past the edge."""
+    apothem = BOARD_HEX_SIZE * math.sin(math.radians(60.0))
+
+    for name in ("Kogge", "Chapter House"):
+        building = building_by_name(load_building_catalog())[name]
+        baselines = _label_baselines(render_board_slot_building(building))
+
+        assert len(baselines) == len(tile_text_lines(building))
+        assert baselines == sorted(baselines)
+        for baseline in baselines:
+            assert 0.0 < baseline < apothem
+
+
+def test_a_bought_building_is_labelled_at_the_same_proportions_as_on_the_map() -> None:
+    building = building_by_name(load_building_catalog())["Kogge"]
+    map_layout = load_map_layout()
+    ratio = BOARD_HEX_SIZE / map_layout["hex_size"]
+
+    slot = _label_baselines(render_board_slot_building(building))
+    on_map = _label_baselines(render_setup_building_label(map_layout, building))
+
+    assert slot and len(slot) == len(on_map)
+    for slot_y, map_y in zip(slot, on_map, strict=True):
+        assert slot_y == pytest.approx(map_y * ratio, abs=0.05)
+
+
+def test_donated_slot_content_keeps_the_star_and_drops_the_tile_border() -> None:
+    tile = tiles_of(load_donated_building_tiles())[0]
+    palette = COLOR_GROUP_PALETTES[tile["color_group"]]
+    content = render_board_slot_donated(tile)
+
+    assert content.startswith(render_board_slot_fill(palette.fill))
+    assert f'stroke="{palette.stroke}"' not in content
+    assert f'fill="{STAR_FILL}" stroke="{STAR_STROKE}"' in content
+    assert f">{tile['vp']}</text>" in content
+
+
+def test_board_building_slots_start_empty(page: str) -> None:
+    """Fill, then the building content, then the dashed outline that stays the slot's boundary."""
+    layout = load_player_boards_v2_layout()
+    palette = layout["palette"]
+    slot_count = int(layout["building_slot_count"])
+
+    assert len(building_slot_centers(layout)) == slot_count
+    for player in players_of(layout):
+        board = _player_board(page, player["id"])
+        for number, (cx, cy) in enumerate(building_slot_centers(layout), start=1):
+            slot = re.search(
+                rf'<g data-player-board-slot="{number}" data-building-slot-state="empty"'
+                r"[^>]*>(.*?)</g>",
+                board,
+                re.S,
+            )
+            assert slot is not None, f"slot {number} is not a taggable group"
+            body = slot.group(1)
+            path = hex_path_data(cx, cy)
+            fill = f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
+            content = f'<use data-building-content="true" x="{cx:.1f}" y="{cy:.1f}" opacity="0"/>'
+            assert body.startswith(fill)
+            assert content in body
+            assert body.endswith(
+                f'<path data-slot-outline="true" d="{path}" fill="none"'
+                f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
+                f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/>'
+            )
+        assert "No buildings bought yet." in board
+        assert "No buildings bought yet." in board
 
 
 def test_player_board_panel_leaves_the_map_controls_alone(page: str) -> None:

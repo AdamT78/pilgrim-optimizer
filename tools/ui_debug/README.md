@@ -309,6 +309,25 @@ UI/debug state only: it can move the first-player marker, move serfs from Villag
 move acolytes between Abbey and role circles. This does not mutate `GameState` and does not
 implement gameplay legality.
 
+The setup view now includes local UI/debug controls for buying buildings from the setup map and
+donating/flipping bought buildings on Player Board v2 slots. Buying removes the building from the
+map visually and places it into the first empty player-board building slot. Donating flips a
+bought building in slot 1-6 to its donated side using the existing 2/4/6 VP level mapping. This
+does not mutate `GameState` and does not implement purchase/donation legality.
+
+A building standing on the map is available, one in a player-board slot is bought, and a bought
+one that has been flipped is donated. Only `"building"` setup slots are for sale — empty slots
+hold nothing and site slots hold a pilgrimage site — and a building is keyed by its setup slot
+rather than by the hex it currently sits on, so changing the start roll afterwards moves the
+unbought buildings around the map without giving a bought one back. Each slot's content is drawn
+once into a `defs` block, as the building's own tile colour and label for the bought side and as
+the donated tile's star and VP value from `render_donated_buildings.py` for the flipped side; a
+slot shows one by pointing its `use` element at it. Both sides recolour the slot the way a setup
+slot recolours a map hex — a fill on the slot's own hex path, `stroke="none"`, no tile border of
+its own — and the slot's dashed outline is drawn last, so it stays the only boundary a slot has. `building_ownership_state`, `buy_building`, and
+`donate_building` are the same two moves in Python, so the rules the buttons follow — first empty
+slot, one flip per building — can be tested without a browser.
+
 The four boards come from `render_player_boards_v2.py`, drawn with `interactive=True`: that draws
 every slot a cube can stand in — all eight Village and Abbey slots, and for each role circle both
 the centred slot and the side-by-side pair — and hides the ones the state does not need, so the
