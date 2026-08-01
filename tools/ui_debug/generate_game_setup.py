@@ -35,6 +35,12 @@ from tools.ui_debug.render_buildings import (  # noqa: E402
     palette_for,
     tile_text_lines,
 )
+from tools.ui_debug.render_donated_buildings import HEX_RADIUS as DONATED_HEX_RADIUS  # noqa: E402
+from tools.ui_debug.render_donated_buildings import (  # noqa: E402
+    load_donated_building_tiles,
+    render_donated_building_contents,
+    tiles_of,
+)
 from tools.ui_debug.render_map import (  # noqa: E402
     hex_center,
     hex_vertices,
@@ -65,11 +71,13 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     DEFAULT_FIRST_PLAYER,
     ROLE_ACOLYTE_LIMIT,
     default_player_board_v2_state,
+    hex_path_data,
     load_player_boards_v2_layout,
     players_of,
     render_player_board_v2_svg,
     token_slot_count,
 )
+from tools.ui_debug.render_player_boards_v2 import HEX_SIZE as BOARD_HEX_SIZE  # noqa: E402
 from tools.ui_debug.render_ship_marker import (  # noqa: E402
     SHIP_ANCHOR_OFFSET_Y as TILE_SHIP_ANCHOR_OFFSET_Y,
 )
@@ -285,14 +293,16 @@ def render_setup_site_contents(map_layout: dict, site: dict) -> str:
     return render_pilgrimage_site_contents(site, scale=_tile_ratio(map_layout), ink=SITE_STROKE)
 
 
-def render_setup_building_label(map_layout: dict, building: dict) -> str:
+def render_building_label(building: dict, hex_size: float) -> str:
     """The tile's own wrapped label, at the tile's own proportions, in the lower half of the hex.
 
-    The map hex is smaller than a building tile, so the tile's text geometry is scaled between the
-    two rather than restated. That keeps the upper half free for the hex label and the ship.
+    A hex the label lands in — a map hex or a player board's building slot — is smaller than a
+    building tile, so the tile's text geometry is scaled between the two rather than restated.
+    Every line stays below the centre, which is what keeps the upper half free for the map's own
+    hex label and the ship, and is how a bought building reads the same on a board slot.
     """
     palette = palette_for(building)
-    ratio = _tile_ratio(map_layout)
+    ratio = hex_size / TILE_HEX_RADIUS
 
     lines = []
     for index, line in enumerate(tile_text_lines(building)):
@@ -306,11 +316,21 @@ def render_setup_building_label(map_layout: dict, building: dict) -> str:
     return "".join(lines)
 
 
+def render_setup_building_label(map_layout: dict, building: dict) -> str:
+    return render_building_label(building, map_layout["hex_size"])
+
+
 def _placed(map_layout: dict, placement: dict, class_name: str, body: str) -> str:
-    """One slot's share of a layer, moved as a whole when the start roll changes."""
+    """One slot's share of a layer, moved as a whole when the start roll changes.
+
+    A building also names itself, so a page can take it off the map when it is bought without
+    having to know which hex the current start roll put it on.
+    """
     center_x, center_y = hex_centers(map_layout)[placement["hex"]]
+    building = placement["building"]
+    named = f' data-building-id="{building["id"]}"' if building is not None else ""
     return (
-        f'<g class="{class_name}" data-slot="{placement["round"]}"'
+        f'<g class="{class_name}" data-slot="{placement["round"]}"{named}'
         f' transform="translate({center_x:.1f},{center_y:.1f})">{body}</g>'
     )
 
@@ -420,6 +440,158 @@ ABBEY_PLACE_ID = "abbey"
 ABBEY_PLACE_LABEL = "Abbey"
 
 
+def available_setup_buildings(placements: list[dict]) -> list[dict]:
+    """The buildings standing on the setup map, in slot order.
+
+    Only `"building"` slots are for sale: empty slots have nothing on them and site slots hold a
+    pilgrimage site. A building is keyed by its setup slot, not by the hex it happens to sit on,
+    so changing the start roll moves it around the map without changing who owns it.
+    """
+    return [
+        {
+            "setupSlot": placement["round"],
+            "buildingId": placement["building"]["id"],
+            "name": placement["building"]["name"],
+            "level": placement["building"]["level"],
+            "label": placement["label"],
+            "boughtContent": f"#{bought_content_id(placement['building'])}",
+            "donatedContent": f"#{donated_content_id(placement['building']['level'])}",
+        }
+        for placement in placements
+        if placement["building"] is not None
+    ]
+
+
+def donated_vp_by_level(donated_data: dict | list) -> dict[int, int]:
+    """What a flipped building is worth: level 1 -> 2 VP, level 2 -> 4 VP, level 3 -> 6 VP."""
+    return {int(tile["level"]): int(tile["vp"]) for tile in tiles_of(donated_data)}
+
+
+def first_empty_building_slot(slots: Sequence[dict | None]) -> int | None:
+    """The slot a bought building goes into, numbered from 1, or `None` on a full board."""
+    for number, entry in enumerate(slots, start=1):
+        if entry is None:
+            return number
+    return None
+
+
+def can_donate_building_slot(slots: Sequence[dict | None], number: int) -> bool:
+    """A slot can be flipped once, and only while a bought building is standing in it."""
+    if not 1 <= number <= len(slots):
+        return False
+    entry = slots[number - 1]
+    return entry is not None and not entry["donated"]
+
+
+def building_ownership_state(board_layout: dict, placements: list[dict]) -> dict:
+    """The state the buy and donate controls start from: everything still on the map, no owners.
+
+    The page's JavaScript keeps its own copy of this shape and moves buildings between the two
+    halves. `buy_building` and `donate_building` are the same two moves in Python, so the rules
+    they follow can be tested without a browser.
+    """
+    return {
+        "available": {
+            str(building["setupSlot"]): building
+            for building in available_setup_buildings(placements)
+        },
+        "players": {
+            player["id"]: {"buildingSlots": [None] * int(board_layout["building_slot_count"])}
+            for player in players_of(board_layout)
+        },
+    }
+
+
+def buy_building(state: dict, player_id: str, setup_slot: int) -> int | None:
+    """Take an available building off the map onto that player's first empty slot.
+
+    Returns the slot it landed in, or `None` when the building is gone or the board is full.
+    """
+    building = state["available"].get(str(setup_slot))
+    slots = state["players"][player_id]["buildingSlots"]
+    number = first_empty_building_slot(slots)
+    if building is None or number is None:
+        return None
+    slots[number - 1] = {
+        "setupSlot": building["setupSlot"],
+        "buildingId": building["buildingId"],
+        "name": building["name"],
+        "level": building["level"],
+        "donated": False,
+    }
+    del state["available"][str(setup_slot)]
+    return number
+
+
+def donate_building(state: dict, player_id: str, number: int) -> bool:
+    """Flip the bought building in that slot to its donated side. Says whether anything flipped."""
+    slots = state["players"][player_id]["buildingSlots"]
+    if not can_donate_building_slot(slots, number):
+        return False
+    slots[number - 1]["donated"] = True
+    return True
+
+
+def bought_content_id(building: dict) -> str:
+    return f"bought-{building['id']}"
+
+
+def donated_content_id(level: int) -> str:
+    return f"donated-level-{level}"
+
+
+def render_board_slot_fill(fill: str, size: float = BOARD_HEX_SIZE) -> str:
+    """A building recolours the slot it stands in; it does not lay a tile on top of it.
+
+    Like a setup slot on the map, the fill takes the slot's own hex shape and draws no border of
+    its own: the board's dashed outline, drawn over this, stays the slot's only boundary.
+    """
+    return f'<path d="{hex_path_data(0.0, 0.0, size)}" fill="{fill}" stroke="none"/>'
+
+
+def render_board_slot_building(building: dict, size: float = BOARD_HEX_SIZE) -> str:
+    """A bought building filling a player-board slot, in the tile's colour and wrapped label.
+
+    The label sits in the lower half of the slot, exactly as it does on a map hex, so a building
+    reads the same whether it is still on the map or already bought.
+    """
+    return render_board_slot_fill(palette_for(building).fill, size) + render_building_label(
+        building, size
+    )
+
+
+def render_board_slot_donated(tile: dict, size: float = BOARD_HEX_SIZE) -> str:
+    """The donated side of a building: the slot in the level's colour, with the tile's star and VP.
+
+    The donated tile's own border is left out for the same reason a bought building's is.
+    """
+    return render_board_slot_fill(palette_for(tile).fill, size) + render_donated_building_contents(
+        tile, scale=size / DONATED_HEX_RADIUS
+    )
+
+
+def render_building_content_defs(placements: list[dict], donated_data: dict | list) -> str:
+    """Every piece of content a board slot can show, defined once and drawn by reference.
+
+    A slot's `use` element points at one of these, so buying or donating is a change of reference
+    rather than a redraw, and the same building never has to be rendered four times over.
+    """
+    fragments = [
+        f'<g id="{bought_content_id(placement["building"])}">'
+        f"{render_board_slot_building(placement['building'])}</g>"
+        for placement in placements
+        if placement["building"] is not None
+    ]
+    fragments += [
+        f'<g id="{donated_content_id(tile["level"])}">{render_board_slot_donated(tile)}</g>'
+        for tile in tiles_of(donated_data)
+    ]
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="content-defs" width="0" height="0"'
+        f' aria-hidden="true"><defs>{"".join(fragments)}</defs></svg>'
+    )
+
+
 def acolyte_places(board_layout: dict) -> list[tuple[str, str]]:
     """Everywhere an acolyte can stand: the Abbey, then the six role circles.
 
@@ -477,6 +649,46 @@ def render_acolyte_controls(board_layout: dict) -> str:
     )
 
 
+def render_buy_controls(board_layout: dict, placements: list[dict]) -> str:
+    """Pick a player and one of the buildings still on the map; the button buys it for them."""
+    players = [(player["id"], player["label"]) for player in players_of(board_layout)]
+    buildings = [
+        (str(building["setupSlot"]), building["label"])
+        for building in available_setup_buildings(placements)
+    ]
+    return (
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="buy-player">Player</label>\n'
+        f'        <select id="buy-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        "      </div>\n"
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="buy-building">Building</label>\n'
+        f'        <select id="buy-building">{_options(buildings, buildings[0][0])}</select>\n'
+        "      </div>\n"
+        '      <button type="button" id="buy-building-button">Buy building</button>'
+    )
+
+
+def render_donate_controls(board_layout: dict) -> str:
+    """Pick a player and one of their six slots; the button flips what is standing in it."""
+    players = [(player["id"], player["label"]) for player in players_of(board_layout)]
+    slots = [
+        (str(number), f"Slot {number}")
+        for number in range(1, int(board_layout["building_slot_count"]) + 1)
+    ]
+    return (
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="donate-player">Player</label>\n'
+        f'        <select id="donate-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        "      </div>\n"
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="donate-slot">Slot</label>\n'
+        f'        <select id="donate-slot">{_options(slots, "1")}</select>\n'
+        "      </div>\n"
+        '      <button type="button" id="donate-building-button">Donate building</button>'
+    )
+
+
 def player_board_ui_state(board_layout: dict) -> dict:
     """The state the panel starts from: the default board for every player, marker on player one.
 
@@ -514,6 +726,7 @@ def render_player_boards(board_layout: dict) -> str:
             f' <strong data-readout="village">0</strong>, Abbey acolytes'
             f' <strong data-readout="abbey">0</strong>, acolytes on roles'
             f' <strong data-readout="roles">0</strong></p>\n'
+            f'      <p class="slot-list" data-readout="buildings">No buildings bought yet.</p>\n'
             f"      {svg}\n"
             "    </div>"
         )
@@ -730,10 +943,123 @@ SETUP_SCRIPT = """
     select.addEventListener("change", renderPlayerBoards);
   });
 
+  // Buildings. One on the map is available, one in a player-board slot is bought, and a bought
+  // one that has been flipped is donated. A slot shows its building by pointing at content the
+  // page already defined, so buying and donating only change a reference.
+  const ownership = data.buildingOwnership;
+  const ownershipState = ownership.state;
+  const buyPlayer = document.getElementById("buy-player");
+  const buyBuilding = document.getElementById("buy-building");
+  const buyButton = document.getElementById("buy-building-button");
+  const donatePlayer = document.getElementById("donate-player");
+  const donateSlot = document.getElementById("donate-slot");
+  const donateButton = document.getElementById("donate-building-button");
+
+  function buildingSlots(playerId) {
+    return ownershipState.players[playerId].buildingSlots;
+  }
+
+  function firstEmptyBuildingSlot(playerId) {
+    const slots = buildingSlots(playerId);
+    for (let index = 0; index < slots.length; index += 1) {
+      if (slots[index] === null) { return index + 1; }
+    }
+    return 0;
+  }
+
+  function canDonate(playerId, number) {
+    const entry = buildingSlots(playerId)[number - 1];
+    return Boolean(entry) && !entry.donated;
+  }
+
+  function describeSlot(number, entry) {
+    const vp = ownership.donatedVpByLevel[entry.level];
+    return "Slot " + number + " " + entry.name + (entry.donated ? ", donated " + vp + " VP" : "");
+  }
+
+  function renderMapBuildings() {
+    // A bought building leaves the map: its recoloured hex and its label both go, and the map's
+    // own hex is underneath them, unchanged. Sites and empty slots are not for sale.
+    const overlays = document.querySelectorAll(
+      "#setup-fills g[data-building-id], #setup-labels g[data-building-id]"
+    );
+    Array.prototype.forEach.call(overlays, function (overlay) {
+      const slot = overlay.getAttribute("data-slot");
+      show(overlay, Object.prototype.hasOwnProperty.call(ownershipState.available, slot));
+    });
+  }
+
+  function renderBuildingSlots(playerId) {
+    const board = boardElement(playerId);
+    const summary = [];
+    buildingSlots(playerId).forEach(function (entry, index) {
+      const number = index + 1;
+      const group = board.querySelector('[data-player-board-slot="' + number + '"]');
+      const content = group.querySelector("[data-building-content]");
+      const donated = Boolean(entry) && entry.donated;
+      group.setAttribute(
+        "data-building-slot-state", entry === null ? "empty" : (donated ? "donated" : "bought")
+      );
+      group.setAttribute("data-building-id", entry === null ? "" : entry.buildingId);
+      group.setAttribute("data-setup-slot", entry === null ? "" : entry.setupSlot);
+      group.setAttribute("data-donated", donated ? "true" : "false");
+      // The dashed outline is drawn over the content and never moves, so a filled slot keeps the
+      // same border an empty one has.
+      show(content, entry !== null);
+      if (entry !== null) {
+        content.setAttribute("href", donated
+          ? ownership.donatedContent[entry.level]
+          : ownership.boughtContent[entry.buildingId]);
+        summary.push(describeSlot(number, entry));
+      }
+    });
+    board.querySelector('[data-readout="buildings"]').textContent =
+      summary.length ? summary.join(". ") : "No buildings bought yet.";
+  }
+
+  function renderOwnership() {
+    Object.keys(ownershipState.players).forEach(renderBuildingSlots);
+    renderMapBuildings();
+    buyButton.disabled = !(buyBuilding.value && firstEmptyBuildingSlot(buyPlayer.value));
+    donateButton.disabled = !canDonate(donatePlayer.value, Number(donateSlot.value));
+  }
+
+  buyButton.addEventListener("click", function () {
+    const playerId = buyPlayer.value;
+    const setupSlot = buyBuilding.value;
+    const building = ownershipState.available[setupSlot];
+    const number = firstEmptyBuildingSlot(playerId);
+    if (!building || !number) { return; }
+    buildingSlots(playerId)[number - 1] = {
+      setupSlot: building.setupSlot,
+      buildingId: building.buildingId,
+      name: building.name,
+      level: building.level,
+      donated: false
+    };
+    delete ownershipState.available[setupSlot];
+    const option = buyBuilding.querySelector('option[value="' + setupSlot + '"]');
+    if (option) { option.remove(); }
+    renderOwnership();
+  });
+
+  donateButton.addEventListener("click", function () {
+    const playerId = donatePlayer.value;
+    const number = Number(donateSlot.value);
+    if (!canDonate(playerId, number)) { return; }
+    buildingSlots(playerId)[number - 1].donated = true;
+    renderOwnership();
+  });
+
+  [buyPlayer, buyBuilding, donatePlayer, donateSlot].forEach(function (select) {
+    select.addEventListener("change", renderOwnership);
+  });
+
   renderSlots();
   renderShip();
   players.forEach(function (_, index) { renderPiety(index); });
   renderPlayerBoards();
+  renderOwnership();
 })();
 """
 
@@ -756,6 +1082,7 @@ def render_game_setup_html(
     catalog: dict,
     site_data: dict | list,
     board_layout: dict,
+    donated_data: dict | list,
 ) -> str:
     variant = variant_by_id(piety_layout, PIETY_VARIANT_ID)
     vp_values = piety_vp_values(piety_config)
@@ -772,6 +1099,8 @@ def render_game_setup_html(
     placements = setup_placements(DEFAULT_START_ROLL, catalog, site_data)
     occupied = [placement["round"] for placement in placements if placement["kind"] != "empty"]
     centers = hex_centers(map_layout)
+    available = available_setup_buildings(placements)
+    donated_vp = donated_vp_by_level(donated_data)
 
     # The fills go under the map's own edges and labels, so a placed building recolours its hex
     # instead of covering it. The names and the ship go on top of the finished map.
@@ -796,6 +1125,15 @@ def render_game_setup_html(
                 "roleLimit": ROLE_ACOLYTE_LIMIT,
                 "roles": [role["id"] for role in board_layout["worker_roles"]],
                 "state": player_board_ui_state(board_layout),
+            },
+            "buildingOwnership": {
+                "slotCount": board_layout["building_slot_count"],
+                "donatedVpByLevel": donated_vp,
+                "boughtContent": {
+                    building["buildingId"]: building["boughtContent"] for building in available
+                },
+                "donatedContent": {level: f"#{donated_content_id(level)}" for level in donated_vp},
+                "state": building_ownership_state(board_layout, placements),
             },
         }
     )
@@ -975,6 +1313,21 @@ def render_game_setup_html(
 {render_serf_controls(board_layout)}
     </div>
     <div class="panel board-controls">
+      <h2>Player board v2 — buy a building</h2>
+      <p class="slot-list">An available building is one still standing on the setup map. Buying it
+        takes it off the map and puts it in the player's first empty building slot, where it stays
+        however the start roll rotates the map afterwards.</p>
+{render_buy_controls(board_layout, placements)}
+    </div>
+    <div class="panel board-controls">
+      <h2>Player board v2 — donate a building</h2>
+      <p class="slot-list">Donating flips a bought building in slots
+        1-{board_layout["building_slot_count"]} to its donated side, which is worth
+        {donated_vp[1]}, {donated_vp[2]}, or {donated_vp[3]} VP by level. It stays in its slot and
+        cannot be flipped twice.</p>
+{render_donate_controls(board_layout)}
+    </div>
+    <div class="panel board-controls">
       <h2>Player board v2 — acolytes</h2>
       <p class="slot-list">Acolytes move between the Abbey and the role circles. A role circle
         holds at most {ROLE_ACOLYTE_LIMIT}: one sits centred, two sit side by side. The Village is
@@ -984,6 +1337,7 @@ def render_game_setup_html(
 {render_player_boards(board_layout)}
   </div>
   </div>
+  {render_building_content_defs(placements, donated_data)}
   <script id="setup-data" type="application/json">{setup_data}</script>
   <script>{SETUP_SCRIPT}</script>
 </body>
@@ -1000,6 +1354,7 @@ def write_game_setup_page(
     catalog_path: Path | None = None,
     site_data_path: Path | None = None,
     board_layout_path: Path | None = None,
+    donated_data_path: Path | None = None,
 ) -> Path:
     destination = default_output_path() if output_path is None else Path(output_path)
     html = render_game_setup_html(
@@ -1009,6 +1364,7 @@ def write_game_setup_page(
         load_building_catalog(catalog_path),
         load_pilgrimage_sites(site_data_path),
         load_player_boards_v2_layout(board_layout_path),
+        load_donated_building_tiles(donated_data_path),
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(html, encoding="utf-8")

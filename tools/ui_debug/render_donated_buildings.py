@@ -32,6 +32,7 @@ STAR_STROKE = "#B8960C"
 
 VP_TEXT_FILL = "#000000"
 VP_TEXT_OFFSET = 3.5
+VP_TEXT_FONT_SIZE = 10.0
 
 BACKGROUND_COLOR = "#000000"
 TITLE = "PILGRIM — Special Tiles"
@@ -101,17 +102,36 @@ def render_star_path(cx: float, cy: float, outer_r: float, inner_r: float) -> st
     )
 
 
-def render_donated_building_tile(tile: dict, x: float, y: float) -> str:
-    """Render one donated building tile (hex, star, VP number) centred on (x, y)."""
+def render_donated_building_hex(tile: dict, x: float, y: float) -> str:
     palette = palette_for(tile)
     return (
         f'<path d="{_hex_path_data(x, y)}" fill="{palette.fill}" stroke="{palette.stroke}"'
         ' stroke-width="2.5" stroke-linejoin="round"/>'
-        + render_star_path(x, y, STAR_OUTER_RADIUS, STAR_OUTER_RADIUS * STAR_INNER_RATIO)
-        + f'<text x="{x:.1f}" y="{y + VP_TEXT_OFFSET:.1f}" text-anchor="middle"'
-        ' font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="600"'
+    )
+
+
+def render_donated_building_contents(
+    tile: dict, x: float = 0.0, y: float = 0.0, scale: float = 1.0
+) -> str:
+    """The star and its VP number, without the hex around them.
+
+    Drawn on its own so a caller that already has a hex — the game setup view recolours a player
+    board's building slot instead of stacking a tile on it — can reuse the contents at its own
+    size, and without the tile's border.
+    """
+    outer = STAR_OUTER_RADIUS * scale
+    return (
+        render_star_path(x, y, outer, outer * STAR_INNER_RATIO)
+        + f'<text x="{x:.1f}" y="{y + VP_TEXT_OFFSET * scale:.1f}" text-anchor="middle"'
+        ' font-family="Helvetica, Arial, sans-serif"'
+        f' font-size="{VP_TEXT_FONT_SIZE * scale:g}" font-weight="600"'
         f' fill="{VP_TEXT_FILL}">{escape(str(tile["vp"]))}</text>'
     )
+
+
+def render_donated_building_tile(tile: dict, x: float, y: float) -> str:
+    """Render one donated building tile (hex, star, VP number) centred on (x, y)."""
+    return render_donated_building_hex(tile, x, y) + render_donated_building_contents(tile, x, y)
 
 
 def _view_box(tile_count: int) -> tuple[float, float, float, float]:

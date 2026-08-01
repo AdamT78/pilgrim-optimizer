@@ -8,8 +8,11 @@ from tools.ui_debug.generate_player_boards_v2 import (
     generate_player_boards_v2_page,
 )
 from tools.ui_debug.render_player_boards_v2 import (
+    BUILDING_SLOT_DASH_ARRAY,
     board_geometry,
+    building_slot_centers,
     default_layout_path,
+    hex_path_data,
     load_player_boards_v2_layout,
     player_by_id,
     players_of,
@@ -131,6 +134,48 @@ def test_one_board_draws_its_slots_labels_and_colour_tag(layout: dict) -> None:
     assert svg.count(f'fill="{player["fill"]}"') > 0
     assert f'clip-path="url(#panelClip_{player["fill"].lstrip("#")})"' in svg
     assert len(geometry["role_x"]) == len(geometry["building_y"]) == 6
+
+
+def test_an_interactive_board_slot_keeps_its_dashed_outline_on_top(layout: dict) -> None:
+    """A page fills a slot by pointing its `use` at content, and the outline is drawn over it."""
+    player = player_by_id(layout, "player_one")
+    svg = render_player_board_v2_svg(layout, player, interactive=True)
+    palette = layout["palette"]
+
+    slots = re.findall(r'<g data-player-board-slot="\d+".*?</g>', svg, re.S)
+
+    assert len(slots) == layout["building_slot_count"]
+    assert svg.count('stroke-dasharray="5,3"') == layout["building_slot_count"]
+    for number, (slot, (cx, cy)) in enumerate(
+        zip(slots, building_slot_centers(layout), strict=True), start=1
+    ):
+        path = hex_path_data(cx, cy)
+        assert f'data-player-board-slot="{number}"' in slot
+        # Content is anchored on the slot centre, so a fragment drawn in the lower half of a hex
+        # lands in the lower half of the slot.
+        assert f'<use data-building-content="true" x="{cx:.1f}" y="{cy:.1f}"' in slot
+        # Fill first, then the building content, then the border, which never carries a fill.
+        assert slot.index(f'fill="{palette["slot_fill"]}" stroke="none"') < slot.index("<use")
+        assert slot.index("<use") < slot.index('data-slot-outline="true"')
+        assert slot.endswith(
+            f'<path data-slot-outline="true" d="{path}" fill="none"'
+            f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
+            f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/></g>'
+        )
+
+
+def test_a_plain_board_slot_stays_the_single_dashed_hex_of_the_baseline(layout: dict) -> None:
+    player = player_by_id(layout, "player_one")
+    svg = render_player_board_v2_svg(layout, player)
+
+    assert "data-player-board-slot" not in svg
+    assert "<use" not in svg
+    for cx, cy in building_slot_centers(layout):
+        assert (
+            f'<path d="{hex_path_data(cx, cy)}" fill="{layout["palette"]["slot_fill"]}"'
+            f' stroke="{layout["palette"]["slot_stroke"]}" stroke-width="2"'
+            f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/>'
+        ) in svg
 
 
 def test_html_shows_four_boards_in_a_two_by_two_grid(page: str) -> None:

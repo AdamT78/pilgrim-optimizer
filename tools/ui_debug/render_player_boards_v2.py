@@ -135,6 +135,12 @@ def default_player_board_v2_state(layout: dict) -> dict:
     }
 
 
+def building_slot_centers(layout: dict) -> list[tuple[float, float]]:
+    """Where the six bottom building slots sit, left to right — slot 1 is the first of them."""
+    geometry = board_geometry(len(layout["worker_roles"]))
+    return list(zip(geometry["role_x"], geometry["building_y"], strict=True))
+
+
 def token_slot_count(layout: dict) -> int:
     """How many cubes the Village or Abbey grid has room for."""
     grid = layout["starting_worker_grid"]
@@ -150,7 +156,7 @@ def wrap_label(label: str) -> list[str]:
     return list(min(splits, key=lambda pair: max(len(pair[0]), len(pair[1]))))
 
 
-def _hex_path_data(cx: float, cy: float, size: float) -> str:
+def hex_path_data(cx: float, cy: float, size: float = HEX_SIZE) -> str:
     corners = [
         (
             cx + size * math.cos(math.radians(60 * index)),
@@ -512,11 +518,28 @@ def _render_role_acolytes(
     )
 
 
-def _render_building_slot(cx: float, cy: float, palette: dict) -> str:
-    return (
-        f'<path d="{_hex_path_data(cx, cy, HEX_SIZE)}" fill="{palette["slot_fill"]}"'
+def _render_building_slot(cx: float, cy: float, palette: dict, number: int = 0) -> str:
+    """One of the six bottom slots, empty.
+
+    A numbered slot is the interactive form. It splits into the three layers a filled slot needs:
+    the slot's own fill, the `use` that takes whatever building content a page points it at, and
+    the dashed outline drawn last. Content goes inside the slot rather than on top of it, so the
+    dashed border stays the only boundary a slot ever has.
+    """
+    path = hex_path_data(cx, cy)
+    dashes = (
         f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
         f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/>'
+    )
+    if not number:
+        return f'<path d="{path}" fill="{palette["slot_fill"]}"{dashes}'
+    return (
+        f'<g data-player-board-slot="{number}" data-building-slot-state="empty"'
+        ' data-building-id="" data-setup-slot="" data-donated="false">'
+        f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
+        f'<use data-building-content="true" x="{cx:.1f}" y="{cy:.1f}" opacity="0"/>'
+        f'<path data-slot-outline="true" d="{path}" fill="none"{dashes}'
+        "</g>"
     )
 
 
@@ -606,8 +629,10 @@ def render_player_board_v2_svg(
         if count or interactive:
             parts.append(_render_role_acolytes(cx, role_cy, count, player, role["id"], interactive))
 
-    for cx, cy in zip(geometry["role_x"], geometry["building_y"], strict=True):
-        parts.append(_render_building_slot(cx, cy, palette))
+    for number, (cx, cy) in enumerate(
+        zip(geometry["role_x"], geometry["building_y"], strict=True), start=1
+    ):
+        parts.append(_render_building_slot(cx, cy, palette, number if interactive else 0))
     parts.append(_render_corner_tag(geometry, player))
 
     return (
