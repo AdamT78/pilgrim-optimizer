@@ -23,6 +23,7 @@ def test_generator_writes_all_pages_to_a_temp_directory(tmp_path: Path) -> None:
     assert written.map_page == tmp_path / "map.html"
     assert written.building_tiles == tmp_path / "building_tiles.html"
     assert written.player_board == tmp_path / "player_board.html"
+    assert written.player_boards_v2 == tmp_path / "player_boards_v2.html"
     assert written.donated_building_tiles == tmp_path / "donated_building_tiles.html"
     assert written.ship_marker == tmp_path / "ship_marker.html"
     assert written.piety_tracks == tmp_path / "piety_tracks.html"
@@ -47,6 +48,9 @@ def test_generated_pages_contain_their_own_views(tmp_path: Path) -> None:
     assert "PILGRIM — Hex Grid" in written.map_page.read_text(encoding="utf-8")
     assert "PILGRIM — Building Tiles" in written.building_tiles.read_text(encoding="utf-8")
     assert "PILGRIM — Player Board" in written.player_board.read_text(encoding="utf-8")
+    boards_v2 = written.player_boards_v2.read_text(encoding="utf-8")
+    assert "PILGRIM — Player Board" in boards_v2
+    assert "Player boards for up to 4 players" in boards_v2
     assert "PILGRIM — Special Tiles" in written.donated_building_tiles.read_text(encoding="utf-8")
     assert "PILGRIM — Ship Building Tiles" in written.ship_marker.read_text(encoding="utf-8")
     assert "Piety tracks" in written.piety_tracks.read_text(encoding="utf-8")
@@ -64,6 +68,7 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
     assert 'href="map.html"' in content
     assert 'href="building_tiles.html"' in content
     assert 'href="player_board.html"' in content
+    assert 'href="player_boards_v2.html"' in content
     assert 'href="donated_building_tiles.html"' in content
     assert 'href="ship_marker.html"' in content
     assert 'href="piety_tracks.html"' in content
@@ -95,6 +100,8 @@ def test_prototype_index_links_to_generated_overview() -> None:
     assert "generated/building_tiles.html" in content
     assert "prototypes/player_board.html" in content
     assert "generated/player_board.html" in content
+    assert "prototypes/player_boards_v2.html" in content
+    assert "generated/player_boards_v2.html" in content
     assert "prototypes/donated_building_tiles.html" in content
     assert "generated/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content

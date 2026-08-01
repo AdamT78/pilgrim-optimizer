@@ -79,14 +79,6 @@ def test_player_boards_v2_prototype_source_is_the_generator_code() -> None:
     assert "red/yellow/blue cubes" in content
 
 
-def test_player_boards_v2_has_no_renderer_or_generated_output_yet() -> None:
-    """This prototype is baseline only; extraction is a separate PR."""
-    for name in ("render_player_board_v2.py", "generate_player_board_v2.py"):
-        assert not (UI_DEBUG_DIR / name).exists()
-    assert not (UI_DEBUG_DIR / "player_board_v2_layout.json").exists()
-    assert "generated/player_boards_v2.html" not in INDEX_HTML.read_text(encoding="utf-8")
-
-
 def test_special_marker_prototype_pages_exist() -> None:
     assert DONATED_BUILDING_TILES_HTML.is_file()
     assert SHIP_MARKER_HTML.is_file()
