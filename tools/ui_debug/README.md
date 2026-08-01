@@ -304,6 +304,20 @@ What moves, and what it means:
 - The four discs are the movable copy of the track's own starting tokens, so their colours come
   from `piety_track_layout.json` (white, red, yellow, blue) rather than being restated here.
 
+The generated setup view now includes a right-side Player Board v2 panel. The panel is local
+UI/debug state only: it can move the first-player marker, move serfs from Village to Abbey, and
+move acolytes between Abbey and role circles. This does not mutate `GameState` and does not
+implement gameplay legality.
+
+The four boards come from `render_player_boards_v2.py`, drawn with `interactive=True`: that draws
+every slot a cube can stand in — all eight Village and Abbey slots, and for each role circle both
+the centred slot and the side-by-side pair — and hides the ones the state does not need, so the
+buttons only flip opacity. A cube is a serf while it is in the Village and an acolyte once it
+reaches the Abbey or a role circle, and the acolyte controls therefore never mention the Village:
+the only way out of it is `Move serf to Abbey`. A role circle holds at most two acolytes and the
+Abbey holds the eight its slots give it, so a button that would break either is disabled. Every
+board starts from `default_player_board_v2_state`, the board the prototype draws.
+
 All of it is visual only. The buttons change SVG attributes; they do not touch `GameState`, call
 `apply_action`, pick legal actions, or write scenario state. The view exists to check layout and
 to confirm markers can move before any of that is wired up.

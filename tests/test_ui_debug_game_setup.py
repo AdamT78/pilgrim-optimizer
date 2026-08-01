@@ -14,11 +14,13 @@ from tools.ui_debug.generate_game_setup import (
     SHIP_POSITION_COUNT,
     SKIPPED_HEXES,
     START_HEX_BY_ROLL,
+    acolyte_places,
     building_by_name,
     default_output_path,
     hex_centers,
     parse_setup_building_label,
     parse_setup_site_label,
+    player_board_ui_state,
     render_setup_building_fill,
     render_setup_site_fill,
     rotated_edge_path,
@@ -53,6 +55,15 @@ from tools.ui_debug.render_pilgrimage_sites import (
     SITE_STROKE,
     load_pilgrimage_sites,
     sites_of,
+)
+from tools.ui_debug.render_player_boards_v2 import (
+    DEFAULT_FIRST_PLAYER,
+    ROLE_ACOLYTE_LIMIT,
+    default_player_board_v2_state,
+    load_player_boards_v2_layout,
+    players_of,
+    render_player_board_v2_svg,
+    token_slot_count,
 )
 from tools.ui_debug.render_ship_marker import HULL_OUTLINE, MASTS, render_ship_icon
 
@@ -118,6 +129,13 @@ def test_page_embeds_the_generated_map_svg(page: str) -> None:
         assert element.strip() in page
 
 
+def _setup_area(page: str) -> str:
+    """The map/piety half of the page, without the player boards standing next to it."""
+    left, marker, _ = page.partition('<div class="player-board-panel">')
+    assert marker, "the page no longer has a player-board panel"
+    return left
+
+
 def _piety_panel(page: str) -> str:
     pattern = rf'<div class="panel" data-piety-variant="{PIETY_VARIANT_ID}">.*?</div>'
     match = re.search(pattern, page, re.S)
@@ -142,7 +160,7 @@ def test_page_uses_the_three_four_player_track_only(page: str) -> None:
     assert f'data-piety-variant="{PIETY_VARIANT_ID}"' in page
     assert variant_by_id(layout, PIETY_VARIANT_ID)["label"] in page
     # One fused strip rect means one track strip was drawn.
-    assert page.count('<rect x="0" y="0"') == 1
+    assert _piety_panel(page).count('<rect x="0" y="0"') == 1
 
 
 def test_page_does_not_show_the_two_player_track(page: str) -> None:
@@ -264,8 +282,8 @@ def test_page_does_not_mark_the_ship_stops(page: str) -> None:
     """Only the ship shows where it is; the stops it is not on stay unmarked."""
     for marker_class in ("ship-path", "ship-position-dot", "ship-anchor", "debug-dot"):
         assert marker_class not in page
-    # The four player discs are the only circles the page draws.
-    assert page.count("<circle") == len(PLAYER_LABELS)
+    # The four player discs are the only circles the map and its track draw.
+    assert _setup_area(page).count("<circle") == len(PLAYER_LABELS)
 
 
 def test_page_draws_the_ship_in_black(page: str) -> None:
@@ -422,7 +440,8 @@ def _slot_groups(page: str) -> list[tuple[int, str, str]]:
         match = re.match(r'"([\w-]+)" data-slot="(\d+)"[^>]*>', chunk)
         if match is None:
             continue
-        groups.append((int(match.group(2)), match.group(1), chunk[match.end() :]))
+        body = chunk[match.end() :].split("</g>")[0]
+        groups.append((int(match.group(2)), match.group(1), body))
     return groups
 
 
@@ -437,7 +456,7 @@ def test_page_does_not_number_the_setup_slots(page: str) -> None:
         assert marker_name not in page
     for round_number, class_name, body in groups:
         assert "<circle" not in body, f"slot {round_number} still draws a number badge"
-        assert f">{round_number}</text>" not in body.split("</g>")[0]
+        assert f">{round_number}</text>" not in body
         assert class_name in (
             "setup-building-fill",
             "setup-site-fill",
@@ -593,3 +612,159 @@ def test_index_links_to_the_generated_game_setup_page() -> None:
 
     assert "generated/game_setup.html" in content
     assert "Generated game setup debug view" in content
+
+
+ROLE_LABELS = (
+    "Fields",
+    "Road Engineer",
+    "Stone Mason",
+    "Alms House",
+    "Engraver",
+    "Vestry",
+)
+PLAYER_BOARD_FILLS = ("#FFFFFF", "#B7382E", "#D9B33B", "#3B6EA5")
+
+
+def _player_board(page: str, player_id: str) -> str:
+    pattern = rf'<div class="panel player-board"[^>]*data-player="{player_id}"[^>]*>.*?</div>'
+    match = re.search(pattern, page, re.S)
+    assert match is not None, f"no player board for {player_id}"
+    return match.group(0)
+
+
+def _cubes(board: str, selector: str) -> tuple[int, int]:
+    """(slots drawn, cubes shown) for one area of a board, since hidden slots stay in the SVG."""
+    slots = re.findall(rf"<rect[^>]*{selector}[^>]*/>", board)
+    return len(slots), len([slot for slot in slots if 'opacity="1"' in slot])
+
+
+def test_page_shows_the_four_player_boards(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+
+    assert "Player board v2" in page
+    for player, fill in zip(players_of(layout), PLAYER_BOARD_FILLS, strict=True):
+        board = _player_board(page, player["id"])
+        assert f'data-player-color="{player["color"]}"' in board
+        assert player["label"] in board
+        assert fill in board
+    for label in ("Village", "Abbey", *ROLE_LABELS):
+        assert label in page
+
+
+def test_boards_start_on_the_default_board_state(page: str) -> None:
+    """Eight serfs in the Village, three acolytes in the Abbey, three acolytes on roles."""
+    layout = load_player_boards_v2_layout()
+    capacity = token_slot_count(layout)
+
+    for player in players_of(layout):
+        board = _player_board(page, player["id"])
+        assert _cubes(board, 'data-token="village"') == (capacity, 8)
+        assert _cubes(board, 'data-token="abbey"') == (capacity, 3)
+        for role, shown in (("stone_mason", 1), ("vestry", 2), ("fields", 0)):
+            # Both the centred slot and the pair are drawn, so a move only flips opacity.
+            assert _cubes(board, f'data-role="{role}"') == (ROLE_ACOLYTE_LIMIT + 1, shown)
+
+
+def test_only_the_first_player_carries_the_marker(page: str) -> None:
+    assert page.count('data-first-player-marker="true"') == 1
+    assert page.count('data-first-player-marker="false"') == len(PLAYER_LABELS) - 1
+    assert 'data-first-player-marker="true"' in _player_board(page, DEFAULT_FIRST_PLAYER)
+
+
+def test_page_offers_first_player_marker_buttons(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+
+    for player, label in zip(players_of(layout), PLAYER_LABELS, strict=True):
+        assert f'data-first-player="{player["id"]}"' in page
+        assert f"Move first player marker to {label}" in page
+
+
+def test_page_offers_a_serf_button_per_player(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+
+    for player, label in zip(players_of(layout), PLAYER_LABELS, strict=True):
+        assert f'data-serf-player="{player["id"]}"' in page
+        assert f"Move serf to Abbey: {label}" in page
+
+
+def test_acolyte_controls_cover_the_abbey_and_every_role_but_not_the_village(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+    places = acolyte_places(layout)
+
+    assert [label for _, label in places] == ["Abbey", *ROLE_LABELS]
+    assert "village" not in [place for place, _ in places]
+    for select in ("acolyte-player", "acolyte-source", "acolyte-target"):
+        assert f'<select id="{select}">' in page
+    assert "Move acolyte" in page
+    source = re.search(r'<select id="acolyte-source">(.*?)</select>', page, re.S)
+    target = re.search(r'<select id="acolyte-target">(.*?)</select>', page, re.S)
+    assert source is not None and target is not None
+    for options in (source.group(1), target.group(1)):
+        for place, label in places:
+            assert f'<option value="{place}"' in options
+            assert f">{label}</option>" in options
+        assert ">Village</option>" not in options
+    assert '<option value="abbey" selected>' in source.group(1)
+    assert '<option value="fields" selected>' in target.group(1)
+
+
+def test_default_board_state_is_the_one_the_prototype_draws() -> None:
+    state = default_player_board_v2_state(load_player_boards_v2_layout())
+
+    assert state["village_serfs"] == 8
+    assert state["abbey_acolytes"] == 3
+    assert state["roles"] == {
+        "fields": 0,
+        "road_engineer": 0,
+        "stone_mason": 1,
+        "alms_house": 0,
+        "engraver": 0,
+        "vestry": 2,
+    }
+
+
+def test_panel_state_gives_every_player_the_default_board() -> None:
+    layout = load_player_boards_v2_layout()
+    state = player_board_ui_state(layout)
+
+    assert state["firstPlayer"] == DEFAULT_FIRST_PLAYER == "player_one"
+    assert sorted(state["players"]) == sorted(player["id"] for player in players_of(layout))
+    for board in state["players"].values():
+        assert board["villageSerfs"] == 8
+        assert board["abbeyAcolytes"] == 3
+        assert board["roles"]["stone_mason"] == 1
+        assert board["roles"]["vestry"] == 2
+
+
+def test_role_circles_hold_at_most_two_acolytes() -> None:
+    layout = load_player_boards_v2_layout()
+    state = default_player_board_v2_state(layout)
+    state["roles"]["fields"] = ROLE_ACOLYTE_LIMIT + 3
+
+    svg = render_player_board_v2_svg(
+        layout, players_of(layout)[0], board_state=state, interactive=True
+    )
+
+    assert ROLE_ACOLYTE_LIMIT == 2
+    assert _cubes(svg, 'data-role="fields"') == (ROLE_ACOLYTE_LIMIT + 1, ROLE_ACOLYTE_LIMIT)
+
+
+def test_page_hands_the_boards_their_limits(page: str) -> None:
+    layout = load_player_boards_v2_layout()
+    boards = _setup_data(page)["playerBoards"]
+
+    assert boards["roleLimit"] == ROLE_ACOLYTE_LIMIT
+    assert boards["abbeyCapacity"] == token_slot_count(layout)
+    assert boards["abbeyId"] == "abbey"
+    assert boards["roles"] == [role["id"] for role in layout["worker_roles"]]
+    assert boards["state"] == player_board_ui_state(layout)
+
+
+def test_player_board_panel_leaves_the_map_controls_alone(page: str) -> None:
+    """The boards sit beside the setup area, and the buttons there keep their own attributes."""
+    assert page.index('<div class="setup-main">') < page.index('<div class="player-board-panel">')
+    assert page.index('<g id="ship-marker"') < page.index('<div class="player-board-panel">')
+    piety_buttons = re.findall(r'<button[^>]*data-piety-delta="[^"]*"[^>]*>', page)
+    assert len(piety_buttons) == 2 * len(PLAYER_LABELS)
+    for button in piety_buttons:
+        assert "data-serf-player" not in button and "data-first-player" not in button

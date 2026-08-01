@@ -61,6 +61,15 @@ from tools.ui_debug.render_pilgrimage_sites import (  # noqa: E402
     render_pilgrimage_site_contents,
     site_by_index,
 )
+from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
+    DEFAULT_FIRST_PLAYER,
+    ROLE_ACOLYTE_LIMIT,
+    default_player_board_v2_state,
+    load_player_boards_v2_layout,
+    players_of,
+    render_player_board_v2_svg,
+    token_slot_count,
+)
 from tools.ui_debug.render_ship_marker import (  # noqa: E402
     SHIP_ANCHOR_OFFSET_Y as TILE_SHIP_ANCHOR_OFFSET_Y,
 )
@@ -74,9 +83,9 @@ OUTPUT_FILENAME = "game_setup.html"
 
 TITLE = "PILGRIM — Game Setup Debug View"
 SUBTITLE = (
-    "Generated map with the 3-4 player piety track above it, and one hard-coded example setup "
-    "laid out on the edge hexes. The start roll, ship, and piety buttons move markers only: no "
-    "GameState, no rules, no actions."
+    "Generated map with the 3-4 player piety track above it, one hard-coded example setup laid "
+    "out on the edge hexes, and the four player boards beside them. The start roll, ship, piety, "
+    "and player board buttons move markers and cubes only: no GameState, no rules, no actions."
 )
 PAGE_BACKGROUND = "#000000"
 
@@ -407,6 +416,110 @@ def render_player_controls(discs: list[dict]) -> str:
     return "\n".join(rows)
 
 
+ABBEY_PLACE_ID = "abbey"
+ABBEY_PLACE_LABEL = "Abbey"
+
+
+def acolyte_places(board_layout: dict) -> list[tuple[str, str]]:
+    """Everywhere an acolyte can stand: the Abbey, then the six role circles.
+
+    The Village is deliberately not on this list. Cubes there are serfs, and the only way one
+    leaves is the serf button, which turns it into an acolyte in the Abbey.
+    """
+    return [(ABBEY_PLACE_ID, ABBEY_PLACE_LABEL)] + [
+        (role["id"], role["label"]) for role in board_layout["worker_roles"]
+    ]
+
+
+def render_first_player_controls(board_layout: dict) -> str:
+    return "\n".join(
+        f'      <button type="button" data-first-player="{player["id"]}">'
+        f"Move first player marker to {escape(player['label'])}</button>"
+        for player in players_of(board_layout)
+    )
+
+
+def render_serf_controls(board_layout: dict) -> str:
+    return "\n".join(
+        f'      <button type="button" data-serf-player="{player["id"]}">'
+        f"Move serf to Abbey: {escape(player['label'])}</button>"
+        for player in players_of(board_layout)
+    )
+
+
+def _options(choices: list[tuple[str, str]], selected: str) -> str:
+    return "".join(
+        f'<option value="{value}"{" selected" if value == selected else ""}>{escape(label)}'
+        "</option>"
+        for value, label in choices
+    )
+
+
+def render_acolyte_controls(board_layout: dict) -> str:
+    """Pick a player, a source, and a target; the button moves one acolyte between them."""
+    players = [(player["id"], player["label"]) for player in players_of(board_layout)]
+    places = acolyte_places(board_layout)
+    first_role = places[1][0]
+    return (
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="acolyte-player">Player</label>\n'
+        f'        <select id="acolyte-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        "      </div>\n"
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="acolyte-source">Source</label>\n'
+        f'        <select id="acolyte-source">{_options(places, ABBEY_PLACE_ID)}</select>\n'
+        "      </div>\n"
+        '      <div class="player-row">\n'
+        '        <label class="player-name" for="acolyte-target">Target</label>\n'
+        f'        <select id="acolyte-target">{_options(places, first_role)}</select>\n'
+        "      </div>\n"
+        '      <button type="button" id="move-acolyte">Move acolyte</button>'
+    )
+
+
+def player_board_ui_state(board_layout: dict) -> dict:
+    """The state the panel starts from: the default board for every player, marker on player one.
+
+    This is the page's own state. It is never read back into the engine.
+    """
+    default = default_player_board_v2_state(board_layout)
+    return {
+        "firstPlayer": DEFAULT_FIRST_PLAYER,
+        "players": {
+            player["id"]: {
+                "villageSerfs": default["village_serfs"],
+                "abbeyAcolytes": default["abbey_acolytes"],
+                "roles": dict(default["roles"]),
+            }
+            for player in players_of(board_layout)
+        },
+    }
+
+
+def render_player_boards(board_layout: dict) -> str:
+    """The four boards, each tagged so the page can move its cubes and its marker."""
+    boards = []
+    for player in players_of(board_layout):
+        svg = render_player_board_v2_svg(
+            board_layout,
+            player,
+            include_first_player_marker=player["id"] == DEFAULT_FIRST_PLAYER,
+            interactive=True,
+        )
+        boards.append(
+            f'    <div class="panel player-board" data-component="player-board-v2"'
+            f' data-player="{player["id"]}" data-player-color="{player["color"]}">\n'
+            f"      <h2>{escape(player['label'])} — {escape(player['color'])}</h2>\n"
+            f'      <p class="readout" style="width: auto;">Village serfs'
+            f' <strong data-readout="village">0</strong>, Abbey acolytes'
+            f' <strong data-readout="abbey">0</strong>, acolytes on roles'
+            f' <strong data-readout="roles">0</strong></p>\n'
+            f"      {svg}\n"
+            "    </div>"
+        )
+    return "\n".join(boards)
+
+
 SETUP_SCRIPT = """
 (function () {
   const data = JSON.parse(document.getElementById("setup-data").textContent);
@@ -491,9 +604,136 @@ SETUP_SCRIPT = """
     });
   });
 
+  // Player boards. A cube is a serf in the Village and an acolyte once it reaches the Abbey or a
+  // role circle. Every slot a cube can stand in is already drawn, so a move is a change of
+  // opacity rather than a redraw.
+  const boards = data.playerBoards;
+  const boardState = boards.state;
+  const acolytePlayer = document.getElementById("acolyte-player");
+  const acolyteSource = document.getElementById("acolyte-source");
+  const acolyteTarget = document.getElementById("acolyte-target");
+  const moveAcolyteButton = document.getElementById("move-acolyte");
+  const serfButtons = document.querySelectorAll("button[data-serf-player]");
+
+  function boardElement(playerId) {
+    return document.querySelector(
+      '[data-component="player-board-v2"][data-player="' + playerId + '"]'
+    );
+  }
+
+  function show(element, visible) {
+    element.setAttribute("opacity", visible ? "1" : "0");
+  }
+
+  function acolytesAt(state, place) {
+    return place === boards.abbeyId ? state.abbeyAcolytes : state.roles[place];
+  }
+
+  function setAcolytesAt(state, place, count) {
+    if (place === boards.abbeyId) {
+      state.abbeyAcolytes = count;
+    } else {
+      state.roles[place] = count;
+    }
+  }
+
+  function capacityOf(place) {
+    return place === boards.abbeyId ? boards.abbeyCapacity : boards.roleLimit;
+  }
+
+  function renderBoard(playerId) {
+    const board = boardElement(playerId);
+    const state = boardState.players[playerId];
+    const cubesInArea = { village: state.villageSerfs, abbey: state.abbeyAcolytes };
+    Object.keys(cubesInArea).forEach(function (area) {
+      const slots = board.querySelectorAll('[data-token="' + area + '"]');
+      Array.prototype.forEach.call(slots, function (slot) {
+        show(slot, Number(slot.getAttribute("data-token-index")) < cubesInArea[area]);
+      });
+    });
+
+    let onRoles = 0;
+    boards.roles.forEach(function (role) {
+      const count = state.roles[role];
+      onRoles += count;
+      const slots = board.querySelectorAll('[data-role="' + role + '"]');
+      Array.prototype.forEach.call(slots, function (slot) {
+        // One acolyte stands in the centred slot, two stand in the pair.
+        show(slot, count === (slot.getAttribute("data-role-slot") === "single" ? 1 : 2));
+      });
+    });
+
+    const marker = board.querySelector("[data-first-player-marker]");
+    const hasMarker = boardState.firstPlayer === playerId;
+    marker.setAttribute("data-first-player-marker", hasMarker ? "true" : "false");
+    show(marker, hasMarker);
+
+    board.querySelector('[data-readout="village"]').textContent = state.villageSerfs;
+    board.querySelector('[data-readout="abbey"]').textContent = state.abbeyAcolytes;
+    board.querySelector('[data-readout="roles"]').textContent = onRoles;
+  }
+
+  function canMoveSerf(playerId) {
+    const state = boardState.players[playerId];
+    return state.villageSerfs > 0 && state.abbeyAcolytes < boards.abbeyCapacity;
+  }
+
+  function canMoveAcolyte() {
+    const state = boardState.players[acolytePlayer.value];
+    const source = acolyteSource.value;
+    const target = acolyteTarget.value;
+    return (
+      source !== target &&
+      acolytesAt(state, source) > 0 &&
+      acolytesAt(state, target) < capacityOf(target)
+    );
+  }
+
+  function renderPlayerBoards() {
+    Object.keys(boardState.players).forEach(renderBoard);
+    Array.prototype.forEach.call(serfButtons, function (button) {
+      button.disabled = !canMoveSerf(button.getAttribute("data-serf-player"));
+    });
+    moveAcolyteButton.disabled = !canMoveAcolyte();
+  }
+
+  const firstPlayerButtons = document.querySelectorAll("button[data-first-player]");
+  Array.prototype.forEach.call(firstPlayerButtons, function (button) {
+    button.addEventListener("click", function () {
+      boardState.firstPlayer = button.getAttribute("data-first-player");
+      renderPlayerBoards();
+    });
+  });
+
+  Array.prototype.forEach.call(serfButtons, function (button) {
+    button.addEventListener("click", function () {
+      const playerId = button.getAttribute("data-serf-player");
+      if (!canMoveSerf(playerId)) { return; }
+      const state = boardState.players[playerId];
+      state.villageSerfs -= 1;
+      state.abbeyAcolytes += 1;
+      renderPlayerBoards();
+    });
+  });
+
+  moveAcolyteButton.addEventListener("click", function () {
+    if (!canMoveAcolyte()) { return; }
+    const state = boardState.players[acolytePlayer.value];
+    const source = acolyteSource.value;
+    const target = acolyteTarget.value;
+    setAcolytesAt(state, source, acolytesAt(state, source) - 1);
+    setAcolytesAt(state, target, acolytesAt(state, target) + 1);
+    renderPlayerBoards();
+  });
+
+  [acolytePlayer, acolyteSource, acolyteTarget].forEach(function (select) {
+    select.addEventListener("change", renderPlayerBoards);
+  });
+
   renderSlots();
   renderShip();
   players.forEach(function (_, index) { renderPiety(index); });
+  renderPlayerBoards();
 })();
 """
 
@@ -515,6 +755,7 @@ def render_game_setup_html(
     piety_config: dict,
     catalog: dict,
     site_data: dict | list,
+    board_layout: dict,
 ) -> str:
     variant = variant_by_id(piety_layout, PIETY_VARIANT_ID)
     vp_values = piety_vp_values(piety_config)
@@ -549,6 +790,13 @@ def render_game_setup_html(
                 round(position_center_x(piety_layout, index), 1) for index in range(len(vp_values))
             ],
             "players": [{"cxOffset": disc["cx_offset"]} for disc in discs],
+            "playerBoards": {
+                "abbeyId": ABBEY_PLACE_ID,
+                "abbeyCapacity": token_slot_count(board_layout),
+                "roleLimit": ROLE_ACOLYTE_LIMIT,
+                "roles": [role["id"] for role in board_layout["worker_roles"]],
+                "state": player_board_ui_state(board_layout),
+            },
         }
     )
 
@@ -589,8 +837,18 @@ def render_game_setup_html(
     text-align: center;
     max-width: 720px;
   }}
+  .setup-layout {{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 14px;
+    width: min(1560px, 96vw);
+  }}
+  .setup-main {{ flex: 1 1 700px; max-width: 1014px; min-width: 0; }}
+  .player-board-panel {{ flex: 1 1 340px; max-width: 460px; min-width: 0; }}
   .board-column, .controls {{
-    width: min(1014px, 92vw);
+    width: 100%;
   }}
   .panel {{
     background: {PAGE_BACKGROUND};
@@ -645,11 +903,29 @@ def render_game_setup_html(
     line-height: 1.5;
     margin: 8px 0 0;
   }}
+  .board-controls button {{ margin: 0 6px 6px 0; }}
+  .board-controls button[disabled] {{
+    opacity: 0.45;
+    cursor: default;
+  }}
+  select {{
+    background: #1A1A1A;
+    color: #F2EEDF;
+    border: 1px solid #555555;
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }}
+  .player-board h2 {{ margin-bottom: 2px; }}
+  .player-board .readout {{ margin: 0 0 8px; }}
 </style>
 </head>
 <body>
   <h1>{TITLE}</h1>
   <p class="subtitle">{escape(SUBTITLE)}</p>
+  <div class="setup-layout">
+  <div class="setup-main">
   <div class="board-column">
     <div class="panel" data-piety-variant="{PIETY_VARIANT_ID}">
       <h2>{escape(variant["label"])}</h2>
@@ -685,6 +961,29 @@ def render_game_setup_html(
 {render_player_controls(discs)}
     </div>
   </div>
+  </div>
+  <div class="player-board-panel">
+    <div class="panel board-controls">
+      <h2>Player board v2 — first player marker</h2>
+{render_first_player_controls(board_layout)}
+    </div>
+    <div class="panel board-controls">
+      <h2>Player board v2 — serfs</h2>
+      <p class="slot-list">A serf leaving the Village becomes an acolyte in the Abbey, which
+        holds {token_slot_count(board_layout)} cubes: the button stops once those slots are
+        full.</p>
+{render_serf_controls(board_layout)}
+    </div>
+    <div class="panel board-controls">
+      <h2>Player board v2 — acolytes</h2>
+      <p class="slot-list">Acolytes move between the Abbey and the role circles. A role circle
+        holds at most {ROLE_ACOLYTE_LIMIT}: one sits centred, two sit side by side. The Village is
+        not a source or a target here.</p>
+{render_acolyte_controls(board_layout)}
+    </div>
+{render_player_boards(board_layout)}
+  </div>
+  </div>
   <script id="setup-data" type="application/json">{setup_data}</script>
   <script>{SETUP_SCRIPT}</script>
 </body>
@@ -700,6 +999,7 @@ def write_game_setup_page(
     piety_config_path: Path | None = None,
     catalog_path: Path | None = None,
     site_data_path: Path | None = None,
+    board_layout_path: Path | None = None,
 ) -> Path:
     destination = default_output_path() if output_path is None else Path(output_path)
     html = render_game_setup_html(
@@ -708,6 +1008,7 @@ def write_game_setup_page(
         load_piety_config(piety_config_path),
         load_building_catalog(catalog_path),
         load_pilgrimage_sites(site_data_path),
+        load_player_boards_v2_layout(board_layout_path),
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(html, encoding="utf-8")
