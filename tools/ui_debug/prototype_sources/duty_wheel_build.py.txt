@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+"""
+Build the Pilgrim board in one pass, from the original v36 document.
+
+This replaces the chain of one-off scripts that produced v37 -> v46. Each
+stage below was a separate file; the dead ends along the way (the ribbon
+arrow variant, the gauge cube tally, the diaper and ground ornaments) are
+gone rather than left commented out.
+
+Stages, in order -- order matters where noted:
+
+  1. cornucopia   Clerical's icon (a shell in v36) becomes a cornucopia,
+                  marking the wild resource.
+  2. arrows       Both arrow families are regenerated in the "quill" style:
+                  the eight ring arrows curved along the board arc, the four
+                  middle arrows straight.
+  3. tally        The packed "*-color-pairs" rows become four fixed columns
+                  on a shared baseline. MUST run before nothing else reads
+                  those rows -- it consumes them, and the per-player counts
+                  are recovered from their fills.
+  4. city         Titles the middle space.
+  5. ornament     A hairline rule inset in each tile and a trefoil above
+                  each title. The green ground is left plain.
+
+Everything is plain vector geometry -- no filters or blend modes -- so the
+SVG survives Illustrator/Affinity round-trips and separates for print.
+
+  python3 build_pilgrim_board.py      -> pilgrim_board.html + .svg
+  python3 render_board.py             -> pilgrim_board.png
+"""
+
+import math
+import re
+from pathlib import Path
+
+HERE = Path(__file__).parent
+SRC = HERE / "pilgrim_flat_top_fresh_v36.html"
+OUT = HERE / "pilgrim_board"
+
+# --- shared geometry --------------------------------------------------------
+BCX, BCY = 551.5, 718.7        # board centre, in the inner group's coordinates
+R_TILE = 101.5                 # tile half-width / bottom radius
+INK = "#3A2F1E"
+
+# space centres: the arc centre of each board-circle path, which is also its
+# bounding-box centre (the flat top sits R above it, the round bottom R below)
+TILES = {
+    "produce": (551.3, 394.5),
+    "allocation": (775.5, 488.7),
+    "clerical": (868.3, 718.7),
+    "build-roads": (775.4, 949.1),
+    "taxation": (551.5, 1043.7),
+    "ordination": (328.5, 949.1),
+    "construct": (235.5, 718.7),
+    "give-alms": (328.0, 488.8),
+    "city": (551.0, 718.8),
+}
+
+
+def lin(a, b, n):
+    return [a + (b - a) * i / (n - 1) for i in range(n)]
+
+
+def catmull_rom(pts, lead="M"):
+    """Smooth cubic Beziers through pts. `lead` empty continues a path."""
+    d = f"{lead} {pts[0][0]:.2f},{pts[0][1]:.2f}" if lead else ""
+    for i in range(len(pts) - 1):
+        p0 = pts[i - 1] if i > 0 else pts[i]
+        p1, p2 = pts[i], pts[i + 1]
+        p3 = pts[i + 2] if i + 2 < len(pts) else pts[i + 1]
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        d += (f" C {c1[0]:.2f},{c1[1]:.2f} {c2[0]:.2f},{c2[1]:.2f}"
+              f" {p2[0]:.2f},{p2[1]:.2f}")
+    return d
+
+
+def replace_balanced(doc, opening, markup):
+    """Swap a <g ...> ... </g> that contains nested groups, matched by depth."""
+    start = doc.index(opening)
+    i, depth = start, 0
+    while True:
+        m = re.compile(r"<g\b|</g>").search(doc, i)
+        depth += 1 if m.group(0) == "<g" else -1
+        i = m.end()
+        if depth == 0:
+            return doc[:start] + markup + doc[i:]
+
+
+# ---------------------------------------------------------------------------
+# 1. cornucopia
+# ---------------------------------------------------------------------------
+# The horn's spine integrates a curvature that RAMPS UP along its length
+# (weight ~ t**K), so it leaves the mouth almost straight and curls only near
+# the tip -- a constant-curvature spine bends evenly and reads as a crescent.
+# The mouth ellipse's MAJOR axis lies across the opening, perpendicular to the
+# horn's axis; align it with the axis instead and the ellipse reads as a leaf
+# lying on the horn rather than a hole at the end of it.
+HORN = dict(h0=165.0, turn=-195.0, k=1.8, length=24.0, mouth_r=7.0,
+            taper=0.75, squash=0.45, rot=-15.0, steps=64, decimate=4)
+HORN_FRUIT = [(0.00, 1.20, 0.42), (0.80, 0.92, 0.30), (-0.80, 0.98, 0.29)]
+HORN_CAP = (846.3, 776.7)      # centre of the Clerical capsule's left cap
+HORN_TARGET_R = 19.0           # icon radius in board units (cap radius is 24)
+
+
+def cornucopia():
+    p = HORN
+    weights = [(i / p["steps"]) ** p["k"] for i in range(p["steps"])]
+    w_tot = sum(weights) or 1.0
+    segs = [p["length"] * (1 - 0.45 * (i / p["steps"])) for i in range(p["steps"])]
+    segs = [s * p["length"] / sum(segs) for s in segs]
+
+    spine, head, x, y = [(0.0, 0.0)], p["h0"], 0.0, 0.0
+    for i in range(p["steps"]):
+        head += p["turn"] * weights[i] / w_tot
+        x += segs[i] * math.cos(math.radians(head))
+        y += segs[i] * math.sin(math.radians(head))
+        spine.append((x, y))
+
+    def deriv(i):
+        a, b = spine[max(0, i - 1)], spine[min(len(spine) - 1, i + 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        n = math.hypot(dx, dy) or 1.0
+        return dx / n, dy / n
+
+    wall_a, wall_b = [], []
+    for i, (px, py) in enumerate(spine):
+        t = i / (len(spine) - 1)
+        tx, ty = deriv(i)
+        w = p["mouth_r"] * (1.0 - t) ** p["taper"]
+        wall_a.append((px - ty * w, py + tx * w))
+        wall_b.append((px + ty * w, py - tx * w))
+
+    def thin(pts):
+        out = pts[::p["decimate"]]
+        if out[-1] != pts[-1]:
+            out.append(pts[-1])
+        return out
+
+    outline = thin(wall_a) + list(reversed(thin(wall_b)))
+
+    tx0, ty0 = deriv(0)
+    nx0, ny0 = -ty0, tx0
+    tilt = math.degrees(math.atan2(ny0, nx0)) + p["rot"]
+    fruit = [(-tx0 * al * p["mouth_r"] + nx0 * ac * p["mouth_r"],
+              -ty0 * al * p["mouth_r"] + ny0 * ac * p["mouth_r"], r * p["mouth_r"])
+             for ac, al, r in HORN_FRUIT]
+
+    ca, sa = math.cos(math.radians(p["rot"])), math.sin(math.radians(p["rot"]))
+
+    def rot(q):
+        return (q[0] * ca - q[1] * sa, q[0] * sa + q[1] * ca)
+
+    outline = [rot(q) for q in outline]
+    fruit = [(*rot((a, b)), r) for a, b, r in fruit]
+    mouth = rot((0.0, 0.0))
+
+    xs = [q[0] for q in outline] + [f[0] - f[2] for f in fruit] + [f[0] + f[2] for f in fruit]
+    ys = [q[1] for q in outline] + [f[1] - f[2] for f in fruit] + [f[1] + f[2] for f in fruit]
+    sx, sy = -(min(xs) + max(xs)) / 2, -(min(ys) + max(ys)) / 2
+    radius = max(math.hypot(a + sx, b + sy) for a, b in zip(xs, ys))
+    scale = HORN_TARGET_R / radius
+
+    shift = [(round(a + sx, 2), round(b + sy, 2)) for a, b in outline]
+    mx, my = round(mouth[0] + sx, 2), round(mouth[1] + sy, 2)
+    lobes = "\n  ".join(
+        f'<circle cx="{a + sx:.2f}" cy="{b + sy:.2f}" r="{r:.2f}" fill="none" '
+        f'stroke="{INK}" stroke-width="1.4"/>' for a, b, r in fruit)
+
+    return (
+        f'<g class="wild-resource-icon" transform="translate({HORN_CAP[0]} {HORN_CAP[1]}) '
+        f'scale({scale:.4f})" aria-label="Cornucopia (wild resource)">\n'
+        f'  <path d="{catmull_rom(shift)}" fill="none" stroke="{INK}" stroke-width="1.7" '
+        f'stroke-linecap="round" stroke-linejoin="round"/>\n'
+        f'  <ellipse cx="{mx}" cy="{my}" rx="{p["mouth_r"]}" '
+        f'ry="{p["mouth_r"] * p["squash"]:.2f}" transform="rotate({tilt:.1f} {mx} {my})" '
+        f'fill="none" stroke="{INK}" stroke-width="1.6"/>\n  {lobes}\n</g>')
+
+
+def stage_cornucopia(doc):
+    return re.sub(r'<g class="wild-resource-icon"[^>]*>[\s\S]*?</g>',
+                  lambda _m: cornucopia(), doc, count=1)
+
+
+# ---------------------------------------------------------------------------
+# 2. arrows
+# ---------------------------------------------------------------------------
+# Quill silhouette: a hairline tail swelling into a sharp dart, with barbs
+# swept back behind the shaft join and their inner edges scooped forward.
+QUILL = dict(w_tail=1.1, w_join=4.0, w_pow=0.50, head_frac=0.31,
+             head_half=12.5, barb_frac=0.36, barb_curve=2.6)
+
+RING_R = 390.0          # radius of the arc the ring arrows ride on
+RING_SPAN = 11.5        # degrees swept by one arrow
+RING_MID = -112.5       # gap midpoint between two spaces (then eight rotations)
+MID_LEN = 88.0
+MID_BOW = 0.0           # >0 bows the middle arrows; 0 runs them straight
+
+MID_PLACES = [
+    "translate(551.0 556.6) rotate(-90)",
+    "translate(709.6 718.8) rotate(180)",
+    "translate(551.0 881.2) rotate(90)",
+    "translate(393.2 718.8)",
+]
+
+
+def ring_centerline(n=80):
+    a0, a1 = RING_MID - RING_SPAN / 2, RING_MID + RING_SPAN / 2
+    return [(BCX + RING_R * math.cos(math.radians(a)),
+             BCY + RING_R * math.sin(math.radians(a))) for a in lin(a0, a1, n)]
+
+
+def middle_centerline(n=80):
+    """Bow whose slope is zero at BOTH ends, so the shaft can curve while the
+    tip still points true; a plain arc leaves the tip ~16 degrees off."""
+    out = []
+    for u in lin(-MID_LEN / 2, MID_LEN / 2, n):
+        k = 1.0 - (2 * u / MID_LEN) ** 2
+        out.append((u, MID_BOW * k * k))
+    return out
+
+
+def arrow_path(center, style, shaft_samples=13):
+    s_arr = [0.0]
+    for i in range(1, len(center)):
+        s_arr.append(s_arr[-1] + math.dist(center[i - 1], center[i]))
+    total = s_arr[-1]
+
+    def at(s):
+        s = max(0.0, min(total, s))
+        i = max(1, min(len(center) - 1,
+                       next(j for j in range(1, len(s_arr)) if s_arr[j] >= s)))
+        seg = s_arr[i] - s_arr[i - 1] or 1.0
+        f = (s - s_arr[i - 1]) / seg
+        p = (center[i - 1][0] + (center[i][0] - center[i - 1][0]) * f,
+             center[i - 1][1] + (center[i][1] - center[i - 1][1]) * f)
+        dx, dy = center[i][0] - center[i - 1][0], center[i][1] - center[i - 1][1]
+        n = math.hypot(dx, dy) or 1.0
+        return p, (dx / n, dy / n)
+
+    head_len = total * style["head_frac"]
+    s_join = total - head_len
+
+    left, right = [], []
+    for s in lin(0.0, s_join, shaft_samples):
+        p, (tx, ty) = at(s)
+        t = s / s_join if s_join else 0.0
+        w = style["w_tail"] + (style["w_join"] - style["w_tail"]) * t ** style["w_pow"]
+        left.append((p[0] - ty * w, p[1] + tx * w))
+        right.append((p[0] + ty * w, p[1] - tx * w))
+
+    pb, (btx, bty) = at(s_join - head_len * style["barb_frac"])
+    hh = style["head_half"]
+    barb_l = (pb[0] - bty * hh, pb[1] + btx * hh)
+    barb_r = (pb[0] + bty * hh, pb[1] - btx * hh)
+    tip = center[-1]
+    bc = style["barb_curve"]
+
+    d = catmull_rom(left, lead="M")
+    if bc > 0:
+        mx = (left[-1][0] + barb_l[0]) / 2 + btx * bc
+        my = (left[-1][1] + barb_l[1]) / 2 + bty * bc
+        d += f" Q {mx:.2f},{my:.2f} {barb_l[0]:.2f},{barb_l[1]:.2f}"
+    else:
+        d += f" L {barb_l[0]:.2f},{barb_l[1]:.2f}"
+    d += (f" L {tip[0]:.2f},{tip[1]:.2f} L {barb_r[0]:.2f},{barb_r[1]:.2f}"
+          f" L {right[-1][0]:.2f},{right[-1][1]:.2f}")
+    d += catmull_rom(list(reversed(right)), lead="")
+    return d + " Z"
+
+
+def two_pass(d, wrap=""):
+    """Black outline underneath, white fill on top -- the board's existing
+    convention, which is why the arrows carry the same weight as the tiles."""
+    return (f'<g{wrap}><path d="{d}" class="arrow-border" />'
+            f'<path d="{d}" class="arrow-interior" /></g>')
+
+
+def stage_arrows(doc):
+    ring = arrow_path(ring_centerline(), QUILL)
+    rows = "\n      ".join(
+        two_pass(ring, f' transform="rotate({k * 45} {BCX} {BCY})"') for k in range(8))
+    doc = replace_balanced(
+        doc, '<g aria-label="Clockwise outer arrows">',
+        f'<g aria-label="Clockwise outer arrows">\n      {rows}\n    </g>')
+
+    mid = arrow_path(middle_centerline(), QUILL)
+    rows = "\n      ".join(two_pass(mid, f' transform="{t}"') for t in MID_PLACES)
+    return replace_balanced(
+        doc, '<g aria-label="Middle directional arrows">',
+        f'<g aria-label="Middle directional arrows">\n      {rows}\n    </g>')
+
+
+# ---------------------------------------------------------------------------
+# 3. cube tally
+# ---------------------------------------------------------------------------
+# Four fixed columns on a shared baseline. The game asks "who has most here,
+# and is anyone level" -- a comparison, not a count -- and comparison needs a
+# common baseline: in a packed row each colour's run starts at a different
+# offset, which is a far harder judgement than scanning aligned tops. Every
+# player keeps a column even at zero, since dropping one would shift the
+# others and destroy that alignment.
+PLAYERS = [("white", "#FFFFFF"), ("red", "#C94C4C"),
+           ("yellow", "#E3C64A"), ("blue", "#3B6EA5")]
+CUBE = 13.0
+CELL_H = 18.0      # cube + 5 of air
+COL_W = 22.0
+MAX_CUBES = 3
+BASE_DY = 19.0     # baseline this far below the space centre
+
+# Vertical budget: the title is centred 50.7 above the centre in 15.5px type,
+# so its underside is about -43; the icon capsule starts at +34. A baseline at
+# +19 with 18-tall cells tops a full stack out at -35.
+TALLY_W = len(PLAYERS) * COL_W
+
+
+def cube_counts(block):
+    fills = re.findall(r'<rect[^>]*fill="(#[0-9A-Fa-f]{6})"', block)
+    counts = {name: 0 for name, _ in PLAYERS}
+    for f in fills:
+        for name, hexv in PLAYERS:
+            if f.upper() == hexv:
+                counts[name] += 1
+                break
+    return counts
+
+
+def tally(prefix, counts):
+    cx, cy = TILES[prefix]
+    left = cx - TALLY_W / 2
+    base = cy + BASE_DY
+    parts = [f'<line x1="{left:.1f}" y1="{base:.1f}" x2="{left + TALLY_W:.1f}" '
+             f'y2="{base:.1f}" stroke="{INK}" stroke-opacity="0.55" '
+             f'stroke-width="1.6" stroke-linecap="round"/>']
+    for i, (name, hexv) in enumerate(PLAYERS):
+        x = left + i * COL_W + (COL_W - CUBE) / 2
+        for k in range(min(counts[name], MAX_CUBES)):
+            y = base - (k + 1) * CELL_H + (CELL_H - CUBE) / 2
+            # white and yellow need a heavier keyline to hold their edges
+            # against the parchment, and against each other when stacked
+            sw = 1.8 if hexv in ("#FFFFFF", "#E3C64A") else 1.5
+            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{CUBE}" '
+                         f'height="{CUBE}" fill="{hexv}" stroke="#000000" '
+                         f'stroke-width="{sw}"/>')
+    return (f'<g class="{prefix}-cube-tally" aria-label="cube counts">'
+            + "".join(parts) + "</g>")
+
+
+def stage_tally(doc):
+    for prefix in TILES:
+        m = re.search(rf'<g class="{prefix}-color-pairs">[\s\S]*?</g>', doc)
+        if not m:                      # the middle space carries no cubes
+            continue
+        doc = doc[:m.start()] + tally(prefix, cube_counts(m.group(0))) + doc[m.end():]
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# 4. city title
+# ---------------------------------------------------------------------------
+MIDDLE_PATH = ('<path d="M 449.5,617.3 H 652.5 V 718.8 A 101.5,101.5 0 0 1 '
+               '449.5,718.8 V 617.3 Z" class="board-circle" />')
+
+
+def stage_city(doc):
+    cx, cy = TILES["city"]
+    label = (f'\n      <text x="{cx}" y="{cy - 50.7:.1f}" class="circle-label">'
+             f'City</text>')
+    assert doc.count(MIDDLE_PATH) == 1
+    return doc.replace(MIDDLE_PATH, MIDDLE_PATH + label, 1)
+
+
+# ---------------------------------------------------------------------------
+# 5. tile ornament
+# ---------------------------------------------------------------------------
+# Ornament goes where no data lives: the tile's inset margin and the empty
+# band above each title. Nothing is added to the tally, the title or the icon
+# capsule. The trefoil is identical on all nine tiles -- a mark that never
+# varies cannot be carrying per-tile meaning, so nobody tries to decode it.
+INSET = 7.5
+
+
+def stage_ornament(doc):
+    insets, heads = [], []
+    for cx, cy in TILES.values():
+        r, top = R_TILE - INSET, cy - R_TILE + INSET
+        insets.append(
+            f'<path d="M {cx - r:.1f},{top:.1f} H {cx + r:.1f} V {cy:.1f} '
+            f'A {r:.1f},{r:.1f} 0 0 1 {cx - r:.1f},{cy:.1f} V {top:.1f} Z" '
+            f'fill="none" stroke="{INK}" stroke-opacity="0.28" stroke-width="1.2" />')
+        y = cy - 78.0
+        lobes = "".join(
+            f'<circle cx="{cx + 4.6 * math.cos(math.radians(a)):.1f}" '
+            f'cy="{y + 4.6 * math.sin(math.radians(a)):.1f}" r="4.6" />'
+            for a in (-90, 30, 150))
+        heads.append(
+            f'<g fill="none" stroke="{INK}" stroke-opacity="0.34" stroke-width="1.3" '
+            f'stroke-linecap="round">{lobes}'
+            f'<path d="M {cx - 44:.1f},{y:.1f} H {cx - 15:.1f} '
+            f'M {cx + 15:.1f},{y:.1f} H {cx + 44:.1f}" /></g>')
+
+    extra = (f'\n      <g class="ornament-inset" aria-hidden="true">'
+             f'{"".join(insets)}</g>'
+             f'\n      <g class="ornament-header" aria-hidden="true">'
+             f'{"".join(heads)}</g>\n    ')
+
+    i = doc.index('<g aria-label="Board spaces">')
+    depth, j = 0, i
+    while True:
+        m = re.compile(r"<g\b|</g>").search(doc, j)
+        depth += 1 if m.group(0) == "<g" else -1
+        j = m.end()
+        if depth == 0:
+            break
+    close = doc.rindex("</g>", i, j)
+    return doc[:close] + extra + doc[close:]
+
+
+# ---------------------------------------------------------------------------
+# 6. text that had gone stale against the art
+# ---------------------------------------------------------------------------
+DESC_OLD = ("Nine parchment circles on a green hexagon with titles, and Produce "
+            "showing a smooth joined wheat and purple resource shape.")
+DESC_NEW = ("Nine parchment spaces on a green hexagon: eight named actions "
+            "around a central City, linked by clockwise ring arrows and four "
+            "arrows to and from the middle. Each space shows its cube counts "
+            "as four columns on a shared baseline.")
+
+SUB_OLD = ('<tspan x="552" dy="0">9 equal-size circles, filled in the same parchment '
+           'tan as the player board panels with black borders,</tspan>\n'
+           '    <tspan x="552" dy="17">one centered and 8 on an imaginary ring around '
+           'it, over a green hexagon matching the map board\'s</tspan>\n'
+           '    <tspan x="552" dy="17">edge color (dashed outline).</tspan>')
+SUB_NEW = ('<tspan x="552" dy="0">Eight action spaces around a central City, sown '
+           'clockwise. Each space shows how many cubes</tspan>\n'
+           '    <tspan x="552" dy="17">each player has there, as four columns on a '
+           'shared baseline.</tspan>')
+
+
+def stage_text(doc):
+    doc = doc.replace(DESC_OLD, DESC_NEW, 1)
+    if SUB_OLD in doc:
+        doc = doc.replace(SUB_OLD, SUB_NEW, 1)
+    else:
+        print("  note: subtitle markup not matched, left as-is")
+    return doc
+
+
+# ---------------------------------------------------------------------------
+def main():
+    doc = SRC.read_text()
+    for stage in (stage_cornucopia, stage_arrows, stage_tally, stage_city,
+                  stage_ornament, stage_text):
+        doc = stage(doc)
+    doc = doc.replace("pilgrim_flat_top_fresh_v36", OUT.name)
+
+    OUT.with_suffix(".html").write_text(doc)
+    svg = re.search(r"<svg[\s\S]*?</svg>", doc).group(0)
+    OUT.with_suffix(".svg").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n' + svg + "\n")
+    print(f"wrote {OUT.name}.html and {OUT.name}.svg")
+
+
+if __name__ == "__main__":
+    main()
