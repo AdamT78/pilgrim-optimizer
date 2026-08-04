@@ -18,6 +18,21 @@ PIETY_TRACKS_HTML = PROTOTYPES_DIR / "piety_tracks.html"
 PIETY_TRACKS_SOURCE = PROTOTYPE_SOURCES_DIR / "piety_tracks.py.txt"
 PILGRIMAGE_SITES_HTML = PROTOTYPES_DIR / "pilgrimage_sites.html"
 PILGRIMAGE_SITES_SOURCE = PROTOTYPE_SOURCES_DIR / "pilgrimage_sites.py.txt"
+DUTY_WHEEL_HTML = PROTOTYPES_DIR / "duty_wheel.html"
+DUTY_WHEEL_SVG = PROTOTYPES_DIR / "duty_wheel.svg"
+DUTY_WHEEL_BUILD_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_wheel_build.py.txt"
+DUTY_WHEEL_RENDER_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_wheel_render.py.txt"
+
+DUTY_NAMES = (
+    "Produce",
+    "Allocation",
+    "Clerical",
+    "Build Roads",
+    "Taxation",
+    "Ordination",
+    "Construct",
+    "Give Alms",
+)
 
 
 def test_ui_debug_index_page_exists() -> None:
@@ -146,6 +161,52 @@ def test_pilgrimage_sites_prototype_source_is_the_generator_code() -> None:
     assert "N_TILES = 5" in content
 
 
+def test_duty_wheel_prototype_pages_and_sources_exist() -> None:
+    assert DUTY_WHEEL_HTML.is_file()
+    assert DUTY_WHEEL_SVG.is_file()
+    assert DUTY_WHEEL_BUILD_SOURCE.is_file()
+    assert DUTY_WHEEL_RENDER_SOURCE.is_file()
+
+
+def test_duty_wheel_prototype_is_identifiable() -> None:
+    content = DUTY_WHEEL_HTML.read_text(encoding="utf-8")
+    assert "PILGRIM" in content
+    assert "City" in content
+    assert "Produce" in content
+    assert "Taxation" in content
+
+
+def test_duty_wheel_prototype_names_every_duty_around_the_city() -> None:
+    content = DUTY_WHEEL_HTML.read_text(encoding="utf-8")
+    for duty in DUTY_NAMES:
+        assert duty in content
+
+
+def test_duty_wheel_prototype_draws_both_families_of_arrows() -> None:
+    content = DUTY_WHEEL_HTML.read_text(encoding="utf-8")
+    assert "Clockwise outer arrows" in content
+    assert "Middle directional arrows" in content
+
+
+def test_duty_wheel_svg_baseline_is_the_same_board_on_its_own() -> None:
+    content = DUTY_WHEEL_SVG.read_text(encoding="utf-8")
+    assert "<svg" in content
+    assert "City" in content
+    assert "Produce" in content
+    assert "Taxation" in content
+
+
+def test_duty_wheel_prototype_sources_are_the_generator_and_render_helper() -> None:
+    build = DUTY_WHEEL_BUILD_SOURCE.read_text(encoding="utf-8")
+    render = DUTY_WHEEL_RENDER_SOURCE.read_text(encoding="utf-8")
+
+    assert "Build the Pilgrim board" in build
+    assert "TILES" in build
+    assert "Clockwise outer arrows" in build
+    assert "Render pilgrim_board.html" in render
+    assert "headless Chromium" in render
+
+
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
@@ -158,3 +219,7 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "prototypes/piety_tracks.html" in content
     assert "prototypes/pilgrimage_sites.html" in content
     assert "Pilgrimage sites prototype baseline" in content
+    assert "prototypes/duty_wheel.html" in content
+    assert "Duty wheel prototype baseline" in content
+    assert "prototypes/duty_wheel.svg" in content
+    assert "Duty wheel SVG prototype baseline" in content

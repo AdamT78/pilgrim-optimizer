@@ -55,8 +55,34 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype currently in `prototypes/` has been through this checklist, so there are no
-baseline-only prototypes left. New prototypes start at step 1 again.
+Every prototype in `prototypes/` except the duty wheel has been through this checklist. The duty
+wheel is at step 1 and stays there until a separate PR extracts its renderer.
+
+## Duty wheel prototype baseline
+
+`prototypes/duty_wheel.html` is the untouched visual baseline for the Duty Wheel / Duty Board,
+which holds the duty tiles and their action spaces away from the map so the map stays readable.
+`prototypes/duty_wheel.svg` is the same board as a standalone SVG, for looking at or embedding
+without the page around it. Both still carry the title the source gave them
+(`PILGRIM — Flat-top Circle Grid`, `PILGRIM — 3x3 Circle Grid`); the wording is left alone so the
+baseline stays exactly what was drawn.
+
+`prototype_sources/duty_wheel_build.py.txt` preserves the Python that generated the prototype and
+`prototype_sources/duty_wheel_render.py.txt` preserves the optional helper that rasterises it to a
+PNG through headless Chromium. Both are reference-only, like every other file in that directory:
+read for intent, never imported, run, or refactored.
+
+Two things in the picture are worth naming now, so a later renderer does not have to guess:
+
+- The purple disc on the top duty tile is the **Merchant token**. It will later move around the
+  wheel, skipping the Taxation duty tile.
+- The resource icons are **Tithe tokens**.
+
+The duty spaces are also where sowing and acolyte placement will happen. None of that is
+implemented here. This PR is the baseline only: no renderer, no layout JSON, no generated output,
+no animations, no Merchant movement, no `game_setup.html` integration, no `GameState` integration,
+and no gameplay/rules logic. Renderer extraction belongs in a separate PR, following the component
+extraction checklist above.
 
 ## Building tiles renderer extraction
 
