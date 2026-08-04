@@ -55,34 +55,8 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype in `prototypes/` except the duty wheel has been through this checklist. The duty
-wheel is at step 1 and stays there until a separate PR extracts its renderer.
-
-## Duty wheel prototype baseline
-
-`prototypes/duty_wheel.html` is the untouched visual baseline for the Duty Wheel / Duty Board,
-which holds the duty tiles and their action spaces away from the map so the map stays readable.
-`prototypes/duty_wheel.svg` is the same board as a standalone SVG, for looking at or embedding
-without the page around it. Both still carry the title the source gave them
-(`PILGRIM — Flat-top Circle Grid`, `PILGRIM — 3x3 Circle Grid`); the wording is left alone so the
-baseline stays exactly what was drawn.
-
-`prototype_sources/duty_wheel_build.py.txt` preserves the Python that generated the prototype and
-`prototype_sources/duty_wheel_render.py.txt` preserves the optional helper that rasterises it to a
-PNG through headless Chromium. Both are reference-only, like every other file in that directory:
-read for intent, never imported, run, or refactored.
-
-Two things in the picture are worth naming now, so a later renderer does not have to guess:
-
-- The purple disc on the top duty tile is the **Merchant token**. It will later move around the
-  wheel, skipping the Taxation duty tile.
-- The resource icons are **Tithe tokens**.
-
-The duty spaces are also where sowing and acolyte placement will happen. None of that is
-implemented here. This PR is the baseline only: no renderer, no layout JSON, no generated output,
-no animations, no Merchant movement, no `game_setup.html` integration, no `GameState` integration,
-and no gameplay/rules logic. Renderer extraction belongs in a separate PR, following the component
-extraction checklist above.
+Every prototype currently in `prototypes/` has been through this checklist, so there are no
+baseline-only prototypes left. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -287,6 +261,52 @@ This is still a picture of five tiles. It does not connect to `GameState`, does 
 pilgrimage sites at random, is not wired into setup generation, and implements no game rules. The
 game setup view below reuses the tile contents for its four site slots, always taking the first
 four sites in file order.
+
+## Duty wheel renderer extraction
+
+`prototypes/duty_wheel.html` is the untouched visual baseline for the Duty Wheel / Duty Board,
+which holds the duty tiles and their action spaces away from the map so the map stays readable.
+`prototypes/duty_wheel.svg` is the same board as a standalone SVG, for looking at or embedding
+without the page around it. Both still carry the titles the source gave them
+(`PILGRIM — Flat-top Circle Grid`, `PILGRIM — 3x3 Circle Grid`).
+`prototype_sources/duty_wheel_build.py.txt` preserves the Python that drew the prototype and
+`prototype_sources/duty_wheel_render.py.txt` preserves the optional helper that rasterises it to a
+PNG through headless Chromium. Both are reference-only: read for intent, never imported or run.
+
+`duty_wheel_layout.json` and `render_duty_wheel.py` are the structured renderer extraction. Every
+space is placed from a single anchor, the centre of its own arc, and everything else on it — the
+flat-top outline, the title, the cube tally, the Tithe capsule, the ornament — is a fixed offset
+from that anchor, which is why the JSON only has to name nine points. The JSON says what a space
+carries and where its anchor sits; the module says how the pieces around it are drawn. Three
+traced shapes live in the JSON as raw path data because nobody derives them: the two arrow
+silhouettes and the cornucopia horn.
+
+Two things in the picture are named so a later renderer does not have to guess:
+
+- The purple disc is the **Merchant token**, drawn wherever `merchant_token.starts_on` points
+  (Produce, for now). It will later move around the wheel, skipping the Taxation duty tile.
+- The resource icons in the capsules are **Tithe tokens**.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_duty_wheel.py
+```
+
+The generated overview below also produces it. Both write `generated/duty_wheel.html`, which is
+not committed.
+
+The cube counts on each duty come from `sample_cubes` in the layout. They are sample debug state,
+not `GameState`, in the same spirit as the v1 player board's mock state. Nothing on this board
+moves: no Merchant movement, no skipping of Taxation, no Tithe token logic, no sowing or acolyte
+placement, and no sow animations. The wheel is also not wired into `game_setup.html` yet. Those
+belong in later PRs.
+
+Every drawing element the renderer emits matches the baseline's numerically, bar one: the
+Allocation title sits 0.1px lower, because the baseline's own title is that far off the offset the
+other eight share. The generated markup does carry `data-duty`, `data-token`, and
+`data-tithe-token` attributes the baseline has no need for, so the two files are not byte
+identical.
 
 ## Game setup debug view
 

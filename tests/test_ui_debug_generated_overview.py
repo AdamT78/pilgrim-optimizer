@@ -28,6 +28,7 @@ def test_generator_writes_all_pages_to_a_temp_directory(tmp_path: Path) -> None:
     assert written.ship_marker == tmp_path / "ship_marker.html"
     assert written.piety_tracks == tmp_path / "piety_tracks.html"
     assert written.pilgrimage_sites == tmp_path / "pilgrimage_sites.html"
+    assert written.duty_wheel == tmp_path / "duty_wheel.html"
     assert written.game_setup == tmp_path / "game_setup.html"
     assert written.overview == tmp_path / "debug_overview.html"
     for path in written.as_tuple():
@@ -56,6 +57,9 @@ def test_generated_pages_contain_their_own_views(tmp_path: Path) -> None:
     assert "Piety tracks" in written.piety_tracks.read_text(encoding="utf-8")
     sites = written.pilgrimage_sites.read_text(encoding="utf-8")
     assert "PILGRIM — Pilgrimage Sites" in sites
+    duty_wheel = written.duty_wheel.read_text(encoding="utf-8")
+    assert "PILGRIM — 3x3 Circle Grid" in duty_wheel
+    assert "Merchant token" in duty_wheel
     assert "PILGRIM — Game Setup Debug View" in written.game_setup.read_text(encoding="utf-8")
 
 
@@ -73,6 +77,7 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
     assert 'href="ship_marker.html"' in content
     assert 'href="piety_tracks.html"' in content
     assert 'href="pilgrimage_sites.html"' in content
+    assert 'href="duty_wheel.html"' in content
     assert 'href="game_setup.html"' in content
 
 
@@ -110,4 +115,7 @@ def test_prototype_index_links_to_generated_overview() -> None:
     assert "generated/piety_tracks.html" in content
     assert "prototypes/pilgrimage_sites.html" in content
     assert "generated/pilgrimage_sites.html" in content
+    assert "prototypes/duty_wheel.html" in content
+    assert "prototypes/duty_wheel.svg" in content
+    assert "generated/duty_wheel.html" in content
     assert "generated/game_setup.html" in content
