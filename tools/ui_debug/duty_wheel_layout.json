@@ -1,0 +1,294 @@
+{
+  "page": {
+    "title": "PILGRIM — Flat-top Circle Grid",
+    "board_title": "PILGRIM — 3x3 Circle Grid",
+    "subtitle": [
+      "Eight action spaces around a central City, sown clockwise. Each space shows how many cubes",
+      "each player has there, as four columns on a shared baseline."
+    ],
+    "description": "Nine parchment spaces on a green hexagon: eight named actions around a central City, linked by clockwise ring arrows and four arrows to and from the middle. Each space shows its cube counts as four columns on a shared baseline."
+  },
+  "board": {
+    "width": 1104,
+    "height": 1425,
+    "view_box": "0 0 1104 1425",
+    "center": [
+      551.5,
+      718.7
+    ],
+    "scale": 0.820116054,
+    "ground_path": "M 550,182 L 988,439 L 988,957 L 553,1216 L 114,957 L 114,440 Z",
+    "frame": {
+      "x": 33,
+      "y": 120,
+      "width": 1038,
+      "height": 1174,
+      "corner_radius": 12
+    },
+    "title_baseline": 48,
+    "subtitle_baseline": 69
+  },
+  "palette": {
+    "page_background": "#000000",
+    "frame_stroke": "#333333",
+    "title": "#F2EEDF",
+    "subtitle": "#D6D2C9",
+    "ink": "#3A2F1E",
+    "parchment": [
+      "#F0E7D2",
+      "#E4D9BC"
+    ],
+    "ground": [
+      "#9CCB78",
+      "#8FBF6B"
+    ],
+    "ground_edge": "#8FBF6B",
+    "space_edge": "#000000",
+    "capsule_fill": "#EFE4C6",
+    "capsule_edge": "#000000",
+    "arrow_border": "#000000",
+    "arrow_interior": "#FFFFFF"
+  },
+  "players": [
+    {
+      "id": "white",
+      "label": "White",
+      "fill": "#FFFFFF",
+      "cube_stroke_width": 1.8
+    },
+    {
+      "id": "red",
+      "label": "Red",
+      "fill": "#C94C4C",
+      "cube_stroke_width": 1.5
+    },
+    {
+      "id": "yellow",
+      "label": "Yellow",
+      "fill": "#E3C64A",
+      "cube_stroke_width": 1.8
+    },
+    {
+      "id": "blue",
+      "label": "Blue",
+      "fill": "#3B6EA5",
+      "cube_stroke_width": 1.5
+    }
+  ],
+  "duties": [
+    {
+      "id": "produce",
+      "label": "Produce",
+      "center": [
+        551.3,
+        394.5
+      ],
+      "tithe_icon": "coin",
+      "sample_cubes": {
+        "white": 2,
+        "red": 1,
+        "yellow": 2,
+        "blue": 1
+      }
+    },
+    {
+      "id": "allocation",
+      "label": "Allocation",
+      "center": [
+        775.5,
+        488.7
+      ],
+      "tithe_icon": "stone",
+      "sample_cubes": {
+        "white": 1,
+        "red": 1,
+        "yellow": 1,
+        "blue": 1
+      }
+    },
+    {
+      "id": "clerical",
+      "label": "Clerical",
+      "center": [
+        868.3,
+        718.7
+      ],
+      "tithe_icon": "cornucopia",
+      "sample_cubes": {
+        "white": 1,
+        "red": 0,
+        "yellow": 1,
+        "blue": 1
+      }
+    },
+    {
+      "id": "build_roads",
+      "label": "Build Roads",
+      "center": [
+        775.4,
+        949.1
+      ],
+      "tithe_icon": "wheat",
+      "sample_cubes": {
+        "white": 0,
+        "red": 2,
+        "yellow": 0,
+        "blue": 0
+      }
+    },
+    {
+      "id": "taxation",
+      "label": "Taxation",
+      "center": [
+        551.5,
+        1043.7
+      ],
+      "tithe_icon": null,
+      "sample_cubes": {
+        "white": 2,
+        "red": 2,
+        "yellow": 1,
+        "blue": 2
+      }
+    },
+    {
+      "id": "ordination",
+      "label": "Ordination",
+      "center": [
+        328.5,
+        949.1
+      ],
+      "tithe_icon": "coin",
+      "sample_cubes": {
+        "white": 2,
+        "red": 2,
+        "yellow": 2,
+        "blue": 2
+      }
+    },
+    {
+      "id": "construct",
+      "label": "Construct",
+      "center": [
+        235.5,
+        718.7
+      ],
+      "tithe_icon": "wheat",
+      "sample_cubes": {
+        "white": 2,
+        "red": 2,
+        "yellow": 2,
+        "blue": 2
+      }
+    },
+    {
+      "id": "give_alms",
+      "label": "Give Alms",
+      "center": [
+        328.0,
+        488.8
+      ],
+      "tithe_icon": "stone",
+      "sample_cubes": {
+        "white": 2,
+        "red": 2,
+        "yellow": 2,
+        "blue": 2
+      }
+    },
+    {
+      "id": "city",
+      "label": "City",
+      "center": [
+        551.0,
+        718.8
+      ],
+      "tithe_icon": null
+    }
+  ],
+  "city_id": "city",
+  "clockwise_order": [
+    "produce",
+    "allocation",
+    "clerical",
+    "build_roads",
+    "taxation",
+    "ordination",
+    "construct",
+    "give_alms"
+  ],
+  "merchant_token": {
+    "label": "Merchant token",
+    "color": "#8E63D7",
+    "edge": "#000000",
+    "starts_on": "produce",
+    "skips": [
+      "taxation"
+    ]
+  },
+  "tithe_icons": {
+    "coin": {
+      "label": "Silver coin",
+      "scale": 1.22,
+      "offset_y": 0.3
+    },
+    "stone": {
+      "label": "Stone",
+      "scale": 1.15,
+      "offset_y": 8.3
+    },
+    "wheat": {
+      "label": "Wheat",
+      "scale": 1.18,
+      "offset_y": 3.3
+    },
+    "cornucopia": {
+      "label": "Cornucopia (wild resource)",
+      "scale": 1.1728,
+      "offset_y": 0.0
+    }
+  },
+  "middle_arrows": [
+    {
+      "id": "city_to_produce",
+      "at": [
+        551.0,
+        556.6
+      ],
+      "rotate": -90,
+      "toward": "produce"
+    },
+    {
+      "id": "clerical_to_city",
+      "at": [
+        709.6,
+        718.8
+      ],
+      "rotate": 180,
+      "toward": "city"
+    },
+    {
+      "id": "city_to_taxation",
+      "at": [
+        551.0,
+        881.2
+      ],
+      "rotate": 90,
+      "toward": "taxation"
+    },
+    {
+      "id": "construct_to_city",
+      "at": [
+        393.2,
+        718.8
+      ],
+      "rotate": 0,
+      "toward": "city"
+    }
+  ],
+  "artwork": {
+    "ring_arrow_path": "M 367.42,376.12 C 368.15,375.90 370.36,375.28 371.78,374.76 C 373.20,374.25 374.54,373.61 375.92,373.02 C 377.29,372.44 378.66,371.84 380.04,371.26 C 381.41,370.67 382.78,370.08 384.15,369.50 C 385.53,368.92 386.90,368.34 388.28,367.77 C 389.66,367.20 391.03,366.64 392.41,366.08 C 393.79,365.52 395.18,364.96 396.56,364.41 C 397.95,363.87 399.33,363.33 400.72,362.79 C 402.11,362.26 403.50,361.73 404.89,361.21 C 406.29,360.68 407.68,360.17 409.08,359.67 C 410.47,359.16 411.88,358.66 413.28,358.16 C 414.68,357.67 416.79,356.95 417.49,356.71 Q 417.44,361.25 412.55,367.70 L 439.10,345.25 L 403.33,344.46 L 414.71,349.21 C 414.01,349.49 411.90,350.35 410.50,350.93 C 409.10,351.51 407.70,352.10 406.31,352.70 C 404.92,353.30 403.53,353.91 402.15,354.53 C 400.76,355.14 399.39,355.77 398.01,356.40 C 396.64,357.04 395.27,357.69 393.90,358.34 C 392.54,359.00 391.18,359.66 389.82,360.33 C 388.47,361.01 387.12,361.69 385.77,362.38 C 384.43,363.08 383.09,363.78 381.76,364.50 C 380.43,365.21 379.10,365.94 377.78,366.68 C 376.46,367.42 375.15,368.17 373.85,368.95 C 372.55,369.72 371.23,370.46 369.99,371.33 C 368.74,372.20 366.99,373.71 366.39,374.18 Z",
+    "middle_arrow_path": "M -44.00,1.10 C -43.16,1.24 -40.63,1.74 -38.94,1.94 C -37.25,2.13 -35.57,2.18 -33.88,2.28 C -32.19,2.39 -30.51,2.47 -28.82,2.55 C -27.13,2.63 -25.45,2.70 -23.76,2.77 C -22.07,2.84 -20.39,2.91 -18.70,2.97 C -17.01,3.03 -15.33,3.09 -13.64,3.15 C -11.95,3.21 -10.27,3.26 -8.58,3.31 C -6.89,3.37 -5.21,3.42 -3.52,3.47 C -1.83,3.52 -0.15,3.56 1.54,3.61 C 3.23,3.66 4.91,3.70 6.60,3.75 C 8.29,3.79 9.97,3.83 11.66,3.88 C 13.35,3.92 15.88,3.98 16.72,4.00 Q 14.41,8.25 6.90,12.50 L 44.00,0.00 L 6.90,-12.50 L 16.72,-4.00 C 15.88,-3.98 13.35,-3.92 11.66,-3.88 C 9.97,-3.83 8.29,-3.79 6.60,-3.75 C 4.91,-3.70 3.23,-3.66 1.54,-3.61 C -0.15,-3.56 -1.83,-3.52 -3.52,-3.47 C -5.21,-3.42 -6.89,-3.37 -8.58,-3.31 C -10.27,-3.26 -11.95,-3.21 -13.64,-3.15 C -15.33,-3.09 -17.01,-3.03 -18.70,-2.97 C -20.39,-2.91 -22.07,-2.84 -23.76,-2.77 C -25.45,-2.70 -27.13,-2.63 -28.82,-2.55 C -30.51,-2.47 -32.19,-2.39 -33.88,-2.28 C -35.57,-2.18 -37.25,-2.13 -38.94,-1.94 C -40.63,-1.74 -43.16,-1.24 -44.00,-1.10 Z",
+    "cornucopia_horn_path": "M -1.29,-9.17 C -1.54,-8.96 -2.29,-8.34 -2.79,-7.92 C -3.29,-7.50 -3.78,-7.09 -4.27,-6.67 C -4.76,-6.25 -5.25,-5.82 -5.74,-5.38 C -6.23,-4.94 -6.72,-4.48 -7.21,-4.01 C -7.70,-3.54 -8.18,-3.06 -8.65,-2.54 C -9.12,-2.02 -9.58,-1.48 -10.01,-0.91 C -10.44,-0.34 -10.86,0.26 -11.23,0.89 C -11.60,1.52 -11.95,2.20 -12.22,2.90 C -12.49,3.60 -12.71,4.34 -12.84,5.09 C -12.97,5.84 -13.04,6.62 -12.98,7.38 C -12.92,8.13 -12.77,8.92 -12.50,9.62 C -12.23,10.32 -11.83,11.02 -11.35,11.56 C -10.87,12.10 -10.25,12.59 -9.63,12.88 C -9.01,13.17 -8.26,13.32 -7.64,13.28 C -7.02,13.24 -6.32,12.99 -5.93,12.65 C -5.54,12.31 -5.38,11.47 -5.27,11.24 C -5.16,11.01 -5.08,11.29 -5.27,11.24 C -5.46,11.20 -6.13,11.11 -6.42,10.97 C -6.71,10.83 -6.87,10.61 -6.99,10.41 C -7.11,10.21 -7.13,9.97 -7.14,9.76 C -7.14,9.55 -7.09,9.35 -7.02,9.16 C -6.95,8.97 -6.85,8.80 -6.73,8.63 C -6.61,8.46 -6.47,8.31 -6.31,8.15 C -6.15,7.99 -5.98,7.84 -5.78,7.69 C -5.58,7.54 -5.36,7.39 -5.11,7.24 C -4.86,7.09 -4.60,6.94 -4.30,6.78 C -4.00,6.62 -3.68,6.47 -3.33,6.31 C -2.98,6.15 -2.60,5.99 -2.19,5.83 C -1.78,5.67 -1.34,5.50 -0.88,5.33 C -0.42,5.16 0.07,4.98 0.58,4.80 C 1.09,4.62 1.63,4.43 2.18,4.23 C 2.73,4.03 3.31,3.83 3.90,3.62 C 4.49,3.41 5.41,3.07 5.71,2.96"
+  }
+}

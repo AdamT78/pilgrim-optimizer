@@ -29,6 +29,12 @@ from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
 from tools.ui_debug.generate_donated_buildings import (  # noqa: E402
     generate_donated_building_tiles_page,
 )
+from tools.ui_debug.generate_duty_wheel import (  # noqa: E402
+    OUTPUT_FILENAME as DUTY_WHEEL_FILENAME,
+)
+from tools.ui_debug.generate_duty_wheel import (  # noqa: E402
+    generate_duty_wheel_page,
+)
 from tools.ui_debug.generate_game_setup import (  # noqa: E402
     OUTPUT_FILENAME as GAME_SETUP_FILENAME,
 )
@@ -93,6 +99,7 @@ class GeneratedViews:
     ship_marker: Path
     piety_tracks: Path
     pilgrimage_sites: Path
+    duty_wheel: Path
     game_setup: Path
     overview: Path
 
@@ -106,6 +113,7 @@ class GeneratedViews:
             self.ship_marker,
             self.piety_tracks,
             self.pilgrimage_sites,
+            self.duty_wheel,
             self.game_setup,
             self.overview,
         )
@@ -147,6 +155,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
     <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
+    <li><a href="{DUTY_WHEEL_FILENAME}">Generated duty wheel</a></li>
     <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
@@ -178,6 +187,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     pilgrimage_sites = generate_pilgrimage_sites_page(
         output_path=destination_dir / PILGRIMAGE_SITES_FILENAME
     )
+    duty_wheel = generate_duty_wheel_page(output_path=destination_dir / DUTY_WHEEL_FILENAME)
     game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
@@ -192,6 +202,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         ship_marker=ship_marker,
         piety_tracks=piety_tracks,
         pilgrimage_sites=pilgrimage_sites,
+        duty_wheel=duty_wheel,
         game_setup=game_setup,
         overview=overview,
     )
