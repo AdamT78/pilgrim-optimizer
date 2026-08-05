@@ -17,6 +17,12 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from tools.ui_debug.generate_alms_table import (  # noqa: E402
+    OUTPUT_FILENAME as ALMS_TABLE_FILENAME,
+)
+from tools.ui_debug.generate_alms_table import (  # noqa: E402
+    generate_alms_table_page,
+)
 from tools.ui_debug.generate_buildings import (  # noqa: E402
     OUTPUT_FILENAME as BUILDING_TILES_FILENAME,
 )
@@ -100,6 +106,7 @@ class GeneratedViews:
     piety_tracks: Path
     pilgrimage_sites: Path
     duty_wheel: Path
+    alms_table: Path
     game_setup: Path
     overview: Path
 
@@ -114,6 +121,7 @@ class GeneratedViews:
             self.piety_tracks,
             self.pilgrimage_sites,
             self.duty_wheel,
+            self.alms_table,
             self.game_setup,
             self.overview,
         )
@@ -156,6 +164,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
     <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
     <li><a href="{DUTY_WHEEL_FILENAME}">Generated duty wheel</a></li>
+    <li><a href="{ALMS_TABLE_FILENAME}">Generated Alms Table</a></li>
     <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view (includes the duty
       wheel panel)</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
@@ -189,6 +198,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         output_path=destination_dir / PILGRIMAGE_SITES_FILENAME
     )
     duty_wheel = generate_duty_wheel_page(output_path=destination_dir / DUTY_WHEEL_FILENAME)
+    alms_table = generate_alms_table_page(output_path=destination_dir / ALMS_TABLE_FILENAME)
     game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
@@ -204,6 +214,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         piety_tracks=piety_tracks,
         pilgrimage_sites=pilgrimage_sites,
         duty_wheel=duty_wheel,
+        alms_table=alms_table,
         game_setup=game_setup,
         overview=overview,
     )

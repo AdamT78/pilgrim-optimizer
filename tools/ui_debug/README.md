@@ -342,7 +342,7 @@ title is that far off the offset the other eight share. The generated markup als
 `data-duty`, `data-token`, and `data-tithe-token` attributes the baseline has no need for, so the
 two files are not byte identical.
 
-## Alms Table prototype baseline
+## Alms Table renderer extraction
 
 `prototypes/alms_table.html` is the untouched visual baseline for the Alms Table, and
 `prototypes/alms_table.svg` is the same board as a standalone SVG, for looking at or embedding
@@ -353,9 +353,7 @@ The board is one grey strip split by a rule into the two things it tracks. Left 
 race, steps `0` to `6` with a 2x2 of player discs on each and a pocket for the first disc to reach
 `6`, and the three threshold rewards printed underneath against the steps that pay them. Right of
 the rule is the record, which is what survives the round reset: four sockets, one per round, and
-beneath them the season-end key from cubes owned to VP. Those numbers are the ones the engine
-already uses — `configs/alms.json` gives the same `max_position` of `6`, the same rewards at `2`,
-`4`, and `6`, and the same `1 -> 5`, `2 -> 11`, `3 -> 18`, `4 -> 26` table.
+beneath them the season-end key from cubes owned to VP.
 
 Two things about the copy are worth knowing before anyone goes looking. The files arrived named
 `construction_track.*` and the page still titles itself `Pilgrim — Construction Track` with an
@@ -364,11 +362,56 @@ the source, and the content is the Alms Table throughout. The baseline is kept e
 arrived rather than retitled, the same way the other baselines keep the titles their sources gave
 them.
 
-This is a picture and nothing more. There is no renderer extraction, no `alms_table_layout.json`,
-no generated output, and no link to it from the generated overview. It is not in the setup view,
-it does not connect to `GameState`, and it implements no gameplay or scoring rule — season-end
-Alms scoring included. Extracting a renderer for it belongs in a separate PR, following the
-component extraction checklist above.
+`alms_table_layout.json` and `render_alms_table.py` are the structured renderer extraction. The
+JSON says where each anchor sits — the step centres, the pocket, the first reward badge and the
+pitch below it, the first placeholder slot and the first key row — and the module says how the
+pieces around them are drawn, the same split the duty wheel uses. None of the pieces are new: the
+disc is the piety-track disc at a larger radius, the star is the piety-track star, and the cube is
+the mancala board's cube, which is why the Alms Table reads as part of the same set.
+
+The numbers the board prints about the game are not in the layout JSON. `configs/alms.json` is the
+source of truth for how far the track runs, which steps pay which reward, and the season-end VP
+per cube, and the renderer parses it with the game's own `alms_from_dict`, exactly as the piety
+track reads `configs/piety.json` for its stars. So the row of steps is as long as `max_position`
+says, there is a reward line per configured threshold, and the key has a row per scoring entry
+above zero — change the config and this view follows without anyone editing the UI layer. The
+four dashed sockets are counted from the same key, which is the board's own logic: four rounds,
+four cubes, four sockets, so an impossible fifth has nowhere to go. What the layout does own is
+the prose beside each reward, which is display copy the config has no opinion about, and a layout
+that draws a different number of steps from the one the config defines is rejected rather than
+drawn.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_alms_table.py
+```
+
+The generated overview below also produces it. Both write `generated/alms_table.html`, which is
+not committed.
+
+One thing is drawn differently on purpose. The baseline puts a full 2x2 of discs on every step,
+as a diagram of where discs go; the generated page draws player state instead, so there are four
+discs and they all stand on step `0`, where a round starts them. Each takes its own corner of the
+2x2, so four on one step stay legible. `render_alms_table_svg(..., positions=...)` takes a seat to
+position mapping, which is all a later PR needs to walk them rightward along the track the way the
+Piety track moves its own discs — no new geometry, and no controls in this PR.
+
+Everything a later PR has to find is already labelled: `data-component="alms-table"` on the board,
+`data-alms-position` on each step and on each disc, `data-player` and `data-player-disc` on the
+discs themselves, `data-alms-threshold` on the reward lines, `data-placeholder-slot` on the four
+dashed squares at the top right, and `data-season-end-rank` on the key rows. Those dashed squares
+stay empty here; they are where the round winners' coloured player cubes will go, one per round.
+The baselines carry none of these attributes, which is the only reason the generated SVG and the
+baseline SVG are not byte identical — with the hooks stripped and the diagram discs set aside,
+every drawing element matches the baseline's exactly, and a test keeps it that way.
+
+The generated page is titled `Alms Table` rather than the baseline's leftover `Construction
+track`, since nothing is preserving fidelity to a wrong title once the renderer owns the markup.
+
+This is still a picture of a board. It is not in the setup view, it does not connect to
+`GameState`, there are no movement or scoring controls, and it implements no gameplay rule —
+season-end Alms scoring included. Those belong in later PRs.
 
 ## Game setup debug view
 
