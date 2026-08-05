@@ -4,9 +4,9 @@
     "board_title": "PILGRIM — 3x3 Circle Grid",
     "subtitle": [
       "Eight action spaces around a central City, sown clockwise. Each space shows how many cubes",
-      "each player has there, as four columns on a shared baseline."
+      "each player has there, as one column per player on a shared baseline."
     ],
-    "description": "Nine parchment spaces on a green hexagon: eight named actions around a central City, linked by clockwise ring arrows and four arrows to and from the middle. Each space shows its cube counts as four columns on a shared baseline."
+    "description": "Nine parchment spaces on a green hexagon: eight named actions around a central City, linked by clockwise ring arrows and four arrows to and from the middle. Each space shows its cube counts as one column per player on a shared baseline."
   },
   "board": {
     "width": 1104,
@@ -51,30 +51,40 @@
   },
   "players": [
     {
-      "id": "white",
-      "label": "White",
+      "id": "player_one",
+      "label": "Player 1",
+      "color": "white",
       "fill": "#FFFFFF",
       "cube_stroke_width": 1.8
     },
     {
-      "id": "red",
-      "label": "Red",
+      "id": "player_two",
+      "label": "Player 2",
+      "color": "red",
       "fill": "#C94C4C",
       "cube_stroke_width": 1.5
     },
     {
-      "id": "yellow",
-      "label": "Yellow",
+      "id": "player_three",
+      "label": "Player 3",
+      "color": "yellow",
       "fill": "#E3C64A",
       "cube_stroke_width": 1.8
     },
     {
-      "id": "blue",
-      "label": "Blue",
+      "id": "player_four",
+      "label": "Player 4",
+      "color": "blue",
       "fill": "#3B6EA5",
       "cube_stroke_width": 1.5
     }
   ],
+  "player_counts": [
+    2,
+    3,
+    4
+  ],
+  "default_player_count": 4,
   "duties": [
     {
       "id": "produce",
@@ -85,10 +95,10 @@
       ],
       "tithe_icon": "coin",
       "sample_cubes": {
-        "white": 2,
-        "red": 1,
-        "yellow": 2,
-        "blue": 1
+        "player_one": 2,
+        "player_two": 1,
+        "player_three": 2,
+        "player_four": 1
       }
     },
     {
@@ -100,10 +110,10 @@
       ],
       "tithe_icon": "stone",
       "sample_cubes": {
-        "white": 1,
-        "red": 1,
-        "yellow": 1,
-        "blue": 1
+        "player_one": 1,
+        "player_two": 1,
+        "player_three": 1,
+        "player_four": 1
       }
     },
     {
@@ -115,10 +125,10 @@
       ],
       "tithe_icon": "cornucopia",
       "sample_cubes": {
-        "white": 1,
-        "red": 0,
-        "yellow": 1,
-        "blue": 1
+        "player_one": 1,
+        "player_two": 0,
+        "player_three": 1,
+        "player_four": 1
       }
     },
     {
@@ -130,10 +140,10 @@
       ],
       "tithe_icon": "wheat",
       "sample_cubes": {
-        "white": 0,
-        "red": 2,
-        "yellow": 0,
-        "blue": 0
+        "player_one": 0,
+        "player_two": 2,
+        "player_three": 0,
+        "player_four": 0
       }
     },
     {
@@ -145,10 +155,10 @@
       ],
       "tithe_icon": null,
       "sample_cubes": {
-        "white": 2,
-        "red": 2,
-        "yellow": 1,
-        "blue": 2
+        "player_one": 2,
+        "player_two": 2,
+        "player_three": 1,
+        "player_four": 2
       }
     },
     {
@@ -160,10 +170,10 @@
       ],
       "tithe_icon": "coin",
       "sample_cubes": {
-        "white": 2,
-        "red": 2,
-        "yellow": 2,
-        "blue": 2
+        "player_one": 2,
+        "player_two": 2,
+        "player_three": 2,
+        "player_four": 2
       }
     },
     {
@@ -175,10 +185,10 @@
       ],
       "tithe_icon": "wheat",
       "sample_cubes": {
-        "white": 2,
-        "red": 2,
-        "yellow": 2,
-        "blue": 2
+        "player_one": 2,
+        "player_two": 2,
+        "player_three": 2,
+        "player_four": 2
       }
     },
     {
@@ -190,10 +200,10 @@
       ],
       "tithe_icon": "stone",
       "sample_cubes": {
-        "white": 2,
-        "red": 2,
-        "yellow": 2,
-        "blue": 2
+        "player_one": 2,
+        "player_two": 2,
+        "player_three": 2,
+        "player_four": 2
       }
     },
     {
@@ -221,10 +231,8 @@
     "label": "Merchant token",
     "color": "#8E63D7",
     "edge": "#000000",
-    "starts_on": "produce",
-    "skips": [
-      "taxation"
-    ]
+    "starts_on": "taxation",
+    "baseline_position": "produce"
   },
   "tithe_icons": {
     "coin": {
