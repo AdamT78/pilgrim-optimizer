@@ -235,6 +235,30 @@ python3 tools/ui_debug/generate_piety_track.py
 The generated overview below also produces it. Reading the piety table is not `GameState`
 integration: this is still a static view, and it still does not implement game rules.
 
+## Piety track v2 prototype baseline
+
+`prototypes/piety_tracks_v2.html` is the untouched visual baseline for Piety Track v2, the piety
+track redrawn in the house ornament so it sits alongside the mancala board and the Alms Table. Like
+the v1 page it holds both tracks: the 3–4 player one on top, the 2 player one beneath.
+`prototypes/piety_track_v2.svg` and `prototypes/piety_track_2p_v2.svg` are those two tracks as
+standalone SVG baselines, and `prototype_sources/piety_tracks_v2.py.txt` preserves the Python that
+drew them, reference-only — read for intent, never imported or executed.
+
+What v2 changes is structural rather than decorative, which is worth knowing before anyone extracts
+it. The two ornament devices the house style kept are an inset hairline just inside the panel edge
+and a trefoil header beside the title, and the v1 strip has nowhere to put either: its boxes butt
+against the panel edge, so a hairline would run through the numbers and clip the end stars. So the
+strip becomes a panel that contains the boxes, the way the Alms Table already is, gaining side
+padding, a title band, and a little more bottom margin — and with it, the board's name in the
+artwork instead of only in the HTML heading. Box pitch, disc sizes and colours, and the star
+geometry are untouched, and the discs are deliberately identical to the Alms Table's.
+
+This is baseline-only. There is no v2 layout JSON, no `render_piety_track_v2.py`, and no generated
+v2 page; the index links the baselines and nothing else. v2 does not replace the current piety
+track — `piety_track_layout.json`, `render_piety_track.py`, and the generated `piety_tracks.html`
+are untouched and stay the live view. It is not in `game_setup.html`, does not touch `GameState`,
+and implements no gameplay rule. Extracting a renderer from it belongs in a separate PR.
+
 ## Pilgrimage site renderer extraction
 
 `prototypes/pilgrimage_sites.html` is the untouched visual baseline for the Pilgrimage Site tiles:
