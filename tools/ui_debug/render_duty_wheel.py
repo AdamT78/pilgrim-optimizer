@@ -684,17 +684,45 @@ def render_duty_wheel_svg(
     )
 
 
-_CONTROLS_HTML = """  <div class="controls">
-    <button type="button" id="randomize-duties">Randomize Duty tiles</button>
-    <button type="button" id="move-merchant">Move Merchant</button>
-    <span class="player-counts" role="group" aria-label="Player count">{player_counts}</span>
-    <span class="readout" id="duty-wheel-readout">{readout}</span>
+_CONTROLS_HTML = """  <div class="duty-wheel-controls">
+    <button type="button" id="duty-wheel-randomize">Randomize Duty tiles</button>
+    <button type="button" id="duty-wheel-move-merchant">Move Merchant</button>
+    <span class="duty-wheel-counts" role="group" aria-label="Player count">{player_counts}</span>
+    <span class="duty-wheel-readout" id="duty-wheel-readout">{readout}</span>
   </div>
 """
 
 _PLAYER_COUNT_BUTTON = (
     '<button type="button" data-player-count="{count}" aria-pressed="{pressed}">{count}p</button>'
 )
+
+# Every hook the controls own is prefixed, because the generated setup view drops this panel into
+# a page that already has its own `.controls` row and `.readout` spans.
+DUTY_WHEEL_CONTROL_STYLES = """  .duty-wheel-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .duty-wheel-controls button {
+    background: #1C1C1C;
+    border: 1px solid #4A4A4A;
+    border-radius: 6px;
+    color: #F2EEDF;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+  .duty-wheel-controls button:hover { background: #2A2A2A; }
+  .duty-wheel-counts { display: flex; gap: 4px; }
+  .duty-wheel-counts button[aria-pressed="true"] {
+    background: #F2EEDF;
+    border-color: #F2EEDF;
+    color: #1C1C1C;
+  }
+  .duty-wheel-readout { color: #A8A296; font-size: 13px; }
+"""
 
 # Plain inline JavaScript, no dependencies. It flips opacity on slots the renderer already drew
 # and rewrites the eight duty titles; it decides nothing about the game.
@@ -704,7 +732,7 @@ _CONTROLS_SCRIPT = """<script>
   var MERCHANT_PATH = __MERCHANT_PATH__;
   var board = document.querySelector('[data-component="duty-wheel"]');
   var readout = document.getElementById('duty-wheel-readout');
-  var countButtons = document.querySelectorAll('.player-counts button');
+  var countButtons = document.querySelectorAll('.duty-wheel-counts button');
   var setupIndex = 0;
   var merchant = __START__;
   var playerCount = __PLAYER_COUNT__;
@@ -766,13 +794,13 @@ _CONTROLS_SCRIPT = """<script>
       ' \\u2014 ' + playerCount + ' players';
   }
 
-  document.getElementById('randomize-duties').addEventListener('click', function () {
+  document.getElementById('duty-wheel-randomize').addEventListener('click', function () {
     setupIndex = (setupIndex + 1) % SETUPS.length;
     applySetup();
     updateReadout();
   });
 
-  document.getElementById('move-merchant').addEventListener('click', function () {
+  document.getElementById('duty-wheel-move-merchant').addEventListener('click', function () {
     merchant = nextMerchantPosition(merchant);
     applyMerchant();
     updateReadout();
@@ -807,13 +835,44 @@ def duty_wheel_readout(
 
 
 def render_duty_wheel_controls_script(layout: dict) -> str:
-    """The page's debug buttons, wired to the slots the interactive board draws."""
+    """The page's debug buttons, wired to the slots the interactive board draws.
+
+    The whole thing is one IIFE reaching for prefixed hooks only, so a host page can drop it in
+    beside its own scripts without sharing a name with them.
+    """
     return (
         _CONTROLS_SCRIPT.replace("__SETUPS__", json.dumps(duty_setups(layout)))
         .replace("__MERCHANT_PATH__", json.dumps(merchant_path(layout)))
         .replace("__START__", json.dumps(layout["merchant_token"]["starts_on"]))
         .replace("__PLAYER_COUNT__", json.dumps(layout["default_player_count"]))
     )
+
+
+def render_duty_wheel_controls_html(layout: dict) -> str:
+    """The debug buttons and their readout, with the default player count already pressed."""
+    buttons = "".join(
+        _PLAYER_COUNT_BUTTON.format(
+            count=count, pressed=str(count == layout["default_player_count"]).lower()
+        )
+        for count in layout["player_counts"]
+    )
+    return _CONTROLS_HTML.format(
+        player_counts=buttons, readout=escape(duty_wheel_readout(layout))
+    )
+
+
+def render_duty_wheel_panel(
+    layout: dict, board_state: dict | None = None, include_controls: bool = True
+) -> str:
+    """The controls and the board as one fragment a host page can drop into its own layout.
+
+    This is what the generated setup view shows: it brings its own wrapper, heading, and width,
+    and pairs this with `DUTY_WHEEL_CONTROL_STYLES` and `render_duty_wheel_controls_script()`.
+    Without controls the board is the fixed picture, so no hidden slots are drawn either.
+    """
+    controls = render_duty_wheel_controls_html(layout) if include_controls else ""
+    board = render_duty_wheel_svg(layout, board_state, interactive=include_controls)
+    return f"{controls}{board}"
 
 
 def render_duty_wheel_html(
@@ -826,17 +885,7 @@ def render_duty_wheel_html(
     """
     palette = layout["palette"]
     merchant = layout["merchant_token"]
-    buttons = "".join(
-        _PLAYER_COUNT_BUTTON.format(
-            count=count, pressed=str(count == layout["default_player_count"]).lower()
-        )
-        for count in layout["player_counts"]
-    )
-    controls = (
-        _CONTROLS_HTML.format(player_counts=buttons, readout=escape(duty_wheel_readout(layout)))
-        if interactive
-        else ""
-    )
+    panel = render_duty_wheel_panel(layout, board_state, include_controls=interactive)
     script = render_duty_wheel_controls_script(layout) if interactive else ""
     moves = (
         "The buttons above cycle sample Duty tile setups, walk the Merchant clockwise around the "
@@ -861,31 +910,7 @@ def render_duty_wheel_html(
     font-family: Helvetica, Arial, sans-serif;
   }}
   svg {{ display: block; width: min(100vw, {layout["board"]["width"]:g}px); height: auto; }}
-  .controls {{
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 16px 12px 4px;
-  }}
-  .controls button {{
-    background: #1C1C1C;
-    border: 1px solid #4A4A4A;
-    border-radius: 6px;
-    color: #F2EEDF;
-    cursor: pointer;
-    font: inherit;
-    font-size: 13px;
-    padding: 7px 12px;
-  }}
-  .controls button:hover {{ background: #2A2A2A; }}
-  .player-counts {{ display: flex; gap: 4px; }}
-  .player-counts button[aria-pressed="true"] {{
-    background: #F2EEDF;
-    border-color: #F2EEDF;
-    color: #1C1C1C;
-  }}
-  .readout {{ color: #A8A296; font-size: 13px; }}
+{DUTY_WHEEL_CONTROL_STYLES}  .duty-wheel-controls {{ padding: 16px 12px 4px; }}
   p.note {{
     color: #A8A296;
     font-size: 13px;
@@ -897,7 +922,7 @@ def render_duty_wheel_html(
 </style>
 </head>
 <body>
-{controls}{render_duty_wheel_svg(layout, board_state, interactive=interactive)}
+{panel}
   <p class="note">
     Generated from {LAYOUT_FILENAME}. The purple disc is the {escape(merchant["label"])} and the
     resource icons are Tithe tokens. {moves} Visual/debug only — no GameState integration, no

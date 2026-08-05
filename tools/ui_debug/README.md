@@ -325,8 +325,15 @@ are `player_one` to `player_four`, each naming its cube colour, the same way
 `player_boards_v2_layout.json` names them. They are sample debug state, not `GameState`, in the
 same spirit as the v1 player board's mock state. Nothing here says what
 any of it means: there is no Tithe token logic, no Taxation rule, no sowing or acolyte placement,
-and no sow animation. The wheel is also not wired into `game_setup.html` yet. Those belong in
-later PRs.
+and no sow animation. Those belong in later PRs.
+
+`render_duty_wheel_panel()` returns the controls and the board as one fragment, which is how the
+generated setup view shows the wheel without copying any of this: it pairs that fragment with
+`DUTY_WHEEL_CONTROL_STYLES` and `render_duty_wheel_controls_script()` and brings its own wrapper
+and heading. Every hook the panel owns is prefixed — `duty-wheel-randomize`,
+`duty-wheel-move-merchant`, `duty-wheel-readout`, `.duty-wheel-controls`, `.duty-wheel-counts` —
+because the setup page already has a `.controls` row and `.readout` spans of its own, and the
+script is one IIFE that reaches for those hooks and nothing else on the host page.
 
 Asked for the board the prototype drew — static, with the Merchant on
 `merchant_token.baseline_position` — every drawing element the renderer emits matches the
@@ -409,6 +416,13 @@ reaches the Abbey or a role circle, and the acolyte controls therefore never men
 the only way out of it is `Move serf to Abbey`. A role circle holds at most two acolytes and the
 Abbey holds the eight its slots give it, so a button that would break either is disabled. Every
 board starts from `default_player_board_v2_state`, the board the prototype draws.
+
+The generated setup view now includes the Duty Wheel panel. It reuses the Duty Wheel renderer and
+includes local controls for sample Duty tile/Tithe setup cycling, Merchant movement, and 2p/3p/4p
+cube-column views. This is UI/debug state only and does not mutate `GameState` or implement
+gameplay legality. The wheel sits in its own full-width panel below the setup area and the player
+boards, so the map keeps the width it had, and it draws at its own size rather than filling that
+panel. Sow animation is still not implemented.
 
 All of it is visual only. The buttons change SVG attributes; they do not touch `GameState`, call
 `apply_action`, pick legal actions, or write scenario state. The view exists to check layout and
