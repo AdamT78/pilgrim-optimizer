@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Piety track with the house ornament applied, so it matches the mancala
+board and the Alms Table.
+
+Only two ornament devices survived on the board (the ground patterns were
+dropped in favour of plain green), and those two are the house style:
+
+    ornament-inset    a hairline just inside the panel's edge
+    ornament-header   a trefoil between two rules, beside the title
+
+Both are already on the Alms Table. Applying them here needs one
+structural change first, which is the whole point of this file:
+
+    The Piety strip has no room for them. Its boxes butt straight up
+    against the panel edge -- the side margin is 0.65 units and the top
+    and bottom margins are 9 -- so an inset hairline at 7.5 would run
+    through the numbers and clip the end stars. The strip has to become a
+    PANEL containing the boxes, rather than being the boxes, exactly as
+    the Alms Table is. That means side padding, a title band on top, and
+    a little more bottom margin.
+
+It also gains a title in the artwork. Right now the Piety track is the
+only one of the three boards whose name lives in the HTML heading rather
+than on the board itself, which is the most visible inconsistency of all.
+
+Everything else -- box pitch, disc sizes and colours, star geometry, the
+carefully calibrated number/circle/star rhythm -- is untouched.
+"""
+
+import math
+
+# --- palette and metrics, unchanged from piety_tracks.py --------------------
+INK = "#3A2F1E"
+MAP_GREY = "#B9B9B4"
+STAR_FILL = "#F4D03F"
+STAR_EDGE = "#B8960C"
+TOKEN_FILL = "#FFFFFF"
+WORKER_EDGE = "#8B7B4E"
+CIRCLE_RED, CIRCLE_RED_EDGE = "#C0392B", "#7A2020"
+CIRCLE_YELLOW, CIRCLE_YELLOW_EDGE = STAR_FILL, STAR_EDGE
+CIRCLE_BLUE, CIRCLE_BLUE_EDGE = "#2E86C1", "#1B4F72"
+
+# Discs match the Alms Table exactly: same radius, same gap within the 2x2,
+# and the same box pitch, so a disc and a step are literally identical
+# between the two tracks.
+TOKEN_R = 9
+TOKEN_GAP = 2
+TOKEN_STROKE = 1.2
+FUSED_RECT_STROKE = 2.5
+CORNER_R = 16
+MAP_BOARD_WIDTH = 1013.8
+
+GRID_W_TOKEN = 2 * (2 * TOKEN_R) + TOKEN_GAP        # 38
+SQUARE_1 = 44                                        # the Alms Table's BOX_W
+FUSED_BOX_PAD = (SQUARE_1 - GRID_W_TOKEN) / 2        # 3
+OUTER_PAD = FUSED_BOX_PAD + (FUSED_RECT_STROKE - TOKEN_STROKE) / 2
+
+N_FUSED = 13
+ABOVE_NUMBERS = [str(i) for i in range(12)] + ["12"]
+TRACK_NUMBERS = ["-5", "-4", "-3", "-2", "-1", "0", "1", "2", "3", "4", "5", "7", "9"]
+
+# --- the new panel around the strip -----------------------------------------
+TITLE = "Piety Track"
+TITLE_BAND = 24        # vertical room for the title, as on the Alms Table
+PANEL_PAD_X = 12       # side margin the inset hairline needs
+PANEL_PAD_TOP = 12
+PANEL_PAD_BOTTOM = 6   # on top of the strip's own 9, giving the hairline room
+ORNAMENT = True
+ORN_INSET = 7.5
+
+
+def star_path_d(cx, cy, outer_r, inner_r, points=5, rotation_deg=-90):
+    pts, step = [], math.pi / points
+    start = math.radians(rotation_deg)
+    for i in range(points * 2):
+        r = outer_r if i % 2 == 0 else inner_r
+        a = start + i * step
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return "M " + " L ".join(f"{x:.2f},{y:.2f}" for x, y in pts) + " Z"
+
+
+def star_extent(outer_r, inner_r, points=5, rotation_deg=-90):
+    step, start, ys = math.pi / points, math.radians(rotation_deg), []
+    for i in range(points * 2):
+        r = outer_r if i % 2 == 0 else inner_r
+        ys.append(r * math.sin(start + i * step))
+    return min(ys), max(ys)
+
+
+def circle_grid(cx, cy, r, gap, overrides=None, rows=(-1, 1)):
+    parts, offset = [], (2 * r + gap) / 2
+    for row in rows:
+        for col in (-1, 1):
+            fill, edge = TOKEN_FILL, WORKER_EDGE
+            if overrides and (row, col) in overrides:
+                fill, edge = overrides[(row, col)]
+            parts.append(
+                f'<circle cx="{cx + col * offset:.1f}" cy="{cy + row * offset:.1f}" '
+                f'r="{r}" fill="{fill}" stroke="{edge}" stroke-width="{TOKEN_STROKE}"/>')
+    return "".join(parts)
+
+
+# --- the two house ornaments -------------------------------------------------
+def panel_inset(w, h, d=ORN_INSET):
+    return (f'<rect x="{d}" y="{d}" width="{w - 2 * d:.1f}" height="{h - 2 * d:.1f}" '
+            f'rx="{CORNER_R - d:.1f}" ry="{CORNER_R - d:.1f}" fill="none" '
+            f'stroke="{INK}" stroke-opacity="0.28" stroke-width="1.2"/>')
+
+
+def trefoil_rule(x0, x1, y):
+    cx = (x0 + x1) / 2
+    lobes = "".join(
+        f'<circle cx="{cx + 4.6 * math.cos(math.radians(a)):.1f}" '
+        f'cy="{y + 4.6 * math.sin(math.radians(a)):.1f}" r="4.6" />'
+        for a in (-90, 30, 150))
+    return (f'<g fill="none" stroke="{INK}" stroke-opacity="0.34" stroke-width="1.3" '
+            f'stroke-linecap="round">{lobes}'
+            f'<path d="M {x0:.1f},{y:.1f} H {cx - 13:.1f} '
+            f'M {cx + 13:.1f},{y:.1f} H {x1:.1f}" /></g>')
+
+
+def title_text(x, y, text):
+    return (f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="start" '
+            f'font-family="Georgia, \'Times New Roman\', serif" font-size="15" '
+            f'font-weight="700" fill="{INK}">{text}</text>')
+
+
+# --- track -------------------------------------------------------------------
+def render(circle_rows=2):
+    outer_extra = OUTER_PAD - FUSED_BOX_PAD
+    strip_w = 2 * outer_extra + N_FUSED * SQUARE_1
+
+    GAP_CIRCLES_TO_STAR = 6
+    CAP_HEIGHT_RENDERED = 8.1      # measured from a real render, not estimated
+    NUM_BOTTOM_OFFSET = 1.74
+    star_outer_r, star_inner_r = 16, 16 * 0.45
+    star_min_y, star_max_y = star_extent(star_outer_r, star_inner_r)
+
+    top_margin = 9
+    num_display_y = top_margin + CAP_HEIGHT_RENDERED
+    num_bottom = num_display_y + NUM_BOTTOM_OFFSET
+    circles_top = num_bottom + GAP_CIRCLES_TO_STAR + TOKEN_R
+    circles_cy = circles_top + (2 * TOKEN_R + TOKEN_GAP) / 2
+    if circle_rows == 2:
+        circles_bottom = circles_cy + (2 * TOKEN_R + TOKEN_GAP) / 2 + TOKEN_R
+    else:
+        circles_cy = circles_top
+        circles_bottom = circles_cy + TOKEN_R
+    star_cy = circles_bottom + GAP_CIRCLES_TO_STAR - star_min_y
+    strip_h = star_cy + star_max_y + top_margin
+
+    panel_w = 2 * PANEL_PAD_X + strip_w
+    content_top = PANEL_PAD_TOP + TITLE_BAND
+    panel_h = content_top + strip_h + PANEL_PAD_BOTTOM
+
+    parts = [f'<rect x="0" y="0" width="{panel_w:.1f}" height="{panel_h:.1f}" '
+             f'rx="{CORNER_R}" ry="{CORNER_R}" fill="{MAP_GREY}" stroke="{MAP_GREY}" '
+             f'stroke-width="{FUSED_RECT_STROKE}"/>']
+
+    if ORNAMENT:
+        parts.append(panel_inset(panel_w, panel_h))
+        parts.append(title_text(PANEL_PAD_X + 2, PANEL_PAD_TOP + 15, TITLE))
+        parts.append(trefoil_rule(PANEL_PAD_X + 108, panel_w - PANEL_PAD_X - 10,
+                                  PANEL_PAD_TOP + 10))
+
+    for i in range(N_FUSED):
+        cx = PANEL_PAD_X + outer_extra + i * SQUARE_1 + SQUARE_1 / 2
+        parts.append(
+            f'<text x="{cx:.1f}" y="{content_top + num_display_y:.1f}" '
+            f'text-anchor="middle" font-family="Helvetica, Arial, sans-serif" '
+            f'font-size="9" font-weight="600" fill="{INK}">{ABOVE_NUMBERS[i]}</text>')
+        if i == 0:
+            if circle_rows == 2:
+                overrides = {(-1, 1): (CIRCLE_RED, CIRCLE_RED_EDGE),
+                             (1, -1): (CIRCLE_YELLOW, CIRCLE_YELLOW_EDGE),
+                             (1, 1): (CIRCLE_BLUE, CIRCLE_BLUE_EDGE)}
+                parts.append(circle_grid(cx, content_top + circles_cy, TOKEN_R,
+                                         TOKEN_GAP, overrides))
+            else:
+                parts.append(circle_grid(cx, content_top + circles_cy, TOKEN_R,
+                                         TOKEN_GAP,
+                                         {(0, 1): (CIRCLE_RED, CIRCLE_RED_EDGE)},
+                                         rows=(0,)))
+        parts.append(
+            f'<path d="{star_path_d(cx, content_top + star_cy, star_outer_r, star_inner_r)}" '
+            f'fill="{STAR_FILL}" stroke="{STAR_EDGE}" stroke-width="1.5" '
+            f'stroke-linejoin="round"/>'
+            f'<text x="{cx:.1f}" y="{content_top + star_cy + 3.0:.1f}" '
+            f'text-anchor="middle" font-family="Helvetica, Arial, sans-serif" '
+            f'font-size="9" font-weight="600" fill="#000000">{TRACK_NUMBERS[i]}</text>')
+
+    pad = 20
+    w, h = panel_w + 2 * pad, panel_h + 2 * pad
+    scale = MAP_BOARD_WIDTH / w
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-pad} {-pad} {w:.1f} {h:.1f}" '
+            f'width="{w * scale:.1f}" height="{h * scale:.1f}">\n'
+            f'  <rect x="{-pad}" y="{-pad}" width="{w:.1f}" height="{h:.1f}" fill="#000000"/>\n'
+            f'  {"".join(parts)}\n</svg>')
+
+
+PAGE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim — Piety Track (ornamented)</title>
+<style>
+  body {{ margin: 0; background: #000; font-family: Helvetica, Arial, sans-serif;
+         display: flex; flex-direction: column; align-items: center;
+         padding: 24px 12px 40px; box-sizing: border-box; }}
+  h1 {{ font-family: Georgia, serif; font-size: 26px; color: #F2EEDF; margin: 0 0 2px; }}
+  p.subtitle {{ color: #A8A296; font-size: 14px; margin: 0 0 18px; text-align: center;
+                max-width: 720px; }}
+  .board-wrap {{ background: #000; border: 1px solid #333; border-radius: 10px;
+                 box-shadow: 0 2px 10px rgba(0,0,0,.5); padding: 10px;
+                 display: flex; flex-direction: column; align-items: center; }}
+  .board-wrap svg {{ display: block; max-width: 95vw; height: auto; }}
+  .track-row {{ margin-bottom: 18px; }}
+  .track-row:last-child {{ margin-bottom: 0; }}
+</style>
+</head>
+<body>
+  <h1>Piety track — with house ornament</h1>
+  <p class="subtitle">The strip is now a panel containing the boxes, which is what makes room
+  for the inset hairline and the titled header used on the mancala board and the Alms Table.
+  Top: 3–4 player. Bottom: 2 player.</p>
+  <div class="board-wrap">
+    <div class="track-row">{a}</div>
+    <div class="track-row">{b}</div>
+  </div>
+</body>
+</html>
+'''
+
+if __name__ == "__main__":
+    a, b = render(2), render(1)
+    with open("piety_track_ornamented.svg", "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n' + a + "\n")
+    with open("piety_track_ornamented_2p.svg", "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n' + b + "\n")
+    with open("piety_track_ornamented.html", "w") as f:
+        f.write(PAGE.format(a=a, b=b))
+    print("wrote piety_track_ornamented.html + 2 svg")

@@ -16,6 +16,10 @@ DONATED_BUILDING_TILES_HTML = PROTOTYPES_DIR / "donated_building_tiles.html"
 SHIP_MARKER_HTML = PROTOTYPES_DIR / "ship_marker.html"
 PIETY_TRACKS_HTML = PROTOTYPES_DIR / "piety_tracks.html"
 PIETY_TRACKS_SOURCE = PROTOTYPE_SOURCES_DIR / "piety_tracks.py.txt"
+PIETY_TRACKS_V2_HTML = PROTOTYPES_DIR / "piety_tracks_v2.html"
+PIETY_TRACK_V2_SVG = PROTOTYPES_DIR / "piety_track_v2.svg"
+PIETY_TRACK_2P_V2_SVG = PROTOTYPES_DIR / "piety_track_2p_v2.svg"
+PIETY_TRACKS_V2_SOURCE = PROTOTYPE_SOURCES_DIR / "piety_tracks_v2.py.txt"
 PILGRIMAGE_SITES_HTML = PROTOTYPES_DIR / "pilgrimage_sites.html"
 PILGRIMAGE_SITES_SOURCE = PROTOTYPE_SOURCES_DIR / "pilgrimage_sites.py.txt"
 DUTY_WHEEL_HTML = PROTOTYPES_DIR / "duty_wheel.html"
@@ -147,6 +151,64 @@ def test_piety_tracks_prototype_source_is_the_generator_code() -> None:
     assert "render_fused" in content
 
 
+def test_piety_tracks_v2_prototype_pages_and_source_exist() -> None:
+    assert PIETY_TRACKS_V2_HTML.is_file()
+    assert PIETY_TRACK_V2_SVG.is_file()
+    assert PIETY_TRACK_2P_V2_SVG.is_file()
+    assert PIETY_TRACKS_V2_SOURCE.is_file()
+    # v2 is a second baseline, not a replacement: v1 stays where it is.
+    assert PIETY_TRACKS_HTML.is_file()
+    assert PIETY_TRACKS_SOURCE.is_file()
+
+
+def test_piety_tracks_v2_prototype_is_identifiable() -> None:
+    content = PIETY_TRACKS_V2_HTML.read_text(encoding="utf-8")
+    assert "Pilgrim" in content
+    assert "Piety Track" in content
+    assert "Piety track — with house ornament" in content
+
+
+def test_piety_tracks_v2_prototype_shows_both_player_count_variants() -> None:
+    content = PIETY_TRACKS_V2_HTML.read_text(encoding="utf-8")
+    assert "3–4 player" in content
+    assert "2 player" in content
+    assert content.count("<svg") == 2
+
+
+def test_piety_tracks_v2_prototype_wears_the_house_ornament() -> None:
+    """The point of v2: the inset hairline and the titled header the other boards already have."""
+    content = PIETY_TRACKS_V2_HTML.read_text(encoding="utf-8")
+
+    assert "house ornament" in content
+    assert "inset" in content
+    # v2 puts the board's name in the artwork; v1 leaves it to the HTML heading alone.
+    assert "<text" in content
+    assert ">Piety Track</text>" in content
+    assert ">Piety Track</text>" not in PIETY_TRACKS_HTML.read_text(encoding="utf-8")
+
+
+def test_piety_track_v2_svg_baselines_are_the_two_tracks_on_their_own() -> None:
+    for path in (PIETY_TRACK_V2_SVG, PIETY_TRACK_2P_V2_SVG):
+        content = path.read_text(encoding="utf-8")
+        assert "<svg" in content
+        assert "Piety Track" in content
+        assert content.count("<svg") == 1
+
+    # One disc per player, all at position 0: four seats on one track, two on the other.
+    assert PIETY_TRACK_V2_SVG.read_text(encoding="utf-8").count('r="9"') == 4
+    assert PIETY_TRACK_2P_V2_SVG.read_text(encoding="utf-8").count('r="9"') == 2
+
+
+def test_piety_tracks_v2_prototype_source_is_the_generator_code() -> None:
+    content = PIETY_TRACKS_V2_SOURCE.read_text(encoding="utf-8")
+
+    assert "Piety track with the house ornament applied" in content
+    assert "ornament-inset" in content
+    assert "ornament-header" in content
+    assert "3–4 player" in content
+    assert "2 player" in content
+
+
 def test_pilgrimage_sites_prototype_page_and_source_exist() -> None:
     assert PILGRIMAGE_SITES_HTML.is_file()
     assert PILGRIMAGE_SITES_SOURCE.is_file()
@@ -264,6 +326,12 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "prototypes/donated_building_tiles.html" in content
     assert "prototypes/ship_marker.html" in content
     assert "prototypes/piety_tracks.html" in content
+    assert "prototypes/piety_tracks_v2.html" in content
+    assert "Piety tracks v2 prototype baseline" in content
+    assert "prototypes/piety_track_v2.svg" in content
+    assert "Piety track v2 SVG prototype baseline" in content
+    assert "prototypes/piety_track_2p_v2.svg" in content
+    assert "Piety track 2p v2 SVG prototype baseline" in content
     assert "prototypes/pilgrimage_sites.html" in content
     assert "Pilgrimage sites prototype baseline" in content
     assert "prototypes/duty_wheel.html" in content
