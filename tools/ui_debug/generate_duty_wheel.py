@@ -34,7 +34,7 @@ def generate_duty_wheel_page(
     destination = default_output_path() if output_path is None else Path(output_path)
     layout = load_duty_wheel_layout(layout_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(render_duty_wheel_html(layout), encoding="utf-8")
+    destination.write_text(render_duty_wheel_html(layout, interactive=True), encoding="utf-8")
     return destination
 
 

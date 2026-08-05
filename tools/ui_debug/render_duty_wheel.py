@@ -2,18 +2,23 @@
 
 The duty wheel holds the duty tiles away from the map so the map stays readable: eight duty
 spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and four
-arrows running to and from the middle. Each duty shows the cubes standing on it as four columns
-on a shared baseline, and most of them carry a capsule with a Tithe token icon.
+arrows running to and from the middle. Each duty shows the cubes standing on it as one column per
+seat on a shared baseline, and most of them carry a capsule with a Tithe token icon.
 
 Two pieces of the picture are named here so a later renderer does not have to guess:
 
 - the purple disc is the **Merchant token**, drawn on whichever duty `merchant_token.starts_on`
-  names (Produce, for now);
+  names (Taxation, for the debug page);
 - the resource icons in the capsules are **Tithe tokens**.
 
-Neither moves. This module draws one fixed picture: there is no Merchant movement, no skipping
-of Taxation, no Tithe token logic, and no sowing. It is a debug/visual tool that reads
-`duty_wheel_layout.json` and emits SVG/HTML, connected to nothing.
+Drawn plain, this is one fixed picture. Drawn `interactive`, the board also carries every slot the
+page's debug buttons can turn on — a Merchant token on each duty, every Tithe token icon on each
+duty that has a capsule, and a cube tally per player count — hidden until they are wanted, so a
+click flips opacity instead of redrawing the board. Those buttons cycle sample setups, walk the
+Merchant around the ring, and switch between the two-, three-, and four-player views; they touch
+nothing else. There is no sowing, no sow animation, no Tithe token logic, and no rule saying what
+any of this means. It is a debug/visual tool that reads `duty_wheel_layout.json` and emits
+SVG/HTML, connected to nothing.
 
 Geometry mirrors `prototypes/duty_wheel.svg`, which stays the visual baseline. Every space is
 placed from one anchor, the centre of its arc, and everything else on that space — the flat-top
@@ -38,8 +43,9 @@ SPACE_STROKE_WIDTH = 2.438679
 LABEL_OFFSET_Y = -50.7
 LABEL_FONT_SIZE = 15.5
 
-# Cube tally: four columns on a shared baseline, one per player, kept even at zero so the
-# stack tops stay comparable across spaces.
+# Cube tally: one column per seat on a shared baseline, kept even at zero so the stack tops stay
+# comparable across spaces. The columns are centred on the duty, so a shorter table narrows the
+# tally around the middle of the space instead of leaving a gap on the right.
 CUBE_SIZE = 13.0
 CUBE_CELL_HEIGHT = 18.0
 CUBE_COLUMN_WIDTH = 22.0
@@ -60,6 +66,10 @@ ORNAMENT_TREFOIL_RADIUS = 4.6
 ORNAMENT_RULE_GAP = 15.0
 
 RING_ARROW_COUNT = 8
+
+# How far the movable duty tiles are turned around the ring in each sample setup. The first is
+# the board as the layout describes it; the others are just far enough apart to look different.
+DUTY_SETUP_ROTATIONS = (0, 1, 3)
 
 _WHEAT_STALKS = (
     (-8.2, -10.8, -6.8, -9.4, -22),
@@ -126,6 +136,88 @@ def default_duty_wheel_state(layout: dict) -> dict:
     }
 
 
+def players_for_count(layout: dict, count: int) -> list[dict]:
+    """The seats in play at a two-, three-, or four-player count, in seat order."""
+    players = layout["players"]
+    if count not in layout["player_counts"]:
+        raise ValueError(f"no {count}-player view: the layout offers {layout['player_counts']}")
+    return players[:count]
+
+
+def tally_columns(layout: dict, duty: dict, count: int) -> list[dict]:
+    """Where each seat's cube column stands on one duty, left to right.
+
+    The group of visible columns is centred on the duty, so dropping seats narrows the tally
+    around the middle of the space rather than leaving it hanging off to one side. `x` is the
+    left edge of a cube, `center_x` the middle of the column it stands in.
+    """
+    cx, _ = duty["center"]
+    players = players_for_count(layout, count)
+    left = cx - len(players) * CUBE_COLUMN_WIDTH / 2
+    return [
+        {
+            "player": player["id"],
+            "x": left + column * CUBE_COLUMN_WIDTH + (CUBE_COLUMN_WIDTH - CUBE_SIZE) / 2,
+            "center_x": left + (column + 0.5) * CUBE_COLUMN_WIDTH,
+        }
+        for column, player in enumerate(players)
+    ]
+
+
+def merchant_path(layout: dict) -> list[str]:
+    """The positions the Merchant can stand on: all eight duty tiles, clockwise.
+
+    The City is not one of them — it is not a duty tile, and no ring arrow runs through it.
+    """
+    return list(layout["clockwise_order"])
+
+
+def next_merchant_position(layout: dict, current: str) -> str:
+    """The next duty tile clockwise, wrapping round the ring."""
+    path = merchant_path(layout)
+    return path[(path.index(current) + 1) % len(path)]
+
+
+def duty_setups(layout: dict) -> list[list[dict]]:
+    """Sample arrangements of the duty tiles, one entry per ring position, clockwise.
+
+    Debug fodder, not a setup rule: the first is the board as the layout describes it, and the
+    rest turn the movable tiles around the ring by a fixed number of places. A tile keeps its own
+    Tithe token wherever it lands, which is why Taxation holds its position in all of them: it is
+    the one duty with no Tithe token, so it is also the one position drawn without a capsule to
+    put a token in. The City is not a duty tile at all and never takes part.
+    """
+    order = layout["clockwise_order"]
+    movable = [duty["id"] for duty in ring_duties(layout) if duty["tithe_icon"]]
+
+    setups = []
+    for rotation in DUTY_SETUP_ROTATIONS:
+        turned = movable[rotation:] + movable[:rotation]
+        landed = dict(zip(movable, turned, strict=True))
+        setups.append(
+            [
+                {
+                    "position": position,
+                    "duty": landed.get(position, position),
+                    "label": duty_position_by_id(layout, landed.get(position, position))["label"],
+                    "tithe_icon": duty_position_by_id(layout, landed.get(position, position))[
+                        "tithe_icon"
+                    ],
+                }
+                for position in order
+            ]
+        )
+    return setups
+
+
+def merchant_slot_center(duty: dict) -> tuple[float, float]:
+    """Where the Merchant stands on a duty: the capsule's right cap, or the empty band on
+    Taxation, which has no capsule to share."""
+    cx, cy = duty["center"]
+    _, merchant_x, cap_y = _capsule_caps(cx, cy)
+    return (merchant_x if duty.get("tithe_icon") else cx), cap_y
+
+
 def space_path_data(cx: float, cy: float, radius: float = SPACE_RADIUS) -> str:
     """A flat top on the arc centre's level, closed by a half circle below it."""
     top = cy - radius
@@ -139,36 +231,49 @@ def _render_space(duty: dict) -> str:
     cx, cy = duty["center"]
     return (
         f'<path d="{space_path_data(cx, cy)}" class="board-circle"/>'
-        f'<text x="{cx:.1f}" y="{cy + LABEL_OFFSET_Y:.1f}"'
-        f' class="circle-label">{escape(duty["label"])}</text>'
+        f'<text x="{cx:.1f}" y="{cy + LABEL_OFFSET_Y:.1f}" class="circle-label"'
+        f' data-duty-label="{duty["id"]}">{escape(duty["label"])}</text>'
     )
 
 
-def render_cube_tally(layout: dict, duty: dict, counts: dict) -> str:
-    """The cubes standing on one duty, one column per player, growing up from the baseline."""
-    cx, cy = duty["center"]
-    players = layout["players"]
-    width = len(players) * CUBE_COLUMN_WIDTH
-    left = cx - width / 2
+def render_cube_tally(
+    layout: dict,
+    duty: dict,
+    counts: dict,
+    count: int | None = None,
+    visible: bool = True,
+) -> str:
+    """The cubes standing on one duty, one column per seat, growing up from the baseline.
+
+    `count` picks how many seats are in play; the columns and the baseline under them are drawn
+    centred on the duty either way, so the two- and three-player tallies sit in the middle of the
+    space rather than off to the left.
+    """
+    _, cy = duty["center"]
+    seats = count or layout["default_player_count"]
+    players = players_for_count(layout, seats)
+    columns = tally_columns(layout, duty, seats)
     baseline = cy + TALLY_OFFSET_Y
+    left = columns[0]["center_x"] - CUBE_COLUMN_WIDTH / 2
+    right = columns[-1]["center_x"] + CUBE_COLUMN_WIDTH / 2
     ink = layout["palette"]["ink"]
 
     parts = [
-        f'<line x1="{left:.1f}" y1="{baseline:.1f}" x2="{left + width:.1f}" y2="{baseline:.1f}"'
+        f'<line x1="{left:.1f}" y1="{baseline:.1f}" x2="{right:.1f}" y2="{baseline:.1f}"'
         f' stroke="{ink}" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round"/>'
     ]
-    for column, player in enumerate(players):
-        x = left + column * CUBE_COLUMN_WIDTH + (CUBE_COLUMN_WIDTH - CUBE_SIZE) / 2
+    for player, column in zip(players, columns, strict=True):
         for index in range(min(int(counts.get(player["id"], 0)), CUBE_STACK_LIMIT)):
             y = baseline - (index + 1) * CUBE_CELL_HEIGHT + (CUBE_CELL_HEIGHT - CUBE_SIZE) / 2
             parts.append(
-                f'<rect x="{x:.1f}" y="{y:.1f}" width="{CUBE_SIZE:g}" height="{CUBE_SIZE:g}"'
-                f' fill="{player["fill"]}" stroke="#000000"'
+                f'<rect x="{column["x"]:.1f}" y="{y:.1f}" width="{CUBE_SIZE:g}"'
+                f' height="{CUBE_SIZE:g}" fill="{player["fill"]}" stroke="#000000"'
                 f' stroke-width="{player["cube_stroke_width"]:g}"'
                 f' data-player="{player["id"]}"/>'
             )
     return (
         f'<g class="{_class_name(duty["id"], "cube-tally")}" data-cube-tally="{duty["id"]}"'
+        f' data-player-count="{seats}" opacity="{1 if visible else 0}"'
         f' aria-label="cube counts">{"".join(parts)}</g>'
     )
 
@@ -243,8 +348,19 @@ def _icon_cornucopia(ink: str, horn_path: str) -> str:
 _ICON_BODIES = {"coin": _icon_coin, "stone": _icon_stone, "wheat": _icon_wheat}
 
 
-def render_tithe_icon(layout: dict, icon_id: str, cx: float, cy: float) -> str:
-    """One Tithe token icon, drawn at its own scale in the left cap of a duty's capsule."""
+def render_tithe_icon(
+    layout: dict,
+    icon_id: str,
+    cx: float,
+    cy: float,
+    position: str = "",
+    visible: bool = True,
+) -> str:
+    """One Tithe token icon, drawn at its own scale in the left cap of a duty's capsule.
+
+    An icon tagged with the ring `position` it belongs to is one the controls can turn on; it is
+    drawn hidden unless it is the one that position currently shows.
+    """
     spec = layout["tithe_icons"][icon_id]
     ink = layout["palette"]["ink"]
     if icon_id == "cornucopia":
@@ -253,20 +369,47 @@ def render_tithe_icon(layout: dict, icon_id: str, cx: float, cy: float) -> str:
         body = _ICON_BODIES[icon_id](ink)
     else:
         raise KeyError(f"unknown tithe icon: {icon_id!r}")
+    tags = f' data-duty-position="{position}" opacity="{1 if visible else 0:g}"' if position else ""
     return (
-        f'<g class="{icon_id}-icon" data-tithe-token="{icon_id}"'
+        f'<g class="{icon_id}-icon" data-tithe-token="{icon_id}"{tags}'
         f' transform="translate({cx:.1f} {cy + spec["offset_y"]:.1f}) scale({spec["scale"]:g})"'
         f' aria-label="{escape(spec["label"])}">{body}</g>'
     )
 
 
-def render_merchant_token(layout: dict, cx: float, cy: float) -> str:
-    """The purple disc. It sits where the layout says and does not move."""
+def render_merchant_token(
+    layout: dict, cx: float, cy: float, position: str = "", visible: bool = True
+) -> str:
+    """The purple disc.
+
+    Tagged with the ring `position` it stands on, it becomes one of the slots the Move Merchant
+    button turns on and off; the disc itself carries no rules and moves nothing but itself.
+    """
     merchant = layout["merchant_token"]
+    tags = f' data-duty-position="{position}" opacity="{1 if visible else 0:g}"' if position else ""
     return (
         f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{CAPSULE_CAP_RADIUS:g}"'
         f' fill="{merchant["color"]}" stroke="{merchant["edge"]}" stroke-width="2"'
-        f' data-token="merchant" aria-label="{escape(merchant["label"])}"/>'
+        f' data-token="merchant"{tags} aria-label="{escape(merchant["label"])}"/>'
+    )
+
+
+def _capsule_fill(layout: dict, duty: dict) -> str:
+    palette = layout["palette"]
+    return (
+        f'<path d="{_capsule_path_data(*duty["center"])}" fill="{palette["capsule_fill"]}"'
+        f' stroke="{palette["capsule_edge"]}" stroke-width="2" stroke-linecap="round"'
+        ' stroke-linejoin="round"/>'
+    )
+
+
+def _capsule_outline(layout: dict, duty: dict) -> str:
+    """The capsule border on its own, redrawn over the discs so they stay inside one outline."""
+    palette = layout["palette"]
+    return (
+        f'<path d="{_capsule_path_data(*duty["center"])}" fill="none"'
+        f' stroke="{palette["capsule_edge"]}" stroke-width="2" stroke-linecap="round"'
+        ' stroke-linejoin="round"/>'
     )
 
 
@@ -278,8 +421,6 @@ def _render_tithe_capsule(layout: dict, duty: dict, icon_id: str, merchant: bool
     """
     palette = layout["palette"]
     tithe_x, merchant_x, cap_y = _capsule_caps(*duty["center"])
-    capsule = _capsule_path_data(*duty["center"])
-    stroke = f'stroke="{palette["capsule_edge"]}" stroke-width="2" stroke-linecap="round"'
 
     if merchant:
         shape = (
@@ -287,26 +428,77 @@ def _render_tithe_capsule(layout: dict, duty: dict, icon_id: str, merchant: bool
             f'<circle cx="{tithe_x:.1f}" cy="{cap_y:.1f}" r="{CAPSULE_CAP_RADIUS:g}"'
             f' fill="{palette["capsule_fill"]}"/>'
             f"{render_merchant_token(layout, merchant_x, cap_y)}</g>"
-            f'<path d="{capsule}" fill="none" {stroke} stroke-linejoin="round"/>'
+            f"{_capsule_outline(layout, duty)}"
         )
     else:
-        shape = (
-            f'<path d="{capsule}" fill="{palette["capsule_fill"]}" {stroke}'
-            ' stroke-linejoin="round"/>'
-        )
+        shape = _capsule_fill(layout, duty)
     icon = render_tithe_icon(layout, icon_id, tithe_x, cap_y)
     return f'<g class="{_class_name(duty["id"], "tithe-shape")}">{shape}{icon}</g>'
 
 
-def render_duty_space(layout: dict, duty: dict, counts: dict, merchant: bool = False) -> str:
+def _render_interactive_capsule(layout: dict, duty: dict, merchant: bool) -> str:
+    """The capsule with every slot the controls can turn on: the Merchant, and each Tithe token.
+
+    The Merchant is drawn between the capsule's fill and its border, clipped to the capsule, so
+    turning him on joins the two discs into one shape exactly as the static board draws it.
+    """
+    tithe_x, merchant_x, cap_y = _capsule_caps(*duty["center"])
+    icons = "".join(
+        render_tithe_icon(
+            layout, icon_id, tithe_x, cap_y, duty["id"], icon_id == duty["tithe_icon"]
+        )
+        for icon_id in layout["tithe_icons"]
+    )
+    return (
+        f'<g class="{_class_name(duty["id"], "tithe-shape")}">'
+        f"{_capsule_fill(layout, duty)}"
+        f'<g clip-path="url(#{duty["id"]}-capsule-clip)">'
+        f"{render_merchant_token(layout, merchant_x, cap_y, duty['id'], merchant)}</g>"
+        f"{_capsule_outline(layout, duty)}{icons}</g>"
+    )
+
+
+def _render_tallies(layout: dict, duty: dict, counts: dict, interactive: bool) -> str:
+    """The cube tally, or — interactive — one tally per player count with the default showing.
+
+    Each count gets its own group because the columns move when seats drop out: the visible ones
+    stay centred on the duty. Switching views is then a matter of flipping which group is drawn.
+    """
+    if not interactive:
+        return render_cube_tally(layout, duty, counts)
+    default = layout["default_player_count"]
+    return "".join(
+        render_cube_tally(layout, duty, counts, count, visible=count == default)
+        for count in layout["player_counts"]
+    )
+
+
+def render_duty_space(
+    layout: dict,
+    duty: dict,
+    counts: dict,
+    merchant: bool = False,
+    interactive: bool = False,
+    ring_index: int | None = None,
+) -> str:
     """One duty: its space, title, cube tally, and the capsule holding its Tithe token."""
     parts = [_render_space(duty)]
     if duty["id"] != layout["city_id"]:
-        parts.append(render_cube_tally(layout, duty, counts))
-    icon_id = duty.get("tithe_icon")
-    if icon_id:
+        parts.append(_render_tallies(layout, duty, counts, interactive))
+
+    icon_id = duty["tithe_icon"]
+    if icon_id and interactive:
+        parts.append(_render_interactive_capsule(layout, duty, merchant))
+    elif icon_id:
         parts.append(_render_tithe_capsule(layout, duty, icon_id, merchant))
-    return f'<g data-duty="{duty["id"]}">{"".join(parts)}</g>'
+    elif interactive or merchant:
+        # Taxation has no capsule for the Merchant to share, so he stands in the empty band.
+        slot_x, slot_y = merchant_slot_center(duty)
+        position = duty["id"] if interactive else ""
+        parts.append(render_merchant_token(layout, slot_x, slot_y, position, merchant))
+
+    index = "" if ring_index is None else f' data-duty-ring-index="{ring_index}"'
+    return f'<g data-duty="{duty["id"]}"{index}>{"".join(parts)}</g>'
 
 
 def _render_ornaments(layout: dict) -> str:
@@ -384,17 +576,25 @@ _STYLE_TEMPLATE = (
 )
 
 
-def _render_defs(layout: dict, merchant_duty_id: str) -> str:
+def _render_defs(layout: dict, merchant_duty_id: str, interactive: bool = False) -> str:
+    """The gradients, the capsule clips, and the board's own stylesheet.
+
+    A static board only needs the clip belonging to the duty the Merchant stands on; an
+    interactive one needs every capsule's, since he can be turned on at any of them.
+    """
     palette = layout["palette"]
     parchment_from, parchment_to = palette["parchment"]
     ground_from, ground_to = palette["ground"]
-    clip = ""
-    if merchant_duty_id:
-        cx, cy = duty_position_by_id(layout, merchant_duty_id)["center"]
-        clip = (
-            f'<clipPath id="{merchant_duty_id}-capsule-clip">'
-            f'<path d="{_capsule_path_data(cx, cy)}"/></clipPath>'
-        )
+    if interactive:
+        clipped = [duty for duty in ring_duties(layout) if duty["tithe_icon"]]
+    else:
+        clipped = [duty_position_by_id(layout, merchant_duty_id)] if merchant_duty_id else []
+    clip = "".join(
+        f'<clipPath id="{duty["id"]}-capsule-clip">'
+        f'<path d="{_capsule_path_data(*duty["center"])}"/></clipPath>'
+        for duty in clipped
+        if duty["tithe_icon"]
+    )
     style = _STYLE_TEMPLATE.format(
         space_edge=palette["space_edge"],
         space_stroke_width=_num(SPACE_STROKE_WIDTH),
@@ -415,13 +615,23 @@ def _render_defs(layout: dict, merchant_duty_id: str) -> str:
     )
 
 
-def render_duty_wheel_svg(layout: dict, board_state: dict | None = None) -> str:
-    """The whole board: title, ground, arrows, and the nine spaces with their contents."""
+def render_duty_wheel_svg(
+    layout: dict,
+    board_state: dict | None = None,
+    merchant_on: str | None = None,
+    interactive: bool = False,
+) -> str:
+    """The whole board: title, ground, arrows, and the nine spaces with their contents.
+
+    `merchant_on` overrides where the Merchant stands, which the baseline parity check uses to
+    ask for the board the prototype drew. `interactive` adds the hidden slots the page's debug
+    controls switch between; left off, the board is the fixed picture the prototype shows.
+    """
     board = layout["board"]
     palette = layout["palette"]
     page = layout["page"]
     state = default_duty_wheel_state(layout) if board_state is None else board_state
-    merchant_duty_id = layout["merchant_token"]["starts_on"]
+    merchant_duty_id = merchant_on or layout["merchant_token"]["starts_on"]
     cx, cy = board["center"]
     frame = board["frame"]
 
@@ -431,13 +641,15 @@ def render_duty_wheel_svg(layout: dict, board_state: dict | None = None) -> str:
     )
 
     spaces = [_render_space(duty_position_by_id(layout, layout["city_id"]))]
-    for duty in ring_duties(layout):
+    for index, duty in enumerate(ring_duties(layout)):
         spaces.append(
             render_duty_space(
                 layout,
                 duty,
                 state.get(duty["id"], {}),
                 merchant=duty["id"] == merchant_duty_id,
+                interactive=interactive,
+                ring_index=index if interactive else None,
             )
         )
     spaces.append(_render_ornaments(layout))
@@ -449,7 +661,7 @@ def render_duty_wheel_svg(layout: dict, board_state: dict | None = None) -> str:
         f' data-merchant-token="{merchant_duty_id}">'
         f'<title id="svg-title">{escape(page["board_title"])}</title>'
         f'<desc id="svg-description">{escape(page["description"])}</desc>'
-        f"{_render_defs(layout, merchant_duty_id)}"
+        f"{_render_defs(layout, merchant_duty_id, interactive)}"
         f'<rect width="{board["width"]:g}" height="{board["height"]:g}"'
         f' fill="{palette["page_background"]}"/>'
         f'<rect x="{frame["x"]:g}" y="{frame["y"]:g}" width="{frame["width"]:g}"'
@@ -472,10 +684,167 @@ def render_duty_wheel_svg(layout: dict, board_state: dict | None = None) -> str:
     )
 
 
-def render_duty_wheel_html(layout: dict, board_state: dict | None = None) -> str:
-    """The board on its own page, the way the baseline prototype presents it."""
+_CONTROLS_HTML = """  <div class="controls">
+    <button type="button" id="randomize-duties">Randomize Duty tiles</button>
+    <button type="button" id="move-merchant">Move Merchant</button>
+    <span class="player-counts" role="group" aria-label="Player count">{player_counts}</span>
+    <span class="readout" id="duty-wheel-readout">{readout}</span>
+  </div>
+"""
+
+_PLAYER_COUNT_BUTTON = (
+    '<button type="button" data-player-count="{count}" aria-pressed="{pressed}">{count}p</button>'
+)
+
+# Plain inline JavaScript, no dependencies. It flips opacity on slots the renderer already drew
+# and rewrites the eight duty titles; it decides nothing about the game.
+_CONTROLS_SCRIPT = """<script>
+(function () {
+  var SETUPS = __SETUPS__;
+  var MERCHANT_PATH = __MERCHANT_PATH__;
+  var board = document.querySelector('[data-component="duty-wheel"]');
+  var readout = document.getElementById('duty-wheel-readout');
+  var countButtons = document.querySelectorAll('.player-counts button');
+  var setupIndex = 0;
+  var merchant = __START__;
+  var playerCount = __PLAYER_COUNT__;
+
+  function currentSetup() {
+    return SETUPS[setupIndex];
+  }
+
+  function entryFor(position) {
+    return currentSetup().filter(function (entry) { return entry.position === position; })[0];
+  }
+
+  function applySetup() {
+    currentSetup().forEach(function (entry) {
+      var label = board.querySelector('[data-duty-label="' + entry.position + '"]');
+      if (label) { label.textContent = entry.label; }
+      var icons = board.querySelectorAll(
+        '[data-duty-position="' + entry.position + '"][data-tithe-token]'
+      );
+      Array.prototype.forEach.call(icons, function (icon) {
+        var shown = icon.getAttribute('data-tithe-token') === entry.tithe_icon;
+        icon.setAttribute('opacity', shown ? '1' : '0');
+      });
+    });
+  }
+
+  function applyMerchant() {
+    var tokens = board.querySelectorAll('[data-token="merchant"]');
+    Array.prototype.forEach.call(tokens, function (token) {
+      var here = token.getAttribute('data-duty-position') === merchant;
+      token.setAttribute('opacity', here ? '1' : '0');
+    });
+    board.setAttribute('data-merchant-token', merchant);
+  }
+
+  // The next duty tile clockwise, wrapping round the ring. The City is not on the path.
+  function nextMerchantPosition(current) {
+    return MERCHANT_PATH[(MERCHANT_PATH.indexOf(current) + 1) % MERCHANT_PATH.length];
+  }
+
+  // Each player count has its own tally drawn on every duty, already centred for that many
+  // seats, so switching views only decides which of them shows.
+  function applyPlayerCount() {
+    var tallies = board.querySelectorAll('[data-cube-tally]');
+    Array.prototype.forEach.call(tallies, function (tally) {
+      var shown = tally.getAttribute('data-player-count') === String(playerCount);
+      tally.setAttribute('opacity', shown ? '1' : '0');
+    });
+    Array.prototype.forEach.call(countButtons, function (button) {
+      var active = button.getAttribute('data-player-count') === String(playerCount);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function updateReadout() {
+    readout.textContent =
+      'Setup ' + (setupIndex + 1) + ' of ' + SETUPS.length +
+      ' \\u2014 Merchant on ' + entryFor(merchant).label +
+      ' \\u2014 ' + playerCount + ' players';
+  }
+
+  document.getElementById('randomize-duties').addEventListener('click', function () {
+    setupIndex = (setupIndex + 1) % SETUPS.length;
+    applySetup();
+    updateReadout();
+  });
+
+  document.getElementById('move-merchant').addEventListener('click', function () {
+    merchant = nextMerchantPosition(merchant);
+    applyMerchant();
+    updateReadout();
+  });
+
+  Array.prototype.forEach.call(countButtons, function (button) {
+    button.addEventListener('click', function () {
+      playerCount = Number(button.getAttribute('data-player-count'));
+      applyPlayerCount();
+      updateReadout();
+    });
+  });
+
+  updateReadout();
+})();
+</script>
+"""
+
+
+def duty_wheel_readout(
+    layout: dict,
+    setup_index: int = 0,
+    merchant: str | None = None,
+    player_count: int | None = None,
+) -> str:
+    """What the controls report: the sample setup, where the Merchant stands, and the seat count."""
+    position = merchant or layout["merchant_token"]["starts_on"]
+    seats = player_count or layout["default_player_count"]
+    setups = duty_setups(layout)
+    label = next(entry["label"] for entry in setups[setup_index] if entry["position"] == position)
+    return f"Setup {setup_index + 1} of {len(setups)} — Merchant on {label} — {seats} players"
+
+
+def render_duty_wheel_controls_script(layout: dict) -> str:
+    """The page's debug buttons, wired to the slots the interactive board draws."""
+    return (
+        _CONTROLS_SCRIPT.replace("__SETUPS__", json.dumps(duty_setups(layout)))
+        .replace("__MERCHANT_PATH__", json.dumps(merchant_path(layout)))
+        .replace("__START__", json.dumps(layout["merchant_token"]["starts_on"]))
+        .replace("__PLAYER_COUNT__", json.dumps(layout["default_player_count"]))
+    )
+
+
+def render_duty_wheel_html(
+    layout: dict, board_state: dict | None = None, interactive: bool = False
+) -> str:
+    """The board on its own page, the way the baseline prototype presents it.
+
+    `interactive` is what the generated page uses: it adds the two debug buttons, which cycle
+    sample duty setups and walk the Merchant token around the ring.
+    """
     palette = layout["palette"]
     merchant = layout["merchant_token"]
+    buttons = "".join(
+        _PLAYER_COUNT_BUTTON.format(
+            count=count, pressed=str(count == layout["default_player_count"]).lower()
+        )
+        for count in layout["player_counts"]
+    )
+    controls = (
+        _CONTROLS_HTML.format(player_counts=buttons, readout=escape(duty_wheel_readout(layout)))
+        if interactive
+        else ""
+    )
+    script = render_duty_wheel_controls_script(layout) if interactive else ""
+    moves = (
+        "The buttons above cycle sample Duty tile setups, walk the Merchant clockwise around the "
+        "eight duty tiles — the City is not on his path — and switch the cube tallies between "
+        "the two-, three-, and four-player views."
+        if interactive
+        else "Neither moves."
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -492,6 +861,31 @@ def render_duty_wheel_html(layout: dict, board_state: dict | None = None) -> str
     font-family: Helvetica, Arial, sans-serif;
   }}
   svg {{ display: block; width: min(100vw, {layout["board"]["width"]:g}px); height: auto; }}
+  .controls {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px 12px 4px;
+  }}
+  .controls button {{
+    background: #1C1C1C;
+    border: 1px solid #4A4A4A;
+    border-radius: 6px;
+    color: #F2EEDF;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+  }}
+  .controls button:hover {{ background: #2A2A2A; }}
+  .player-counts {{ display: flex; gap: 4px; }}
+  .player-counts button[aria-pressed="true"] {{
+    background: #F2EEDF;
+    border-color: #F2EEDF;
+    color: #1C1C1C;
+  }}
+  .readout {{ color: #A8A296; font-size: 13px; }}
   p.note {{
     color: #A8A296;
     font-size: 13px;
@@ -503,12 +897,12 @@ def render_duty_wheel_html(layout: dict, board_state: dict | None = None) -> str
 </style>
 </head>
 <body>
-{render_duty_wheel_svg(layout, board_state)}
+{controls}{render_duty_wheel_svg(layout, board_state, interactive=interactive)}
   <p class="note">
     Generated from {LAYOUT_FILENAME}. The purple disc is the {escape(merchant["label"])} and the
-    resource icons are Tithe tokens; neither moves yet. Visual/debug only — no GameState
-    integration and no gameplay rules.
+    resource icons are Tithe tokens. {moves} Visual/debug only — no GameState integration, no
+    gameplay rules, and no sow animation.
   </p>
-</body>
+{script}</body>
 </html>
 """

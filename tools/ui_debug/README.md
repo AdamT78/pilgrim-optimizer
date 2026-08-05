@@ -284,7 +284,7 @@ silhouettes and the cornucopia horn.
 Two things in the picture are named so a later renderer does not have to guess:
 
 - The purple disc is the **Merchant token**, drawn wherever `merchant_token.starts_on` points
-  (Produce, for now). It will later move around the wheel, skipping the Taxation duty tile.
+  (Taxation, on the generated page).
 - The resource icons in the capsules are **Tithe tokens**.
 
 Generate the output page with:
@@ -296,17 +296,44 @@ python3 tools/ui_debug/generate_duty_wheel.py
 The generated overview below also produces it. Both write `generated/duty_wheel.html`, which is
 not committed.
 
-The cube counts on each duty come from `sample_cubes` in the layout. They are sample debug state,
-not `GameState`, in the same spirit as the v1 player board's mock state. Nothing on this board
-moves: no Merchant movement, no skipping of Taxation, no Tithe token logic, no sowing or acolyte
-placement, and no sow animations. The wheel is also not wired into `game_setup.html` yet. Those
-belong in later PRs.
+The generated Duty Wheel carries three local UI/debug controls. **Randomize Duty tiles** cycles
+through sample Duty tile / Tithe token setups, and **Move Merchant** walks the Merchant token
+clockwise around the duty ring. The Merchant starts on Taxation in this debug view, and repeated
+clicks carry him through all eight duty tiles, Taxation included; the City is not part of his
+path. **2p / 3p / 4p** picks how many players the board is drawn for, which decides how many cube
+tally columns each duty shows: 4p is the view the prototype drew and the one the page opens on,
+3p drops blue, and 2p drops yellow as well. The columns left standing stay centred on the duty, so
+a shorter table narrows the tally around the middle of the space instead of leaving a gap on the
+right, and the baseline under them shrinks to match. All of it is visual/debug only: the controls
+move tokens, rewrite the eight titles, and swap tallies, and they do not mutate `GameState` or
+implement any gameplay rule.
 
-Every drawing element the renderer emits matches the baseline's numerically, bar one: the
-Allocation title sits 0.1px lower, because the baseline's own title is that far off the offset the
-other eight share. The generated markup does carry `data-duty`, `data-token`, and
-`data-tithe-token` attributes the baseline has no need for, so the two files are not byte
-identical.
+The controls work by ring position rather than tile identity, which is debug-only shorthand and
+fine while Taxation is the one tile that never moves. The renderer draws every slot they can
+switch on — a Merchant token on each position, every Tithe token on each position that has a
+capsule, and a tally per player count on every duty — hidden until wanted, so a click flips
+opacity instead of redrawing the board. Ask for the board without `interactive` and none of that
+is emitted, leaving the four-player tally the prototype shows. `players_for_count()` says who is
+at the table and `tally_columns()` says where their columns stand. The sample setups come from
+`duty_setups()`: the first is the board the layout describes, the rest turn the movable tiles
+around the ring, and a tile keeps its own Tithe token wherever it lands — which is why Taxation
+stays put, being the one tile with no Tithe token and so the one position drawn without a capsule.
+`next_merchant_position()` is the walk itself, one step clockwise along `clockwise_order`.
+
+The cube counts on each duty come from `sample_cubes` in the layout, keyed by seat — the players
+are `player_one` to `player_four`, each naming its cube colour, the same way
+`player_boards_v2_layout.json` names them. They are sample debug state, not `GameState`, in the
+same spirit as the v1 player board's mock state. Nothing here says what
+any of it means: there is no Tithe token logic, no Taxation rule, no sowing or acolyte placement,
+and no sow animation. The wheel is also not wired into `game_setup.html` yet. Those belong in
+later PRs.
+
+Asked for the board the prototype drew — static, with the Merchant on
+`merchant_token.baseline_position` — every drawing element the renderer emits matches the
+baseline's numerically, bar one: the Allocation title sits 0.1px lower, because the baseline's own
+title is that far off the offset the other eight share. The generated markup also carries
+`data-duty`, `data-token`, and `data-tithe-token` attributes the baseline has no need for, so the
+two files are not byte identical.
 
 ## Game setup debug view
 
