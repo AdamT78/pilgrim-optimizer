@@ -56,6 +56,13 @@ ROUND_LABEL_FONT_SIZE = 7.5
 STAR_LABEL_OFFSET = 3.0
 STAR_LABEL_FONT_SIZE = 9
 
+# The place past the last step: the `1st` pocket on the race track, for the first disc to reach the
+# top. It is a space on the track, not one of the record's cube sockets, and not a score.
+RANK_FIRST = "rank_1st"
+
+# A disc stands on a numbered step, or in the `1st` pocket past the last one.
+Positions = dict[str, int | str]
+
 COMPONENT_NAME = "alms-table"
 
 
@@ -102,7 +109,7 @@ def players_of(layout: dict) -> list[dict]:
     return list(layout["players"])
 
 
-def initial_positions(layout: dict) -> dict[str, int]:
+def initial_positions(layout: dict) -> Positions:
     """Every player on the starting step, which is where a round leaves them."""
     start = layout["starting_position"]
     return {player["id"]: start for player in players_of(layout)}
@@ -164,6 +171,31 @@ def placeholder_slots(layout: dict, rules: AlmsConfig) -> list[dict]:
     ]
 
 
+def season_end_slot_by_index(layout: dict, rules: AlmsConfig, index: int) -> dict:
+    """A season-end winner slot by its 1-based number, left to right."""
+    for slot in placeholder_slots(layout, rules):
+        if slot["slot"] == index:
+            return slot
+    raise KeyError(f"no season end winner slot {index}")
+
+
+def mover_path(rules: AlmsConfig) -> list[int | str]:
+    """Everywhere the moving disc can stand, in order: the steps, then the `1st` pocket."""
+    return [*range(rules.max_position + 1), RANK_FIRST]
+
+
+def next_mover_position(rules: AlmsConfig, position: int | str) -> int | str:
+    """One step up the track, and off the end of it into the `1st` pocket."""
+    path = mover_path(rules)
+    return path[min(path.index(position) + 1, len(path) - 1)]
+
+
+def previous_mover_position(rules: AlmsConfig, position: int | str) -> int | str:
+    """One step back down, which drops out of the `1st` pocket onto the last step."""
+    path = mover_path(rules)
+    return path[max(path.index(position) - 1, 0)]
+
+
 def disc_center(layout: dict, player: dict, index: int) -> tuple[float, float]:
     """Where one player's disc sits on a step: its own corner of the 2x2.
 
@@ -177,6 +209,20 @@ def disc_center(layout: dict, player: dict, index: int) -> tuple[float, float]:
         position_by_index(layout, index)["center_x"] + seat["column"] * offset,
         layout["track"]["disc_grid_center_y"] + seat["row"] * offset,
     )
+
+
+def alms_position_target(
+    layout: dict, rules: AlmsConfig, player: dict, position: int | str
+) -> tuple[float, float]:
+    """Where a disc sits for a track step, or for the `1st` pocket past the last step.
+
+    The pocket holds one disc, so a disc there takes the pocket's own centre rather than its seat
+    corner in the 2x2 it shares with three others on a step.
+    """
+    if position == RANK_FIRST:
+        pocket = layout["track"]["bonus_pocket"]
+        return pocket["center_x"], pocket["center_y"]
+    return disc_center(layout, player, position)
 
 
 def _f(value: float) -> str:
@@ -211,16 +257,16 @@ def _label(layout: dict, x: float, y: float, value: str, size: float) -> str:
     return _text(x, y, value, size=size, fill=layout["palette"]["ink"])
 
 
-def render_player_disc(layout: dict, player: dict, index: int) -> str:
+def render_player_disc(layout: dict, rules: AlmsConfig, player: dict, position: int | str) -> str:
     """One player's disc, tagged with who it belongs to and where it stands."""
     disc = layout["disc"]
-    center_x, center_y = disc_center(layout, player, index)
+    center_x, center_y = alms_position_target(layout, rules, player, position)
     return (
         f'<circle cx="{_f(center_x)}" cy="{_f(center_y)}" r="{_n(disc["radius"])}"'
         f' fill="{player["fill"]}" stroke="{player["stroke"]}"'
         f' stroke-width="{_n(disc["stroke_width"])}"'
         f' data-player-disc="true" data-player="{player["id"]}"'
-        f' data-player-color="{player["color"]}" data-alms-position="{index}"/>'
+        f' data-player-color="{player["color"]}" data-alms-position="{position}"/>'
     )
 
 
@@ -288,17 +334,37 @@ def render_threshold_reward(layout: dict, reward: dict) -> str:
 def render_placeholder_slot(layout: dict, slot: dict) -> str:
     """An empty cube space, for the coloured player cube a later PR will cover it with."""
     ink = layout["palette"]["ink"]
-    size = layout["record"]["cube"]["size"]
+    cube = layout["record"]["cube"]
+    size = cube["size"]
     center_x, center_y = slot["center_x"], slot["center_y"]
     socket = (
         f'<rect x="{_f(center_x - size / 2)}" y="{_f(center_y - size / 2)}"'
         f' width="{_n(size)}" height="{_n(size)}"'
-        f' fill="{layout["palette"]["socket_fill"]}" stroke="{ink}" stroke-width="1.4"'
-        f' stroke-dasharray="{SOCKET_DASH}"'
+        f' fill="{layout["palette"]["socket_fill"]}" stroke="{ink}"'
+        f' stroke-width="{_n(cube["stroke_width"])}" stroke-dasharray="{SOCKET_DASH}"'
         f' data-placeholder-slot="{slot["slot"]}" data-round="{slot["round"]}"/>'
     )
     return socket + _label(
         layout, center_x, slot["label_y"], str(slot["round"]), ROUND_LABEL_FONT_SIZE
+    )
+
+
+def render_winner_cube(layout: dict, slot: dict, player: dict, visible: bool = True) -> str:
+    """A round winner's cube, exactly the size of the slot it fills, so it covers it completely.
+
+    This is the player's own cube from their board, not a new piece, so it carries the Player
+    Board v2 cube colours rather than the piety-track disc colours the track uses.
+    """
+    cube = layout["record"]["cube"]
+    size = cube["size"]
+    center_x, center_y = slot["center_x"], slot["center_y"]
+    return (
+        f'<rect x="{_f(center_x - size / 2)}" y="{_f(center_y - size / 2)}"'
+        f' width="{_n(size)}" height="{_n(size)}"'
+        f' fill="{player["cube_fill"]}" stroke="{player["cube_stroke"]}"'
+        f' stroke-width="{_n(cube["stroke_width"])}" opacity="{1 if visible else 0:g}"'
+        f' data-season-end-winner-slot="{slot["slot"]}" data-player="{player["id"]}"'
+        f' data-player-color="{player["color"]}"/>'
     )
 
 
@@ -325,7 +391,7 @@ def _scoring_key_row(layout: dict, row: dict) -> str:
         f'<rect x="{_f(key["first_cube_center_x"] + k * pitch - size / 2)}"'
         f' y="{_f(center_y - size / 2)}" width="{_n(size)}" height="{_n(size)}"'
         f' fill="{palette["key_cube_fill"]}" stroke="{palette["key_cube_stroke"]}"'
-        ' stroke-width="1.5"/>'
+        f' stroke-width="{_n(cube["stroke_width"])}"/>'
         for k in range(row["cubes"])
     )
     outer = key["star_outer_radius"]
@@ -367,7 +433,9 @@ def _trefoil_rule(layout: dict) -> str:
     )
 
 
-def _race_zone(layout: dict, rules: AlmsConfig, positions: dict[str, int]) -> str:
+def _race_zone(
+    layout: dict, rules: AlmsConfig, positions: Positions, interactive: bool = False
+) -> str:
     track = layout["track"]
     ink = layout["palette"]["ink"]
     centers = step_centers(layout)
@@ -377,18 +445,21 @@ def _race_zone(layout: dict, rules: AlmsConfig, positions: dict[str, int]) -> st
     for index, center_x in enumerate(centers):
         step = [_label(layout, center_x, track["number_label_y"], str(index), NUMBER_FONT_SIZE)]
         # Player state, not the baseline's full 2x2: a disc appears only where a player stands.
-        step += [
-            render_player_disc(layout, player, index)
-            for player in players_of(layout)
-            if positions.get(player["id"]) == index
-        ]
+        # A disc that can move lives in its own layer instead, so sliding it along the track
+        # does not leave it parented to the step it started on.
+        if not interactive:
+            step += [
+                render_player_disc(layout, rules, player, index)
+                for player in players_of(layout)
+                if positions.get(player["id"]) == index
+            ]
         if index in rewarded:
             step.append(_effect_tick(layout, center_x))
         parts.append(f'<g data-alms-position="{index}">{"".join(step)}</g>')
 
     pocket = track["bonus_pocket"]
     parts.append(
-        '<g data-alms-bonus-pocket="true">'
+        f'<g data-alms-bonus-pocket="true" data-alms-position="{RANK_FIRST}">'
         + _label(
             layout,
             pocket["center_x"],
@@ -399,6 +470,14 @@ def _race_zone(layout: dict, rules: AlmsConfig, positions: dict[str, int]) -> st
         + _bonus_pocket(layout)
         + "</g>"
     )
+
+    # After the pocket, which is painted solid: a disc that can reach it must sit on top of it.
+    if interactive:
+        discs = "".join(
+            render_player_disc(layout, rules, player, positions.get(player["id"], 0))
+            for player in players_of(layout)
+        )
+        parts.append(f'<g data-alms-discs="true">{discs}</g>')
 
     rule = track["step_rule"]
     pitch = track["step_pitch"]
@@ -415,19 +494,28 @@ def _race_zone(layout: dict, rules: AlmsConfig, positions: dict[str, int]) -> st
     return "".join(parts)
 
 
-def _record_zone(layout: dict, rules: AlmsConfig) -> str:
+def _record_zone(layout: dict, rules: AlmsConfig, interactive: bool = False) -> str:
     record = layout["record"]
     ink = layout["palette"]["ink"]
     heading = record["heading"]
     rule = record["rule"]
+    slots = placeholder_slots(layout, rules)
+
+    # Every cube that could ever be placed, drawn hidden, so a click flips opacity rather than
+    # building SVG in the browser: the colours and geometry stay here.
+    winner_cubes = ""
+    if interactive:
+        winner_cubes = "".join(
+            render_winner_cube(layout, slot, player, visible=False)
+            for slot in slots
+            for player in players_of(layout)
+        )
 
     return "".join(
         [
             _label(layout, heading["x"], heading["y"], heading["text"], heading["font_size"]),
-            "".join(
-                render_placeholder_slot(layout, slot)
-                for slot in placeholder_slots(layout, rules)
-            ),
+            "".join(render_placeholder_slot(layout, slot) for slot in slots),
+            winner_cubes,
             f'<line x1="{_f(rule["x1"])}" y1="{_f(rule["y"])}" x2="{_f(rule["x2"])}"'
             f' y2="{_f(rule["y"])}" stroke="{ink}" stroke-opacity="0.25" stroke-width="1"/>',
             "".join(_scoring_key_row(layout, row) for row in scoring_key_rows(layout, rules)),
@@ -438,12 +526,17 @@ def _record_zone(layout: dict, rules: AlmsConfig) -> str:
 def render_alms_table_svg(
     layout: dict,
     config: dict,
-    positions: dict[str, int] | None = None,
+    positions: Positions | None = None,
+    interactive: bool = False,
 ) -> str:
     """The board, with each player's disc on the step `positions` puts them on.
 
-    Defaults to the start of a round, every disc on `0`. Passing `positions` is how a later PR
-    will move them; it is a picture of state, not a rule about which moves are legal.
+    Defaults to the start of a round, every disc on `0`. `positions` is a picture of state, not a
+    rule about which moves are legal.
+
+    `interactive` lifts the discs into their own layer and draws every winner cube hidden, so a
+    page can move a disc and fill a slot without building any SVG of its own. Left off, the board
+    is the fixed picture the baseline prototype draws.
     """
     rules = alms_rules(config)
     centers = step_centers(layout)
@@ -501,10 +594,10 @@ def render_alms_table_svg(
             panel,
             title,
             panel_inset,
-            _race_zone(layout, rules, where),
+            _race_zone(layout, rules, where, interactive),
             _trefoil_rule(layout),
             zone_divider,
-            _record_zone(layout, rules),
+            _record_zone(layout, rules, interactive),
         ]
     )
     return (
@@ -516,12 +609,162 @@ def render_alms_table_svg(
     )
 
 
+ALMS_TABLE_CONTROL_STYLES = """  .alms-table-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin: 0 0 16px;
+    max-width: 760px;
+  }
+  .alms-table-controls button {
+    background: #1C1C1C;
+    border: 1px solid #4A4A4A;
+    border-radius: 6px;
+    color: #F2EEDF;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+  .alms-table-controls button:hover:enabled { background: #2A2A2A; }
+  .alms-table-controls button:disabled { cursor: default; opacity: 0.4; }
+  .alms-table-readout { color: #A8A296; font-size: 13px; width: 100%; text-align: center; }
+"""
+
+# Plain inline JavaScript, no dependencies. It slides a disc the renderer already drew and flips
+# opacity on cubes and slots it already drew; it decides nothing about the game.
+_CONTROLS_SCRIPT = """<script>
+(function initAlmsTableControls() {
+  var PATH = __PATH__;
+  var TARGETS = __TARGETS__;
+  var SLOT_COUNT = __SLOT_COUNT__;
+  var RANK_FIRST = "__RANK_FIRST__";
+  var MOVER = "__MOVER__";
+
+  var board = document.querySelector('[data-component="alms-table"]');
+  if (!board) { return; }
+  var disc = board.querySelector('[data-player-disc="true"][data-player="' + MOVER + '"]');
+  var up = document.getElementById("alms-move-up");
+  var down = document.getElementById("alms-move-down");
+  var readout = document.getElementById("alms-readout");
+  var winnerButtons = [].slice.call(document.querySelectorAll("[data-add-winner]"));
+
+  // Where the one moving disc stands, as an index into PATH, and which players' cubes are down
+  // in the record's sockets. Debug bookkeeping only; it ranks nobody and scores nothing.
+  var almsState = {
+    playerPositions: __POSITIONS__,
+    seasonEndWinners: []
+  };
+
+  function moveBy(step) {
+    var at = PATH.indexOf(almsState.playerPositions[MOVER]);
+    var next = PATH[Math.min(Math.max(at + step, 0), PATH.length - 1)];
+    almsState.playerPositions[MOVER] = next;
+    var target = TARGETS[next];
+    disc.setAttribute("cx", target[0]);
+    disc.setAttribute("cy", target[1]);
+    disc.setAttribute("data-alms-position", String(next));
+    refresh();
+  }
+
+  function addWinner(playerId) {
+    var index = almsState.seasonEndWinners.length;
+    if (index >= SLOT_COUNT) { return; }
+    var slot = index + 1;
+    var cube = board.querySelector(
+      '[data-season-end-winner-slot="' + slot + '"][data-player="' + playerId + '"]');
+    if (cube) { cube.setAttribute("opacity", "1"); }
+    // The socket goes out from under its cube, so no dashed edge is left showing around it.
+    var placeholder = board.querySelector('[data-placeholder-slot="' + slot + '"]');
+    if (placeholder) { placeholder.setAttribute("opacity", "0"); }
+    almsState.seasonEndWinners.push(playerId);
+    refresh();
+  }
+
+  function refresh() {
+    var at = almsState.playerPositions[MOVER];
+    var placed = almsState.seasonEndWinners.length;
+    up.disabled = at === PATH[PATH.length - 1];
+    down.disabled = at === PATH[0];
+    winnerButtons.forEach(function (button) { button.disabled = placed >= SLOT_COUNT; });
+    readout.textContent =
+      "__MOVER_LABEL__ " + (at === RANK_FIRST ? "in the 1st pocket" : "on step " + at)
+      + " \\u00b7 " + placed + " of " + SLOT_COUNT + " winner cubes";
+  }
+
+  up.addEventListener("click", function () { moveBy(1); });
+  down.addEventListener("click", function () { moveBy(-1); });
+  winnerButtons.forEach(function (button) {
+    button.addEventListener("click", function () { addWinner(button.dataset.addWinner); });
+  });
+  refresh();
+})();
+</script>"""
+
+
+def mover_id(layout: dict) -> str:
+    """The one disc these debug controls move. The other three stay where they start."""
+    return players_of(layout)[0]["id"]
+
+
+def disc_targets(layout: dict, rules: AlmsConfig, player_id: str) -> dict[str, list[float]]:
+    """Every place a player's disc can stand, so the page moves it without recomputing geometry."""
+    player = next(p for p in players_of(layout) if p["id"] == player_id)
+    return {
+        str(position): list(alms_position_target(layout, rules, player, position))
+        for position in mover_path(rules)
+    }
+
+
+def render_alms_table_controls_html(layout: dict, config: dict) -> str:
+    """Buttons for the one disc that moves and for filling the winner slots."""
+    rules = alms_rules(config)
+    start = layout["starting_position"]
+    mover = next(p for p in players_of(layout) if p["id"] == mover_id(layout))
+    buttons = "".join(
+        f'\n    <button type="button" data-add-winner="{player["id"]}">'
+        f'Add {player["color"]} cube to Season end winner</button>'
+        for player in players_of(layout)
+    )
+    # Rendered in the state the page opens in, so it reads correctly before any script runs.
+    path = mover_path(rules)
+    at_bottom = " disabled" if start == path[0] else ""
+    at_top = " disabled" if start == path[-1] else ""
+    slots = len(placeholder_slots(layout, rules))
+    label = mover["label"]
+    readout = f"{label} on step {start} &middot; 0 of {slots} winner cubes"
+    return f"""<div class="alms-table-controls">
+    <button type="button" id="alms-move-up"{at_top}>Move {label} up</button>
+    <button type="button" id="alms-move-down"{at_bottom}>Move {label} down</button>{buttons}
+    <span class="alms-table-readout" id="alms-readout">{readout}</span>
+  </div>"""
+
+
+def render_alms_table_controls_script(layout: dict, config: dict) -> str:
+    rules = alms_rules(config)
+    targets = disc_targets(layout, rules, mover_id(layout))
+    return (
+        _CONTROLS_SCRIPT.replace("__PATH__", json.dumps(mover_path(rules)))
+        .replace("__TARGETS__", json.dumps(targets))
+        .replace("__SLOT_COUNT__", str(len(placeholder_slots(layout, rules))))
+        .replace("__RANK_FIRST__", RANK_FIRST)
+        .replace("__MOVER__", mover_id(layout))
+        .replace("__MOVER_LABEL__", players_of(layout)[0]["label"])
+        .replace("__POSITIONS__", json.dumps(initial_positions(layout)))
+    )
+
+
 def render_alms_table_html(
     layout: dict,
     config: dict,
-    positions: dict[str, int] | None = None,
+    positions: Positions | None = None,
+    interactive: bool = False,
 ) -> str:
     start = layout["starting_position"]
+    controls = render_alms_table_controls_html(layout, config) if interactive else ""
+    script = render_alms_table_controls_script(layout, config) if interactive else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -559,16 +802,18 @@ def render_alms_table_html(
     padding: 10px;
   }}
   .board-wrap svg {{ display: block; max-width: 95vw; height: auto; }}
-</style>
+{ALMS_TABLE_CONTROL_STYLES}</style>
 </head>
 <body>
   <h1>{escape(layout["title"])}</h1>
   <p class="subtitle">{escape(layout["subtitle"])}
   All four player discs start at step {start}. Generated from {LAYOUT_FILENAME}, with the track
   bounds, rewards, and VP values from {"/".join(ALMS_CONFIG_RELATIVE_PATH)}.</p>
+  {controls}
   <div class="board-wrap">
-    {render_alms_table_svg(layout, config, positions)}
+    {render_alms_table_svg(layout, config, positions, interactive)}
   </div>
+{script}
 </body>
 </html>
 """

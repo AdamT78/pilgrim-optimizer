@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -8,19 +9,27 @@ from tools.ui_debug.generate_alms_table import (
     generate_alms_table_page,
 )
 from tools.ui_debug.render_alms_table import (
+    RANK_FIRST,
+    alms_position_target,
     alms_rules,
     default_alms_config_path,
     default_layout_path,
     disc_center,
+    disc_targets,
     initial_positions,
     load_alms_config,
     load_alms_table_layout,
+    mover_id,
+    mover_path,
+    next_mover_position,
     placeholder_slots,
     players_of,
     position_by_index,
+    previous_mover_position,
     render_alms_table_html,
     render_alms_table_svg,
     scoring_key_rows,
+    season_end_slot_by_index,
     step_centers,
     threshold_rewards,
 )
@@ -240,6 +249,9 @@ def test_generator_writes_the_page_to_a_temp_path(tmp_path: Path) -> None:
     content = destination.read_text(encoding="utf-8")
     assert "Alms Table" in content
     assert 'data-component="alms-table"' in content
+    # The generated debug page is the one with the controls on it.
+    assert "Move Player 1 up" in content
+    assert "Add white cube to Season end winner" in content
 
 
 def test_generator_creates_a_missing_output_directory(tmp_path: Path) -> None:
@@ -248,6 +260,202 @@ def test_generator_creates_a_missing_output_directory(tmp_path: Path) -> None:
 
     assert destination.is_file()
     assert default_output_path() == UI_DEBUG_DIR / "generated" / "alms_table.html"
+
+
+def test_a_disc_starts_at_zero_and_walks_up_the_track() -> None:
+    board_rules = rules()
+
+    assert initial_positions(layout())[mover_id(layout())] == 0
+    assert board_rules.max_position == 6
+    assert next_mover_position(board_rules, 0) == 1
+    assert next_mover_position(board_rules, 5) == 6
+    assert previous_mover_position(board_rules, 6) == 5
+    # The first step is the bottom of the track.
+    assert previous_mover_position(board_rules, 0) == 0
+
+
+def test_the_place_past_the_last_step_is_the_first_place_pocket() -> None:
+    board_rules = rules()
+
+    assert mover_path(board_rules) == [0, 1, 2, 3, 4, 5, 6, RANK_FIRST]
+    assert next_mover_position(board_rules, 6) == RANK_FIRST
+    assert next_mover_position(board_rules, RANK_FIRST) == RANK_FIRST
+    assert previous_mover_position(board_rules, RANK_FIRST) == 6
+
+
+def test_a_disc_in_the_first_place_pocket_sits_on_the_pocket_itself() -> None:
+    """Not in its seat corner: the pocket holds one disc, so it takes the pocket's centre."""
+    mover = players_of(layout())[0]
+    pocket = layout()["track"]["bonus_pocket"]
+
+    assert pocket["label"] == "1st"
+    assert alms_position_target(layout(), rules(), mover, RANK_FIRST) == (
+        pocket["center_x"],
+        pocket["center_y"],
+    )
+    assert alms_position_target(layout(), rules(), mover, 0) == disc_center(layout(), mover, 0)
+
+
+def test_the_first_place_pocket_is_not_a_season_end_cube_socket() -> None:
+    """Two different places: the disc races into one, the cubes are recorded in the other."""
+    mover = players_of(layout())[0]
+    pocket = alms_position_target(layout(), rules(), mover, RANK_FIRST)
+    slot = season_end_slot_by_index(layout(), rules(), 1)
+
+    assert pocket != (slot["center_x"], slot["center_y"])
+    # The pocket is down on the race track, left of the divider; the sockets are up in the record.
+    assert pocket[0] < slot["center_x"]
+    assert pocket[1] > slot["center_y"]
+
+
+def test_the_track_offers_a_target_for_every_place_a_disc_can_stand() -> None:
+    targets = disc_targets(layout(), rules(), "player_one")
+
+    assert sorted(targets) == ["0", "1", "2", "3", "4", "5", "6", RANK_FIRST]
+    steps = [targets[str(index)] for index in range(rules().max_position + 1)]
+    assert [x for x, _ in steps] == sorted(x for x, _ in steps)
+    assert steps[0] == list(disc_center(layout(), players_of(layout())[0], 0))
+    # The pocket is one more space along the track, past the last step.
+    assert targets[RANK_FIRST][0] > steps[-1][0]
+
+
+def test_winner_slots_can_be_looked_up_by_number() -> None:
+    slot = season_end_slot_by_index(layout(), rules(), 1)
+
+    assert slot["slot"] == 1
+    assert slot["center_x"] == placeholder_slots(layout(), rules())[0]["center_x"]
+    with pytest.raises(KeyError):
+        season_end_slot_by_index(layout(), rules(), 5)
+
+
+def test_winner_cubes_are_the_player_board_v2_cubes() -> None:
+    """They are the player's own cube moved onto this board, not a new piece."""
+    v2 = json.loads(
+        (UI_DEBUG_DIR / "player_boards_v2_layout.json").read_text(encoding="utf-8")
+    )
+    v2_cubes = {player["id"]: (player["fill"], player["stroke"]) for player in v2["players"]}
+
+    for player in players_of(layout()):
+        assert (player["cube_fill"], player["cube_stroke"]) == v2_cubes[player["id"]]
+
+
+def test_the_static_board_carries_no_controls_or_hidden_slots() -> None:
+    """Asked for the picture, the renderer draws the picture, so baseline parity holds."""
+    content = render_alms_table_html(layout(), config())
+
+    assert "data-season-end-winner-slot" not in content
+    assert "data-alms-discs" not in content
+    assert "<script" not in content
+    assert "Move Player 1 up" not in content
+
+
+def test_the_interactive_page_offers_every_control() -> None:
+    content = render_alms_table_html(layout(), config(), interactive=True)
+
+    assert "Move Player 1 up" in content
+    assert "Move Player 1 down" in content
+    for color in PLAYER_COLORS:
+        assert f"Add {color} cube to Season end winner" in content
+    assert 'data-player="player_one"' in content
+    assert 'data-player-disc="true"' in content
+    assert 'data-placeholder-slot="1"' in content
+
+
+def test_the_interactive_page_opens_in_the_state_it_says_it_is_in() -> None:
+    """Rendered ready, so the page reads correctly even before the script runs."""
+    content = render_alms_table_html(layout(), config(), interactive=True)
+
+    assert "Player 1 on step 0 &middot; 0 of 4 winner cubes" in content
+    # Nobody can move below the first step, so the button says so from the start.
+    assert re.search(r'id="alms-move-down"\s+disabled', content)
+    assert not re.search(r'id="alms-move-up"\s+disabled', content)
+
+
+def test_every_winner_cube_is_drawn_once_per_slot_and_starts_hidden() -> None:
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+
+    cubes = re.findall(r"<rect[^>]*data-season-end-winner-slot=\"(\d)\"[^>]*/>", content)
+    assert len(cubes) == 4 * len(PLAYER_IDS)
+    assert sorted(set(cubes)) == ["1", "2", "3", "4"]
+    hidden = re.findall(r"<rect[^>]*data-season-end-winner-slot[^>]*/>", content)
+    assert all('opacity="0"' in cube for cube in hidden)
+
+
+def _box(element: str) -> tuple[float, float, float, float]:
+    def value(name: str) -> float:
+        return float(re.search(rf'\b{name}="([\d.]+)"', element).group(1))
+
+    return value("x"), value("y"), value("width"), value("height")
+
+
+def test_a_winner_cube_covers_the_slot_it_fills() -> None:
+    """Exactly the placeholder's box, so no dashed edge is left showing around a placed cube."""
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+
+    placeholder = re.search(r'<rect[^>]*data-placeholder-slot="1"[^>]*/>', content).group()
+    cube = re.search(
+        r'<rect[^>]*data-season-end-winner-slot="1"[^>]*data-player="player_one"[^>]*/>', content
+    ).group()
+
+    assert _box(cube) == _box(placeholder)
+    # And the script takes the socket out from under it, so no dash can peek past the stroke.
+    page = render_alms_table_html(layout(), config(), interactive=True)
+    assert 'board.querySelector(\'[data-placeholder-slot="\' + slot + \'"]\');' in page
+    assert 'placeholder.setAttribute("opacity", "0");' in page
+
+
+def test_the_page_carries_the_path_the_disc_walks() -> None:
+    """The whole of the movement rule, handed to the page as data rather than as branches."""
+    content = render_alms_table_html(layout(), config(), interactive=True)
+
+    assert f"var PATH = {json.dumps(mover_path(rules()))};" in content
+    # Both ends of it are where the buttons switch off.
+    assert "up.disabled = at === PATH[PATH.length - 1];" in content
+    assert "down.disabled = at === PATH[0];" in content
+
+
+def test_the_page_carries_the_pocket_the_disc_moves_to_not_a_cube_socket() -> None:
+    content = render_alms_table_html(layout(), config(), interactive=True)
+    pocket = layout()["track"]["bonus_pocket"]
+    slot = season_end_slot_by_index(layout(), rules(), 1)
+
+    target = json.dumps({RANK_FIRST: [pocket["center_x"], pocket["center_y"]]}).strip("{}")
+    assert target in content
+    assert json.dumps([slot["center_x"], slot["center_y"]]) not in content
+    # The pocket is labelled on the board and hooked for the disc that lands in it.
+    assert f'data-alms-position="{RANK_FIRST}"' in content
+    assert 'data-alms-bonus-pocket="true"' in content
+
+
+def test_the_moving_disc_is_drawn_after_the_pocket_it_can_land_in() -> None:
+    """The pocket is painted solid, so a disc drawn before it would slide in behind it."""
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+
+    assert content.index('data-alms-bonus-pocket="true"') < content.index('data-alms-discs="true"')
+
+
+def test_a_movable_disc_is_not_parented_to_the_step_it_started_on() -> None:
+    """It slides along the track, so it lives in its own layer rather than in a step group."""
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+
+    disc_layer = re.search(r'<g data-alms-discs="true">(.*?)</g>', content, re.S)
+    assert disc_layer is not None
+    assert disc_layer.group(1).count("data-player-disc") == len(PLAYER_IDS)
+    # The step groups keep their labels and reward ticks, but hold no discs.
+    for group in re.findall(r'<g data-alms-position="\d">(.*?)</g>', content, re.S):
+        assert "data-player-disc" not in group
+
+
+def test_the_controls_script_keeps_itself_to_itself() -> None:
+    content = render_alms_table_html(layout(), config(), interactive=True)
+
+    assert "initAlmsTableControls" in content
+    assert "})();" in content
+    # Namespaced hooks, so this can join a page that already has controls of its own.
+    for hook in ("alms-move-up", "alms-move-down", "alms-readout", "alms-table-controls"):
+        assert hook in content
+    assert "React" not in content
+    assert "<iframe" not in content
 
 
 def _drawing_elements(content: str) -> list[str]:
@@ -260,8 +468,19 @@ def _is_step_disc(element: str) -> bool:
     return element.startswith("<circle") and ' r="9"' in element and "dasharray" not in element
 
 
+def _is_cube(element: str) -> bool:
+    size = layout()["record"]["cube"]["size"]
+    return element.startswith("<rect") and f' width="{size:g}"' in element
+
+
+def _one_cube_stroke(element: str) -> str:
+    """The baseline drew each kind of cube at its own weight; the renderer settles on one."""
+    width = layout()["record"]["cube"]["stroke_width"]
+    return re.sub(r'stroke-width="[\d.]+"', f'stroke-width="{width:g}"', element)
+
+
 def test_generated_board_matches_the_baseline_element_for_element() -> None:
-    """Only the discs differ: the baseline diagrams all seven steps, this draws player state."""
+    """Only the discs and the cube strokes differ, and both are deliberate."""
     baseline = _drawing_elements(BASELINE_SVG.read_text(encoding="utf-8"))
     generated = _drawing_elements(svg())
 
@@ -269,7 +488,7 @@ def test_generated_board_matches_the_baseline_element_for_element() -> None:
         f'cx="{x:.1f}"' for x, _ in (disc_center(layout(), p, 0) for p in players_of(layout()))
     }
     expected = [
-        element
+        _one_cube_stroke(element) if _is_cube(element) else element
         for element in baseline
         if not (_is_step_disc(element) and not any(c in element for c in on_step_zero))
     ]
@@ -277,6 +496,21 @@ def test_generated_board_matches_the_baseline_element_for_element() -> None:
     assert generated == expected
     # Six steps of four diagram discs each, which the generated board leaves empty.
     assert len(baseline) - len(expected) == 24
+    # Four sockets and ten key cubes, all restroked, and nothing else touched.
+    assert len([element for element in baseline if _is_cube(element)]) == 14
+
+
+def test_every_cube_on_the_board_is_drawn_at_one_weight() -> None:
+    """Socket, winner's cube, and printed key cube are the same piece, so they read alike."""
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+    width = layout()["record"]["cube"]["stroke_width"]
+
+    cubes = [element for element in _drawing_elements(content) if _is_cube(element)]
+    # Four sockets, ten printed key cubes, and a hidden winner's cube per player per socket.
+    assert len(cubes) == 14 + 4 * len(PLAYER_IDS)
+    assert all(f'stroke-width="{width:g}"' in cube for cube in cubes)
+    # The same weight Player Board v2 draws its cubes at, since it is the same piece.
+    assert width == 1.2
 
 
 def test_baseline_prototypes_are_still_present_and_untouched() -> None:

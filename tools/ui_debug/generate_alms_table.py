@@ -37,7 +37,9 @@ def generate_alms_table_page(
     layout = load_alms_table_layout(layout_path)
     config = load_alms_config(alms_config_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(render_alms_table_html(layout, config), encoding="utf-8")
+    destination.write_text(
+        render_alms_table_html(layout, config, interactive=True), encoding="utf-8"
+    )
     return destination
 
 
