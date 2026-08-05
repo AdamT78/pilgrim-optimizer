@@ -176,7 +176,7 @@ Current deferred/simplified areas that can expand branching later include:
 - duty-value intensity controls (partial-use decisions)
 - deeper Allocation optionality/ordering semantics
 - spatial roads/bridges/trade-route creation systems
-- deferred building effects (for example `bank`, `reliquary`)
+- deferred building effects (for example `reliquary`)
 - broader mixed-modifier composition/hire-order-sensitive stacks
 
 ## Related documents

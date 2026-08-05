@@ -61,6 +61,10 @@ class FullTurnAction:
     building_conversion_source: str | None = None
     building_conversion_direction: str | None = None
     building_conversion_amount: int | None = None
+    bank_payment_building_id: str | None = None
+    bank_payment_building_source: str | None = None
+    bank_payment_replaced_resource: str | None = None
+    bank_payment_silver_amount: int | None = None
     effective_acolyte_building_id: str | None = None
     effective_acolyte_building_source: str | None = None
     taxation_majority_building_id: str | None = None
@@ -228,6 +232,19 @@ def action_id(action: GameAction) -> str:
             f":direction:{action.building_conversion_direction or 'unknown'}"
             f":amount:{action.building_conversion_amount if action.building_conversion_amount is not None else 'none'}"
         )
+    bank_payment_suffix = ""
+    if (
+        action.bank_payment_building_id is not None
+        or action.bank_payment_building_source is not None
+        or action.bank_payment_replaced_resource is not None
+        or action.bank_payment_silver_amount is not None
+    ):
+        bank_payment_suffix = (
+            f":bank_payment_building:{action.bank_payment_building_id or 'none'}"
+            f":from:{action.bank_payment_building_source or 'unknown'}"
+            f":replace:{action.bank_payment_replaced_resource or 'unknown'}"
+            f":silver:{action.bank_payment_silver_amount if action.bank_payment_silver_amount is not None else 'none'}"
+        )
     merchant_advance_suffix = ""
     if (
         action.effective_acolyte_building_id is not None
@@ -296,7 +313,7 @@ def action_id(action: GameAction) -> str:
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
-        f"{sow_route_suffix}{conversion_suffix}{effective_acolyte_suffix}"
+        f"{sow_route_suffix}{conversion_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
         f"{merchant_advance_suffix}{workforce_move_suffix}{confession_box_suffix}{hire_suffix}"
     )
@@ -432,6 +449,17 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             " | use building: pulpit "
             "to move 1 serf village -> abbey for free"
         )
+    if (
+        action.bank_payment_building_id == "bank"
+        and action.bank_payment_replaced_resource is not None
+        and action.bank_payment_silver_amount is not None
+    ):
+        amount = action.bank_payment_silver_amount
+        replaced_resource = action.bank_payment_replaced_resource
+        route_summary += (
+            " | use building: bank "
+            f"to replace {amount} {replaced_resource} with {amount} silver for this transaction"
+        )
     summary = (
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
@@ -546,6 +574,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             " | hire building: pulpit "
             f"from {action.workforce_move_building_source}"
+        )
+    if (
+        action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source is not None
+        and action.bank_payment_building_source != "own_active"
+    ):
+        summary += (
+            " | hire building: bank "
+            f"from {action.bank_payment_building_source}"
         )
     if action.start_player_confession_box_uses:
         confession_parts: list[str] = []

@@ -753,6 +753,18 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_wheat_for_silver":
                 return f"{event_name}: brewery sold 1 wheat for 2 silver"
+        if (
+            building == "bank"
+            and action_name == "payment_substitution"
+            and "replaced_resource" in details
+            and "silver_amount" in details
+        ):
+            replaced_resource = str(details.get("replaced_resource", "unknown"))
+            silver_amount = int(details.get("silver_amount", 0))
+            return (
+                f"{event_name}: bank replaced {silver_amount} {replaced_resource} "
+                f"with {silver_amount} silver for this transaction"
+            )
         if building == "scriptorium" and action_name == "effective_acolyte_bonus":
             return (
                 f"{event_name}: scriptorium added +1 effective acolyte "
