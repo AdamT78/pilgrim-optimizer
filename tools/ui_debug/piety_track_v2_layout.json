@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "title": "Piety Track",
+  "page_title": "Piety tracks v2",
+  "subtitle": "The strip is a panel containing the boxes, which is what makes room for the inset hairline and the titled header the mancala board and the Alms Table already wear. Top: 3\u20134 player. Bottom: 2 player.",
+  "page_background": "#000000",
+  "display_width": 1013.8,
+  "starting_position": 0,
+  "padding": {
+    "top": 20,
+    "bottom": 20,
+    "side": 20
+  },
+  "palette": {
+    "ink": "#3A2F1E",
+    "panel_fill": "#B9B9B4",
+    "star_label_fill": "#000000"
+  },
+  "panel": {
+    "corner_radius": 16,
+    "stroke_width": 2.5,
+    "pad_x": 12,
+    "pad_top": 12,
+    "pad_bottom": 6,
+    "title_band": 24
+  },
+  "ornament": {
+    "inset": {
+      "offset": 7.5,
+      "stroke_width": 1.2,
+      "stroke_opacity": 0.28
+    },
+    "title": {
+      "dx": 2,
+      "dy": 15,
+      "font_family": "Georgia, 'Times New Roman', serif",
+      "font_size": 15,
+      "font_weight": 700
+    },
+    "trefoil": {
+      "start_dx": 108,
+      "end_dx": 10,
+      "dy": 10,
+      "lobe_radius": 4.6,
+      "rule_gap": 13,
+      "stroke_width": 1.3,
+      "stroke_opacity": 0.34
+    }
+  },
+  "track": {
+    "position_count": 13,
+    "box_width": 44,
+    "outer_extra": 0.65,
+    "top_margin": 9,
+    "row_gap": 6,
+    "disc_position": 0,
+    "position_label": {
+      "cap_height": 8.1,
+      "descent": 1.74,
+      "fill": "#3A2F1E"
+    },
+    "disc": {
+      "radius": 9,
+      "gap": 2,
+      "stroke_width": 1.2
+    },
+    "star": {
+      "outer_radius": 16,
+      "inner_ratio": 0.45,
+      "label_offset": 3.0
+    }
+  },
+  "players": [
+    {
+      "id": "player_one",
+      "label": "Player 1",
+      "color": "white",
+      "fill": "#FFFFFF",
+      "stroke": "#8B7B4E"
+    },
+    {
+      "id": "player_two",
+      "label": "Player 2",
+      "color": "red",
+      "fill": "#C0392B",
+      "stroke": "#7A2020"
+    },
+    {
+      "id": "player_three",
+      "label": "Player 3",
+      "color": "yellow",
+      "fill": "#F4D03F",
+      "stroke": "#B8960C"
+    },
+    {
+      "id": "player_four",
+      "label": "Player 4",
+      "color": "blue",
+      "fill": "#2E86C1",
+      "stroke": "#1B4F72"
+    }
+  ],
+  "variants": [
+    {
+      "id": "3_4_player",
+      "label": "3\u20134 player track",
+      "disc_rows": 2,
+      "seats": [
+        { "player": "player_one", "row": -1, "column": -1 },
+        { "player": "player_two", "row": -1, "column": 1 },
+        { "player": "player_three", "row": 1, "column": -1 },
+        { "player": "player_four", "row": 1, "column": 1 }
+      ]
+    },
+    {
+      "id": "2_player",
+      "label": "2 player track",
+      "disc_rows": 1,
+      "seats": [
+        { "player": "player_one", "row": 0, "column": -1 },
+        { "player": "player_two", "row": 0, "column": 1 }
+      ]
+    }
+  ]
+}
