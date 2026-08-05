@@ -938,7 +938,8 @@ def test_setup_building_overlays_name_the_building_they_draw(page: str) -> None:
 
 
 def _defs(page: str) -> str:
-    match = re.search(r"<defs>(.*?)</defs>", page, re.S)
+    """The slot-content defs, which is not the only `<defs>` on the page: the wheel has one too."""
+    match = re.search(r'class="content-defs".*?<defs>(.*?)</defs>', page, re.S)
     assert match is not None
     return match.group(1)
 
@@ -1065,3 +1066,75 @@ def test_player_board_panel_leaves_the_map_controls_alone(page: str) -> None:
     assert len(piety_buttons) == 2 * len(PLAYER_LABELS)
     for button in piety_buttons:
         assert "data-serf-player" not in button and "data-first-player" not in button
+
+
+def _duty_wheel_panel(page: str) -> str:
+    _, marker, panel = page.partition('<div class="panel duty-wheel-panel">')
+    assert marker, "the page no longer has a duty wheel panel"
+    return panel
+
+
+def test_page_shows_the_duty_wheel_below_the_setup_area(page: str) -> None:
+    """The wheel is its own full-width panel, so neither it nor the map has to shrink."""
+    wheel = page.index('<div class="panel duty-wheel-panel">')
+    assert page.index('<div class="setup-layout">') < wheel
+    assert page.index('<div class="player-board-panel">') < wheel
+    assert "<h2>Duty wheel</h2>" in page
+    # The map keeps the width it had before the wheel arrived.
+    assert ".setup-main { flex: 1 1 700px; max-width: 1014px; min-width: 0; }" in page
+    assert ".duty-wheel-panel svg { width: min(100%, 760px); margin: 0 auto; }" in page
+
+
+def test_duty_wheel_panel_draws_the_board_and_its_controls(page: str) -> None:
+    panel = _duty_wheel_panel(page)
+
+    assert 'data-component="duty-wheel"' in panel
+    assert "Randomize Duty tiles" in panel
+    assert "Move Merchant" in panel
+    assert [button for button in re.findall(r">(\dp)</button>", panel)] == ["2p", "3p", "4p"]
+    assert 'data-player-count="4" aria-pressed="true"' in panel
+    for label in (">City</text>", ">Produce</text>", ">Taxation</text>"):
+        assert label in panel
+    assert 'data-token="merchant"' in panel
+    assert 'data-merchant-token="taxation"' in panel
+
+
+def test_duty_wheel_controls_are_namespaced_away_from_the_setup_controls(page: str) -> None:
+    """The wheel brings its own prefixed hooks, so nothing here collides with the setup page."""
+    for element_id in ("duty-wheel-randomize", "duty-wheel-move-merchant", "duty-wheel-readout"):
+        assert page.count(f'id="{element_id}"') == 1
+    # The setup page styles its own `.controls` row and `.readout` spans; the wheel uses neither.
+    panel = _duty_wheel_panel(page)
+    assert 'class="controls"' not in panel
+    assert 'class="readout"' not in panel
+    assert 'class="duty-wheel-controls"' in panel
+
+
+def test_duty_wheel_script_is_its_own_scope(page: str) -> None:
+    """Two IIFEs, one page: the wheel's state never becomes a global the setup script can see."""
+    scripts = re.findall(r"<script>(.*?)</script>", page, re.S)
+    wheel = [script for script in scripts if "MERCHANT_PATH" in script]
+
+    assert len(wheel) == 1
+    assert wheel[0].lstrip().startswith("(function ()")
+    assert wheel[0].rstrip().endswith("})();")
+    # It only reaches for the wheel's own hooks and the board it was drawn with.
+    assert "duty-wheel-randomize" in wheel[0]
+    assert "setup-data" not in wheel[0]
+    assert "ship-marker" not in wheel[0]
+
+
+def test_page_keeps_every_setup_control_beside_the_new_panel(page: str) -> None:
+    for heading in (
+        "<h2>Setup slots</h2>",
+        "<h2>Ship controls</h2>",
+        "<h2>Player piety controls</h2>",
+        "<h2>Player board v2 — first player marker</h2>",
+        "<h2>Player board v2 — buy a building</h2>",
+        "<h2>Player board v2 — donate a building</h2>",
+        "<h2>Duty wheel</h2>",
+    ):
+        assert heading in page
+    for control_id in ("advance-ship", "reset-ship", "buy-building-button"):
+        assert f'id="{control_id}"' in page
+    assert 'id="donate-building-button"' in page

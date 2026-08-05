@@ -41,6 +41,12 @@ from tools.ui_debug.render_donated_buildings import (  # noqa: E402
     render_donated_building_contents,
     tiles_of,
 )
+from tools.ui_debug.render_duty_wheel import (  # noqa: E402
+    DUTY_WHEEL_CONTROL_STYLES,
+    load_duty_wheel_layout,
+    render_duty_wheel_controls_script,
+    render_duty_wheel_panel,
+)
 from tools.ui_debug.render_map import (  # noqa: E402
     hex_center,
     hex_vertices,
@@ -1083,6 +1089,7 @@ def render_game_setup_html(
     site_data: dict | list,
     board_layout: dict,
     donated_data: dict | list,
+    duty_wheel_layout: dict,
 ) -> str:
     variant = variant_by_id(piety_layout, PIETY_VARIANT_ID)
     vp_values = piety_vp_values(piety_config)
@@ -1257,6 +1264,10 @@ def render_game_setup_html(
   }}
   .player-board h2 {{ margin-bottom: 2px; }}
   .player-board .readout {{ margin: 0 0 8px; }}
+  .duty-wheel-panel {{ width: min(1560px, 96vw); }}
+  /* The wheel is a tall board, so it keeps its own width instead of filling the panel. */
+  .duty-wheel-panel svg {{ width: min(100%, 760px); margin: 0 auto; }}
+{DUTY_WHEEL_CONTROL_STYLES}  .duty-wheel-controls {{ margin: 4px 0 10px; }}
 </style>
 </head>
 <body>
@@ -1337,10 +1348,20 @@ def render_game_setup_html(
 {render_player_boards(board_layout)}
   </div>
   </div>
+  <div class="panel duty-wheel-panel">
+    <h2>Duty wheel</h2>
+    <p class="slot-list">The duty tiles, kept off the map so both stay readable. The purple disc
+      is the Merchant token and the icons in the capsules are Tithe tokens. The buttons cycle
+      sample Duty tile setups, walk the Merchant clockwise around the eight duty tiles — the City
+      is not on his path — and switch the cube tallies between the two-, three-, and four-player
+      views. Visual/debug only, like the rest of this page: no GameState, no rules, and no sow
+      animation.</p>
+{render_duty_wheel_panel(duty_wheel_layout)}
+  </div>
   {render_building_content_defs(placements, donated_data)}
   <script id="setup-data" type="application/json">{setup_data}</script>
   <script>{SETUP_SCRIPT}</script>
-</body>
+{render_duty_wheel_controls_script(duty_wheel_layout)}</body>
 </html>
 """
 
@@ -1355,6 +1376,7 @@ def write_game_setup_page(
     site_data_path: Path | None = None,
     board_layout_path: Path | None = None,
     donated_data_path: Path | None = None,
+    duty_wheel_layout_path: Path | None = None,
 ) -> Path:
     destination = default_output_path() if output_path is None else Path(output_path)
     html = render_game_setup_html(
@@ -1365,6 +1387,7 @@ def write_game_setup_page(
         load_pilgrimage_sites(site_data_path),
         load_player_boards_v2_layout(board_layout_path),
         load_donated_building_tiles(donated_data_path),
+        load_duty_wheel_layout(duty_wheel_layout_path),
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(html, encoding="utf-8")

@@ -18,7 +18,10 @@ from tools.ui_debug.render_duty_wheel import (
     merchant_path,
     next_merchant_position,
     players_for_count,
+    render_duty_wheel_controls_html,
+    render_duty_wheel_controls_script,
     render_duty_wheel_html,
+    render_duty_wheel_panel,
     render_duty_wheel_svg,
     ring_duties,
     tally_columns,
@@ -400,8 +403,9 @@ def test_interactive_page_offers_all_three_debug_controls() -> None:
 
     assert "Randomize Duty tiles" in html
     assert "Move Merchant" in html
-    assert 'id="randomize-duties"' in html
-    assert 'id="move-merchant"' in html
+    # Every hook is prefixed, so the setup view can host the panel without a name clash.
+    assert 'id="duty-wheel-randomize"' in html
+    assert 'id="duty-wheel-move-merchant"' in html
     assert "Setup 1 of 3 — Merchant on Taxation — 4 players" in html
     assert duty_wheel_readout(layout()) == "Setup 1 of 3 — Merchant on Taxation — 4 players"
 
@@ -440,6 +444,43 @@ def test_interactive_page_hands_the_script_the_ring_it_walks() -> None:
     # The controls only ever move tokens and rewrite titles.
     assert "GameState" not in script
     assert "legal_actions" not in script
+
+
+def test_panel_hands_a_host_page_the_controls_and_the_board() -> None:
+    data = layout()
+    panel = render_duty_wheel_panel(data)
+
+    assert panel.index("Randomize Duty tiles") < panel.index("<svg")
+    assert "Move Merchant" in panel
+    assert 'data-component="duty-wheel"' in panel
+    # A fragment, not a page: the host brings its own document, heading, and scripts.
+    assert "<!DOCTYPE html>" not in panel
+    assert "<body" not in panel
+    assert "<script>" not in panel
+
+
+def test_panel_without_controls_is_the_fixed_picture() -> None:
+    data = layout()
+    panel = render_duty_wheel_panel(data, include_controls=False)
+
+    assert "Randomize Duty tiles" not in panel
+    assert "<button" not in panel
+    assert panel == render_duty_wheel_svg(data)
+
+
+def test_panel_control_hooks_are_all_prefixed() -> None:
+    data = layout()
+    controls = render_duty_wheel_controls_html(data)
+    script = render_duty_wheel_controls_script(data)
+
+    for hook in re.findall(r'(?:id|class)="([\w -]+)"', controls):
+        for name in hook.split():
+            assert name.startswith("duty-wheel-"), name
+    # The script reaches for those hooks and the board, and nothing else on the host page.
+    assert "duty-wheel-randomize" in script
+    assert "duty-wheel-move-merchant" in script
+    assert "duty-wheel-counts" in script
+    assert script.lstrip().startswith("<script>\n(function ()")
 
 
 def test_plain_page_has_no_controls() -> None:
