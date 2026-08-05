@@ -3714,44 +3714,56 @@ def _apply_full_turn_action(
                     ),
                 )
             remaining_no_wheat_steps = mill_waiver + bank_wheat_credit
+            remaining_bank_paid_steps = bank_wheat_credit
             for step in action.ordination_steps:
                 wheat_paid = 0 if remaining_no_wheat_steps > 0 else 1
+                bank_silver_paid = 0
+                if wheat_paid == 0 and remaining_bank_paid_steps > 0:
+                    bank_silver_paid = 1
                 try:
                     new_player_state = apply_ordination_step(new_player_state, step)
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
                 if remaining_no_wheat_steps > 0:
                     remaining_no_wheat_steps -= 1
+                if bank_silver_paid:
+                    remaining_bank_paid_steps -= 1
                 if step == ORDINATION_ORDAIN:
+                    ordain_details = {
+                        "step": ORDINATION_ORDAIN,
+                        "from_pool": "village",
+                        "to_pool": "abbey",
+                        "unit": "serf",
+                        "amount": 1,
+                        "wheat_paid": wheat_paid,
+                    }
+                    if bank_silver_paid:
+                        ordain_details["bank_silver_paid"] = bank_silver_paid
                     special_bonus_events.append(
                         GameEvent(
                             event_type=EventType.ORDINATION,
                             actor=player,
                             action_id=transition_action_id,
-                            details=make_event_details(
-                                step=ORDINATION_ORDAIN,
-                                from_pool="village",
-                                to_pool="abbey",
-                                unit="serf",
-                                amount=1,
-                                wheat_paid=wheat_paid,
-                            ),
+                            details=make_event_details(**ordain_details),
                         )
                     )
                 elif step == ORDINATION_MISSION:
+                    mission_details = {
+                        "step": ORDINATION_MISSION,
+                        "from_pool": "abbey",
+                        "to_pool": "city",
+                        "unit": "acolyte",
+                        "amount": 1,
+                        "wheat_paid": wheat_paid,
+                    }
+                    if bank_silver_paid:
+                        mission_details["bank_silver_paid"] = bank_silver_paid
                     special_bonus_events.append(
                         GameEvent(
                             event_type=EventType.ORDINATION,
                             actor=player,
                             action_id=transition_action_id,
-                            details=make_event_details(
-                                step=ORDINATION_MISSION,
-                                from_pool="abbey",
-                                to_pool="city",
-                                unit="acolyte",
-                                amount=1,
-                                wheat_paid=wheat_paid,
-                            ),
+                            details=make_event_details(**mission_details),
                         )
                     )
                 else:

@@ -75,6 +75,11 @@ def test_cli_apply_market_hired_bank_shows_hire_bonus_and_delta_before_sowing(ca
     assert exit_code == 0
     assert "BUILDING_HIRED: player_one hired Bank from market; paid silver 1 to bank" in output
     assert "BUILDING_BONUS: bank replaced 1 wheat with 1 silver for this transaction" in output
+    assert (
+        "ORDINATION: player_one ordained 1 serf village -> abbey; paid wheat=0; "
+        "paid 1 silver via Bank"
+    ) in output
+    assert "ORDINATION: player_one ordained 1 serf village -> abbey; paid wheat=1" in output
     assert "RESOURCE_DELTA: player_one silver -2; wheat -1" in output
     assert output.index(
         "BUILDING_HIRED: player_one hired Bank from market; paid silver 1 to bank"
@@ -108,4 +113,5 @@ def test_cli_apply_wagon_yard_free_hire_bank_has_no_paid_hire(capsys) -> None:
     assert exit_code == 0
     assert "BUILDING_HIRED: player_one hired Bank from market for free with Wagon Yard" in output
     assert "BUILDING_BONUS: bank replaced 2 wheat with 2 silver for this transaction" in output
+    assert output.count("paid 1 silver via Bank") == 2
     assert "paid silver 1 to bank" not in output
