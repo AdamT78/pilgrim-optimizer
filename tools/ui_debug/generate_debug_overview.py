@@ -174,8 +174,8 @@ def render_debug_overview_html() -> str:
     <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
     <li><a href="{DUTY_WHEEL_FILENAME}">Generated duty wheel</a></li>
     <li><a href="{ALMS_TABLE_FILENAME}">Generated Alms Table</a></li>
-    <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view (includes the duty
-      wheel panel)</a></li>
+    <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view (piety track v2 above the
+      map, and the duty wheel panel)</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">

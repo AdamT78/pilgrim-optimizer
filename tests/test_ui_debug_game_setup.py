@@ -59,12 +59,12 @@ from tools.ui_debug.render_map import (
     load_map_layout,
     render_map_svg,
 )
-from tools.ui_debug.render_piety_track import (
+from tools.ui_debug.render_piety_track_v2 import (
     load_piety_config,
-    load_piety_track_layout,
+    load_piety_track_v2_layout,
     piety_vp_values,
     position_center_x,
-    track_geometry,
+    seated_players,
     variant_by_id,
 )
 from tools.ui_debug.render_pilgrimage_sites import (
@@ -176,7 +176,7 @@ def test_page_embeds_the_rendered_piety_track(page: str) -> None:
 
 
 def test_page_uses_the_three_four_player_track_only(page: str) -> None:
-    layout = load_piety_track_layout()
+    layout = load_piety_track_v2_layout()
 
     assert f'data-piety-variant="{PIETY_VARIANT_ID}"' in page
     assert variant_by_id(layout, PIETY_VARIANT_ID)["label"] in page
@@ -184,30 +184,50 @@ def test_page_uses_the_three_four_player_track_only(page: str) -> None:
     assert _piety_panel(page).count('<rect x="0" y="0"') == 1
 
 
+def test_page_uses_the_ornamented_v2_track(page: str) -> None:
+    """The panel and its title come from the v2 renderer, not from the older flat strip."""
+    panel = _piety_panel(page)
+
+    assert 'data-component="piety-track-v2"' in panel
+    assert f">{load_piety_track_v2_layout()['title']}</text>" in panel
+
+
 def test_page_does_not_show_the_two_player_track(page: str) -> None:
-    layout = load_piety_track_layout()
+    layout = load_piety_track_v2_layout()
 
-    assert variant_by_id(layout, "two_player")["label"] not in page
-    assert "two_player" not in page
+    assert variant_by_id(layout, "2_player")["label"] not in page
+    assert 'data-piety-variant="2_player"' not in page
 
 
-def test_player_discs_use_the_track_token_colours(page: str) -> None:
-    layout = load_piety_track_layout()
-    variant = variant_by_id(layout, PIETY_VARIANT_ID)
-    tokens = variant["tokens"]
-    offset = track_geometry(layout, variant["token_rows"])["token_offset"]
-    start_x = position_center_x(layout, layout["track"]["token_position"])
+def test_player_discs_are_the_tracks_own_tagged_discs(page: str) -> None:
+    """The page moves the discs the renderer drew, so each one is found by who it belongs to."""
+    layout = load_piety_track_v2_layout()
+    seated = seated_players(layout, PIETY_VARIANT_ID)
+    start_x = position_center_x(layout, layout["track"]["disc_position"])
+    panel = _piety_panel(page)
 
-    assert len(tokens) == len(PLAYER_LABELS)
-    for index, token in enumerate(tokens):
-        disc = re.search(rf'<circle id="piety-disc-{index}"[^>]*/>', page)
+    assert len(seated) == len(PLAYER_LABELS)
+    assert panel.count('data-player-disc="true"') == len(PLAYER_LABELS)
+    for player in seated:
+        pattern = rf'<circle[^>]*data-player="{player["id"]}"[^>]*/>'
+        disc = re.search(pattern, panel)
         assert disc is not None
-        assert f'fill="{token["fill"]}"' in disc.group(0)
-        assert f'cx="{start_x + token["col"] * offset:.1f}"' in disc.group(0)
+        assert f'fill="{player["fill"]}"' in disc.group(0)
+        assert f'cx="{start_x + player["cx_offset"]:.1f}"' in disc.group(0)
+        assert 'data-piety-position="0"' in disc.group(0)
+
+
+def test_piety_buttons_move_the_v2_discs(page: str) -> None:
+    """The script finds discs by player inside the track, not by their order in the SVG."""
+    assert '[data-component="piety-track-v2"]' in page
+    assert '[data-player-disc="true"][data-player="' in page
+    assert [player["id"] for player in _setup_data(page)["players"]] == [
+        player["id"] for player in seated_players(load_piety_track_v2_layout(), PIETY_VARIANT_ID)
+    ]
 
 
 def test_piety_positions_in_the_script_match_the_renderer(page: str) -> None:
-    layout = load_piety_track_layout()
+    layout = load_piety_track_v2_layout()
     expected = [
         round(position_center_x(layout, index), 1)
         for index in range(layout["track"]["position_count"])
@@ -303,8 +323,11 @@ def test_page_does_not_mark_the_ship_stops(page: str) -> None:
     """Only the ship shows where it is; the stops it is not on stay unmarked."""
     for marker_class in ("ship-path", "ship-position-dot", "ship-anchor", "debug-dot"):
         assert marker_class not in page
-    # The four player discs are the only circles the map and its track draw.
-    assert _setup_area(page).count("<circle") == len(PLAYER_LABELS)
+    # Every circle on this half of the page belongs to the piety panel — its four player discs
+    # and its ornament — so the map itself is left with none.
+    setup_area = _setup_area(page)
+    assert setup_area.count("<circle") == _piety_panel(page).count("<circle")
+    assert setup_area.count('data-player-disc="true"') == len(PLAYER_LABELS)
 
 
 def test_page_draws_the_ship_in_black(page: str) -> None:

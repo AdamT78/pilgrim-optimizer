@@ -283,9 +283,10 @@ difference between the generated SVG and the baseline, and they exist for future
 interaction. The baselines carry none of them.
 
 v2 does not replace the current piety track: `piety_track_layout.json`, `render_piety_track.py`,
-and the generated `piety_tracks.html` are untouched and stay the live view, so the two are
-generated side by side for now. There are no movement controls, no `game_setup.html` integration,
-no `GameState` integration, and no gameplay rules here.
+and the generated `piety_tracks.html` are untouched, so the two are generated side by side. The
+setup view below is the one place that has moved over to v2; the old generated page remains
+available as a standalone debug view. There is no `GameState` integration and no gameplay rules
+here.
 
 ## Pilgrimage site renderer extraction
 
@@ -515,12 +516,18 @@ scoring, and no `apply_action` integration. Those belong in later PRs.
 
 `generated/game_setup.html` is the first composed view: it has no prototype baseline of its own
 and no renderer module of its own. `generate_game_setup.py` puts the generated map, the generated
-3-4 player piety track, generated building tiles, and generated pilgrimage sites on one page and
+3-4 player piety track v2, generated building tiles, and generated pilgrimage sites on one page and
 adds a little client-side interaction.
 
-It uses the `three_four_player` variant only, because the page has controls for four players. The
-2-player track is intentionally not shown here; `generate_piety_track.py` still produces both
-variants for the standalone piety tracks page.
+The generated setup view now uses the 3-4 player Piety Track v2 renderer above the map, so the
+track arrives ornamented, titled, and with its four discs already tagged with whose they are. The
+setup piety buttons still move local UI/debug discs only; this does not mutate `GameState` or
+implement gameplay rules.
+
+It uses the `3_4_player` variant only, because the page has controls for four players. The 2-player
+track is intentionally not shown here; `generate_piety_track_v2.py` still produces both v2 variants
+on the standalone v2 page, and the older `generate_piety_track.py` remains available as its own
+standalone generated view.
 
 What moves, and what it means:
 
@@ -550,8 +557,11 @@ What moves, and what it means:
   implemented yet, and the fifth site is unused.
 - Each player has one disc on the piety track. `+1 piety` and `-1 piety` move it one position and
   clamp at the ends of the track.
-- The four discs are the movable copy of the track's own starting tokens, so their colours come
-  from `piety_track_layout.json` (white, red, yellow, blue) rather than being restated here.
+- The page moves the discs the v2 track itself drew rather than laying its own set of circles over
+  them, so their colours, seats, and start position all come from `piety_track_v2_layout.json`.
+  The script finds each one by `data-player` inside `data-component="piety-track-v2"`, never by
+  its order in the SVG, and `data-player` is scoped that way because the player boards and the
+  buttons carry the same attribute.
 
 The generated setup view now includes a right-side Player Board v2 panel. The panel is local
 UI/debug state only: it can move the first-player marker, move serfs from Village to Abbey, and

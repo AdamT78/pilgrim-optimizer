@@ -1,7 +1,7 @@
 """Write the generated game setup debug page.
 
-The page composes four existing renderers — the map, the 3-4 player piety track, the building
-tiles, and the pilgrimage sites — and adds a ship marker plus one piety disc per player, moved by
+The page composes four existing renderers — the map, the 3-4 player piety track v2, the building
+tiles, and the pilgrimage sites — and adds a ship marker, moving the track's own player discs with
 plain buttons.
 
 The setup slots are a hard-coded example schedule, not the output of `pilgrim.setup.generator`:
@@ -54,13 +54,12 @@ from tools.ui_debug.render_map import (  # noqa: E402
     load_map_layout,
     render_map_svg,
 )
-from tools.ui_debug.render_piety_track import (  # noqa: E402
+from tools.ui_debug.render_piety_track_v2 import (  # noqa: E402
     load_piety_config,
-    load_piety_track_layout,
-    piety_vp_values,
+    load_piety_track_v2_layout,
     position_center_x,
-    render_piety_track_variant_svg,
-    track_geometry,
+    render_piety_track_v2_svg,
+    seated_players,
     variant_by_id,
 )
 from tools.ui_debug.render_pilgrimage_sites import (  # noqa: E402
@@ -97,15 +96,16 @@ OUTPUT_FILENAME = "game_setup.html"
 
 TITLE = "PILGRIM — Game Setup Debug View"
 SUBTITLE = (
-    "Generated map with the 3-4 player piety track above it, one hard-coded example setup laid "
+    "Generated map with the 3-4 player piety track v2 above it, one hard-coded example setup laid "
     "out on the edge hexes, and the four player boards beside them. The start roll, ship, piety, "
     "and player board buttons move markers and cubes only: no GameState, no rules, no actions."
 )
 PAGE_BACKGROUND = "#000000"
 
-# The setup page has four players, so it uses the 3-4 player track: two token rows on the
-# starting space, one disc per player, in the token order white, red, yellow, blue.
-PIETY_VARIANT_ID = "three_four_player"
+# The setup page has four players, so it uses the 3-4 player track: two disc rows on the starting
+# space, one disc per player, in the seat order white, red, yellow, blue. The 2 player variant is
+# not drawn here; it stays on the standalone piety track v2 page.
+PIETY_VARIANT_ID = "3_4_player"
 
 # The edge hexes clockwise from J3, skipping the four special corner hexes below. That leaves 26
 # eligible hexes, which is also the engine's round track length. The ship and the setup slots both
@@ -390,31 +390,9 @@ def render_ship_overlay(map_layout: dict, start_hex: str) -> str:
     return f'<g id="ship-marker" transform="translate({start_x:.1f},{start_y:.1f})">{ship}</g>'
 
 
-def player_discs(piety_layout: dict, variant: dict) -> list[dict]:
-    """One disc per player, taking colour and start offset from the track's own token data."""
-    geometry = track_geometry(piety_layout, variant["token_rows"])
-    offset = geometry["token_offset"]
-    return [
-        {
-            "label": f"Player {index + 1}",
-            "fill": token["fill"],
-            "stroke": token["stroke"],
-            "cx_offset": token["col"] * offset,
-            "cy": geometry["tokens_cy"] + token["row"] * offset,
-        }
-        for index, token in enumerate(variant["tokens"])
-    ]
-
-
-def render_piety_disc_overlay(piety_layout: dict, discs: list[dict], start_position: int) -> str:
-    token = piety_layout["track"]["token"]
-    start_x = position_center_x(piety_layout, start_position)
-    return "".join(
-        f'<circle id="piety-disc-{index}" cx="{start_x + disc["cx_offset"]:.1f}"'
-        f' cy="{disc["cy"]:.1f}" r="{token["radius"]}" fill="{disc["fill"]}"'
-        f' stroke="{disc["stroke"]}" stroke-width="{token["stroke_width"]}"/>'
-        for index, disc in enumerate(discs)
-    )
+def player_discs(piety_layout: dict) -> list[dict]:
+    """One disc per player, as the track itself seats them, so the page moves what it drew."""
+    return seated_players(piety_layout, PIETY_VARIANT_ID)
 
 
 def _with_overlay(svg: str, overlay: str) -> str:
@@ -756,6 +734,8 @@ SETUP_SCRIPT = """
   const shipMarker = document.getElementById("ship-marker");
   const shipReadout = document.getElementById("ship-position");
   const startHexReadout = document.getElementById("start-hex");
+  // Scoped to the track: `data-player` is on the player boards and the buttons as well.
+  const pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
   // A slot has one group per layer — its fill and its label — and both carry the same slot number.
   const slotGroups = document.querySelectorAll("g[data-slot]");
 
@@ -781,10 +761,17 @@ SETUP_SCRIPT = """
     startHexReadout.textContent = startRoll + " / " + path[0];
   }
 
+  function pietyDisc(playerId) {
+    return pietyTrack.querySelector(
+      '[data-player-disc="true"][data-player="' + playerId + '"]');
+  }
+
   function renderPiety(index) {
     const value = pietyValues[index];
-    const disc = document.getElementById("piety-disc-" + index);
-    disc.setAttribute("cx", (pietyPositions[value] + players[index].cxOffset).toFixed(1));
+    const player = players[index];
+    const disc = pietyDisc(player.id);
+    disc.setAttribute("cx", (pietyPositions[value] + player.cxOffset).toFixed(1));
+    disc.setAttribute("data-piety-position", value);
     document.getElementById("piety-value-" + index).textContent = value;
   }
 
@@ -1092,16 +1079,11 @@ def render_game_setup_html(
     duty_wheel_layout: dict,
 ) -> str:
     variant = variant_by_id(piety_layout, PIETY_VARIANT_ID)
-    vp_values = piety_vp_values(piety_config)
-    start_position = piety_layout["track"]["token_position"]
-    discs = player_discs(piety_layout, variant)
+    discs = player_discs(piety_layout)
 
-    # The discs are the movable copy of the starting tokens, so the track is drawn without its
-    # static ones instead of stacking two sets of circles on the starting space.
-    track_svg = render_piety_track_variant_svg(piety_layout, vp_values, {**variant, "tokens": []})
-    track_svg = _with_overlay(
-        track_svg, render_piety_disc_overlay(piety_layout, discs, start_position)
-    )
+    # The track draws its own discs on the starting space, already tagged with whose they are, so
+    # the page moves those rather than laying a second set of circles over them.
+    track_svg = render_piety_track_v2_svg(piety_layout, piety_config, PIETY_VARIANT_ID)
 
     placements = setup_placements(DEFAULT_START_ROLL, catalog, site_data)
     occupied = [placement["round"] for placement in placements if placement["kind"] != "empty"]
@@ -1123,9 +1105,10 @@ def render_game_setup_html(
             "startRoll": DEFAULT_START_ROLL,
             "occupiedSlots": occupied,
             "pietyPositions": [
-                round(position_center_x(piety_layout, index), 1) for index in range(len(vp_values))
+                round(position_center_x(piety_layout, index), 1)
+                for index in range(piety_layout["track"]["position_count"])
             ],
-            "players": [{"cxOffset": disc["cx_offset"]} for disc in discs],
+            "players": [{"id": disc["id"], "cxOffset": disc["cx_offset"]} for disc in discs],
             "playerBoards": {
                 "abbeyId": ABBEY_PLACE_ID,
                 "abbeyCapacity": token_slot_count(board_layout),
@@ -1381,7 +1364,7 @@ def write_game_setup_page(
     destination = default_output_path() if output_path is None else Path(output_path)
     html = render_game_setup_html(
         load_map_layout(map_layout_path),
-        load_piety_track_layout(piety_layout_path),
+        load_piety_track_v2_layout(piety_layout_path),
         load_piety_config(piety_config_path),
         load_building_catalog(catalog_path),
         load_pilgrimage_sites(site_data_path),

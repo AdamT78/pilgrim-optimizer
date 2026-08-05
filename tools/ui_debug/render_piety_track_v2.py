@@ -155,6 +155,26 @@ def position_center(layout: dict, variant_id: str, index: int) -> tuple[float, f
     return position_center_x(layout, index), geometry["discs_cy"]
 
 
+def seated_players(layout: dict, variant_id: str) -> list[dict]:
+    """Each player a variant seats, with its colours and its own corner of the grid.
+
+    The offsets are relative to a position's centre, so anything that moves a disc along the track
+    only has to change the x of the position it stands on. That is the one description of where a
+    disc sits: the renderer draws from it, and the setup page moves from it.
+    """
+    variant = variant_by_id(layout, variant_id)
+    geometry = track_geometry(layout, variant["disc_rows"])
+    offset = geometry["disc_offset"]
+    return [
+        {
+            **player_by_id(layout, seat["player"]),
+            "cx_offset": seat["column"] * offset,
+            "cy": geometry["discs_cy"] + seat["row"] * offset,
+        }
+        for seat in variant["seats"]
+    ]
+
+
 def render_position_label(layout: dict, geometry: dict, index: int) -> str:
     fill = layout["track"]["position_label"]["fill"]
     return (
@@ -164,14 +184,12 @@ def render_position_label(layout: dict, geometry: dict, index: int) -> str:
     )
 
 
-def render_player_disc(layout: dict, geometry: dict, index: int, seat: dict) -> str:
-    """One player's disc on a position, tagged with who it belongs to and where it stands."""
+def render_player_disc(layout: dict, index: int, player: dict) -> str:
+    """One seated player's disc on a position, tagged with whose it is and where it stands."""
     disc = layout["track"]["disc"]
-    player = player_by_id(layout, seat["player"])
-    offset = geometry["disc_offset"]
     return (
-        f'<circle cx="{position_center_x(layout, index) + seat["column"] * offset:.1f}"'
-        f' cy="{geometry["discs_cy"] + seat["row"] * offset:.1f}" r="{disc["radius"]}"'
+        f'<circle cx="{position_center_x(layout, index) + player["cx_offset"]:.1f}"'
+        f' cy="{player["cy"]:.1f}" r="{disc["radius"]}"'
         f' fill="{player["fill"]}" stroke="{player["stroke"]}"'
         f' stroke-width="{disc["stroke_width"]}"'
         f' data-player-disc="true" data-player="{player["id"]}"'
@@ -276,11 +294,11 @@ def render_piety_track_v2_svg(layout: dict, config: dict, variant_id: str) -> st
         render_trefoil_rule(layout, geometry),
     ]
 
-    seats_by_position = {track["disc_position"]: variant["seats"]}
+    seated = seated_players(layout, variant_id)
     for index, vp in enumerate(vp_values):
         parts.append(render_position_label(layout, geometry, index))
-        for seat in seats_by_position.get(index, ()):
-            parts.append(render_player_disc(layout, geometry, index, seat))
+        if index == track["disc_position"]:
+            parts += [render_player_disc(layout, index, player) for player in seated]
         parts.append(render_vp_star(layout, geometry, index, vp))
 
     padding = layout["padding"]
