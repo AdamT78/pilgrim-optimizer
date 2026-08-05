@@ -397,21 +397,67 @@ discs and they all stand on step `0`, where a round starts them. Each takes its 
 position mapping, which is all a later PR needs to walk them rightward along the track the way the
 Piety track moves its own discs — no new geometry, and no controls in this PR.
 
-Everything a later PR has to find is already labelled: `data-component="alms-table"` on the board,
-`data-alms-position` on each step and on each disc, `data-player` and `data-player-disc` on the
-discs themselves, `data-alms-threshold` on the reward lines, `data-placeholder-slot` on the four
-dashed squares at the top right, and `data-season-end-rank` on the key rows. Those dashed squares
-stay empty here; they are where the round winners' coloured player cubes will go, one per round.
-The baselines carry none of these attributes, which is the only reason the generated SVG and the
-baseline SVG are not byte identical — with the hooks stripped and the diagram discs set aside,
-every drawing element matches the baseline's exactly, and a test keeps it that way.
+Everything is labelled: `data-component="alms-table"` on the board, `data-alms-position` on each
+step and on each disc, `data-player` and `data-player-disc` on the discs themselves,
+`data-alms-threshold` on the reward lines, `data-placeholder-slot` on the four dashed squares at
+the top right, `data-season-end-winner-slot` on the cubes that fill them, and
+`data-season-end-rank` on the key rows. The baselines carry none of these attributes, which is the
+only reason the generated SVG and the baseline SVG are not byte identical — with the hooks
+stripped and the diagram discs set aside, every drawing element matches the baseline's exactly,
+and a test keeps it that way.
+
+The generated Alms Table carries local UI/debug controls. **Move Player 1 up** and **Move Player 1
+down** walk the white disc along the track, and the button at the end of its travel is disabled
+rather than silently doing nothing. Only Player 1 moves; the other three stay on step `0`, where
+they keep their own corners of the 2x2 so the white disc leaving does not disturb them. The four
+**Add _colour_ cube to Season end winner** buttons drop a cube into the first free socket, and
+once all four are filled the buttons switch off. A readout beside them says where Player 1 stands
+and how many cubes are down. All of it is visual/debug state only: nothing here mutates
+`GameState`, decides whether a player really won a round, or scores anything.
+
+Player 1 has one space past the end of the track: the `1st` pocket, `RANK_FIRST`, which the board
+already draws for the first disc to reach the top. `mover_path` is the whole of the movement rule
+— `[0, 1, 2, 3, 4, 5, 6, "rank_1st"]` — and `next_mover_position`, `previous_mover_position`, and
+the page's own buttons all just step along it, which is why neither end can be walked off. The
+pocket holds one disc, so a disc there takes the pocket's centre rather than its seat corner in
+the 2x2; `alms_position_target` decides which. Note that the pocket is a space on the race track,
+left of the divider, and has nothing to do with the record's cube sockets at the top right: the
+disc races into one, the cubes are recorded in the other, and a test pins the two apart.
+
+Like the duty wheel, the renderer draws everything the controls can switch on and hides it, so a
+click flips opacity rather than building SVG in the browser: all sixteen winner cubes, one per
+socket per player, are already there at `opacity="0"`. The disc is the exception — it slides, so
+the page sets its `cx` and `cy` from `disc_targets`, the same coordinates the renderer used, and
+updates its `data-alms-position` so the markup stays honest about where it is. That is also why a
+disc that can move is lifted out of its step group into its own layer when `interactive` is on:
+sliding it must not leave it parented to the step it started on. That layer is drawn after the
+`1st` pocket, since the pocket is painted solid and would otherwise hide the disc that lands in
+it. Ask for the board without `interactive` and none of that is emitted, leaving exactly the
+picture the baseline draws.
+
+The winner cubes take the Player Board v2 cube colours rather than the track's disc colours,
+because they are the player's own cube moved onto this board, while the discs are the piety-track
+disc. A test pins them to `player_boards_v2_layout.json` so the two cannot drift apart. A cube is
+exactly the size of the socket it fills, and the script hides the socket underneath it as well, so
+a filled socket shows no dashed edge rather than a dash peeking out from behind a stroke.
+
+Every square on this board is the same cube — the empty socket, the winner's cube that fills it,
+and the printed key cube counting toward a score — so all three read from one `record.cube` and
+are drawn at one size and one stroke weight, `1.2`, which is what Player Board v2 draws a cube at.
+The baseline gave each kind its own weight (`1.4` for a socket, `1.5` for a key cube), so this is
+the one place the generated board deliberately departs from it: the parity test restrokes the
+baseline's fourteen cubes before comparing, and still holds every other element to the letter.
+
+The hooks are namespaced — `alms-move-up`, `alms-move-down`, `alms-readout`,
+`.alms-table-controls` — and the script is one IIFE, so the panel can later join a page that
+already has controls of its own without either side reaching into the other.
 
 The generated page is titled `Alms Table` rather than the baseline's leftover `Construction
 track`, since nothing is preserving fidelity to a wrong title once the renderer owns the markup.
 
-This is still a picture of a board. It is not in the setup view, it does not connect to
-`GameState`, there are no movement or scoring controls, and it implements no gameplay rule —
-season-end Alms scoring included. Those belong in later PRs.
+The controls move pieces and nothing else. The board is not in the setup view, it does not connect
+to `GameState`, and it implements no gameplay rule: no Alms legality, no season-end resolution, no
+scoring, and no `apply_action` integration. Those belong in later PRs.
 
 ## Game setup debug view
 

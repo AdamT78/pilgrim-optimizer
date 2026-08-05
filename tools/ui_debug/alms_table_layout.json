@@ -61,7 +61,9 @@
       "color": "white",
       "fill": "#FFFFFF",
       "stroke": "#8B7B4E",
-      "seat": { "column": -1, "row": -1 }
+      "seat": { "column": -1, "row": -1 },
+      "cube_fill": "#FFFFFF",
+      "cube_stroke": "#8B7B4E"
     },
     {
       "id": "player_two",
@@ -69,7 +71,9 @@
       "color": "red",
       "fill": "#C0392B",
       "stroke": "#7A2020",
-      "seat": { "column": 1, "row": -1 }
+      "seat": { "column": 1, "row": -1 },
+      "cube_fill": "#B7382E",
+      "cube_stroke": "#7A241C"
     },
     {
       "id": "player_three",
@@ -77,7 +81,9 @@
       "color": "yellow",
       "fill": "#F4D03F",
       "stroke": "#B8960C",
-      "seat": { "column": -1, "row": 1 }
+      "seat": { "column": -1, "row": 1 },
+      "cube_fill": "#D9B33B",
+      "cube_stroke": "#8A6B1E"
     },
     {
       "id": "player_four",
@@ -85,7 +91,9 @@
       "color": "blue",
       "fill": "#2E86C1",
       "stroke": "#1B4F72",
-      "seat": { "column": 1, "row": 1 }
+      "seat": { "column": 1, "row": 1 },
+      "cube_fill": "#3B6EA5",
+      "cube_stroke": "#254A73"
     }
   ],
   "starting_position": 0,
@@ -104,7 +112,7 @@
     "width": 111.0,
     "heading": { "text": "Season end winners", "x": 447.5, "y": 46.0, "font_size": 9.5 },
     "rule": { "x1": 392.0, "x2": 503.0, "y": 82.0 },
-    "cube": { "size": 13, "gap": 5 },
+    "cube": { "size": 13, "gap": 5, "stroke_width": 1.2 },
     "placeholder_slots": {
       "first_center_x": 420.5,
       "center_y": 59.5,
