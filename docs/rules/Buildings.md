@@ -1,4 +1,4 @@
-# Buildings (v1.9-v5.7 Sandbox Scope)
+# Buildings (v1.9-v5.12 Sandbox Scope)
 
 ## Implemented now
 
@@ -84,7 +84,8 @@ Construct note:
 
 - Construct can buy from `building_market` only when a target building is live
 - future/non-live market buildings are not legal Construct purchase targets yet
-- building hiring (bank or other players) remains deferred
+- at v2.9 this milestone still deferred building hiring; later milestones add
+  source-specific hire behavior for supported effects
 
 ## Building hire infrastructure (v3.0)
 
@@ -403,6 +404,53 @@ Event semantics before sowing:
 - own active source: `BUILDING_BONUS` -> conversion `RESOURCE_DELTA` -> `SOWING`
 - Brewery conversion delta is always `wheat -1`, `silver +2`
 
+## Bank payment substitution (v5.12)
+
+Bank now applies as an optional payment-substitution modifier attached to a normal full-turn
+action.
+
+Source resolution follows the existing building-hire source model:
+
+- own active Bank -> free
+- live market Bank -> hire from bank
+- opponent active Bank -> hire from owner
+
+Bank rule:
+
+- for one transaction, replace one required resource type with silver
+- supported replaced resource types: `wheat`, `stone`, `piety`
+- replacement amount is any `X` where `1 <= X <= required amount` for the chosen resource type
+- replacement can be partial or full for that one resource type
+- only one resource type can be replaced per action
+
+Scope boundaries:
+
+- applies only to resources spent for the selected action's payment/cost transaction
+- does not apply to resources received/rewards
+- does not create resources or change/refund mechanics
+- does not replace multiple resource types in one action
+- cannot pay Bank's own hire cost (hire payment resolves before substitution options)
+
+Current legal-generation scope:
+
+- Ordination wheat costs (after any Mill waiver)
+- Construct stone costs (`construct_building`, `construct_building_and_road_deferred`)
+- no zero-substitution variants
+- no Bank variants for pure reward/no-cost actions
+
+Timing:
+
+- if Bank is hired, hire payment resolves first
+- Bank substitution declaration resolves next (`BUILDING_BONUS`)
+- sowing and selected Duty resolve after that
+- substituted payment is deducted during duty resolution
+
+Event semantics before sowing:
+
+- hired source: `BUILDING_HIRED` -> `BUILDING_BONUS` -> `SOWING`
+- own active source: `BUILDING_BONUS` -> `SOWING`
+- `BUILDING_BONUS`: `bank replaced X <resource> with X silver for this transaction`
+
 ## Guild merchant advance (v5.3)
 
 Guild now applies as an optional pre-sow Merchant-position modifier attached to a normal full-turn action.
@@ -614,6 +662,7 @@ Current supported free-hire target effects:
 - Indulgences
 - Stone Yard
 - Brewery
+- Bank
 - Guild
 - Pulpit
 - Scriptorium

@@ -64,6 +64,7 @@ def test_wagon_yard_supports_minimum_target_building_set() -> None:
         ("scenarios/wagon_yard_active_free_hire_market_indulgences_001.json", "indulgences"),
         ("scenarios/wagon_yard_active_free_hire_market_stone_yard_001.json", "stone_yard"),
         ("scenarios/wagon_yard_active_free_hire_market_brewery_001.json", "brewery"),
+        ("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json", "bank"),
         ("scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"),
         ("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"),
         ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),

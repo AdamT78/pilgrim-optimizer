@@ -190,6 +190,27 @@ class _ResolvedGrainStoreConversion:
 
 
 @dataclass(frozen=True, slots=True)
+class _BankPaymentOption:
+    """Pre-sow state plus payment-substitution metadata for one Bank use."""
+
+    state: GameState
+    building_id: str
+    source: BuildingAbilitySource
+    replaced_resource: str
+    silver_amount: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedBankPayment:
+    """Validated Bank payment substitution directive from one action."""
+
+    building_id: str
+    source: BuildingAbilitySource
+    replaced_resource: str
+    silver_amount: int
+
+
+@dataclass(frozen=True, slots=True)
 class _GuildMerchantAdvanceOption:
     """Pre-sow merchant-advance variant for one legal Guild use."""
 
@@ -313,6 +334,8 @@ _STONE_YARD_BUY_STONE = "buy_stone"
 _STONE_YARD_SELL_STONE = "sell_stone"
 _BUILDING_BREWERY = "brewery"
 _BREWERY_SELL_WHEAT_FOR_SILVER = "sell_wheat_for_silver"
+_BUILDING_BANK = "bank"
+_BANK_REPLACED_RESOURCES: tuple[str, ...] = ("wheat", "stone", "piety")
 _BUILDING_SCRIPTORIUM = "scriptorium"
 _BUILDING_CUSTOMS_HOUSE = "customs_house"
 _BUILDING_GUILD = "guild"
@@ -326,6 +349,7 @@ _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS: frozenset[str] = frozenset(
         _BUILDING_INDULGENCES,
         _BUILDING_STONE_YARD,
         _BUILDING_BREWERY,
+        _BUILDING_BANK,
         _BUILDING_GUILD,
         _BUILDING_PULPIT,
         _BUILDING_SCRIPTORIUM,
@@ -396,6 +420,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             allow_scriptorium_modifier=start_turn_option is None,
             allow_customs_house_modifier=start_turn_option is None,
             allow_wagon_yard_modifier=start_turn_option is None,
+            allow_bank_modifier=start_turn_option is None,
             uses_scriptorium_effective_counts=False,
             uses_customs_house_taxation_override=False,
         )
@@ -469,6 +494,7 @@ def _legal_full_turn_actions_for_state(
     allow_scriptorium_modifier: bool,
     allow_customs_house_modifier: bool,
     allow_wagon_yard_modifier: bool,
+    allow_bank_modifier: bool,
     uses_scriptorium_effective_counts: bool,
     uses_customs_house_taxation_override: bool,
 ) -> tuple[GameAction, ...]:
@@ -482,6 +508,35 @@ def _legal_full_turn_actions_for_state(
         uses_customs_house=uses_customs_house_taxation_override,
     )
     actions: list[GameAction] = []
+
+    def _append_bank_payment_variants_for_action(
+        *,
+        action: FullTurnAction,
+        state_for_action: GameState,
+        required_stone: int = 0,
+        required_silver: int = 0,
+        required_wheat: int = 0,
+        required_piety: int = 0,
+        hired_source: BuildingAbilitySource | None = None,
+    ) -> None:
+        if not allow_bank_modifier:
+            return
+        if not _is_bank_modifier_eligible_action(action):
+            return
+        bank_options = _legal_bank_payment_options_for_action(
+            state=state_for_action,
+            config=config,
+            required_stone=required_stone,
+            required_silver=required_silver,
+            required_wheat=required_wheat,
+            required_piety=required_piety,
+            hired_source=hired_source,
+        )
+        for bank_option in bank_options:
+            bank_action = _with_bank_payment_fields(action, option=bank_option)
+            if bank_action not in actions:
+                actions.append(bank_action)
+
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
         for route_option in _legal_sow_routes_for_origin(
@@ -545,6 +600,9 @@ def _legal_full_turn_actions_for_state(
                 )
                 player_state = state_for_turn.player_state(state.active_player)
                 player_resources = player_state.resources
+                bank_modifier_allowed_for_turn = (
+                    route_option.building_id is None and conversion_option is None
+                )
 
                 for duty_position in config.duty_positions():
                     if sowed_vector[duty_position] <= 0:
@@ -779,16 +837,37 @@ def _legal_full_turn_actions_for_state(
                                 config=config,
                                 building_market=state_for_turn.building_market,
                             )
+                            construct_candidate_ids = _construct_market_candidate_building_ids(
+                                state=state_for_turn,
+                                player_state=player_state,
+                                config=config,
+                                building_market=state_for_turn.building_market,
+                            )
                             for building_id in constructible_building_ids:
-                                actions.append(
-                                    FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.CONSTRUCT_BUILDING,
-                                        construct_building_id=building_id,
-                                    )
+                                construct_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+                                    construct_building_id=building_id,
                                 )
+                                actions.append(construct_action)
+                            for building_id in construct_candidate_ids:
+                                stone_cost = config.buildings.definition_by_id(building_id).stone_cost
+                                construct_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+                                    construct_building_id=building_id,
+                                )
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=construct_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_stone=stone_cost,
+                                    )
                             for construct_plan in _construct_road_only_plans(
                                 duty_value=duty_value,
                                 road_engineer_extra_roads=road_engineer_extra_roads,
@@ -807,18 +886,38 @@ def _legal_full_turn_actions_for_state(
                                 road_engineer_extra_roads=road_engineer_extra_roads,
                             ):
                                 for building_id in constructible_building_ids:
-                                    actions.append(
-                                        FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=(
-                                                TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
-                                            ),
-                                            construct_plan=construct_plan,
-                                            construct_building_id=building_id,
-                                        )
+                                    construct_building_and_road_action = FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=(
+                                            TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+                                        ),
+                                        construct_plan=construct_plan,
+                                        construct_building_id=building_id,
                                     )
+                                    actions.append(construct_building_and_road_action)
+                                for building_id in construct_candidate_ids:
+                                    stone_cost = config.buildings.definition_by_id(
+                                        building_id
+                                    ).stone_cost
+                                    construct_building_and_road_action = FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=(
+                                            TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+                                        ),
+                                        construct_plan=construct_plan,
+                                        construct_building_id=building_id,
+                                    )
+                                    if bank_modifier_allowed_for_turn:
+                                        _append_bank_payment_variants_for_action(
+                                            action=construct_building_and_road_action,
+                                            state_for_action=state_for_turn,
+                                            required_silver=silver_cost,
+                                            required_stone=stone_cost,
+                                        )
                     elif TurnResolutionType.ORDINATION in category_actions:
                         strength = _duty_strength_for_position(
                             state,
@@ -882,6 +981,13 @@ def _legal_full_turn_actions_for_state(
                                 )
                                 if base_action not in actions:
                                     actions.append(base_action)
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=base_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                    )
 
                             if owns_active_infirmary:
                                 bonus_sequences = legal_ordination_step_sequences(
@@ -910,6 +1016,73 @@ def _legal_full_turn_actions_for_state(
                                     )
                                     if bonus_action not in actions:
                                         actions.append(bonus_action)
+                                    if bank_modifier_allowed_for_turn:
+                                        _append_bank_payment_variants_for_action(
+                                            action=bonus_action,
+                                            state_for_action=state_for_turn,
+                                            required_silver=silver_cost,
+                                            required_wheat=required_wheat,
+                                        )
+
+                        # Bank can make otherwise-unaffordable Ordination wheat costs legal.
+                        bank_sequence_seed = _player_state_with_wheat_delta(
+                            player_state,
+                            wheat_delta=(
+                                (2 if no_hire_mill_active else 0) + player_resources.silver
+                            ),
+                        )
+                        if (
+                            bank_modifier_allowed_for_turn
+                            and bank_sequence_seed is not None
+                            and player_resources.silver > 0
+                        ):
+                            bank_base_sequences = legal_ordination_step_sequences(
+                                bank_sequence_seed,
+                                max_steps=duty_value,
+                            )
+                            for step_sequence in bank_base_sequences:
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=no_hire_mill_active,
+                                )
+                                base_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                )
+                                _append_bank_payment_variants_for_action(
+                                    action=base_action,
+                                    state_for_action=state_for_turn,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                )
+                            if owns_active_infirmary:
+                                bank_bonus_sequences = legal_ordination_step_sequences(
+                                    bank_sequence_seed,
+                                    max_steps=duty_value + 1,
+                                )
+                                for step_sequence in bank_bonus_sequences:
+                                    if len(step_sequence) <= duty_value:
+                                        continue
+                                    required_wheat = _ordination_wheat_cost(
+                                        len(step_sequence),
+                                        mill_active=no_hire_mill_active,
+                                    )
+                                    bonus_action = FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.ORDINATION,
+                                        ordination_steps=step_sequence,
+                                    )
+                                    _append_bank_payment_variants_for_action(
+                                        action=bonus_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                    )
 
                         if _is_hired_source(infirmary_source) and infirmary_source.usable:
                             hired_infirmary_player_state = _player_state_with_wheat_delta(
@@ -1105,6 +1278,7 @@ def _legal_full_turn_actions_for_state(
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
+                allow_bank_modifier=False,
                 uses_scriptorium_effective_counts=True,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1132,6 +1306,7 @@ def _legal_full_turn_actions_for_state(
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
+                allow_bank_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1157,6 +1332,7 @@ def _legal_full_turn_actions_for_state(
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
+                allow_bank_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=True,
             ):
@@ -1191,6 +1367,9 @@ def _legal_full_turn_actions_for_state(
                     wagon_yard_option.target_building_id == _BUILDING_CUSTOMS_HOUSE
                 ),
                 allow_wagon_yard_modifier=False,
+                allow_bank_modifier=(
+                    wagon_yard_option.target_building_id == _BUILDING_BANK
+                ),
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1229,6 +1408,7 @@ def _legal_full_turn_actions_for_state(
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
+                allow_bank_modifier=False,
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1958,6 +2138,40 @@ def _apply_full_turn_action(
             uses_customs_house=True,
         )
 
+    bank_payment = _resolved_bank_payment_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if bank_payment is not None:
+        if _is_hired_source(bank_payment.source):
+            try:
+                state_for_sow, bank_hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=bank_payment.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=bank_payment.source,
+                    payment=bank_hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+        pre_sowing_events.append(
+            _bank_payment_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+                replaced_resource=bank_payment.replaced_resource,
+                silver_amount=bank_payment.silver_amount,
+            )
+        )
+
     if wagon_yard_free_hire is not None and wagon_yard_free_hire.target_was_temporary_added:
         state_for_sow = _state_without_temporary_active_building(
             state_for_sow,
@@ -2073,6 +2287,32 @@ def _apply_full_turn_action(
         duty_deferred_event: GameEvent | None = None
         updated_building_market = state_after_sow.building_market
         state_after_resolution: GameState | None = None
+
+        def _resolution_costs_with_bank(
+            *,
+            required_stone: int = 0,
+            required_silver: int = 0,
+            required_wheat: int = 0,
+            required_piety: int = 0,
+        ) -> tuple[int, int, int, int]:
+            if bank_payment is None:
+                return (
+                    max(0, required_stone),
+                    max(0, required_silver),
+                    max(0, required_wheat),
+                    max(0, required_piety),
+                )
+            try:
+                return _costs_with_bank_substitution(
+                    required_stone=required_stone,
+                    required_silver=required_silver,
+                    required_wheat=required_wheat,
+                    required_piety=required_piety,
+                    replaced_resource=bank_payment.replaced_resource,
+                    silver_amount=bank_payment.silver_amount,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
 
         if (
             action.resolution is not TurnResolutionType.GIVE_ALMS_PAID
@@ -2274,6 +2514,54 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Brewery conversion amount must be exactly 1."
                 )
+        bank_payment_fields = (
+            action.bank_payment_building_id,
+            action.bank_payment_building_source,
+            action.bank_payment_replaced_resource,
+            action.bank_payment_silver_amount,
+        )
+        bank_payment_field_count = sum(field is not None for field in bank_payment_fields)
+        if bank_payment_field_count not in (0, len(bank_payment_fields)):
+            raise TransitionValidationError(
+                "bank_payment_building_id/source and bank_payment_replaced_resource/silver_amount must be set together."
+            )
+        has_bank_payment_modifier = bank_payment_field_count == len(bank_payment_fields)
+        if has_bank_payment_modifier:
+            if action.bank_payment_building_id != _BUILDING_BANK:
+                raise TransitionValidationError(
+                    "Only Bank is supported for bank_payment_building fields."
+                )
+            if action.bank_payment_replaced_resource not in _BANK_REPLACED_RESOURCES:
+                replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
+                raise TransitionValidationError(
+                    "Bank replaced resource must be one of: "
+                    f"{replaced_text}."
+                )
+            amount = action.bank_payment_silver_amount
+            if amount is None or amount <= 0:
+                raise TransitionValidationError(
+                    "Bank silver substitution amount must be at least 1."
+                )
+            if action.resolution not in (
+                TurnResolutionType.ORDINATION,
+                TurnResolutionType.CONSTRUCT_BUILDING,
+                TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
+            ):
+                raise TransitionValidationError(
+                    "Bank payment substitution is only supported for Ordination and Construct building actions."
+                )
+            if conversion_field_count == len(conversion_fields):
+                raise TransitionValidationError(
+                    "Combining Bank payment substitution with building conversion modifiers is deferred."
+                )
+            if has_route_building_id or has_secondary_route_building_id:
+                raise TransitionValidationError(
+                    "Combining Bank payment substitution with sow-route modifiers is deferred."
+                )
+            if start_turn_relocation is not None:
+                raise TransitionValidationError(
+                    "Combining Bank payment substitution with start-turn relocation modifiers is deferred."
+                )
         merchant_advance_fields = (
             action.merchant_advance_building_id,
             action.merchant_advance_building_source,
@@ -2305,6 +2593,10 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Guild Merchant movement with start-turn relocation modifiers is deferred."
                 )
+        if has_guild_merchant_modifier and has_bank_payment_modifier:
+            raise TransitionValidationError(
+                "Combining Guild and Bank pre-sow building modifiers in one action is deferred."
+            )
         effective_acolyte_fields = (
             action.effective_acolyte_building_id,
             action.effective_acolyte_building_source,
@@ -2339,6 +2631,10 @@ def _apply_full_turn_action(
             if has_guild_merchant_modifier:
                 raise TransitionValidationError(
                     "Combining Guild and Scriptorium pre-sow building modifiers in one action is deferred."
+                )
+            if has_bank_payment_modifier:
+                raise TransitionValidationError(
+                    "Combining Bank and Scriptorium pre-sow building modifiers in one action is deferred."
                 )
         taxation_majority_fields = (
             action.taxation_majority_building_id,
@@ -2382,6 +2678,10 @@ def _apply_full_turn_action(
             if has_scriptorium_effective_modifier:
                 raise TransitionValidationError(
                     "Combining Scriptorium and Customs House pre-sow building modifiers in one action is deferred."
+                )
+            if has_bank_payment_modifier:
+                raise TransitionValidationError(
+                    "Combining Bank and Customs House pre-sow building modifiers in one action is deferred."
                 )
         free_hire_fields = (
             action.free_hire_enabler_building_id,
@@ -2446,6 +2746,10 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Wagon Yard free-hire with additional hired/modifier effects is deferred."
                 )
+            if has_bank_payment_modifier and target_building_id != _BUILDING_BANK:
+                raise TransitionValidationError(
+                    "Bank payment substitution with Wagon Yard is only supported when Wagon Yard targets Bank."
+                )
         workforce_move_fields = (
             action.workforce_move_building_id,
             action.workforce_move_building_source,
@@ -2477,6 +2781,10 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Pulpit free serf movement with start-turn relocation modifiers is deferred."
                 )
+            if has_bank_payment_modifier:
+                raise TransitionValidationError(
+                    "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
+                )
         if has_guild_merchant_modifier and has_pulpit_workforce_modifier:
             raise TransitionValidationError(
                 "Combining Guild and Pulpit pre-sow building modifiers in one action is deferred."
@@ -2488,6 +2796,10 @@ def _apply_full_turn_action(
         if has_customs_house_taxation_modifier and has_pulpit_workforce_modifier:
             raise TransitionValidationError(
                 "Combining Pulpit and Customs House pre-sow building modifiers in one action is deferred."
+            )
+        if has_bank_payment_modifier and has_pulpit_workforce_modifier:
+            raise TransitionValidationError(
+                "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
             )
         end_turn_fields = (
             action.end_turn_building_id,
@@ -2523,6 +2835,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Combining Customs House Taxation modifier with end-turn relocation modifiers is deferred."
             )
+        if has_bank_payment_modifier and end_turn_field_count == len(end_turn_fields):
+            raise TransitionValidationError(
+                "Combining Bank payment substitution with end-turn relocation modifiers is deferred."
+            )
 
         hire_context = BuildingHireTurnContext()
         if (action.hired_building_id is None) != (action.hired_building_source is None):
@@ -2533,6 +2849,10 @@ def _apply_full_turn_action(
             if has_guild_merchant_modifier:
                 raise TransitionValidationError(
                     "Combining Guild Merchant movement with resolution-level hired building fields is deferred."
+                )
+            if has_bank_payment_modifier:
+                raise TransitionValidationError(
+                    "Combining Bank payment substitution with resolution-level hired building fields is deferred."
                 )
             allowed_hire_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution)
             if allowed_hire_buildings is None:
@@ -2624,6 +2944,22 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=_BUILDING_PULPIT,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if (
+            has_bank_payment_modifier
+            and action.bank_payment_building_source is not None
+            and action.bank_payment_building_source != "own_active"
+        ):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_BANK):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_BANK,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -3043,10 +3379,40 @@ def _apply_full_turn_action(
                     f"{action.construct_building_id} "
                     f"(round {state_after_sow.round_number}; live round {live_round})."
                 )
+            try:
+                construct_definition = config.buildings.definition_by_id(
+                    action.construct_building_id
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            stone_cost = construct_definition.stone_cost
+            (
+                adjusted_stone_cost,
+                adjusted_silver_cost,
+                _adjusted_wheat_cost,
+                _adjusted_piety_cost,
+            ) = _resolution_costs_with_bank(
+                required_stone=stone_cost,
+                required_silver=silver_cost,
+            )
 
             new_player_state = state_after_sow.player_state(player)
-            if silver_cost:
-                new_resources = new_player_state.resources.add(silver=-silver_cost)
+            if not _can_afford_resolution_costs(
+                new_player_state,
+                required_stone=adjusted_stone_cost,
+                required_silver=adjusted_silver_cost,
+            ):
+                raise TransitionValidationError(
+                    "Construct costs are not affordable for this action."
+                )
+            bank_stone_substitution = stone_cost - adjusted_stone_cost
+            if bank_stone_substitution:
+                new_player_state = replace(
+                    new_player_state,
+                    resources=new_player_state.resources.add(stone=bank_stone_substitution),
+                )
+            if adjusted_silver_cost:
+                new_resources = new_player_state.resources.add(silver=-adjusted_silver_cost)
                 if new_resources.silver < 0:
                     raise TransitionValidationError(
                         "Construct minority silver cost would overdraw silver."
@@ -3067,8 +3433,7 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
 
-            stone_cost = constructed_building.stone_cost
-            resource_delta = (-stone_cost, -silver_cost, 0)
+            resource_delta = (-adjusted_stone_cost, -adjusted_silver_cost, 0)
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
             construct_events.append(
@@ -3110,6 +3475,22 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "construct_building_and_road_deferred requires duty value >= 2."
                 )
+            try:
+                construct_definition = config.buildings.definition_by_id(
+                    action.construct_building_id
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            stone_cost = construct_definition.stone_cost
+            (
+                adjusted_stone_cost,
+                adjusted_silver_cost,
+                _adjusted_wheat_cost,
+                _adjusted_piety_cost,
+            ) = _resolution_costs_with_bank(
+                required_stone=stone_cost,
+                required_silver=silver_cost,
+            )
 
             road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
                 state_after_sow.player_state(player),
@@ -3124,8 +3505,22 @@ def _apply_full_turn_action(
                 )
 
             new_player_state = state_after_sow.player_state(player)
-            if silver_cost:
-                new_resources = new_player_state.resources.add(silver=-silver_cost)
+            if not _can_afford_resolution_costs(
+                new_player_state,
+                required_stone=adjusted_stone_cost,
+                required_silver=adjusted_silver_cost,
+            ):
+                raise TransitionValidationError(
+                    "Construct costs are not affordable for this action."
+                )
+            bank_stone_substitution = stone_cost - adjusted_stone_cost
+            if bank_stone_substitution:
+                new_player_state = replace(
+                    new_player_state,
+                    resources=new_player_state.resources.add(stone=bank_stone_substitution),
+                )
+            if adjusted_silver_cost:
+                new_resources = new_player_state.resources.add(silver=-adjusted_silver_cost)
                 if new_resources.silver < 0:
                     raise TransitionValidationError(
                         "Construct minority silver cost would overdraw silver."
@@ -3146,7 +3541,6 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
 
-            stone_cost = constructed_building.stone_cost
             construct_extra_roads = _construct_plan_extra_road_count(action.construct_plan)
             if construct_extra_roads:
                 bonus_details = {
@@ -3166,7 +3560,7 @@ def _apply_full_turn_action(
                     )
                 )
 
-            resource_delta = (-stone_cost, -silver_cost, 0)
+            resource_delta = (-adjusted_stone_cost, -adjusted_silver_cost, 0)
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
             construct_events.append(
@@ -3220,6 +3614,16 @@ def _apply_full_turn_action(
                 if mill_source is not None
                 else required_mill_wheat
             )
+            (
+                _adjusted_stone_cost,
+                adjusted_silver_cost,
+                adjusted_wheat_cost,
+                _adjusted_piety_cost,
+            ) = _resolution_costs_with_bank(
+                required_silver=silver_cost,
+                required_wheat=mill_actual_wheat_spent,
+            )
+            bank_wheat_credit = mill_actual_wheat_spent - adjusted_wheat_cost
             ordination_source = _resolved_infirmary_source_for_action(
                 state=state_after_sow,
                 config=config,
@@ -3294,20 +3698,30 @@ def _apply_full_turn_action(
                         config=config,
                     )
                 )
-            if mill_waiver:
+            if not _can_afford_resolution_costs(
+                new_player_state,
+                required_silver=adjusted_silver_cost,
+                required_wheat=adjusted_wheat_cost,
+            ):
+                raise TransitionValidationError(
+                    "Ordination costs are not affordable for this action."
+                )
+            if mill_waiver or bank_wheat_credit:
                 new_player_state = replace(
                     new_player_state,
-                    resources=new_player_state.resources.add(wheat=mill_waiver),
+                    resources=new_player_state.resources.add(
+                        wheat=(mill_waiver + bank_wheat_credit)
+                    ),
                 )
-            remaining_mill_waiver = mill_waiver
+            remaining_no_wheat_steps = mill_waiver + bank_wheat_credit
             for step in action.ordination_steps:
-                wheat_paid = 0 if remaining_mill_waiver > 0 else 1
+                wheat_paid = 0 if remaining_no_wheat_steps > 0 else 1
                 try:
                     new_player_state = apply_ordination_step(new_player_state, step)
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
-                if remaining_mill_waiver > 0:
-                    remaining_mill_waiver -= 1
+                if remaining_no_wheat_steps > 0:
+                    remaining_no_wheat_steps -= 1
                 if step == ORDINATION_ORDAIN:
                     special_bonus_events.append(
                         GameEvent(
@@ -3343,8 +3757,8 @@ def _apply_full_turn_action(
                 else:
                     raise TransitionValidationError(f"Unknown ordination step: {step}")
 
-            if silver_cost:
-                new_resources = new_player_state.resources.add(silver=-silver_cost)
+            if adjusted_silver_cost:
+                new_resources = new_player_state.resources.add(silver=-adjusted_silver_cost)
                 if new_resources.silver < 0:
                     raise TransitionValidationError(
                         "Ordination minority silver cost would overdraw silver."
@@ -5185,6 +5599,128 @@ def _legal_brewery_conversion_options(
     )
 
 
+def _costs_with_bank_substitution(
+    *,
+    required_stone: int = 0,
+    required_silver: int = 0,
+    required_wheat: int = 0,
+    required_piety: int = 0,
+    replaced_resource: str | None = None,
+    silver_amount: int = 0,
+) -> tuple[int, int, int, int]:
+    adjusted_stone = max(0, required_stone)
+    adjusted_silver = max(0, required_silver)
+    adjusted_wheat = max(0, required_wheat)
+    adjusted_piety = max(0, required_piety)
+
+    if replaced_resource is None:
+        if silver_amount != 0:
+            raise ValueError("Bank silver_amount requires a replaced_resource.")
+        return adjusted_stone, adjusted_silver, adjusted_wheat, adjusted_piety
+
+    if replaced_resource not in _BANK_REPLACED_RESOURCES:
+        raise ValueError(f"Unsupported Bank replaced resource: {replaced_resource}.")
+    if silver_amount <= 0:
+        raise ValueError("Bank substitution amount must be at least 1.")
+
+    if replaced_resource == "stone":
+        if silver_amount > adjusted_stone:
+            raise ValueError("Bank substitution exceeds required stone.")
+        adjusted_stone -= silver_amount
+    elif replaced_resource == "wheat":
+        if silver_amount > adjusted_wheat:
+            raise ValueError("Bank substitution exceeds required wheat.")
+        adjusted_wheat -= silver_amount
+    elif replaced_resource == "piety":
+        if silver_amount > adjusted_piety:
+            raise ValueError("Bank substitution exceeds required piety.")
+        adjusted_piety -= silver_amount
+
+    adjusted_silver += silver_amount
+    return adjusted_stone, adjusted_silver, adjusted_wheat, adjusted_piety
+
+
+def _legal_bank_payment_options_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    required_stone: int = 0,
+    required_silver: int = 0,
+    required_wheat: int = 0,
+    required_piety: int = 0,
+    hired_source: BuildingAbilitySource | None = None,
+) -> tuple[_BankPaymentOption, ...]:
+    if max(required_stone, required_wheat, required_piety) <= 0:
+        return ()
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_BANK,
+    )
+    if not source.usable or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
+        return ()
+
+    state_after_hire = state
+    if _is_hired_source(source):
+        try:
+            state_after_hire, _payment = apply_building_hire_payment(
+                state_after_hire,
+                acting_player=state.active_player,
+                source=source,
+            )
+        except ValueError:
+            return ()
+
+    player_state = state_after_hire.player_state(state.active_player)
+    substitutions: list[_BankPaymentOption] = []
+    required_amounts = {
+        "stone": max(0, required_stone),
+        "wheat": max(0, required_wheat),
+        "piety": max(0, required_piety),
+    }
+    for replaced_resource, required_amount in required_amounts.items():
+        if required_amount <= 0:
+            continue
+        max_substitution = min(required_amount, player_state.resources.silver)
+        for silver_amount in range(1, max_substitution + 1):
+            (
+                adjusted_stone,
+                adjusted_silver,
+                adjusted_wheat,
+                adjusted_piety,
+            ) = _costs_with_bank_substitution(
+                required_stone=required_stone,
+                required_silver=required_silver,
+                required_wheat=required_wheat,
+                required_piety=required_piety,
+                replaced_resource=replaced_resource,
+                silver_amount=silver_amount,
+            )
+            if not _can_afford_resolution_costs(
+                player_state,
+                required_stone=adjusted_stone,
+                required_silver=adjusted_silver,
+                required_wheat=adjusted_wheat,
+                required_piety=adjusted_piety,
+                hired_source=hired_source,
+            ):
+                continue
+            substitutions.append(
+                _BankPaymentOption(
+                    state=state_after_hire,
+                    building_id=_BUILDING_BANK,
+                    source=source,
+                    replaced_resource=replaced_resource,
+                    silver_amount=silver_amount,
+                )
+            )
+    return tuple(substitutions)
+
+
 def _legal_guild_merchant_advance_options(
     state: GameState,
     config: GameConfig,
@@ -5509,6 +6045,10 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.bank_payment_building_id is None
+        and action.bank_payment_building_source is None
+        and action.bank_payment_replaced_resource is None
+        and action.bank_payment_silver_amount is None
         and action.free_hire_enabler_building_id is None
         and action.free_hire_target_building_id is None
         and action.free_hire_target_building_source is None
@@ -5531,6 +6071,10 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.bank_payment_building_id is None
+        and action.bank_payment_building_source is None
+        and action.bank_payment_replaced_resource is None
+        and action.bank_payment_silver_amount is None
         and action.free_hire_enabler_building_id is None
         and action.free_hire_target_building_id is None
         and action.free_hire_target_building_source is None
@@ -5553,6 +6097,10 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.bank_payment_building_id is None
+        and action.bank_payment_building_source is None
+        and action.bank_payment_replaced_resource is None
+        and action.bank_payment_silver_amount is None
         and action.free_hire_enabler_building_id is None
         and action.free_hire_target_building_id is None
         and action.free_hire_target_building_source is None
@@ -5575,6 +6123,38 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
         and action.taxation_majority_building_source is None
+        and action.bank_payment_building_id is None
+        and action.bank_payment_building_source is None
+        and action.bank_payment_replaced_resource is None
+        and action.bank_payment_silver_amount is None
+        and action.free_hire_enabler_building_id is None
+        and action.free_hire_target_building_id is None
+        and action.free_hire_target_building_source is None
+    )
+
+
+def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
+    return (
+        action.sow_route_building_id is None
+        and action.sow_route_secondary_building_id is None
+        and action.sow_route_omitted_location is None
+        and action.building_conversion_id is None
+        and action.start_turn_building_id is None
+        and action.end_turn_building_id is None
+        and action.hired_building_id is None
+        and action.hired_building_source is None
+        and action.merchant_advance_building_id is None
+        and action.merchant_advance_building_source is None
+        and action.workforce_move_building_id is None
+        and action.workforce_move_building_source is None
+        and action.effective_acolyte_building_id is None
+        and action.effective_acolyte_building_source is None
+        and action.taxation_majority_building_id is None
+        and action.taxation_majority_building_source is None
+        and action.bank_payment_building_id is None
+        and action.bank_payment_building_source is None
+        and action.bank_payment_replaced_resource is None
+        and action.bank_payment_silver_amount is None
         and action.free_hire_enabler_building_id is None
         and action.free_hire_target_building_id is None
         and action.free_hire_target_building_source is None
@@ -5629,6 +6209,11 @@ def _wagon_yard_action_uses_target_building(
             action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE
             and action.taxation_majority_building_source == "own_active"
         )
+    if target_building_id == _BUILDING_BANK:
+        return (
+            action.bank_payment_building_id == _BUILDING_BANK
+            and action.bank_payment_building_source == "own_active"
+        )
     return False
 
 
@@ -5652,6 +6237,8 @@ def _wagon_yard_action_is_supported_composition(
         return False
     if target_building_id != _BUILDING_CUSTOMS_HOUSE and action.taxation_majority_building_id is not None:
         return False
+    if target_building_id != _BUILDING_BANK and action.bank_payment_building_id is not None:
+        return False
     if (
         target_building_id
         not in (
@@ -5661,6 +6248,17 @@ def _wagon_yard_action_is_supported_composition(
             _BUILDING_BREWERY,
         )
         and action.building_conversion_id is not None
+    ):
+        return False
+    if target_building_id == _BUILDING_BANK and action.building_conversion_id is not None:
+        return False
+    if (
+        target_building_id == _BUILDING_BANK
+        and action.bank_payment_replaced_resource not in _BANK_REPLACED_RESOURCES
+    ):
+        return False
+    if target_building_id == _BUILDING_BANK and (
+        action.bank_payment_silver_amount is None or action.bank_payment_silver_amount <= 0
     ):
         return False
     return True
@@ -5763,6 +6361,25 @@ def _with_grain_store_conversion_fields(
         building_conversion_source=source_label,
         building_conversion_direction=option.direction,
         building_conversion_amount=option.amount,
+    )
+
+
+def _with_bank_payment_fields(
+    action: FullTurnAction,
+    *,
+    option: _BankPaymentOption,
+) -> FullTurnAction:
+    source_label = (
+        "own_active"
+        if option.source.source_type == "own_active"
+        else _hired_building_source_label(option.source)
+    )
+    return replace(
+        action,
+        bank_payment_building_id=option.building_id,
+        bank_payment_building_source=source_label,
+        bank_payment_replaced_resource=option.replaced_resource,
+        bank_payment_silver_amount=option.silver_amount,
     )
 
 
@@ -6269,6 +6886,86 @@ def _resolved_customs_house_taxation_for_action(
     return _ResolvedCustomsHouseTaxation(
         building_id=_BUILDING_CUSTOMS_HOUSE,
         source=source,
+    )
+
+
+def _resolved_bank_payment_for_action(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+) -> _ResolvedBankPayment | None:
+    fields = (
+        action.bank_payment_building_id,
+        action.bank_payment_building_source,
+        action.bank_payment_replaced_resource,
+        action.bank_payment_silver_amount,
+    )
+    field_count = sum(field is not None for field in fields)
+    if field_count == 0:
+        return None
+    if field_count != len(fields):
+        raise TransitionValidationError(
+            "bank_payment_building_id/source and bank_payment_replaced_resource/silver_amount must be set together."
+        )
+
+    building_id = action.bank_payment_building_id
+    source_label = action.bank_payment_building_source
+    replaced_resource = action.bank_payment_replaced_resource
+    silver_amount = action.bank_payment_silver_amount
+    assert building_id is not None
+    assert source_label is not None
+    assert replaced_resource is not None
+    assert silver_amount is not None
+
+    if building_id != _BUILDING_BANK:
+        raise TransitionValidationError(
+            "Only Bank is supported for bank_payment_building fields."
+        )
+    if replaced_resource not in _BANK_REPLACED_RESOURCES:
+        replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
+        raise TransitionValidationError(
+            "Bank replaced resource must be one of: "
+            f"{replaced_text}."
+        )
+    if silver_amount <= 0:
+        raise TransitionValidationError("Bank silver substitution amount must be at least 1.")
+    if action.resolution not in (
+        TurnResolutionType.ORDINATION,
+        TurnResolutionType.CONSTRUCT_BUILDING,
+        TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
+    ):
+        raise TransitionValidationError(
+            "Bank payment substitution is only supported for Ordination and Construct building actions."
+        )
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_BANK,
+    )
+    if source.source_type == "own_active" and source.usable:
+        if source_label != "own_active":
+            raise TransitionValidationError(
+                "Own-active Bank payment substitution must set source=own_active."
+            )
+    elif _is_hired_source(source) and source.usable:
+        expected_source_label = _hired_building_source_label(source)
+        if source_label != expected_source_label:
+            raise TransitionValidationError(
+                "Bank payment substitution source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+    else:
+        raise TransitionValidationError("Bank is unavailable in current state.")
+
+    return _ResolvedBankPayment(
+        building_id=_BUILDING_BANK,
+        source=source,
+        replaced_resource=replaced_resource,
+        silver_amount=silver_amount,
     )
 
 
@@ -6868,12 +7565,14 @@ def _can_afford_resolution_costs(
     required_stone: int = 0,
     required_silver: int = 0,
     required_wheat: int = 0,
+    required_piety: int = 0,
     hired_source: BuildingAbilitySource | None = None,
 ) -> bool:
     """Return True when total resolution costs are jointly affordable."""
     required_stone = max(0, required_stone)
     required_silver = max(0, required_silver)
     required_wheat = max(0, required_wheat)
+    required_piety = max(0, required_piety)
 
     if hired_source is not None and _is_hired_source(hired_source):
         if not hired_source.usable:
@@ -6886,6 +7585,8 @@ def _can_afford_resolution_costs(
             required_silver += hired_source.hire_cost
         elif hired_source.hire_resource == "wheat":
             required_wheat += hired_source.hire_cost
+        elif hired_source.hire_resource == "piety":
+            required_piety += hired_source.hire_cost
         else:
             return False
 
@@ -6894,6 +7595,7 @@ def _can_afford_resolution_costs(
         resources.stone >= required_stone
         and resources.silver >= required_silver
         and resources.wheat >= required_wheat
+        and player_state.piety >= required_piety
     )
 
 
@@ -7211,6 +7913,26 @@ def _grain_store_conversion_bonus_event(
             action="conversion",
             conversion_direction=conversion.direction,
             amount=conversion.amount,
+        ),
+    )
+
+
+def _bank_payment_bonus_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    replaced_resource: str,
+    silver_amount: int,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.BUILDING_BONUS,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            building=_BUILDING_BANK,
+            action="payment_substitution",
+            replaced_resource=replaced_resource,
+            silver_amount=silver_amount,
         ),
     )
 
@@ -7535,6 +8257,33 @@ def _constructible_building_ids(
         if player_state.resources.stone >= definition.stone_cost:
             affordable_buildings.append(building_id)
     return tuple(affordable_buildings)
+
+
+def _construct_market_candidate_building_ids(
+    *,
+    state: GameState,
+    player_state,
+    config: GameConfig,
+    building_market: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not has_available_player_board_slot(player_state, config):
+        return ()
+
+    owned_buildings = set(player_state.player_board_slots.active_buildings).union(
+        player_state.player_board_slots.donated_buildings
+    )
+    candidate_buildings: list[str] = []
+    for building_id in building_market:
+        if building_id in owned_buildings:
+            continue
+        try:
+            _definition = config.buildings.definition_by_id(building_id)
+        except ValueError:
+            continue
+        if not is_building_live(state, building_id):
+            continue
+        candidate_buildings.append(building_id)
+    return tuple(candidate_buildings)
 
 
 def _opponents(state: GameState, player: PlayerId) -> tuple[PlayerId, ...]:

@@ -310,8 +310,8 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - apply-time validation rejects attempts to construct non-live market buildings
 - Setup generator integration:
   - generated setups now include explicit live rounds for selected buildings using seeded local RNG
-- Hiring remains deferred:
-  - no bank-hire or other-player-hire runtime behavior is implemented yet
+- At the v2.9 milestone, hiring remained deferred. Later milestones implement
+  market/opponent hire behavior for supported building effects.
 
 ## Abstract Setup Timeline (v4.3)
 

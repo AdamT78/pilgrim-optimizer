@@ -433,7 +433,8 @@ Confession Box start-player notes:
 - `build_roads` now exposes `build_roads_deferred` scaffold plus `tithe`.
 - Build Roads remains fully non-spatial scaffolded.
 - Construct road effects remain non-spatial scaffolded; only building acquisition is implemented.
-- Building hiring (bank or other player) remains deferred.
+- Building hiring for supported building effects is implemented; there is still no standalone
+  "hire-only" command.
 
 ## Building Hire Infrastructure (v3.0)
 
