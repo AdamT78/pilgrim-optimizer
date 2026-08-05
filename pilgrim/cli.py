@@ -557,19 +557,25 @@ def _format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_pool = str(details.get("from_pool", "unknown"))
         to_pool = str(details.get("to_pool", "unknown"))
         wheat_paid = int(details.get("wheat_paid", 1))
+        bank_silver_paid = int(details.get("bank_silver_paid", 0))
+        bank_paid_suffix = (
+            f"; paid {bank_silver_paid} silver via Bank"
+            if bank_silver_paid > 0
+            else ""
+        )
         if step == "ordain":
             return (
                 f"{event_name}: {actor_name} ordained {amount} serf {from_pool} -> {to_pool}; "
-                f"paid wheat={wheat_paid}"
+                f"paid wheat={wheat_paid}{bank_paid_suffix}"
             )
         if step == "mission":
             return (
                 f"{event_name}: {actor_name} sent {amount} acolyte {from_pool} -> {to_pool}; "
-                f"paid wheat={wheat_paid}"
+                f"paid wheat={wheat_paid}{bank_paid_suffix}"
             )
         return (
             f"{event_name}: {actor_name} step={step} moved {amount} {from_pool} -> {to_pool}; "
-            f"paid wheat={wheat_paid}"
+            f"paid wheat={wheat_paid}{bank_paid_suffix}"
         )
 
     if event.event_type is EventType.TAXATION:
