@@ -342,6 +342,34 @@ title is that far off the offset the other eight share. The generated markup als
 `data-duty`, `data-token`, and `data-tithe-token` attributes the baseline has no need for, so the
 two files are not byte identical.
 
+## Alms Table prototype baseline
+
+`prototypes/alms_table.html` is the untouched visual baseline for the Alms Table, and
+`prototypes/alms_table.svg` is the same board as a standalone SVG, for looking at or embedding
+without the page around it. `prototype_sources/alms_table.py.txt` preserves the Python that drew
+them, reference-only as always: read for intent, never imported or run.
+
+The board is one grey strip split by a rule into the two things it tracks. Left of the rule is the
+race, steps `0` to `6` with a 2x2 of player discs on each and a pocket for the first disc to reach
+`6`, and the three threshold rewards printed underneath against the steps that pay them. Right of
+the rule is the record, which is what survives the round reset: four sockets, one per round, and
+beneath them the season-end key from cubes owned to VP. Those numbers are the ones the engine
+already uses — `configs/alms.json` gives the same `max_position` of `6`, the same rewards at `2`,
+`4`, and `6`, and the same `1 -> 5`, `2 -> 11`, `3 -> 18`, `4 -> 26` table.
+
+Two things about the copy are worth knowing before anyone goes looking. The files arrived named
+`construction_track.*` and the page still titles itself `Pilgrim — Construction Track` with an
+`<h1>` of `Construction track`; the drawing's own caption reads `Alms Table`, as does `TITLE` in
+the source, and the content is the Alms Table throughout. The baseline is kept exactly as it
+arrived rather than retitled, the same way the other baselines keep the titles their sources gave
+them.
+
+This is a picture and nothing more. There is no renderer extraction, no `alms_table_layout.json`,
+no generated output, and no link to it from the generated overview. It is not in the setup view,
+it does not connect to `GameState`, and it implements no gameplay or scoring rule — season-end
+Alms scoring included. Extracting a renderer for it belongs in a separate PR, following the
+component extraction checklist above.
+
 ## Game setup debug view
 
 `generated/game_setup.html` is the first composed view: it has no prototype baseline of its own

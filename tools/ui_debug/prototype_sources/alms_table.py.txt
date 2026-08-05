@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""
+Pilgrim -- construction track (strip layout).
+
+Shares every component with the rest of the game rather than re-inventing:
+
+  discs   r=6, 1.2 stroke, and the four player fills/edges  -> piety_tracks.py
+  star    same 5-point path, outer r=16 / inner 0.45, value -> piety_tracks.py
+  cubes   13 units square, black keyline                    -> mancala board
+  body    #B9B9B4 rounded strip, 16 corner radius           -> piety_tracks.py
+
+Layout, left to right:
+
+  * The RACE -- steps 0..6 with a 2x2 of player discs each, then the pocket
+    for the first disc to reach 6. This is the part that RESETS every
+    round, so it is grouped on its own and separated by a rule.
+  * The RECORD -- what survives the reset. Four empty sockets, one per
+    round, cap the board at four coloured cubes: four rounds, four cubes,
+    four sockets, so an impossible fifth has nowhere to go. Under them,
+    the scoring key: cubes owned -> points (1->5, 2->11, 3->18, 4->26).
+
+Splitting the panel that way means the divider is doing real work -- it
+marks the boundary between what is wiped each round and what accumulates,
+rather than being decoration.
+
+The key's cubes are drawn SOLID neutral grey and the winners' are drawn
+DASHED and empty. That contrast is what separates reference from
+placement at a glance: filled grey = information, empty = put one here.
+
+Steps 2, 4 and 6 carry an empty dashed panel where their text will go.
+"""
+
+import math
+
+# --- palette, all inherited ------------------------------------------------
+INK = "#3A2F1E"
+BODY = "#B9B9B4"            # same grey as the Piety strip
+BODY_STROKE = 2.5
+CORNER_R = 16
+
+TOKEN_R = 9                 # Piety disc, enlarged here (Piety uses 6)
+TOKEN_STROKE = 1.2
+PLAYERS = [                 # name, disc fill, disc edge
+    ("white",  "#FFFFFF", "#8B7B4E"),
+    ("red",    "#C0392B", "#7A2020"),
+    ("yellow", "#F4D03F", "#B8960C"),
+    ("blue",   "#2E86C1", "#1B4F72"),
+]
+
+STAR_FILL = "#F4D03F"
+STAR_EDGE = "#B8960C"
+STAR_R = 16
+STAR_INNER = STAR_R * 0.45
+
+CUBE = 13                   # same cube as the mancala board
+CUBE_GAP = 5
+KEY_CUBE_FILL = "#6E6E68"   # neutral: the key belongs to no player
+SOCKET_FILL = "#A9A9A3"     # a shade under the body, so it reads as a recess
+SOCKET_EDGE = INK
+
+STEPS = 7                   # 0..6
+ROUNDS = 4                  # four rounds -> at most four cubes on the board
+SCORE_KEY = [(1, 5), (2, 11), (3, 18), (4, 26)]   # cubes owned, points
+# Step effects. NOTE: the brief listed the third of these as "score 4" as
+# well; it is placed on 6 here, since 2/4/6 are the steps that carry text.
+EFFECTS = [
+    (2, "Move a serf from the village to the abbey"),
+    (4, "Move an acolyte from the abbey to the city"),
+    (6, "Move a serf directly to the city"),
+]
+EFFECT_STEPS = [n for n, _ in EFFECTS]
+TITLE = "Alms Table"
+TITLE_BAND = 24             # vertical room reserved for the title
+
+ROW_W = ROUNDS * CUBE + (ROUNDS - 1) * CUBE_GAP     # width of a 4-cube row
+
+# Ornament, carried over from the mancala board so the two read as one set.
+# Same rule: it goes where no data lives -- the panel's outer margin and the
+# empty band beside the title -- and never over a disc, socket, star or text.
+# Same weights and opacities as the board's `ornament-inset` / `ornament-header`.
+ORNAMENT = True
+ORN_INSET = 7.5
+
+
+# --- pieces ----------------------------------------------------------------
+def star_path_d(cx, cy, outer_r=STAR_R, inner_r=STAR_INNER, points=5, rotation_deg=-90):
+    pts, step = [], math.pi / points
+    start = math.radians(rotation_deg)
+    for i in range(points * 2):
+        r = outer_r if i % 2 == 0 else inner_r
+        a = start + i * step
+        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return "M " + " L ".join(f"{x:.2f},{y:.2f}" for x, y in pts) + " Z"
+
+
+def star(cx, cy, value):
+    return (f'<path d="{star_path_d(cx, cy)}" fill="{STAR_FILL}" stroke="{STAR_EDGE}" '
+            f'stroke-width="1.5" stroke-linejoin="round"/>'
+            f'<text x="{cx:.1f}" y="{cy + 3.0:.1f}" text-anchor="middle" '
+            f'font-family="Helvetica, Arial, sans-serif" font-size="9" '
+            f'font-weight="600" fill="#000000">{value}</text>')
+
+
+def disc(cx, cy, fill, edge):
+    return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{TOKEN_R}" fill="{fill}" '
+            f'stroke="{edge}" stroke-width="{TOKEN_STROKE}"/>')
+
+
+def disc_socket(cx, cy):
+    return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{TOKEN_R}" fill="{SOCKET_FILL}" '
+            f'stroke="{SOCKET_EDGE}" stroke-width="1.2" stroke-dasharray="3,2.5"/>')
+
+
+def cube_key(cx, cy):
+    """Solid neutral cube -- printed reference, not a place to put anything."""
+    return (f'<rect x="{cx - CUBE / 2:.1f}" y="{cy - CUBE / 2:.1f}" width="{CUBE}" '
+            f'height="{CUBE}" fill="{KEY_CUBE_FILL}" stroke="#000000" '
+            f'stroke-width="1.5"/>')
+
+
+def cube_socket(cx, cy):
+    """Empty cube space, to be filled with a round winner's coloured cube."""
+    return (f'<rect x="{cx - CUBE / 2:.1f}" y="{cy - CUBE / 2:.1f}" width="{CUBE}" '
+            f'height="{CUBE}" fill="{SOCKET_FILL}" stroke="{SOCKET_EDGE}" '
+            f'stroke-width="1.4" stroke-dasharray="3,2.5"/>')
+
+
+def label(cx, cy, text, size=9, fill=INK, weight="600"):
+    return (f'<text x="{cx:.1f}" y="{cy:.1f}" text-anchor="middle" '
+            f'font-family="Helvetica, Arial, sans-serif" font-size="{size}" '
+            f'font-weight="{weight}" fill="{fill}">{text}</text>')
+
+
+def title_text(x, y, text):
+    """Board title -- Georgia serif, matching the space titles on the map."""
+    return (f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="start" '
+            f'font-family="Georgia, \'Times New Roman\', serif" font-size="15" '
+            f'font-weight="700" fill="{INK}">{text}</text>')
+
+
+def body_text(x, y, text, size=10.5):
+    """Left-aligned running text, for the effect lines under the track.
+    A little larger than the numerals inside the stars, which were too
+    small to read comfortably as running text."""
+    return (f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="start" '
+            f'font-family="Helvetica, Arial, sans-serif" font-size="{size}" '
+            f'fill="{INK}">{text}</text>')
+
+
+def step_badge(cx, cy, n, w=18, h=15):
+    """Carries a step number down to its text -- same numeral, same weight as
+    the number above the step, so the two read as the same reference."""
+    return (f'<rect x="{cx - w / 2:.1f}" y="{cy - h / 2:.1f}" width="{w}" height="{h}" '
+            f'rx="3" fill="{SOCKET_FILL}" stroke="{INK}" stroke-width="1.1"/>'
+            + label(cx, cy + 3.9, str(n), 11))
+
+
+def effect_tick(cx, y, w=6, h=4.5):
+    """Small mark under a step that has an effect, pointing at the text."""
+    return (f'<path d="M {cx - w / 2:.1f},{y:.1f} L {cx + w / 2:.1f},{y:.1f} '
+            f'L {cx:.1f},{y + h:.1f} Z" fill="{INK}" fill-opacity="0.65"/>')
+
+
+def panel_inset(w, h, d=ORN_INSET):
+    """Hairline inside the panel edge -- the board's tile treatment, applied
+    to this panel's outline. Radius shrinks with the inset so the corners
+    stay concentric."""
+    return (f'<rect x="{d}" y="{d}" width="{w - 2 * d:.1f}" height="{h - 2 * d:.1f}" '
+            f'rx="{CORNER_R - d:.1f}" ry="{CORNER_R - d:.1f}" fill="none" '
+            f'stroke="{INK}" stroke-opacity="0.28" stroke-width="1.2"/>')
+
+
+def trefoil_rule(x0, x1, y):
+    """The board's title motif -- trefoil between two rules -- stretched to
+    run from the end of the title across to the zone divider."""
+    cx = (x0 + x1) / 2
+    lobes = "".join(
+        f'<circle cx="{cx + 4.6 * math.cos(math.radians(a)):.1f}" '
+        f'cy="{y + 4.6 * math.sin(math.radians(a)):.1f}" r="4.6" />'
+        for a in (-90, 30, 150))
+    return (f'<g fill="none" stroke="{INK}" stroke-opacity="0.34" stroke-width="1.3" '
+            f'stroke-linecap="round">{lobes}'
+            f'<path d="M {x0:.1f},{y:.1f} H {cx - 13:.1f} '
+            f'M {cx + 13:.1f},{y:.1f} H {x1:.1f}" /></g>')
+
+
+def bonus_pocket(cx, cy, w=36, h=32):
+    """Single-disc space for the first player to reach 6 -- rounded, not square."""
+    return (f'<rect x="{cx - w / 2:.1f}" y="{cy - h / 2:.1f}" width="{w}" height="{h}" '
+            f'rx="{h / 2:.1f}" ry="{h / 2:.1f}" fill="{BODY}" stroke="{INK}" '
+            f'stroke-width="1.4"/>' + disc_socket(cx, cy))
+
+
+def winner_row(x, cy):
+    """The four round-winner sockets, with a round number under each."""
+    parts = []
+    for k in range(ROUNDS):
+        cx = x + CUBE / 2 + k * (CUBE + CUBE_GAP)
+        parts.append(cube_socket(cx, cy))
+        parts.append(label(cx, cy + CUBE / 2 + 9, str(k + 1), 7.5))
+    return "".join(parts)
+
+
+def key_block(x, y, row_h=36):
+    """Scoring key stacked vertically: n cubes owned -> points."""
+    parts = []
+    star_cx = x + ROW_W + 12 + STAR_R
+    for i, (count, points) in enumerate(SCORE_KEY):
+        cy = y + row_h * i + row_h / 2
+        for k in range(count):
+            parts.append(cube_key(x + CUBE / 2 + k * (CUBE + CUBE_GAP), cy))
+        parts.append(star(star_cx, cy, points))
+    return "".join(parts), star_cx + STAR_R - x, row_h * len(SCORE_KEY)
+
+
+# --- layout ------------------------------------------------------------------
+PAD = 14
+BOX_W = 44
+# The step pitch is fixed at BOX_W, so a larger disc has to buy its size
+# out of the gap between the discs rather than out of the step spacing:
+# 4*9 + 2 = 38 across, leaving 3 clear on each side of a 44-wide step.
+GAP_2X2 = 2
+GRID = 2 * TOKEN_R * 2 + GAP_2X2
+ZONE_GAP = 13                            # race zone -> divider -> record zone
+
+
+def build():
+    n_boxes = STEPS + 1                  # seven steps plus the bonus pocket
+
+    # vertical rhythm inside the race strip
+    num_dy = 14
+    grid_cy = num_dy + 8 + GRID / 2
+    tick_dy = grid_cy + GRID / 2 + 7
+    strip_h = tick_dy + 12
+    line_h = 24        # badge is 14 tall, so this leaves 10 between boxes
+    effects_dy = strip_h + 10
+    race_h = effects_dy + line_h * len(EFFECTS)
+    race_w = n_boxes * BOX_W
+
+    # the record column: winners on top, key underneath
+    _, key_w, key_h = key_block(0, 0)
+    win_label_dy = 8
+    win_cy = win_label_dy + 7 + CUBE / 2
+    win_bottom = win_cy + CUBE / 2 + 11
+    key_dy = win_bottom + 12
+    record_h = key_dy + key_h
+    record_w = key_w
+
+    content_h = max(race_h, record_h)
+    content_top = PAD + TITLE_BAND
+    panel_w = PAD + race_w + ZONE_GAP * 2 + record_w + PAD
+    panel_hgt = content_top + content_h + PAD
+
+    race_x = PAD
+    race_top = content_top + (content_h - race_h) / 2
+    divider_x = PAD + race_w + ZONE_GAP
+    record_x = divider_x + ZONE_GAP
+    record_top = content_top + (content_h - record_h) / 2
+
+    parts = [f'<rect x="0" y="0" width="{panel_w:.1f}" height="{panel_hgt:.1f}" '
+             f'rx="{CORNER_R}" ry="{CORNER_R}" fill="{BODY}" stroke="{BODY}" '
+             f'stroke-width="{BODY_STROKE}"/>',
+             title_text(PAD + 2, PAD + 15, TITLE)]
+
+    if ORNAMENT:
+        parts.append(panel_inset(panel_w, panel_hgt))
+
+    # --- race zone: steps 0..6 plus the first-to-6 pocket
+    for i in range(n_boxes):
+        left = race_x + i * BOX_W
+        cx = left + BOX_W / 2
+        if i < STEPS:
+            parts.append(label(cx, race_top + num_dy, str(i), 11))
+            off = TOKEN_R + GAP_2X2 / 2
+            for r_i, (_, fill, edge) in enumerate(PLAYERS):
+                dx = -off if r_i % 2 == 0 else off
+                dy = -off if r_i < 2 else off
+                parts.append(disc(cx + dx, race_top + grid_cy + dy, fill, edge))
+            if i in EFFECT_STEPS:
+                parts.append(effect_tick(cx, race_top + tick_dy))
+        else:
+            parts.append(label(cx, race_top + num_dy, "1st", 8))
+            parts.append(bonus_pocket(cx, race_top + grid_cy))
+
+    for i in range(1, n_boxes):
+        x = race_x + i * BOX_W
+        parts.append(f'<line x1="{x:.1f}" y1="{race_top + 4:.1f}" '
+                     f'x2="{x:.1f}" y2="{race_top + strip_h - 2:.1f}" '
+                     f'stroke="{INK}" stroke-opacity="0.22" stroke-width="1"/>')
+
+    # effect texts, under the track, each tagged with its step number
+    badge_cx = race_x + 12
+    for k, (n, text) in enumerate(EFFECTS):
+        cy = race_top + effects_dy + line_h * k + line_h / 2
+        parts.append(step_badge(badge_cx, cy, n))
+        parts.append(body_text(badge_cx + 16, cy + 3.8, text))
+
+    if ORNAMENT:
+        parts.append(trefoil_rule(PAD + 100, divider_x - 9, PAD + 10))
+
+    # --- the divider: everything left of it is wiped between rounds
+    parts.append(f'<line x1="{divider_x:.1f}" y1="{content_top + 4:.1f}" '
+                 f'x2="{divider_x:.1f}" y2="{panel_hgt - PAD - 4:.1f}" '
+                 f'stroke="{INK}" stroke-opacity="0.45" stroke-width="1.4"/>')
+
+    # --- record zone: winners' sockets over the scoring key
+    win_x = record_x + (record_w - ROW_W) / 2
+    key, _, _ = key_block(record_x, record_top + key_dy)
+    parts.append(label(record_x + record_w / 2, record_top + win_label_dy,
+                       "Season end winners", 9.5))
+    parts.append(winner_row(win_x, record_top + win_cy))
+    parts.append(f'<line x1="{record_x:.1f}" y1="{record_top + win_bottom + 5:.1f}" '
+                 f'x2="{record_x + record_w:.1f}" y2="{record_top + win_bottom + 5:.1f}" '
+                 f'stroke="{INK}" stroke-opacity="0.25" stroke-width="1"/>')
+    parts.append(key)
+
+    pad_out = 18
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" '
+           f'viewBox="{-pad_out} {-pad_out} {panel_w + 2 * pad_out:.1f} '
+           f'{panel_hgt + 2 * pad_out:.1f}" width="{panel_w + 2 * pad_out:.1f}" '
+           f'height="{panel_hgt + 2 * pad_out:.1f}">\n'
+           f'  <rect x="{-pad_out}" y="{-pad_out}" width="{panel_w + 2 * pad_out:.1f}" '
+           f'height="{panel_hgt + 2 * pad_out:.1f}" fill="#000000"/>\n'
+           f'  {"".join(parts)}\n</svg>')
+    return svg, panel_w, panel_hgt
+
+
+PAGE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim — Construction Track</title>
+<style>
+  body {{
+    margin: 0; background: #000000; font-family: Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 12px 40px; box-sizing: border-box;
+  }}
+  h1 {{ font-family: Georgia, serif; font-size: 26px; color: #F2EEDF; margin: 0 0 2px; }}
+  p.subtitle {{ color: #A8A296; font-size: 14px; margin: 0 0 18px; text-align: center;
+                max-width: 760px; }}
+  .board-wrap {{ background: #000000; border: 1px solid #333333; border-radius: 10px;
+                 box-shadow: 0 2px 10px rgba(0,0,0,0.5); padding: 10px; }}
+  .board-wrap svg {{ display: block; max-width: 95vw; height: auto; }}
+</style>
+</head>
+<body>
+  <h1>Construction track</h1>
+  <p class="subtitle">Left of the divider is the race, which resets every round. Right of it is
+  the record, which does not: four sockets cap the board at four coloured cubes, one per round,
+  with the scoring key beneath.</p>
+  <div class="board-wrap">
+    {svg}
+  </div>
+</body>
+</html>
+'''
+
+if __name__ == "__main__":
+    svg, w, h = build()
+    with open("construction_track.svg", "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n' + svg + "\n")
+    with open("construction_track.html", "w") as f:
+        f.write(PAGE.format(svg=svg))
+    print(f"{w:.0f}x{h:.0f} -> construction_track.html, construction_track.svg")

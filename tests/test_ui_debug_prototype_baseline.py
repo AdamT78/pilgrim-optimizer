@@ -22,6 +22,16 @@ DUTY_WHEEL_HTML = PROTOTYPES_DIR / "duty_wheel.html"
 DUTY_WHEEL_SVG = PROTOTYPES_DIR / "duty_wheel.svg"
 DUTY_WHEEL_BUILD_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_wheel_build.py.txt"
 DUTY_WHEEL_RENDER_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_wheel_render.py.txt"
+ALMS_TABLE_HTML = PROTOTYPES_DIR / "alms_table.html"
+ALMS_TABLE_SVG = PROTOTYPES_DIR / "alms_table.svg"
+ALMS_TABLE_SOURCE = PROTOTYPE_SOURCES_DIR / "alms_table.py.txt"
+
+# The three threshold rewards the board prints beside steps 2, 4, and 6.
+ALMS_THRESHOLD_TEXT = (
+    "Move a serf from the village to the abbey",
+    "Move an acolyte from the abbey to the city",
+    "Move a serf directly to the city",
+)
 
 DUTY_NAMES = (
     "Produce",
@@ -207,6 +217,43 @@ def test_duty_wheel_prototype_sources_are_the_generator_and_render_helper() -> N
     assert "headless Chromium" in render
 
 
+def test_alms_table_prototype_pages_and_source_exist() -> None:
+    assert ALMS_TABLE_HTML.is_file()
+    assert ALMS_TABLE_SVG.is_file()
+    assert ALMS_TABLE_SOURCE.is_file()
+
+
+def test_alms_table_prototype_is_identifiable() -> None:
+    content = ALMS_TABLE_HTML.read_text(encoding="utf-8")
+    assert "Pilgrim" in content
+    assert "Alms" in content
+    # The caption drawn on the board, which is what names the component.
+    assert "Alms Table" in content
+
+
+def test_alms_table_prototype_draws_the_race_and_the_season_end_record() -> None:
+    """The two halves of the board: the row players race along, and what survives the reset."""
+    content = ALMS_TABLE_HTML.read_text(encoding="utf-8")
+
+    assert "1st" in content
+    assert "Season end winners" in content
+    for text in ALMS_THRESHOLD_TEXT:
+        assert text in content
+
+
+def test_alms_table_svg_baseline_is_the_same_board_on_its_own() -> None:
+    content = ALMS_TABLE_SVG.read_text(encoding="utf-8")
+    assert "<svg" in content
+    assert "Alms Table" in content
+    assert "Season end winners" in content
+
+
+def test_alms_table_prototype_source_is_the_generator_code() -> None:
+    content = ALMS_TABLE_SOURCE.read_text(encoding="utf-8")
+    assert 'TITLE = "Alms Table"' in content
+    assert "Season end winners" in content
+
+
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
@@ -223,3 +270,7 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "Duty wheel prototype baseline" in content
     assert "prototypes/duty_wheel.svg" in content
     assert "Duty wheel SVG prototype baseline" in content
+    assert "prototypes/alms_table.html" in content
+    assert "Alms Table prototype baseline" in content
+    assert "prototypes/alms_table.svg" in content
+    assert "Alms Table SVG prototype baseline" in content
