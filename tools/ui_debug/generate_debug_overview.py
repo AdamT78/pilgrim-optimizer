@@ -59,6 +59,12 @@ from tools.ui_debug.generate_piety_track import (  # noqa: E402
 from tools.ui_debug.generate_piety_track import (  # noqa: E402
     generate_piety_track_page,
 )
+from tools.ui_debug.generate_piety_track_v2 import (  # noqa: E402
+    OUTPUT_FILENAME as PIETY_TRACKS_V2_FILENAME,
+)
+from tools.ui_debug.generate_piety_track_v2 import (  # noqa: E402
+    generate_piety_track_v2_page,
+)
 from tools.ui_debug.generate_pilgrimage_sites import (  # noqa: E402
     OUTPUT_FILENAME as PILGRIMAGE_SITES_FILENAME,
 )
@@ -104,6 +110,7 @@ class GeneratedViews:
     donated_building_tiles: Path
     ship_marker: Path
     piety_tracks: Path
+    piety_tracks_v2: Path
     pilgrimage_sites: Path
     duty_wheel: Path
     alms_table: Path
@@ -119,6 +126,7 @@ class GeneratedViews:
             self.donated_building_tiles,
             self.ship_marker,
             self.piety_tracks,
+            self.piety_tracks_v2,
             self.pilgrimage_sites,
             self.duty_wheel,
             self.alms_table,
@@ -162,6 +170,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{DONATED_BUILDING_TILES_FILENAME}">Generated donated building tiles</a></li>
     <li><a href="{SHIP_MARKER_FILENAME}">Generated ship marker</a></li>
     <li><a href="{PIETY_TRACKS_FILENAME}">Generated piety tracks</a></li>
+    <li><a href="{PIETY_TRACKS_V2_FILENAME}">Generated piety tracks v2</a></li>
     <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
     <li><a href="{DUTY_WHEEL_FILENAME}">Generated duty wheel</a></li>
     <li><a href="{ALMS_TABLE_FILENAME}">Generated Alms Table</a></li>
@@ -194,6 +203,9 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     )
     ship_marker = generate_ship_marker_page(output_path=destination_dir / SHIP_MARKER_FILENAME)
     piety_tracks = generate_piety_track_page(output_path=destination_dir / PIETY_TRACKS_FILENAME)
+    piety_tracks_v2 = generate_piety_track_v2_page(
+        output_path=destination_dir / PIETY_TRACKS_V2_FILENAME
+    )
     pilgrimage_sites = generate_pilgrimage_sites_page(
         output_path=destination_dir / PILGRIMAGE_SITES_FILENAME
     )
@@ -212,6 +224,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         donated_building_tiles=donated_building_tiles,
         ship_marker=ship_marker,
         piety_tracks=piety_tracks,
+        piety_tracks_v2=piety_tracks_v2,
         pilgrimage_sites=pilgrimage_sites,
         duty_wheel=duty_wheel,
         alms_table=alms_table,

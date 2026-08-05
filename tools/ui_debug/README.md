@@ -235,7 +235,7 @@ python3 tools/ui_debug/generate_piety_track.py
 The generated overview below also produces it. Reading the piety table is not `GameState`
 integration: this is still a static view, and it still does not implement game rules.
 
-## Piety track v2 prototype baseline
+## Piety track v2 renderer extraction
 
 `prototypes/piety_tracks_v2.html` is the untouched visual baseline for Piety Track v2, the piety
 track redrawn in the house ornament so it sits alongside the mancala board and the Alms Table. Like
@@ -244,20 +244,48 @@ the v1 page it holds both tracks: the 3–4 player one on top, the 2 player one 
 standalone SVG baselines, and `prototype_sources/piety_tracks_v2.py.txt` preserves the Python that
 drew them, reference-only — read for intent, never imported or executed.
 
-What v2 changes is structural rather than decorative, which is worth knowing before anyone extracts
-it. The two ornament devices the house style kept are an inset hairline just inside the panel edge
-and a trefoil header beside the title, and the v1 strip has nowhere to put either: its boxes butt
-against the panel edge, so a hairline would run through the numbers and clip the end stars. So the
-strip becomes a panel that contains the boxes, the way the Alms Table already is, gaining side
-padding, a title band, and a little more bottom margin — and with it, the board's name in the
-artwork instead of only in the HTML heading. Box pitch, disc sizes and colours, and the star
-geometry are untouched, and the discs are deliberately identical to the Alms Table's.
+What v2 changes is structural rather than decorative. The two ornament devices the house style kept
+are an inset hairline just inside the panel edge and a trefoil header beside the title, and the v1
+strip has nowhere to put either: its boxes butt against the panel edge, so a hairline would run
+through the numbers and clip the end stars. So the strip becomes a panel that contains the boxes,
+the way the Alms Table already is, gaining side padding, a title band, and a little more bottom
+margin — and with it, the board's name in the artwork instead of only in the HTML heading. Box
+pitch, disc sizes and colours, and the star geometry are untouched, and the discs are deliberately
+identical to the Alms Table's, which is why a step reads the same on both boards.
 
-This is baseline-only. There is no v2 layout JSON, no `render_piety_track_v2.py`, and no generated
-v2 page; the index links the baselines and nothing else. v2 does not replace the current piety
-track — `piety_track_layout.json`, `render_piety_track.py`, and the generated `piety_tracks.html`
-are untouched and stay the live view. It is not in `game_setup.html`, does not touch `GameState`,
-and implements no gameplay rule. Extracting a renderer from it belongs in a separate PR.
+`piety_track_v2_layout.json` and `render_piety_track_v2.py` are the structured extraction, and they
+follow v1's shape closely: the layout describes the panel once and lists the two variants,
+`3_4_player` with two disc rows and `2_player` with one, and dropping a row still shortens the
+panel by exactly that row. What v2 adds to the layout is the panel around the strip — side padding,
+title band, corner radius — and the ornament geometry, so the hairline offset and the trefoil's
+lobes and rule gap are all named values rather than constants buried in the drawing code.
+
+The VP numbers on the stars are **not** in the layout JSON, exactly as in v1. They are read from
+`configs/piety.json`, parsed with the game's own `piety_from_dict`, so the drawn track cannot
+disagree with the scoring the engine uses, and the renderer fails loudly if the config stops
+matching the number of positions the layout draws. The viewBox and display size are not stored
+either: they follow from the panel and the padding, and a stored copy could only ever go stale. The
+star is imported from `render_donated_buildings.py` rather than reimplemented.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_piety_track_v2.py
+```
+
+The generated overview below also produces it, and the index links it as `Generated piety tracks
+v2`.
+
+Both variants render byte-for-byte identical to their SVG baselines once the `data-` hooks are
+stripped, and a test holds them there. Those hooks — `data-component="piety-track-v2"`,
+`data-piety-variant`, `data-piety-position`, `data-player`, `data-player-disc` — are the only
+difference between the generated SVG and the baseline, and they exist for future UI/debug
+interaction. The baselines carry none of them.
+
+v2 does not replace the current piety track: `piety_track_layout.json`, `render_piety_track.py`,
+and the generated `piety_tracks.html` are untouched and stay the live view, so the two are
+generated side by side for now. There are no movement controls, no `game_setup.html` integration,
+no `GameState` integration, and no gameplay rules here.
 
 ## Pilgrimage site renderer extraction
 
