@@ -4,7 +4,7 @@
   "subtitle": "Left of the divider is the race, which resets every round. Right of it is the record, which does not: four sockets cap the board at four coloured cubes, one per round, with the scoring key beneath.",
   "page_background": "#000000",
   "board": {
-    "panel_width": 517.0,
+    "panel_width": 536.0,
     "panel_height": 247.0,
     "corner_radius": 16,
     "fill": "#B9B9B4",
@@ -14,7 +14,7 @@
     "view_box": {
       "min_x": -18.0,
       "min_y": -18.0,
-      "width": 553.0,
+      "width": 572.0,
       "height": 283.0
     },
     "title_anchor": { "x": 16.0, "y": 29.0 },
@@ -31,7 +31,7 @@
     "star_label_fill": "#000000"
   },
   "ornament": {
-    "trefoil": { "x0": 114.0, "x1": 370.0, "y": 24.0, "lobe_radius": 4.6, "rule_gap": 13 }
+    "trefoil": { "center_x": 242.0, "y": 24.0 }
   },
   "zone_divider": { "x": 379.0, "y1": 42.0, "y2": 229.0 },
   "track": {
@@ -43,7 +43,6 @@
     "step_rule": { "y1": 59.0, "y2": 132.0 },
     "bonus_pocket": {
       "label": "1st",
-      "center_x": 344.0,
       "center_y": 96.0,
       "width": 36,
       "height": 32
@@ -109,19 +108,19 @@
   },
   "record": {
     "x": 392.0,
-    "width": 111.0,
-    "heading": { "text": "Season end winners", "x": 447.5, "y": 46.0, "font_size": 9.5 },
-    "rule": { "x1": 392.0, "x2": 503.0, "y": 82.0 },
-    "cube": { "size": 13, "gap": 5, "stroke_width": 1.2 },
+    "width": 127.0,
+    "heading": { "text": "Season end winners", "x": 455.5, "y": 46.0 },
+    "rule": { "x1": 392.0, "x2": 519.0, "y": 82.0 },
+    "cube": { "stroke_width": 1.2 },
     "placeholder_slots": {
-      "first_center_x": 420.5,
+      "first_center_x": 432.3,
       "center_y": 59.5,
       "label_y": 75.0
     },
     "scoring_key": {
-      "first_cube_center_x": 398.5,
-      "star_center_x": 487.0,
-      "star_outer_radius": 16,
+      "first_cube_center_x": 410.3,
+      "star_center_x": 490.1,
+      "star_outer_radius": 18,
       "star_inner_ratio": 0.45,
       "first_row_center_y": 107.0,
       "row_height": 36

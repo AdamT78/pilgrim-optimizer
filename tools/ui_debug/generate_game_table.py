@@ -54,6 +54,9 @@ from tools.ui_debug.generate_game_setup import (  # noqa: E402
     setup_placements,
 )
 from tools.ui_debug.render_alms_table import (  # noqa: E402
+    CUBE_SIZE as ALMS_CUBE_UNITS,
+)
+from tools.ui_debug.render_alms_table import (
     load_alms_config,
     load_alms_table_layout,
     render_alms_table_svg,
@@ -288,12 +291,12 @@ def board_measurements(
     action_cube = DUTY_CUBE_UNITS * duty_layout["board"]["scale"]
     cubes = {
         "action": action_cube,
-        "alms": alms_layout["record"]["cube"]["size"],
+        "alms": ALMS_CUBE_UNITS,
         "player": PLAYER_CUBE_UNITS,
         # The piety track has no cube. It shares a player disc with the alms table -- the same
         # diameter on both -- so giving it the alms table's cube for that same disc is what makes
         # the two discs come out the same size on screen.
-        "piety": alms_layout["record"]["cube"]["size"]
+        "piety": ALMS_CUBE_UNITS
         * (piety_layout["track"]["disc"]["radius"] / alms_layout["disc"]["radius"]),
         # The map has no cube either, and is anchored on the board hexagon instead: this is the
         # cube that makes its hexagon render exactly as wide as the duty wheel's.
@@ -583,9 +586,10 @@ def render_game_table_html(
     --w-piety:  calc(var(--cube) * {scale.piety_coef:.5f});
     /* {SEAT_ROWS} of these plus their gaps come to the height of the duty wheel. */
     --w-player: calc(var(--cube) * {scale.player_k:.3f} - {-scale.player_c:.2f}px);
-    /* Locked to the piety track's scale rather than the seats' width, which is
-       what makes the coloured discs the same size on both boards. It comes out
-       narrower than the seats, so .left centres it over them. */
+  /* Locked to the piety track's scale rather than the seats' width, which is
+     what makes the coloured discs the same size on both boards. The alms table
+     is then drawn wide enough in its own units that at that scale it still
+     comes out the width of a seat -- see UNITS_PER_PLAYER_UNIT there. */
     --w-alms:   calc(var(--w-piety) * {scale.alms_over_piety:.5f});
   }}
 

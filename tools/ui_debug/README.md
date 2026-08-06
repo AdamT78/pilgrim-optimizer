@@ -493,7 +493,65 @@ JSON says where each anchor sits — the step centres, the pocket, the first rew
 pitch below it, the first placeholder slot and the first key row — and the module says how the
 pieces around them are drawn, the same split the duty wheel uses. None of the pieces are new: the
 disc is the piety-track disc at a larger radius, the star is the piety-track star, and the cube is
-the mancala board's cube, which is why the Alms Table reads as part of the same set.
+Player Board v2's cube, which is why the Alms Table reads as part of the same set.
+
+### Widened to the seats it stands above
+
+In the game table the Alms Table sits over two Player Board v2 boards, and it is now as wide as
+they are. That width is native geometry — `panel_width` and the viewBox around it grew, and
+nothing is scaled — but how much of it to buy is a question about the composed table, because the
+two boards are not drawn at the same scale. The Alms Table is pinned to the piety track, for the
+player disc the two share, and the piety track's units are the smaller of the two: one unit here
+renders 1.2925 of the pixels one player board unit does. `UNITS_PER_PLAYER_UNIT` in
+`render_alms_table.py` is that ratio, and `PLAYER_UNIT` its reciprocal — one player board unit
+measured in this board's units. So a seat's 692.8 units come to 536 here, which is what the board
+is. `test_the_alms_table_comes_out_the_width_of_a_seat` checks the number against the real solve
+rather than trusting it.
+
+The extra width all went right of the zone divider, which has not moved: the race track, the
+reward lines and the title are where they were, and the record zone got both a wider span and a
+wider right margin. The ratio is exact at the one viewport the table is solved for and drifts a
+few percent either side of it, because both panels carry fixed chrome that does not scale with the
+cube. Pinning the width exactly at every window size would mean giving up the disc match with the
+piety track, which is the older and more visible of the two.
+
+The same conversion is what sizes the pieces. The dashed placeholders and the season-end cubes are
+`MARKER_CUBE` in `PLAYER_UNIT`s with `TOKEN_GAP` between them, so a cube won here is the cube it
+came off a player board as, spaced as it was in a Village grid — and because the board used to
+draw a 13-unit cube at a scale where that came out 20% oversized, the cubes got smaller as the
+board got wider. `cube_rect` is the one helper that draws the box for all of them, socket, placed
+cube and printed key alike, so a placed cube covers the dashed outline it fills exactly rather
+than nearly. `Season end winners` and the `2`/`4`/`6` the rewards are filed under are
+`ROLE_FONT_SIZE` the same way, so they read as `Fields` and `Stone Mason` do on a seat.
+
+The scoring key's stars grew with the rest of the zone. The VP inside one is now
+`STEP_NUMBER_FONT_SIZE`, the size the track numbers its steps, so a score on this board reads at
+one size wherever it is printed; `STAR_LABEL_OFFSET` follows from that size rather than sitting
+beside it, which is what keeps the digits centred on the star as it changes. It is the one number
+on the board set plain rather than bold, since the star around it already stands the score out.
+The star itself went
+to 18 units so a two-digit VP still sits inside its waist rather than across its points. What caps
+it is the four rows: a five-pointed star stands its radius above its centre and sin(54) of that
+below, so at this row height anything past 19.9 would have the rows touching, and
+`test_a_star_holds_its_vp_at_the_size_the_track_numbers_its_steps` holds the size against both
+bounds rather than only pinning it where it landed.
+
+Two smaller things went with it. The `1st` pocket is centred in the lane between the track's last
+rule and the zone divider — measured by `bonus_pocket_center_x` rather than written down, since
+that lane is wider than a step and the pocket used to sit on the track's pitch inside it, off to
+the left. And the header ornament's trefoil is the duty wheel's: that board draws its lobes at 4.6
+units against a 13.0-unit cube and holds the rule 15.0 clear of them, and carrying those over in
+cubes puts the two marks at the same size on screen. They used to be this board's own 4.6 units,
+which at this board's scale read a fifth larger than the same mark over every duty on the wheel.
+
+The rule the lobes sit on is this header's rather than the wheel's, because this board has a header
+to span and a duty space does not. `ornament_rule_arm` runs the right arm out to
+`ORNAMENT_RULE_CLEARANCE` short of the zone divider and gives the left one the same length rather
+than a reach of its own, so the mark stays symmetrical about the lobes. The left arm is then the
+only thing on the board that could run into the title, and it ends 11 units clear of it.
+`test_the_ornament_rule_spans_the_header_symmetrically_and_touches_neither_end` holds it to all
+three: symmetry, the gap off the divider, and the gap off the title. That last one is checked
+against a measured `TITLE_RIGHT_EDGE`, since there is no font metric here to compute it from.
 
 The numbers the board prints about the game are not in the layout JSON. `configs/alms.json` is the
 source of truth for how far the track runs, which steps pay which reward, and the season-end VP
@@ -712,8 +770,8 @@ the arrangement. The tab keeps a name, which is the one piece of text a window n
 
 Each renderer draws in its own units, so handing every panel a width by eye makes the same wooden
 cube come out a different size on each board — a cube is 13 units on the duty wheel but inside a
-group the wheel scales, 13 on the alms table, and 14 on a player board, against viewBoxes of 1104,
-553 and 493.
+group the wheel scales, 10.83 on the alms table, and 14 on a player board, against viewBoxes of
+1104, 572 and 706.8.
 
 So the page stops choosing panel widths. One physical reference is measured in each board's own
 units, and every display width falls out of it:
@@ -728,7 +786,7 @@ changes. Two boards draw no cube at all, so each is anchored on a piece it does 
 - the Piety Track on the player disc it shares with the Alms Table — both draw it 18 units across,
   so matching their units-per-pixel matches the discs on screen. This is why `--w-alms` is a
   multiple of `--w-piety` rather than of `--cube` directly, and why the Alms Table is not simply
-  given the width of the seats underneath it.
+  handed the seats' width: it buys that width in its own units instead, as above.
 - the map on the board hexagon the Duty Wheel's was derived from, so the two greens come out the
   same width.
 
