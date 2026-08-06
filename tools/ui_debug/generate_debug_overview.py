@@ -47,6 +47,12 @@ from tools.ui_debug.generate_game_setup import (  # noqa: E402
 from tools.ui_debug.generate_game_setup import (  # noqa: E402
     write_game_setup_page,
 )
+from tools.ui_debug.generate_game_table import (  # noqa: E402
+    OUTPUT_FILENAME as GAME_TABLE_FILENAME,
+)
+from tools.ui_debug.generate_game_table import (  # noqa: E402
+    generate_game_table_page,
+)
 from tools.ui_debug.generate_map import (  # noqa: E402
     OUTPUT_FILENAME as MAP_FILENAME,
 )
@@ -115,6 +121,7 @@ class GeneratedViews:
     duty_wheel: Path
     alms_table: Path
     game_setup: Path
+    game_table: Path
     overview: Path
 
     def as_tuple(self) -> tuple[Path, ...]:
@@ -131,6 +138,7 @@ class GeneratedViews:
             self.duty_wheel,
             self.alms_table,
             self.game_setup,
+            self.game_table,
             self.overview,
         )
 
@@ -176,6 +184,8 @@ def render_debug_overview_html() -> str:
     <li><a href="{ALMS_TABLE_FILENAME}">Generated Alms Table</a></li>
     <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view (piety track v2 above the
       map, and the duty wheel panel)</a></li>
+    <li><a href="{GAME_TABLE_FILENAME}">Generated game table layout (every board at one scale, laid
+      out as they sit on the table)</a></li>
     <li><a href="../index.html">Back to prototype index</a></li>
   </ul>
   <ul class="notes">
@@ -212,6 +222,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
     duty_wheel = generate_duty_wheel_page(output_path=destination_dir / DUTY_WHEEL_FILENAME)
     alms_table = generate_alms_table_page(output_path=destination_dir / ALMS_TABLE_FILENAME)
     game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
+    game_table = generate_game_table_page(output_path=destination_dir / GAME_TABLE_FILENAME)
 
     overview = destination_dir / OVERVIEW_FILENAME
     overview.write_text(render_debug_overview_html(), encoding="utf-8")
@@ -229,6 +240,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         duty_wheel=duty_wheel,
         alms_table=alms_table,
         game_setup=game_setup,
+        game_table=game_table,
         overview=overview,
     )
 
