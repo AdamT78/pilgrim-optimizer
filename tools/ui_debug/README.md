@@ -424,16 +424,41 @@ here.
 ## Pilgrimage site renderer extraction
 
 `prototypes/pilgrimage_sites.html` is the untouched visual baseline for the Pilgrimage Site tiles:
-five orange tiles in one row, each with a piety-track star in its lower half and a P value and an S
-value beside it. `prototype_sources/pilgrimage_sites.py.txt` is the reference-only copy of the
+five orange tiles in one row, each with a piety-track star and a P value and an S value beside it. `prototype_sources/pilgrimage_sites.py.txt` is the reference-only copy of the
 script that drew it. That script is read for intent; it is never imported or executed.
 
 `pilgrimage_sites.json` and `render_pilgrimage_sites.py` are the structured renderer extraction.
 The JSON holds only what the tiles print — the VP value on the star and the two values beside it —
 while the geometry lives in the renderer, the same split the building tiles use. Nothing is
 redrawn from scratch: the hex comes from `render_buildings.py` at the same 52 unit radius, so the
-sites read as the same kind of piece, and the star comes from `render_donated_buildings.py`. The
-rendered SVG is byte-identical to the baseline, and a test keeps it that way.
+sites read as the same kind of piece, and the star comes from `render_donated_buildings.py`.
+
+Pilgrimage Site VP stars are enlarged to match the Piety Track star, and the P and S values beside
+them are set the size a building tile sets its name. `STAR_OUTER_RADIUS` is the track's own star
+written in the
+tile's units: the site tile is drawn into a map hex, so its star crosses the tile's units into the
+map's and the map's into the table's before it stands next to the track, and the figure is that
+round trip solved for. `VP_TEXT_FONT_SIZE` takes the Alms Table's star-to-label proportion of it,
+so the VP sits in the star the way the piety track's does. A test in
+`test_ui_debug_game_table.py` measures the two stars against each other across the boards' scales;
+it is what holds the figure honest, and what to re-measure from if a board's scale ever moves.
+
+Matching the track makes the star large enough to run into the ship marker, so `STAR_CENTER_Y`
+hangs it below the ship instead: a map hex carrying both shows them one under the other. What it
+clears is `SHIP_BOTTOM_Y`, the keel's own depth taken off the hull the ship renderer draws, plus
+`STAR_SHIP_CLEARANCE` for daylight. The ship is scaled onto a map hex by the same tile-to-map ratio
+as the site's contents, so the keel sits at the same height in either board's units and the drop
+reads the same on the tile page and on the map.
+
+The P and S values take `TILE_NAME_FONT_SIZE` and `TILE_NAME_LINE_HEIGHT` from the building tiles,
+so a site tile and a building tile are lettered alike. The pair straddles the hex's mid line — the
+number standing above it, its letter hanging below — rather than sitting under it, and
+`LABEL_COLUMN_X` is measured out from the star's widest points so the two stay clear of each other
+whatever size the star is set to.
+
+Because the star and the values grew, the page is no longer byte-identical to the baseline. In its
+place the tests assert the divergence: the hexes are still the baseline's element for element, and
+the tiles print exactly what they printed, while nothing about how the contents are set matches.
 
 Generate the output page with:
 

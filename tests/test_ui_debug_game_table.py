@@ -40,9 +40,14 @@ from tools.ui_debug.render_alms_table import (
     load_alms_table_layout,
     render_alms_table_controls_html,
 )
+from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_FONT_SIZE
+from tools.ui_debug.render_alms_table import STAR_OUTER_RADIUS as TRACK_STAR_RADIUS
+from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS
 from tools.ui_debug.render_duty_wheel import load_duty_wheel_layout, render_duty_wheel_controls_html
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout
+from tools.ui_debug.render_pilgrimage_sites import STAR_OUTER_RADIUS as SITE_STAR_RADIUS
+from tools.ui_debug.render_pilgrimage_sites import VP_TEXT_FONT_SIZE as SITE_VP_FONT_SIZE
 from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_HEX_SIZE,
     MARKER_CUBE,
@@ -70,6 +75,7 @@ def _per_unit(solved, board: str) -> float:
         "alms": solved.cube * solved.piety_coef * solved.alms_over_piety,
         "piety": solved.cube * solved.piety_coef,
         "player": solved.cube * solved.player_k + solved.player_c,
+        "map": solved.cube * solved.mult["map"] * solved.map_scale,
     }[board]
     return width / solved.crop[board][2]
 
@@ -307,6 +313,26 @@ def test_the_alms_table_and_the_piety_track_share_a_scale(scale) -> None:
     # same y on the two boards is the same y on the table. The piety track's stars are placed on
     # the Alms Table's second key row that way.
     assert solved.crop["alms"][1] == pytest.approx(solved.crop["piety"][1])
+
+
+def test_a_pilgrimage_sites_star_reads_at_the_size_of_a_piety_track_star(scale) -> None:
+    """The site renderer's star size is written for this page, so this is what checks it.
+
+    The site tile is drawn into a map hex, so its star crosses two scales to get here -- the tile's
+    own units into the map's, and the map's into the table's -- and neither is the piety track's.
+    `STAR_OUTER_RADIUS` in the site renderer is that round trip solved for; if a board's scale ever
+    moves, this is the test that says so and the figure to re-measure.
+    """
+    _, _, _, solved = scale
+    tile_into_map = load_map_layout()["hex_size"] / TILE_HEX_RADIUS
+
+    site_star = SITE_STAR_RADIUS * tile_into_map * _per_unit(solved, "map")
+    track_star = TRACK_STAR_RADIUS * _per_unit(solved, "piety")
+    site_vp = SITE_VP_FONT_SIZE * tile_into_map * _per_unit(solved, "map")
+    track_vp = TRACK_STAR_FONT_SIZE * _per_unit(solved, "piety")
+
+    assert site_star == pytest.approx(track_star, rel=1e-4)
+    assert site_vp == pytest.approx(track_vp, rel=1e-4)
 
 
 def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:

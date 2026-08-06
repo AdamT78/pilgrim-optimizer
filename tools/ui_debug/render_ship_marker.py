@@ -47,6 +47,13 @@ HULL_OUTLINE = (
     (-4.0, -2.0),  # deck control point
     (-20.0, 0.0),  # stern, deck
 )
+# How deep the keel hangs below the waterline, in the units of the hex the ship is drawn on. The
+# hull is one quadratic from stern to bow, and a quadratic reaches its extreme halfway along, at
+# half the depth of its control point.
+KEEL_DEPTH = SHIP_SCALE * HULL_OUTLINE[1][1] / 2.0
+# The lowest the ship reaches on that hex, which is what anything sharing the hex has to clear.
+SHIP_BOTTOM_Y = SHIP_ANCHOR_OFFSET_Y + KEEL_DEPTH
+
 BOWSPRIT = ((14.0, -2.0), (24.0, -8.0))
 RIGGING_STROKE_WIDTH = 1.2
 
