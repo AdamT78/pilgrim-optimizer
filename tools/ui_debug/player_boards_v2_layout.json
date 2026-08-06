@@ -67,5 +67,5 @@
     { "id": "silver", "label": "Silver", "icon": "coin", "count": 1 }
   ],
   "building_slot_count": 6,
-  "first_player_marker": { "label": "First player marker" }
+  "first_player_marker": { "label": "First player" }
 }

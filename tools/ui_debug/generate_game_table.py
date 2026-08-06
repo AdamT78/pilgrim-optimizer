@@ -106,6 +106,11 @@ PIETY_VARIANT_ID = "3_4_player"
 # This is debug/layout state to look at, not a seating rule: player counts are not wired up here.
 SEATED_PLAYERS = ("player_two", "player_four")
 
+# The marker card goes on the top board. Which seat that is is layout state to look at, not a rule
+# about who starts: nothing here decides a first player, and there is no control to move it. The
+# standalone four-seat page still hands it to white, who does not sit at this table.
+MARKER_SEAT = SEATED_PLAYERS[0]
+
 # --- page chrome, in px ----------------------------------------------------------------------
 # The gap between panels, and between the two player boards.
 GAP_PX = 20
@@ -519,12 +524,18 @@ def render_game_table_html(
         regularise_duty_hexagon(render_duty_wheel_svg(duty_wheel_layout), hexagon),
         scale.crop["action"],
     )
-    seats = "\n        ".join(
-        f'<div class="panel p-player" data-component="player-board-v2"'
-        f' data-player="{player["id"]}" data-player-color="{player["color"]}">'
-        f"{crop_svg(render_player_board_v2_svg(board_layout, player), scale.crop['player'])}</div>"
-        for player in (player_by_id(board_layout, seat) for seat in SEATED_PLAYERS)
-    )
+    panels = []
+    for seat in SEATED_PLAYERS:
+        player = player_by_id(board_layout, seat)
+        marked = seat == MARKER_SEAT
+        board = render_player_board_v2_svg(board_layout, player, include_first_player_marker=marked)
+        panels.append(
+            f'<div class="panel p-player" data-component="player-board-v2"'
+            f' data-player="{player["id"]}" data-player-color="{player["color"]}"'
+            f' data-first-player-marker="{"true" if marked else "false"}">'
+            f"{crop_svg(board, scale.crop['player'])}</div>"
+        )
+    seats = "\n        ".join(panels)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
