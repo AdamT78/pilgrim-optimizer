@@ -28,9 +28,9 @@ if __package__ in (None, ""):
 
 from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS  # noqa: E402
 from tools.ui_debug.render_buildings import (  # noqa: E402
-    TILE_TEXT_FONT_SIZE,
-    TILE_TEXT_LINE_HEIGHT,
-    TILE_TEXT_TOP_OFFSET,
+    TILE_NAME_CENTER_Y_OFFSET,
+    TILE_NAME_FONT_SIZE,
+    TILE_NAME_LINE_HEIGHT,
     load_building_catalog,
     palette_for,
     tile_text_lines,
@@ -302,7 +302,7 @@ def render_setup_site_contents(map_layout: dict, site: dict) -> str:
 
 
 def render_building_label(building: dict, hex_size: float) -> str:
-    """The tile's own wrapped label, at the tile's own proportions, in the lower half of the hex.
+    """The tile's own label, at the tile's own proportions, in the lower half of the hex.
 
     A hex the label lands in — a map hex or a player board's building slot — is smaller than a
     building tile, so the tile's text geometry is scaled between the two rather than restated.
@@ -314,11 +314,11 @@ def render_building_label(building: dict, hex_size: float) -> str:
 
     lines = []
     for index, line in enumerate(tile_text_lines(building)):
-        text_y = ratio * (TILE_TEXT_TOP_OFFSET + index * TILE_TEXT_LINE_HEIGHT)
+        text_y = ratio * (TILE_NAME_CENTER_Y_OFFSET + index * TILE_NAME_LINE_HEIGHT)
         lines.append(
             f'<text x="0" y="{text_y:.1f}" text-anchor="middle"'
             ' font-family="Helvetica, Arial, sans-serif"'
-            f' font-size="{ratio * TILE_TEXT_FONT_SIZE:.1f}" font-weight="600"'
+            f' font-size="{ratio * TILE_NAME_FONT_SIZE:.1f}" font-weight="600"'
             f' fill="{palette.stroke}">{escape(line)}</text>'
         )
     return "".join(lines)
@@ -549,7 +549,7 @@ def render_board_slot_fill(fill: str, size: float = BOARD_HEX_SIZE) -> str:
 
 
 def render_board_slot_building(building: dict, size: float = BOARD_HEX_SIZE) -> str:
-    """A bought building filling a player-board slot, in the tile's colour and wrapped label.
+    """A bought building filling a player-board slot, in the tile's colour and label.
 
     The label sits in the lower half of the slot, exactly as it does on a map hex, so a building
     reads the same whether it is still on the map or already bought.

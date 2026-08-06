@@ -75,6 +75,16 @@ python3 tools/ui_debug/generate_buildings.py
 This writes `generated/building_tiles.html`. Generated output is not committed; the catalog and
 the renderer are.
 
+Building tile labels omit the Roman numeral level row. Level is communicated by tile color, while
+the building name is rendered larger, near the hex center, breaking only between words: a name of
+two words takes two lines, and no word is ever cut or hyphenated. Setting a word to a line is what
+buys the size, because the longest word rather than the longest name is what has to fit.
+`Indulgences` is the widest of them, and it caps `TILE_NAME_FONT_SIZE` at 14: on the first line,
+at `TILE_NAME_CENTER_Y_OFFSET`, it fills all but about 7 units of the hex's width. That first line
+starts just below the middle of the hex, which is as far down as the ship marker's hull reaches,
+so a tile carrying both still reads. The label the tiles used to wrap under a level numeral
+survives on the ship marker page, which still heads each example tile with its level.
+
 Like the prototypes, this still does not connect to `GameState` and still does not implement
 game rules.
 
@@ -725,10 +735,10 @@ What moves, and what it means:
 - The slots themselves are `SETUP_SLOTS`, one hard-coded example schedule of 26 rounds. This page
   deliberately does not call `pilgrim.setup.generator`, so the layout can be looked at without a
   seed or a scenario. A building slot recolours its map hex in the catalog palette and writes the
-  tile's own wrapped label into it; it does not lay a second hex on top of the board. The fill goes
-  in through `render_map_svg(layout, tile_overlay=...)`, which drops a fragment onto the tile fills
-  before the map draws its rivers, hex edges, and labels, so a placed building keeps every line and
-  label the map would have drawn there. `render_buildings.py` and the standalone building tiles
+  tile's own name into it, a word to a line; it does not lay a second hex on top of the board. The
+  fill goes in through `render_map_svg(layout, tile_overlay=...)`, which drops a fragment onto the
+  tile fills before the map draws its rivers, hex edges, and labels, so a placed building keeps
+  every line and label the map would have drawn there. `render_buildings.py` and the building tiles
   page are untouched and still draw full tiles. An empty slot draws nothing. Which round a slot
   belongs to is not written on the map.
 - A pilgrimage site slot is filled the same way: its hex takes the site orange and carries the
