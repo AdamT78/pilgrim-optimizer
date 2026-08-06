@@ -95,6 +95,16 @@ ORNAMENT_STROKE_WIDTH = 0.1 * CUBE_SIZE
 ORNAMENT_STROKE_OPACITY = "0.34"
 ORNAMENT_LOBE_ANGLES = (-90, 30, 150)
 
+# The board's name, and the rules that divide one step of the track from the next. Both are style
+# rather than layout -- where the title sits and where the rules fall are this board's business,
+# but how they are drawn is the house's -- so they are constants the piety track can be drawn from
+# too, rather than numbers buried in this board's layout JSON.
+TITLE_FONT_SIZE = 15
+TITLE_FONT_WEIGHT = "700"
+LABEL_FONT_WEIGHT = "600"
+STEP_RULE_STROKE_OPACITY = "0.22"
+STEP_RULE_STROKE_WIDTH = 1
+
 # Offsets the baseline holds as constants rather than per-anchor data.
 STEP_NUMBER_FONT_SIZE = 11
 BONUS_LABEL_FONT_SIZE = 8
@@ -107,9 +117,13 @@ REWARD_FONT_SIZE = 10.5
 TICK_WIDTH = 6
 TICK_HEIGHT = 4.5
 ROUND_LABEL_FONT_SIZE = 7.5
-# The VP a star pays reads as the track's own step numbers do. Its baseline sits a third of the
-# size below the star's centre, which is what puts the middle of the digits on it -- so the offset
-# follows the size rather than being set beside it.
+# The star a score is printed in, and the score inside it. The VP reads as the track's own step
+# numbers do, and its baseline sits a third of the size below the star's centre, which is what puts
+# the middle of the digits on it -- so the offset follows the size rather than being set beside it.
+# The star is drawn big enough to hold two of those digits between its inner points.
+STAR_OUTER_RADIUS = 18
+STAR_INNER_RATIO = 0.45
+STAR_INNER_RADIUS = STAR_OUTER_RADIUS * STAR_INNER_RATIO
 STAR_LABEL_FONT_SIZE = STEP_NUMBER_FONT_SIZE
 STAR_LABEL_OFFSET = STAR_LABEL_FONT_SIZE / 3
 
@@ -333,7 +347,7 @@ def _text(
     size: float,
     fill: str,
     anchor: str = "middle",
-    weight: str | None = "600",
+    weight: str | None = LABEL_FONT_WEIGHT,
     font: str = INK_FONT,
 ) -> str:
     weight_attr = f' font-weight="{weight}"' if weight is not None else ""
@@ -483,10 +497,9 @@ def _scoring_key_row(layout: dict, row: dict) -> str:
         f' stroke-width="{_n(cube["stroke_width"])}"/>'
         for k in range(row["cubes"])
     )
-    outer = key["star_outer_radius"]
     star_x = key["star_center_x"]
     star = (
-        f'<path d="{_star_path_data(star_x, center_y, outer, outer * key["star_inner_ratio"])}"'
+        f'<path d="{_star_path_data(star_x, center_y, STAR_OUTER_RADIUS, STAR_INNER_RADIUS)}"'
         f' fill="{palette["star_fill"]}" stroke="{palette["star_stroke"]}"'
         ' stroke-width="1.5" stroke-linejoin="round"/>'
     )
@@ -584,7 +597,8 @@ def _race_zone(
     parts += [
         f'<line x1="{_f(first_x + i * pitch)}" y1="{_f(rule["y1"])}"'
         f' x2="{_f(first_x + i * pitch)}" y2="{_f(rule["y2"])}"'
-        f' stroke="{ink}" stroke-opacity="0.22" stroke-width="1"/>'
+        f' stroke="{ink}" stroke-opacity="{STEP_RULE_STROKE_OPACITY}"'
+        f' stroke-width="{_n(STEP_RULE_STROKE_WIDTH)}"/>'
         for i in range(1, len(centers) + 1)
     ]
     parts += [
@@ -668,10 +682,10 @@ def render_alms_table_svg(
         title_anchor["x"],
         title_anchor["y"],
         layout["title"],
-        size=board["title_font_size"],
+        size=TITLE_FONT_SIZE,
         fill=palette["ink"],
         anchor="start",
-        weight="700",
+        weight=TITLE_FONT_WEIGHT,
         font=TITLE_FONT,
     )
     # Hairline inside the panel edge; the radius shrinks with the inset to stay concentric.

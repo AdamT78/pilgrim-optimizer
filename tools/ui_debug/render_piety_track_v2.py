@@ -22,11 +22,15 @@ a change to the piety table shows up in this view without anyone editing the UI 
 viewBox and display size stored: they follow from the panel and the padding, and a stored copy
 could only ever disagree with what is drawn.
 
-Geometry constants mirror `prototypes/piety_tracks_v2.html` and the two SVG baselines beside it,
-which stay the visual target. `prototype_sources/piety_tracks_v2.py.txt` is the reference for how
-they were drawn; it is read, never imported or executed. The pieces are shared rather than
-reinvented: the star is the piety track's own star, and the disc is the Alms Table's disc at the
-same radius and gap, which is why a step reads the same on both boards.
+`prototypes/piety_tracks_v2.html` and the two SVG baselines beside it are what was drawn first, and
+the strip is still theirs: the same panel width, the same spaces on the same centres, the same
+discs. What has moved away from them is how it is all set. This board and the Alms Table are the
+same thing twice -- a numbered row of spaces with a player disc standing on one and a score printed
+under each -- and in the composed game table they are drawn at the same scale, so this one is set
+from that one's constants and each thing lands at the same size on screen. The star, the disc, the
+numbers, the rules between them and the title all come from elsewhere rather than being reinvented
+here. `prototype_sources/piety_tracks_v2.py.txt` is the reference for how the baseline was drawn;
+it is read, never imported or executed.
 """
 
 from __future__ import annotations
@@ -37,14 +41,45 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from pilgrim.model.config import piety_from_dict
+from tools.ui_debug.render_alms_table import (
+    INK_FONT,
+    LABEL_FONT_WEIGHT,
+    ORNAMENT_LOBE_ANGLES,
+    ORNAMENT_RULE_GAP,
+    ORNAMENT_STROKE_OPACITY,
+    ORNAMENT_STROKE_WIDTH,
+    ORNAMENT_TREFOIL_RADIUS,
+    STAR_INNER_RADIUS,
+    STAR_LABEL_FONT_SIZE,
+    STAR_LABEL_OFFSET,
+    STAR_OUTER_RADIUS,
+    STEP_NUMBER_FONT_SIZE,
+    STEP_RULE_STROKE_OPACITY,
+    STEP_RULE_STROKE_WIDTH,
+    TITLE_FONT,
+    TITLE_FONT_SIZE,
+    TITLE_FONT_WEIGHT,
+)
 from tools.ui_debug.render_donated_buildings import render_star_path, star_points
 
 COMPONENT_NAME = "piety-track-v2"
 LAYOUT_FILENAME = "piety_track_v2_layout.json"
 PIETY_CONFIG_RELATIVE_PATH = ("configs", "piety.json")
 
-LABEL_FONT = 'font-family="Helvetica, Arial, sans-serif" font-size="9" font-weight="600"'
-TREFOIL_LOBE_ANGLES = (-90, 30, 150)
+# Both boards are a numbered row of spaces with a player disc standing on one, and in the game
+# table they are drawn at the same scale -- that is what makes the disc they share come out the
+# same size on each. So a space here is set the way a step there is: the same number at the same
+# size and weight, divided from its neighbours by the same hairline, under a title of the same size
+# at the same distance above it, and paying a star of the same size with the score set inside it
+# the same way. Every one of those is the Alms Table's own constant rather than a copy of its
+# value, so the two boards cannot be restyled apart by accident.
+NUMBER_FONT = (
+    f'font-family="{INK_FONT}" font-size="{STEP_NUMBER_FONT_SIZE:g}"'
+    f' font-weight="{LABEL_FONT_WEIGHT}"'
+)
+# The score in a star is the one number on either board set plain: the star is already standing it
+# out, so the digits do not have to as well.
+STAR_LABEL_FONT = f'font-family="{INK_FONT}" font-size="{STAR_LABEL_FONT_SIZE:g}"'
 
 
 def repo_root() -> Path:
@@ -96,45 +131,55 @@ def _star_extent(outer_r: float, inner_r: float) -> tuple[float, float]:
 
 
 def track_geometry(layout: dict, disc_rows: int) -> dict:
-    """Vertical layout of one panel: title band, then top margin, number, discs, star.
+    """Vertical layout of one panel: title, then the numbers, the discs and the stars beneath.
 
-    Inside the band the stack is the v1 strip unchanged — the top margin equals the bottom margin
-    and the number-to-discs gap equals the discs-to-star gap — so dropping a disc row still
-    shortens the panel by exactly that row.
+    The numbers hang `title_to_numbers` below the title's baseline, which is the drop the Alms
+    Table gives its own track under `Alms Table`, and everything below is chained off them: gap,
+    disc rows, gap, stars, bottom margin. So dropping a disc row still shortens the panel by
+    exactly that row, and nothing else moves.
+
+    The two gaps used to be one number. They are separate because the second one is doing a job
+    the first is not: the composed game table stands this panel's top level with the Alms Table's,
+    and `discs_to_stars` is what lands this row of stars on the row the `11` star sits in there,
+    so a score reads across the table at one height. That holds for the variant the table stands
+    on. The 2 player one is a disc row shorter and its stars come up with the rest of the strip,
+    which is the same rule applied, not an exception to it.
+
+    Every y here is already in panel coordinates. There is no separate title band to add on: what
+    used to be one is now the drop itself, which is the thing worth naming.
     """
     panel = layout["panel"]
     track = layout["track"]
     label = track["position_label"]
     disc = track["disc"]
-    star = track["star"]
 
-    top_margin = track["top_margin"]
-    row_gap = track["row_gap"]
     radius = disc["radius"]
     row_step = 2 * radius + disc["gap"]
 
-    number_baseline_y = top_margin + label["cap_height"]
+    title_baseline_y = panel["pad_top"] + layout["ornament"]["title"]["dy"]
+    number_baseline_y = title_baseline_y + track["title_to_numbers"]
     number_bottom = number_baseline_y + label["descent"]
-    top_row_cy = number_bottom + row_gap + radius
+    top_row_cy = number_bottom + track["numbers_to_discs"] + radius
     discs_cy = top_row_cy + (disc_rows - 1) * row_step / 2
     discs_bottom = top_row_cy + (disc_rows - 1) * row_step + radius
 
-    outer_r = star["outer_radius"]
-    star_min_y, star_max_y = _star_extent(outer_r, outer_r * star["inner_ratio"])
-    star_cy = discs_bottom + row_gap - star_min_y
-    strip_height = star_cy + star_max_y + top_margin
+    star_min_y, star_max_y = _star_extent(STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
+    star_cy = discs_bottom + track["discs_to_stars"] - star_min_y
 
-    content_top = panel["pad_top"] + panel["title_band"]
     strip_width = 2 * track["outer_extra"] + track["position_count"] * track["box_width"]
+    rule = track["position_rule"]
 
     return {
         "panel_width": 2 * panel["pad_x"] + strip_width,
-        "panel_height": content_top + strip_height + panel["pad_bottom"],
-        "content_top": content_top,
-        "number_baseline_y": content_top + number_baseline_y,
-        "discs_cy": content_top + discs_cy,
+        "panel_height": star_cy + star_max_y + track["bottom_margin"] + panel["pad_bottom"],
+        "title_baseline_y": title_baseline_y,
+        "number_baseline_y": number_baseline_y,
+        "discs_cy": discs_cy,
+        "discs_bottom": discs_bottom,
         "disc_offset": row_step / 2,
-        "star_cy": content_top + star_cy,
+        "star_cy": star_cy,
+        "rule_y1": number_baseline_y - rule["above_numbers"],
+        "rule_y2": discs_bottom + rule["below_discs"],
     }
 
 
@@ -179,8 +224,34 @@ def render_position_label(layout: dict, geometry: dict, index: int) -> str:
     fill = layout["track"]["position_label"]["fill"]
     return (
         f'<text x="{position_center_x(layout, index):.1f}"'
-        f' y="{geometry["number_baseline_y"]:.1f}" text-anchor="middle" {LABEL_FONT}'
+        f' y="{geometry["number_baseline_y"]:.1f}" text-anchor="middle" {NUMBER_FONT}'
         f' fill="{fill}">{index}</text>'
+    )
+
+
+def position_rule_x(layout: dict, index: int) -> float:
+    """Where the hairline between position `index` and the one after it falls."""
+    track = layout["track"]
+    if not 0 <= index < track["position_count"] - 1:
+        raise KeyError(f"no piety position rule after {index}")
+    box_width = track["box_width"]
+    return layout["panel"]["pad_x"] + track["outer_extra"] + (index + 1) * box_width
+
+
+def render_position_rules(layout: dict, geometry: dict) -> str:
+    """The hairlines that divide one position from the next, as the Alms Table divides its steps.
+
+    Only between the numbers: the strip's own two ends are closed by the panel's padding and the
+    inset hairline inside it, so a rule there would be a second edge beside an edge.
+    """
+    ink = layout["palette"]["ink"]
+    y1, y2 = geometry["rule_y1"], geometry["rule_y2"]
+    return "".join(
+        f'<line x1="{position_rule_x(layout, index):.1f}" y1="{y1:.1f}"'
+        f' x2="{position_rule_x(layout, index):.1f}" y2="{y2:.1f}"'
+        f' stroke="{ink}" stroke-opacity="{STEP_RULE_STROKE_OPACITY}"'
+        f' stroke-width="{STEP_RULE_STROKE_WIDTH:g}"/>'
+        for index in range(layout["track"]["position_count"] - 1)
     )
 
 
@@ -199,14 +270,12 @@ def render_player_disc(layout: dict, index: int, player: dict) -> str:
 
 def render_vp_star(layout: dict, geometry: dict, index: int, vp: int) -> str:
     """The VP a player scores for finishing the season on this position."""
-    star = layout["track"]["star"]
     center_x = position_center_x(layout, index)
     star_cy = geometry["star_cy"]
-    outer_r = star["outer_radius"]
     return (
-        render_star_path(center_x, star_cy, outer_r, outer_r * star["inner_ratio"])
-        + f'<text x="{center_x:.1f}" y="{star_cy + star["label_offset"]:.1f}"'
-        f' text-anchor="middle" {LABEL_FONT}'
+        render_star_path(center_x, star_cy, STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
+        + f'<text x="{center_x:.1f}" y="{star_cy + STAR_LABEL_OFFSET:.1f}"'
+        f' text-anchor="middle" {STAR_LABEL_FONT}'
         f' fill="{layout["palette"]["star_label_fill"]}">{escape(str(vp))}</text>'
     )
 
@@ -227,7 +296,12 @@ def render_panel_inset(layout: dict, geometry: dict) -> str:
 
 
 def render_trefoil_rule(layout: dict, geometry: dict) -> str:
-    """The house header: a rule broken by three lobes, running from the title to the far edge."""
+    """The house header: a rule broken by three lobes, running from the title to the far edge.
+
+    The lobes and the air they hold are the Alms Table's, so the mark reads at the size it does
+    there. The rule they sit on is this header's own: it runs from clear of the title to the far
+    padding, which is wider than the Alms Table's header, and the lobes stay at its middle.
+    """
     panel = layout["panel"]
     trefoil = layout["ornament"]["trefoil"]
     ink = layout["palette"]["ink"]
@@ -236,32 +310,29 @@ def render_trefoil_rule(layout: dict, geometry: dict) -> str:
     x1 = geometry["panel_width"] - panel["pad_x"] - trefoil["end_dx"]
     y = panel["pad_top"] + trefoil["dy"]
     center_x = (x0 + x1) / 2
-    radius = trefoil["lobe_radius"]
-    gap = trefoil["rule_gap"]
+    radius = ORNAMENT_TREFOIL_RADIUS
+    gap = ORNAMENT_RULE_GAP
 
     lobes = "".join(
         f'<circle cx="{center_x + radius * math.cos(math.radians(angle)):.1f}"'
-        f' cy="{y + radius * math.sin(math.radians(angle)):.1f}" r="{radius}" />'
-        for angle in TREFOIL_LOBE_ANGLES
+        f' cy="{y + radius * math.sin(math.radians(angle)):.1f}" r="{radius:.1f}" />'
+        for angle in ORNAMENT_LOBE_ANGLES
     )
     return (
-        f'<g fill="none" stroke="{ink}" stroke-opacity="{trefoil["stroke_opacity"]}"'
-        f' stroke-width="{trefoil["stroke_width"]}" stroke-linecap="round">{lobes}'
+        f'<g fill="none" stroke="{ink}" stroke-opacity="{ORNAMENT_STROKE_OPACITY}"'
+        f' stroke-width="{ORNAMENT_STROKE_WIDTH:.1f}" stroke-linecap="round">{lobes}'
         f'<path d="M {x0:.1f},{y:.1f} H {center_x - gap:.1f}'
         f' M {center_x + gap:.1f},{y:.1f} H {x1:.1f}" /></g>'
     )
 
 
-def render_panel_title(layout: dict) -> str:
+def render_panel_title(layout: dict, geometry: dict) -> str:
     """The board's name, in the artwork rather than only in the page heading."""
-    panel = layout["panel"]
-    title = layout["ornament"]["title"]
-    x = panel["pad_x"] + title["dx"]
-    y = panel["pad_top"] + title["dy"]
+    x = layout["panel"]["pad_x"] + layout["ornament"]["title"]["dx"]
     return (
-        f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="start"'
-        f' font-family="{escape(title["font_family"])}"'
-        f' font-size="{title["font_size"]}" font-weight="{title["font_weight"]}"'
+        f'<text x="{x:.1f}" y="{geometry["title_baseline_y"]:.1f}" text-anchor="start"'
+        f' font-family="{escape(TITLE_FONT)}"'
+        f' font-size="{TITLE_FONT_SIZE:g}" font-weight="{TITLE_FONT_WEIGHT}"'
         f' fill="{layout["palette"]["ink"]}">{escape(layout["title"])}</text>'
     )
 
@@ -290,8 +361,9 @@ def render_piety_track_v2_svg(layout: dict, config: dict, variant_id: str) -> st
         f' rx="{corner_r}" ry="{corner_r}" fill="{fill}" stroke="{fill}"'
         f' stroke-width="{panel["stroke_width"]}"/>',
         render_panel_inset(layout, geometry),
-        render_panel_title(layout),
+        render_panel_title(layout, geometry),
         render_trefoil_rule(layout, geometry),
+        render_position_rules(layout, geometry),
     ]
 
     seated = seated_players(layout, variant_id)

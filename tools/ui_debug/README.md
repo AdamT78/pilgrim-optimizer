@@ -323,15 +323,58 @@ strip has nowhere to put either: its boxes butt against the panel edge, so a hai
 through the numbers and clip the end stars. So the strip becomes a panel that contains the boxes,
 the way the Alms Table already is, gaining side padding, a title band, and a little more bottom
 margin — and with it, the board's name in the artwork instead of only in the HTML heading. Box
-pitch, disc sizes and colours, and the star geometry are untouched, and the discs are deliberately
-identical to the Alms Table's, which is why a step reads the same on both boards.
+pitch, disc sizes and colours are untouched, and the discs are deliberately identical to the Alms
+Table's, which is why a step reads the same on both boards.
 
 `piety_track_v2_layout.json` and `render_piety_track_v2.py` are the structured extraction, and they
 follow v1's shape closely: the layout describes the panel once and lists the two variants,
 `3_4_player` with two disc rows and `2_player` with one, and dropping a row still shortens the
 panel by exactly that row. What v2 adds to the layout is the panel around the strip — side padding,
-title band, corner radius — and the ornament geometry, so the hairline offset and the trefoil's
-lobes and rule gap are all named values rather than constants buried in the drawing code.
+corner radius — and where the ornament sits on it.
+
+### Set the way the Alms Table is set
+
+The two boards are the same thing twice: a numbered row of spaces with a player disc standing on
+one and a score printed under each. In the composed game table they are drawn at the same scale —
+that is what makes the disc they share come out the same size on both, and
+`test_the_alms_table_and_the_piety_track_share_a_scale` holds it against the real solve. A unit
+being a unit on both is what lets this board be set from the Alms Table's own constants and have
+each thing land at the same size on screen.
+
+So it is. The numbers `0`–`12` are `STEP_NUMBER_FONT_SIZE` in `INK_FONT` at `LABEL_FONT_WEIGHT`,
+the same three the Alms Table numbers its steps with; a hairline at `STEP_RULE_STROKE_OPACITY`
+divides each position from the next, as one divides each step there; the title is `TITLE_FONT` at
+`TITLE_FONT_SIZE`; and each score sits in a `STAR_OUTER_RADIUS` star with the VP set inside it at
+`STAR_LABEL_FONT_SIZE`, plain rather than bold, `STAR_LABEL_OFFSET` under the centre. None of those
+are copies of the Alms Table's values — they are imported from `render_alms_table.py`, so the two
+boards cannot be restyled apart by accident. Four of them were moved out of `alms_table_layout.json`
+into that module to make the sharing possible: how a thing is drawn is the house's business, where
+it sits is the board's.
+
+The row of stars is then placed rather than merely sized. The composed table stands this panel's
+top level with the Alms Table's and draws both at one scale, so the same y in panel coordinates is
+the same y on the table, and `discs_to_stars` is set to land this row on the row the `11` star
+sits in over there — a score reads across the table at one height.
+`test_the_stars_stand_level_with_the_second_row_of_the_alms_tables_key` measures it against the
+Alms Table's own key rather than against the number, and the game table's own test holds the
+premise: the two panels are cropped to the same height above their panels. It is bought in the gap
+over the stars rather than by pinning them to a y, so the strip is still a stack — the 2 player
+variant is a disc row shorter and its stars come up with the rest of it.
+
+Two more things follow from all this rather than being asked for directly. The rules run from
+above the numbers to the Alms Table's own distance below the disc grid, which takes them down past
+the top of the stars — what keeps them off the pieces is width, not height, since a disc pair and
+a star are both narrower than the space they stand in. And the drop from the title to the numbers
+is the Alms Table's, which is 14 units more than v2 was drawn with, so the panel is taller than
+the baseline by that, the two the star grew, and the six the stars moved down. The title band the
+layout used to carry is gone: what it described is now the drop itself, which is the thing worth
+naming.
+
+The header rule is the one place the two part company. The lobes, the air held either side of
+them and the stroke are the Alms Table's, but the rule they break runs from clear of the title to
+the panel's far padding, which is a wider header than the Alms Table's — so the arms are longer.
+They stay equal to each other and centred on the lobes, and the tests hold the left one clear of a
+measured `TITLE_RIGHT_EDGE`, as the Alms Table's tests do.
 
 The VP numbers on the stars are **not** in the layout JSON, exactly as in v1. They are read from
 `configs/piety.json`, parsed with the game's own `piety_from_dict`, so the drawn track cannot
@@ -349,11 +392,18 @@ python3 tools/ui_debug/generate_piety_track_v2.py
 The generated overview below also produces it, and the index links it as `Generated piety tracks
 v2`.
 
-Both variants render byte-for-byte identical to their SVG baselines once the `data-` hooks are
-stripped, and a test holds them there. Those hooks — `data-component="piety-track-v2"`,
-`data-piety-variant`, `data-piety-position`, `data-player`, `data-player-disc` — are the only
-difference between the generated SVG and the baseline, and they exist for future UI/debug
-interaction. The baselines carry none of them.
+The board no longer renders byte-for-byte against its SVG baselines: the styling above moved it
+away from them, and the baselines are left untouched as the record of what was drawn first. Two
+tests stand in place of that parity. One says what the restyling was not allowed to touch — the
+panel is the same width, the positions fall on the same centres, and the discs are the same discs
+on the same position — checked against the baseline's own numbers rather than against this layout,
+so the two cannot drift together. The other says what did move and which way: the numbers and the
+scores grew from 9, the star from 16, rules arrived where the baseline had none, and the panel
+grew taller for the drop under the title.
+
+The `data-` hooks — `data-component="piety-track-v2"`, `data-piety-variant`, `data-piety-position`,
+`data-player`, `data-player-disc` — are still the only thing the extraction adds that is not
+drawing, and they exist for future UI/debug interaction. The baselines carry none of them.
 
 v2 does not replace the current piety track: `piety_track_layout.json`, `render_piety_track.py`,
 and the generated `piety_tracks.html` are untouched, so the two are generated side by side. The

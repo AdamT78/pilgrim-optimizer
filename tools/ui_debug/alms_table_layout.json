@@ -18,7 +18,6 @@
       "height": 283.0
     },
     "title_anchor": { "x": 16.0, "y": 29.0 },
-    "title_font_size": 15,
     "inset": 7.5
   },
   "palette": {
@@ -120,8 +119,6 @@
     "scoring_key": {
       "first_cube_center_x": 410.3,
       "star_center_x": 490.1,
-      "star_outer_radius": 18,
-      "star_inner_ratio": 0.45,
       "first_row_center_y": 107.0,
       "row_height": 36
     }

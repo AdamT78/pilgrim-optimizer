@@ -73,6 +73,9 @@ from tools.ui_debug.render_pilgrimage_sites import (  # noqa: E402
     site_by_index,
 )
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
+    BUILDING_SLOT_HEX_SIZE as BOARD_HEX_SIZE,
+)
+from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     DEFAULT_FIRST_PLAYER,
     ROLE_ACOLYTE_LIMIT,
     default_player_board_v2_state,
@@ -82,7 +85,6 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     render_player_board_v2_svg,
     token_slot_count,
 )
-from tools.ui_debug.render_player_boards_v2 import HEX_SIZE as BOARD_HEX_SIZE  # noqa: E402
 from tools.ui_debug.render_ship_marker import (  # noqa: E402
     SHIP_ANCHOR_OFFSET_Y as TILE_SHIP_ANCHOR_OFFSET_Y,
 )
@@ -399,6 +401,19 @@ def _with_overlay(svg: str, overlay: str) -> str:
     """Drop an extra fragment into a rendered SVG, drawn on top of what is already there."""
     closing = svg.rindex("</svg>")
     return f"{svg[:closing]}  {overlay}\n{svg[closing:]}"
+
+
+def render_setup_map_svg(map_layout: dict, placements: list[dict]) -> str:
+    """The map with a round's setup on it: the fills under the map, the names and ship over it.
+
+    The fills go under the map's own edges and labels, so a placed building recolours its hex
+    instead of covering it. The names and the ship go on top of the finished map.
+
+    This page and the composed game table both draw the map this way, so they draw it from here.
+    """
+    map_svg = render_map_svg(map_layout, render_setup_fill_layer(map_layout, placements))
+    map_svg = _with_overlay(map_svg, render_setup_label_layer(map_layout, placements))
+    return _with_overlay(map_svg, render_ship_overlay(map_layout, placements[0]["hex"]))
 
 
 def render_player_controls(discs: list[dict]) -> str:
@@ -1091,11 +1106,7 @@ def render_game_setup_html(
     available = available_setup_buildings(placements)
     donated_vp = donated_vp_by_level(donated_data)
 
-    # The fills go under the map's own edges and labels, so a placed building recolours its hex
-    # instead of covering it. The names and the ship go on top of the finished map.
-    map_svg = render_map_svg(map_layout, render_setup_fill_layer(map_layout, placements))
-    map_svg = _with_overlay(map_svg, render_setup_label_layer(map_layout, placements))
-    map_svg = _with_overlay(map_svg, render_ship_overlay(map_layout, placements[0]["hex"]))
+    map_svg = render_setup_map_svg(map_layout, placements)
 
     setup_data = json.dumps(
         {
