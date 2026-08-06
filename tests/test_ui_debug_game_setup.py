@@ -601,8 +601,8 @@ def test_site_values_read_the_way_the_standalone_tiles_do(page: str) -> None:
         assert texts == [str(site["vp"]), str(site["piety"]), "P", str(site["stone"]), "S"]
 
 
-def test_site_content_stays_in_the_lower_half_of_its_hex(page: str) -> None:
-    """The upper half belongs to the map's hex label and the ship, as it does for buildings."""
+def test_site_content_stays_inside_its_hex(page: str) -> None:
+    """A site fills its hex rather than sitting in the lower half of it, but stays within it."""
     layout = load_map_layout()
     apothem = layout["hex_size"] * math.sin(math.radians(60.0))
     bodies = [
@@ -613,9 +613,11 @@ def test_site_content_stays_in_the_lower_half_of_its_hex(page: str) -> None:
 
     assert bodies
     for body in bodies:
-        for x, y in re.findall(r'<text x="(-?[\d.]+)" y="(-?[\d.]+)"', body):
-            assert 0.0 < float(y) < apothem
-            assert abs(float(x)) < layout["hex_size"]
+        for raw_x, raw_y in re.findall(r'<text x="(-?[\d.]+)" y="(-?[\d.]+)"', body):
+            x, y = abs(float(raw_x)), abs(float(raw_y))
+            assert y < apothem
+            # The hex narrows towards its points, so the width at a value's own height is the bound.
+            assert x < layout["hex_size"] * (1.0 - y / (2.0 * apothem))
 
 
 def test_page_leaves_empty_slots_and_skipped_hexes_alone(page: str) -> None:
