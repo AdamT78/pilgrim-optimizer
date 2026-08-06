@@ -616,6 +616,116 @@ python3 tools/ui_debug/generate_game_setup.py
 The generated overview below also produces it. Until one of the two has been run, the
 `generated/game_setup.html` link in `index.html` is dead like the other generated links.
 
+## Game table layout
+
+`generated/game_table.html` composes the existing UI/debug renderers into a three-column 2-player
+table view. Column 1 contains the Alms Table with two Player Board v2 boards underneath. Column 2
+contains Piety Track v2 above the Duty Wheel. Column 3 contains the map board. The composition page
+owns shared scale and placement; individual renderers continue to own visual geometry. This is
+visual/debug layout only: it does not mutate `GameState`, and it implements no gameplay rules.
+
+`game_setup.html` remains the control-heavy debug sandbox. The table page has no buttons and no
+script at all, and no text either — no heading, no description, nothing above the boards. It opens
+straight into the table, because what is being judged is the arrangement rather than a page about
+the arrangement. The tab keeps a name, which is the one piece of text a window needs.
+
+### One shared scale
+
+Each renderer draws in its own units, so handing every panel a width by eye makes the same wooden
+cube come out a different size on each board — a cube is 13 units on the duty wheel but inside a
+group the wheel scales, 13 on the alms table, and 14 on a player board, against viewBoxes of 1104,
+553 and 493.
+
+So the page stops choosing panel widths. One physical reference is measured in each board's own
+units, and every display width falls out of it:
+
+```text
+display width = --cube * (cropped viewBox width / cube size in that board's units)
+```
+
+A single `--cube` therefore drives the whole table, and every board stays in proportion when it
+changes. Two boards draw no cube at all, so each is anchored on a piece it does share:
+
+- the Piety Track on the player disc it shares with the Alms Table — both draw it 18 units across,
+  so matching their units-per-pixel matches the discs on screen. This is why `--w-alms` is a
+  multiple of `--w-piety` rather than of `--cube` directly, and why the Alms Table is not simply
+  given the width of the seats underneath it.
+- the map on the board hexagon the Duty Wheel's was derived from, so the two greens come out the
+  same width.
+
+Two panels are then fitted rather than cube-matched, because the layout needs them to be: the two
+player boards are sized so that stacking them comes to exactly the Duty Wheel's panel height, and
+the Duty Wheel fills whatever height the row has left. Everything else is the cube.
+
+### Cropping, and the one place a drawing is touched
+
+Each of these SVGs was authored as a standalone page, so its viewBox includes a heading, a subtitle
+and a backdrop. The Duty Wheel is the worst: its playable hexagon is 717x848 inside a 1104x1425
+viewBox, so nearly half the panel is page furniture, which would be paid for in the middle of a
+table. Each fragment's viewBox is therefore pointed at its own panel instead. Nothing is deleted —
+the extra elements are simply outside the view — and no renderer changes.
+
+The crops are measured off the frame each renderer draws rather than off everything it draws,
+because those page backdrops overhang the panel by 18 units on the Alms Table and 20 on the Piety
+Track against 1 on a player board, and cropping to them would bury the two ornamented panels in far
+more black than a board carries. The two hexagon boards are cropped off their hexagon instead, since
+they are meant to read as the same physical board.
+
+The one place the composition touches what a renderer drew is the Duty Wheel's hexagon, which was
+drawn by hand about 2.5% taller than a regular hexagon of the same width, so at equal widths it and
+the map did not read as the same shape. `duty_hexagon()` replaces it with a true regular hexagon of
+the same width and centre; only how far the empty top and bottom points reach changes, and no tile
+on the board moves. It is done in the composition so the standalone Duty Wheel page keeps the
+hexagon it has always had, and it fails loudly rather than silently mis-cropping if the renderer
+stops drawing the path it was measured against.
+
+### The converged solve
+
+Every board is cropped to its own content plus a margin, and that margin has to come out the same
+number of pixels on all of them — which is whatever a player board's 6 units happen to render as.
+But that figure depends on how big everything is, the sizes depend on the crops, and the crops
+depend on the margins. Rather than pretend that chain has a first link, `solve_table_scale()`
+iterates the whole thing to a fixed point.
+
+Everything it measures is read from the layout files rather than hardcoded, so the crops follow the
+renderers: the panel frames from the alms and piety layouts and `board_geometry`, the map's hexagon
+from `edge_hex_radius`, and the wheel's from its own `ground_path`, `center` and `scale`.
+
+### Heights, and why the gaps come out even
+
+The row's height is whichever of the map or the Alms-over-seats column needs more of it — neither
+depends on the Duty Wheel, so it can be read before the wheel is sized. The wheel is then handed
+what is left once the Piety Track, both panels' chrome and one gap come out of it. Because the two
+stacked columns have the same shape, two panels and one gap, the space above the wheel comes out to
+exactly `var(--gap)`: the same distance used between the two player boards, and the wheel's bottom
+edge lands on the map's.
+
+That is computed in CSS from `--cube` rather than baked in as a scale factor, so it holds at any
+window size rather than only at the one the constants were solved against. It is the reason the Duty
+Wheel is the one panel sized by height (`--h-action`) while every other panel is sized by width.
+
+Below 1080px there is no row height to fill, so the row wraps and the wheel goes back to being sized
+by width like everything else.
+
+Nothing is redrawn here. The alms table, the piety track, the map with its setup overlay, the duty
+wheel, and the boards all arrive through the same functions their standalone pages call —
+`render_setup_map_svg` in `generate_game_setup.py` for the three-layer map, and
+`render_player_board_v2_svg` for one board at a time.
+
+The two seats shown are the second column of the four-seat grid the layout describes; the first
+(white, yellow) is simply not drawn, and neither seated board carries the first-player marker
+because the layout hands it to white. That is debug state to look at rather than a seating rule —
+player-count switching is not wired up on this page.
+
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_game_table.py
+```
+
+The generated overview below also produces it, and the index links it as `Generated game table
+layout`.
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
@@ -634,7 +744,12 @@ tools/ui_debug/generated/player_boards_v2.html
 tools/ui_debug/generated/donated_building_tiles.html
 tools/ui_debug/generated/ship_marker.html
 tools/ui_debug/generated/piety_tracks.html
+tools/ui_debug/generated/piety_tracks_v2.html
+tools/ui_debug/generated/pilgrimage_sites.html
+tools/ui_debug/generated/duty_wheel.html
+tools/ui_debug/generated/alms_table.html
 tools/ui_debug/generated/game_setup.html
+tools/ui_debug/generated/game_table.html
 tools/ui_debug/generated/debug_overview.html
 ```
 

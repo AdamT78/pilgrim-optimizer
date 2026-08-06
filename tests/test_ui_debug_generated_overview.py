@@ -32,6 +32,7 @@ def test_generator_writes_all_pages_to_a_temp_directory(tmp_path: Path) -> None:
     assert written.duty_wheel == tmp_path / "duty_wheel.html"
     assert written.alms_table == tmp_path / "alms_table.html"
     assert written.game_setup == tmp_path / "game_setup.html"
+    assert written.game_table == tmp_path / "game_table.html"
     assert written.overview == tmp_path / "debug_overview.html"
     for path in written.as_tuple():
         assert path.is_file()
@@ -69,6 +70,12 @@ def test_generated_pages_contain_their_own_views(tmp_path: Path) -> None:
     assert "Alms Table" in alms_table
     assert "Season end winners" in alms_table
     assert "PILGRIM — Game Setup Debug View" in written.game_setup.read_text(encoding="utf-8")
+    # The table page carries no heading of its own: it opens straight into the boards.
+    game_table = written.game_table.read_text(encoding="utf-8")
+    assert "<title>Pilgrim — Game Table</title>" in game_table
+    assert "game-table-stage" in game_table
+    assert 'data-component="alms-table"' in game_table
+    assert 'data-component="duty-wheel"' in game_table
 
 
 def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
@@ -89,6 +96,7 @@ def test_overview_page_titles_and_links_generated_views(tmp_path: Path) -> None:
     assert 'href="duty_wheel.html"' in content
     assert 'href="alms_table.html"' in content
     assert 'href="game_setup.html"' in content
+    assert 'href="game_table.html"' in content
 
 
 def test_overview_page_states_current_limitations() -> None:
@@ -134,3 +142,5 @@ def test_prototype_index_links_to_generated_overview() -> None:
     assert "prototypes/alms_table.svg" in content
     assert "generated/alms_table.html" in content
     assert "generated/game_setup.html" in content
+    assert "generated/game_table.html" in content
+    assert "Generated game table layout" in content
