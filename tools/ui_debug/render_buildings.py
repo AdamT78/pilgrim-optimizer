@@ -26,7 +26,10 @@ ROW_LABEL_GUTTER = 222.0
 
 TILE_TEXT_TOP_OFFSET = 16.5
 TILE_TEXT_LINE_HEIGHT = 12.0
-TILE_TEXT_FONT_SIZE = 10.0
+
+TILE_NAME_FONT_SIZE = 14.0
+TILE_NAME_LINE_HEIGHT = 15.0
+TILE_NAME_CENTER_Y_OFFSET = 13.0
 
 MARGIN_X = 68.0
 MARGIN_Y = 75.0
@@ -98,23 +101,33 @@ def _hex_path_data(x: float, y: float) -> str:
 
 
 def tile_text_lines(building: dict) -> list[str]:
-    """The label as the tile wraps it: the level numeral, then one line per word of the name."""
-    return [level_numeral(building["level"]), *building["name"].split()]
+    """The label the tile carries: its name, a word to a line. The fill colour is the level.
+
+    Names break only where they are already spaced, so `Chapter House` takes two lines and no
+    word is ever cut in half. The level numeral the label used to be headed by is gone.
+    """
+    return building["name"].split()
 
 
 def render_building_tile(building: dict, x: float, y: float) -> str:
-    """Render one hex tile (shape plus wrapped label) centred on (x, y)."""
+    """Render one hex tile (shape plus label) centred on (x, y).
+
+    The first line starts just below the middle of the hex, which leaves the upper half free
+    wherever a tile shares its space with a ship or a map hex label, and a second word follows
+    under it. Setting a word to a line is what buys the size: `Indulgences`, the widest word in
+    the catalog, is the one that caps it, and it fills all but 7 units of the hex at this depth.
+    """
     palette = palette_for(building)
     parts = [
         f'<path d="{_hex_path_data(x, y)}" fill="{palette.fill}" stroke="{palette.stroke}"'
         ' stroke-width="2.5" stroke-linejoin="round"/>'
     ]
     for index, line in enumerate(tile_text_lines(building)):
-        text_y = y + TILE_TEXT_TOP_OFFSET + index * TILE_TEXT_LINE_HEIGHT
+        text_y = y + TILE_NAME_CENTER_Y_OFFSET + index * TILE_NAME_LINE_HEIGHT
         parts.append(
             f'<text x="{x:.1f}" y="{text_y:.1f}" text-anchor="middle"'
             ' font-family="Helvetica, Arial, sans-serif"'
-            f' font-size="{TILE_TEXT_FONT_SIZE:g}" font-weight="600"'
+            f' font-size="{TILE_NAME_FONT_SIZE:g}" font-weight="600"'
             f' fill="{palette.stroke}">{escape(line)}</text>'
         )
     return "".join(parts)

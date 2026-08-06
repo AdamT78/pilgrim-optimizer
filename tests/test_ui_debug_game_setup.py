@@ -44,7 +44,6 @@ from tools.ui_debug.render_buildings import (
     COLOR_GROUP_PALETTES,
     load_building_catalog,
     render_building_tile,
-    tile_text_lines,
 )
 from tools.ui_debug.render_donated_buildings import (
     STAR_FILL,
@@ -1049,15 +1048,18 @@ def _label_baselines(content: str) -> list[float]:
 
 
 def test_a_bought_building_labels_the_lower_half_of_its_slot() -> None:
-    """The slot reads like a map hex: every line below the centre, none of it past the edge."""
+    """The slot reads like a map hex: a word to a line, every line below the centre and inside."""
     apothem = BOARD_HEX_SIZE * math.sin(math.radians(60.0))
 
     for name in ("Kogge", "Chapter House"):
         building = building_by_name(load_building_catalog())[name]
-        baselines = _label_baselines(render_board_slot_building(building))
+        content = render_board_slot_building(building)
+        baselines = _label_baselines(content)
 
-        assert len(baselines) == len(tile_text_lines(building))
+        assert len(baselines) == len(name.split())
         assert baselines == sorted(baselines)
+        for word in name.split():
+            assert f">{word}</text>" in content
         for baseline in baselines:
             assert 0.0 < baseline < apothem
 
