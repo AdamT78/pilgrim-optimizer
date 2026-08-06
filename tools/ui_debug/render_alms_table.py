@@ -18,11 +18,17 @@ the game's own `alms_from_dict`, so a change to the Alms table shows up in this 
 anyone editing the UI layer. What the layout does own is the prose beside each reward, which is
 display copy the config has no opinion about.
 
-Geometry constants mirror `prototypes/alms_table.html`, which stays the visual baseline.
-`prototype_sources/alms_table.py.txt` is the reference for how that baseline was drawn; it is
-read, never imported or executed. The pieces are shared rather than reinvented: the disc is the
-piety-track disc at a larger radius, the star is the piety-track star, and the cube is the mancala
-board's cube.
+Geometry constants mirror `prototypes/alms_table.html`, which stays the baseline for the race:
+the steps, the rules between them, the ticks and the reward lines are still drawn exactly as it
+draws them. What has moved away from it is the record. The board is wider than the prototype's,
+because in the composed game table it stands over two seats and should be as wide as they are, and
+that width was bought in its own units rather than by scaling the board up. The room it bought
+went right of the zone divider, where the season-end cubes are now the cube a player board plays
+with rather than a larger one of this board's own. `prototype_sources/alms_table.py.txt` is the
+reference for how the baseline was drawn; it is read, never imported or executed.
+
+The pieces are shared rather than reinvented: the disc is the piety-track disc at a larger radius,
+the star is the piety-track star, and the cube is the one on Player Board v2.
 """
 
 from __future__ import annotations
@@ -33,6 +39,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from pilgrim.model.config import AlmsConfig, alms_from_dict
+from tools.ui_debug.render_player_boards_v2 import MARKER_CUBE as PLAYER_CUBE
+from tools.ui_debug.render_player_boards_v2 import ROLE_FONT_SIZE as PLAYER_LABEL_FONT_SIZE
+from tools.ui_debug.render_player_boards_v2 import TOKEN_GAP as PLAYER_CUBE_GAP
 
 LAYOUT_FILENAME = "alms_table_layout.json"
 ALMS_CONFIG_RELATIVE_PATH = ("configs", "alms.json")
@@ -41,8 +50,53 @@ INK_FONT = "Helvetica, Arial, sans-serif"
 TITLE_FONT = "Georgia, 'Times New Roman', serif"
 SOCKET_DASH = "3,2.5"
 
+# What one player board unit measures here.
+#
+# The game table hands this board the piety track's scale rather than the seats' width, because
+# the two draw the same player disc and pinning them together is what makes that disc come out the
+# same size on both. The piety track's units are the smaller of the two, so a unit here renders
+# 1.2925 of the pixels a player board unit does. That ratio belongs to the composed table, not to
+# either board, and the game table tests check it against the real solve rather than trusting the
+# number written here.
+#
+# So anything meant to read at the same size as its counterpart on a seat is that board's size in
+# PLAYER_UNITs. It is why this board is 536 units wide and a seat is 692.8: the same width.
+UNITS_PER_PLAYER_UNIT = 1.2925
+PLAYER_UNIT = 1 / UNITS_PER_PLAYER_UNIT
+
+# A cube is a cube wherever it is played, so the season-end cubes are the seats' cube and the air
+# between them is the air between the ones in a Village grid. Rounded to the hundredth the board
+# writes its geometry in; a thousandth of a unit is nothing anyone can see.
+CUBE_SIZE = round(PLAYER_CUBE * PLAYER_UNIT, 2)
+CUBE_GAP = round(PLAYER_CUBE_GAP * PLAYER_UNIT, 2)
+CUBE_PITCH = CUBE_SIZE + CUBE_GAP
+
+# `Season end winners` and the `2`/`4`/`6` the rewards are filed under both read as the seats'
+# special activity labels -- `Fields`, `Stone Mason` -- do.
+SEASON_END_LABEL_FONT_SIZE = round(PLAYER_LABEL_FONT_SIZE * PLAYER_UNIT, 2)
+THRESHOLD_LABEL_FONT_SIZE = SEASON_END_LABEL_FONT_SIZE
+
+# The header motif is the duty wheel's, at the size that board draws it. There a trefoil lobe is
+# 4.6 units against a 13.0-unit cube, the rule holds 15.0 clear either side of the lobes before it
+# starts, and each arm then runs 29.0 further -- 0.354, 1.154 and 2.231 cubes. Cubes are what the
+# game table makes agree across boards drawn at different scales, so carrying the motif over in
+# cubes is what puts the two ornaments at the same size on screen.
+#
+# The arms are the one departure. On the wheel each runs out to the end of that space's cube tally,
+# which is far narrower than this header, so at that length the rule reads as two ticks beside the
+# lobes rather than as a rule. Here the right arm runs out to ORNAMENT_RULE_CLEARANCE short of the
+# zone divider, and the left one takes the same length back the other way rather than a reach of
+# its own, so the mark stays symmetrical about the lobes. That leaves the left arm ending clear of
+# the title, which is the other thing it must not touch; the tests hold it to both.
+ORNAMENT_TREFOIL_RADIUS = 0.3538 * CUBE_SIZE
+ORNAMENT_RULE_GAP = 1.1538 * CUBE_SIZE
+ORNAMENT_RULE_CLEARANCE = 8.0
+ORNAMENT_STROKE_WIDTH = 0.1 * CUBE_SIZE
+ORNAMENT_STROKE_OPACITY = "0.34"
+ORNAMENT_LOBE_ANGLES = (-90, 30, 150)
+
 # Offsets the baseline holds as constants rather than per-anchor data.
-NUMBER_FONT_SIZE = 11
+STEP_NUMBER_FONT_SIZE = 11
 BONUS_LABEL_FONT_SIZE = 8
 BADGE_WIDTH = 18
 BADGE_HEIGHT = 15
@@ -53,8 +107,11 @@ REWARD_FONT_SIZE = 10.5
 TICK_WIDTH = 6
 TICK_HEIGHT = 4.5
 ROUND_LABEL_FONT_SIZE = 7.5
-STAR_LABEL_OFFSET = 3.0
-STAR_LABEL_FONT_SIZE = 9
+# The VP a star pays reads as the track's own step numbers do. Its baseline sits a third of the
+# size below the star's centre, which is what puts the middle of the digits on it -- so the offset
+# follows the size rather than being set beside it.
+STAR_LABEL_FONT_SIZE = STEP_NUMBER_FONT_SIZE
+STAR_LABEL_OFFSET = STAR_LABEL_FONT_SIZE / 3
 
 # The place past the last step: the `1st` pocket on the race track, for the first disc to reach the
 # top. It is a space on the track, not one of the record's cube sockets, and not a score.
@@ -157,13 +214,11 @@ def placeholder_slots(layout: dict, rules: AlmsConfig) -> list[dict]:
     nowhere to go — four rounds, four cubes, four sockets.
     """
     slots = layout["record"]["placeholder_slots"]
-    cube = layout["record"]["cube"]
-    pitch = cube["size"] + cube["gap"]
     return [
         {
             "slot": row["rank"],
             "round": row["rank"],
-            "center_x": slots["first_center_x"] + (row["rank"] - 1) * pitch,
+            "center_x": slots["first_center_x"] + (row["rank"] - 1) * CUBE_PITCH,
             "center_y": slots["center_y"],
             "label_y": slots["label_y"],
         }
@@ -220,8 +275,7 @@ def alms_position_target(
     corner in the 2x2 it shares with three others on a step.
     """
     if position == RANK_FIRST:
-        pocket = layout["track"]["bonus_pocket"]
-        return pocket["center_x"], pocket["center_y"]
+        return bonus_pocket_center_x(layout), layout["track"]["bonus_pocket"]["center_y"]
     return disc_center(layout, player, position)
 
 
@@ -232,6 +286,43 @@ def _f(value: float) -> str:
 def _n(value: float) -> str:
     """Sizes the baseline prints as written: `13`, not `13.0`."""
     return f"{value:g}"
+
+
+def cube_rect(center_x: float, center_y: float) -> str:
+    """The box every cube on this board is drawn in, whether it is a socket or a cube in one.
+
+    One helper for all of them, so a placed cube covers the dashed socket it fills exactly rather
+    than nearly: same centre, same size, same rounding, so there is no way for the two to drift.
+    """
+    return (
+        f'x="{_f(center_x - CUBE_SIZE / 2)}" y="{_f(center_y - CUBE_SIZE / 2)}"'
+        f' width="{_f(CUBE_SIZE)}" height="{_f(CUBE_SIZE)}"'
+    )
+
+
+def ornament_rule_arm(layout: dict) -> float:
+    """How far each arm of the header rule runs out from the gap around the lobes.
+
+    The right one is the one with somewhere to be: it stops just short of the zone divider, which
+    is what closes the header. The left one is given the same length rather than a reach of its
+    own, so the mark is symmetrical about the lobes wherever they are put.
+    """
+    trefoil = layout["ornament"]["trefoil"]
+    reach = layout["zone_divider"]["x"] - ORNAMENT_RULE_CLEARANCE - trefoil["center_x"]
+    return reach - ORNAMENT_RULE_GAP
+
+
+def bonus_pocket_center_x(layout: dict) -> float:
+    """The middle of the lane the `1st` pocket stands in.
+
+    That lane is what is left of the track past the last step's rule, and it is wider than a step
+    because the zone divider, not the track's pitch, is what closes it. Centring the pocket in it
+    is measured rather than written down, so the air either side of the pocket stays equal.
+    """
+    track = layout["track"]
+    centers = step_centers(layout)
+    last_rule_x = centers[0] - track["step_pitch"] / 2 + len(centers) * track["step_pitch"]
+    return (last_rule_x + layout["zone_divider"]["x"]) / 2
 
 
 def _text(
@@ -284,7 +375,7 @@ def _effect_tick(layout: dict, center_x: float) -> str:
     y = layout["track"]["effect_tick_y"]
     return (
         f'<path d="M {_f(center_x - TICK_WIDTH / 2)},{_f(y)}'
-        f' L {_f(center_x + TICK_WIDTH / 2)},{_f(y)}'
+        f" L {_f(center_x + TICK_WIDTH / 2)},{_f(y)}"
         f' L {_f(center_x)},{_f(y + TICK_HEIGHT)} Z"'
         f' fill="{layout["palette"]["ink"]}" fill-opacity="0.65"/>'
     )
@@ -293,7 +384,7 @@ def _effect_tick(layout: dict, center_x: float) -> str:
 def _bonus_pocket(layout: dict) -> str:
     """Single-disc space for the first player to reach the top step — rounded, not square."""
     pocket = layout["track"]["bonus_pocket"]
-    center_x, center_y = pocket["center_x"], pocket["center_y"]
+    center_x, center_y = bonus_pocket_center_x(layout), pocket["center_y"]
     width, height = pocket["width"], pocket["height"]
     return (
         f'<rect x="{_f(center_x - width / 2)}" y="{_f(center_y - height / 2)}"'
@@ -314,7 +405,11 @@ def render_threshold_reward(layout: dict, reward: dict) -> str:
         f' fill="{layout["palette"]["socket_fill"]}" stroke="{ink}" stroke-width="1.1"/>'
     )
     number = _label(
-        layout, center_x, center_y + BADGE_LABEL_OFFSET, str(reward["position"]), NUMBER_FONT_SIZE
+        layout,
+        center_x,
+        center_y + BADGE_LABEL_OFFSET,
+        str(reward["position"]),
+        THRESHOLD_LABEL_FONT_SIZE,
     )
     text = _text(
         center_x + REWARD_TEXT_GAP,
@@ -335,11 +430,9 @@ def render_placeholder_slot(layout: dict, slot: dict) -> str:
     """An empty cube space, for the coloured player cube a later PR will cover it with."""
     ink = layout["palette"]["ink"]
     cube = layout["record"]["cube"]
-    size = cube["size"]
     center_x, center_y = slot["center_x"], slot["center_y"]
     socket = (
-        f'<rect x="{_f(center_x - size / 2)}" y="{_f(center_y - size / 2)}"'
-        f' width="{_n(size)}" height="{_n(size)}"'
+        f"<rect {cube_rect(center_x, center_y)}"
         f' fill="{layout["palette"]["socket_fill"]}" stroke="{ink}"'
         f' stroke-width="{_n(cube["stroke_width"])}" stroke-dasharray="{SOCKET_DASH}"'
         f' data-placeholder-slot="{slot["slot"]}" data-round="{slot["round"]}"/>'
@@ -356,11 +449,9 @@ def render_winner_cube(layout: dict, slot: dict, player: dict, visible: bool = T
     Board v2 cube colours rather than the piety-track disc colours the track uses.
     """
     cube = layout["record"]["cube"]
-    size = cube["size"]
     center_x, center_y = slot["center_x"], slot["center_y"]
     return (
-        f'<rect x="{_f(center_x - size / 2)}" y="{_f(center_y - size / 2)}"'
-        f' width="{_n(size)}" height="{_n(size)}"'
+        f"<rect {cube_rect(center_x, center_y)}"
         f' fill="{player["cube_fill"]}" stroke="{player["cube_stroke"]}"'
         f' stroke-width="{_n(cube["stroke_width"])}" opacity="{1 if visible else 0:g}"'
         f' data-season-end-winner-slot="{slot["slot"]}" data-player="{player["id"]}"'
@@ -384,12 +475,10 @@ def _scoring_key_row(layout: dict, row: dict) -> str:
     palette = layout["palette"]
     key = layout["record"]["scoring_key"]
     cube = layout["record"]["cube"]
-    size, pitch = cube["size"], cube["size"] + cube["gap"]
     center_y = row["center_y"]
 
     cubes = "".join(
-        f'<rect x="{_f(key["first_cube_center_x"] + k * pitch - size / 2)}"'
-        f' y="{_f(center_y - size / 2)}" width="{_n(size)}" height="{_n(size)}"'
+        f"<rect {cube_rect(key['first_cube_center_x'] + k * CUBE_PITCH, center_y)}"
         f' fill="{palette["key_cube_fill"]}" stroke="{palette["key_cube_stroke"]}"'
         f' stroke-width="{_n(cube["stroke_width"])}"/>'
         for k in range(row["cubes"])
@@ -407,6 +496,7 @@ def _scoring_key_row(layout: dict, row: dict) -> str:
         str(row["vp"]),
         size=STAR_LABEL_FONT_SIZE,
         fill=palette["star_label_fill"],
+        weight=None,
     )
     return (
         f'<g data-season-end-rank="{row["rank"]}" data-season-end-cubes="{row["cubes"]}"'
@@ -415,21 +505,28 @@ def _scoring_key_row(layout: dict, row: dict) -> str:
 
 
 def _trefoil_rule(layout: dict) -> str:
-    """The board's title motif, stretched from the title across to the zone divider."""
+    """The board's title motif: the duty wheel's trefoil, on a rule that spans this board's header.
+
+    The lobes and the air they hold are the wheel's own, so the mark reads at the size it does over
+    every duty there. The rule they sit on is this header's, since it has a header to span and the
+    wheel does not; what it used to be was the wheel's lobes scaled up with it.
+    """
     trefoil = layout["ornament"]["trefoil"]
-    x0, x1, y = trefoil["x0"], trefoil["x1"], trefoil["y"]
-    radius, gap = trefoil["lobe_radius"], trefoil["rule_gap"]
-    cx = (x0 + x1) / 2
+    cx, y = trefoil["center_x"], trefoil["y"]
+    radius = ORNAMENT_TREFOIL_RADIUS
     lobes = "".join(
         f'<circle cx="{_f(cx + radius * math.cos(math.radians(a)))}"'
-        f' cy="{_f(y + radius * math.sin(math.radians(a)))}" r="{_n(radius)}" />'
-        for a in (-90, 30, 150)
+        f' cy="{_f(y + radius * math.sin(math.radians(a)))}" r="{_f(radius)}" />'
+        for a in ORNAMENT_LOBE_ANGLES
     )
+    inner = ORNAMENT_RULE_GAP
+    outer = inner + ornament_rule_arm(layout)
     return (
-        f'<g fill="none" stroke="{layout["palette"]["ink"]}" stroke-opacity="0.34"'
-        f' stroke-width="1.3" stroke-linecap="round">{lobes}'
-        f'<path d="M {_f(x0)},{_f(y)} H {_f(cx - gap)}'
-        f' M {_f(cx + gap)},{_f(y)} H {_f(x1)}" /></g>'
+        f'<g fill="none" stroke="{layout["palette"]["ink"]}"'
+        f' stroke-opacity="{ORNAMENT_STROKE_OPACITY}"'
+        f' stroke-width="{_f(ORNAMENT_STROKE_WIDTH)}" stroke-linecap="round">{lobes}'
+        f'<path d="M {_f(cx - outer)},{_f(y)} H {_f(cx - inner)}'
+        f' M {_f(cx + inner)},{_f(y)} H {_f(cx + outer)}" /></g>'
     )
 
 
@@ -443,7 +540,9 @@ def _race_zone(
     parts: list[str] = []
 
     for index, center_x in enumerate(centers):
-        step = [_label(layout, center_x, track["number_label_y"], str(index), NUMBER_FONT_SIZE)]
+        step = [
+            _label(layout, center_x, track["number_label_y"], str(index), STEP_NUMBER_FONT_SIZE)
+        ]
         # Player state, not the baseline's full 2x2: a disc appears only where a player stands.
         # A disc that can move lives in its own layer instead, so sliding it along the track
         # does not leave it parented to the step it started on.
@@ -462,7 +561,7 @@ def _race_zone(
         f'<g data-alms-bonus-pocket="true" data-alms-position="{RANK_FIRST}">'
         + _label(
             layout,
-            pocket["center_x"],
+            bonus_pocket_center_x(layout),
             track["number_label_y"],
             pocket["label"],
             BONUS_LABEL_FONT_SIZE,
@@ -513,7 +612,7 @@ def _record_zone(layout: dict, rules: AlmsConfig, interactive: bool = False) -> 
 
     return "".join(
         [
-            _label(layout, heading["x"], heading["y"], heading["text"], heading["font_size"]),
+            _label(layout, heading["x"], heading["y"], heading["text"], SEASON_END_LABEL_FONT_SIZE),
             "".join(render_placeholder_slot(layout, slot) for slot in slots),
             winner_cubes,
             f'<line x1="{_f(rule["x1"])}" y1="{_f(rule["y"])}" x2="{_f(rule["x2"])}"'
@@ -725,7 +824,7 @@ def render_alms_table_controls_html(layout: dict, config: dict) -> str:
     mover = next(p for p in players_of(layout) if p["id"] == mover_id(layout))
     buttons = "".join(
         f'\n    <button type="button" data-add-winner="{player["id"]}">'
-        f'Add {player["color"]} cube to Season end winner</button>'
+        f"Add {player['color']} cube to Season end winner</button>"
         for player in players_of(layout)
     )
     # Rendered in the state the page opens in, so it reads correctly before any script runs.

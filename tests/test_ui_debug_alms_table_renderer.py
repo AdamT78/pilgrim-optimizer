@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from pathlib import Path
 
@@ -9,9 +10,25 @@ from tools.ui_debug.generate_alms_table import (
     generate_alms_table_page,
 )
 from tools.ui_debug.render_alms_table import (
+    CUBE_GAP,
+    CUBE_PITCH,
+    CUBE_SIZE,
+    INK_FONT,
+    ORNAMENT_RULE_CLEARANCE,
+    ORNAMENT_RULE_GAP,
+    ORNAMENT_STROKE_WIDTH,
+    ORNAMENT_TREFOIL_RADIUS,
+    PLAYER_UNIT,
     RANK_FIRST,
+    SEASON_END_LABEL_FONT_SIZE,
+    STAR_LABEL_FONT_SIZE,
+    STAR_LABEL_OFFSET,
+    STEP_NUMBER_FONT_SIZE,
+    THRESHOLD_LABEL_FONT_SIZE,
     alms_position_target,
     alms_rules,
+    bonus_pocket_center_x,
+    cube_rect,
     default_alms_config_path,
     default_layout_path,
     disc_center,
@@ -22,6 +39,7 @@ from tools.ui_debug.render_alms_table import (
     mover_id,
     mover_path,
     next_mover_position,
+    ornament_rule_arm,
     placeholder_slots,
     players_of,
     position_by_index,
@@ -32,6 +50,26 @@ from tools.ui_debug.render_alms_table import (
     season_end_slot_by_index,
     step_centers,
     threshold_rewards,
+)
+from tools.ui_debug.render_duty_wheel import (
+    CUBE_COLUMN_WIDTH as DUTY_CUBE_COLUMN_WIDTH,
+)
+from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
+from tools.ui_debug.render_duty_wheel import (
+    ORNAMENT_RULE_GAP as DUTY_ORNAMENT_RULE_GAP,
+)
+from tools.ui_debug.render_duty_wheel import (
+    ORNAMENT_TREFOIL_RADIUS as DUTY_ORNAMENT_TREFOIL_RADIUS,
+)
+from tools.ui_debug.render_player_boards_v2 import (
+    MARKER_CUBE,
+    ROLE_FONT_SIZE,
+    TOKEN_GAP,
+    TOKEN_RADIUS,
+    load_player_boards_v2_layout,
+)
+from tools.ui_debug.render_player_boards_v2 import (
+    board_geometry as player_board_geometry,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +85,28 @@ PLAYER_IDS = ("player_one", "player_two", "player_three", "player_four")
 PLAYER_COLORS = ("white", "red", "yellow", "blue")
 SEASON_END_VP = (5, 11, 18, 26)
 THRESHOLD_POSITIONS = (2, 4, 6)
+
+# Where `Alms Table` stops. There is no font metric to compute this from, so it is measured: at the
+# title's 15 units of Georgia bold the text runs from x=15.6 to here. It is what the header rule's
+# left arm has to stay clear of, and the only reason that arm is not free to be any length.
+TITLE_RIGHT_EDGE = 101.9
+
+# What the board measured before the pass that widened it to the width of a seat. The tests keep
+# these so they can say which way each number moved, rather than only pinning it where it landed.
+BEFORE_WIDENING = {
+    "panel_width": 517.0,
+    "divider_x": 379.0,
+    "record_x": 392.0,
+    "record_width": 111.0,
+    "rule_span": 111.0,
+    "right_margin": 14.0,
+    "cube_size": 13,
+    "heading_font_size": 9.5,
+    "pocket_center_x": 344.0,
+    "trefoil_rule_span": 256.0,
+    "star_outer_radius": 16,
+    "star_label_font_size": 9,
+}
 
 
 def layout() -> dict:
@@ -290,7 +350,7 @@ def test_a_disc_in_the_first_place_pocket_sits_on_the_pocket_itself() -> None:
 
     assert pocket["label"] == "1st"
     assert alms_position_target(layout(), rules(), mover, RANK_FIRST) == (
-        pocket["center_x"],
+        bonus_pocket_center_x(layout()),
         pocket["center_y"],
     )
     assert alms_position_target(layout(), rules(), mover, 0) == disc_center(layout(), mover, 0)
@@ -330,9 +390,7 @@ def test_winner_slots_can_be_looked_up_by_number() -> None:
 
 def test_winner_cubes_are_the_player_board_v2_cubes() -> None:
     """They are the player's own cube moved onto this board, not a new piece."""
-    v2 = json.loads(
-        (UI_DEBUG_DIR / "player_boards_v2_layout.json").read_text(encoding="utf-8")
-    )
+    v2 = json.loads((UI_DEBUG_DIR / "player_boards_v2_layout.json").read_text(encoding="utf-8"))
     v2_cubes = {player["id"]: (player["fill"], player["stroke"]) for player in v2["players"]}
 
     for player in players_of(layout()):
@@ -400,7 +458,7 @@ def test_a_winner_cube_covers_the_slot_it_fills() -> None:
     assert _box(cube) == _box(placeholder)
     # And the script takes the socket out from under it, so no dash can peek past the stroke.
     page = render_alms_table_html(layout(), config(), interactive=True)
-    assert 'board.querySelector(\'[data-placeholder-slot="\' + slot + \'"]\');' in page
+    assert "board.querySelector('[data-placeholder-slot=\"' + slot + '\"]');" in page
     assert 'placeholder.setAttribute("opacity", "0");' in page
 
 
@@ -419,7 +477,8 @@ def test_the_page_carries_the_pocket_the_disc_moves_to_not_a_cube_socket() -> No
     pocket = layout()["track"]["bonus_pocket"]
     slot = season_end_slot_by_index(layout(), rules(), 1)
 
-    target = json.dumps({RANK_FIRST: [pocket["center_x"], pocket["center_y"]]}).strip("{}")
+    center = [bonus_pocket_center_x(layout()), pocket["center_y"]]
+    target = json.dumps({RANK_FIRST: center}).strip("{}")
     assert target in content
     assert json.dumps([slot["center_x"], slot["center_y"]]) not in content
     # The pocket is labelled on the board and hooked for the disc that lands in it.
@@ -469,8 +528,7 @@ def _is_step_disc(element: str) -> bool:
 
 
 def _is_cube(element: str) -> bool:
-    size = layout()["record"]["cube"]["size"]
-    return element.startswith("<rect") and f' width="{size:g}"' in element
+    return element.startswith("<rect") and f' width="{CUBE_SIZE:.1f}"' in element
 
 
 def _one_cube_stroke(element: str) -> str:
@@ -479,25 +537,250 @@ def _one_cube_stroke(element: str) -> str:
     return re.sub(r'stroke-width="[\d.]+"', f'stroke-width="{width:g}"', element)
 
 
-def test_generated_board_matches_the_baseline_element_for_element() -> None:
-    """Only the discs and the cube strokes differ, and both are deliberate."""
+def test_the_race_track_survived_the_widening_element_for_element() -> None:
+    """The board is wider than the baseline now, but the race it draws is the baseline's own.
+
+    Only the record side was meant to move. The steps, the rules between them, the ticks under the
+    steps that pay and the reward lines underneath are all still the prototype's elements, byte for
+    byte, which is the thing a width change is most likely to disturb without anyone noticing.
+    """
     baseline = _drawing_elements(BASELINE_SVG.read_text(encoding="utf-8"))
-    generated = _drawing_elements(svg())
+    kept = set(baseline) & set(_drawing_elements(svg()))
 
-    on_step_zero = {
-        f'cx="{x:.1f}"' for x, _ in (disc_center(layout(), p, 0) for p in players_of(layout()))
-    }
-    expected = [
-        _one_cube_stroke(element) if _is_cube(element) else element
-        for element in baseline
-        if not (_is_step_disc(element) and not any(c in element for c in on_step_zero))
+    numbered = [
+        element
+        for element in kept
+        if element.startswith("<text") and f'font-size="{STEP_NUMBER_FONT_SIZE:g}"' in element
     ]
+    assert len(numbered) == rules().max_position + 1
+    # One rule closing each step, and a tick under each step that pays.
+    assert len([e for e in kept if e.startswith("<line") and 'stroke-opacity="0.22"' in e]) == 7
+    assert len([e for e in kept if 'fill-opacity="0.65"' in e]) == len(THRESHOLD_POSITIONS)
+    for prose in layout()["reward_text"].values():
+        assert any(prose in element for element in kept)
+    # Four discs on step zero, where the baseline draws its diagram of four.
+    on_step_zero = [disc_center(layout(), player, 0) for player in players_of(layout())]
+    for x, y in on_step_zero:
+        assert any(f'cx="{x:.1f}" cy="{y:.1f}"' in element for element in kept)
 
-    assert generated == expected
-    # Six steps of four diagram discs each, which the generated board leaves empty.
-    assert len(baseline) - len(expected) == 24
-    # Four sockets and ten key cubes, all restroked, and nothing else touched.
-    assert len([element for element in baseline if _is_cube(element)]) == 14
+
+def test_the_extra_width_all_went_to_the_record_side_of_the_divider() -> None:
+    """A wider board, not a rescaled one: the race keeps its place and the record spreads out."""
+    board, record = layout()["board"], layout()["record"]
+    divider = layout()["zone_divider"]["x"]
+
+    assert board["panel_width"] > BEFORE_WIDENING["panel_width"]
+    assert board["panel_height"] == 247.0
+    # Nothing left of the divider moved: same track, same rewards, same title, same divider.
+    assert step_centers(layout()) == [36.0, 80.0, 124.0, 168.0, 212.0, 256.0, 300.0]
+    assert divider == BEFORE_WIDENING["divider_x"]
+    assert layout()["threshold_rows"]["badge_center_x"] == 26.0
+    assert board["title_anchor"] == {"x": 16.0, "y": 29.0}
+
+    # The width the board gained went into the record, which starts where it always did and now
+    # runs further, and into the margin past it.
+    assert record["x"] == BEFORE_WIDENING["record_x"] > divider
+    assert record["width"] > BEFORE_WIDENING["record_width"]
+    assert record["rule"]["x2"] - record["rule"]["x1"] > BEFORE_WIDENING["rule_span"]
+    assert board["panel_width"] - record["rule"]["x2"] > BEFORE_WIDENING["right_margin"]
+    # And the record still clears the panel's own hairline frame.
+    assert record["rule"]["x2"] < board["panel_width"] - board["inset"]
+
+
+def test_the_board_is_as_wide_as_a_seat_in_its_own_units() -> None:
+    """The width is native geometry, not a transform: the viewBox is what grew.
+
+    A player board unit is PLAYER_UNIT of one here, so a seat's 692.8 units come to this board's
+    536 -- and the game table, which renders both, is where that ratio is checked for real.
+    """
+    board = layout()["board"]
+    seat = player_board_geometry(len(load_player_boards_v2_layout()["worker_roles"]))
+
+    assert board["panel_width"] == pytest.approx(seat["panel_width"] * PLAYER_UNIT, rel=1e-3)
+    # The viewBox carries the width, and carries the padding the board has always had around it.
+    assert board["view_box"]["width"] == board["panel_width"] + 2 * board["outer_padding"]
+    assert board["view_box"]["min_x"] == -board["outer_padding"]
+    content = svg()
+    assert f'viewBox="-18 -18 {board["view_box"]["width"]:.1f}' in content
+    assert f'width="{board["view_box"]["width"]:.1f}"' in content
+    assert "transform=" not in content
+    assert "scale(" not in content
+
+
+def test_the_season_end_cubes_are_the_cubes_a_seat_plays_with() -> None:
+    """Same piece, same size, same air between them -- a cube won here came off a player board."""
+    assert CUBE_SIZE == pytest.approx(MARKER_CUBE * PLAYER_UNIT, abs=0.005)
+    assert CUBE_GAP == pytest.approx(TOKEN_GAP * PLAYER_UNIT, abs=0.005)
+    assert CUBE_PITCH == CUBE_SIZE + CUBE_GAP
+    # The seats draw that cube as a square token, so its width is the marker cube's.
+    assert 2 * TOKEN_RADIUS == MARKER_CUBE
+
+    slots = placeholder_slots(layout(), rules())
+    spacing = [b["center_x"] - a["center_x"] for a, b in zip(slots, slots[1:], strict=False)]
+    assert spacing == [pytest.approx(CUBE_PITCH)] * (len(slots) - 1)
+    # Smaller than the cube the board used to draw, which is the point: it was 20% oversized.
+    assert CUBE_SIZE < BEFORE_WIDENING["cube_size"]
+
+
+def test_a_cube_covers_the_socket_it_fills_exactly() -> None:
+    """One helper draws the box for both, so there is no way for the two to drift apart."""
+    slot = season_end_slot_by_index(layout(), rules(), 1)
+    box = cube_rect(slot["center_x"], slot["center_y"])
+    content = render_alms_table_svg(layout(), config(), interactive=True)
+
+    socket = re.search(rf'<rect {re.escape(box)}[^>]*data-placeholder-slot="1"[^>]*/>', content)
+    assert socket is not None
+    assert "stroke-dasharray" in socket.group(0)
+    for player in players_of(layout()):
+        cube = re.search(
+            rf'<rect {re.escape(box)}[^>]*data-season-end-winner-slot="1"'
+            rf'[^>]*data-player="{player["id"]}"[^>]*/>',
+            content,
+        )
+        assert cube is not None
+        assert "stroke-dasharray" not in cube.group(0)
+    # Every cube on the board is drawn in a box this helper made, sockets and printed key alike.
+    boxes = re.findall(r'<rect (x="[\d.]+" y="[\d.]+" width="10\.8" height="10\.8")', content)
+    assert len(boxes) == 4 + 10 + 4 * len(PLAYER_IDS)
+
+
+def test_the_season_end_heading_and_the_reward_numbers_read_as_a_seat_labels_do() -> None:
+    """`Season end winners` and the `2`/`4`/`6` are the size of `Fields` on a player board."""
+    assert SEASON_END_LABEL_FONT_SIZE == pytest.approx(ROLE_FONT_SIZE * PLAYER_UNIT, abs=0.005)
+    assert THRESHOLD_LABEL_FONT_SIZE == SEASON_END_LABEL_FONT_SIZE
+    assert SEASON_END_LABEL_FONT_SIZE > BEFORE_WIDENING["heading_font_size"]
+    # The track's own numbers keep their own size; only the reward badges follow the heading.
+    assert STEP_NUMBER_FONT_SIZE != THRESHOLD_LABEL_FONT_SIZE
+
+    content = svg()
+    heading = layout()["record"]["heading"]
+    size = f'font-size="{SEASON_END_LABEL_FONT_SIZE:g}"'
+    assert f'x="{heading["x"]:.1f}" y="{heading["y"]:.1f}"' in content
+    assert content.count(size) == 1 + len(THRESHOLD_POSITIONS)
+    for position in THRESHOLD_POSITIONS:
+        assert re.search(rf"{size}[^>]*>{position}</text>", content)
+
+
+def test_the_heading_and_its_cubes_are_centred_in_the_record_zone() -> None:
+    record = layout()["record"]
+    middle = record["x"] + record["width"] / 2
+    slots = placeholder_slots(layout(), rules())
+
+    # To the hundredth of a unit the layout is written to, which is a thousandth of a pixel.
+    assert record["heading"]["x"] == pytest.approx(middle, abs=0.01)
+    assert (slots[0]["center_x"] + slots[-1]["center_x"]) / 2 == pytest.approx(middle, abs=0.01)
+    # The scoring key sits under them, cubes on the left and the star it pays on the right.
+    key = record["scoring_key"]
+    assert key["first_cube_center_x"] > record["x"]
+    widest_row = key["first_cube_center_x"] + 3 * CUBE_PITCH + CUBE_SIZE / 2
+    assert widest_row < key["star_center_x"] - key["star_outer_radius"]
+    assert key["star_center_x"] + key["star_outer_radius"] < record["x"] + record["width"]
+
+
+def test_a_star_holds_its_vp_at_the_size_the_track_numbers_its_steps() -> None:
+    """The VP is the track's own number size, and the star is drawn big enough to hold it."""
+    key = layout()["record"]["scoring_key"]
+
+    assert STAR_LABEL_FONT_SIZE == STEP_NUMBER_FONT_SIZE
+    assert STAR_LABEL_OFFSET == pytest.approx(STAR_LABEL_FONT_SIZE / 3)
+    assert STAR_LABEL_FONT_SIZE > BEFORE_WIDENING["star_label_font_size"]
+    assert key["star_outer_radius"] > BEFORE_WIDENING["star_outer_radius"]
+
+    # What caps the star: five-pointed, so it stands `outer` above its centre and sin(54) of that
+    # below, and four of them come down the record one row_height apart without touching.
+    radius = key["star_outer_radius"]
+    height = radius * (1 + math.sin(math.radians(54)))
+    assert height < key["row_height"]
+    # And the widest VP has to sit inside the star's waist rather than across its points. Every
+    # digit of the family the board sets its ink in is 0.556 of the size wide.
+    waist = 2 * radius * key["star_inner_ratio"]
+    assert len(str(max(SEASON_END_VP))) * 0.556 * STAR_LABEL_FONT_SIZE < waist
+
+    # And it is set plain, where the board's other numbers are bold: the star around it is doing
+    # the work of standing the score out, so the digits do not have to as well.
+    content = svg()
+    fill = layout()["palette"]["star_label_fill"]
+    for row, vp in zip(scoring_key_rows(layout(), rules()), SEASON_END_VP, strict=True):
+        baseline = row["center_y"] + STAR_LABEL_OFFSET
+        assert (
+            f'<text x="{key["star_center_x"]:.1f}" y="{baseline:.1f}"'
+            f' text-anchor="middle" font-family="{INK_FONT}"'
+            f' font-size="{STAR_LABEL_FONT_SIZE:g}" fill="{fill}">{vp}</text>' in content
+        )
+
+
+def test_the_first_place_pocket_is_centred_in_the_lane_it_stands_in() -> None:
+    """Equal air either side: the lane is the track's last rule to the zone divider."""
+    track, pocket = layout()["track"], layout()["track"]["bonus_pocket"]
+    last_rule_x = step_centers(layout())[-1] + track["step_pitch"] / 2
+    divider = layout()["zone_divider"]["x"]
+    center_x = bonus_pocket_center_x(layout())
+
+    assert center_x - last_rule_x == pytest.approx(divider - center_x)
+    assert last_rule_x < center_x - pocket["width"] / 2
+    assert center_x + pocket["width"] / 2 < divider
+    # It used to sit off to the left of that lane, on the track's pitch rather than in the space.
+    assert center_x > BEFORE_WIDENING["pocket_center_x"]
+
+    # The label and the pocket under it share the one centre, so neither can drift off the other.
+    content = svg()
+    assert f'<text x="{center_x:.1f}" y="{track["number_label_y"]:.1f}"' in content
+    assert f'<rect x="{center_x - pocket["width"] / 2:.1f}"' in content
+    assert f'<circle cx="{center_x:.1f}" cy="{pocket["center_y"]:.1f}"' in content
+
+
+def test_the_header_ornament_is_the_duty_wheels_ornament() -> None:
+    """Same mark at the same size: written in cubes, which is what the two boards share."""
+    in_cubes = lambda value, cube: value / cube  # noqa: E731
+
+    assert in_cubes(ORNAMENT_TREFOIL_RADIUS, CUBE_SIZE) == pytest.approx(
+        in_cubes(DUTY_ORNAMENT_TREFOIL_RADIUS, DUTY_CUBE_SIZE), rel=1e-3
+    )
+    assert in_cubes(ORNAMENT_RULE_GAP, CUBE_SIZE) == pytest.approx(
+        in_cubes(DUTY_ORNAMENT_RULE_GAP, DUTY_CUBE_SIZE), rel=1e-3
+    )
+    assert in_cubes(ORNAMENT_STROKE_WIDTH, CUBE_SIZE) == pytest.approx(1.3 / DUTY_CUBE_SIZE, 1e-3)
+
+    # The arms are the one departure. The wheel runs each out to the end of that space's cube
+    # tally, which is a fraction of what this board's header has to span.
+    duty_arm = 4 * DUTY_CUBE_COLUMN_WIDTH / 2 - DUTY_ORNAMENT_RULE_GAP
+    assert ornament_rule_arm(layout()) > duty_arm * CUBE_SIZE / DUTY_CUBE_SIZE
+
+    content = svg()
+    assert content.count(f'r="{ORNAMENT_TREFOIL_RADIUS:.1f}" />') == 3
+    assert f'stroke-opacity="0.34" stroke-width="{ORNAMENT_STROKE_WIDTH:.1f}"' in content
+
+
+def test_the_ornament_rule_spans_the_header_symmetrically_and_touches_neither_end() -> None:
+    """It reaches almost to the zone divider, mirrors that to the left, and clears the title.
+
+    The right arm is the one with a reach of its own; the left is given the same length, so the
+    mark is symmetrical about the lobes. What that has to be checked against is the title, which
+    the left arm is the only thing on the board that could ever run into.
+    """
+    center_x = layout()["ornament"]["trefoil"]["center_x"]
+    divider = layout()["zone_divider"]["x"]
+    drawn = re.search(
+        r'<path d="M ([\d.]+),[\d.]+ H ([\d.]+) M ([\d.]+),[\d.]+ H ([\d.]+)" />', svg()
+    )
+    assert drawn is not None
+    left_end, left_start, right_start, right_end = (float(value) for value in drawn.groups())
+
+    # Symmetrical: the same air off the lobes and the same length of arm on either side.
+    assert center_x - left_start == pytest.approx(right_start - center_x)
+    assert center_x - left_end == pytest.approx(right_end - center_x)
+    assert left_start - left_end == pytest.approx(right_end - right_start)
+    assert left_start < center_x < right_start
+    assert center_x - left_start == pytest.approx(ORNAMENT_RULE_GAP, abs=0.05)
+    assert left_start - left_end == pytest.approx(ornament_rule_arm(layout()), abs=0.05)
+
+    # Almost to the divider on the right, and clear of the title on the left.
+    assert right_end < divider
+    assert divider - right_end == pytest.approx(ORNAMENT_RULE_CLEARANCE, abs=0.05)
+    assert left_end > TITLE_RIGHT_EDGE
+    assert left_end - TITLE_RIGHT_EDGE > ORNAMENT_RULE_CLEARANCE
+    # Long enough to read as a rule: most of the way from the title to the divider.
+    assert (right_end - left_end) / (divider - TITLE_RIGHT_EDGE) > 0.9
 
 
 def test_every_cube_on_the_board_is_drawn_at_one_weight() -> None:

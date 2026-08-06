@@ -31,6 +31,11 @@ from tools.ui_debug.generate_game_table import (
     solve_table_scale,
 )
 from tools.ui_debug.render_alms_table import (
+    CUBE_SIZE as ALMS_CUBE_SIZE,
+)
+from tools.ui_debug.render_alms_table import (
+    SEASON_END_LABEL_FONT_SIZE,
+    UNITS_PER_PLAYER_UNIT,
     load_alms_config,
     load_alms_table_layout,
     render_alms_table_controls_html,
@@ -40,6 +45,9 @@ from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout
 from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_HEX_SIZE,
+    MARKER_CUBE,
+    ROLE_FONT_SIZE,
+    board_geometry,
     load_player_boards_v2_layout,
     players_of,
 )
@@ -52,6 +60,18 @@ INDEX_HTML = UI_DEBUG_DIR / "index.html"
 # The text the page used to carry above the table, and no longer should.
 FORMER_HEADING = "PILGRIM — Generated game table layout"
 FORMER_BLURB = "The existing debug renderers composed into one 2-player table"
+
+ALMS_LAYOUT = load_alms_table_layout()
+
+
+def _per_unit(solved, board: str) -> float:
+    """Pixels one of a board's own units renders as, at the cube size the table solved for."""
+    width = {
+        "alms": solved.cube * solved.piety_coef * solved.alms_over_piety,
+        "piety": solved.cube * solved.piety_coef,
+        "player": solved.cube * solved.player_k + solved.player_c,
+    }[board]
+    return width / solved.crop[board][2]
 
 
 @pytest.fixture(scope="module")
@@ -263,15 +283,45 @@ def test_the_duty_wheel_is_the_one_panel_sized_by_height(page: str) -> None:
 def test_the_alms_table_and_the_piety_track_share_a_scale(scale) -> None:
     """Both draw the same player disc, so matching their units-per-pixel matches the discs.
 
-    This is what `--w-alms` being a multiple of `--w-piety` buys, and it is the reason the alms
-    table is not simply given the width of the seats underneath it.
+    This is what `--w-alms` being a multiple of `--w-piety` buys. It is also why the alms table is
+    not simply handed the seats' width: the width it wants is bought in its own units instead.
     """
     content, _, cubes, solved = scale
 
     assert cubes["alms"] == pytest.approx(cubes["piety"])
     # same units per pixel, so the width ratio is just the ratio of the crops
     assert solved.alms_over_piety == pytest.approx(solved.crop["alms"][2] / solved.crop["piety"][2])
-    assert content["alms"][2] < content["piety"][2], "narrower, so it is centred over the seats"
+    assert content["alms"][2] < content["piety"][2]
+
+    disc = ALMS_LAYOUT["disc"]["radius"]
+    piety_disc = load_piety_track_v2_layout()["track"]["disc"]["radius"]
+    assert 2 * disc * _per_unit(solved, "alms") == pytest.approx(
+        2 * piety_disc * _per_unit(solved, "piety")
+    )
+
+
+def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:
+    """What the alms table's own width is chosen for: the boards it stands above.
+
+    It is drawn at the piety track's scale rather than the seats', so a unit of it is not a unit of
+    a player board -- `UNITS_PER_PLAYER_UNIT` is that ratio, written down in the alms renderer so
+    the board can size a cube or a label in a seat's units and get a seat's pixels back. This is
+    where that number is checked against the solve rather than trusted.
+
+    The solve is for one reference viewport. Both panels carry fixed chrome that does not scale
+    with the cube, so the two widths drift a few percent either side of it at other window sizes.
+    """
+    _, _, _, solved = scale
+    alms, player = _per_unit(solved, "alms"), _per_unit(solved, "player")
+    seat = board_geometry(len(load_player_boards_v2_layout()["worker_roles"]))
+
+    assert alms / player == pytest.approx(UNITS_PER_PLAYER_UNIT, rel=1e-3)
+    assert ALMS_LAYOUT["board"]["panel_width"] * alms == pytest.approx(
+        seat["panel_width"] * player, rel=1e-3
+    )
+    # And with the two on one scale, a cube and a label carry across at the size they are written.
+    assert ALMS_CUBE_SIZE * alms == pytest.approx(MARKER_CUBE * player, rel=1e-3)
+    assert SEASON_END_LABEL_FONT_SIZE * alms == pytest.approx(ROLE_FONT_SIZE * player, rel=1e-3)
 
 
 def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> None:
