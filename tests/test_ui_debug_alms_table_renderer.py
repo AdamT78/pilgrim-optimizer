@@ -21,8 +21,10 @@ from tools.ui_debug.render_alms_table import (
     PLAYER_UNIT,
     RANK_FIRST,
     SEASON_END_LABEL_FONT_SIZE,
+    STAR_INNER_RADIUS,
     STAR_LABEL_FONT_SIZE,
     STAR_LABEL_OFFSET,
+    STAR_OUTER_RADIUS,
     STEP_NUMBER_FONT_SIZE,
     THRESHOLD_LABEL_FONT_SIZE,
     alms_position_target,
@@ -673,8 +675,8 @@ def test_the_heading_and_its_cubes_are_centred_in_the_record_zone() -> None:
     key = record["scoring_key"]
     assert key["first_cube_center_x"] > record["x"]
     widest_row = key["first_cube_center_x"] + 3 * CUBE_PITCH + CUBE_SIZE / 2
-    assert widest_row < key["star_center_x"] - key["star_outer_radius"]
-    assert key["star_center_x"] + key["star_outer_radius"] < record["x"] + record["width"]
+    assert widest_row < key["star_center_x"] - STAR_OUTER_RADIUS
+    assert key["star_center_x"] + STAR_OUTER_RADIUS < record["x"] + record["width"]
 
 
 def test_a_star_holds_its_vp_at_the_size_the_track_numbers_its_steps() -> None:
@@ -684,16 +686,15 @@ def test_a_star_holds_its_vp_at_the_size_the_track_numbers_its_steps() -> None:
     assert STAR_LABEL_FONT_SIZE == STEP_NUMBER_FONT_SIZE
     assert STAR_LABEL_OFFSET == pytest.approx(STAR_LABEL_FONT_SIZE / 3)
     assert STAR_LABEL_FONT_SIZE > BEFORE_WIDENING["star_label_font_size"]
-    assert key["star_outer_radius"] > BEFORE_WIDENING["star_outer_radius"]
+    assert STAR_OUTER_RADIUS > BEFORE_WIDENING["star_outer_radius"]
 
     # What caps the star: five-pointed, so it stands `outer` above its centre and sin(54) of that
     # below, and four of them come down the record one row_height apart without touching.
-    radius = key["star_outer_radius"]
-    height = radius * (1 + math.sin(math.radians(54)))
+    height = STAR_OUTER_RADIUS * (1 + math.sin(math.radians(54)))
     assert height < key["row_height"]
     # And the widest VP has to sit inside the star's waist rather than across its points. Every
     # digit of the family the board sets its ink in is 0.556 of the size wide.
-    waist = 2 * radius * key["star_inner_ratio"]
+    waist = 2 * STAR_INNER_RADIUS
     assert len(str(max(SEASON_END_VP))) * 0.556 * STAR_LABEL_FONT_SIZE < waist
 
     # And it is set plain, where the board's other numbers are bold: the star around it is doing

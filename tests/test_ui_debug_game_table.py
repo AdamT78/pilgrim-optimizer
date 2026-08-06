@@ -299,6 +299,15 @@ def test_the_alms_table_and_the_piety_track_share_a_scale(scale) -> None:
         2 * piety_disc * _per_unit(solved, "piety")
     )
 
+    # The discs match because a unit is a unit on both boards, not because the two were sized to
+    # agree. That is also what lets the piety track set its numbers, its rules, its title and its
+    # stars from the Alms Table's own constants and have them come out the same size here.
+    assert _per_unit(solved, "alms") == pytest.approx(_per_unit(solved, "piety"))
+    # And both are cropped to the same height above their panel, so with the row's tops level the
+    # same y on the two boards is the same y on the table. The piety track's stars are placed on
+    # the Alms Table's second key row that way.
+    assert solved.crop["alms"][1] == pytest.approx(solved.crop["piety"][1])
+
 
 def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:
     """What the alms table's own width is chosen for: the boards it stands above.

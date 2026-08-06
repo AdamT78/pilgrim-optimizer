@@ -473,8 +473,13 @@ def test_building_fills_take_the_map_hex_shape_and_draw_no_outline(page: str) ->
 
 def test_building_fills_sit_under_the_map_border_lines(page: str) -> None:
     """The map draws its edges and labels after the fills, so a placed building keeps both."""
-    assert page.index('<g id="setup-fills">') < page.index("<line ")
-    assert page.index("<line ") < page.index('<g id="setup-labels">')
+    fills = page.index('<g id="setup-fills">')
+    labels = page.index('<g id="setup-labels">')
+
+    # Scoped to the map: the piety track above it rules its positions with lines of its own, so
+    # the border lines are the ones between the fills they sit over and the names drawn on top.
+    assert fills < labels
+    assert "<line " in page[fills:labels]
 
 
 def _slot_groups(page: str) -> list[tuple[int, str, str]]:
