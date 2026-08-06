@@ -14,9 +14,11 @@ import pytest
 
 from tools.ui_debug.generate_game_table import (
     GAP_PX,
+    MARKER_SEAT,
     PAGE_TITLE,
     PANEL_CHROME,
     PIETY_VARIANT_ID,
+    SEAT_COLS,
     SEAT_ROWS,
     SEATED_PLAYERS,
     board_measurements,
@@ -36,7 +38,11 @@ from tools.ui_debug.render_alms_table import (
 from tools.ui_debug.render_duty_wheel import load_duty_wheel_layout, render_duty_wheel_controls_html
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout
-from tools.ui_debug.render_player_boards_v2 import load_player_boards_v2_layout, players_of
+from tools.ui_debug.render_player_boards_v2 import (
+    BUILDING_SLOT_HEX_SIZE,
+    load_player_boards_v2_layout,
+    players_of,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
@@ -193,8 +199,27 @@ def test_page_seats_two_of_the_four_players(page: str) -> None:
     assert {player["id"] for player in players_of(layout)} >= set(SEATED_PLAYERS)
     for player_id in SEATED_PLAYERS:
         assert f'data-player="{player_id}"' in seats
-    # the four-seat grid hands the marker to a player this table does not seat
-    assert 'data-first-player-marker="true"' not in page
+
+
+def test_the_marker_card_goes_on_the_top_board_and_only_that_one(page: str) -> None:
+    """One first-player marker at this table, on the board at the top of the column.
+
+    Layout state to look at, like the choice of seats: nothing here works out who starts, and there
+    is no control to move the card. The four-seat page still gives it to white, who is not seated
+    here, so the table names its own holder rather than inheriting one.
+    """
+    seats = _block(page, "seats")
+    marked = re.findall(
+        r'data-player="(\w+)" data-player-color="\w+"'
+        r' data-first-player-marker="(\w+)"',
+        seats,
+    )
+
+    assert MARKER_SEAT == SEATED_PLAYERS[0]
+    assert marked == [(SEATED_PLAYERS[0], "true"), (SEATED_PLAYERS[1], "false")]
+    # And the card itself is drawn on that board, once.
+    assert seats.count(">First player</text>") == 1
+    assert seats.index(">First player</text>") < seats.index(f'data-player="{SEATED_PLAYERS[1]}"')
 
 
 # ---------------------------------------------------------------------------------------------
@@ -258,6 +283,33 @@ def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> N
 
     assert cubes["map"] / cubes["action"] == pytest.approx(hexes["map"][2] / hexes["action"][2])
     assert solved.mult["action"] == pytest.approx(solved.mult["map"], abs=0.5)
+
+
+def test_a_building_slot_is_the_same_number_of_cubes_across_as_a_map_hex(scale) -> None:
+    """Where the player board's slot size comes from, checked against the map it was taken from.
+
+    A slot and a map hex are both flat-top hexagons measured from the centre out to a corner, so
+    the two are the same size on screen exactly when they are the same number of cubes across.
+    `BUILDING_SLOT_HEX_SIZE` is that number written out in the player board's own units; this is
+    the arithmetic behind it, run against the real map layout rather than trusted.
+    """
+    _, _, cubes, _ = scale
+    hex_in_cubes = load_map_layout()["hex_size"] / cubes["map"]
+
+    assert BUILDING_SLOT_HEX_SIZE / cubes["player"] == pytest.approx(hex_in_cubes, rel=0.002)
+
+
+def test_the_seats_are_wider_than_they_are_tall(scale) -> None:
+    """The seats got wider, and the table gave them the room rather than shrinking them to fit.
+
+    A seat's width is solved from its shape, so a wider board is a wider seat -- there is no
+    separate width for the table to have opinions about. The table may come out wider for it.
+    """
+    _, _, _, solved = scale
+    crop = solved.crop["player"]
+
+    assert crop[2] > crop[3]
+    assert solved.width_cubes > SEAT_COLS * solved.player_k > 0
 
 
 def test_two_seats_stack_to_the_height_of_the_duty_wheel(scale) -> None:

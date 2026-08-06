@@ -85,7 +85,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     render_player_board_v2_svg,
     token_slot_count,
 )
-from tools.ui_debug.render_player_boards_v2 import HEX_SIZE as BOARD_HEX_SIZE
+from tools.ui_debug.render_player_boards_v2 import BUILDING_SLOT_HEX_SIZE as BOARD_HEX_SIZE
 from tools.ui_debug.render_ship_marker import HULL_OUTLINE, MASTS, render_ship_icon
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -997,6 +997,38 @@ def test_board_slot_content_recolours_the_slot_without_a_tile_border(page: str) 
         assert f'stroke="{palette.stroke}"' not in defs
 
 
+def test_a_placed_building_lands_exactly_on_the_dashed_slot(page: str) -> None:
+    """The one thing a slot and the building that goes in it have to agree about.
+
+    A building is not a tile laid over a slot, it is the slot painted in; so its hexagon has to be
+    the slot's hexagon, corner for corner. That holds because both are drawn by `hex_path_data` at
+    the same size, one around the origin and one around the slot, and the `use` that puts the two
+    together carries the slot's centre and no scale of its own -- but it is worth pinning down,
+    because a building drawn a hair small leaves a rim of dashes showing all the way round.
+    """
+    layout = load_player_boards_v2_layout()
+    board = _player_board(page, players_of(layout)[0]["id"])
+    content = _path_numbers(render_board_slot_fill("#123456"))
+
+    for number, (cx, cy) in enumerate(building_slot_centers(layout), start=1):
+        slot = re.search(rf'<g data-player-board-slot="{number}"[^>]*>(.*?)</g>', board, re.S)
+        assert slot is not None
+        use = re.search(r'<use[^>]*x="(-?[\d.]+)" y="(-?[\d.]+)"', slot.group(1))
+        dashed = re.search(r'data-slot-outline="true" d="([^"]+)"', slot.group(1))
+        outline = _path_numbers(dashed[1])
+        origin = (float(use[1]), float(use[2]))
+
+        assert origin == (pytest.approx(cx, abs=0.005), pytest.approx(cy, abs=0.005))
+        placed = [value + origin[index % 2] for index, value in enumerate(content)]
+        assert placed == pytest.approx(outline, abs=0.005)
+
+
+def _path_numbers(path_or_fragment: str) -> list[float]:
+    """A hexagon's corners, flattened to x, y, x, y."""
+    numbers = re.findall(r"-?[\d.]+", re.sub(r'^.*? d="|".*$', "", path_or_fragment, flags=re.S))
+    return [float(value) for value in numbers]
+
+
 def test_bought_slot_content_is_the_tile_colour_and_label_only() -> None:
     building = building_by_name(load_building_catalog())["Guild"]
     palette = COLOR_GROUP_PALETTES[building["color_group"]]
@@ -1069,7 +1101,7 @@ def test_board_building_slots_start_empty(page: str) -> None:
             body = slot.group(1)
             path = hex_path_data(cx, cy)
             fill = f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
-            content = f'<use data-building-content="true" x="{cx:.1f}" y="{cy:.1f}" opacity="0"/>'
+            content = f'<use data-building-content="true" x="{cx:.2f}" y="{cy:.2f}" opacity="0"/>'
             assert body.startswith(fill)
             assert content in body
             assert body.endswith(
