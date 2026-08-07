@@ -2,8 +2,13 @@
 
 The duty wheel holds the duty tiles away from the map so the map stays readable: eight duty
 spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and four
-arrows running to and from the middle. Each duty shows the cubes standing on it as one column per
-seat on a shared baseline, and most of them carry a capsule with a Tithe token icon.
+arrows running to and from the middle. Each space shows the cubes standing on it as one column per
+seat on a shared baseline, and most of the duties carry a capsule with a Tithe token icon.
+
+A duty tile's tally is the seats in play followed by a neutral column for the dummy acolytes a
+reduced table plays against; a full table has no neutrals, so it is seats alone. The City takes
+seats only either way, since dummy acolytes are seeded and moved on the duty ring and the City is
+not on it.
 
 Two pieces of the picture are named here so a later renderer does not have to guess:
 
@@ -46,11 +51,19 @@ LABEL_FONT_SIZE = 15.5
 # Cube tally: one column per seat on a shared baseline, kept even at zero so the stack tops stay
 # comparable across spaces. The columns are centred on the duty, so a shorter table narrows the
 # tally around the middle of the space instead of leaving a gap on the right.
+#
+# The cube keeps the size it has always had. It is the reference the rest of the table is
+# calibrated against -- `render_player_boards_v2` sizes a building slot by how many of these a map
+# hex measures -- so what it is worth in another board's units is not this renderer's to restate.
 CUBE_SIZE = 13.0
 CUBE_CELL_HEIGHT = 18.0
 CUBE_COLUMN_WIDTH = 22.0
 CUBE_STACK_LIMIT = 3
 TALLY_OFFSET_Y = 19.0
+
+# The City stacks a seat's whole holding rather than a duty tile's handful, so its columns are
+# taller than a tile's and stand lower in the space to make room.
+CITY_STACK_HEIGHT = 4
 
 # Tithe capsule: a stadium under the title, its left cap holding the Tithe token icon and its
 # right cap the Merchant token when the Merchant stands here.
@@ -64,6 +77,15 @@ ORNAMENT_INSET = 7.5
 ORNAMENT_HEADER_OFFSET_Y = -78.0
 ORNAMENT_TREFOIL_RADIUS = 4.6
 ORNAMENT_RULE_GAP = 15.0
+# Held to a full table's width rather than to the tally below it, which now narrows and widens
+# with the table size. A mark that never varies is the point of this one.
+ORNAMENT_RULE_HALF_WIDTH = 4 * CUBE_COLUMN_WIDTH / 2
+
+# Where the City's taller stack stands: centred in the room the space has under its title, which
+# runs from that title's baseline down to the inset margin above the bottom of the arc.
+CITY_TALLY_OFFSET_Y = (
+    LABEL_OFFSET_Y + SPACE_RADIUS - ORNAMENT_INSET + CITY_STACK_HEIGHT * CUBE_CELL_HEIGHT
+) / 2.0
 
 RING_ARROW_COUNT = 8
 
@@ -137,31 +159,75 @@ def default_duty_wheel_state(layout: dict) -> dict:
 
 
 def players_for_count(layout: dict, count: int) -> list[dict]:
-    """The seats in play at a two-, three-, or four-player count, in seat order."""
-    players = layout["players"]
+    """The colours that sit down at a two-, three-, or four-player table, in seat order.
+
+    Which seats those are is the layout's to say rather than simply the first few: a two-player
+    table takes red and blue, the pair that carries against parchment, and the others fill in
+    around them.
+    """
     if count not in layout["player_counts"]:
         raise ValueError(f"no {count}-player view: the layout offers {layout['player_counts']}")
-    return players[:count]
+    by_id = {player["id"]: player for player in layout["players"]}
+    return [by_id[seat] for seat in layout["seats_by_player_count"][str(count)]]
+
+
+def dummy_acolytes(layout: dict, count: int) -> dict | None:
+    """The neutral column, on the table sizes that play with one.
+
+    Reduced tables seed neutral dummy acolytes onto the duty ring to compete with the players; a
+    full table has none, so its tally is seats only. They are pieces on the board, not a seat:
+    they take no turn and hold nothing.
+    """
+    dummy = layout["dummy_acolytes"]
+    return dummy if count in dummy["player_counts"] else None
+
+
+def tally_pieces(layout: dict, duty: dict, count: int) -> list[dict]:
+    """The columns standing on one space, left to right: the seats, then the neutrals.
+
+    The City takes no neutral column. Dummy acolytes are seeded and moved around the duty ring
+    only, and the City is not on that ring.
+    """
+    pieces = list(players_for_count(layout, count))
+    dummy = dummy_acolytes(layout, count)
+    if dummy is not None and duty["id"] != layout["city_id"]:
+        pieces.append(dummy)
+    return pieces
 
 
 def tally_columns(layout: dict, duty: dict, count: int) -> list[dict]:
-    """Where each seat's cube column stands on one duty, left to right.
+    """Where each column stands on one space, left to right.
 
-    The group of visible columns is centred on the duty, so dropping seats narrows the tally
-    around the middle of the space rather than leaving it hanging off to one side. `x` is the
-    left edge of a cube, `center_x` the middle of the column it stands in.
+    The group of visible columns is centred on the space, so dropping seats narrows the tally
+    around the middle of it rather than leaving it hanging off to one side. `x` is the left edge
+    of a cube, `center_x` the middle of the column it stands in.
     """
     cx, _ = duty["center"]
-    players = players_for_count(layout, count)
-    left = cx - len(players) * CUBE_COLUMN_WIDTH / 2
+    pieces = tally_pieces(layout, duty, count)
+    left = cx - len(pieces) * CUBE_COLUMN_WIDTH / 2
     return [
         {
-            "player": player["id"],
+            "player": piece["id"],
             "x": left + column * CUBE_COLUMN_WIDTH + (CUBE_COLUMN_WIDTH - CUBE_SIZE) / 2,
             "center_x": left + (column + 0.5) * CUBE_COLUMN_WIDTH,
         }
-        for column, player in enumerate(players)
+        for column, piece in enumerate(pieces)
     ]
+
+
+def cubes_standing(layout: dict, duty: dict, piece: dict, counts: dict, count: int) -> int:
+    """How many cubes one column shows.
+
+    A seat on a duty tile shows what the debug state puts there, capped at what a tile has room
+    for. The City is drawn as a full holding instead, and the neutral column reads its own
+    seeding out of the layout, since neutrals are not part of the players' state.
+    """
+    if piece["id"] == layout["dummy_acolytes"]["id"]:
+        seeded = layout["dummy_acolytes"]["sample_cubes"].get(str(count), {})
+        return int(seeded.get(duty["id"], 0))
+    if duty["id"] == layout["city_id"]:
+        return int(layout["city_sample_cubes_per_seat"])
+    return min(int(counts.get(piece["id"], 0)), CUBE_STACK_LIMIT)
 
 
 def merchant_path(layout: dict) -> list[str]:
@@ -243,17 +309,19 @@ def render_cube_tally(
     count: int | None = None,
     visible: bool = True,
 ) -> str:
-    """The cubes standing on one duty, one column per seat, growing up from the baseline.
+    """The cubes standing on one space, one column per piece, growing up from the baseline.
 
     `count` picks how many seats are in play; the columns and the baseline under them are drawn
-    centred on the duty either way, so the two- and three-player tallies sit in the middle of the
-    space rather than off to the left.
+    centred on the space either way, so the two- and three-player tallies sit in the middle of it
+    rather than off to the left. On a duty tile the seats are followed by the neutral column when
+    the table plays with one. The City's stacks are taller, so they stand lower in their space.
     """
     _, cy = duty["center"]
     seats = count or layout["default_player_count"]
-    players = players_for_count(layout, seats)
+    pieces = tally_pieces(layout, duty, seats)
     columns = tally_columns(layout, duty, seats)
-    baseline = cy + TALLY_OFFSET_Y
+    is_city = duty["id"] == layout["city_id"]
+    baseline = cy + (CITY_TALLY_OFFSET_Y if is_city else TALLY_OFFSET_Y)
     left = columns[0]["center_x"] - CUBE_COLUMN_WIDTH / 2
     right = columns[-1]["center_x"] + CUBE_COLUMN_WIDTH / 2
     ink = layout["palette"]["ink"]
@@ -262,14 +330,14 @@ def render_cube_tally(
         f'<line x1="{left:.1f}" y1="{baseline:.1f}" x2="{right:.1f}" y2="{baseline:.1f}"'
         f' stroke="{ink}" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round"/>'
     ]
-    for player, column in zip(players, columns, strict=True):
-        for index in range(min(int(counts.get(player["id"], 0)), CUBE_STACK_LIMIT)):
+    for piece, column in zip(pieces, columns, strict=True):
+        for index in range(cubes_standing(layout, duty, piece, counts, seats)):
             y = baseline - (index + 1) * CUBE_CELL_HEIGHT + (CUBE_CELL_HEIGHT - CUBE_SIZE) / 2
             parts.append(
                 f'<rect x="{column["x"]:.1f}" y="{y:.1f}" width="{CUBE_SIZE:g}"'
-                f' height="{CUBE_SIZE:g}" fill="{player["fill"]}" stroke="#000000"'
-                f' stroke-width="{player["cube_stroke_width"]:g}"'
-                f' data-player="{player["id"]}"/>'
+                f' height="{CUBE_SIZE:g}" fill="{piece["fill"]}" stroke="#000000"'
+                f' stroke-width="{piece["cube_stroke_width"]:g}"'
+                f' data-player="{piece["id"]}"/>'
             )
     return (
         f'<g class="{_class_name(duty["id"], "cube-tally")}" data-cube-tally="{duty["id"]}"'
@@ -481,21 +549,21 @@ def render_duty_space(
     interactive: bool = False,
     ring_index: int | None = None,
 ) -> str:
-    """One duty: its space, title, cube tally, and the capsule holding its Tithe token."""
-    parts = [_render_space(duty)]
-    if duty["id"] != layout["city_id"]:
-        parts.append(_render_tallies(layout, duty, counts, interactive))
+    """One space: its parchment, title, cube tally, and the capsule holding its Tithe token."""
+    parts = [_render_space(duty), _render_tallies(layout, duty, counts, interactive)]
 
-    icon_id = duty["tithe_icon"]
-    if icon_id and interactive:
-        parts.append(_render_interactive_capsule(layout, duty, merchant))
-    elif icon_id:
-        parts.append(_render_tithe_capsule(layout, duty, icon_id, merchant))
-    elif interactive or merchant:
-        # Taxation has no capsule for the Merchant to share, so he stands in the empty band.
-        slot_x, slot_y = merchant_slot_center(duty)
-        position = duty["id"] if interactive else ""
-        parts.append(render_merchant_token(layout, slot_x, slot_y, position, merchant))
+    # The City is not a duty tile: it holds no Tithe token, and the Merchant never stands on it.
+    if duty["id"] != layout["city_id"]:
+        icon_id = duty["tithe_icon"]
+        if icon_id and interactive:
+            parts.append(_render_interactive_capsule(layout, duty, merchant))
+        elif icon_id:
+            parts.append(_render_tithe_capsule(layout, duty, icon_id, merchant))
+        elif interactive or merchant:
+            # Taxation has no capsule for the Merchant to share, so he stands in the empty band.
+            slot_x, slot_y = merchant_slot_center(duty)
+            position = duty["id"] if interactive else ""
+            parts.append(render_merchant_token(layout, slot_x, slot_y, position, merchant))
 
     index = "" if ring_index is None else f' data-duty-ring-index="{ring_index}"'
     return f'<g data-duty="{duty["id"]}"{index}>{"".join(parts)}</g>'
@@ -519,7 +587,7 @@ def _render_ornaments(layout: dict) -> str:
             f' r="{ORNAMENT_TREFOIL_RADIUS:g}"/>'
             for angle in (-90, 30, 150)
         )
-        half = len(layout["players"]) * CUBE_COLUMN_WIDTH / 2
+        half = ORNAMENT_RULE_HALF_WIDTH
         headers.append(
             f'<g fill="none" stroke="{ink}" stroke-opacity="0.34" stroke-width="1.3"'
             f' stroke-linecap="round">{lobes}'
@@ -640,7 +708,8 @@ def render_duty_wheel_svg(
         for index, line in enumerate(page["subtitle"])
     )
 
-    spaces = [_render_space(duty_position_by_id(layout, layout["city_id"]))]
+    city = duty_position_by_id(layout, layout["city_id"])
+    spaces = [render_duty_space(layout, city, state.get(city["id"], {}), interactive=interactive)]
     for index, duty in enumerate(ring_duties(layout)):
         spaces.append(
             render_duty_space(
@@ -670,7 +739,7 @@ def render_duty_wheel_svg(
         f'<text x="{board["width"] / 2:g}" y="{board["title_baseline"]:g}"'
         f' fill="{palette["title"]}" font-family="Georgia, \'Times New Roman\', serif"'
         f' font-size="30" font-weight="700" text-anchor="middle">'
-        f'{escape(page["board_title"])}</text>'
+        f"{escape(page['board_title'])}</text>"
         f'<text x="{board["width"] / 2:g}" y="{board["subtitle_baseline"]:g}"'
         f' fill="{palette["subtitle"]}" font-family="Helvetica, Arial, sans-serif"'
         f' font-size="13.5" text-anchor="middle">{subtitle}</text>'
@@ -856,9 +925,7 @@ def render_duty_wheel_controls_html(layout: dict) -> str:
         )
         for count in layout["player_counts"]
     )
-    return _CONTROLS_HTML.format(
-        player_counts=buttons, readout=escape(duty_wheel_readout(layout))
-    )
+    return _CONTROLS_HTML.format(player_counts=buttons, readout=escape(duty_wheel_readout(layout)))
 
 
 def render_duty_wheel_panel(

@@ -4,9 +4,10 @@
     "board_title": "PILGRIM — 3x3 Circle Grid",
     "subtitle": [
       "Eight action spaces around a central City, sown clockwise. Each space shows how many cubes",
-      "each player has there, as one column per player on a shared baseline."
+      "stand there, as one column per seat on a shared baseline, plus a neutral column on the duty",
+      "tiles when the table plays against dummy acolytes."
     ],
-    "description": "Nine parchment spaces on a green hexagon: eight named actions around a central City, linked by clockwise ring arrows and four arrows to and from the middle. Each space shows its cube counts as one column per player on a shared baseline."
+    "description": "Nine parchment spaces on a green hexagon: eight named actions around a central City, linked by clockwise ring arrows and four arrows to and from the middle. Each space shows its cube counts as one column per seat on a shared baseline, with a neutral column beside them on the duty tiles when the table plays against dummy acolytes."
   },
   "board": {
     "width": 1104,
@@ -79,12 +80,57 @@
       "cube_stroke_width": 1.5
     }
   ],
+  "dummy_acolytes": {
+    "id": "dummy",
+    "label": "Neutral acolytes",
+    "color": "black",
+    "fill": "#1F1F1F",
+    "cube_stroke_width": 1.5,
+    "player_counts": [
+      2,
+      3
+    ],
+    "sample_cubes": {
+      "2": {
+        "produce": 1,
+        "allocation": 1,
+        "clerical": 1,
+        "taxation": 1,
+        "ordination": 1,
+        "construct": 1
+      },
+      "3": {
+        "produce": 1,
+        "allocation": 1,
+        "taxation": 1,
+        "ordination": 1
+      }
+    }
+  },
   "player_counts": [
     2,
     3,
     4
   ],
-  "default_player_count": 4,
+  "seats_by_player_count": {
+    "2": [
+      "player_two",
+      "player_four"
+    ],
+    "3": [
+      "player_one",
+      "player_two",
+      "player_four"
+    ],
+    "4": [
+      "player_one",
+      "player_two",
+      "player_three",
+      "player_four"
+    ]
+  },
+  "default_player_count": 2,
+  "city_sample_cubes_per_seat": 4,
   "duties": [
     {
       "id": "produce",

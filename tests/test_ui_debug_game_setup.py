@@ -1156,7 +1156,8 @@ def test_duty_wheel_panel_draws_the_board_and_its_controls(page: str) -> None:
     assert "Randomize Duty tiles" in panel
     assert "Move Merchant" in panel
     assert [button for button in re.findall(r">(\dp)</button>", panel)] == ["2p", "3p", "4p"]
-    assert 'data-player-count="4" aria-pressed="true"' in panel
+    # The wheel opens on the two-player view, the seats it shows beside a neutral column.
+    assert 'data-player-count="2" aria-pressed="true"' in panel
     for label in (">City</text>", ">Produce</text>", ">Taxation</text>"):
         assert label in panel
     assert 'data-token="merchant"' in panel

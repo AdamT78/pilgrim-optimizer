@@ -1,5 +1,6 @@
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,16 @@ from tools.ui_debug.generate_duty_wheel import (
     generate_duty_wheel_page,
 )
 from tools.ui_debug.render_duty_wheel import (
+    CITY_STACK_HEIGHT,
+    CITY_TALLY_OFFSET_Y,
+    CUBE_CELL_HEIGHT,
+    CUBE_SIZE,
+    LABEL_OFFSET_Y,
+    ORNAMENT_INSET,
+    SPACE_RADIUS,
+    TALLY_OFFSET_Y,
     default_layout_path,
+    dummy_acolytes,
     duties_of,
     duty_position_by_id,
     duty_setups,
@@ -25,6 +35,7 @@ from tools.ui_debug.render_duty_wheel import (
     render_duty_wheel_svg,
     ring_duties,
     tally_columns,
+    tally_pieces,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +64,7 @@ PLAYER_FILLS = {
     "player_three": "#E3C64A",
     "player_four": "#3B6EA5",
 }
+DUMMY_BLACK = "#1F1F1F"
 MERCHANT_PURPLE = "#8E63D7"
 ALLOWED_DRIFT = 0.1
 
@@ -74,15 +86,47 @@ def baseline_svg() -> str:
     return content[content.index("<svg") :]
 
 
-def drawing_elements(svg: str) -> list[tuple[str, tuple[float, ...]]]:
-    """Every drawn element as its tag plus the numbers in its attributes, in document order."""
+def _is_cube(tag: str, body: str) -> bool:
+    """A cube is the only rect the board draws at a cube's size, on either side of the compare."""
+    if tag != "rect":
+        return False
+    width = re.search(r'width="([\d.]+)"', body)
+    return width is not None and float(width.group(1)) == CUBE_SIZE
+
+
+def _is_rule(body: str) -> bool:
+    """The baseline rule the cubes stand on, which the tally draws with the columns."""
+    return 'stroke-opacity="0.55"' in body
+
+
+def drawing_elements(svg: str, without_cubes: bool = False) -> list[tuple[str, tuple[float, ...]]]:
+    """Every drawn element as its tag plus the numbers in its attributes, in document order.
+
+    `without_cubes` drops the tally — the cubes and the baseline rule under them — which is the
+    part of the board this renderer no longer draws the way the prototype did.
+    """
+    flat = re.sub(r"\s+", " ", svg)
+    elements = [
+        (match.group(1), match.group(2))
+        for match in re.finditer(r"<(path|rect|circle|line|ellipse|text)\b([^>]*)>", flat)
+    ]
+    if without_cubes:
+        elements = [
+            (tag, body) for tag, body in elements if not _is_cube(tag, body) and not _is_rule(body)
+        ]
+    return [
+        (tag, tuple(float(number) for number in re.findall(r"-?\d+\.?\d*", body)))
+        for tag, body in elements
+    ]
+
+
+def cube_rects(svg: str) -> list[str]:
+    """Every cube standing on the board, in document order."""
     flat = re.sub(r"\s+", " ", svg)
     return [
-        (
-            match.group(1),
-            tuple(float(number) for number in re.findall(r"-?\d+\.?\d*", match.group(2))),
-        )
-        for match in re.finditer(r"<(path|rect|circle|line|ellipse|text)\b([^>]*)>", flat)
+        match.group(0)
+        for match in re.finditer(r"<rect\b([^>]*)>", flat)
+        if _is_cube("rect", match.group(1))
     ]
 
 
@@ -150,18 +194,63 @@ def test_layout_offers_the_two_three_and_four_player_views() -> None:
     data = layout()
 
     assert data["player_counts"] == [2, 3, 4]
-    # Four is the view the prototype drew, so it is what the page opens on.
-    assert data["default_player_count"] == 4
+    # Two is the view the board opens on: two seats and the neutrals they play against.
+    assert data["default_player_count"] == 2
 
 
-def test_players_for_count_seats_the_table_in_order() -> None:
+def test_players_for_count_seats_the_colours_the_layout_sits_at_each_table() -> None:
+    """Which colours sit down is the layout's to say, not simply the first few in the list."""
     data = layout()
     seated = {count: players_for_count(data, count) for count in data["player_counts"]}
 
-    assert [player["color"] for player in seated[2]] == ["white", "red"]
-    assert [player["color"] for player in seated[3]] == ["white", "red", "yellow"]
+    assert [player["color"] for player in seated[2]] == ["red", "blue"]
+    assert [player["color"] for player in seated[3]] == ["white", "red", "blue"]
     assert [player["color"] for player in seated[4]] == ["white", "red", "yellow", "blue"]
     assert [player["id"] for player in seated[4]] == list(PLAYER_SEATS)
+    # Every roster is a subset of the four seats, kept in the order the layout names them.
+    for count, players in seated.items():
+        ids = [player["id"] for player in players]
+        assert len(ids) == count
+        assert ids == [seat for seat in PLAYER_SEATS if seat in set(ids)]
+
+
+def test_the_neutral_column_joins_the_reduced_tables_only() -> None:
+    """Dummy acolytes are seeded for two- and three-player tables; a full table has none."""
+    data = layout()
+
+    assert dummy_acolytes(data, 2)["color"] == "black"
+    assert dummy_acolytes(data, 3)["color"] == "black"
+    assert dummy_acolytes(data, 4) is None
+    assert dummy_acolytes(data, 2)["id"] not in {player["id"] for player in data["players"]}
+
+
+def test_a_duty_tile_carries_the_neutral_column_and_the_city_does_not() -> None:
+    """Dummies are seeded and moved on the duty ring, and the City is not on that ring."""
+    data = layout()
+    tile = duty_position_by_id(data, "produce")
+    city = duty_position_by_id(data, data["city_id"])
+
+    assert [piece["color"] for piece in tally_pieces(data, tile, 2)] == ["red", "blue", "black"]
+    assert [piece["color"] for piece in tally_pieces(data, city, 2)] == ["red", "blue"]
+    # A full table seats no neutrals, so the tile and the City agree again.
+    assert [piece["color"] for piece in tally_pieces(data, tile, 4)] == list(PLAYER_COLOURS)
+    assert [piece["color"] for piece in tally_pieces(data, city, 4)] == list(PLAYER_COLOURS)
+
+
+def test_the_neutrals_are_seeded_where_the_dummy_acolyte_rules_seed_them() -> None:
+    """Two groups of three, clockwise from the top and from the bottom, and two of two at three
+    players. Sample debug state, but taken from `docs/rules/DummyAcolytes.md` rather than invented.
+    """
+    seeded = layout()["dummy_acolytes"]["sample_cubes"]
+
+    assert set(seeded["2"]) == {"produce", "allocation", "clerical"} | {
+        "taxation",
+        "ordination",
+        "construct",
+    }
+    assert set(seeded["3"]) == {"produce", "allocation", "taxation", "ordination"}
+    assert set(seeded["2"].values()) == {1}
+    assert set(seeded["3"].values()) == {1}
 
 
 def test_players_for_count_refuses_a_count_the_layout_does_not_offer() -> None:
@@ -172,23 +261,37 @@ def test_players_for_count_refuses_a_count_the_layout_does_not_offer() -> None:
             players_for_count(data, count)
 
 
-def test_every_player_count_centres_its_cube_columns_on_the_duty() -> None:
+def test_every_player_count_centres_its_cube_columns_on_the_space() -> None:
     data = layout()
-    duty = duty_position_by_id(data, "produce")
-    center_x = duty["center"][0]
+    for space_id in ("produce", data["city_id"]):
+        duty = duty_position_by_id(data, space_id)
+        center_x = duty["center"][0]
 
-    for count in data["player_counts"]:
-        columns = tally_columns(data, duty, count)
-        assert len(columns) == count
-        assert [column["player"] for column in columns] == list(PLAYER_SEATS[:count])
-        # The columns sit symmetrically about the duty, so a shorter table stays in the middle.
-        assert round(sum(column["center_x"] for column in columns) / count, 6) == center_x
-        assert round(columns[0]["center_x"] + columns[-1]["center_x"], 6) == round(2 * center_x, 6)
+        for count in data["player_counts"]:
+            columns = tally_columns(data, duty, count)
+            pieces = tally_pieces(data, duty, count)
+            middles = [column["center_x"] for column in columns]
+            assert [column["player"] for column in columns] == [piece["id"] for piece in pieces]
+            # The columns sit symmetrically about the space, so a shorter table stays in the middle.
+            assert round(sum(middles) / len(middles), 6) == center_x
+            assert round(middles[0] + middles[-1], 6) == round(2 * center_x, 6)
+
+
+def test_a_duty_tile_shows_three_columns_at_the_table_the_board_opens_on() -> None:
+    data = layout()
+    tile = duty_position_by_id(data, "produce")
+    city = duty_position_by_id(data, data["city_id"])
+    opening = data["default_player_count"]
+
+    assert len(tally_columns(data, tile, opening)) == 3
+    assert len(tally_columns(data, city, opening)) == 2
 
 
 def test_dropping_seats_narrows_the_tally_from_both_sides() -> None:
+    """Counted in columns rather than seats: at two and three players the neutrals take one."""
     data = layout()
     duty = duty_position_by_id(data, "produce")
+    widths = {count: len(tally_columns(data, duty, count)) for count in data["player_counts"]}
     spans = {
         count: (
             tally_columns(data, duty, count)[0]["center_x"],
@@ -197,8 +300,10 @@ def test_dropping_seats_narrows_the_tally_from_both_sides() -> None:
         for count in data["player_counts"]
     }
 
-    assert spans[2][0] > spans[3][0] > spans[4][0]
-    assert spans[2][1] < spans[3][1] < spans[4][1]
+    assert widths == {2: 3, 3: 4, 4: 4}
+    assert spans[2][0] > spans[3][0]
+    assert spans[2][1] < spans[3][1]
+    assert spans[3] == spans[4]
 
 
 def test_layout_gives_every_ring_duty_a_tithe_icon_except_taxation() -> None:
@@ -294,16 +399,39 @@ def test_rendered_svg_marks_the_tithe_token_icons() -> None:
     assert "taxation-tithe-shape" not in svg
 
 
-def test_rendered_svg_tallies_cubes_in_every_player_colour() -> None:
+def test_rendered_svg_tallies_cubes_in_the_colours_the_opening_table_seats() -> None:
+    data = layout()
     svg = generated_svg()
+    seated = {player["id"] for player in players_for_count(data, data["default_player_count"])}
 
     for seat, fill in PLAYER_FILLS.items():
-        assert f'fill="{fill}"' in svg
-        assert f'data-player="{seat}"' in svg
-    # Drawn plain, each duty carries the one tally the prototype shows: the four-player view.
-    assert len(re.findall(r'data-cube-tally="', svg)) == 8
-    assert len(re.findall(r'data-player-count="4"', svg)) == 8
-    assert 'data-player-count="2"' not in svg
+        if seat in seated:
+            assert f'fill="{fill}"' in svg
+            assert f'data-player="{seat}"' in svg
+        else:
+            assert f'data-player="{seat}"' not in svg
+    assert f'fill="{DUMMY_BLACK}"' in svg
+    # Drawn plain, all nine spaces carry the one tally the board opens on.
+    assert len(re.findall(r'data-cube-tally="', svg)) == 9
+    assert len(re.findall(r'data-player-count="2"', svg)) == 9
+    assert 'data-player-count="4"' not in svg
+
+
+def test_the_city_stands_two_full_columns_below_its_title() -> None:
+    data = layout()
+    city = duty_position_by_id(data, data["city_id"])
+    svg = generated_svg()
+    tally = svg[svg.index('data-cube-tally="city"') :]
+    cubes = re.findall(r'<rect [^>]*data-player="(\w+)"', tally[: tally.index("</g>")])
+    _, cy = city["center"]
+
+    assert Counter(cubes) == {"player_two": CITY_STACK_HEIGHT, "player_four": CITY_STACK_HEIGHT}
+    # It stands lower than a duty tile's, with the room under the title shared evenly around it.
+    assert CITY_TALLY_OFFSET_Y > TALLY_OFFSET_Y
+    title = cy + LABEL_OFFSET_Y
+    inset_bottom = cy + SPACE_RADIUS - ORNAMENT_INSET
+    top = cy + CITY_TALLY_OFFSET_Y - CITY_STACK_HEIGHT * CUBE_CELL_HEIGHT
+    assert top - title == pytest.approx(inset_bottom - (cy + CITY_TALLY_OFFSET_Y))
 
 
 def test_sample_setups_start_from_the_layout_and_then_turn_the_tiles() -> None:
@@ -379,11 +507,11 @@ def test_interactive_board_draws_a_cube_tally_for_every_player_count() -> None:
     svg = render_duty_wheel_svg(data, interactive=True)
     tallies = re.findall(r'data-cube-tally="(\w+)" data-player-count="(\d)" opacity="(\d)"', svg)
     shown = [(duty, count) for duty, count, opacity in tallies if opacity == "1"]
+    spaces = [data["city_id"], *data["clockwise_order"]]
 
-    assert len(tallies) == 8 * len(data["player_counts"])
-    # Every duty offers all three views, and opens on the four-player one.
-    assert shown == [(duty, "4") for duty in data["clockwise_order"]]
-    assert data["city_id"] not in {duty for duty, _, _ in tallies}
+    assert len(tallies) == len(spaces) * len(data["player_counts"])
+    # Every space offers all three views, the City included, and opens on the two-player one.
+    assert shown == [(space, "2") for space in spaces]
 
 
 def test_interactive_board_only_draws_the_seats_a_player_count_seats() -> None:
@@ -392,10 +520,14 @@ def test_interactive_board_only_draws_the_seats_a_player_count_seats() -> None:
     produce = svg[svg.index('data-cube-tally="produce" data-player-count="2"') :]
     two_player = produce[: produce.index("</g>")]
 
-    assert 'data-player="player_one"' in two_player
     assert 'data-player="player_two"' in two_player
+    assert 'data-player="player_four"' in two_player
+    assert 'data-player="player_one"' not in two_player
     assert 'data-player="player_three"' not in two_player
-    assert 'data-player="player_four"' not in two_player
+    # And the neutrals stand beside them, on the duty tile but not in the City.
+    assert 'data-player="dummy"' in two_player
+    city = svg[svg.index('data-cube-tally="city" data-player-count="2"') :]
+    assert 'data-player="dummy"' not in city[: city.index("</g>")]
 
 
 def test_interactive_page_offers_all_three_debug_controls() -> None:
@@ -406,18 +538,18 @@ def test_interactive_page_offers_all_three_debug_controls() -> None:
     # Every hook is prefixed, so the setup view can host the panel without a name clash.
     assert 'id="duty-wheel-randomize"' in html
     assert 'id="duty-wheel-move-merchant"' in html
-    assert "Setup 1 of 3 — Merchant on Taxation — 4 players" in html
-    assert duty_wheel_readout(layout()) == "Setup 1 of 3 — Merchant on Taxation — 4 players"
+    assert "Setup 1 of 3 — Merchant on Taxation — 2 players" in html
+    assert duty_wheel_readout(layout()) == "Setup 1 of 3 — Merchant on Taxation — 2 players"
 
 
-def test_interactive_page_offers_a_button_per_player_count_with_four_selected() -> None:
+def test_interactive_page_offers_a_button_per_player_count_with_two_selected() -> None:
     html = interactive_html()
     pattern = r'<button type="button" data-player-count="(\d)" aria-pressed="(\w+)">(\dp)</button>'
     buttons = re.findall(pattern, html)
 
     assert [label for _, _, label in buttons] == ["2p", "3p", "4p"]
     assert [count for count, _, _ in buttons] == ["2", "3", "4"]
-    assert [count for count, pressed, _ in buttons if pressed == "true"] == ["4"]
+    assert [count for count, pressed, _ in buttons if pressed == "true"] == ["2"]
 
 
 def test_interactive_page_hands_the_script_the_player_count_it_opens_on() -> None:
@@ -519,18 +651,21 @@ def test_generator_creates_a_missing_output_directory(tmp_path: Path) -> None:
     assert written.is_file()
 
 
-def test_generated_board_matches_the_baseline_element_for_element() -> None:
-    """Coarse parity: the same shapes at the same coordinates, in the same order.
+def test_the_board_around_the_cubes_is_still_the_baseline_element_for_element() -> None:
+    """Coarse parity, with the cubes taken out of both sides.
 
     Asked for the board the prototype drew — static, Merchant on Produce — the renderer reproduces
-    it. The one tolerated gap is the Allocation title, which the baseline puts 0.1px above the
-    offset its other eight titles share; the renderer uses the shared offset instead.
+    everything the tally does not touch: the spaces, the arrows, the capsules, the titles and the
+    ornaments, the same shapes at the same coordinates in the same order. The one tolerated gap is
+    the Allocation title, which the baseline puts 0.1px above the offset its other eight titles
+    share; the renderer uses the shared offset instead.
     """
     data = layout()
     generated = drawing_elements(
-        render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"])
+        render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"]),
+        without_cubes=True,
     )
-    baseline = drawing_elements(baseline_svg())
+    baseline = drawing_elements(baseline_svg(), without_cubes=True)
 
     assert len(generated) == len(baseline)
     for mine, theirs in zip(generated, baseline, strict=True):
@@ -538,6 +673,21 @@ def test_generated_board_matches_the_baseline_element_for_element() -> None:
         assert len(mine[1]) == len(theirs[1])
         for value, expected in zip(mine[1], theirs[1], strict=True):
             assert abs(round(value - expected, 6)) <= ALLOWED_DRIFT
+
+
+def test_the_cubes_are_what_moved_away_from_the_baseline() -> None:
+    """The baseline stands four seats on each duty tile and nothing in the City; this board stands
+    two seats and the neutrals they play against, and gives the City a holding of its own.
+    """
+    data = layout()
+    generated = render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"])
+
+    assert len(cube_rects(generated)) != len(cube_rects(baseline_svg()))
+    assert cube_rects(generated) != cube_rects(baseline_svg())
+    # The baseline draws every one of the four seats; this board draws the two that sit down.
+    assert PLAYER_FILLS["player_three"] in baseline_svg()
+    assert PLAYER_FILLS["player_three"] not in generated
+    assert DUMMY_BLACK not in baseline_svg()
 
 
 def test_generated_and_baseline_share_their_identifying_text() -> None:
