@@ -512,20 +512,23 @@ through sample Duty tile / Tithe token setups, and **Move Merchant** walks the M
 clockwise around the duty ring. The Merchant starts on Taxation in this debug view, and repeated
 clicks carry him through all eight duty tiles, Taxation included; the City is not part of his
 path. **2p / 3p / 4p** picks how many players the board is drawn for, which decides how many cube
-tally columns each duty shows: 4p is the view the prototype drew and the one the page opens on,
-3p drops blue, and 2p drops yellow as well. The columns left standing stay centred on the duty, so
-a shorter table narrows the tally around the middle of the space instead of leaving a gap on the
-right, and the baseline under them shrinks to match. All of it is visual/debug only: the controls
+tally columns each space shows. 2p is the view the page opens on: red and blue at the table, and a
+black neutral column beside them on each duty tile, so a duty tile shows three columns and the City
+two. 3p seats white as well and 4p seats yellow too, and a full table plays against no neutrals, so
+its tally is seats alone. The columns stay centred on the space, so a shorter table narrows the
+tally around the middle of it instead of leaving a gap on the right, and the baseline under them
+shrinks to match. All of it is visual/debug only: the controls
 move tokens, rewrite the eight titles, and swap tallies, and they do not mutate `GameState` or
 implement any gameplay rule.
 
 The controls work by ring position rather than tile identity, which is debug-only shorthand and
 fine while Taxation is the one tile that never moves. The renderer draws every slot they can
 switch on — a Merchant token on each position, every Tithe token on each position that has a
-capsule, and a tally per player count on every duty — hidden until wanted, so a click flips
+capsule, and a tally per player count on every space — hidden until wanted, so a click flips
 opacity instead of redrawing the board. Ask for the board without `interactive` and none of that
-is emitted, leaving the four-player tally the prototype shows. `players_for_count()` says who is
-at the table and `tally_columns()` says where their columns stand. The sample setups come from
+is emitted, leaving the two-player tally the page opens on. `players_for_count()` says who is at
+the table, `tally_pieces()` adds the neutrals beside them, and `tally_columns()` says where the
+columns stand. The sample setups come from
 `duty_setups()`: the first is the board the layout describes, the rest turn the movable tiles
 around the ring, and a tile keeps its own Tithe token wherever it lands — which is why Taxation
 stays put, being the one tile with no Tithe token and so the one position drawn without a capsule.
@@ -533,10 +536,29 @@ stays put, being the one tile with no Tithe token and so the one position drawn 
 
 The cube counts on each duty come from `sample_cubes` in the layout, keyed by seat — the players
 are `player_one` to `player_four`, each naming its cube colour, the same way
-`player_boards_v2_layout.json` names them. They are sample debug state, not `GameState`, in the
-same spirit as the v1 player board's mock state. Nothing here says what
-any of it means: there is no Tithe token logic, no Taxation rule, no sowing or acolyte placement,
-and no sow animation. Those belong in later PRs.
+`player_boards_v2_layout.json` names them. Which of those four sit down at a two- or three-player
+table is `seats_by_player_count`, the layout's to say rather than simply the first few in the list:
+a two-player table takes red and blue, the pair that carries against parchment.
+
+The black column beside them is `dummy_acolytes`, the neutral pieces a reduced table plays against.
+They are not a seat — they take no turn and hold nothing — so they are not in the players' state
+and read their own seeding out of the layout, one group of three clockwise from the top and one
+from the bottom at two players, two and two at three. That mirrors `docs/rules/DummyAcolytes.md`,
+which is also why the City has no neutral column: dummy acolytes are seeded and moved on the duty
+ring, and the City is not on that ring. The City's own columns are drawn as a full holding,
+`city_sample_cubes_per_seat` high, standing lower in the space so the taller stacks share the room
+under the title evenly.
+
+All of it is sample debug state, not `GameState`, in the same spirit as the v1 player board's mock
+state. Nothing here says what any of it means: there is no Tithe token logic, no Taxation rule, no
+sowing or acolyte placement, and no sow animation. Those belong in later PRs.
+
+The cube itself keeps the size it has always had. It is the reference the rest of the composed
+table is calibrated against — `render_player_boards_v2.py` sizes a building slot by how many of
+these a map hex measures across, and a game table test holds that arithmetic — so what a cube here
+is worth in another board's units is not this renderer's to restate. The cubes do read smaller than
+a player board's on the composed pages, but that comes from the panel scaling around them,
+not from this number.
 
 `render_duty_wheel_panel()` returns the controls and the board as one fragment, which is how the
 generated setup view shows the wheel without copying any of this: it pairs that fragment with
