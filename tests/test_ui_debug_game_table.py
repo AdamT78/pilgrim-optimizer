@@ -374,7 +374,7 @@ def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:
         seat["panel_width"] * player, rel=1e-3
     )
     # And with the two on one scale, a cube and a label carry across at the size they are written.
-    assert ALMS_CUBE_SIZE * alms == pytest.approx(MARKER_CUBE * player, rel=1e-3)
+    assert ALMS_CUBE_SIZE * alms == pytest.approx(2 * TOKEN_RADIUS * player, rel=1e-3)
     assert SEASON_END_LABEL_FONT_SIZE * alms == pytest.approx(ROLE_FONT_SIZE * player, rel=1e-3)
 
 
@@ -392,9 +392,13 @@ def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) 
 
     duty_cube = DUTY_CUBE_SIZE * wheel_unit
     village_cube = 2 * TOKEN_RADIUS * _per_unit(solved, "player")
+    won_cube = ALMS_CUBE_SIZE * _per_unit(solved, "alms")
 
     assert 2 * TOKEN_RADIUS == DUTY_CUBE_SIZE
     assert village_cube == pytest.approx(duty_cube, rel=0.03)
+    # The alms table takes its cube from a seat, so it comes along at the same distance.
+    assert won_cube == pytest.approx(duty_cube, rel=0.03)
+    assert won_cube == pytest.approx(village_cube, rel=1e-3)
     # And the old cube would not have passed that, which is what the change was for.
     assert MARKER_CUBE * _per_unit(solved, "player") > duty_cube * 1.09
 
