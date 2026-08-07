@@ -613,16 +613,19 @@ def test_the_board_is_as_wide_as_a_seat_in_its_own_units() -> None:
 def test_the_season_end_cubes_are_the_cubes_a_seat_plays_with() -> None:
     """Same piece, same size, same air between them -- a cube won here came off a player board.
 
-    Off a player board as it was drawn before its own cubes were matched to the duty wheel's,
-    which is a size and a gap this board has yet to be brought across to. Held here rather than
-    read from the seats so that pass moves this board when it is made, and not before.
+    And a seat's cube is the duty wheel's, so the three boards draw one piece at one size. Both
+    numbers are read from the seats rather than written here: when this board wrote its own, they
+    were the seats' cube of the day, and they stayed behind when the seats' cube moved.
     """
-    assert CUBE_SIZE == pytest.approx(MARKER_CUBE * PLAYER_UNIT, abs=0.005)
-    assert CUBE_GAP == pytest.approx(PLAYER_CUBE_GAP * PLAYER_UNIT, abs=0.005)
+    assert CUBE_SIZE == pytest.approx(2 * TOKEN_RADIUS * PLAYER_UNIT, abs=0.005)
+    assert CUBE_GAP == pytest.approx(TOKEN_GAP * PLAYER_UNIT, abs=0.005)
     assert CUBE_PITCH == CUBE_SIZE + CUBE_GAP
-    # Both are the seats' old numbers: their cube is the wheel's now, and it is smaller.
-    assert 2 * TOKEN_RADIUS < MARKER_CUBE
-    assert TOKEN_GAP > PLAYER_CUBE_GAP
+    assert PLAYER_CUBE_GAP == TOKEN_GAP
+    # The seats take their cube from the wheel, so this board is drawing the wheel's cube too.
+    assert 2 * TOKEN_RADIUS == DUTY_CUBE_SIZE
+    # Smaller and airier than what this board drew when it held the seats' older cube itself.
+    assert CUBE_SIZE < MARKER_CUBE * PLAYER_UNIT
+    assert CUBE_GAP > 6.0 * PLAYER_UNIT
 
     slots = placeholder_slots(layout(), rules())
     spacing = [b["center_x"] - a["center_x"] for a, b in zip(slots, slots[1:], strict=False)]
@@ -649,7 +652,8 @@ def test_a_cube_covers_the_socket_it_fills_exactly() -> None:
         assert cube is not None
         assert "stroke-dasharray" not in cube.group(0)
     # Every cube on the board is drawn in a box this helper made, sockets and printed key alike.
-    boxes = re.findall(r'<rect (x="[\d.]+" y="[\d.]+" width="10\.8" height="10\.8")', content)
+    side = re.escape(f"{CUBE_SIZE:.1f}")
+    boxes = re.findall(rf'<rect (x="[\d.]+" y="[\d.]+" width="{side}" height="{side}")', content)
     assert len(boxes) == 4 + 10 + 4 * len(PLAYER_IDS)
 
 
@@ -668,6 +672,45 @@ def test_the_season_end_heading_and_the_reward_numbers_read_as_a_seat_labels_do(
     assert content.count(size) == 1 + len(THRESHOLD_POSITIONS)
     for position in THRESHOLD_POSITIONS:
         assert re.search(rf"{size}[^>]*>{position}</text>", content)
+
+
+def test_one_spacing_runs_through_every_row_of_cubes_on_the_board() -> None:
+    """The dashed sockets and the printed key below them are one grid, not two.
+
+    Both are drawn on `CUBE_PITCH`, so the air between two cubes reads the same wherever a row of
+    them appears, and both follow the seats when the seats' cube moves.
+    """
+    content = svg()
+    boxes = re.findall(r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"', content)
+    rows: dict[str, list[float]] = {}
+    for x, y, side in boxes:
+        if side == f"{CUBE_SIZE:.1f}":
+            rows.setdefault(y, []).append(float(x))
+
+    # Four sockets, then the key's ladder of one, two, three and four.
+    assert sorted(len(xs) for xs in rows.values()) == [1, 2, 3, 4, 4]
+    for xs in rows.values():
+        xs.sort()
+        steps = [round(right - left, 2) for left, right in zip(xs, xs[1:], strict=False)]
+        # Corners are printed to a tenth, so a step measured off two of them can be a tenth out.
+        assert steps == [pytest.approx(CUBE_PITCH, abs=0.1)] * len(steps)
+
+
+def test_where_the_socket_row_starts_is_worked_out_rather_than_written_down() -> None:
+    """The layout no longer names an x for it, because that x is not the layout's to know.
+
+    It falls out of the record zone, the number of sockets and the cube, and the cube belongs to
+    the seats. A number here would be one that quietly goes stale the next time they resize.
+    """
+    record = layout()["record"]
+    slots = placeholder_slots(layout(), rules())
+    span = slots[-1]["center_x"] - slots[0]["center_x"]
+
+    assert "first_center_x" not in record["placeholder_slots"]
+    assert span == pytest.approx((len(slots) - 1) * CUBE_PITCH)
+    assert slots[0]["center_x"] == pytest.approx(
+        record["x"] + record["width"] / 2 - span / 2, abs=0.01
+    )
 
 
 def test_the_heading_and_its_cubes_are_centred_in_the_record_zone() -> None:

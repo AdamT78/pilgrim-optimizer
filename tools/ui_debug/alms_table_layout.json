@@ -112,12 +112,11 @@
     "rule": { "x1": 392.0, "x2": 519.0, "y": 82.0 },
     "cube": { "stroke_width": 1.2 },
     "placeholder_slots": {
-      "first_center_x": 432.3,
       "center_y": 59.5,
       "label_y": 75.0
     },
     "scoring_key": {
-      "first_cube_center_x": 410.3,
+      "first_cube_center_x": 406.0,
       "star_center_x": 490.1,
       "first_row_center_y": 107.0,
       "row_height": 36

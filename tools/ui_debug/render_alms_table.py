@@ -39,8 +39,9 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from pilgrim.model.config import AlmsConfig, alms_from_dict
-from tools.ui_debug.render_player_boards_v2 import MARKER_CUBE as PLAYER_CUBE
 from tools.ui_debug.render_player_boards_v2 import ROLE_FONT_SIZE as PLAYER_LABEL_FONT_SIZE
+from tools.ui_debug.render_player_boards_v2 import TOKEN_GAP as PLAYER_CUBE_GAP
+from tools.ui_debug.render_player_boards_v2 import TOKEN_RADIUS as PLAYER_CUBE_RADIUS
 
 LAYOUT_FILENAME = "alms_table_layout.json"
 ALMS_CONFIG_RELATIVE_PATH = ("configs", "alms.json")
@@ -63,15 +64,19 @@ SOCKET_DASH = "3,2.5"
 UNITS_PER_PLAYER_UNIT = 1.2925
 PLAYER_UNIT = 1 / UNITS_PER_PLAYER_UNIT
 
-# A cube is a cube wherever it is played, so the season-end cubes are drawn at a seat's cube and the
-# air between them is the air between the ones in a Village grid. Rounded to the hundredth the board
-# writes its geometry in; a thousandth of a unit is nothing anyone can see.
+# A cube is a cube wherever it is played, so the season-end cubes are a seat's cube and the air
+# between them is the air between the ones in a Village grid. Both are taken from the seats rather
+# than written here, and a seat takes them from the duty wheel, so the three boards draw one piece
+# at one size. Rounded to the hundredth the board writes its geometry in; a thousandth of a unit is
+# nothing anyone can see.
 #
-# Both are the numbers a seat carried before its cubes were matched to the duty wheel's -- the size
-# is still a seat's unit, the gap is the 6.0 a seat used to space its grids with. Bringing the
-# wheel's cube across is a pass over this board's own geometry rather than a side effect of the
-# seats having had theirs, so until that pass this board stays spaced the way it was drawn.
-PLAYER_CUBE_GAP = 6.0
+# A seat places a cube by its centre and so keeps a radius; this board asks for the side, which is
+# the number every socket and every printed cube here is drawn from.
+#
+# There are no cubes above or below each other on this board, so only the side-to-side gap crosses
+# over. The scoring key's rows are a star apart, not a cube apart -- `row_height` in the layout is
+# the star's own diameter -- and that is the star's spacing to set, not the cube's.
+PLAYER_CUBE = 2 * PLAYER_CUBE_RADIUS
 CUBE_SIZE = round(PLAYER_CUBE * PLAYER_UNIT, 2)
 CUBE_GAP = round(PLAYER_CUBE_GAP * PLAYER_UNIT, 2)
 CUBE_PITCH = CUBE_SIZE + CUBE_GAP
@@ -231,13 +236,21 @@ def placeholder_slots(layout: dict, rules: AlmsConfig) -> list[dict]:
 
     The board caps at as many cubes as the scoring key has rows, so an impossible extra one has
     nowhere to go — four rounds, four cubes, four sockets.
+
+    The row centres itself under the heading it sits below rather than starting at an x the layout
+    names. Where it starts depends on the cube and the air around it, and both of those are the
+    seats' to set, so a number here would be one that has to be recomputed by hand every time the
+    cube moves — which is exactly what it was when the cube last moved.
     """
     slots = layout["record"]["placeholder_slots"]
+    record = layout["record"]
+    row_count = len(scoring_key_rows(layout, rules))
+    first_center_x = record["x"] + record["width"] / 2 - (row_count - 1) * CUBE_PITCH / 2
     return [
         {
             "slot": row["rank"],
             "round": row["rank"],
-            "center_x": slots["first_center_x"] + (row["rank"] - 1) * CUBE_PITCH,
+            "center_x": first_center_x + (row["rank"] - 1) * CUBE_PITCH,
             "center_y": slots["center_y"],
             "label_y": slots["label_y"],
         }

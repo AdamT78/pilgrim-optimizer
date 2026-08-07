@@ -219,8 +219,8 @@ first-player card are all multiples of it — and matching the cubes to the whee
 to resize the slots or reset the type. The grids also keep the band they had at the old cube size,
 `TOKEN_BAND_HEIGHT`, with the shorter grid centred in it, so nothing below them moved: the role
 circles, the readouts, the building slots and the panel height are all where they were to the unit.
-The Alms Table draws the same cube, and it holds the seats' *old* size and gap for now; bringing the
-wheel's across is a pass over that board's own geometry rather than a side effect of this one.
+The Alms Table draws the same cube too, taken from the seats the way the seats take theirs from the
+wheel, so the three boards are one chain from the wheel's `CUBE_SIZE` down.
 
 The generated SVGs are therefore no longer byte-identical to the baseline's. The test that used to
 pin that parity now pins the divergence instead, and only that: a wider board of the same height,
@@ -651,17 +651,30 @@ few percent either side of it, because both panels carry fixed chrome that does 
 cube. Pinning the width exactly at every window size would mean giving up the disc match with the
 piety track, which is the older and more visible of the two.
 
-The same conversion is what sizes the pieces. The dashed placeholders and the season-end cubes are
-`MARKER_CUBE` in `PLAYER_UNIT`s with `PLAYER_CUBE_GAP` between them, so a cube won here is the cube
+The same conversion is what sizes the pieces. The dashed placeholders and the season-end cubes are a
+seat's cube in `PLAYER_UNIT`s with a seat's `TOKEN_GAP` between them, so a cube won here is the cube
 it came off a player board as, spaced as it was in a Village grid — and because the board used to
 draw a 13-unit cube at a scale where that came out 20% oversized, the cubes got smaller as the
-board got wider. Both figures are the seat's as it was drawn before its own cubes were matched to
-the duty wheel's, and they are written here rather than imported from it so that bringing that
-across is a deliberate pass over this board and not something a change to the seats does for it.
-`cube_rect` is the one helper that draws the box for all of them, socket, placed
-cube and printed key alike, so a placed cube covers the dashed outline it fills exactly rather
-than nearly. `Season end winners` and the `2`/`4`/`6` the rewards are filed under are
+board got wider. Both are imported rather than written down, and a seat takes them from the duty
+wheel in turn, so the three boards draw one piece at one size and none of them can drift from the
+others by standing still. Only the side-to-side gap crosses over: no cubes sit above or below each
+other here, and the scoring key's rows are a star apart rather than a cube apart — `row_height` is
+the star's own diameter. `cube_rect` is the one helper that draws the box for all of them, socket,
+placed cube and printed key alike, so a placed cube covers the dashed outline it fills exactly
+rather than nearly. `Season end winners` and the `2`/`4`/`6` the rewards are filed under are
 `ROLE_FONT_SIZE` the same way, so they read as `Fields` and `Stone Mason` do on a seat.
+
+Matching the cube moved two things around it. The socket row is no longer given a starting x by the
+layout: where it starts depends on the cube and the air beside it, both of which belong to the
+seats, so a number here is one that goes stale the next time they resize — as it had. It now falls
+out of the record zone's own centre, and a test holds it there. The scoring key's ladder did keep an
+x, because where it sits is a judgment about margins rather than a derivation, and it moved four
+units left so its widest row keeps the air it had between the fourth cube and the star it pays.
+
+The header ornament came along with the cube without being touched. Its lobes and rule are written
+in cubes — `0.354` and `1.154` of one — precisely so they match the wheel's, so correcting the cube
+corrected the motif with it; it was rendering about 8% over the wheel's and now sits where the rest
+of the table does.
 
 The scoring key's stars grew with the rest of the zone. The VP inside one is now
 `STEP_NUMBER_FONT_SIZE`, the size the track numbers its steps, so a score on this board reads at
