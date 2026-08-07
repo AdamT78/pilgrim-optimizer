@@ -8,6 +8,8 @@ from tools.ui_debug.generate_player_boards_v2 import (
     default_output_path,
     generate_player_boards_v2_page,
 )
+from tools.ui_debug.render_duty_wheel import CUBE_CELL_HEIGHT as DUTY_CUBE_CELL_HEIGHT
+from tools.ui_debug.render_duty_wheel import CUBE_COLUMN_WIDTH as DUTY_CUBE_COLUMN_WIDTH
 from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
 from tools.ui_debug.render_duty_wheel import LABEL_FONT_SIZE as DUTY_LABEL_FONT_SIZE
 from tools.ui_debug.render_player_boards_v2 import (
@@ -30,12 +32,16 @@ from tools.ui_debug.render_player_boards_v2 import (
     RESOURCE_COUNT_OFFSET,
     RESOURCE_ICON_FOOT,
     RESOURCE_RADIUS,
+    ROLE_ACOLYTE_LIMIT,
     ROLE_CIRCLE_RADIUS,
     ROLE_FONT_SIZE,
     ROLE_LINE_HEIGHT,
     SIDE_MARGIN,
+    TOKEN_BAND_HEIGHT,
     TOKEN_GAP,
+    TOKEN_GRID_TOP_GAP,
     TOKEN_RADIUS,
+    TOKEN_ROW_GAP,
     WHEAT_ICON_SIZE,
     board_geometry,
     building_slot_centers,
@@ -50,6 +56,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     resource_icon_center_y,
     resource_icon_size,
     slot_apothem,
+    token_slot_count,
     wrap_label,
 )
 
@@ -94,6 +101,16 @@ def _svg_bodies(text: str) -> list[str]:
 
 def _board_wraps(text: str) -> list[str]:
     return re.findall(r'<div class="board-wrap"[^>]*>', text)
+
+
+def _tagged_cubes(svg: str, token: str) -> list[tuple[float, float, str]]:
+    """The cubes an interactive board tags as one grid's, each by its corner and its side."""
+    return [
+        (float(x), float(y), side)
+        for x, y, side in re.findall(
+            rf'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)"[^>]*data-token="{token}"', svg
+        )
+    ]
 
 
 def test_layout_file_exists(layout: dict) -> None:
@@ -261,14 +278,69 @@ def test_a_slot_clears_its_neighbours_the_circle_above_it_and_the_board_edge(lay
     )
 
 
-def test_the_role_circles_and_cubes_did_not_grow_with_the_slots(layout: dict) -> None:
-    """Widening is not scaling: the slots are the only thing on the board that changed size."""
+def test_the_role_circles_did_not_grow_with_the_slots(layout: dict) -> None:
+    """Widening is not scaling: the slots are the only thing the widening changed the size of."""
     svg = render_player_board_v2_svg(layout, player_by_id(layout, "player_one"))
 
     assert ROLE_CIRCLE_RADIUS == 34.0
-    assert MARKER_CUBE == 14.0
     assert svg.count(f'r="{ROLE_CIRCLE_RADIUS:g}"') == len(layout["worker_roles"])
-    assert svg.count(f'width="{MARKER_CUBE:.1f}" height="{MARKER_CUBE:.1f}"') > 0
+
+
+def test_a_cube_here_is_the_cube_the_duty_wheel_draws() -> None:
+    """One piece, one size. A cube is a cube whether it is in a Village or on a duty tile."""
+    assert 2 * TOKEN_RADIUS == DUTY_CUBE_SIZE
+
+
+def test_cubes_are_spaced_the_way_the_wheel_spaces_its_tallies() -> None:
+    """The wheel writes pitches; the air between two of its cubes is a pitch less the cube.
+
+    Wider side to side than top to bottom, on the wheel and so here too, which is why the grids
+    take two numbers rather than one.
+    """
+    assert TOKEN_GAP == DUTY_CUBE_COLUMN_WIDTH - DUTY_CUBE_SIZE
+    assert TOKEN_ROW_GAP == DUTY_CUBE_CELL_HEIGHT - DUTY_CUBE_SIZE
+    assert TOKEN_GAP > TOKEN_ROW_GAP
+
+
+def test_the_village_and_abbey_grids_are_drawn_at_that_cube_and_that_spacing(
+    layout: dict,
+) -> None:
+    """Both grids, every slot in them, at the wheel's size and on the wheel's two pitches."""
+    svg = render_player_board_v2_svg(layout, player_by_id(layout, "player_one"), interactive=True)
+    grid = layout["starting_worker_grid"]
+
+    for banner in layout["banners"]:
+        cubes = _tagged_cubes(svg, banner["id"])
+        rows = sorted({y for _, y, _ in cubes})
+        columns = sorted({x for x, _, _ in cubes})
+
+        assert len(cubes) == token_slot_count(layout)
+        assert {side for *_, side in cubes} == {f"{DUTY_CUBE_SIZE:.1f}"}
+        assert len(rows) == int(grid["rows"])
+        assert len(columns) == int(grid["columns"])
+        assert rows[1] - rows[0] == pytest.approx(DUTY_CUBE_CELL_HEIGHT, abs=0.05)
+        steps = {round(right - left, 1) for left, right in zip(columns, columns[1:], strict=False)}
+        assert steps == {DUTY_CUBE_COLUMN_WIDTH}
+
+
+def test_the_acolytes_on_a_role_circle_are_the_same_cube_at_the_same_pitch(layout: dict) -> None:
+    """A cube that walks from the Abbey to a role does not change size on the way."""
+    svg = render_player_board_v2_svg(layout, player_by_id(layout, "player_one"), interactive=True)
+    paired = re.findall(
+        r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)"[^>]*data-role-slot="pair"', svg
+    )
+    geometry = board_geometry(len(layout["worker_roles"]))
+
+    assert ROLE_ACOLYTE_LIMIT == 2
+    assert len(paired) == ROLE_ACOLYTE_LIMIT * len(layout["worker_roles"])
+    assert {width for *_, width in paired} == {f"{DUTY_CUBE_SIZE:.1f}"}
+    for left, right in zip(paired[::2], paired[1::2], strict=True):
+        assert float(right[0]) - float(left[0]) == pytest.approx(DUTY_CUBE_COLUMN_WIDTH, abs=0.05)
+        # Centred on the circle, side to side and top to bottom, and clear of its rim.
+        middle = (float(left[0]) + float(right[0]) + DUTY_CUBE_SIZE) / 2
+        assert min(abs(middle - x) for x in geometry["role_x"]) == pytest.approx(0.0, abs=0.05)
+        assert float(left[1]) + DUTY_CUBE_SIZE / 2 == pytest.approx(geometry["role_circle_cy"])
+        assert middle - float(left[0]) < ROLE_CIRCLE_RADIUS
 
 
 def test_every_slot_is_drawn_from_the_one_hex_size(layout: dict) -> None:
@@ -422,9 +494,31 @@ def test_the_marker_card_names_itself_on_one_line(layout: dict) -> None:
 def test_the_bigger_readouts_still_clear_the_workers_above_them(layout: dict) -> None:
     """The readouts grew into a gap that was already there, rather than pushing the board about."""
     geometry = board_geometry(len(layout["worker_roles"]))
-    tokens_bottom = geometry["token_grid_top"] + 2 * 2 * TOKEN_RADIUS + TOKEN_GAP
+    tokens_bottom = geometry["token_grid_top"] + 2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
 
     assert geometry["resource_cy"] - RESOURCE_RADIUS > tokens_bottom
+
+
+def test_the_smaller_cubes_centre_in_the_band_rather_than_pulling_the_board_up(
+    layout: dict,
+) -> None:
+    """Nothing below the grids moved when the cubes shrank to the wheel's.
+
+    The band is the height two rows of 14.0-unit cubes needed, and the shorter grid sits in the
+    middle of it, so the role circles and the building slots hanging off them stay where they were.
+    """
+    geometry = board_geometry(len(layout["worker_roles"]))
+    band_top = BANNER_CENTER_Y + BANNER_HEIGHT / 2 + TOKEN_GRID_TOP_GAP
+    grid_height = 2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
+
+    assert TOKEN_BAND_HEIGHT == 2 * MARKER_CUBE + 6.0
+    assert grid_height < TOKEN_BAND_HEIGHT
+    assert geometry["token_grid_top"] - band_top == pytest.approx(
+        band_top + TOKEN_BAND_HEIGHT - (geometry["token_grid_top"] + grid_height)
+    )
+    # Where the board below the grids has always started.
+    assert geometry["role_circle_cy"] == pytest.approx(253.0)
+    assert geometry["panel_height"] == pytest.approx(401.56, abs=0.005)
 
 
 def _corners(path: str) -> list[float]:
@@ -521,11 +615,12 @@ def test_v1_player_board_is_left_alone() -> None:
 def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Path) -> None:
     """Everything these boards no longer share with the prototype, and nothing else.
 
-    Two departures, both deliberate. The board got wider, because the prototype's building slots
+    Three departures, all deliberate. The board got wider, because the prototype's building slots
     are two thirds of a map hex and these are a whole one. Then the type and the resource readouts
-    grew, because they were sized for a board that narrow and read small on this one. What is left
-    is what the prototype set and no reason has come up to change: the height, the cubes, the
-    worker circles, and the number of every piece.
+    grew, because they were sized for a board that narrow and read small on this one. Then the
+    cubes shrank to the duty wheel's, so that a player's piece reads as one piece across the table.
+    What is left is what the prototype set and no reason has come up to change: the height, the
+    worker circles, and the number of every piece, cubes included.
     """
     generated = _svg_bodies(
         generate_player_boards_v2_page(output_path=tmp_path / "player_boards_v2.html").read_text(
@@ -539,7 +634,9 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
         'font-size="13"': f'font-size="{RESOURCE_COUNT_FONT_SIZE:g}"',
         'r="27"': f'r="{RESOURCE_RADIUS:g}"',
     }
-    kept = ('width="14.0" height="14.0"', 'r="34"')
+    cube = 'width="14.0" height="14.0"'
+    now_cube = f'width="{DUTY_CUBE_SIZE:.1f}" height="{DUTY_CUBE_SIZE:.1f}"'
+    kept = ('r="34"',)
 
     assert len(generated) == len(baseline) == 4
     for board, was in zip(generated, baseline, strict=True):
@@ -555,6 +652,10 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
             assert before not in board, before
             assert now in board, now
             assert float(now.split('"')[1]) > float(before.split('"')[1])
+        # Drawn smaller, and every cube the prototype drew is still there.
+        assert cube not in board
+        assert DUTY_CUBE_SIZE < MARKER_CUBE
+        assert board.count(now_cube) == was.count(cube)
     # As many of each as the prototype drew, counted on a board without the marker card: its label
     # is no longer set at the role size, and shares a size with the resource amounts.
     board, was = generated[1], baseline[1]

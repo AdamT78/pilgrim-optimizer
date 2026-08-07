@@ -137,9 +137,9 @@ of cubes across — and `BUILDING_SLOT_HEX_SIZE` is the map's figure converted i
 units. It is written out rather than read from `map_layout.json`, so that drawing a player board
 does not mean loading the map; a test re-runs the arithmetic against the real map layout instead.
 
-Nothing was rescaled to make the room. The slots grew and the board grew with them; the cubes and
-the worker circles are the sizes they always were — the circles kept their own `ROLE_CIRCLE_RADIUS`
-when the slots stopped sharing it — and the board is the height it always was, to within a unit.
+Nothing was rescaled to make the room. The slots grew and the board grew with them; the worker
+circles are the size they always were — they kept their own `ROLE_CIRCLE_RADIUS` when the slots
+stopped sharing it — and the board is the height it always was, to within a unit.
 The height is the part that matters beyond this page: a board shown beside other components is
 given a height and takes its width from that, so leaving the height alone is what keeps everything
 already on the board rendering at the size it used to, wherever it is shown. In particular the game
@@ -193,10 +193,39 @@ carries the largest sans on the board rather than borrowing the role labels' siz
 label fits `MARKER_CARD_MIN_WIDTH` on one line at that size, so unlike the roles it is not run
 through `wrap_label`; breaking a two-word phrase to no purpose reads worse than leaving it whole.
 
+### Cubes are the duty wheel's cubes
+
+Player Board v2 cube size and cube spacing intentionally match the Duty Wheel cube styling so player
+pieces read consistently across the composed game table. A player's cube is the same piece whether
+it is waiting in the Village, standing on a role circle or sitting on a duty tile, and it should not
+change size on the way. So `TOKEN_RADIUS` is half the wheel's `CUBE_SIZE`, imported rather than
+copied, and the grids are spaced off the wheel's two pitches: the wheel writes `CUBE_COLUMN_WIDTH`
+and `CUBE_CELL_HEIGHT`, and the air between two of its cubes is a pitch less the cube. It spaces
+them wider side to side than it stacks them, so `TOKEN_GAP` and `TOKEN_ROW_GAP` are two numbers here
+rather than one.
+
+The wheel is the reference rather than the other way round because its cube is what the rest of the
+table is calibrated against; see the duty wheel section below.
+
+That does not make the two exactly equal on screen, and cannot from this side. The seats are fitted
+to the duty wheel's *height* rather than drawn at its scale, so a seat's unit and a wheel's are
+close but never the same, and how close moves with the window. At the viewport the table solves for
+the seats' cube now lands about 2% off the wheel's, where the old 14.0-unit cube was about 10% over.
+A game table test measures both against the real solve rather than trusting either renderer.
+
+`MARKER_CUBE` stays at 14.0 through all of this. It is no longer the size of a drawn cube but it is
+still the unit the board's geometry is written in — the building slots, the banner type and the
+first-player card are all multiples of it — and matching the cubes to the wheel was never a reason
+to resize the slots or reset the type. The grids also keep the band they had at the old cube size,
+`TOKEN_BAND_HEIGHT`, with the shorter grid centred in it, so nothing below them moved: the role
+circles, the readouts, the building slots and the panel height are all where they were to the unit.
+The Alms Table draws the same cube, and it holds the seats' *old* size and gap for now; bringing the
+wheel's across is a pass over that board's own geometry rather than a side effect of this one.
+
 The generated SVGs are therefore no longer byte-identical to the baseline's. The test that used to
 pin that parity now pins the divergence instead, and only that: a wider board of the same height,
-with the type and the readouts bigger, and the cubes, the worker circles and the count of every
-piece exactly as the prototype left them. The baseline itself is untouched.
+with the type and the readouts bigger and the cubes smaller, and the worker circles and the count of
+every piece — cubes included — exactly as the prototype left them. The baseline itself is untouched.
 
 Generate the output page with:
 
@@ -553,12 +582,12 @@ All of it is sample debug state, not `GameState`, in the same spirit as the v1 p
 state. Nothing here says what any of it means: there is no Tithe token logic, no Taxation rule, no
 sowing or acolyte placement, and no sow animation. Those belong in later PRs.
 
-The cube itself keeps the size it has always had. It is the reference the rest of the composed
-table is calibrated against — `render_player_boards_v2.py` sizes a building slot by how many of
-these a map hex measures across, and a game table test holds that arithmetic — so what a cube here
-is worth in another board's units is not this renderer's to restate. The cubes do read smaller than
-a player board's on the composed pages, but that comes from the panel scaling around them,
-not from this number.
+The cube itself keeps the size it has always had, and this is the board that sets it. It is the
+reference the rest of the composed table is calibrated against — `render_player_boards_v2.py` sizes
+a building slot by how many of these a map hex measures across, and a game table test holds that
+arithmetic — so what a cube here is worth in another board's units is not this renderer's to
+restate. When the seats' cubes read larger than these on the composed pages, it was the seats that
+were brought to this size rather than this number that moved.
 
 `render_duty_wheel_panel()` returns the controls and the board as one fragment, which is how the
 generated setup view shows the wheel without copying any of this: it pairs that fragment with
@@ -623,10 +652,13 @@ cube. Pinning the width exactly at every window size would mean giving up the di
 piety track, which is the older and more visible of the two.
 
 The same conversion is what sizes the pieces. The dashed placeholders and the season-end cubes are
-`MARKER_CUBE` in `PLAYER_UNIT`s with `TOKEN_GAP` between them, so a cube won here is the cube it
-came off a player board as, spaced as it was in a Village grid — and because the board used to
+`MARKER_CUBE` in `PLAYER_UNIT`s with `PLAYER_CUBE_GAP` between them, so a cube won here is the cube
+it came off a player board as, spaced as it was in a Village grid — and because the board used to
 draw a 13-unit cube at a scale where that came out 20% oversized, the cubes got smaller as the
-board got wider. `cube_rect` is the one helper that draws the box for all of them, socket, placed
+board got wider. Both figures are the seat's as it was drawn before its own cubes were matched to
+the duty wheel's, and they are written here rather than imported from it so that bringing that
+across is a deliberate pass over this board and not something a change to the seats does for it.
+`cube_rect` is the one helper that draws the box for all of them, socket, placed
 cube and printed key alike, so a placed cube covers the dashed outline it fills exactly rather
 than nearly. `Season end winners` and the `2`/`4`/`6` the rewards are filed under are
 `ROLE_FONT_SIZE` the same way, so they read as `Fields` and `Stone Mason` do on a seat.

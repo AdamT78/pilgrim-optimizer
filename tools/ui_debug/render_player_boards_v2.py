@@ -17,9 +17,15 @@ layout JSON says what a board carries; this module says where it goes.
 This is a wider board than `prototypes/player_boards_v2.html` draws. The prototype's slots were
 about two thirds of a map hex, which left the bottom row looking like six placeholders rather than
 six places a tile goes; sizing them properly is what pushed the columns apart. Nothing on the board
-was rescaled to do it -- the cubes, the text and the role circles are the sizes they always were,
-and the board is the height it always was -- so a board still renders at exactly the scale it used
-to wherever it is shown.
+was rescaled to do it -- the text and the role circles are the sizes they always were, and the
+board is the height it always was -- so a board still renders at exactly the scale it used to
+wherever it is shown.
+
+The cubes are the one thing here that has been resized, and they were resized to the duty wheel's.
+A player's piece should read as one piece wherever it is standing, so the Village and Abbey grids
+and the acolytes on the role circles are drawn at the wheel's cube size and spaced the way the
+wheel spaces its tallies. The board around them did not move to make room: the grids stand in the
+band they always stood in, and the slots along the bottom are the size they always were.
 """
 
 from __future__ import annotations
@@ -28,6 +34,10 @@ import json
 import math
 from pathlib import Path
 from xml.sax.saxutils import escape
+
+from tools.ui_debug.render_duty_wheel import CUBE_CELL_HEIGHT as DUTY_CUBE_CELL_HEIGHT
+from tools.ui_debug.render_duty_wheel import CUBE_COLUMN_WIDTH as DUTY_CUBE_COLUMN_WIDTH
+from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
 
 LAYOUT_FILENAME = "player_boards_v2_layout.json"
 PAGE_BACKGROUND = "#000000"
@@ -43,7 +53,8 @@ ROLE_ACOLYTE_LIMIT = 2
 # one number: how many cubes it measures across. That number is the map's:
 #
 #   a map hex is 46.0 map units across the radius, and a cube renders as 13.03 map units,
-#   so a hex is 3.531 cubes; and a cube here is MARKER_CUBE units, so a slot is 3.531 * 14.0.
+#   so a hex is 3.531 cubes; and this board is written in MARKER_CUBE units to the cube, so a slot
+#   is 3.531 * 14.0.
 #
 # Written out rather than read from `map_layout.json`, so that drawing a player board does not mean
 # loading the map. The arithmetic is checked against the real map layout in the tests instead.
@@ -67,14 +78,31 @@ BANNER_HEIGHT = 26.0
 # Village and Abbey are set to read at the size the duty wheel sets its duty names -- Produce,
 # Taxation, Give Alms and the rest. Same trick as the building slots: two boards drawn at
 # different scales agree on screen when they agree in cubes, and a duty name is 15.5 units against
-# that board's 13.0-unit cube, so 1.192 cubes, which is 1.192 * MARKER_CUBE here.
+# that board's 13.0-unit cube, so 1.192 cubes, which is 1.192 * MARKER_CUBE in this board's units.
 BANNER_FONT_SIZE = 16.7
 BANNER_NOTCH_RATIO = 0.35
 BANNER_TEXT_BASELINE_RATIO = 0.35
 
-TOKEN_RADIUS = 7.0
-TOKEN_GAP = 6.0
+# The cubes are the duty wheel's cubes. A player's piece is the same piece whether it is waiting in
+# the Village, standing on a role circle or sitting on a duty tile, so it should read as one piece
+# in all three places. On the composed game table a unit of this board and a unit of the wheel land
+# within a couple of percent of each other -- the seats are fitted to the wheel's height rather than
+# drawn at its scale, so the two never agree exactly and what is left over moves with the window --
+# and at that distance taking the wheel's numbers across as written is what makes the cubes match.
+# The game table tests measure the two against the real solve rather than trusting this.
+#
+# The wheel writes its grid as pitches rather than gaps -- a column is CUBE_COLUMN_WIDTH from the
+# next, a cube CUBE_CELL_HEIGHT from the one above it -- so the air between two cubes is what is
+# left of a pitch once the cube is taken out of it. The wheel spaces its cubes wider side to side
+# than it stacks them, and the grids here are spaced the same way.
+TOKEN_RADIUS = DUTY_CUBE_SIZE / 2
+TOKEN_GAP = DUTY_CUBE_COLUMN_WIDTH - DUTY_CUBE_SIZE
+TOKEN_ROW_GAP = DUTY_CUBE_CELL_HEIGHT - DUTY_CUBE_SIZE
 TOKEN_GRID_TOP_GAP = 12.0
+# The band the Village and Abbey grids stand in, held at the height it had when a cube was 14 units
+# so that resizing the cubes does not drag the role circles and the building slots up with them. A
+# grid shorter than its band centres itself in it and everything below stays where it was.
+TOKEN_BAND_HEIGHT = 34.0
 
 # The role labels sit a fixed distance below the token grid, which leaves the resource readouts
 # free to centre themselves in the gap without the two chasing each other.
@@ -116,6 +144,10 @@ RESOURCE_ICON_FOOT = 2.6
 RESOURCE_COUNT_OFFSET = 25.0
 RESOURCE_COUNT_FONT_SIZE = 16
 
+# The unit this board's geometry is written in, and the size its cubes were drawn at before they
+# were matched to the duty wheel's. The building slots, the banner type and the first-player marker
+# card below are all multiples of it, so it stays where it is: resizing the cubes was never a reason
+# to resize the slots or reset the type.
 MARKER_CUBE = 14.0
 MARKER_CARD_MIN_WIDTH = 92.0
 MARKER_CARD_PAD_X = 10.0
@@ -238,8 +270,9 @@ def board_geometry(role_count: int) -> dict:
     role_x = [SIDE_MARGIN + BUILDING_SLOT_HEX_SIZE + index * pitch for index in range(role_count)]
     panel_width = role_x[-1] + BUILDING_SLOT_HEX_SIZE + SIDE_MARGIN
 
-    token_top = BANNER_CENTER_Y + BANNER_HEIGHT / 2 + TOKEN_GRID_TOP_GAP
-    tokens_bottom = token_top + 2 * 2 * TOKEN_RADIUS + TOKEN_GAP
+    band_top = BANNER_CENTER_Y + BANNER_HEIGHT / 2 + TOKEN_GRID_TOP_GAP
+    tokens_bottom = band_top + TOKEN_BAND_HEIGHT
+    token_top = band_top + (TOKEN_BAND_HEIGHT - (2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP)) / 2
 
     role_circle_top = tokens_bottom + ROLE_ROW_GAP_FROM_TOKENS
     role_baseline = role_circle_top - ROLE_LABEL_GAP
@@ -338,18 +371,19 @@ def _render_token_grid(
     tag: str = "",
 ) -> str:
     """The starting workers. Hidden tokens keep their slot so both grids stay the same shape."""
-    step = 2 * TOKEN_RADIUS + TOKEN_GAP
+    across = 2 * TOKEN_RADIUS + TOKEN_GAP
+    down = 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
     grid_width = columns * 2 * TOKEN_RADIUS + (columns - 1) * TOKEN_GAP
     first_x = cx - grid_width / 2 + TOKEN_RADIUS
     tokens = []
     for row in range(rows):
-        token_y = top_y + TOKEN_RADIUS + row * step
+        token_y = top_y + TOKEN_RADIUS + row * down
         for column in range(columns):
             index = row * columns + column
             tags = f' data-token="{tag}" data-token-index="{index}"' if tag else ""
             tokens.append(
                 _render_square_token(
-                    first_x + column * step,
+                    first_x + column * across,
                     token_y,
                     player,
                     1 if index < visible else 0,

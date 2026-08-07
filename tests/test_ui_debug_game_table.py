@@ -43,7 +43,13 @@ from tools.ui_debug.render_alms_table import (
 from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_FONT_SIZE
 from tools.ui_debug.render_alms_table import STAR_OUTER_RADIUS as TRACK_STAR_RADIUS
 from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS
-from tools.ui_debug.render_duty_wheel import load_duty_wheel_layout, render_duty_wheel_controls_html
+from tools.ui_debug.render_duty_wheel import (
+    CUBE_SIZE as DUTY_CUBE_SIZE,
+)
+from tools.ui_debug.render_duty_wheel import (
+    load_duty_wheel_layout,
+    render_duty_wheel_controls_html,
+)
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout
 from tools.ui_debug.render_pilgrimage_sites import STAR_OUTER_RADIUS as SITE_STAR_RADIUS
@@ -52,6 +58,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_HEX_SIZE,
     MARKER_CUBE,
     ROLE_FONT_SIZE,
+    TOKEN_RADIUS,
     board_geometry,
     load_player_boards_v2_layout,
     players_of,
@@ -70,7 +77,19 @@ ALMS_LAYOUT = load_alms_table_layout()
 
 
 def _per_unit(solved, board: str) -> float:
-    """Pixels one of a board's own units renders as, at the cube size the table solved for."""
+    """Pixels one of a board's own units renders as, at the cube size the table solved for.
+
+    The duty wheel is the one board the stylesheet sizes by its height rather than its width: it
+    is handed whatever the row has left once the piety track and the chrome are out of it, so it
+    is measured down its own crop instead of across it.
+    """
+    if board == "action":
+        row_height = max(
+            solved.cube * solved.map_cubes + PANEL_CHROME,
+            solved.cube * solved.left_cubes + 2 * PANEL_CHROME + GAP_PX,
+        )
+        height = row_height - solved.cube * solved.piety_cubes - 2 * PANEL_CHROME - GAP_PX
+        return height / solved.crop["action"][3]
     width = {
         "alms": solved.cube * solved.piety_coef * solved.alms_over_piety,
         "piety": solved.cube * solved.piety_coef,
@@ -357,6 +376,27 @@ def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:
     # And with the two on one scale, a cube and a label carry across at the size they are written.
     assert ALMS_CUBE_SIZE * alms == pytest.approx(MARKER_CUBE * player, rel=1e-3)
     assert SEASON_END_LABEL_FONT_SIZE * alms == pytest.approx(ROLE_FONT_SIZE * player, rel=1e-3)
+
+
+def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) -> None:
+    """Why the seats took the wheel's cube size: this is where the two are seen side by side.
+
+    They cannot be made exactly equal from the seats' side. The seat panels are fitted to the duty
+    wheel's height rather than drawn at its scale, so a seat's unit and a wheel's are close but
+    never the same, and how close moves with the window. Two percent is what that comes to at the
+    viewport the table solves for -- near enough that the pieces read as one piece, where the 10
+    percent the seats' old 14.0-unit cube gave was not.
+    """
+    _, _, _, solved = scale
+    wheel_unit = _per_unit(solved, "action") * load_duty_wheel_layout()["board"]["scale"]
+
+    duty_cube = DUTY_CUBE_SIZE * wheel_unit
+    village_cube = 2 * TOKEN_RADIUS * _per_unit(solved, "player")
+
+    assert 2 * TOKEN_RADIUS == DUTY_CUBE_SIZE
+    assert village_cube == pytest.approx(duty_cube, rel=0.03)
+    # And the old cube would not have passed that, which is what the change was for.
+    assert MARKER_CUBE * _per_unit(solved, "player") > duty_cube * 1.09
 
 
 def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> None:
