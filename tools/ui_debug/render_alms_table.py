@@ -41,7 +41,6 @@ from xml.sax.saxutils import escape
 from pilgrim.model.config import AlmsConfig, alms_from_dict
 from tools.ui_debug.render_player_boards_v2 import MARKER_CUBE as PLAYER_CUBE
 from tools.ui_debug.render_player_boards_v2 import ROLE_FONT_SIZE as PLAYER_LABEL_FONT_SIZE
-from tools.ui_debug.render_player_boards_v2 import TOKEN_GAP as PLAYER_CUBE_GAP
 
 LAYOUT_FILENAME = "alms_table_layout.json"
 ALMS_CONFIG_RELATIVE_PATH = ("configs", "alms.json")
@@ -64,9 +63,15 @@ SOCKET_DASH = "3,2.5"
 UNITS_PER_PLAYER_UNIT = 1.2925
 PLAYER_UNIT = 1 / UNITS_PER_PLAYER_UNIT
 
-# A cube is a cube wherever it is played, so the season-end cubes are the seats' cube and the air
-# between them is the air between the ones in a Village grid. Rounded to the hundredth the board
+# A cube is a cube wherever it is played, so the season-end cubes are drawn at a seat's cube and the
+# air between them is the air between the ones in a Village grid. Rounded to the hundredth the board
 # writes its geometry in; a thousandth of a unit is nothing anyone can see.
+#
+# Both are the numbers a seat carried before its cubes were matched to the duty wheel's -- the size
+# is still a seat's unit, the gap is the 6.0 a seat used to space its grids with. Bringing the
+# wheel's cube across is a pass over this board's own geometry rather than a side effect of the
+# seats having had theirs, so until that pass this board stays spaced the way it was drawn.
+PLAYER_CUBE_GAP = 6.0
 CUBE_SIZE = round(PLAYER_CUBE * PLAYER_UNIT, 2)
 CUBE_GAP = round(PLAYER_CUBE_GAP * PLAYER_UNIT, 2)
 CUBE_PITCH = CUBE_SIZE + CUBE_GAP

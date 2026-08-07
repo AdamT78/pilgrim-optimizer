@@ -18,6 +18,7 @@ from tools.ui_debug.render_alms_table import (
     ORNAMENT_RULE_GAP,
     ORNAMENT_STROKE_WIDTH,
     ORNAMENT_TREFOIL_RADIUS,
+    PLAYER_CUBE_GAP,
     PLAYER_UNIT,
     RANK_FIRST,
     SEASON_END_LABEL_FONT_SIZE,
@@ -610,12 +611,18 @@ def test_the_board_is_as_wide_as_a_seat_in_its_own_units() -> None:
 
 
 def test_the_season_end_cubes_are_the_cubes_a_seat_plays_with() -> None:
-    """Same piece, same size, same air between them -- a cube won here came off a player board."""
+    """Same piece, same size, same air between them -- a cube won here came off a player board.
+
+    Off a player board as it was drawn before its own cubes were matched to the duty wheel's,
+    which is a size and a gap this board has yet to be brought across to. Held here rather than
+    read from the seats so that pass moves this board when it is made, and not before.
+    """
     assert CUBE_SIZE == pytest.approx(MARKER_CUBE * PLAYER_UNIT, abs=0.005)
-    assert CUBE_GAP == pytest.approx(TOKEN_GAP * PLAYER_UNIT, abs=0.005)
+    assert CUBE_GAP == pytest.approx(PLAYER_CUBE_GAP * PLAYER_UNIT, abs=0.005)
     assert CUBE_PITCH == CUBE_SIZE + CUBE_GAP
-    # The seats draw that cube as a square token, so its width is the marker cube's.
-    assert 2 * TOKEN_RADIUS == MARKER_CUBE
+    # Both are the seats' old numbers: their cube is the wheel's now, and it is smaller.
+    assert 2 * TOKEN_RADIUS < MARKER_CUBE
+    assert TOKEN_GAP > PLAYER_CUBE_GAP
 
     slots = placeholder_slots(layout(), rules())
     spacing = [b["center_x"] - a["center_x"] for a, b in zip(slots, slots[1:], strict=False)]
