@@ -55,13 +55,16 @@ SOCKET_DASH = "3,2.5"
 # The game table hands this board the piety track's scale rather than the seats' width, because
 # the two draw the same player disc and pinning them together is what makes that disc come out the
 # same size on both. The piety track's units are the smaller of the two, so a unit here renders
-# 1.2925 of the pixels a player board unit does. That ratio belongs to the composed table, not to
+# 1.4799 of the pixels a player board unit does. That ratio belongs to the composed table, not to
 # either board, and the game table tests check it against the real solve rather than trusting the
 # number written here.
 #
 # So anything meant to read at the same size as its counterpart on a seat is that board's size in
-# PLAYER_UNITs. It is why this board is 536 units wide and a seat is 692.8: the same width.
-UNITS_PER_PLAYER_UNIT = 1.2925
+# PLAYER_UNITs. It was also once why this board is 536 units wide: at the ratio that held then,
+# that came out a seat's width exactly. It no longer does -- the seats are drawn at the duty
+# wheel's scale now rather than stretched to its height, which made them narrower -- so this board
+# renders about a seventh wider than a seat until its own width is re-fitted.
+UNITS_PER_PLAYER_UNIT = 1.4799
 PLAYER_UNIT = 1 / UNITS_PER_PLAYER_UNIT
 
 # A cube is a cube wherever it is played, so the season-end cubes are a seat's cube and the air

@@ -23,6 +23,12 @@ when it changes. Two boards draw no cube, so each is anchored on a piece it does
 track on the disc it shares with the alms table, and the map on the board hexagon the duty wheel's
 was derived from.
 
+The duty wheel is the exception. It is given whatever height the row has left rather than a width of
+its own, so it draws a smaller cube than `--cube` names, and a seat -- which has to match it piece
+for piece -- is sized against the wheel rather than against the cube. That is what lets a player
+board be any shape it likes: the seats used to be stacked to the wheel's height instead, which made
+a board's proportions decide the scale it was drawn at here.
+
 CROPPED, NOT REDRAWN
 Those same standalone pages put a heading, a subtitle and a backdrop inside the viewBox -- nearly
 half of the duty wheel's box is page furniture -- which would otherwise be paid for in the middle
@@ -79,7 +85,7 @@ from tools.ui_debug.render_piety_track_v2 import (  # noqa: E402
 )
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites  # noqa: E402
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
-    MARKER_CUBE as PLAYER_CUBE_UNITS,  # noqa: E402
+    TOKEN_RADIUS as PLAYER_TOKEN_RADIUS,  # noqa: E402
 )
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     PANEL_STROKE_WIDTH as PLAYER_PANEL_STROKE,  # noqa: E402
@@ -134,8 +140,10 @@ RENDER_SEAT_COLS = 1
 # to match whatever this comes out as on screen.
 PLAYER_MARGIN = 6.0
 
-# Somewhere to start the fixed point below; the seed does not survive the first pass.
+# Somewhere to start the fixed point below; none of these survives the first few passes.
 _MARGIN_SEED = {"action": 10.0, "map": 12.0, "piety": 4.0}
+_SEAT_SEED = 50.0
+_CUBE_SEED = 8.0
 _SOLVE_PASSES = 200
 
 # The duty wheel draws its hexagon with this stroke, in the units of its own board group.
@@ -287,7 +295,9 @@ def board_measurements(
     cubes = {
         "action": action_cube,
         "alms": ALMS_CUBE_UNITS,
-        "player": PLAYER_CUBE_UNITS,
+        # The cube a player board actually draws, which is the wheel's carried across into that
+        # board's units. Its geometry is written in a larger unit that is no longer a cube.
+        "player": 2 * PLAYER_TOKEN_RADIUS,
         # The piety track has no cube. It shares a player disc with the alms table -- the same
         # diameter on both -- so giving it the alms table's cube for that same disc is what makes
         # the two discs come out the same size on screen.
@@ -315,14 +325,13 @@ class TableScale:
     width_cubes: float
     width_fixed: float
     left_cubes: float
-    left_fixed: float
+    left_panels: float
     map_cubes: float
     piety_cubes: float
     duty_cubes: float
     map_scale: float
     piety_coef: float
     player_k: float
-    player_c: float
     alms_over_piety: float
     margin_px: float
 
@@ -365,6 +374,9 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
     # The margin is part of what gets drawn, so the shape a seat takes up is the crop's, not the
     # board's.
     player_aspect = player_crop[3] / player_crop[2]
+    # The seat is part of the fixed point too, for the reason given below. Seeds only; neither
+    # survives the first few passes.
+    player_k, cube = _SEAT_SEED, _CUBE_SEED
 
     for _ in range(_SOLVE_PASSES):
         crop = {
@@ -392,33 +404,39 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         piety_cubes = mult["action"] * duty_scale * piety_share * aspect["piety"]
         alms_cubes = piety_cubes * alms_over_piety * aspect["alms"] / aspect["piety"]
 
-        # The seat block is pinned to the duty wheel: SEAT_ROWS rows plus their gaps come to
-        # exactly that panel's height.
-        player_k = duty_cubes / (SEAT_ROWS * player_aspect)
-        player_c = (
-            ((PANEL_CHROME - (SEAT_ROWS - 1) * GAP_PX) / SEAT_ROWS) - PANEL_CHROME
-        ) / player_aspect
-
         # `--avail` has already taken the body padding out of the width, so only the panels' own
-        # chrome and the gaps between them are counted here. The height budget below works off a
-        # raw 100vh, so it has to subtract the page's own chrome itself.
+        # chrome and the gaps between them are counted here. The height budgets below work off a
+        # raw 100vh, so they have to subtract the page's own chrome themselves.
         width_cubes = mult["action"] * duty_scale + mult["map"] + SEAT_COLS * player_k
-        width_fixed = (
-            (2 + SEAT_COLS) * PANEL_CHROME + (1 + SEAT_COLS) * GAP_PX + SEAT_COLS * player_c
-        )
-        # The alms table over the seats, on the left column: the same shape of bound.
-        left_cubes = duty_cubes + alms_cubes
-        left_fixed = 2 * PANEL_CHROME + GAP_PX + BODY_CHROME
+        width_fixed = (2 + SEAT_COLS) * PANEL_CHROME + (1 + SEAT_COLS) * GAP_PX
+        # The alms table over the seats: three panels and two gaps, standing to whatever height
+        # they come to. They used to be stretched to the duty wheel's height instead, which is
+        # what made this column the tall one by construction; now either it or the map can be.
+        left_cubes = alms_cubes + SEAT_ROWS * player_k * player_aspect
+        left_panels = (1 + SEAT_ROWS) * PANEL_CHROME + SEAT_ROWS * GAP_PX
 
         cube = min(
             (REF_AVAIL_WIDTH - width_fixed) / width_cubes,
-            (REF_VIEWPORT_HEIGHT - left_fixed) / left_cubes,
+            (REF_VIEWPORT_HEIGHT - BODY_CHROME - left_panels) / left_cubes,
+            (REF_VIEWPORT_HEIGHT - BODY_CHROME - PANEL_CHROME) / map_cubes,
         )
+
+        # A seat is sized so its cube comes out the size the duty wheel's does, which is what makes
+        # a player's piece one piece across the table. It cannot be sized from `cube` to manage it:
+        # the wheel is the one panel not drawn at that size, being handed whatever height the row
+        # has left over instead, so matching it means reading that height back.
+        #
+        # Which makes the two mutually dependent -- the seats stand in one of the columns the row's
+        # height is the greater of -- so they are left to settle together in the fixed point rather
+        # than one being solved before the other.
+        row_height = max(cube * map_cubes + PANEL_CHROME, cube * left_cubes + left_panels)
+        duty_height = row_height - cube * piety_cubes - 2 * PANEL_CHROME - GAP_PX
+        duty_cube_px = cubes["action"] * duty_height / crop["action"][3]
+        player_k = mult["player"] * duty_cube_px / cube
 
         # What a player board's margin comes to on screen, and the same in every other board's
         # units, which is what the next pass crops to.
-        player_width = cube * player_k + player_c
-        margin_px = PLAYER_MARGIN * player_width / player_crop[2]
+        margin_px = PLAYER_MARGIN * cube * player_k / player_crop[2]
         per_unit = {
             "action": cube * mult["action"] * duty_scale / crop["action"][2],
             "map": cube * mult["map"] / crop["map"][2],
@@ -427,10 +445,8 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         margins = {key: margin_px / value for key, value in per_unit.items()}
 
     # The piety track keeps the size it has here. The duty wheel does not: it grows into whatever
-    # height its column has left over, which the stylesheet works out for itself from these
-    # coefficients rather than from a scale frozen at one window size. Because the two stacked
-    # columns have the same shape -- two panels and one gap -- the leftover comes out to exactly
-    # var(--gap), the same distance used between the player boards, at any cube size.
+    # height the row has left over, which the stylesheet works out for itself from these
+    # coefficients rather than from a scale frozen at one window size.
     piety_coef = mult["action"] * duty_scale * piety_share
 
     return TableScale(
@@ -440,7 +456,7 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         width_cubes=width_cubes,
         width_fixed=width_fixed,
         left_cubes=left_cubes,
-        left_fixed=left_fixed,
+        left_panels=left_panels,
         map_cubes=map_cubes,
         piety_cubes=piety_cubes,
         duty_cubes=duty_cubes,
@@ -451,7 +467,6 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         map_scale=1.0,
         piety_coef=piety_coef,
         player_k=player_k,
-        player_c=player_c,
         alms_over_piety=alms_over_piety,
         margin_px=margin_px,
     )
@@ -549,14 +564,15 @@ def render_game_table_html(
     --gap: {GAP_PX}px;
     --avail: min(2400px, 100vw - {BODY_CHROME}px);
 
-    /* The row competes for the width and the left column for the height;
-       the cube is the smaller solution, so the table fits the window.
-       Neither the piety-over-duty column nor the map is part of this: both
-       are sized afterwards to fill exactly what the left column leaves
-       them, so neither can need more room than it already provides. */
+    /* The row competes for the width, and the two columns that stand to their
+       own height for the height; the cube is the smallest solution, so the
+       table fits the window. The piety-over-duty column is not part of it: the
+       wheel is sized afterwards to fill exactly what the row leaves it, so it
+       cannot need more room than the row already provides. */
     --cube: min(
       calc((var(--avail) - {scale.width_fixed:.2f}px) / {scale.width_cubes:.3f}),
-      calc((100vh - {scale.left_fixed:.0f}px) / {scale.left_cubes:.3f})
+      calc((100vh - {BODY_CHROME + scale.left_panels:.0f}px) / {scale.left_cubes:.3f}),
+      calc((100vh - {BODY_CHROME + PANEL_CHROME}px) / {scale.map_cubes:.3f})
     );
 
     /* How tall the row comes out: whichever of the map or the alms-over-seats
@@ -564,7 +580,7 @@ def render_game_table_html(
        be read before the wheel is sized. */
     --row-height: max(
       calc(var(--cube) * {scale.map_cubes:.3f} + {PANEL_CHROME}px),
-      calc(var(--cube) * {scale.left_cubes:.3f} + {2 * PANEL_CHROME + GAP_PX}px)
+      calc(var(--cube) * {scale.left_cubes:.3f} + {scale.left_panels:.0f}px)
     );
     /* The duty wheel is then handed whatever height that leaves once the piety
        track, both panels' chrome and one gap are taken out -- so the space
@@ -577,8 +593,10 @@ def render_game_table_html(
     --w-map:    calc(var(--cube) * {scale.mult["map"]:.3f} * {scale.map_scale:.5f});
     /* Its own size, frozen before the duty wheel started growing. */
     --w-piety:  calc(var(--cube) * {scale.piety_coef:.5f});
-    /* {SEAT_ROWS} of these plus their gaps come to the height of the duty wheel. */
-    --w-player: calc(var(--cube) * {scale.player_k:.3f} - {-scale.player_c:.2f}px);
+    /* Sized so a seat's cube comes out the size the wheel's does: the
+       coefficient is how many cubes wide a seat is, times the wheel's own
+       shortfall against --cube. */
+    --w-player: calc(var(--cube) * {scale.player_k:.3f});
   /* Locked to the piety track's scale rather than the seats' width, which is
      what makes the coloured discs the same size on both boards. The alms table
      is then drawn wide enough in its own units that at that scale it still
@@ -601,12 +619,15 @@ def render_game_table_html(
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short
      of the row, so space-between produces precisely that gap rather than a
-     leftover of whatever height happens to remain. .left mirrors it: the alms
-     table level with the piety track's top, the seats on the bottom. */
+     leftover of whatever height happens to remain. */
   .col, .left {{
     display: flex; flex-direction: column; align-items: center;
     align-self: stretch; justify-content: space-between; gap: var(--gap);
   }}
+  /* The left column no longer fills the row -- the seats are sized from the
+     cube rather than stretched to the wheel's height, and come to less -- so
+     its panels stay together at the top and the slack falls under them. */
+  .left {{ justify-content: flex-start; }}
   .seats {{
     display: grid;
     grid-template-columns: repeat({RENDER_SEAT_COLS}, max-content);

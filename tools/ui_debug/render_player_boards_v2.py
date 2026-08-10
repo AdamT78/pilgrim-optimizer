@@ -114,13 +114,16 @@ TOKEN_GRID_TOP_GAP = 12.0
 # grid shorter than its band centres itself in it and everything below stays where it was.
 TOKEN_BAND_HEIGHT = 34.0
 
-# The role labels sit a fixed distance below the token grid. The readouts used to stand in this
-# gap; out of it, the gap stays where it is. It could be closed now, and the board would be about a
-# tenth shorter, but a seat on the composed game table is sized by fitting two boards into the duty
-# wheel's height -- so a board's shape, not just its size, is what sets the scale it is drawn at
-# there, and taking a tenth off its height would draw a cube in a Village a tenth larger than the
-# same cube on a duty tile. The height stays until the table sizes a seat from its cube instead.
-ROLE_ROW_GAP_FROM_TOKENS = 130.0
+# Air between the bottom of the board's top section and the top of the role labels. The readouts
+# used to stand in this gap and left a third of the board empty when they went to the corner, so
+# the labels are hung off whatever is above them now rather than off a distance fixed when they
+# were not.
+ROLE_LABEL_TOP_GAP = 16.0
+# How deep a role label can be. "Road Engineer" and "Alms House" wrap to two lines and nothing on
+# the board wraps to three, so the circles are set below a two-line label whether or not the label
+# above any one of them needs both -- which is what keeps all six circles on one line. Checked
+# against the layout in the tests.
+ROLE_LABEL_MAX_LINES = 2
 # Both are properties of the type rather than choices, so every point of it on the board derives
 # them from its own size: a line needs 1.1 times its size to sit clear of the next, and its glyphs
 # reach 0.91 of it above their baseline. Measured at size 10, where they were written out as 11.0
@@ -329,14 +332,26 @@ def board_geometry(role_count: int) -> dict:
     tokens_bottom = band_top + TOKEN_BAND_HEIGHT
     token_top = band_top + (TOKEN_BAND_HEIGHT - (2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP)) / 2
 
-    role_circle_top = tokens_bottom + ROLE_ROW_GAP_FROM_TOKENS
-    role_baseline = role_circle_top - ROLE_LABEL_GAP
+    # The labels run the whole width of the board, so they hang below whichever half of the top
+    # section reaches lower: the Village and Abbey grids over the left of it, or the readouts and
+    # their rules over the right. It is the readouts, which is why moving them into the corner is
+    # what let the rest of the board come up behind them.
+    resources = resource_block(panel_width)
+    top_section_bottom = max(tokens_bottom, resources["bottom"] + RESOURCE_DIVIDER_OVERHANG)
+    # Rounded because the readouts' depth comes off icon artwork and carries a long tail, and
+    # everything below here is measured from it. Paths are written at two decimals, so keeping the
+    # chain there is what lets a placed building land on the dashed slot's own numbers exactly.
+    label_top = round(top_section_bottom + ROLE_LABEL_TOP_GAP, 2)
+    role_baseline = label_top + (ROLE_LABEL_MAX_LINES - 1) * ROLE_LINE_HEIGHT + LABEL_ASCENT
+    role_circle_top = role_baseline + ROLE_LABEL_GAP
 
     # The slots hang off the bottom of the role circles, all six level with each other.
-    building_cy = role_circle_top + 2 * ROLE_CIRCLE_RADIUS + BUILDING_ROW_GAP + slot_apothem()
+    building_cy = round(
+        role_circle_top + 2 * ROLE_CIRCLE_RADIUS + BUILDING_ROW_GAP + slot_apothem(), 2
+    )
 
     top_margin = BANNER_CENTER_Y - BANNER_HEIGHT / 2
-    panel_height = building_cy + slot_apothem() + top_margin
+    panel_height = round(building_cy + slot_apothem() + top_margin, 2)
 
     return {
         "panel_width": panel_width,
@@ -345,7 +360,7 @@ def board_geometry(role_count: int) -> dict:
         "role_circle_cy": role_circle_top + ROLE_CIRCLE_RADIUS,
         "role_label_baseline": role_baseline,
         "token_grid_top": token_top,
-        "resources": resource_block(panel_width),
+        "resources": resources,
         "building_y": [building_cy] * role_count,
     }
 
