@@ -74,7 +74,7 @@ from tools.ui_debug.render_pilgrimage_sites import (
 )
 from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_DASH_ARRAY,
-    DEFAULT_FIRST_PLAYER,
+    DEFAULT_PLAYER,
     ROLE_ACOLYTE_LIMIT,
     building_slot_centers,
     default_player_board_v2_state,
@@ -715,18 +715,16 @@ def test_boards_start_on_the_default_board_state(page: str) -> None:
             assert _cubes(board, f'data-role="{role}"') == (ROLE_ACOLYTE_LIMIT + 1, shown)
 
 
-def test_only_the_first_player_carries_the_marker(page: str) -> None:
-    assert page.count('data-first-player-marker="true"') == 1
-    assert page.count('data-first-player-marker="false"') == len(PLAYER_LABELS) - 1
-    assert 'data-first-player-marker="true"' in _player_board(page, DEFAULT_FIRST_PLAYER)
-
-
-def test_page_offers_first_player_marker_buttons(page: str) -> None:
+def test_no_board_carries_a_first_player_marker_and_nothing_offers_to_move_one(page: str) -> None:
+    """The card and the buttons that moved it went together: it is the resources' corner now."""
     layout = load_player_boards_v2_layout()
 
-    for player, label in zip(players_of(layout), PLAYER_LABELS, strict=True):
-        assert f'data-first-player="{player["id"]}"' in page
-        assert f"Move first player marker to {label}" in page
+    assert "first-player" not in page
+    assert "First player" not in page
+    assert "firstPlayer" not in page
+    for player in players_of(layout):
+        board = _player_board(page, player["id"])
+        assert board.count("<g data-resource=") == len(layout["resources"])
 
 
 def test_page_offers_a_serf_button_per_player(page: str) -> None:
@@ -777,7 +775,7 @@ def test_panel_state_gives_every_player_the_default_board() -> None:
     layout = load_player_boards_v2_layout()
     state = player_board_ui_state(layout)
 
-    assert state["firstPlayer"] == DEFAULT_FIRST_PLAYER == "player_one"
+    assert DEFAULT_PLAYER == "player_one"
     assert sorted(state["players"]) == sorted(player["id"] for player in players_of(layout))
     for board in state["players"].values():
         assert board["villageSerfs"] == 8
@@ -1129,7 +1127,7 @@ def test_player_board_panel_leaves_the_map_controls_alone(page: str) -> None:
     piety_buttons = re.findall(r'<button[^>]*data-piety-delta="[^"]*"[^>]*>', page)
     assert len(piety_buttons) == 2 * len(PLAYER_LABELS)
     for button in piety_buttons:
-        assert "data-serf-player" not in button and "data-first-player" not in button
+        assert "data-serf-player" not in button
 
 
 def _duty_wheel_panel(page: str) -> str:
@@ -1194,7 +1192,7 @@ def test_page_keeps_every_setup_control_beside_the_new_panel(page: str) -> None:
         "<h2>Setup slots</h2>",
         "<h2>Ship controls</h2>",
         "<h2>Player piety controls</h2>",
-        "<h2>Player board v2 — first player marker</h2>",
+        "<h2>Player board v2 — serfs</h2>",
         "<h2>Player board v2 — buy a building</h2>",
         "<h2>Player board v2 — donate a building</h2>",
         "<h2>Duty wheel</h2>",

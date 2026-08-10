@@ -111,8 +111,7 @@ connect to `GameState` and still does not implement game rules.
 
 `prototypes/player_boards_v2.html` is the untouched visual baseline for player board v2. It holds
 all four player boards on one page — white, red, yellow, and blue — instead of the single board
-v1 draws, and the first-player marker sits on the first/white board.
-`prototype_sources/player_boards_v2.py.txt` is the reference-only copy of the script that drew it,
+v1 draws. `prototype_sources/player_boards_v2.py.txt` is the reference-only copy of the script that drew it,
 read for intent while reverse-engineering the layout, never imported or run.
 
 `player_boards_v2_layout.json` and `render_player_boards_v2.py` are the structured renderer
@@ -121,8 +120,8 @@ players and their colours, the palette, the Village/Abbey banners and how many s
 each shows, the six worker roles, the three resource readouts, which roles already hold workers),
 and the module says where it all goes. The geometry stays in the module because it is derived
 rather than chosen: the six building slots along the bottom are the widest thing on a board, so
-they set the column pitch, and the banners, resource readouts, and worker circles all line up on
-the columns they make.
+they set the column pitch, and the banners, the worker circles and the resource readouts all line
+up on the columns they make.
 
 ### The board is wider than the baseline, and only wider
 
@@ -150,9 +149,8 @@ component's geometry and the shared table scale, and comes out a little wider fo
 
 On a board that much wider, type set for the narrow one reads small, so three things were drawn
 bigger afterwards: the Village and Abbey banners, the worker role labels, and the three resource
-readouts with their circles. The board did not change size again to fit them — `board_geometry`
-returns the same panel it did before, to the unit — and none of it is scaled; these are the native
-constants.
+readouts. The board did not change size again to fit them — `board_geometry` returns the same panel
+it did before, to the unit — and none of it is scaled; these are the native constants.
 
 Two of the three are matched to the duty wheel, by the argument the building slots settled. Boards
 drawn at different scales are the same size on screen when they are the same size in cubes, so
@@ -167,12 +165,12 @@ three, so it is the one you notice. Sized on its own it lands within about a per
 wheat in both height and width. The other two are left a few percent under the wheel's rather than
 exactly on it, which is where they read right next to everything else on this board.
 
-Because the three no longer share a size, they are placed by their feet rather than their centres —
-`ICON_FOOT_RATIO` is how far each reaches below its own centre, and `resource_icon_center_y` stands
-each one on the single line at `RESOURCE_ICON_FOOT`. That is what keeps the amount the same
-distance below every icon instead of drifting nearer the smaller ones, and it means resizing any
-one icon cannot break the row. `RESOURCE_RADIUS` is then whatever holds the tallest of them with
-its margin, so the circle follows the icons rather than the icons being cut to fit the circle.
+Because the three no longer share a size, and because none of them is drawn around the middle of its
+own shape, each one centres itself in the band they share: `ICON_RISE_RATIO` and `ICON_FOOT_RATIO`
+are how far each reaches above and below the point it is drawn from, and `resource_icon_center_y` is
+the offset that puts the middle of the drawing on the middle of the band. The wheat is the one that
+needs it, fanning upwards and reaching barely half as far below. Resizing any one icon therefore
+cannot leave the three standing at three different heights.
 
 That buys a match in cubes, not a match in pixels. On the table the two panels do not render at the
 same pixels-per-cube: the player board runs somewhere between 2% and 9% larger than the duty wheel
@@ -187,11 +185,37 @@ type rather than free choices, so every point of type on the board derives them 
 Set a size and the spacing that depends on it follows, and no change can leave two-line labels like
 "Road Engineer" overlapping or drop a row of them onto the circles below.
 
-The first-player card reads "First player" rather than the prototype's "First player marker", set
-at its own `MARKER_LABEL_FONT_SIZE` — it is the one thing on a board that says what it is, so it
-carries the largest sans on the board rather than borrowing the role labels' size. The shorter
-label fits `MARKER_CARD_MIN_WIDTH` on one line at that size, so unlike the roles it is not run
-through `wrap_label`; breaking a two-word phrase to no purpose reads worse than leaving it whole.
+### Resources stand in the top-right corner
+
+Player Board v2 now keeps resources in a compact top-right block and no longer renders the
+first-player marker on the board. They used to be three large circles strung across the middle of
+the board; they are a row of icon over amount in the corner, with a thin rule between one readout
+and the next.
+
+Across the board they stand on the same six columns as everything else. The banners take two
+columns each, which leaves two, and the readouts split those three ways — `RESOURCE_BAND_COLUMNS`
+over `RESOURCE_READOUT_COUNT` — so one centres in each third and a rule falls on each seam. That
+lands the block's left-hand end exactly on the Abbey banner's right-hand end, which is a
+consequence of the derivation rather than a number anyone picked. The two ends of the row are left
+open: a rule out there would read as a frame drawn around the block rather than a division inside
+it.
+
+Two things want this corner, and they divide it between them. The colour tag runs down the board's
+right-hand edge as far as its own size, and the rules pick up from exactly where it stops, so the
+boundary between them is one line rather than a judged gap. That is what puts the readouts below
+the banners rather than level with them: the tag is the deeper of the two. Under the rules' start
+comes a band deep enough for the tallest of the three icons, then `RESOURCE_VALUE_GAP`, then the
+amounts, all on one baseline so a two-digit amount cannot shift its neighbours.
+
+The first-player card went with the move: it would have sat on top of the block, and it was never
+anything but layout state to look at. The buttons on the setup page that moved it went too.
+
+The board is the height it was. Closing the gap the readouts came out of would take about a tenth
+off it, and the composed game table sizes a seat by fitting two boards into the duty wheel's height
+— so a board's shape, not just its size, is what sets the scale it is drawn at there. A tenth off
+the height would draw a cube in a Village a tenth larger than the same cube on a duty tile, undoing
+the match the section below is about. The gap stays open until the table sizes a seat from its cube
+instead of from its height.
 
 ### Cubes are the duty wheel's cubes
 
@@ -214,9 +238,9 @@ the seats' cube now lands about 2% off the wheel's, where the old 14.0-unit cube
 A game table test measures both against the real solve rather than trusting either renderer.
 
 `MARKER_CUBE` stays at 14.0 through all of this. It is no longer the size of a drawn cube but it is
-still the unit the board's geometry is written in — the building slots, the banner type and the
-first-player card are all multiples of it — and matching the cubes to the wheel was never a reason
-to resize the slots or reset the type. The grids also keep the band they had at the old cube size,
+still the unit the board's geometry is written in — the building slots and the banner type are
+multiples of it — and matching the cubes to the wheel was never a reason to resize the slots or
+reset the type. The grids also keep the band they had at the old cube size,
 `TOKEN_BAND_HEIGHT`, with the shorter grid centred in it, so nothing below them moved: the role
 circles, the readouts, the building slots and the panel height are all where they were to the unit.
 The Alms Table draws the same cube too, taken from the seats the way the seats take theirs from the
@@ -224,8 +248,9 @@ wheel, so the three boards are one chain from the wheel's `CUBE_SIZE` down.
 
 The generated SVGs are therefore no longer byte-identical to the baseline's. The test that used to
 pin that parity now pins the divergence instead, and only that: a wider board of the same height,
-with the type and the readouts bigger and the cubes smaller, and the worker circles and the count of
-every piece — cubes included — exactly as the prototype left them. The baseline itself is untouched.
+with the type bigger and the cubes smaller, the readouts moved out of their circles and into the
+corner with the first-player card gone, and the worker circles and the count of every piece — cubes
+included — exactly as the prototype left them. The baseline itself is untouched.
 
 Generate the output page with:
 
@@ -235,10 +260,6 @@ python3 tools/ui_debug/generate_player_boards_v2.py
 
 The generated overview below also produces it. Both write `generated/player_boards_v2.html`, which
 is not committed.
-
-The first-player marker is renderer-driven, not `GameState`-driven:
-`render_player_boards_v2_html(layout, first_player="player_two")` moves the card to the red board.
-Nothing here decides who the first player actually is, and there are no start-player rules.
 
 This does not replace the v1 player board. `player_board_layout.json`, `render_player_board.py`,
 `generate_player_board.py`, and `prototypes/player_board.html` are untouched, and both views are
@@ -847,9 +868,8 @@ What moves, and what it means:
   buttons carry the same attribute.
 
 The generated setup view now includes a right-side Player Board v2 panel. The panel is local
-UI/debug state only: it can move the first-player marker, move serfs from Village to Abbey, and
-move acolytes between Abbey and role circles. This does not mutate `GameState` and does not
-implement gameplay legality.
+UI/debug state only: it can move serfs from Village to Abbey and move acolytes between Abbey and
+role circles. This does not mutate `GameState` and does not implement gameplay legality.
 
 The setup view now includes local UI/debug controls for buying buildings from the setup map and
 donating/flipping bought buildings on Player Board v2 slots. Buying removes the building from the
@@ -1002,11 +1022,8 @@ wheel, and the boards all arrive through the same functions their standalone pag
 `render_player_board_v2_svg` for one board at a time.
 
 The two seats shown are the second column of the four-seat grid the layout describes; the first
-(white, yellow) is simply not drawn. The first-player marker goes on the top board, which the page
-names itself in `MARKER_SEAT` rather than inheriting from the layout — the layout hands the card to
-white, who does not sit at this table. Both are debug state to look at rather than seating rules:
-nothing here works out who starts, there is no control to move the card, and player-count switching
-is not wired up on this page. The standalone four-seat page is unaffected and still marks white.
+(white, yellow) is simply not drawn. That is debug state to look at rather than a seating rule:
+player-count switching is not wired up on this page, and no board says who starts.
 
 Generate the output page with:
 

@@ -14,7 +14,6 @@ import pytest
 
 from tools.ui_debug.generate_game_table import (
     GAP_PX,
-    MARKER_SEAT,
     PAGE_TITLE,
     PANEL_CHROME,
     PIETY_VARIANT_ID,
@@ -246,25 +245,19 @@ def test_page_seats_two_of_the_four_players(page: str) -> None:
         assert f'data-player="{player_id}"' in seats
 
 
-def test_the_marker_card_goes_on_the_top_board_and_only_that_one(page: str) -> None:
-    """One first-player marker at this table, on the board at the top of the column.
+def test_no_board_at_this_table_says_who_starts(page: str) -> None:
+    """The first-player card is gone from the board, and so is the seat that used to carry it.
 
-    Layout state to look at, like the choice of seats: nothing here works out who starts, and there
-    is no control to move the card. The four-seat page still gives it to white, who is not seated
-    here, so the table names its own holder rather than inheriting one.
+    Nothing here ever worked out who starts -- it was layout state to look at, with no control to
+    move it -- and the corner it sat in is the resources' now.
     """
     seats = _block(page, "seats")
-    marked = re.findall(
-        r'data-player="(\w+)" data-player-color="\w+"'
-        r' data-first-player-marker="(\w+)"',
-        seats,
-    )
 
-    assert MARKER_SEAT == SEATED_PLAYERS[0]
-    assert marked == [(SEATED_PLAYERS[0], "true"), (SEATED_PLAYERS[1], "false")]
-    # And the card itself is drawn on that board, once.
-    assert seats.count(">First player</text>") == 1
-    assert seats.index(">First player</text>") < seats.index(f'data-player="{SEATED_PLAYERS[1]}"')
+    assert "first-player" not in page
+    assert ">First player</text>" not in page
+    assert re.findall(r'data-player="(\w+)" data-player-color="\w+">', seats) == list(
+        SEATED_PLAYERS
+    )
 
 
 # ---------------------------------------------------------------------------------------------

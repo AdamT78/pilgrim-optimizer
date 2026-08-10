@@ -1,13 +1,14 @@
 """Structured renderer for the player board v2 debug view.
 
 Four boards on one page — white, red, yellow, and blue — laid out in a 2x2 grid, each one a
-parchment panel with the Village and Abbey banners, the starting worker tokens, three resource
-readouts, six worker-role circles, six empty building slots, and a colour tag folded into the
-top-right corner. The first-player marker card is drawn on whichever board is named first player.
+parchment panel with the Village and Abbey banners, the starting worker tokens, six worker-role
+circles, six empty building slots, and a colour tag folded into the top-right corner. The three
+resource readouts stand side by side in the top-right, each amount under its own icon, with a thin
+rule between one and the next.
 
 This is a debug/visual tool only. It reads `player_boards_v2_layout.json` and emits SVG/HTML. It
-is not connected to `GameState`, it does not decide who the first player is, and it implements no
-game rules. It also does not replace `render_player_board.py`, which still draws the v1 board.
+is not connected to `GameState` and it implements no game rules. It also does not replace
+`render_player_board.py`, which still draws the v1 board.
 
 The board is six columns wide, and it is the building slots along the bottom that set how wide a
 column is: they are the biggest thing on the board, being map hexes, and everything above them --
@@ -26,6 +27,14 @@ A player's piece should read as one piece wherever it is standing, so the Villag
 and the acolytes on the role circles are drawn at the wheel's cube size and spaced the way the
 wheel spaces its tallies. The board around them did not move to make room: the grids stand in the
 band they always stood in, and the slots along the bottom are the size they always were.
+
+What did move is the resources. They used to be three large circles strung across the middle of the
+board; they are a plain row of icon over amount in the top-right corner now, standing in the two
+columns the banners leave free. The gap they came out of stays open. Closing it would take about a
+tenth off the board's height, and a seat on the composed game table is sized by fitting two boards
+into the duty wheel's height -- so a shorter board is a wider seat drawn at a larger scale, and a
+cube in a Village would stop matching the same cube on a duty tile. Nothing here was rescaled or
+moved to make room: every piece of the board is the size and in the place it was.
 """
 
 from __future__ import annotations
@@ -42,7 +51,8 @@ from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
 LAYOUT_FILENAME = "player_boards_v2_layout.json"
 PAGE_BACKGROUND = "#000000"
 BOARD_GAP = 60
-DEFAULT_FIRST_PLAYER = "player_one"
+# Which board a page that has to pick one starts on.
+DEFAULT_PLAYER = "player_one"
 
 # Cubes are serfs while they sit in the Village and acolytes once they reach the Abbey or a role
 # circle. A role circle holds at most two acolytes: one centred, two side by side.
@@ -104,8 +114,12 @@ TOKEN_GRID_TOP_GAP = 12.0
 # grid shorter than its band centres itself in it and everything below stays where it was.
 TOKEN_BAND_HEIGHT = 34.0
 
-# The role labels sit a fixed distance below the token grid, which leaves the resource readouts
-# free to centre themselves in the gap without the two chasing each other.
+# The role labels sit a fixed distance below the token grid. The readouts used to stand in this
+# gap; out of it, the gap stays where it is. It could be closed now, and the board would be about a
+# tenth shorter, but a seat on the composed game table is sized by fitting two boards into the duty
+# wheel's height -- so a board's shape, not just its size, is what sets the scale it is drawn at
+# there, and taking a tenth off its height would draw a cube in a Village a tenth larger than the
+# same cube on a duty tile. The height stays until the table sizes a seat from its cube instead.
 ROLE_ROW_GAP_FROM_TOKENS = 130.0
 # Both are properties of the type rather than choices, so every point of it on the board derives
 # them from its own size: a line needs 1.1 times its size to sit clear of the next, and its glyphs
@@ -131,33 +145,35 @@ WHEAT_ICON_SIZE = 17.26
 # on them, which is where they read right next to everything else on this board.
 COMPACT_ICON_SIZE = 18.70
 
-# How far each icon reaches below its own centre, per unit of the size it is asked for. The three
-# are placed by their feet rather than their centres, so they stand on one line whatever sizes they
-# are given and the amount below sits the same distance under each.
+# How far each icon reaches above and below the point it is drawn from, per unit of the size it is
+# asked for. Measured off the rendered artwork rather than derived, so they hold only while the
+# drawings do. None of the three is symmetric about that point -- the wheat least of all, being a
+# sheaf that fans upwards -- so a row that wants its icon centred has to know both numbers.
+ICON_RISE_RATIO = {"wheat": 1.1244, "cube": 0.6, "coin": 0.6}
 ICON_FOOT_RATIO = {"wheat": 0.6, "cube": 0.62, "coin": 0.62}
 
-# The readout is an icon in the top of a circle with the amount under it. The circle is drawn to
-# hold the tallest of the three with the margin it had before; that the two never touch and both
-# stay inside the rim is checked rather than eyeballed.
-RESOURCE_RADIUS = 33.5
-RESOURCE_ICON_FOOT = 2.6
-RESOURCE_COUNT_OFFSET = 25.0
+# A readout is an icon with its amount under it, and the three of them stand side by side in the
+# top-right corner. The banners take four of the board's six columns, so the readouts get the two
+# on the right and split them three ways: one centres in each third, and a rule falls on each of
+# the two seams between them. The ends are left open -- a rule out there would bracket the readouts
+# rather than divide them.
+RESOURCE_READOUT_COUNT = 3
+RESOURCE_BAND_COLUMNS = 2
 RESOURCE_COUNT_FONT_SIZE = 16
+# Digits, so the amounts are set on their cap height rather than a baseline that would leave a
+# one-digit readout and a two-digit one sitting at different heights.
+RESOURCE_COUNT_CAP_RATIO = 0.72
+# Air between the bottom of the icons' band and the top of the amounts under them.
+RESOURCE_VALUE_GAP = 6.0
+# The rules are run a little past the readouts at both ends, so they read as divisions between
+# them rather than as a frame drawn around each one.
+RESOURCE_DIVIDER_OVERHANG = 4.0
+RESOURCE_DIVIDER_WIDTH = 1.5
 
 # The unit this board's geometry is written in, and the size its cubes were drawn at before they
-# were matched to the duty wheel's. The building slots, the banner type and the first-player marker
-# card below are all multiples of it, so it stays where it is: resizing the cubes was never a reason
-# to resize the slots or reset the type.
+# were matched to the duty wheel's. The building slots and the banner type are multiples of it, so
+# it stays where it is: resizing the cubes was never a reason to resize the slots or reset the type.
 MARKER_CUBE = 14.0
-MARKER_CARD_MIN_WIDTH = 92.0
-MARKER_CARD_PAD_X = 10.0
-MARKER_CARD_PAD_Y = 8.0
-MARKER_TEXT_TO_ICON_GAP = 6.0
-# The card names itself on one line, so its label has to fit MARKER_CARD_MIN_WIDTH: "First player"
-# comes to 86 units at this size, against the 92 the card allows.
-MARKER_LABEL_FONT_SIZE = 16
-MARKER_CARD_CORNER_RADIUS = 6
-MARKER_SCALLOP_COUNT = 6
 
 CORNER_TAG_SIZE = 48.0
 # The tag runs a little past the panel edge so the clip path, not the raw triangle, is what draws
@@ -258,13 +274,52 @@ def column_pitch() -> float:
     return 2 * BUILDING_SLOT_HEX_SIZE + BUILDING_SLOT_GAP
 
 
+def resource_block(panel_width: float) -> dict:
+    """Where the three readouts stand, and the rules that divide one from the next.
+
+    Across the board they are the board's own columns: the banners take four of the six, so the
+    readouts take the two on the right and split them three ways, which puts a readout in the
+    middle of each third and a rule on each seam.
+
+    Down the board they hang from the colour tag, the other thing that wants this corner: the rules
+    start exactly where the tag stops running down the board's right-hand edge, so the two divide
+    the corner between them rather than the readouts having to be tucked under a diagonal. Under
+    the rules' start comes a band deep enough for the tallest of the three icons -- each one centres
+    itself in it, so they keep a level line however differently they are drawn -- and then the
+    amounts, all on one baseline.
+    """
+    icon_band = max(resource_icon_height(icon) for icon in ICON_RISE_RATIO)
+    right = panel_width - SIDE_MARGIN
+    pitch = RESOURCE_BAND_COLUMNS * column_pitch() / RESOURCE_READOUT_COUNT
+    left = right - RESOURCE_READOUT_COUNT * pitch
+    top = CORNER_TAG_SIZE + RESOURCE_DIVIDER_OVERHANG
+    # Digits sit on their baseline, so the bottom of the amounts is the bottom of the block.
+    baseline = top + icon_band + RESOURCE_VALUE_GAP + RESOURCE_COUNT_CAP_RATIO * (
+        RESOURCE_COUNT_FONT_SIZE
+    )
+
+    return {
+        "cell_x": [left + (index + 0.5) * pitch for index in range(RESOURCE_READOUT_COUNT)],
+        "divider_x": [left + (index + 1) * pitch for index in range(RESOURCE_READOUT_COUNT - 1)],
+        "icon_cy": top + icon_band / 2,
+        "value_baseline": baseline,
+        "left": left,
+        "right": right,
+        "top": top,
+        "bottom": baseline,
+    }
+
+
 def board_geometry(role_count: int) -> dict:
     """Every coordinate a board needs.
 
     The building slots are the widest thing on a board, so they are what it is spaced around: one
-    column per slot, and the banners, resource readouts and role circles all line up on those
-    columns. Vertically nothing has moved -- the row of slots is deeper than it used to be, but it
-    starts from the same role circles and ends on the same bottom margin.
+    column per slot, and the banners, the role circles and the resource readouts all line up on
+    those columns -- the banners taking two each and the readouts sharing the two left over.
+
+    Down the board nothing has moved. The readouts came out of the gap between the cubes and the
+    role labels and everything below it stayed where it was, so a board is the height it has always
+    been and a seat on the composed table is drawn at the scale it always was.
     """
     pitch = column_pitch()
     role_x = [SIDE_MARGIN + BUILDING_SLOT_HEX_SIZE + index * pitch for index in range(role_count)]
@@ -276,7 +331,6 @@ def board_geometry(role_count: int) -> dict:
 
     role_circle_top = tokens_bottom + ROLE_ROW_GAP_FROM_TOKENS
     role_baseline = role_circle_top - ROLE_LABEL_GAP
-    label_top = role_baseline - ROLE_LINE_HEIGHT - LABEL_ASCENT
 
     # The slots hang off the bottom of the role circles, all six level with each other.
     building_cy = role_circle_top + 2 * ROLE_CIRCLE_RADIUS + BUILDING_ROW_GAP + slot_apothem()
@@ -291,7 +345,7 @@ def board_geometry(role_count: int) -> dict:
         "role_circle_cy": role_circle_top + ROLE_CIRCLE_RADIUS,
         "role_label_baseline": role_baseline,
         "token_grid_top": token_top,
-        "resource_cy": (tokens_bottom + label_top) / 2,
+        "resources": resource_block(panel_width),
         "building_y": [building_cy] * role_count,
     }
 
@@ -311,13 +365,6 @@ def banner_centers(layout: dict, geometry: dict) -> list[float]:
     return [
         banner_center_x(geometry, banner["first_role_index"])[0] for banner in layout["banners"]
     ]
-
-
-def resource_centers(layout: dict, geometry: dict) -> list[float]:
-    """The readouts keep the banners' rhythm: under each banner, then one step further right."""
-    village_cx, abbey_cx = banner_centers(layout, geometry)
-    step = abbey_cx - village_cx
-    return [village_cx, abbey_cx, abbey_cx + step]
 
 
 def _render_panel(geometry: dict, palette: dict) -> str:
@@ -478,84 +525,58 @@ def resource_icon_size(icon: str) -> float:
     return WHEAT_ICON_SIZE if icon == "wheat" else COMPACT_ICON_SIZE
 
 
+def resource_icon_height(icon: str) -> float:
+    """How tall an icon is drawn, top of it to bottom."""
+    return (ICON_RISE_RATIO[icon] + ICON_FOOT_RATIO[icon]) * resource_icon_size(icon)
+
+
 def resource_icon_center_y(icon: str) -> float:
-    """An icon's centre, relative to its circle's, standing it on the shared foot line."""
-    return RESOURCE_ICON_FOOT - ICON_FOOT_RATIO[icon] * resource_icon_size(icon)
+    """From the middle of the icons' band to the point an icon is drawn from, centring it there.
+
+    An icon is drawn around a point that is not the middle of the shape it draws, and by a different
+    amount for each of the three, so a band that placed them all on its own middle would stand them
+    at three different heights.
+    """
+    size = resource_icon_size(icon)
+    return (ICON_RISE_RATIO[icon] - ICON_FOOT_RATIO[icon]) * size / 2
 
 
-def _render_resource(cx: float, cy: float, resource: dict, palette: dict) -> str:
+def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> str:
+    """One readout: the icon, and its amount centred under it."""
     icon = resource["icon"]
     if icon not in _ICON_RENDERERS:
         raise KeyError(f"unknown resource icon: {icon}")
     return (
-        f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{RESOURCE_RADIUS:g}"'
-        f' fill="{palette["worker_fill"]}" stroke="{palette["worker_edge"]}" stroke-width="2"/>'
+        f'<g data-resource="{escape(str(resource["id"]))}">'
         + _ICON_RENDERERS[icon](
-            cx, cy + resource_icon_center_y(icon), resource_icon_size(icon), palette["ink"]
+            cx,
+            block["icon_cy"] + resource_icon_center_y(icon),
+            resource_icon_size(icon),
+            palette["ink"],
         )
-        + f'<text x="{cx:.1f}" y="{cy + RESOURCE_COUNT_OFFSET:.1f}" text-anchor="middle"'
+        + f'<text x="{cx:.1f}" y="{block["value_baseline"]:.1f}" text-anchor="middle"'
         ' font-family="Helvetica, Arial, sans-serif"'
         f' font-size="{RESOURCE_COUNT_FONT_SIZE:g}" font-weight="700"'
         f' fill="{palette["ink"]}">{escape(str(resource["count"]))}</text>'
+        "</g>"
     )
 
 
-def _render_first_player_marker(cx: float, palette: dict, label: str) -> str:
-    """The scallop shell in its labelled card, aligned with the top edge of the banners."""
-    marker_width, marker_height = 3 * MARKER_CUBE, 2 * MARKER_CUBE
-
-    card_top = BANNER_CENTER_Y - BANNER_HEIGHT / 2
-    baseline = card_top + MARKER_CARD_PAD_Y + ASCENT_RATIO * MARKER_LABEL_FONT_SIZE
-    icon_top = baseline + MARKER_TEXT_TO_ICON_GAP
-    card_height = icon_top + marker_height + MARKER_CARD_PAD_Y - card_top
-    card_width = max(marker_width, MARKER_CARD_MIN_WIDTH) + 2 * MARKER_CARD_PAD_X
-
-    return (
-        f'<rect x="{cx - card_width / 2:.1f}" y="{card_top:.1f}" width="{card_width:.1f}"'
-        f' height="{card_height:.1f}" rx="{MARKER_CARD_CORNER_RADIUS:g}"'
-        f' fill="{palette["marker_fill"]}" stroke="{palette["marker_stroke"]}"'
-        ' stroke-width="1.5"/>'
-        f'<text x="{cx:.1f}" y="{baseline:.1f}"'
-        ' text-anchor="middle" font-family="Helvetica, Arial, sans-serif"'
-        f' font-size="{MARKER_LABEL_FONT_SIZE:g}" font-weight="700"'
-        f' fill="{palette["ink"]}">{escape(label)}</text>'
-        + _render_scallop_shell(
-            cx, icon_top + marker_height / 2, marker_width, marker_height, palette
-        )
-    )
-
-
-def _render_scallop_shell(cx: float, cy: float, width: float, height: float, palette: dict) -> str:
-    """A solid scallop shell, the pilgrimage symbol, with parchment ribs fanning from the hinge."""
-    ink = palette["ink"]
-    hinge_x, hinge_y = cx, cy + height * 0.42
-    half_width = width * 0.46
-    top_y = cy - height * 0.42
-
-    def rib_top(index: int) -> tuple[float, float]:
-        fraction = index / MARKER_SCALLOP_COUNT
-        return (
-            hinge_x - half_width + fraction * 2 * half_width,
-            top_y - math.sin(fraction * math.pi) * height * 0.10,
-        )
-
-    outline = [(hinge_x, hinge_y)]
-    for index in range(MARKER_SCALLOP_COUNT + 1):
-        x, y = rib_top(index)
-        on_end = index in (0, MARKER_SCALLOP_COUNT)
-        notch = 0.0 if on_end or index % 2 else height * 0.05
-        outline.append((x, y + notch))
-
-    path = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in outline) + " Z"
+def _render_resource_block(geometry: dict, resources: list[dict], palette: dict) -> str:
+    """The three readouts in their corner, with a rule standing on each seam between them."""
+    block = geometry["resources"]
     parts = [
-        f'<path d="{path}" fill="{ink}" stroke="{ink}" stroke-width="1" stroke-linejoin="round"/>'
+        f'<line data-resource-divider="true" x1="{x:.1f}"'
+        f' y1="{block["top"] - RESOURCE_DIVIDER_OVERHANG:.1f}" x2="{x:.1f}"'
+        f' y2="{block["bottom"] + RESOURCE_DIVIDER_OVERHANG:.1f}"'
+        f' stroke="{palette["parchment_edge"]}" stroke-width="{RESOURCE_DIVIDER_WIDTH:g}"'
+        ' stroke-linecap="round"/>'
+        for x in block["divider_x"]
     ]
-    for index in range(1, MARKER_SCALLOP_COUNT):
-        x, y = rib_top(index)
-        parts.append(
-            f'<line x1="{hinge_x:.1f}" y1="{hinge_y:.1f}" x2="{x:.1f}" y2="{y:.1f}"'
-            f' stroke="{palette["parchment"]}" stroke-width="0.8" stroke-opacity="0.55"/>'
-        )
+    parts += [
+        _render_resource(block, cx, resource, palette)
+        for cx, resource in zip(block["cell_x"], resources, strict=True)
+    ]
     return "".join(parts)
 
 
@@ -652,15 +673,13 @@ def _render_corner_tag(geometry: dict, player: dict) -> str:
 def render_player_board_v2_svg(
     layout: dict,
     player: dict,
-    include_first_player_marker: bool = False,
     board_state: dict | None = None,
     interactive: bool = False,
 ) -> str:
     """One player's board, holding `board_state` (the starting board when none is given).
 
-    `interactive` tags the cubes and the marker card and draws every slot they can occupy, hidden
-    where the state does not need them, so a page can move a cube by flipping opacity. Left off,
-    the board is exactly the one the baseline prototype draws.
+    `interactive` tags the cubes and draws every slot they can occupy, hidden where the state does
+    not need them, so a page can move a cube by flipping opacity.
     """
     palette = layout["palette"]
     roles = layout["worker_roles"]
@@ -691,20 +710,7 @@ def render_player_board_v2_svg(
             )
         )
 
-    resource_x = resource_centers(layout, geometry)
-    if include_first_player_marker or interactive:
-        marker = _render_first_player_marker(
-            resource_x[2], palette, layout["first_player_marker"]["label"]
-        )
-        if interactive:
-            shown = "true" if include_first_player_marker else "false"
-            marker = (
-                f'<g data-first-player-marker="{shown}"'
-                f' opacity="{1 if include_first_player_marker else 0:g}">{marker}</g>'
-            )
-        parts.append(marker)
-    for cx, resource in zip(resource_x, layout["resources"], strict=True):
-        parts.append(_render_resource(cx, geometry["resource_cy"], resource, palette))
+    parts.append(_render_resource_block(geometry, layout["resources"], palette))
 
     role_cy = geometry["role_circle_cy"]
     label_baseline = geometry["role_label_baseline"]
@@ -730,21 +736,19 @@ def render_player_board_v2_svg(
     )
 
 
-def render_player_boards_v2_grid(layout: dict, first_player: str = DEFAULT_FIRST_PLAYER) -> str:
+def render_player_boards_v2_grid(layout: dict) -> str:
     """The four boards in the layout's grid, as a fragment a host page can drop into its own page.
 
     The grid is the layout's own — two rows of two — so a page that shows the boards beside other
     components keeps the same footprint the standalone page uses. Pair it with
     `player_board_v2_grid_styles()`, which is where the rows and the gaps are described.
     """
-    player_by_id(layout, first_player)
     grid = layout["grid"]
 
     wraps = [
         f'    <div class="board-wrap" data-component="player-board-v2"'
-        f' data-player="{player["id"]}" data-player-color="{player["color"]}"'
-        f' data-first-player-marker="{"true" if player["id"] == first_player else "false"}">'
-        f"{render_player_board_v2_svg(layout, player, player['id'] == first_player)}</div>"
+        f' data-player="{player["id"]}" data-player-color="{player["color"]}">'
+        f"{render_player_board_v2_svg(layout, player)}</div>"
         for player in players_of(layout)
     ]
     rows = "\n".join(
@@ -782,10 +786,10 @@ def player_board_v2_grid_styles(layout: dict, gap: float | None = None) -> str:
 """
 
 
-def render_player_boards_v2_html(layout: dict, first_player: str = DEFAULT_FIRST_PLAYER) -> str:
-    """All four boards in the layout's grid. `first_player` picks which one carries the marker."""
+def render_player_boards_v2_html(layout: dict) -> str:
+    """All four boards in the layout's grid."""
     page = layout["page"]
-    boards = render_player_boards_v2_grid(layout, first_player)
+    boards = render_player_boards_v2_grid(layout)
 
     return f"""<!DOCTYPE html>
 <html lang="en">

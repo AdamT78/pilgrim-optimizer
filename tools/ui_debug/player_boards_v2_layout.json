@@ -2,7 +2,7 @@
   "version": 1,
   "page": {
     "title": "PILGRIM — Player Board",
-    "subtitle": "Player boards for up to 4 players and first player marker (shown on the first/white player board)."
+    "subtitle": "Player boards for up to 4 players, each with its resources in the top-right corner."
   },
   "grid": { "rows": 2, "columns": 2, "gap": 60 },
   "palette": {
@@ -13,9 +13,7 @@
     "slot_fill": "#D8CCA9",
     "slot_stroke": "#A99A6E",
     "worker_fill": "#EFE4C6",
-    "worker_edge": "#8B7B4E",
-    "marker_fill": "#CDD3D8",
-    "marker_stroke": "#84898E"
+    "worker_edge": "#8B7B4E"
   },
   "players": [
     {
@@ -66,6 +64,5 @@
     { "id": "stone", "label": "Stone", "icon": "cube", "count": 1 },
     { "id": "silver", "label": "Silver", "icon": "coin", "count": 1 }
   ],
-  "building_slot_count": 6,
-  "first_player_marker": { "label": "First player" }
+  "building_slot_count": 6
 }
