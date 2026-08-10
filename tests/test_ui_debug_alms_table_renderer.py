@@ -590,16 +590,20 @@ def test_the_extra_width_all_went_to_the_record_side_of_the_divider() -> None:
     assert record["rule"]["x2"] < board["panel_width"] - board["inset"]
 
 
-def test_the_board_is_as_wide_as_a_seat_in_its_own_units() -> None:
+def test_the_board_carries_its_width_as_native_geometry() -> None:
     """The width is native geometry, not a transform: the viewBox is what grew.
 
-    A player board unit is PLAYER_UNIT of one here, so a seat's 692.8 units come to this board's
-    536 -- and the game table, which renders both, is where that ratio is checked for real.
+    536 is a seat's 692.8 units at the ratio that held when this board was widened. The ratio has
+    moved since -- the game table stopped stretching a seat to the duty wheel's height and started
+    sizing it from the wheel's cube, which made a seat narrower -- so 536 now renders about a
+    seventh proud of the boards it stands above. Re-fitting it is a pass over this board's own
+    layout; the game table is where the overhang is measured for real.
     """
     board = layout()["board"]
     seat = player_board_geometry(len(load_player_boards_v2_layout()["worker_roles"]))
 
-    assert board["panel_width"] == pytest.approx(seat["panel_width"] * PLAYER_UNIT, rel=1e-3)
+    assert board["panel_width"] == 536.0
+    assert board["panel_width"] > seat["panel_width"] * PLAYER_UNIT
     # The viewBox carries the width, and carries the padding the board has always had around it.
     assert board["view_box"]["width"] == board["panel_width"] + 2 * board["outer_padding"]
     assert board["view_box"]["min_x"] == -board["outer_padding"]
@@ -661,7 +665,9 @@ def test_the_season_end_heading_and_the_reward_numbers_read_as_a_seat_labels_do(
     """`Season end winners` and the `2`/`4`/`6` are the size of `Fields` on a player board."""
     assert SEASON_END_LABEL_FONT_SIZE == pytest.approx(ROLE_FONT_SIZE * PLAYER_UNIT, abs=0.005)
     assert THRESHOLD_LABEL_FONT_SIZE == SEASON_END_LABEL_FONT_SIZE
-    assert SEASON_END_LABEL_FONT_SIZE > BEFORE_WIDENING["heading_font_size"]
+    # It is written in fewer of this board's units than before the widening, and still renders
+    # larger: a seat is drawn at a bigger scale here than it was when that figure was measured.
+    assert SEASON_END_LABEL_FONT_SIZE < BEFORE_WIDENING["heading_font_size"]
     # The track's own numbers keep their own size; only the reward badges follow the heading.
     assert STEP_NUMBER_FONT_SIZE != THRESHOLD_LABEL_FONT_SIZE
 

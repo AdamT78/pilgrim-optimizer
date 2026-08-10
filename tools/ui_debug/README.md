@@ -210,12 +210,24 @@ amounts, all on one baseline so a two-digit amount cannot shift its neighbours.
 The first-player card went with the move: it would have sat on top of the block, and it was never
 anything but layout state to look at. The buttons on the setup page that moved it went too.
 
-The board is the height it was. Closing the gap the readouts came out of would take about a tenth
-off it, and the composed game table sizes a seat by fitting two boards into the duty wheel's height
-— so a board's shape, not just its size, is what sets the scale it is drawn at there. A tenth off
-the height would draw a cube in a Village a tenth larger than the same cube on a duty tile, undoing
-the match the section below is about. The gap stays open until the table sizes a seat from its cube
-instead of from its height.
+### The board is shorter now
+
+Player Board v2 was shortened after moving resources to the top-right by tightening vertical spacing
+between the cube area, special activity labels, and role circles. Piece sizes and font sizes remain
+unchanged: the board went from 401.56 units tall to 339.98, and nothing on it was scaled to do it.
+
+The readouts had left a third of the board empty. The role labels used to hang a flat 130 units
+below the cube grid — a distance chosen when the readouts stood in that space — so they are hung off
+whatever is above them instead. That is the readouts rather than the cubes: the block and its rules
+reach lower than the Village and Abbey grids do, and the labels run the whole width of the board, so
+`ROLE_LABEL_TOP_GAP` is measured from the deeper of the two. Below it the band is exactly as deep as
+a label can be, `ROLE_LABEL_MAX_LINES` of them, and then the circles. Everything under the circles
+came up with them, and the board's bottom margin is the banners' top margin again.
+
+This could not move until the composed game table was taught to size a seat from the duty wheel's
+cube. The table used to stretch two boards to the wheel's height, which made a board's shape decide
+the scale it was drawn at there: taking a sixth off the height drew a cube in a Village a fifth
+larger than the same cube on a duty tile. See "One shared scale" below for what changed.
 
 ### Cubes are the duty wheel's cubes
 
@@ -962,9 +974,39 @@ changes. Two boards draw no cube at all, so each is anchored on a piece it does 
 - the map on the board hexagon the Duty Wheel's was derived from, so the two greens come out the
   same width.
 
-Two panels are then fitted rather than cube-matched, because the layout needs them to be: the two
-player boards are sized so that stacking them comes to exactly the Duty Wheel's panel height, and
-the Duty Wheel fills whatever height the row has left. Everything else is the cube.
+The Duty Wheel is the one panel not sized this way: it fills whatever height the row has left once
+the Piety Track and the chrome are out of it, which comes to rather less than its own width would
+give it. So the cube it draws is not `--cube`, and anything meant to match a wheel cube has to be
+sized against the wheel rather than against the cube.
+
+That is what a seat is. The seats used to be fitted the other way about — stacked to exactly the
+Duty Wheel's panel height — which made a board's *shape* decide the scale it was drawn at, and left
+the cubes matching only because the board happened to be the height it was. Shortening the board
+took that match from 2% out to 20%. A seat is now as many cubes wide as its crop measures, times
+the wheel's own shortfall against `--cube`, so a Village cube and a duty tile cube are the same size
+exactly, at any board height. The two are mutually dependent — the seats stand in one of the columns
+the row's height is the greater of — so they settle together in the solve below rather than one
+being solved before the other.
+
+Two consequences worth knowing about, neither of them new to this arrangement so much as uncovered
+by it:
+
+- The seat block no longer fills its column. Two boards at the wheel's cube come to less than the
+  row, so the left column ends above the others and the slack falls under the seats. This is the
+  vertical room a shorter board was asked to give back.
+- The Alms Table no longer comes out a seat's width. It is 536 of its own units because that was a
+  seat's width at the ratio which held when it was widened; a seat is narrower now, and this board
+  is pinned to the Piety Track rather than to the seats, which is what keeps the two boards' player
+  discs the same size. It therefore stands about a seventh proud of the boards below it until its
+  own width is re-fitted. `UNITS_PER_PLAYER_UNIT` was re-solved, so pieces and type written in a
+  seat's units — its cubes, its labels — do still come out a seat's size.
+
+A third was already there and is now further out: a building slot is `BUILDING_SLOT_HEX_SIZE` across
+where that was solved as a number of `MARKER_CUBE`s, the unit a player board writes its geometry in,
+which stopped being the board's cube when the cubes were resized to the wheel's. Slots have
+therefore always rendered short of the map hex they were matched to. Closing that means drawing them
+bigger, which sets the board's column pitch and so its width, so it is left alone and recorded in
+the tests instead.
 
 ### Cropping, and the one place a drawing is touched
 

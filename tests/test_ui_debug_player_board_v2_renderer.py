@@ -35,8 +35,10 @@ from tools.ui_debug.render_player_boards_v2 import (
     ROLE_ACOLYTE_LIMIT,
     ROLE_CIRCLE_RADIUS,
     ROLE_FONT_SIZE,
+    ROLE_LABEL_GAP,
+    ROLE_LABEL_MAX_LINES,
+    ROLE_LABEL_TOP_GAP,
     ROLE_LINE_HEIGHT,
-    ROLE_ROW_GAP_FROM_TOKENS,
     SIDE_MARGIN,
     TOKEN_BAND_HEIGHT,
     TOKEN_GAP,
@@ -230,19 +232,20 @@ def test_a_plain_board_slot_stays_the_single_dashed_hex_of_the_baseline(layout: 
         ) in svg
 
 
-def test_the_board_got_wider_without_getting_taller(layout: dict) -> None:
-    """The whole point of the widening: more room across, and not a pixel more down.
+def test_the_board_got_wider_and_then_shorter(layout: dict) -> None:
+    """Wider across for the slots, and since the readouts moved into the corner, shorter down.
 
-    The height matters more than it looks. Wherever a board is shown beside other components it is
-    given a height and takes its width from that, so leaving the height alone is what guarantees
-    that everything already on the board still renders at exactly the size it used to.
+    The height was held for a long time because a seat on the composed game table was sized by
+    fitting two boards into the duty wheel's height, which made the board's shape decide the scale
+    it was drawn at there. The table sizes a seat from the wheel's cube now, so the height is the
+    board's own business again.
     """
     geometry = board_geometry(len(layout["worker_roles"]))
     baseline = _svg_bodies(BASELINE_PROTOTYPE.read_text(encoding="utf-8"))[0]
     was_width, was_height = _view_box(baseline)
 
     assert geometry["panel_width"] > was_width * 1.25
-    assert abs(geometry["panel_height"] - was_height) < 1.0
+    assert geometry["panel_height"] < was_height * 0.87
 
 
 def test_the_slots_are_the_widest_thing_on_the_board_and_set_its_columns(layout: dict) -> None:
@@ -270,14 +273,16 @@ def test_a_slot_clears_its_neighbours_the_circle_above_it_and_the_board_edge(lay
     assert column_pitch() - 2 * BUILDING_SLOT_HEX_SIZE == pytest.approx(BUILDING_SLOT_GAP)
     # Below the role circles, and by the stated gap.
     circle_bottom = geometry["role_circle_cy"] + ROLE_CIRCLE_RADIUS
-    assert cy - slot_apothem() - circle_bottom == pytest.approx(BUILDING_ROW_GAP)
+    # The slot centres are rounded to the two decimals a path is written at, so the gap they leave
+    # is that stated one to within half a hundredth.
+    assert cy - slot_apothem() - circle_bottom == pytest.approx(BUILDING_ROW_GAP, abs=0.005)
     # The same margin either side, and the bottom margin the banners get at the top.
     assert slots[0][0] - BUILDING_SLOT_HEX_SIZE == pytest.approx(SIDE_MARGIN)
     assert geometry["panel_width"] - (slots[-1][0] + BUILDING_SLOT_HEX_SIZE) == pytest.approx(
         SIDE_MARGIN
     )
     assert geometry["panel_height"] - (cy + slot_apothem()) == pytest.approx(
-        BANNER_CENTER_Y - BANNER_HEIGHT / 2
+        BANNER_CENTER_Y - BANNER_HEIGHT / 2, abs=0.005
     )
 
 
@@ -342,7 +347,9 @@ def test_the_acolytes_on_a_role_circle_are_the_same_cube_at_the_same_pitch(layou
         # Centred on the circle, side to side and top to bottom, and clear of its rim.
         middle = (float(left[0]) + float(right[0]) + DUTY_CUBE_SIZE) / 2
         assert min(abs(middle - x) for x in geometry["role_x"]) == pytest.approx(0.0, abs=0.05)
-        assert float(left[1]) + DUTY_CUBE_SIZE / 2 == pytest.approx(geometry["role_circle_cy"])
+        assert float(left[1]) + DUTY_CUBE_SIZE / 2 == pytest.approx(
+            geometry["role_circle_cy"], abs=0.05
+        )
         assert middle - float(left[0]) < ROLE_CIRCLE_RADIUS
 
 
@@ -493,8 +500,9 @@ def test_the_three_readouts_share_the_two_columns_the_banners_leave_free(layout:
     assert block["right"] == geometry["panel_width"] - SIDE_MARGIN
     assert block["left"] == pytest.approx(abbey[0] + abbey[1] / 2)
     assert block["right"] - block["left"] == pytest.approx(band)
-    # All of it in the top quarter, beside the Village and Abbey grids rather than under them.
-    assert block["bottom"] < geometry["panel_height"] / 4
+    # All of it in the top third, beside the Village and Abbey grids rather than under them. It
+    # was the top quarter before the board was shortened; the block did not move, the board did.
+    assert block["bottom"] < geometry["panel_height"] / 3
 
 
 def test_every_icon_centres_in_the_band_however_it_is_drawn(layout: dict) -> None:
@@ -592,32 +600,44 @@ def test_no_board_carries_a_first_player_marker_any_more(layout: dict) -> None:
     assert not [key for key in layout["palette"] if key.startswith("marker")]
 
 
-def test_the_readouts_left_the_gap_they_stood_in_where_it_was(layout: dict) -> None:
-    """Moving them into the corner did not move anything else.
+def test_the_board_closed_the_gap_the_readouts_came_out_of(layout: dict) -> None:
+    """The readouts left a third of the board empty when they went to the corner. This is it shut.
 
-    Closing the gap they came out of would take about a tenth off the board, but a seat on the
-    composed game table is sized by fitting two boards into the duty wheel's height -- so a shorter
-    board is drawn at a larger scale there, and a cube in a Village would stop matching the same
-    cube on a duty tile. The gap stays until the table sizes a seat from its cube instead.
+    The labels used to hang a fixed 130 units below the cube grid, a distance set when the readouts
+    stood in that space. They hang off whatever is above them now, so the band is as deep as the
+    labels need and no deeper, and everything below comes up with them.
+
+    The game table had to be taught to size a seat from the duty wheel's cube before this could
+    move: it used to stretch two boards to the wheel's height, which made a shorter board render
+    larger and a Village cube stop matching a duty tile's.
     """
     geometry = board_geometry(len(layout["worker_roles"]))
     tokens_bottom = geometry["token_grid_top"] + 2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
-
-    assert geometry["panel_height"] == pytest.approx(401.56, abs=0.005)
-    assert geometry["role_circle_cy"] == pytest.approx(253.0)
-    assert ROLE_ROW_GAP_FROM_TOKENS == 130.0
-    # The corner reaches deeper than the cubes do, and still stops well short of the role labels.
     label_top = geometry["role_label_baseline"] - ROLE_LINE_HEIGHT - LABEL_ASCENT
-    assert tokens_bottom < geometry["resources"]["bottom"] < label_top
+
+    assert geometry["panel_height"] == pytest.approx(339.98, abs=0.005)
+    assert geometry["panel_height"] < 401.56
+    # The labels clear the readouts' rules, which hang lower than the cubes do, by that one gap.
+    rules_bottom = geometry["resources"]["bottom"] + RESOURCE_DIVIDER_OVERHANG
+    assert tokens_bottom < rules_bottom
+    assert label_top - rules_bottom == pytest.approx(ROLE_LABEL_TOP_GAP, abs=0.005)
+    # And the circles sit one label-block below that, deep enough for the two-line labels.
+    assert geometry["role_circle_cy"] - ROLE_CIRCLE_RADIUS - label_top == pytest.approx(
+        (ROLE_LABEL_MAX_LINES - 1) * ROLE_LINE_HEIGHT + LABEL_ASCENT + ROLE_LABEL_GAP
+    )
+    assert max(len(wrap_label(role["label"])) for role in layout["worker_roles"]) == (
+        ROLE_LABEL_MAX_LINES
+    )
 
 
 def test_the_smaller_cubes_centre_in_the_band_rather_than_pulling_the_board_up(
     layout: dict,
 ) -> None:
-    """Nothing below the grids moved when the cubes shrank to the wheel's.
+    """The grids kept the band the older, larger cubes needed rather than closing up around the
+    smaller ones, so the two rows still sit in the middle of the space the banners leave them.
 
-    The band is the height two rows of 14.0-unit cubes needed, and the shorter grid sits in the
-    middle of it, so the role circles and the building slots hanging off them stay where they were.
+    What hangs below the band did move, but not because of this: the readouts went to the corner
+    and the gap they had stood in was closed.
     """
     geometry = board_geometry(len(layout["worker_roles"]))
     band_top = BANNER_CENTER_Y + BANNER_HEIGHT / 2 + TOKEN_GRID_TOP_GAP
@@ -628,9 +648,6 @@ def test_the_smaller_cubes_centre_in_the_band_rather_than_pulling_the_board_up(
     assert geometry["token_grid_top"] - band_top == pytest.approx(
         band_top + TOKEN_BAND_HEIGHT - (geometry["token_grid_top"] + grid_height)
     )
-    # Where the board below the grids has always started.
-    assert geometry["role_circle_cy"] == pytest.approx(253.0)
-    assert geometry["panel_height"] == pytest.approx(401.56, abs=0.005)
 
 
 def _corners(path: str) -> list[float]:
@@ -710,13 +727,13 @@ def test_v1_player_board_is_left_alone() -> None:
 def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Path) -> None:
     """Everything these boards no longer share with the prototype, and nothing else.
 
-    Four departures, all deliberate. The board got wider, because the prototype's building slots
+    Five departures, all deliberate. The board got wider, because the prototype's building slots
     are two thirds of a map hex and these are a whole one. Then the type grew, because it was sized
     for a board that narrow and read small on this one. Then the cubes shrank to the duty wheel's,
     so that a player's piece reads as one piece across the table. Then the resource readouts came
-    out of their circles and went to the corner, and the first-player card went with them. What is
-    left is what the prototype set and no reason has come up to change: the height, the worker
-    circles, and the number of every piece, cubes included.
+    out of their circles and went to the corner, and the first-player card went with them. Then the
+    board got shorter, closing the gap they had stood in. What is left is what the prototype set
+    and no reason has come up to change: the worker circles, and the number of every piece.
     """
     generated = _svg_bodies(
         generate_player_boards_v2_page(output_path=tmp_path / "player_boards_v2.html").read_text(
@@ -739,7 +756,7 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
         old_width, old_height = _view_box(was)
 
         assert width > old_width
-        assert height == old_height
+        assert height < old_height
         for size in kept:
             assert board.count(size) == was.count(size), size
         # Drawn bigger, with nothing left behind at the old size.

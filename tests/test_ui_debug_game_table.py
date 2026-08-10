@@ -75,6 +75,14 @@ FORMER_BLURB = "The existing debug renderers composed into one 2-player table"
 ALMS_LAYOUT = load_alms_table_layout()
 
 
+def _row_height(solved) -> float:
+    """How tall the row comes out: whichever of the two self-sizing columns needs more of it."""
+    return max(
+        solved.cube * solved.map_cubes + PANEL_CHROME,
+        solved.cube * solved.left_cubes + solved.left_panels,
+    )
+
+
 def _per_unit(solved, board: str) -> float:
     """Pixels one of a board's own units renders as, at the cube size the table solved for.
 
@@ -83,16 +91,12 @@ def _per_unit(solved, board: str) -> float:
     is measured down its own crop instead of across it.
     """
     if board == "action":
-        row_height = max(
-            solved.cube * solved.map_cubes + PANEL_CHROME,
-            solved.cube * solved.left_cubes + 2 * PANEL_CHROME + GAP_PX,
-        )
-        height = row_height - solved.cube * solved.piety_cubes - 2 * PANEL_CHROME - GAP_PX
+        height = _row_height(solved) - solved.cube * solved.piety_cubes - 2 * PANEL_CHROME - GAP_PX
         return height / solved.crop["action"][3]
     width = {
         "alms": solved.cube * solved.piety_coef * solved.alms_over_piety,
         "piety": solved.cube * solved.piety_coef,
-        "player": solved.cube * solved.player_k + solved.player_c,
+        "player": solved.cube * solved.player_k,
         "map": solved.cube * solved.mult["map"] * solved.map_scale,
     }[board]
     return width / solved.crop[board][2]
@@ -347,38 +351,55 @@ def test_a_pilgrimage_sites_star_reads_at_the_size_of_a_piety_track_star(scale) 
     assert site_vp == pytest.approx(track_vp, rel=1e-4)
 
 
-def test_the_alms_table_comes_out_the_width_of_a_seat(scale) -> None:
-    """What the alms table's own width is chosen for: the boards it stands above.
+def test_a_seats_pieces_carry_over_to_the_alms_table_at_the_size_they_are_written(scale) -> None:
+    """What `UNITS_PER_PLAYER_UNIT` buys: sizes written in a seat's units come out a seat's size.
 
-    It is drawn at the piety track's scale rather than the seats', so a unit of it is not a unit of
-    a player board -- `UNITS_PER_PLAYER_UNIT` is that ratio, written down in the alms renderer so
-    the board can size a cube or a label in a seat's units and get a seat's pixels back. This is
-    where that number is checked against the solve rather than trusted.
+    The alms table is drawn at the piety track's scale rather than the seats', so a unit of it is
+    not a unit of a player board. That ratio is written down in the alms renderer so the board can
+    size a cube or a label in a seat's units and get a seat's pixels back, and this is where the
+    number is checked against the solve rather than trusted. It moved when the seats stopped being
+    stretched to the duty wheel's height, because that changed the scale a seat is drawn at.
 
     The solve is for one reference viewport. Both panels carry fixed chrome that does not scale
-    with the cube, so the two widths drift a few percent either side of it at other window sizes.
+    with the cube, so the two drift a little either side of it at other window sizes.
+    """
+    _, _, _, solved = scale
+    alms, player = _per_unit(solved, "alms"), _per_unit(solved, "player")
+
+    assert alms / player == pytest.approx(UNITS_PER_PLAYER_UNIT, rel=1e-3)
+    assert ALMS_CUBE_SIZE * alms == pytest.approx(2 * TOKEN_RADIUS * player, rel=1e-3)
+    assert SEASON_END_LABEL_FONT_SIZE * alms == pytest.approx(ROLE_FONT_SIZE * player, rel=1e-3)
+
+
+def test_the_alms_table_now_overhangs_the_seats_it_stands_above(scale) -> None:
+    """A width the seats no longer share, recorded rather than asserted away.
+
+    The alms table is 536 of its own units across because at the ratio that held when that was
+    chosen, 536 came out a seat's width exactly. Sizing a seat from the duty wheel's cube instead
+    of stretching it to the wheel's height made the seats narrower, and this board did not follow:
+    it is pinned to the piety track, which is what keeps the two boards' player discs the same
+    size. Closing the gap means re-fitting this board's own width, which is a change to its layout
+    rather than to the table, so for now it stands about a seventh proud of the boards below it.
     """
     _, _, _, solved = scale
     alms, player = _per_unit(solved, "alms"), _per_unit(solved, "player")
     seat = board_geometry(len(load_player_boards_v2_layout()["worker_roles"]))
 
-    assert alms / player == pytest.approx(UNITS_PER_PLAYER_UNIT, rel=1e-3)
-    assert ALMS_LAYOUT["board"]["panel_width"] * alms == pytest.approx(
-        seat["panel_width"] * player, rel=1e-3
-    )
-    # And with the two on one scale, a cube and a label carry across at the size they are written.
-    assert ALMS_CUBE_SIZE * alms == pytest.approx(2 * TOKEN_RADIUS * player, rel=1e-3)
-    assert SEASON_END_LABEL_FONT_SIZE * alms == pytest.approx(ROLE_FONT_SIZE * player, rel=1e-3)
+    overhang = ALMS_LAYOUT["board"]["panel_width"] * alms / (seat["panel_width"] * player)
+
+    assert overhang == pytest.approx(1.145, abs=0.01)
+    # The width it would have to be drawn in to sit flush again.
+    assert seat["panel_width"] * player / alms == pytest.approx(468.2, abs=0.5)
 
 
 def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) -> None:
-    """Why the seats took the wheel's cube size: this is where the two are seen side by side.
+    """The one size the whole table is judged on, seen on all three boards that draw it.
 
-    They cannot be made exactly equal from the seats' side. The seat panels are fitted to the duty
-    wheel's height rather than drawn at its scale, so a seat's unit and a wheel's are close but
-    never the same, and how close moves with the window. Two percent is what that comes to at the
-    viewport the table solves for -- near enough that the pieces read as one piece, where the 10
-    percent the seats' old 14.0-unit cube gave was not.
+    The seats used to be stretched to the duty wheel's height, which made a seat's scale a
+    consequence of the board's shape: it came within two percent of the wheel's only because the
+    board happened to be the height it was, and shortening it took that to twenty. A seat is sized
+    from the wheel's own rendered cube now, so the match is exact and holds whatever shape the
+    board is drawn in -- which is what let the board be shortened at all.
     """
     _, _, _, solved = scale
     wheel_unit = _per_unit(solved, "action") * load_duty_wheel_layout()["board"]["scale"]
@@ -388,12 +409,14 @@ def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) 
     won_cube = ALMS_CUBE_SIZE * _per_unit(solved, "alms")
 
     assert 2 * TOKEN_RADIUS == DUTY_CUBE_SIZE
-    assert village_cube == pytest.approx(duty_cube, rel=0.03)
-    # The alms table takes its cube from a seat, so it comes along at the same distance.
-    assert won_cube == pytest.approx(duty_cube, rel=0.03)
+    assert village_cube == pytest.approx(duty_cube, rel=1e-6)
+    # The alms table takes its cube from a seat, so it comes along at the same size.
+    assert won_cube == pytest.approx(duty_cube, rel=1e-3)
     assert won_cube == pytest.approx(village_cube, rel=1e-3)
-    # And the old cube would not have passed that, which is what the change was for.
-    assert MARKER_CUBE * _per_unit(solved, "player") > duty_cube * 1.09
+    # And the unit the board writes its geometry in is not a cube, which is the thing that made
+    # the seats read a tenth too big before they were given one.
+    assert MARKER_CUBE > DUTY_CUBE_SIZE
+    assert MARKER_CUBE * _per_unit(solved, "player") > duty_cube * 1.07
 
 
 def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> None:
@@ -407,18 +430,40 @@ def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> N
     assert solved.mult["action"] == pytest.approx(solved.mult["map"], abs=0.5)
 
 
-def test_a_building_slot_is_the_same_number_of_cubes_across_as_a_map_hex(scale) -> None:
+def test_a_building_slot_is_the_map_hex_measured_in_the_unit_the_board_writes_in(scale) -> None:
     """Where the player board's slot size comes from, checked against the map it was taken from.
 
-    A slot and a map hex are both flat-top hexagons measured from the centre out to a corner, so
-    the two are the same size on screen exactly when they are the same number of cubes across.
-    `BUILDING_SLOT_HEX_SIZE` is that number written out in the player board's own units; this is
-    the arithmetic behind it, run against the real map layout rather than trusted.
+    `BUILDING_SLOT_HEX_SIZE` was solved as a number of MARKER_CUBEs, the unit the board writes its
+    geometry in -- which was the board's cube when the figure was chosen, and has not been one
+    since the cubes were resized to the duty wheel's. So this is the arithmetic behind the constant
+    rather than a claim about what renders; the next test is what renders.
     """
     _, _, cubes, _ = scale
     hex_in_cubes = load_map_layout()["hex_size"] / cubes["map"]
 
-    assert BUILDING_SLOT_HEX_SIZE / cubes["player"] == pytest.approx(hex_in_cubes, rel=0.002)
+    assert cubes["player"] == 2 * TOKEN_RADIUS
+    assert BUILDING_SLOT_HEX_SIZE / MARKER_CUBE == pytest.approx(hex_in_cubes, rel=0.002)
+
+
+def test_a_building_slot_does_not_yet_render_the_size_of_a_map_hex(scale) -> None:
+    """The gap that constant leaves, recorded rather than asserted away.
+
+    A slot and a map hex are both flat-top hexagons measured from the centre out to a corner, so
+    the two are the same size on screen exactly when they are the same number of CUBES across --
+    and a slot is that many MARKER_CUBEs across, which is a larger unit. It has therefore always
+    rendered short of a map hex; sizing the seats from the wheel's cube widened the gap, because
+    it moved the scale a seat is drawn at without moving the map's.
+
+    Closing it means drawing the slots bigger, which sets the board's column pitch and so its
+    width. That is a change to the player board rather than to the table, and is left alone here.
+    """
+    _, _, _, solved = scale
+    slot = BUILDING_SLOT_HEX_SIZE * _per_unit(solved, "player")
+    map_hex = load_map_layout()["hex_size"] * _per_unit(solved, "map")
+
+    assert slot / map_hex == pytest.approx(0.798, abs=0.01)
+    # What the board would have to draw a slot at for the two to meet.
+    assert map_hex / _per_unit(solved, "player") == pytest.approx(61.9, abs=0.5)
 
 
 def test_the_seats_are_wider_than_they_are_tall(scale) -> None:
@@ -434,16 +479,24 @@ def test_the_seats_are_wider_than_they_are_tall(scale) -> None:
     assert solved.width_cubes > SEAT_COLS * solved.player_k > 0
 
 
-def test_two_seats_stack_to_the_height_of_the_duty_wheel(scale) -> None:
-    """The seat block is solved to the duty wheel's own panel height, which is what pins the
-    left column's height to the middle one's and lets both bottoms land on the map's."""
+def test_the_seats_take_less_of_the_row_than_they_are_given(scale) -> None:
+    """The seat block used to be stretched to the duty wheel's height. It is not any more.
+
+    Sizing a seat from the wheel's cube is what freed it: the block comes to whatever two boards
+    at that size come to, which is less than the row, and the left column ends above the others.
+    That slack is the room a shorter board was asked to give back, and the reason the row is now
+    as tall as the map rather than as tall as the seats.
+    """
     _, _, _, solved = scale
     aspect = solved.crop["player"][3] / solved.crop["player"][2]
 
-    board_width = solved.cube * solved.player_k + solved.player_c
-    seats = SEAT_ROWS * (board_width * aspect + PANEL_CHROME) + (SEAT_ROWS - 1) * GAP_PX
+    board_height = solved.cube * solved.player_k * aspect
+    left = solved.cube * solved.left_cubes + solved.left_panels
+    seats = SEAT_ROWS * (board_height + PANEL_CHROME) + (SEAT_ROWS - 1) * GAP_PX
 
-    assert seats == pytest.approx(solved.cube * solved.duty_cubes + PANEL_CHROME)
+    assert seats < solved.cube * solved.duty_cubes + PANEL_CHROME
+    assert left < _row_height(solved)
+    assert _row_height(solved) == pytest.approx(solved.cube * solved.map_cubes + PANEL_CHROME)
     assert solved.left_cubes > solved.duty_cubes, "the alms table sits above the seats"
 
 
