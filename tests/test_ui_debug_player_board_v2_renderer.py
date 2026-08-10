@@ -1,5 +1,4 @@
 import re
-from html import escape
 from pathlib import Path
 
 import pytest
@@ -22,20 +21,22 @@ from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_GAP,
     BUILDING_SLOT_HEX_SIZE,
     COMPACT_ICON_SIZE,
+    CORNER_TAG_OVERSHOOT,
+    CORNER_TAG_SIZE,
     ICON_FOOT_RATIO,
+    ICON_RISE_RATIO,
     LABEL_ASCENT,
     LINE_HEIGHT_RATIO,
-    MARKER_CARD_MIN_WIDTH,
     MARKER_CUBE,
-    MARKER_LABEL_FONT_SIZE,
+    RESOURCE_BAND_COLUMNS,
     RESOURCE_COUNT_FONT_SIZE,
-    RESOURCE_COUNT_OFFSET,
-    RESOURCE_ICON_FOOT,
-    RESOURCE_RADIUS,
+    RESOURCE_DIVIDER_OVERHANG,
+    RESOURCE_READOUT_COUNT,
     ROLE_ACOLYTE_LIMIT,
     ROLE_CIRCLE_RADIUS,
     ROLE_FONT_SIZE,
     ROLE_LINE_HEIGHT,
+    ROLE_ROW_GAP_FROM_TOKENS,
     SIDE_MARGIN,
     TOKEN_BAND_HEIGHT,
     TOKEN_GAP,
@@ -43,6 +44,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     TOKEN_RADIUS,
     TOKEN_ROW_GAP,
     WHEAT_ICON_SIZE,
+    banner_center_x,
     board_geometry,
     building_slot_centers,
     column_pitch,
@@ -54,6 +56,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     render_player_board_v2_svg,
     render_player_boards_v2_html,
     resource_icon_center_y,
+    resource_icon_height,
     resource_icon_size,
     slot_apothem,
     token_slot_count,
@@ -173,10 +176,10 @@ def test_one_board_draws_its_slots_labels_and_colour_tag(layout: dict) -> None:
     geometry = board_geometry(len(layout["worker_roles"]))
 
     assert svg.startswith("<svg") and svg.endswith("</svg>")
-    # Six building slots, six worker circles, and three resource circles.
+    # Six building slots, six worker circles, and three resource readouts.
     assert svg.count('stroke-dasharray="5,3"') == layout["building_slot_count"]
     assert svg.count(f'r="{ROLE_CIRCLE_RADIUS:g}"') == len(layout["worker_roles"])
-    assert svg.count(f'r="{RESOURCE_RADIUS:g}"') == len(layout["resources"])
+    assert svg.count("<g data-resource=") == len(layout["resources"])
     for role in WORKER_ROLES:
         for line in wrap_label(role):
             assert f">{line}</text>" in svg
@@ -400,17 +403,18 @@ def test_the_role_labels_grew_and_the_spacing_that_depends_on_them_followed(layo
     assert ROLE_LINE_HEIGHT == pytest.approx(LINE_HEIGHT_RATIO * ROLE_FONT_SIZE)
     assert LABEL_ASCENT == pytest.approx(ASCENT_RATIO * ROLE_FONT_SIZE)
     assert svg.count(f'font-size="{ROLE_FONT_SIZE:g}"') >= len(layout["worker_roles"])
-    # The tallest label is two lines, and it clears the readouts above it.
+    # The tallest label is two lines, and it clears the corner the readouts stand in.
     label_top = geometry["role_label_baseline"] - ROLE_LINE_HEIGHT - LABEL_ASCENT
     assert wrap_label("Road Engineer") == ["Road", "Engineer"]
-    assert label_top > geometry["resource_cy"] + RESOURCE_RADIUS
+    assert label_top > geometry["resources"]["bottom"]
 
 
-# How tall each icon is drawn, per unit of the size it is asked for, and how far it reaches above
-# its own centre. Measured off the rendered artwork with getBBox rather than derived, so they hold
-# only while the drawings do -- they are here to size the readouts, not to police the pictures.
+# How tall each icon is drawn, per unit of the size it is asked for. Measured off the rendered
+# artwork with getBBox rather than derived, so it holds only while the drawings do -- it is here to
+# size the readouts, not to police the pictures. The renderer keeps the same measurement split into
+# the part above the point an icon is drawn from and the part below, which is what a row needs to
+# centre one; this is the check that the two say the same thing.
 ICON_HEIGHT_PER_UNIT = {"wheat": 1.7243, "cube": 1.2400, "coin": 1.2400}
-ICON_RISE_PER_UNIT = {"wheat": 1.1244, "cube": 0.6000, "coin": 0.6000}
 # The same measurement of the duty wheel's three, in its cubes, which is how they compare.
 DUTY_ICON_HEIGHT_IN_CUBES = {"wheat": 2.1255, "cube": 1.7692, "coin": 1.8018}
 
@@ -429,6 +433,13 @@ def test_the_resource_icons_are_the_size_the_duty_wheel_draws_the_same_things(la
     }
 
     assert icons == ["wheat", "cube", "coin"]
+    # What the renderer thinks an icon's height is, against the measurement. The two are within a
+    # couple of percent rather than equal: the renderer's is the artwork's own construction and the
+    # measurement takes in the stroke drawn around it.
+    for icon, per_unit in ICON_HEIGHT_PER_UNIT.items():
+        assert resource_icon_height(icon) == pytest.approx(
+            per_unit * resource_icon_size(icon), rel=0.02
+        )
     assert height["wheat"] == pytest.approx(DUTY_ICON_HEIGHT_IN_CUBES["wheat"], rel=0.02)
     for icon in ("cube", "coin"):
         assert 0.9 < height[icon] / DUTY_ICON_HEIGHT_IN_CUBES[icon] < 1.0
@@ -439,64 +450,165 @@ def test_the_resource_icons_are_the_size_the_duty_wheel_draws_the_same_things(la
     assert shared > DUTY_ICON_HEIGHT_IN_CUBES["wheat"] * 1.05
 
 
-def test_a_resource_readout_holds_its_icon_over_its_amount_inside_the_circle(layout: dict) -> None:
-    """An icon in the top of the circle and the amount under it, with both clear of the rim."""
-    was = 27
+def _readouts(svg: str) -> list[tuple[str, str, float, str]]:
+    """Each readout: its id, its artwork, where its amount is centred, and what the amount says."""
+    rows = []
+    for row in re.findall(r'<g data-resource="\w+">.*?</g>', svg, re.S):
+        amount = re.search(r'<text x="(-?[\d.]+)"[^>]*>(\d+)</text>', row)
+        rows.append(
+            (
+                re.match(r'<g data-resource="(\w+)"', row).group(1),
+                row[: row.index("<text")],
+                float(amount.group(1)),
+                amount.group(2),
+            )
+        )
+    return rows
+
+
+def test_the_three_readouts_share_the_two_columns_the_banners_leave_free(layout: dict) -> None:
+    """Icon over amount, three of them side by side, standing on the board's own column grid.
+
+    The board is six columns and the banners take two each, so the readouts get the two left over
+    and split them three ways -- which is what stands them in a row of even pitch whose left-hand
+    end lands exactly where the Abbey banner's right-hand end does.
+    """
+    geometry = board_geometry(len(layout["worker_roles"]))
+    block = geometry["resources"]
+    svg = render_player_board_v2_svg(layout, player_by_id(layout, "player_one"))
+    rows = _readouts(svg)
+    abbey = banner_center_x(geometry, 2)
+
+    assert [row[0] for row in rows] == [resource["id"] for resource in layout["resources"]]
+    assert len(rows) == RESOURCE_READOUT_COUNT == len(block["cell_x"])
+    assert [row[3] for row in rows] == [str(r["count"]) for r in layout["resources"]]
+    # Each amount centred under its own icon rather than strung out along a shared edge.
+    assert [row[2] for row in rows] == [round(x, 1) for x in block["cell_x"]]
+    for (_, artwork, _, _), cell_x in zip(rows, block["cell_x"], strict=True):
+        assert f"{cell_x:.1f}" in artwork
+    # Even pitch, filling exactly the columns the banners do not.
+    steps = [b - a for a, b in zip(block["cell_x"], block["cell_x"][1:], strict=False)]
+    band = RESOURCE_BAND_COLUMNS * column_pitch()
+    assert steps == [pytest.approx(band / RESOURCE_READOUT_COUNT)] * (RESOURCE_READOUT_COUNT - 1)
+    assert block["right"] == geometry["panel_width"] - SIDE_MARGIN
+    assert block["left"] == pytest.approx(abbey[0] + abbey[1] / 2)
+    assert block["right"] - block["left"] == pytest.approx(band)
+    # All of it in the top quarter, beside the Village and Abbey grids rather than under them.
+    assert block["bottom"] < geometry["panel_height"] / 4
+
+
+def test_every_icon_centres_in_the_band_however_it_is_drawn(layout: dict) -> None:
+    """The three are different sizes and none is drawn around the middle of its own shape.
+
+    The wheat is the awkward one: it fans upwards from the point it is drawn from and reaches
+    barely half as far below it. Placed on the band's middle it would ride high; centred by its own
+    box, the three stand on one line.
+    """
     tops = {
-        icon: resource_icon_center_y(icon) - ICON_RISE_PER_UNIT[icon] * resource_icon_size(icon)
-        for icon in ICON_FOOT_RATIO
+        icon: resource_icon_center_y(icon) - ICON_RISE_RATIO[icon] * resource_icon_size(icon)
+        for icon in ICON_RISE_RATIO
     }
     feet = {
         icon: resource_icon_center_y(icon) + ICON_FOOT_RATIO[icon] * resource_icon_size(icon)
         for icon in ICON_FOOT_RATIO
     }
-    amount_top = RESOURCE_COUNT_OFFSET - 0.91 * RESOURCE_COUNT_FONT_SIZE
 
-    assert RESOURCE_RADIUS > was
-    # All three stand on one line however they are sized, so the amount is the same distance below
-    # each of them rather than nearer the smaller ones.
-    assert {round(foot, 6) for foot in feet.values()} == {round(RESOURCE_ICON_FOOT, 6)}
-    # The amount is under the icons with a gap, and below the circle's middle.
-    assert max(feet.values()) < amount_top
-    assert 0 < amount_top < RESOURCE_COUNT_OFFSET < RESOURCE_RADIUS
-    # Each icon is in the top of the circle: its middle above the centre, and only the foot of it
-    # -- a tenth of the radius at most -- reaching past.
-    assert max(feet.values()) < RESOURCE_RADIUS * 0.1
     for icon, top in tops.items():
-        assert top > -RESOURCE_RADIUS, icon
-        assert (top + feet[icon]) / 2 < 0, icon
+        assert top == pytest.approx(-resource_icon_height(icon) / 2), icon
+        assert feet[icon] == pytest.approx(resource_icon_height(icon) / 2), icon
+    # The wheat is the one that has to be moved to manage it, and downwards.
+    assert resource_icon_center_y("wheat") > 1
+    assert abs(resource_icon_center_y("cube")) < 0.5
 
 
-def test_the_marker_card_names_itself_on_one_line(layout: dict) -> None:
-    """ "First player", set at its own size and unbroken.
+def test_the_readouts_start_where_the_colour_tag_stops(layout: dict) -> None:
+    """Two things want this corner, and they divide it between them.
 
-    The card is the one thing on a board that says what it is, so it carries the largest point of
-    sans on the board rather than borrowing the role labels'. It stays on one line because the
-    label fits the card at that size, and breaking a two-word phrase to no purpose reads worse.
+    The tag runs down the board's right-hand edge as far as its own size, and the rules pick up
+    from exactly there, so the boundary between them is one line rather than a judged gap. Under
+    that the tag is a diagonal cutting back to the edge, and the readouts clear it with room over.
     """
-    label = layout["first_player_marker"]["label"]
-    svg = render_player_board_v2_svg(
-        layout, player_by_id(layout, "player_one"), include_first_player_marker=True
+    geometry = board_geometry(len(layout["worker_roles"]))
+    block = geometry["resources"]
+
+    def tag_reaches(x: float) -> float:
+        """How far down the tag has come by the time its edge gets to `x`."""
+        return x - geometry["panel_width"] + CORNER_TAG_SIZE - CORNER_TAG_OVERSHOOT
+
+    assert block["top"] - RESOURCE_DIVIDER_OVERHANG == CORNER_TAG_SIZE
+    # Which is below the banners rather than level with them: the tag is the deeper of the two.
+    assert CORNER_TAG_SIZE > BANNER_CENTER_Y + BANNER_HEIGHT / 2
+    # The right-hand readout is the one under the tag, and the tag has cut well back by then.
+    assert tag_reaches(block["right"]) < block["top"]
+    # The block is inside the panel on every side.
+    assert block["top"] > 0
+    assert block["right"] < geometry["panel_width"]
+    assert block["left"] > 0
+
+
+def test_a_rule_stands_on_every_seam_between_one_readout_and_the_next(layout: dict) -> None:
+    """Thin vertical lines, on the seams only, running past the readouts at both ends.
+
+    Two of them for three readouts. The ends of the row are left open: a rule out there would read
+    as a frame drawn around the block rather than as a division inside it.
+    """
+    geometry = board_geometry(len(layout["worker_roles"]))
+    block = geometry["resources"]
+    svg = render_player_board_v2_svg(layout, player_by_id(layout, "player_one"))
+    rules = re.findall(r"<line data-resource-divider=\"true\"[^>]*/>", svg)
+
+    assert len(rules) == len(block["divider_x"]) == RESOURCE_READOUT_COUNT - 1
+    for rule, x in zip(rules, block["divider_x"], strict=True):
+        ends = [float(value) for value in re.findall(r'[xy][12]="(-?[\d.]+)"', rule)]
+        assert ends[0] == ends[2] == round(x, 1)
+        assert ends[1] == pytest.approx(block["top"] - RESOURCE_DIVIDER_OVERHANG, abs=0.05)
+        assert ends[3] == pytest.approx(block["bottom"] + RESOURCE_DIVIDER_OVERHANG, abs=0.05)
+    # Each one halfway between the readouts it divides, and clear of both.
+    neighbours = list(zip(block["cell_x"], block["cell_x"][1:], strict=False))
+    for x, (left, right) in zip(block["divider_x"], neighbours, strict=True):
+        assert x == pytest.approx((left + right) / 2)
+        assert x - left > resource_icon_height("coin") / 2
+    # And nothing at the ends of the row.
+    assert min(block["divider_x"]) > block["left"]
+    assert max(block["divider_x"]) < block["right"]
+
+
+def test_no_board_carries_a_first_player_marker_any_more(layout: dict) -> None:
+    """The card is gone, and so is the corner it stood in: the readouts have it now.
+
+    It was never anything but layout state to look at -- no board here decides who starts -- and it
+    would have sat on top of the readouts, so it went rather than moving.
+    """
+    page = render_player_boards_v2_html(layout)
+    interactive = render_player_board_v2_svg(
+        layout, player_by_id(layout, "player_one"), interactive=True
     )
-    # The average advance of this face, measured off the rendered label: 0.45 of its size a glyph.
-    drawn_width = len(label) * MARKER_LABEL_FONT_SIZE * 0.45
 
-    assert label == "First player"
-    assert MARKER_LABEL_FONT_SIZE > ROLE_FONT_SIZE
-    assert f'font-size="{MARKER_LABEL_FONT_SIZE:g}" font-weight="700"' in svg
-    assert f">{escape(label)}</text>" in svg
-    # One line, and it fits inside the card it names.
-    assert wrap_label(label) != [label]
-    assert svg.count(f">{escape(label)}</text>") == 1
-    assert drawn_width < MARKER_CARD_MIN_WIDTH
+    assert "first_player_marker" not in layout
+    assert "First player" not in page
+    assert "first-player" not in page
+    assert "first-player" not in interactive
+    # The card's own colours went with it.
+    assert not [key for key in layout["palette"] if key.startswith("marker")]
 
 
-def test_the_bigger_readouts_still_clear_the_workers_above_them(layout: dict) -> None:
-    """The readouts grew into a gap that was already there, rather than pushing the board about."""
+def test_the_readouts_left_the_gap_they_stood_in_where_it_was(layout: dict) -> None:
+    """Moving them into the corner did not move anything else.
+
+    Closing the gap they came out of would take about a tenth off the board, but a seat on the
+    composed game table is sized by fitting two boards into the duty wheel's height -- so a shorter
+    board is drawn at a larger scale there, and a cube in a Village would stop matching the same
+    cube on a duty tile. The gap stays until the table sizes a seat from its cube instead.
+    """
     geometry = board_geometry(len(layout["worker_roles"]))
     tokens_bottom = geometry["token_grid_top"] + 2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
 
-    assert geometry["resource_cy"] - RESOURCE_RADIUS > tokens_bottom
+    assert geometry["panel_height"] == pytest.approx(401.56, abs=0.005)
+    assert geometry["role_circle_cy"] == pytest.approx(253.0)
+    assert ROLE_ROW_GAP_FROM_TOKENS == 130.0
+    # The corner reaches deeper than the cubes do, and still stops well short of the role labels.
+    label_top = geometry["role_label_baseline"] - ROLE_LINE_HEIGHT - LABEL_ASCENT
+    assert tokens_bottom < geometry["resources"]["bottom"] < label_top
 
 
 def test_the_smaller_cubes_centre_in_the_band_rather_than_pulling_the_board_up(
@@ -537,7 +649,7 @@ def test_html_shows_four_boards_in_a_two_by_two_grid(page: str) -> None:
 
 
 def test_html_carries_the_board_labels_and_player_colours(page: str) -> None:
-    for text in ("Village", "Abbey", "First player", *WORKER_ROLES[:1]):
+    for text in ("Village", "Abbey", *WORKER_ROLES[:1]):
         assert f">{text}</text>" in page
     for role in WORKER_ROLES:
         for line in wrap_label(role):
@@ -547,29 +659,12 @@ def test_html_carries_the_board_labels_and_player_colours(page: str) -> None:
         assert stroke in page
 
 
-def test_first_player_marker_is_drawn_once_on_the_white_board(page: str) -> None:
-    wraps = _board_wraps(page)
-
-    assert page.count(">First player</text>") == 1
-    assert page.count('data-first-player-marker="true"') == 1
-    assert 'data-player="player_one" data-player-color="white"' in wraps[0]
-    assert 'data-first-player-marker="true"' in wraps[0]
-    marker_board = _svg_bodies(page)[0]
-    assert ">First player</text>" in marker_board
-
-
-def test_first_player_can_be_moved_to_another_board(layout: dict) -> None:
-    page = render_player_boards_v2_html(layout, first_player="player_two")
-    boards = _svg_bodies(page)
-    wraps = _board_wraps(page)
-
-    assert page.count(">First player</text>") == 1
-    assert ">First player</text>" not in boards[0]
-    assert ">First player</text>" in boards[1]
-    assert 'data-first-player-marker="false"' in wraps[0]
-    assert 'data-first-player-marker="true"' in wraps[1]
-    with pytest.raises(KeyError):
-        render_player_boards_v2_html(layout, first_player="player_five")
+def test_every_board_on_the_page_carries_its_own_resources(page: str) -> None:
+    """Four boards, each with the same three readouts: no board is singled out any more."""
+    assert 'data-player="player_one" data-player-color="white"' in _board_wraps(page)[0]
+    for board in _svg_bodies(page):
+        assert len(_readouts(board)) == RESOURCE_READOUT_COUNT
+        assert board.count("data-resource-divider") == RESOURCE_READOUT_COUNT - 1
 
 
 def test_generator_default_output_is_the_generated_player_boards_v2_page() -> None:
@@ -615,12 +710,13 @@ def test_v1_player_board_is_left_alone() -> None:
 def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Path) -> None:
     """Everything these boards no longer share with the prototype, and nothing else.
 
-    Three departures, all deliberate. The board got wider, because the prototype's building slots
-    are two thirds of a map hex and these are a whole one. Then the type and the resource readouts
-    grew, because they were sized for a board that narrow and read small on this one. Then the
-    cubes shrank to the duty wheel's, so that a player's piece reads as one piece across the table.
-    What is left is what the prototype set and no reason has come up to change: the height, the
-    worker circles, and the number of every piece, cubes included.
+    Four departures, all deliberate. The board got wider, because the prototype's building slots
+    are two thirds of a map hex and these are a whole one. Then the type grew, because it was sized
+    for a board that narrow and read small on this one. Then the cubes shrank to the duty wheel's,
+    so that a player's piece reads as one piece across the table. Then the resource readouts came
+    out of their circles and went to the corner, and the first-player card went with them. What is
+    left is what the prototype set and no reason has come up to change: the height, the worker
+    circles, and the number of every piece, cubes included.
     """
     generated = _svg_bodies(
         generate_player_boards_v2_page(output_path=tmp_path / "player_boards_v2.html").read_text(
@@ -632,7 +728,6 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
         'font-size="11"': f'font-size="{BANNER_FONT_SIZE:g}"',
         'font-size="10"': f'font-size="{ROLE_FONT_SIZE:g}"',
         'font-size="13"': f'font-size="{RESOURCE_COUNT_FONT_SIZE:g}"',
-        'r="27"': f'r="{RESOURCE_RADIUS:g}"',
     }
     cube = 'width="14.0" height="14.0"'
     now_cube = f'width="{DUTY_CUBE_SIZE:.1f}" height="{DUTY_CUBE_SIZE:.1f}"'
@@ -656,13 +751,16 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
         assert cube not in board
         assert DUTY_CUBE_SIZE < MARKER_CUBE
         assert board.count(now_cube) == was.count(cube)
-    # As many of each as the prototype drew, counted on a board without the marker card: its label
-    # is no longer set at the role size, and shares a size with the resource amounts.
+        # The readouts are a row in the corner where the prototype drew three circles in the
+        # middle, and the card the prototype gave its first board is on none of these.
+        assert 'r="27"' in was and 'r="27"' not in board
+        assert len(_readouts(board)) == RESOURCE_READOUT_COUNT
+        assert "first-player" not in board
+    # As many of each as the prototype drew, counted on a board the prototype did not give the
+    # card to: its label was set at the size the amounts are.
     board, was = generated[1], baseline[1]
-    assert "data-first-player-marker" not in board
     for before, now in grew.items():
-        if before != 'font-size="13"':
-            assert board.count(now) == was.count(before), now
+        assert board.count(now) == was.count(before), now
 
 
 def _view_box(svg: str) -> tuple[float, float]:
@@ -673,14 +771,13 @@ def _view_box(svg: str) -> tuple[float, float]:
 def test_generated_page_matches_baseline_facts(page: str) -> None:
     baseline = BASELINE_PROTOTYPE.read_text(encoding="utf-8")
 
-    for text in (TITLE, SUBTITLE_START, ">First player</text>"):
+    for text in (TITLE, SUBTITLE_START):
         assert text in baseline
         assert text in page
     for _, fill, _ in PLAYER_COLORS.values():
         assert fill in baseline
         assert fill in page
     assert len(_svg_bodies(baseline)) == len(_svg_bodies(page)) == 4
-    # The card is the one label that reads differently: the prototype broke "First player marker"
-    # over two lines, and it now says just what it is, on one.
-    assert ">marker</text>" in baseline
-    assert ">marker</text>" not in page
+    # The first-player card is the one thing the prototype names that these boards do not draw.
+    assert ">First player</text>" in baseline and ">marker</text>" in baseline
+    assert "First player" not in page

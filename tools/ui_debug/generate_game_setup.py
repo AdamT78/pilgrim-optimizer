@@ -76,7 +76,7 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     BUILDING_SLOT_HEX_SIZE as BOARD_HEX_SIZE,
 )
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
-    DEFAULT_FIRST_PLAYER,
+    DEFAULT_PLAYER,
     ROLE_ACOLYTE_LIMIT,
     default_player_board_v2_state,
     hex_path_data,
@@ -602,14 +602,6 @@ def acolyte_places(board_layout: dict) -> list[tuple[str, str]]:
     ]
 
 
-def render_first_player_controls(board_layout: dict) -> str:
-    return "\n".join(
-        f'      <button type="button" data-first-player="{player["id"]}">'
-        f"Move first player marker to {escape(player['label'])}</button>"
-        for player in players_of(board_layout)
-    )
-
-
 def render_serf_controls(board_layout: dict) -> str:
     return "\n".join(
         f'      <button type="button" data-serf-player="{player["id"]}">'
@@ -634,7 +626,7 @@ def render_acolyte_controls(board_layout: dict) -> str:
     return (
         '      <div class="player-row">\n'
         '        <label class="player-name" for="acolyte-player">Player</label>\n'
-        f'        <select id="acolyte-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        f'        <select id="acolyte-player">{_options(players, DEFAULT_PLAYER)}</select>\n'
         "      </div>\n"
         '      <div class="player-row">\n'
         '        <label class="player-name" for="acolyte-source">Source</label>\n'
@@ -658,7 +650,7 @@ def render_buy_controls(board_layout: dict, placements: list[dict]) -> str:
     return (
         '      <div class="player-row">\n'
         '        <label class="player-name" for="buy-player">Player</label>\n'
-        f'        <select id="buy-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        f'        <select id="buy-player">{_options(players, DEFAULT_PLAYER)}</select>\n'
         "      </div>\n"
         '      <div class="player-row">\n'
         '        <label class="player-name" for="buy-building">Building</label>\n'
@@ -678,7 +670,7 @@ def render_donate_controls(board_layout: dict) -> str:
     return (
         '      <div class="player-row">\n'
         '        <label class="player-name" for="donate-player">Player</label>\n'
-        f'        <select id="donate-player">{_options(players, DEFAULT_FIRST_PLAYER)}</select>\n'
+        f'        <select id="donate-player">{_options(players, DEFAULT_PLAYER)}</select>\n'
         "      </div>\n"
         '      <div class="player-row">\n'
         '        <label class="player-name" for="donate-slot">Slot</label>\n'
@@ -689,13 +681,12 @@ def render_donate_controls(board_layout: dict) -> str:
 
 
 def player_board_ui_state(board_layout: dict) -> dict:
-    """The state the panel starts from: the default board for every player, marker on player one.
+    """The state the panel starts from: the default board for every player.
 
     This is the page's own state. It is never read back into the engine.
     """
     default = default_player_board_v2_state(board_layout)
     return {
-        "firstPlayer": DEFAULT_FIRST_PLAYER,
         "players": {
             player["id"]: {
                 "villageSerfs": default["village_serfs"],
@@ -708,15 +699,10 @@ def player_board_ui_state(board_layout: dict) -> dict:
 
 
 def render_player_boards(board_layout: dict) -> str:
-    """The four boards, each tagged so the page can move its cubes and its marker."""
+    """The four boards, each tagged so the page can move its cubes."""
     boards = []
     for player in players_of(board_layout):
-        svg = render_player_board_v2_svg(
-            board_layout,
-            player,
-            include_first_player_marker=player["id"] == DEFAULT_FIRST_PLAYER,
-            interactive=True,
-        )
+        svg = render_player_board_v2_svg(board_layout, player, interactive=True)
         boards.append(
             f'    <div class="panel player-board" data-component="player-board-v2"'
             f' data-player="{player["id"]}" data-player-color="{player["color"]}">\n'
@@ -884,11 +870,6 @@ SETUP_SCRIPT = """
       });
     });
 
-    const marker = board.querySelector("[data-first-player-marker]");
-    const hasMarker = boardState.firstPlayer === playerId;
-    marker.setAttribute("data-first-player-marker", hasMarker ? "true" : "false");
-    show(marker, hasMarker);
-
     board.querySelector('[data-readout="village"]').textContent = state.villageSerfs;
     board.querySelector('[data-readout="abbey"]').textContent = state.abbeyAcolytes;
     board.querySelector('[data-readout="roles"]').textContent = onRoles;
@@ -917,14 +898,6 @@ SETUP_SCRIPT = """
     });
     moveAcolyteButton.disabled = !canMoveAcolyte();
   }
-
-  const firstPlayerButtons = document.querySelectorAll("button[data-first-player]");
-  Array.prototype.forEach.call(firstPlayerButtons, function (button) {
-    button.addEventListener("click", function () {
-      boardState.firstPlayer = button.getAttribute("data-first-player");
-      renderPlayerBoards();
-    });
-  });
 
   Array.prototype.forEach.call(serfButtons, function (button) {
     button.addEventListener("click", function () {
@@ -1306,10 +1279,6 @@ def render_game_setup_html(
   </div>
   </div>
   <div class="player-board-panel">
-    <div class="panel board-controls">
-      <h2>Player board v2 — first player marker</h2>
-{render_first_player_controls(board_layout)}
-    </div>
     <div class="panel board-controls">
       <h2>Player board v2 — serfs</h2>
       <p class="slot-list">A serf leaving the Village becomes an acolyte in the Abbey, which
