@@ -316,6 +316,14 @@ level III (light green) = 6 VP
 The tile colours are imported from `render_buildings.py` rather than repeated, so the donated
 tiles cannot drift away from the regular building tiles.
 
+Donated building VP stars now match the Pilgrimage Site VP star sizing while remaining centered in
+the donated hex. Neither tile is ever seen at its own size — a donated tile is drawn into a player
+board's building slot and a site into a map hex, and the composed game table scales those two
+differently — so `STAR_OUTER_RADIUS` here is what the star has to be in this tile's units to come
+out a site star's size on that page. `test_ui_debug_game_table.py` measures the two against each
+other, so the table is what to re-measure if either board's scale moves. The VP inside the star is
+set at the piety track's star-to-label proportion, the same one the site uses.
+
 Generate the output page with:
 
 ```bash

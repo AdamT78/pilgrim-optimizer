@@ -7,8 +7,11 @@ This is a debug/visual tool only. It reads `donated_building_tiles.json` and emi
 It is not connected to `GameState` and does not implement any game rules.
 
 Geometry constants mirror `prototypes/donated_building_tiles.html`, which stays the visual
-baseline. The tile colours are shared with `render_buildings.py` so the two views cannot drift
-apart.
+baseline for the hex and its colours. The tile colours are shared with `render_buildings.py` so the
+two views cannot drift apart. The star has deliberately moved away from the baseline: it is drawn
+at the size a pilgrimage site's star comes out on the composed game table, with the VP inside it at
+the piety track's star-to-label proportion, so the two kinds of VP star read as one piece. It stays
+in the middle of the hex, unlike the site's, which hangs below the ship marker.
 """
 
 from __future__ import annotations
@@ -18,21 +21,34 @@ import math
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_FONT_SIZE
+from tools.ui_debug.render_alms_table import STAR_OUTER_RADIUS as TRACK_STAR_RADIUS
 from tools.ui_debug.render_buildings import COLOR_GROUP_PALETTES, ColorPalette
 
 HEX_RADIUS = 60.0
 COLUMN_SPACING = 160.0
 MARGIN = 78.0
 
-STAR_OUTER_RADIUS = 24.0
+# The pilgrimage site's star written in this tile's units: what it has to be drawn at here to come
+# out the size a site star does, once the composed game table has scaled a player board's building
+# slot and a map hex to their places. A donated tile is only ever seen in a board slot and a site
+# only on a map hex, and those two are drawn at different scales, so a star of the same size in
+# either tile's own units does not come out the same size on the page -- this figure is that round
+# trip solved for. `test_ui_debug_game_table.py` measures the two against each other and holds it
+# there, so the table is what to re-measure if either board's scale ever moves.
+STAR_OUTER_RADIUS = 32.506
 STAR_INNER_RATIO = 0.45
 STAR_POINTS = 5
 STAR_FILL = "#F4D03F"
 STAR_STROKE = "#B8960C"
 
 VP_TEXT_FILL = "#000000"
-VP_TEXT_OFFSET = 3.5
-VP_TEXT_FONT_SIZE = 10.0
+# The VP is set inside the star the way the piety track and the pilgrimage site set their own: the
+# same share of the star's size, on the same third-of-the-font drop below its middle. Taken from
+# the track rather than from the site renderer because that one already reads its star from here,
+# and the two cannot be made to read from each other.
+VP_TEXT_FONT_SIZE = STAR_OUTER_RADIUS * TRACK_STAR_FONT_SIZE / TRACK_STAR_RADIUS
+VP_TEXT_OFFSET = VP_TEXT_FONT_SIZE / 3.0
 
 BACKGROUND_COLOR = "#000000"
 TITLE = "PILGRIM — Special Tiles"

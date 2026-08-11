@@ -50,6 +50,13 @@ from tools.ui_debug.generate_game_setup import (
     donated_vp_by_level,
     setup_placements,
 )
+from tools.ui_debug.render_donated_buildings import HEX_RADIUS as DONATED_HEX_RADIUS
+from tools.ui_debug.render_donated_buildings import (
+    STAR_OUTER_RADIUS as DONATED_STAR_RADIUS,
+)
+from tools.ui_debug.render_donated_buildings import (
+    VP_TEXT_FONT_SIZE as DONATED_VP_FONT_SIZE,
+)
 from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_alms_table import (
     CUBE_SIZE as ALMS_CUBE_SIZE,
@@ -899,6 +906,28 @@ def test_a_pilgrimage_sites_star_reads_at_the_size_of_a_piety_track_star(scale) 
 
     assert site_star == pytest.approx(track_star, rel=1e-4)
     assert site_vp == pytest.approx(track_vp, rel=1e-4)
+
+
+def test_a_donated_buildings_star_reads_at_the_size_of_a_pilgrimage_sites_star(scale) -> None:
+    """Both are VP stars, so on a table showing both they should be the one piece.
+
+    Neither tile is drawn at its own size here: a site goes into a map hex and a donated building
+    into a player board's building slot, and those two are not scaled alike. A star of the same
+    size in either tile's own units therefore does not come out the same size on the page, which
+    is why the donated renderer's `STAR_OUTER_RADIUS` is written for this page rather than for its
+    own. This is the measurement it was written from.
+    """
+    _, _, _, solved = scale
+    tile_into_map = load_map_layout()["hex_size"] / TILE_HEX_RADIUS
+    tile_into_slot = BUILDING_SLOT_HEX_SIZE / DONATED_HEX_RADIUS
+
+    site_star = SITE_STAR_RADIUS * tile_into_map * _per_unit(solved, "map")
+    donated_star = DONATED_STAR_RADIUS * tile_into_slot * _per_unit(solved, "player")
+    site_vp = SITE_VP_FONT_SIZE * tile_into_map * _per_unit(solved, "map")
+    donated_vp = DONATED_VP_FONT_SIZE * tile_into_slot * _per_unit(solved, "player")
+
+    assert donated_star == pytest.approx(site_star, rel=1e-4)
+    assert donated_vp == pytest.approx(site_vp, rel=1e-4)
 
 
 def test_a_seats_pieces_carry_over_to_the_alms_table_at_the_size_they_are_written(scale) -> None:
