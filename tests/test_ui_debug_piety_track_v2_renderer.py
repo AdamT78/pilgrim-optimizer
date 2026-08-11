@@ -442,22 +442,27 @@ def test_the_track_the_baseline_drew_is_still_the_track_here(
     width = float(re.search(r'viewBox="[-\d.]+ [-\d.]+ ([\d.]+)', drawn).group(1))
     assert re.search(rf'viewBox="-20 -20 {width:g} ', generated)
 
-    # Every position's number sits where the baseline puts it horizontally, and the discs are
-    # unchanged but for the height the restyling moved the whole strip to.
+    # Every position's number sits where the baseline puts it horizontally. Disc colours were
+    # reseated for the game-table player-count control (red/yellow keep the left column), so the
+    # match is by the set of fills and the set of x centres rather than by document order.
     for index in range(POSITION_COUNT):
         x = position_center_x(layout(), index)
         assert f'<text x="{x:.1f}"' in drawn
         assert f'<text x="{x:.1f}"' in generated
-    for drawn_disc, made_disc in zip(
-        re.findall(r"<circle cx=\"[\d.]+\" cy=\"[\d.]+\" r=\"9\"[^>]*/>", drawn),
-        re.findall(r"<circle[^>]*data-player-disc[^>]*/>", svg(variant_id)),
-        strict=True,
-    ):
-        for attribute in ('cx="', 'r="9"', 'fill="', 'stroke="', 'stroke-width="1.2"'):
-            assert attribute in drawn_disc
-        assert re.search(r'cx="([\d.]+)"', drawn_disc).group(1) == (
-            re.search(r'cx="([\d.]+)"', made_disc).group(1)
-        )
+    drawn_discs = re.findall(
+        r'<circle cx="([\d.]+)" cy="[\d.]+" r="9"[^>]*fill="([^"]+)"[^>]*/>', drawn
+    )
+    made_discs = re.findall(r"<circle[^>]*data-player-disc[^>]*/>", svg(variant_id))
+    made_by_fill = {
+        re.search(r'fill="([^"]+)"', disc).group(1): re.search(r'cx="([\d.]+)"', disc).group(1)
+        for disc in made_discs
+    }
+    drawn_by_fill = {fill: cx for cx, fill in drawn_discs}
+    assert set(made_by_fill) == set(drawn_by_fill)
+    assert set(made_by_fill.values()) == set(drawn_by_fill.values())
+    for disc in made_discs:
+        assert 'r="9"' in disc
+        assert 'stroke-width="1.2"' in disc
 
 
 def test_the_polish_is_what_moved_the_board_away_from_the_baseline() -> None:

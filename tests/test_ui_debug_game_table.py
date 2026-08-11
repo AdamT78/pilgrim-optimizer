@@ -2,8 +2,8 @@
 
 They check that every component reached the page through its own renderer, that the three columns
 hold the right things in the right order, that the shared cube scale is what sizes them, and that
-the page adds no controls or state of its own. Nothing here looks at the drawing itself; each
-renderer's own tests do that, and nothing here renders a browser.
+the only page-local control is the 2P/3P/4P bar under the Alms Table. Nothing here looks at the
+drawing itself; each renderer's own tests do that, and nothing here renders a browser.
 """
 
 import math
@@ -14,10 +14,12 @@ import pytest
 
 from tools.ui_debug.generate_game_table import (
     BODY_CHROME,
+    DEFAULT_PLAYER_COUNT,
     GAP_PX,
     PAGE_TITLE,
     PANEL_CHROME,
     PIETY_VARIANT_ID,
+    PLAYER_COUNTS,
     REF_AVAIL_WIDTH,
     REF_VIEWPORT_HEIGHT,
     SEAT_COLS,
@@ -29,7 +31,9 @@ from tools.ui_debug.generate_game_table import (
     generate_game_table_page,
     regular_hexagon_path,
     regularise_duty_hexagon,
+    seat_numbers_by_player,
     solve_table_scale,
+    visible_seats_by_count,
 )
 from tools.ui_debug.render_alms_table import (
     CUBE_SIZE as ALMS_CUBE_SIZE,
@@ -52,7 +56,7 @@ from tools.ui_debug.render_duty_wheel import (
     render_duty_wheel_controls_html,
 )
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
-from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout
+from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout, variant_by_id
 from tools.ui_debug.render_pilgrimage_sites import STAR_OUTER_RADIUS as SITE_STAR_RADIUS
 from tools.ui_debug.render_pilgrimage_sites import VP_TEXT_FONT_SIZE as SITE_VP_FONT_SIZE
 from tools.ui_debug.render_player_boards_v2 import (
@@ -62,6 +66,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     TOKEN_RADIUS,
     board_geometry,
     load_player_boards_v2_layout,
+    player_by_id,
     players_of,
 )
 
@@ -121,7 +126,10 @@ def scale():
 
 def _block(page: str, class_name: str) -> str:
     """One `<div class="...">` and its contents, nested divs included."""
-    start = page.index(f'<div class="{class_name}">')
+    match = re.search(rf'<div\b[^>]*\bclass="{re.escape(class_name)}"[^>]*>', page)
+    if match is None:
+        raise AssertionError(f"{class_name} is not on the page")
+    start = match.start()
     depth = 0
     for tag in re.finditer(r"<div\b|</div>", page[start:]):
         depth += 1 if tag.group(0).startswith("<div") else -1
@@ -160,27 +168,33 @@ def test_the_page_opens_straight_into_the_table(page: str) -> None:
 
 
 def test_no_styling_is_left_over_from_the_removed_heading(page: str) -> None:
-    """Only the page's own stylesheet; the renderers keep their own fonts and colours."""
+    """The old page heading is gone; button chrome is page-local and does not revive it."""
     stylesheet = page[page.index("<style>") : page.index("</style>")]
+    buttons = stylesheet[stylesheet.index(".player-count-controls") :]
 
-    for stale in ("game-table-subtitle", "h1 ", "--ink", "Georgia", "color:", "font-family"):
+    for stale in ("game-table-subtitle", "h1 ", "--ink", "Georgia", "font-family"):
         assert stale not in stylesheet, stale
+    # Colour only appears once the 2P/3P/4P bar's rules begin.
+    assert "color:" not in stylesheet[: stylesheet.index(".player-count-controls")]
+    assert "color:" in buttons
 
 
-def test_the_main_row_is_the_alms_table_the_piety_duty_column_and_the_map(page: str) -> None:
+def test_the_main_row_is_the_alms_column_the_piety_duty_column_and_the_map(page: str) -> None:
     """Three across, in that order, and no seat among them.
 
-    The seats used to stand under the alms table in a column of their own here. Taking them out
-    leaves the alms table a panel of the row rather than the head of a column.
+    The left column is only the Alms Table and the 2P/3P/4P bar under it. The seats stay in their
+    own row below, so changing the player count never has to ask this column for more height.
     """
     assert '<div class="game-table-stage">' in page
     row = _block(page, "row")
+    left = _block(page, "left")
 
-    for class_name in ("panel p-alms", "col", "panel p-map"):
+    for class_name in ("left", "col", "panel p-map"):
         assert f'<div class="{class_name}">' in row, class_name
-    assert row.index("p-alms") < row.index('class="col"') < row.index("p-map")
+    assert row.index('class="left"') < row.index('class="col"') < row.index("p-map")
     assert "p-player" not in row
-    assert 'class="left"' not in page, "the left column went with the seats"
+    assert left.index("p-alms") < left.index("player-count-controls")
+    assert "p-player" not in left
 
 
 def test_the_seats_stand_in_one_row_below_the_main_row(page: str) -> None:
@@ -248,8 +262,8 @@ def test_page_shows_only_the_three_four_player_piety_track(page: str) -> None:
 def test_the_table_seats_every_player_the_layout_describes(page: str) -> None:
     """All four boards now, where it used to draw the second column of a four-seat grid.
 
-    Which board leads is layout state to look at rather than a seating rule: player counts are not
-    wired up on this page, so the order is fixed.
+    Which board leads is layout state to look at rather than a seating rule: the 2P/3P/4P control
+    only hides later seats, it does not reseat anyone.
     """
     layout = load_player_boards_v2_layout()
     seats = _block(page, "seats")
@@ -280,6 +294,28 @@ def test_the_red_board_leads_the_row_and_the_rest_follow_in_the_layouts_order(pa
     assert [player_id for player_id, _ in seated] == rotated
 
 
+def test_the_four_seat_slots_carry_stable_player_count_hooks(page: str) -> None:
+    """Fixed slots 1–4 in seat order, so the count control can hide without reshuffling."""
+    seats = _block(page, "seats")
+    hooks = re.findall(
+        r'data-player-seat="(\d)" data-player="(\w+)" data-player-color="(\w+)"',
+        seats,
+    )
+
+    assert hooks == [
+        ("1", "player_two", "red"),
+        ("2", "player_three", "yellow"),
+        ("3", "player_four", "blue"),
+        ("4", "player_one", "white"),
+    ]
+    assert seat_numbers_by_player() == {
+        "player_two": 1,
+        "player_three": 2,
+        "player_four": 3,
+        "player_one": 4,
+    }
+
+
 def test_no_board_at_this_table_says_who_starts(page: str) -> None:
     """The first-player card is gone from the board, and so is the seat that used to carry it.
 
@@ -293,6 +329,105 @@ def test_no_board_at_this_table_says_who_starts(page: str) -> None:
     assert re.findall(r'data-player="(\w+)" data-player-color="\w+">', seats) == list(
         SEATED_PLAYERS
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Player-count controls
+# ---------------------------------------------------------------------------------------------
+
+
+def test_the_player_count_buttons_sit_under_the_alms_table(page: str) -> None:
+    """2P/3P/4P under the Alms Table, left of the Duty Wheel, defaulting to 4P."""
+    left = _block(page, "left")
+    controls = _block(page, "player-count-controls")
+
+    assert left.index("p-alms") < left.index("player-count-controls")
+    assert "p-action" not in left
+    assert "duty-wheel-counts" not in page
+    assert PLAYER_COUNTS == (2, 3, 4)
+    assert DEFAULT_PLAYER_COUNT == 4
+
+    buttons = re.findall(
+        r'data-player-count-button="(\d)" aria-pressed="(\w+)">([^<]+)</button>',
+        controls,
+    )
+    assert buttons == [("2", "false", "2P"), ("3", "false", "3P"), ("4", "true", "4P")]
+
+
+def test_the_player_count_script_hides_later_seats_without_reflowing_the_row(page: str) -> None:
+    """The mapping the script uses, and the hide style that keeps empty slots in the flex row."""
+    assert visible_seats_by_count() == {"2": [1, 2], "3": [1, 2, 3], "4": [1, 2, 3, 4]}
+    assert 'var VISIBLE = {"2":[1,2],"3":[1,2,3],"4":[1,2,3,4]};' in page
+    assert f"var defaultCount = {DEFAULT_PLAYER_COUNT};" in page
+    assert "seat.style.visibility" in page
+    assert "disc.style.visibility" in page
+    assert "display: none" not in page
+    assert "Duty Wheel player-count" in page
+
+
+def test_alms_and_piety_discs_share_the_seat_order_the_boards_use(page: str) -> None:
+    """Red/yellow/blue/white on both boards, stamped with the same seat numbers as the row."""
+    alms = _block(page, "panel p-alms")
+    piety = _block(page, "panel p-piety")
+
+    def discs(fragment: str) -> list[tuple[str, str, str]]:
+        return re.findall(
+            r'data-player-disc="(\d)" data-player-seat="(\d)" data-player="(\w+)"'
+            r' data-player-color="(\w+)"',
+            fragment,
+        )
+
+    expected = {
+        ("1", "1", "player_two", "red"),
+        ("2", "2", "player_three", "yellow"),
+        ("3", "3", "player_four", "blue"),
+        ("4", "4", "player_one", "white"),
+    }
+    assert set(discs(alms)) == expected
+    assert set(discs(piety)) == expected
+
+
+def test_two_player_mode_centres_the_red_over_yellow_stack(page: str) -> None:
+    """2P keeps two rows / one column (red over yellow), centred on the track value.
+
+    Home seats stay the 2x2 (so 3P/4P restore cleanly). The script reads midX and the top/bottom
+    rows from those homes and parks both visible discs on that one centred column.
+    """
+    alms_players = {
+        player["color"]: (player["seat"]["column"], player["seat"]["row"])
+        for player in load_alms_table_layout()["players"]
+    }
+    piety_seats = {
+        player_by_id(load_player_boards_v2_layout(), seat["player"])["color"]: (
+            seat["column"],
+            seat["row"],
+        )
+        for seat in variant_by_id(load_piety_track_v2_layout(), PIETY_VARIANT_ID)["seats"]
+    }
+
+    assert alms_players["red"] == (-1, -1)
+    assert alms_players["yellow"] == (-1, 1)
+    assert alms_players["blue"] == (1, -1)
+    assert alms_players["white"] == (1, 1)
+    assert piety_seats == alms_players
+
+    assert "function pairLayout(discs)" in page
+    assert "midX: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2" in page
+    assert "if (pair && n === 1)" in page
+    assert "disc.setAttribute('cx', pair.midX);" in page
+    assert "disc.setAttribute('cy', pair.top);" in page
+    assert "disc.setAttribute('cy', pair.bottom);" in page
+    assert "data-home-cx" in page
+    assert ".p-alms" in page and ".p-piety" in page
+
+
+def test_the_duty_wheel_is_not_wired_to_the_player_count_buttons(page: str) -> None:
+    """Buttons may sit near the wheel, but they must not drive its tallies yet."""
+    action = _block(page, "panel p-action")
+
+    assert "data-player-count-button" not in action
+    assert "duty-wheel-controls" not in page
+    assert "deferred to a later PR" in page
 
 
 # ---------------------------------------------------------------------------------------------
@@ -655,10 +790,11 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-def test_page_carries_no_controls_or_state(page: str) -> None:
-    """Layout only: the control-heavy sandbox is still game_setup.html."""
-    assert "<button" not in page
-    assert "<script" not in page
+def test_page_carries_only_the_player_count_control(page: str) -> None:
+    """The control-heavy sandbox is still game_setup.html; this page only has 2P/3P/4P."""
+    assert page.count("<button") == len(PLAYER_COUNTS)
+    assert page.count("<script") == 1
+    assert "data-player-count-button" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page
 

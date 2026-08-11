@@ -1076,8 +1076,11 @@ wheel, and the boards all arrive through the same functions their standalone pag
 
 Every seat the layout describes is drawn, in the layout's own order read from the red board rather
 than from the first one — red, yellow, blue, white — so the run is the seating order the layout
-already gives and red simply leads it. That is debug state to look at rather than a seating rule:
-player-count switching is not wired up on this page, and no board says who starts.
+already gives and red simply leads it. The generated game table includes 2P/3P/4P controls under
+the Alms Table. These controls toggle visible Player Board v2 boards and Alms/Piety player discs
+while preserving the fixed table layout and leaving Duty Wheel player-count behavior deferred. In
+2P, the remaining red and yellow discs stay stacked (red over yellow) but centred horizontally
+inside each track value; 3P/4P restore the 2x2. No board says who starts.
 
 Generate the output page with:
 
