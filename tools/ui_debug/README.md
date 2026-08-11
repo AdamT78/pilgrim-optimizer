@@ -243,11 +243,11 @@ rather than one.
 The wheel is the reference rather than the other way round because its cube is what the rest of the
 table is calibrated against; see the duty wheel section below.
 
-That does not make the two exactly equal on screen, and cannot from this side. The seats are fitted
-to the duty wheel's *height* rather than drawn at its scale, so a seat's unit and a wheel's are
-close but never the same, and how close moves with the window. At the viewport the table solves for
-the seats' cube now lands about 2% off the wheel's, where the old 14.0-unit cube was about 10% over.
-A game table test measures both against the real solve rather than trusting either renderer.
+Matching the number here is not on its own what makes the two equal on screen — that depends on the
+scale each board is drawn at, which is the composed table's business rather than either renderer's.
+The table pins a seat to the wheel's own rendered cube, so the match is now exact; the old 14.0-unit
+cube was about 10% over. A game table test measures both against the real solve rather than trusting
+either renderer.
 
 `MARKER_CUBE` stays at 14.0 through all of this. It is no longer the size of a drawn cube but it is
 still the unit the board's geometry is written in — the building slots and the banner type are
@@ -664,18 +664,20 @@ pieces around them are drawn, the same split the duty wheel uses. None of the pi
 disc is the piety-track disc at a larger radius, the star is the piety-track star, and the cube is
 Player Board v2's cube, which is why the Alms Table reads as part of the same set.
 
-### Widened to the seats it stands above
+### Widened to the seat it stands above
 
-In the game table the Alms Table sits over two Player Board v2 boards, and it is now as wide as
-they are. That width is native geometry — `panel_width` and the viewBox around it grew, and
-nothing is scaled — but how much of it to buy is a question about the composed table, because the
-two boards are not drawn at the same scale. The Alms Table is pinned to the piety track, for the
+In the game table the Alms Table heads the column the player boards start under, and it was widened
+to the seat below it. That width is native geometry — `panel_width` and the viewBox around it grew,
+and nothing is scaled — but how much of it to buy is a question about the composed table, because
+the two boards are not drawn at the same scale. The Alms Table is pinned to the piety track, for the
 player disc the two share, and the piety track's units are the smaller of the two: one unit here
-renders 1.2925 of the pixels one player board unit does. `UNITS_PER_PLAYER_UNIT` in
+renders 1.48688 of the pixels one player board unit does. `UNITS_PER_PLAYER_UNIT` in
 `render_alms_table.py` is that ratio, and `PLAYER_UNIT` its reciprocal — one player board unit
-measured in this board's units. So a seat's 692.8 units come to 536 here, which is what the board
-is. `test_the_alms_table_comes_out_the_width_of_a_seat` checks the number against the real solve
-rather than trusting it.
+measured in this board's units. The ratio belongs to the composed table rather than to either board,
+so it is re-solved each time the table is recomposed, and the game table's tests check it against
+the real solve rather than trusting the number written here. A seat's 692.8 units came to 536 at the
+ratio that held when the width was chosen, which is what the board is; at the ratio that holds now
+they come to 466, so the board stands proud of the seat until its width is re-fitted.
 
 The extra width all went right of the zone divider, which has not moved: the race track, the
 reward lines and the title are where they were, and the record zone got both a wider span and a
@@ -933,17 +935,19 @@ The generated overview below also produces it. Until one of the two has been run
 
 ## Game table layout
 
-`generated/game_table.html` composes the existing UI/debug renderers into a three-column 2-player
-table view. Column 1 contains the Alms Table with two Player Board v2 boards underneath. Column 2
-contains Piety Track v2 above the Duty Wheel. Column 3 contains the map board. The composition page
-owns shared scale and placement; individual renderers continue to own visual geometry. This is
+`generated/game_table.html` composes the existing UI/debug renderers into a full four-player table
+view, laid out as two rows. The top row is three panels across: the Alms Table, then Piety Track v2
+above the Duty Wheel, then the map board. Under it stands one unscaled horizontal row of all four
+Player Board v2 boards, red first, starting under the Alms Table column. The composition page owns
+shared scale and placement; individual renderers continue to own visual geometry. This is
 visual/debug layout only: it does not mutate `GameState`, and it implements no gameplay rules.
 
-That division is why widening Player Board v2 needed nothing here. A seat's width is solved from
-the board's own shape, so a wider board is simply a wider seat; the table has no separate width to
-adjust and must not scale the boards down to win the room back. It reserves the same two seat
-columns it always did, so the wider boards leave the table a little smaller on screen than they
-used to.
+The stage is left-aligned rather than centred, which is what lines the two rows up: both start on
+the same vertical, so the leading board sits under the leading panel of the row above.
+
+That division of ownership is why widening Player Board v2 needed nothing here. A seat's width is
+solved from the board's own shape, so a wider board is simply a wider seat; the table has no
+separate width to adjust and must not scale the boards down to win the room back.
 
 `game_setup.html` remains the control-heavy debug sandbox. The table page has no buttons and no
 script at all, and no text either — no heading, no description, nothing above the boards. It opens
@@ -984,22 +988,19 @@ Duty Wheel's panel height — which made a board's *shape* decide the scale it w
 the cubes matching only because the board happened to be the height it was. Shortening the board
 took that match from 2% out to 20%. A seat is now as many cubes wide as its crop measures, times
 the wheel's own shortfall against `--cube`, so a Village cube and a duty tile cube are the same size
-exactly, at any board height. The two are mutually dependent — the seats stand in one of the columns
-the row's height is the greater of — so they settle together in the solve below rather than one
-being solved before the other.
+exactly, at any board height. The two are mutually dependent — the seat row is part of the height
+the cube is solved against — so they settle together in the solve below rather than one being solved
+before the other.
 
-Two consequences worth knowing about, neither of them new to this arrangement so much as uncovered
-by it:
+One consequence worth knowing about, not new to this arrangement so much as uncovered by it:
 
-- The seat block no longer fills its column. Two boards at the wheel's cube come to less than the
-  row, so the left column ends above the others and the slack falls under the seats. This is the
-  vertical room a shorter board was asked to give back.
 - The Alms Table no longer comes out a seat's width. It is 536 of its own units because that was a
   seat's width at the ratio which held when it was widened; a seat is narrower now, and this board
   is pinned to the Piety Track rather than to the seats, which is what keeps the two boards' player
-  discs the same size. It therefore stands about a seventh proud of the boards below it until its
-  own width is re-fitted. `UNITS_PER_PLAYER_UNIT` was re-solved, so pieces and type written in a
-  seat's units — its cubes, its labels — do still come out a seat's size.
+  discs the same size. It therefore stands about a seventh proud of the board below it until its
+  own width is re-fitted. `UNITS_PER_PLAYER_UNIT` is re-solved whenever the table is recomposed —
+  moving the seats into a row of their own moved it by half a percent — so pieces and type written
+  in a seat's units, its cubes and its labels, do still come out a seat's size.
 
 A third was already there and is now further out: a building slot is `BUILDING_SLOT_HEX_SIZE` across
 where that was solved as a number of `MARKER_CUBE`s, the unit a player board writes its geometry in,
@@ -1044,12 +1045,22 @@ from `edge_hex_radius`, and the wheel's from its own `ground_path`, `center` and
 
 ### Heights, and why the gaps come out even
 
-The row's height is whichever of the map or the Alms-over-seats column needs more of it — neither
-depends on the Duty Wheel, so it can be read before the wheel is sized. The wheel is then handed
-what is left once the Piety Track, both panels' chrome and one gap come out of it. Because the two
-stacked columns have the same shape, two panels and one gap, the space above the wheel comes out to
-exactly `var(--gap)`: the same distance used between the two player boards, and the wheel's bottom
-edge lands on the map's.
+The top row's height is whichever of the map or the Alms Table needs more of it — in practice the
+map, now that the seats no longer stand under the Alms Table — and neither depends on the Duty
+Wheel, so it can be read before the wheel is sized. The wheel is then handed what is left once the
+Piety Track, both panels' chrome and one gap come out of it. Because the stacked column has the
+same shape as the row is measured against, two panels and one gap, the space above the wheel comes
+out to exactly `var(--gap)`: the same distance used between the player boards, and the wheel's
+bottom edge lands on the map's.
+
+The two rows then compete differently. Each asks for the window's width on its own — neither is
+inside the other any more, so neither bounds the other — while for height they take the window one
+after the other. With four seats in the stack the height is what binds at the reference window, and
+the shared cube comes out about 6% under what the two-seat table reached; give the page the 1142px
+the two rows want and the width takes over instead, at a cube a fifth larger than that table ever
+reached. Nothing is scaled to fit: there is one cube and every panel is a fixed multiple of it, so
+this shows up as a smaller cube for the whole table rather than as any board drawn at a size of its
+own.
 
 That is computed in CSS from `--cube` rather than baked in as a scale factor, so it holds at any
 window size rather than only at the one the constants were solved against. It is the reason the Duty
@@ -1063,8 +1074,9 @@ wheel, and the boards all arrive through the same functions their standalone pag
 `render_setup_map_svg` in `generate_game_setup.py` for the three-layer map, and
 `render_player_board_v2_svg` for one board at a time.
 
-The two seats shown are the second column of the four-seat grid the layout describes; the first
-(white, yellow) is simply not drawn. That is debug state to look at rather than a seating rule:
+Every seat the layout describes is drawn, in the layout's own order read from the red board rather
+than from the first one — red, yellow, blue, white — so the run is the seating order the layout
+already gives and red simply leads it. That is debug state to look at rather than a seating rule:
 player-count switching is not wired up on this page, and no board says who starts.
 
 Generate the output page with:
