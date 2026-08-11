@@ -5,14 +5,16 @@ the physical game reads as -- the shared boards across the top, the seats in a r
 renderers keep owning what each component looks like; nothing here draws geometry of its own.
 
     alms table      piety track     map
-    2P 3P 4P        duty wheel
+    2P 3P 4P 1..6   duty wheel
+    P1 A+ A- P+ P-
+    P1 src dst Move
 
     red seat        seat            seat            seat
 
 The stage is left-aligned, so the two rows start on the same vertical and the red seat comes out
-under the alms table. The 2P/3P/4P bar under the Alms Table only toggles which fixed seats and
-which Alms/Piety discs are visible; it does not reseat anyone, recompute scale, or touch the Duty
-Wheel yet.
+under the alms table. Under that table sits one compact three-row control stack: player count with
+setup roll buttons, Alms/Piety disc movement, and acolyte movement. These controls are local page
+state only: no GameState, no rules, and no scaling solve changes.
 
 ONE SHARED SCALE
 Each renderer draws in its own units and was authored as its own standalone page, so handing
@@ -44,8 +46,9 @@ half of the duty wheel's box is page furniture -- which would otherwise be paid 
 of a table. Each fragment's viewBox is therefore pointed at its own panel instead. Nothing is
 deleted: the extra elements are simply outside the view, and no renderer changes.
 
-Nothing here reads or writes `GameState`, picks legal actions, or applies any rule. There are no
-controls on this page at all; `game_setup.html` remains the control-heavy debug sandbox.
+Nothing here reads or writes `GameState`, picks legal actions, or applies any rule. The controls
+below the Alms Table move only this page's own SVG elements and state; `game_setup.html` remains
+the full control-heavy debug sandbox.
 
 Run from the repo root:
 
@@ -65,7 +68,12 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.ui_debug.generate_game_setup import (  # noqa: E402
+    ABBEY_PLACE_ID,
     DEFAULT_START_ROLL,
+    EDGE_HEX_PATH,
+    START_HEX_BY_ROLL,
+    acolyte_places,
+    hex_centers,
     render_setup_map_svg,
     setup_placements,
 )
@@ -73,8 +81,12 @@ from tools.ui_debug.render_alms_table import (  # noqa: E402
     CUBE_SIZE as ALMS_CUBE_UNITS,
 )
 from tools.ui_debug.render_alms_table import (
+    RANK_FIRST,
+    alms_position_target,
+    alms_rules,
     load_alms_config,
     load_alms_table_layout,
+    players_of as alms_players,
     render_alms_table_svg,
 )
 from tools.ui_debug.render_buildings import load_building_catalog  # noqa: E402
@@ -89,13 +101,17 @@ from tools.ui_debug.render_map import load_map_layout  # noqa: E402
 from tools.ui_debug.render_piety_track_v2 import (  # noqa: E402
     load_piety_config,
     load_piety_track_v2_layout,
+    position_center_x,
     render_piety_track_v2_svg,
+    seated_players,
     track_geometry,
     variant_by_id,
 )
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites  # noqa: E402
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
+    ROLE_ACOLYTE_LIMIT,
     TOKEN_RADIUS as PLAYER_TOKEN_RADIUS,  # noqa: E402
+    default_player_board_v2_state,
 )
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     PANEL_STROKE_WIDTH as PLAYER_PANEL_STROKE,  # noqa: E402
@@ -105,6 +121,7 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     load_player_boards_v2_layout,
     player_by_id,
     render_player_board_v2_svg,
+    token_slot_count,
 )
 
 GENERATED_DIRNAME = "generated"
@@ -148,10 +165,9 @@ SEAT_COLS = len(SEATED_PLAYERS)
 PLAYER_COUNTS = (2, 3, 4)
 DEFAULT_PLAYER_COUNT = 4
 
-# The control bar under the alms table. Its height is fixed rather than left to the type, so the
-# left column's height is a number this module knows: it has to stay well inside the row, which is
-# the map's to set, or the duty wheel would be handed a short height to fill.
-CONTROLS_HEIGHT_PX = 32
+# The setup rolls and players the compact controls offer.
+SETUP_ROLLS = tuple(sorted(START_HEX_BY_ROLL))
+DEFAULT_CONTROL_PLAYER_SEAT = 1
 
 # Dead canvas left around a player board, in its own units. Every other board's margin is solved
 # to match whatever this comes out as on screen.
@@ -565,110 +581,450 @@ def tag_player_discs(fragment: str) -> str:
     return tagged
 
 
-def render_player_count_controls() -> str:
-    """The 2P/3P/4P bar that sits under the Alms Table."""
-    buttons = []
-    for count in PLAYER_COUNTS:
-        pressed = "true" if count == DEFAULT_PLAYER_COUNT else "false"
-        buttons.append(
-            f'<button type="button" data-player-count-button="{count}"'
-            f' aria-pressed="{pressed}">{count}P</button>'
-        )
-    return (
-        '<div class="player-count-controls" role="group" aria-label="Player count">'
-        f"{''.join(buttons)}</div>"
+def _options(choices: list[tuple[str, str]], selected: str) -> str:
+    return "".join(
+        f'<option value="{value}"{" selected" if value == selected else ""}>{label}</option>'
+        for value, label in choices
     )
 
 
-def render_player_count_script() -> str:
-    """Toggle seat boards and Alms/Piety discs. Duty Wheel player-count is deferred."""
-    visible = json.dumps(visible_seats_by_count(), separators=(",", ":"))
+def _control_player_options() -> list[tuple[str, str]]:
+    return [(str(seat), f"P{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
+
+
+def render_compact_controls(board_layout: dict) -> str:
+    """Three compact rows under the Alms Table, with no labels or help text."""
+    count_buttons = "".join(
+        f'<button type="button" data-player-count-button="{count}"'
+        f' aria-pressed="{"true" if count == DEFAULT_PLAYER_COUNT else "false"}">{count}P</button>'
+        for count in PLAYER_COUNTS
+    )
+    setup_buttons = "".join(
+        f'<button type="button" data-setup-roll-button="{roll}"'
+        f' aria-pressed="{"true" if roll == DEFAULT_START_ROLL else "false"}">{roll}</button>'
+        for roll in SETUP_ROLLS
+    )
+    players = _control_player_options()
+    places = acolyte_places(board_layout)
+    first_role = places[1][0] if len(places) > 1 else places[0][0]
+    return (
+        '<div class="table-controls" data-component="game-table-controls">'
+        '<div class="control-row" data-controls-row="1">'
+        f"{count_buttons}{setup_buttons}"
+        '<button type="button" data-ship-advance="true">S+</button>'
+        "</div>"
+        '<div class="control-row" data-controls-row="2">'
+        f'<select id="disc-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
+        '<button type="button" data-disc-track="alms" data-disc-delta="1">A+</button>'
+        '<button type="button" data-disc-track="alms" data-disc-delta="-1">A-</button>'
+        '<button type="button" data-disc-track="piety" data-disc-delta="1">P+</button>'
+        '<button type="button" data-disc-track="piety" data-disc-delta="-1">P-</button>'
+        "</div>"
+        '<div class="control-row" data-controls-row="3">'
+        f'<select id="acolyte-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
+        f'<select id="acolyte-source">{_options(places, ABBEY_PLACE_ID)}</select>'
+        f'<select id="acolyte-target">{_options(places, first_role)}</select>'
+        '<button type="button" id="move-acolyte">Move acolyte</button>'
+        "</div>"
+        "</div>"
+    )
+
+
+def setup_roll_data(map_layout: dict) -> dict:
+    centers = hex_centers(map_layout)
+    return {
+        "edgePath": list(EDGE_HEX_PATH),
+        "hexCenters": {label: [round(x, 1), round(y, 1)] for label, (x, y) in centers.items()},
+        "startHexByRoll": {str(roll): label for roll, label in START_HEX_BY_ROLL.items()},
+        "defaultRoll": DEFAULT_START_ROLL,
+    }
+
+
+def disc_motion_data(alms_layout: dict, alms_config: dict, piety_layout: dict) -> dict:
+    seat_by_player = seat_numbers_by_player()
+    rules = alms_rules(alms_config)
+    alms_max = int(rules.max_position)
+    piety_max = int(piety_layout["track"]["position_count"]) - 1
+    alms_by_id = {player["id"]: player for player in alms_players(alms_layout)}
+
+    alms_targets = {}
+    for player_id, seat in seat_by_player.items():
+        player = alms_by_id[player_id]
+        alms_targets[str(seat)] = {
+            str(position): [
+                round(target[0], 1),
+                round(target[1], 1),
+            ]
+            for position in range(alms_max + 1)
+            for target in [alms_position_target(alms_layout, rules, player, position)]
+        }
+        first_target = alms_position_target(alms_layout, rules, player, RANK_FIRST)
+        alms_targets[str(seat)][RANK_FIRST] = [round(first_target[0], 1), round(first_target[1], 1)]
+
+    piety_targets = {}
+    for player in seated_players(piety_layout, PIETY_VARIANT_ID):
+        seat = seat_by_player[player["id"]]
+        piety_targets[str(seat)] = {
+            str(position): [
+                round(position_center_x(piety_layout, position) + player["cx_offset"], 1),
+                round(player["cy"], 1),
+            ]
+            for position in range(piety_max + 1)
+        }
+
+    def pair_columns(targets: dict[str, dict[str, list[float]]]) -> dict[str, list[float]]:
+        return {
+            position: [
+                round((targets["1"][position][0] + targets["3"][position][0]) / 2, 1),
+                targets["1"][position][1],
+                targets["2"][position][1],
+            ]
+            for position in targets["1"]
+        }
+
+    starts = {
+        "alms": {
+            str(seat): int(alms_layout["starting_position"])
+            for seat in range(1, len(SEATED_PLAYERS) + 1)
+        },
+        "piety": {
+            str(seat): int(piety_layout["track"]["disc_position"])
+            for seat in range(1, len(SEATED_PLAYERS) + 1)
+        },
+    }
+    return {
+        "targets": {"alms": alms_targets, "piety": piety_targets},
+        "pair": {"alms": pair_columns(alms_targets), "piety": pair_columns(piety_targets)},
+        "initial": starts,
+        "max": {"alms": alms_max, "piety": piety_max},
+        "first": {"alms": RANK_FIRST},
+    }
+
+
+def acolyte_control_data(board_layout: dict) -> dict:
+    default = default_player_board_v2_state(board_layout)
+    roles = [role["id"] for role in board_layout["worker_roles"]]
+    return {
+        "abbeyId": ABBEY_PLACE_ID,
+        "abbeyCapacity": token_slot_count(board_layout),
+        "roleLimit": ROLE_ACOLYTE_LIMIT,
+        "roles": roles,
+        "places": [{"id": place_id, "label": label} for place_id, label in acolyte_places(board_layout)],
+        "state": {
+            str(seat): {
+                "playerId": player_id,
+                "villageSerfs": int(default["village_serfs"]),
+                "abbeyAcolytes": int(default["abbey_acolytes"]),
+                "roles": {role: int(default["roles"].get(role, 0)) for role in roles},
+            }
+            for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
+        },
+    }
+
+
+def render_compact_controls_script(
+    map_layout: dict,
+    piety_layout: dict,
+    board_layout: dict,
+    alms_layout: dict,
+    alms_config: dict,
+) -> str:
+    """Compact local controls for player count, setup roll, disc movement, and acolytes.
+
+    Duty Wheel player-count behaviour is intentionally deferred.
+    """
     return f"""<script>
 (function () {{
-  /* Seat slots stay in the flex row; only visibility flips. Duty Wheel player-count
-     behaviour is deferred to a later PR. */
-  var VISIBLE = {visible};
-  var defaultCount = {DEFAULT_PLAYER_COUNT};
-  var buttons = document.querySelectorAll('[data-player-count-button]');
-  var seats = document.querySelectorAll('[data-player-seat].p-player');
-  var discBoards = [
-    document.querySelector('.p-alms'),
-    document.querySelector('.p-piety')
-  ];
+  var VISIBLE = {json.dumps(visible_seats_by_count(), separators=(",", ":"))};
+  var DEFAULT_COUNT = {DEFAULT_PLAYER_COUNT};
+  var SETUP = {json.dumps(setup_roll_data(map_layout), separators=(",", ":"))};
+  var DISC = {json.dumps(disc_motion_data(alms_layout, alms_config, piety_layout), separators=(",", ":"))};
+  var ACOLYTES = {json.dumps(acolyte_control_data(board_layout), separators=(",", ":"))};
 
-  function boardDiscs(board) {{
+  var state = {{
+    count: DEFAULT_COUNT,
+    roll: SETUP.defaultRoll,
+    path: [],
+    shipPosition: 0,
+    discs: JSON.parse(JSON.stringify(DISC.initial)),
+    acolytes: JSON.parse(JSON.stringify(ACOLYTES.state))
+  }};
+
+  var countButtons = document.querySelectorAll('[data-player-count-button]');
+  var rollButtons = document.querySelectorAll('[data-setup-roll-button]');
+  var seatBoards = document.querySelectorAll('[data-player-seat].p-player');
+  var discButtons = document.querySelectorAll('[data-disc-track][data-disc-delta]');
+  var discPlayerSeat = document.getElementById('disc-player-seat');
+  var acolytePlayerSeat = document.getElementById('acolyte-player-seat');
+  var acolyteSource = document.getElementById('acolyte-source');
+  var acolyteTarget = document.getElementById('acolyte-target');
+  var moveAcolyte = document.getElementById('move-acolyte');
+  var shipButton = document.querySelector('[data-ship-advance]');
+  var mapPanel = document.querySelector('.p-map');
+  var setupGroups = mapPanel ? mapPanel.querySelectorAll('g[data-slot]') : [];
+  var shipMarker = mapPanel ? mapPanel.querySelector('#ship-marker') : null;
+
+  function visibleSeats(count) {{
+    return VISIBLE[String(count)] || VISIBLE[String(DEFAULT_COUNT)] || [];
+  }}
+
+  function boardDiscs(track) {{
+    var board = document.querySelector(track === 'alms' ? '.p-alms' : '.p-piety');
     return board ? board.querySelectorAll('[data-player-disc][data-player-seat]') : [];
   }}
 
-  function rememberHomes(discs) {{
-    Array.prototype.forEach.call(discs, function (disc) {{
-      if (!disc.hasAttribute('data-home-cx')) {{
-        disc.setAttribute('data-home-cx', disc.getAttribute('cx'));
-        disc.setAttribute('data-home-cy', disc.getAttribute('cy'));
+  function discPoint(track, seat, position) {{
+    return DISC.targets[track][String(seat)][String(position)];
+  }}
+
+  function pairPoint(track, position) {{
+    return DISC.pair[track][String(position)];
+  }}
+
+  function isAlmsFirst(position) {{
+    return String(position) === String(DISC.first.alms);
+  }}
+
+  function almsFirstOccupied(exceptSeat) {{
+    return Object.keys(state.discs.alms).some(function (seat) {{
+      return Number(seat) !== exceptSeat && isAlmsFirst(state.discs.alms[seat]);
+    }});
+  }}
+
+  function nextAlmsPosition(current, delta, seat) {{
+    var maximum = Number(DISC.max.alms);
+    if (delta > 0) {{
+      if (isAlmsFirst(current)) {{
+        return DISC.first.alms;
       }}
-    }});
-  }}
-
-  function pairLayout(discs) {{
-    /* Still two rows / one column (red over yellow), but centred on the value so the
-       stack is horizontally aligned inside the step rather than parked in the left
-       column of the 2x2. Board height is unchanged. */
-    var xs = [];
-    var ys = [];
-    Array.prototype.forEach.call(discs, function (disc) {{
-      xs.push(Number(disc.getAttribute('data-home-cx')));
-      ys.push(Number(disc.getAttribute('data-home-cy')));
-    }});
-    return {{
-      midX: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2,
-      top: Math.min.apply(null, ys),
-      bottom: Math.max.apply(null, ys)
-    }};
-  }}
-
-  function placeDiscs(discs, count) {{
-    rememberHomes(discs);
-    var pair = count === 2 ? pairLayout(discs) : null;
-    Array.prototype.forEach.call(discs, function (disc) {{
-      var n = Number(disc.getAttribute('data-player-seat'));
-      var shown = VISIBLE[String(count)].indexOf(n) !== -1;
-      disc.style.visibility = shown ? 'visible' : 'hidden';
-      if (pair && n === 1) {{
-        disc.setAttribute('cx', pair.midX);
-        disc.setAttribute('cy', pair.top);
-      }} else if (pair && n === 2) {{
-        disc.setAttribute('cx', pair.midX);
-        disc.setAttribute('cy', pair.bottom);
-      }} else {{
-        disc.setAttribute('cx', disc.getAttribute('data-home-cx'));
-        disc.setAttribute('cy', disc.getAttribute('data-home-cy'));
+      var step = Number(current);
+      if (step < maximum) {{
+        return step + 1;
       }}
+      if (step === maximum && !almsFirstOccupied(seat)) {{
+        return DISC.first.alms;
+      }}
+      return maximum;
+    }}
+    if (delta < 0) {{
+      if (isAlmsFirst(current)) {{
+        return maximum;
+      }}
+      return Math.max(0, Number(current) - 1);
+    }}
+    return current;
+  }}
+
+  function renderDiscTrack(track) {{
+    var shown = visibleSeats(state.count);
+    Array.prototype.forEach.call(boardDiscs(track), function (disc) {{
+      var seat = Number(disc.getAttribute('data-player-seat'));
+      var position = state.discs[track][String(seat)];
+      var point = discPoint(track, seat, position);
+      var x = point[0];
+      var y = point[1];
+      if (state.count === 2 && (seat === 1 || seat === 2)) {{
+        var pair = pairPoint(track, position);
+        x = pair[0];
+        y = seat === 1 ? pair[1] : pair[2];
+      }}
+      disc.setAttribute('cx', Number(x).toFixed(1));
+      disc.setAttribute('cy', Number(y).toFixed(1));
+      disc.style.visibility = shown.indexOf(seat) === -1 ? 'hidden' : 'visible';
+      disc.setAttribute(track === 'alms' ? 'data-alms-position' : 'data-piety-position', String(position));
     }});
   }}
 
-  function apply(count) {{
-    var shown = VISIBLE[String(count)] || VISIBLE[String(defaultCount)];
-    Array.prototype.forEach.call(seats, function (seat) {{
-      var n = Number(seat.getAttribute('data-player-seat'));
-      /* visibility, not display: the empty slot has to keep its width so the
-         remaining boards do not slide left when a count drops. */
-      seat.style.visibility = shown.indexOf(n) === -1 ? 'hidden' : 'visible';
+  function moveDisc(track, delta) {{
+    var seat = Number(discPlayerSeat.value);
+    var key = String(seat);
+    var current = state.discs[track][key];
+    var next = current;
+    if (track === 'alms') {{
+      next = nextAlmsPosition(current, delta, seat);
+    }} else {{
+      var maximum = Number(DISC.max[track]);
+      next = Math.max(0, Math.min(maximum, Number(current) + delta));
+    }}
+    state.discs[track][key] = next;
+    renderDiscTrack(track);
+  }}
+
+  function renderSeatBoards() {{
+    var shown = visibleSeats(state.count);
+    Array.prototype.forEach.call(seatBoards, function (board) {{
+      var seat = Number(board.getAttribute('data-player-seat'));
+      /* visibility, not display: hidden seats keep their width, so the row's geometry
+         and scale never move with player count. */
+      board.style.visibility = shown.indexOf(seat) === -1 ? 'hidden' : 'visible';
     }});
-    discBoards.forEach(function (board) {{
-      placeDiscs(boardDiscs(board), count);
+  }}
+
+  function rotatedPath(roll) {{
+    var startHex = SETUP.startHexByRoll[String(roll)];
+    var offset = SETUP.edgePath.indexOf(startHex);
+    return SETUP.edgePath.slice(offset).concat(SETUP.edgePath.slice(0, offset));
+  }}
+
+  function placeOnHex(element, hexLabel) {{
+    var center = SETUP.hexCenters[hexLabel];
+    element.setAttribute(
+      'transform',
+      'translate(' + Number(center[0]).toFixed(1) + ',' + Number(center[1]).toFixed(1) + ')'
+    );
+  }}
+
+  function renderShip() {{
+    if (shipMarker) {{
+      placeOnHex(shipMarker, state.path[state.shipPosition]);
+    }}
+  }}
+
+  /* One stop clockwise, wrapping at the end of the path -- the same walk the
+     setup page's Advance ship button takes. There is no reset button here; a
+     setup roll puts the ship back on the first stop. */
+  function advanceShip() {{
+    state.shipPosition = (state.shipPosition + 1) % state.path.length;
+    renderShip();
+  }}
+
+  function applySetupRoll(roll) {{
+    state.roll = roll;
+    state.path = rotatedPath(roll);
+    state.shipPosition = 0;
+    Array.prototype.forEach.call(setupGroups, function (group) {{
+      var slot = Number(group.getAttribute('data-slot'));
+      placeOnHex(group, state.path[slot - 1]);
     }});
-    Array.prototype.forEach.call(buttons, function (button) {{
+    renderShip();
+    Array.prototype.forEach.call(rollButtons, function (button) {{
+      var active = Number(button.getAttribute('data-setup-roll-button')) === roll;
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }});
+  }}
+
+  function acolytesAt(playerState, place) {{
+    return place === ACOLYTES.abbeyId ? playerState.abbeyAcolytes : Number(playerState.roles[place] || 0);
+  }}
+
+  function setAcolytesAt(playerState, place, count) {{
+    if (place === ACOLYTES.abbeyId) {{
+      playerState.abbeyAcolytes = count;
+    }} else {{
+      playerState.roles[place] = count;
+    }}
+  }}
+
+  function capacityOf(place) {{
+    return place === ACOLYTES.abbeyId ? ACOLYTES.abbeyCapacity : ACOLYTES.roleLimit;
+  }}
+
+  function show(element, visible) {{
+    if (element) {{
+      element.setAttribute('opacity', visible ? '1' : '0');
+    }}
+  }}
+
+  function boardForSeat(seat) {{
+    return document.querySelector('.p-player[data-player-seat="' + seat + '"]');
+  }}
+
+  function renderAcolyteBoard(seat) {{
+    var board = boardForSeat(seat);
+    var playerState = state.acolytes[String(seat)];
+    if (!board || !playerState) {{
+      return;
+    }}
+    var abbeySlots = board.querySelectorAll('[data-token="abbey"]');
+    Array.prototype.forEach.call(abbeySlots, function (slot) {{
+      show(slot, Number(slot.getAttribute('data-token-index')) < playerState.abbeyAcolytes);
+    }});
+
+    ACOLYTES.roles.forEach(function (role) {{
+      var count = Number(playerState.roles[role] || 0);
+      var roleSlots = board.querySelectorAll('[data-role="' + role + '"]');
+      Array.prototype.forEach.call(roleSlots, function (slot) {{
+        show(slot, count === (slot.getAttribute('data-role-slot') === 'single' ? 1 : 2));
+      }});
+    }});
+  }}
+
+  function canMoveAcolyte() {{
+    var seat = String(acolytePlayerSeat.value);
+    var playerState = state.acolytes[seat];
+    var source = acolyteSource.value;
+    var target = acolyteTarget.value;
+    return (
+      source !== target &&
+      acolytesAt(playerState, source) > 0 &&
+      acolytesAt(playerState, target) < capacityOf(target)
+    );
+  }}
+
+  function refreshMoveAcolyteButton() {{
+    moveAcolyte.disabled = !canMoveAcolyte();
+  }}
+
+  function applyPlayerCount(count) {{
+    state.count = count;
+    renderSeatBoards();
+    renderDiscTrack('alms');
+    renderDiscTrack('piety');
+    Array.prototype.forEach.call(countButtons, function (button) {{
       var active = Number(button.getAttribute('data-player-count-button')) === count;
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }});
   }}
 
-  Array.prototype.forEach.call(buttons, function (button) {{
+  Array.prototype.forEach.call(countButtons, function (button) {{
     button.addEventListener('click', function () {{
-      apply(Number(button.getAttribute('data-player-count-button')));
+      applyPlayerCount(Number(button.getAttribute('data-player-count-button')));
     }});
   }});
-  apply(defaultCount);
+
+  Array.prototype.forEach.call(rollButtons, function (button) {{
+    button.addEventListener('click', function () {{
+      applySetupRoll(Number(button.getAttribute('data-setup-roll-button')));
+    }});
+  }});
+
+  if (shipButton) {{
+    shipButton.addEventListener('click', advanceShip);
+  }}
+
+  Array.prototype.forEach.call(discButtons, function (button) {{
+    button.addEventListener('click', function () {{
+      var track = button.getAttribute('data-disc-track');
+      var delta = Number(button.getAttribute('data-disc-delta'));
+      moveDisc(track, delta);
+    }});
+  }});
+
+  moveAcolyte.addEventListener('click', function () {{
+    if (!canMoveAcolyte()) {{
+      return;
+    }}
+    var seat = String(acolytePlayerSeat.value);
+    var playerState = state.acolytes[seat];
+    var source = acolyteSource.value;
+    var target = acolyteTarget.value;
+    setAcolytesAt(playerState, source, acolytesAt(playerState, source) - 1);
+    setAcolytesAt(playerState, target, acolytesAt(playerState, target) + 1);
+    renderAcolyteBoard(seat);
+    refreshMoveAcolyteButton();
+  }});
+
+  [acolytePlayerSeat, acolyteSource, acolyteTarget].forEach(function (control) {{
+    control.addEventListener('change', refreshMoveAcolyteButton);
+  }});
+
+  Object.keys(state.acolytes).forEach(function (seat) {{
+    renderAcolyteBoard(seat);
+  }});
+  applySetupRoll(SETUP.defaultRoll);
+  applyPlayerCount(DEFAULT_COUNT);
+  refreshMoveAcolyteButton();
+  /* Duty Wheel player-count behaviour is deferred to a later PR. */
 }})();
 </script>"""
 
@@ -695,8 +1051,15 @@ def render_game_table_html(
     scale = solve_table_scale(content, hexes, cubes)
     hexagon = duty_hexagon(duty_wheel_layout)
 
+    # The `1st` pocket is painted solid, so a disc that can be moved into it has to be drawn
+    # after it. That is what the renderer's interactive form is for: it lifts the discs out of
+    # their step groups into one layer above the pocket. Nothing about the board's drawing
+    # changes -- the four discs still start on step 0.
     alms_svg = tag_player_discs(
-        crop_svg(render_alms_table_svg(alms_layout, alms_config), scale.crop["alms"])
+        crop_svg(
+            render_alms_table_svg(alms_layout, alms_config, interactive=True),
+            scale.crop["alms"],
+        )
     )
     piety_svg = tag_player_discs(
         crop_svg(
@@ -717,7 +1080,7 @@ def render_game_table_html(
     panels = []
     for index, seat in enumerate(SEATED_PLAYERS, start=1):
         player = player_by_id(board_layout, seat)
-        board = render_player_board_v2_svg(board_layout, player)
+        board = render_player_board_v2_svg(board_layout, player, interactive=True)
         panels.append(
             f'<div class="panel p-player" data-component="player-board-v2"'
             f' data-player-seat="{index}"'
@@ -725,8 +1088,10 @@ def render_game_table_html(
             f"{crop_svg(board, scale.crop['player'])}</div>"
         )
     seats = "\n      ".join(panels)
-    controls = render_player_count_controls()
-    count_script = render_player_count_script()
+    controls = render_compact_controls(board_layout)
+    control_script = render_compact_controls_script(
+        map_layout, piety_layout, board_layout, alms_layout, alms_config
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -799,12 +1164,12 @@ def render_game_table_html(
      wants to: the other two are single panels or short stacks, and a panel
      taller than its own drawing is a border round empty canvas. */
   .row  {{ display: flex; gap: var(--gap); align-items: stretch; }}
-  /* Alms Table over the 2P/3P/4P bar. The bar sits in the slack under the alms
-     table rather than stretching the left column past the map, so the scale
+  /* Alms Table over the compact controls. The controls sit in the slack under
+     the alms table rather than stretching the left column past the map, so the scale
      solver never has to know about it. */
   .left {{
     display: flex; flex-direction: column; align-items: center;
-    align-self: stretch; justify-content: flex-start; gap: 10px;
+    align-self: stretch; justify-content: flex-start; gap: 8px;
   }}
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short
@@ -838,17 +1203,26 @@ def render_game_table_html(
   .p-piety  > svg {{ width: var(--w-piety); }}
   .p-alms   > svg {{ width: var(--w-alms); }}
 
-  .player-count-controls {{
+  .table-controls {{
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }}
+  .control-row {{
     display: flex; align-items: center; justify-content: center; gap: 4px;
-    height: {CONTROLS_HEIGHT_PX}px;
+    flex-wrap: wrap;
   }}
-  .player-count-controls button {{
+  .control-row button,
+  .control-row select {{
     background: #1C1C1C; border: 1px solid #4A4A4A; border-radius: 6px;
-    color: #F2EEDF; cursor: pointer; font: inherit; font-size: 13px;
-    min-width: 2.75em; padding: 7px 12px;
+    color: #F2EEDF; font: inherit; font-size: 13px;
   }}
-  .player-count-controls button:hover {{ background: #2A2A2A; }}
-  .player-count-controls button[aria-pressed="true"] {{
+  .control-row button {{
+    cursor: pointer; min-width: 2.55em; padding: 6px 10px;
+  }}
+  .control-row select {{
+    min-width: 54px; padding: 5px 6px;
+  }}
+  .control-row button:hover {{ background: #2A2A2A; }}
+  .control-row button[aria-pressed="true"] {{
     background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
   }}
 
@@ -880,7 +1254,7 @@ def render_game_table_html(
       {seats}
     </div>
   </div>
-  {count_script}
+  {control_script}
 </body>
 </html>
 """
