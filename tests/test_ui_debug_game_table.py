@@ -33,6 +33,7 @@ from tools.ui_debug.generate_game_table import (
     default_output_path,
     duty_hexagon,
     generate_game_table_page,
+    building_control_data,
     regular_hexagon_path,
     regularise_duty_hexagon,
     resource_control_data,
@@ -40,7 +41,16 @@ from tools.ui_debug.generate_game_table import (
     solve_table_scale,
     visible_seats_by_count,
 )
-from tools.ui_debug.generate_game_setup import EDGE_HEX_PATH, START_HEX_BY_ROLL, acolyte_places
+from tools.ui_debug.generate_game_setup import (
+    DEFAULT_START_ROLL,
+    EDGE_HEX_PATH,
+    START_HEX_BY_ROLL,
+    acolyte_places,
+    available_setup_buildings,
+    donated_vp_by_level,
+    setup_placements,
+)
+from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_alms_table import (
     CUBE_SIZE as ALMS_CUBE_SIZE,
 )
@@ -57,6 +67,7 @@ from tools.ui_debug.render_alms_table import (
 from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_FONT_SIZE
 from tools.ui_debug.render_alms_table import STAR_OUTER_RADIUS as TRACK_STAR_RADIUS
 from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS
+from tools.ui_debug.render_buildings import load_building_catalog
 from tools.ui_debug.render_duty_wheel import (
     CUBE_SIZE as DUTY_CUBE_SIZE,
 )
@@ -68,6 +79,7 @@ from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout, variant_by_id
 from tools.ui_debug.render_pilgrimage_sites import STAR_OUTER_RADIUS as SITE_STAR_RADIUS
 from tools.ui_debug.render_pilgrimage_sites import VP_TEXT_FONT_SIZE as SITE_VP_FONT_SIZE
+from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites
 from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_HEX_SIZE,
     MARKER_CUBE,
@@ -119,6 +131,12 @@ def _per_unit(solved, board: str) -> float:
 def page(tmp_path_factory: pytest.TempPathFactory) -> str:
     output = tmp_path_factory.mktemp("game_table") / "game_table.html"
     return generate_game_table_page(output_path=output).read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def placements() -> list[dict]:
+    """The setup map the page opens on, which is what the buy dropdown is drawn from."""
+    return setup_placements(DEFAULT_START_ROLL, load_building_catalog(), load_pilgrimage_sites())
 
 
 @pytest.fixture(scope="module")
@@ -451,6 +469,48 @@ def test_row_three_carries_the_season_end_winner_controls(page: str) -> None:
     assert body.index(">AT+<") < body.index(">ATr<")
 
 
+def test_row_three_also_buys_and_donates_buildings(page: str) -> None:
+    """Buy and Donate share the row's player dropdown, so they follow the winner buttons."""
+    controls = _block(page, "table-controls")
+    row_three = re.search(r'data-controls-row="3">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_three is not None
+    body = row_three.group(1)
+
+    assert 'id="buy-building" data-building-buy-select="true"' in body
+    assert 'data-building-buy-button="true">Buy</button>' in body
+    assert 'id="donate-building-slot" data-building-donate-slot-select="true"' in body
+    assert 'data-building-donate-button="true">Donate</button>' in body
+    assert body.index(">ATr<") < body.index("buy-building") < body.index(">Buy<")
+    assert body.index(">Buy<") < body.index("donate-building-slot") < body.index(">Donate<")
+
+
+def test_the_building_dropdown_offers_what_is_standing_on_the_setup_map(
+    page: str, placements: list[dict]
+) -> None:
+    controls = _block(page, "table-controls")
+    select = re.search(r'id="buy-building".*?>(.*?)</select>', controls, flags=re.DOTALL)
+    assert select is not None
+
+    buildings = available_setup_buildings(placements)
+    offered = re.findall(r'<option value="(\d+)"(?: selected)?>([^<]+)</option>', select.group(1))
+
+    assert offered == [(str(item["setupSlot"]), item["label"]) for item in buildings]
+    # keyed by the setup slot, not the hex, so a roll moves a building without renaming it
+    assert all(label.endswith(")") for _, label in offered)
+
+
+def test_the_donate_dropdown_numbers_the_slots_the_board_has(page: str) -> None:
+    controls = _block(page, "table-controls")
+    select = re.search(r'id="donate-building-slot".*?>(.*?)</select>', controls, flags=re.DOTALL)
+    assert select is not None
+
+    count = int(load_player_boards_v2_layout()["building_slot_count"])
+    numbered = re.findall(r'<option value="(\d)"(?: selected)?>(\d)</option>', select.group(1))
+
+    assert count == 6
+    assert numbered == [(str(number), str(number)) for number in range(1, count + 1)]
+
+
 def test_row_four_has_acolyte_controls_with_game_setup_places(page: str) -> None:
     controls = _block(page, "table-controls")
     row_four = re.search(r'data-controls-row="4">(.+?)</div>', controls, flags=re.DOTALL)
@@ -590,6 +650,92 @@ def test_a_reset_sends_every_cube_back_to_the_abbey_it_came_from(page: str) -> N
     assert "var returning = state.winners.slice();" in page
     assert "state.winners = [];" in page
     assert "ACOLYTES.abbeyCapacity, playerState.abbeyAcolytes + 1" in page
+
+
+def test_every_building_starts_on_the_map_owing_to_nobody(
+    page: str, placements: list[dict]
+) -> None:
+    board_layout = load_player_boards_v2_layout()
+    data = building_control_data(board_layout, placements)
+
+    assert data["slotCount"] == int(board_layout["building_slot_count"])
+    assert list(data["state"]["players"]) == [str(seat) for seat in range(1, 5)]
+    assert all(
+        slots["buildingSlots"] == [None] * data["slotCount"]
+        for slots in data["state"]["players"].values()
+    )
+    assert list(data["state"]["available"]) == [
+        str(building["setupSlot"]) for building in available_setup_buildings(placements)
+    ]
+    assert "var BUILDINGS = " + json.dumps(data, separators=(",", ":")) + ";" in page
+
+
+def test_a_bought_building_leaves_the_map_and_the_list_it_was_bought_from(page: str) -> None:
+    assert "function buyBuilding()" in page
+    assert "var building = state.buildings.available[setupSlot];" in page
+    assert "var number = firstEmptyBuildingSlot(seat);" in page
+    assert "if (!building || !number)" in page
+    assert "delete state.buildings.available[setupSlot];" in page
+    assert "option.parentNode.removeChild(option);" in page
+    assert "buyButton.addEventListener('click', buyBuilding);" in page
+
+
+def test_a_bought_building_stands_in_the_first_empty_slot(page: str) -> None:
+    """The slot is found the way the setup page finds it: the first one holding nothing."""
+    assert "function firstEmptyBuildingSlot(seat)" in page
+    assert "if (slots[index] === null)" in page
+    assert "return index + 1;" in page
+    assert "buildingSlotsOf(seat)[number - 1] = {" in page
+
+
+def test_a_slot_shows_its_building_by_pointing_at_content_the_page_defined(page: str) -> None:
+    """Buying and donating change a reference; no SVG is built in the browser."""
+    assert "function renderBuildingSlots(seat)" in page
+    assert "board.querySelector('[data-player-board-slot=\"' + (index + 1) + '\"]')" in page
+    assert "group.querySelector('[data-building-content]')" in page
+    assert (
+        "content.setAttribute('href', donated ? entry.donatedContent : entry.boughtContent);"
+        in page
+    )
+    assert (
+        "'data-building-slot-state', entry === null ? 'empty' : (donated ? 'donated' : 'bought')"
+        in page
+    )
+
+
+def test_the_donated_side_of_a_slot_is_the_donated_tile_for_that_level(
+    page: str, placements: list[dict]
+) -> None:
+    """Level 1 is 2 VP, level 2 is 4 VP, level 3 is 6 VP -- the tiles say so, not the page."""
+    assert donated_vp_by_level(load_donated_building_tiles()) == {1: 2, 2: 4, 3: 6}
+
+    defs = re.search(r'<svg[^>]*class="content-defs".*?</svg>', page, flags=re.DOTALL)
+    assert defs is not None
+    for level in (1, 2, 3):
+        assert f'<g id="donated-level-{level}">' in defs.group(0)
+    for building in available_setup_buildings(placements):
+        assert f'<g id="bought-{building["buildingId"]}">' in defs.group(0)
+        assert building["donatedContent"] == f"#donated-level-{building['level']}"
+
+
+def test_a_slot_can_only_be_flipped_once_and_only_when_it_holds_something(page: str) -> None:
+    assert "function donateBuilding()" in page
+    assert "function canDonateBuilding(seat, number)" in page
+    assert "return Boolean(entry) && !entry.donated;" in page
+    assert "if (!canDonateBuilding(seat, number))" in page
+    assert "buildingSlotsOf(seat)[number - 1].donated = true;" in page
+    assert "donateButton.addEventListener('click', donateBuilding);" in page
+
+
+def test_a_setup_roll_does_not_sell_a_bought_building_back_to_the_map(page: str) -> None:
+    """The roll moves every overlay, so what is still for sale has to be said again after it."""
+    assert "function renderMapBuildings()" in page
+    assert "'#setup-fills g[data-building-id], #setup-labels g[data-building-id]'" in page
+    assert "Object.prototype.hasOwnProperty.call(state.buildings.available, slot)" in page
+
+    applied = re.search(r"function applySetupRoll\(roll\) \{(.+?)\n  \}", page, flags=re.DOTALL)
+    assert applied is not None
+    assert "renderMapBuildings();" in applied.group(1)
 
 
 def test_a_disc_in_the_first_pocket_is_drawn_on_top_of_it(page: str) -> None:
@@ -967,8 +1113,11 @@ def test_each_fragment_is_cropped_to_its_own_panel(page: str) -> None:
 
     The table points each viewBox at the board instead. Nothing is removed, so the count of SVGs
     and what they contain is unchanged; only the window onto them moves.
+
+    The building content the board slots point at is the one SVG that is not a panel: it draws
+    nothing itself and is sized 0 by 0, so it is measured by no rule of the page's.
     """
-    roots = re.findall(r"<svg\b[^>]*>", page)
+    roots = [root for root in re.findall(r"<svg\b[^>]*>", page) if "content-defs" not in root]
 
     # the alms table, the piety track, the duty wheel and the map, plus one board per seat
     assert len(roots) == 4 + len(SEATED_PLAYERS)
@@ -1031,8 +1180,9 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
     resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
-    # counts, setup rolls, the ship, four disc steps, the resource steps, AT+/ATr, Move acolyte
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + resource_steps + 2 + 1
+    # counts, setup rolls, the ship, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
+    # and Move acolyte
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + resource_steps + 2 + 2 + 1
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
@@ -1040,6 +1190,8 @@ def test_page_carries_only_local_compact_controls(page: str) -> None:
     assert "data-disc-track" in page
     assert "data-resource-button" in page
     assert "data-alms-winner-button" in page
+    assert "data-building-buy-button" in page
+    assert "data-building-donate-button" in page
     assert "move-acolyte" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page

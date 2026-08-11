@@ -62,6 +62,7 @@ import math
 import re
 import sys
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -73,7 +74,10 @@ from tools.ui_debug.generate_game_setup import (  # noqa: E402
     EDGE_HEX_PATH,
     START_HEX_BY_ROLL,
     acolyte_places,
+    available_setup_buildings,
+    building_ownership_state,
     hex_centers,
+    render_building_content_defs,
     render_setup_map_svg,
     setup_placements,
 )
@@ -91,6 +95,9 @@ from tools.ui_debug.render_alms_table import (
     render_alms_table_svg,
 )
 from tools.ui_debug.render_buildings import load_building_catalog  # noqa: E402
+from tools.ui_debug.render_donated_buildings import (  # noqa: E402
+    load_donated_building_tiles,
+)
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     CUBE_SIZE as DUTY_CUBE_UNITS,  # noqa: E402
 )
@@ -632,7 +639,27 @@ def _resource_buttons(board_layout: dict) -> str:
     )
 
 
-def render_compact_controls(board_layout: dict) -> str:
+def _building_options(placements: list[dict]) -> list[tuple[str, str]]:
+    """Every building still for sale, keyed by the setup slot it stands on.
+
+    The slot is the key rather than the hex, so a setup roll can move a building around the map
+    without changing which entry in this list it is.
+    """
+    return [
+        (str(building["setupSlot"]), escape(building["label"]))
+        for building in available_setup_buildings(placements)
+    ]
+
+
+def _building_slot_options(board_layout: dict) -> list[tuple[str, str]]:
+    """The board's building slots, by number. The row is tight, so they are numbered, not named."""
+    return [
+        (str(number), str(number))
+        for number in range(1, int(board_layout["building_slot_count"]) + 1)
+    ]
+
+
+def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
     """Four compact rows under the Alms Table, with no labels or help text."""
     count_buttons = "".join(
         f'<button type="button" data-player-count-button="{count}"'
@@ -647,6 +674,8 @@ def render_compact_controls(board_layout: dict) -> str:
     players = _control_player_options()
     places = acolyte_places(board_layout)
     first_role = places[1][0] if len(places) > 1 else places[0][0]
+    buildings = _building_options(placements)
+    slots = _building_slot_options(board_layout)
     return (
         '<div class="table-controls" data-component="game-table-controls">'
         '<div class="control-row" data-controls-row="1">'
@@ -666,6 +695,12 @@ def render_compact_controls(board_layout: dict) -> str:
         f"{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>"
         '<button type="button" data-alms-winner-button="add">AT+</button>'
         '<button type="button" data-alms-winner-button="reset">ATr</button>'
+        '<select id="buy-building" data-building-buy-select="true">'
+        f"{_options(buildings, buildings[0][0] if buildings else '')}</select>"
+        '<button type="button" data-building-buy-button="true">Buy</button>'
+        '<select id="donate-building-slot" data-building-donate-slot-select="true">'
+        f"{_options(slots, slots[0][0])}</select>"
+        '<button type="button" data-building-donate-button="true">Donate</button>'
         "</div>"
         '<div class="control-row" data-controls-row="4">'
         f'<select id="acolyte-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
@@ -761,6 +796,28 @@ def resource_control_data(board_layout: dict) -> dict:
     }
 
 
+def building_control_data(board_layout: dict, placements: list[dict]) -> dict:
+    """Where every building stands before anything is bought: all on the map, no board owns one.
+
+    This is `building_ownership_state` with the players re-keyed to seat numbers, because the
+    compact rows pick a seat rather than a player id. The shape is otherwise the setup page's,
+    so the buy and donate moves the script makes are the ones `buy_building` and
+    `donate_building` already describe in Python.
+    """
+    ownership = building_ownership_state(board_layout, placements)
+    seats = seat_numbers_by_player()
+    return {
+        "slotCount": int(board_layout["building_slot_count"]),
+        "state": {
+            "available": ownership["available"],
+            "players": {
+                str(seat): ownership["players"][player_id]
+                for player_id, seat in sorted(seats.items(), key=lambda pair: pair[1])
+            },
+        },
+    }
+
+
 def season_winner_data(alms_layout: dict, alms_config: dict) -> dict:
     """How many winner sockets the record has, which is what caps the row."""
     return {"slotCount": len(placeholder_slots(alms_layout, alms_rules(alms_config)))}
@@ -793,11 +850,14 @@ def render_compact_controls_script(
     board_layout: dict,
     alms_layout: dict,
     alms_config: dict,
+    placements: list[dict],
 ) -> str:
-    """Compact local controls for player count, setup roll, discs, resources, winners, acolytes.
+    """Compact local controls: player count, setup roll, discs, resources, winners, buildings,
+    acolytes.
 
     Duty Wheel player-count behaviour is intentionally deferred.
     """
+    buildings = json.dumps(building_control_data(board_layout, placements), separators=(",", ":"))
     return f"""<script>
 (function () {{
   var VISIBLE = {json.dumps(visible_seats_by_count(), separators=(",", ":"))};
@@ -807,6 +867,7 @@ def render_compact_controls_script(
   var ACOLYTES = {json.dumps(acolyte_control_data(board_layout), separators=(",", ":"))};
   var RESOURCES = {json.dumps(resource_control_data(board_layout), separators=(",", ":"))};
   var WINNERS = {json.dumps(season_winner_data(alms_layout, alms_config), separators=(",", ":"))};
+  var BUILDINGS = {buildings};
 
   var state = {{
     count: DEFAULT_COUNT,
@@ -817,7 +878,8 @@ def render_compact_controls_script(
     acolytes: JSON.parse(JSON.stringify(ACOLYTES.state)),
     resources: JSON.parse(JSON.stringify(RESOURCES.state)),
     /* Seat numbers in slot order, so the row of sockets is just this list drawn. */
-    winners: []
+    winners: [],
+    buildings: JSON.parse(JSON.stringify(BUILDINGS.state))
   }};
 
   var countButtons = document.querySelectorAll('[data-player-count-button]');
@@ -832,7 +894,13 @@ def render_compact_controls_script(
   var shipButton = document.querySelector('[data-ship-advance]');
   var resourceButtons = document.querySelectorAll('[data-resource-button]');
   var winnerButtons = document.querySelectorAll('[data-alms-winner-button]');
-  var winnerPlayerSeat = document.getElementById('alms-winner-player-seat');
+  /* Row three's dropdown is shared: it picks the seat for the winner cube and for the
+     buildings alike, which is why it is not named after either. */
+  var rowThreeSeat = document.getElementById('alms-winner-player-seat');
+  var buildingSelect = document.getElementById('buy-building');
+  var buyButton = document.querySelector('[data-building-buy-button]');
+  var donateSlot = document.getElementById('donate-building-slot');
+  var donateButton = document.querySelector('[data-building-donate-button]');
   var almsPanel = document.querySelector('.p-alms');
   var mapPanel = document.querySelector('.p-map');
   var setupGroups = mapPanel ? mapPanel.querySelectorAll('g[data-slot]') : [];
@@ -970,6 +1038,9 @@ def render_compact_controls_script(
       var slot = Number(group.getAttribute('data-slot'));
       placeOnHex(group, state.path[slot - 1]);
     }});
+    /* The roll moves every overlay, including the ones a bought building left behind, so what
+       is on the map is said again afterwards. */
+    renderMapBuildings();
     renderShip();
     Array.prototype.forEach.call(rollButtons, function (button) {{
       var active = Number(button.getAttribute('data-setup-roll-button')) === roll;
@@ -1068,7 +1139,7 @@ def render_compact_controls_script(
   }}
 
   function addWinner() {{
-    var seat = Number(winnerPlayerSeat.value);
+    var seat = Number(rowThreeSeat.value);
     var playerState = state.acolytes[String(seat)];
     if (state.winners.length >= WINNERS.slotCount || playerState.abbeyAcolytes < 1) {{
       return;
@@ -1097,6 +1168,121 @@ def render_compact_controls_script(
     }});
     renderWinners();
     refreshMoveAcolyteButton();
+  }}
+
+  function buildingSlotsOf(seat) {{
+    return state.buildings.players[String(seat)].buildingSlots;
+  }}
+
+  function firstEmptyBuildingSlot(seat) {{
+    var slots = buildingSlotsOf(seat);
+    for (var index = 0; index < slots.length; index += 1) {{
+      if (slots[index] === null) {{
+        return index + 1;
+      }}
+    }}
+    return 0;
+  }}
+
+  function canDonateBuilding(seat, number) {{
+    var entry = buildingSlotsOf(seat)[number - 1];
+    return Boolean(entry) && !entry.donated;
+  }}
+
+  /* A bought building leaves the map: its recoloured hex and its label both go, and the map's
+     own hex underneath them is untouched. What is still for sale is kept here rather than read
+     off the map, so a setup roll moves the overlays around without selling anything back. */
+  function renderMapBuildings() {{
+    if (!mapPanel) {{
+      return;
+    }}
+    var overlays = mapPanel.querySelectorAll(
+      '#setup-fills g[data-building-id], #setup-labels g[data-building-id]');
+    Array.prototype.forEach.call(overlays, function (overlay) {{
+      var slot = overlay.getAttribute('data-slot');
+      show(overlay, Object.prototype.hasOwnProperty.call(state.buildings.available, slot));
+    }});
+  }}
+
+  /* A slot shows its building by pointing at content the page has already defined, so buying
+     and donating change a reference rather than drawing anything. The dashed outline is drawn
+     over that content and never moves, so a filled slot keeps the border an empty one has. */
+  function renderBuildingSlots(seat) {{
+    var board = boardForSeat(seat);
+    if (!board) {{
+      return;
+    }}
+    buildingSlotsOf(seat).forEach(function (entry, index) {{
+      var group = board.querySelector('[data-player-board-slot="' + (index + 1) + '"]');
+      if (!group) {{
+        return;
+      }}
+      var donated = Boolean(entry) && entry.donated;
+      group.setAttribute(
+        'data-building-slot-state', entry === null ? 'empty' : (donated ? 'donated' : 'bought'));
+      group.setAttribute('data-building-id', entry === null ? '' : entry.buildingId);
+      group.setAttribute('data-setup-slot', entry === null ? '' : entry.setupSlot);
+      group.setAttribute('data-donated', donated ? 'true' : 'false');
+      var content = group.querySelector('[data-building-content]');
+      show(content, entry !== null);
+      if (entry !== null && content) {{
+        content.setAttribute('href', donated ? entry.donatedContent : entry.boughtContent);
+      }}
+    }});
+  }}
+
+  function renderBuildings() {{
+    Object.keys(state.buildings.players).forEach(function (seat) {{
+      renderBuildingSlots(seat);
+    }});
+    renderMapBuildings();
+    refreshBuildingButtons();
+  }}
+
+  function refreshBuildingButtons() {{
+    var seat = Number(rowThreeSeat.value);
+    buyButton.disabled = !(buildingSelect.value && firstEmptyBuildingSlot(seat));
+    donateButton.disabled = !canDonateBuilding(seat, Number(donateSlot.value));
+  }}
+
+  /* Off the map and onto the first empty slot of the chosen board. Nothing is checked but the
+     two things that make the move impossible: the building is gone, or the board is full. */
+  function buyBuilding() {{
+    var seat = Number(rowThreeSeat.value);
+    var setupSlot = buildingSelect.value;
+    var building = state.buildings.available[setupSlot];
+    var number = firstEmptyBuildingSlot(seat);
+    if (!building || !number) {{
+      return;
+    }}
+    buildingSlotsOf(seat)[number - 1] = {{
+      setupSlot: building.setupSlot,
+      buildingId: building.buildingId,
+      name: building.name,
+      level: building.level,
+      boughtContent: building.boughtContent,
+      donatedContent: building.donatedContent,
+      donated: false
+    }};
+    delete state.buildings.available[setupSlot];
+    /* Sold is sold: it leaves the list it was bought from as well as the map. */
+    var option = buildingSelect.querySelector('option[value="' + setupSlot + '"]');
+    if (option) {{
+      option.parentNode.removeChild(option);
+    }}
+    renderBuildings();
+  }}
+
+  /* One flip, one way: an empty slot has nothing to turn over and a donated one is already
+     turned. */
+  function donateBuilding() {{
+    var seat = Number(rowThreeSeat.value);
+    var number = Number(donateSlot.value);
+    if (!canDonateBuilding(seat, number)) {{
+      return;
+    }}
+    buildingSlotsOf(seat)[number - 1].donated = true;
+    renderBuildings();
   }}
 
   function canMoveAcolyte() {{
@@ -1149,6 +1335,13 @@ def render_compact_controls_script(
     }});
   }});
 
+  buyButton.addEventListener('click', buyBuilding);
+  donateButton.addEventListener('click', donateBuilding);
+
+  [rowThreeSeat, buildingSelect, donateSlot].forEach(function (select) {{
+    select.addEventListener('change', refreshBuildingButtons);
+  }});
+
   Array.prototype.forEach.call(winnerButtons, function (button) {{
     button.addEventListener('click', function () {{
       if (button.getAttribute('data-alms-winner-button') === 'add') {{
@@ -1190,6 +1383,7 @@ def render_compact_controls_script(
     renderResources(seat);
   }});
   renderWinners();
+  renderBuildings();
   applySetupRoll(SETUP.defaultRoll);
   applyPlayerCount(DEFAULT_COUNT);
   refreshMoveAcolyteButton();
@@ -1236,10 +1430,11 @@ def render_game_table_html(
             scale.crop["piety"],
         )
     )
-    map_svg = crop_svg(
-        render_setup_map_svg(map_layout, setup_placements(DEFAULT_START_ROLL, catalog, site_data)),
-        scale.crop["map"],
-    )
+    placements = setup_placements(DEFAULT_START_ROLL, catalog, site_data)
+    map_svg = crop_svg(render_setup_map_svg(map_layout, placements), scale.crop["map"])
+    # Every side of every building a board slot can show, defined once and pointed at, so buying
+    # or donating is a change of reference rather than SVG built in the browser.
+    content_defs = render_building_content_defs(placements, load_donated_building_tiles())
     # The wheel's own controls stay off: they would add height, and the player count does not
     # reach the wheel yet in any case. TODO: duty wheel player-count behaviour, a later pass.
     duty_svg = crop_svg(
@@ -1259,9 +1454,9 @@ def render_game_table_html(
             f"{crop_svg(board, scale.crop['player'])}</div>"
         )
     seats = "\n      ".join(panels)
-    controls = render_compact_controls(board_layout)
+    controls = render_compact_controls(board_layout, placements)
     control_script = render_compact_controls_script(
-        map_layout, piety_layout, board_layout, alms_layout, alms_config
+        map_layout, piety_layout, board_layout, alms_layout, alms_config, placements
     )
 
     return f"""<!DOCTYPE html>
@@ -1425,6 +1620,7 @@ def render_game_table_html(
       {seats}
     </div>
   </div>
+  {content_defs}
   {control_script}
 </body>
 </html>
