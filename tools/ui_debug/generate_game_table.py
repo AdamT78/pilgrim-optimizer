@@ -86,6 +86,7 @@ from tools.ui_debug.render_alms_table import (
     alms_rules,
     load_alms_config,
     load_alms_table_layout,
+    placeholder_slots,
     players_of as alms_players,
     render_alms_table_svg,
 )
@@ -168,6 +169,16 @@ DEFAULT_PLAYER_COUNT = 4
 # The setup rolls and players the compact controls offer.
 SETUP_ROLLS = tuple(sorted(START_HEX_BY_ROLL))
 DEFAULT_CONTROL_PLAYER_SEAT = 1
+
+# What a resource's step buttons are called. The board writes the names out in full beside its
+# icons; a control row this tight has room for two letters, so the buttons say `Wh+` where the
+# board says `Wheat`. Keyed by the layout's own resource ids, so a resource the board stops
+# drawing takes its buttons with it rather than leaving a pair that steps nothing.
+RESOURCE_ABBREVIATIONS = {"wheat": "Wh", "stone": "St", "silver": "Si"}
+
+# A resource cannot go below nothing. There is no ceiling: what a player may actually hold is a
+# rule, and no rule is applied on this page.
+RESOURCE_FLOOR = 0
 
 # Dead canvas left around a player board, in its own units. Every other board's margin is solved
 # to match whatever this comes out as on screen.
@@ -581,6 +592,25 @@ def tag_player_discs(fragment: str) -> str:
     return tagged
 
 
+def tag_resource_readouts(fragment: str, board_layout: dict) -> str:
+    """Stamp each resource amount with the id of the resource it counts.
+
+    The renderer already names the readout's group; the amount inside it is the only text there,
+    and this is what lets the control row find it without reaching through the group's shape.
+    Done here rather than in the renderer so the standalone board page is unchanged.
+    """
+    tagged = fragment
+    for resource in board_layout["resources"]:
+        resource_id = resource["id"]
+        group = re.compile(rf'(<g data-resource="{re.escape(resource_id)}">.*?)<text ', re.DOTALL)
+        tagged, count = group.subn(
+            rf'\1<text data-player-resource="{resource_id}" ', tagged, count=1
+        )
+        if not count:
+            raise ValueError(f"no {resource_id} readout to tag on the player board")
+    return tagged
+
+
 def _options(choices: list[tuple[str, str]], selected: str) -> str:
     return "".join(
         f'<option value="{value}"{" selected" if value == selected else ""}>{label}</option>'
@@ -592,8 +622,18 @@ def _control_player_options() -> list[tuple[str, str]]:
     return [(str(seat), f"P{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
 
 
+def _resource_buttons(board_layout: dict) -> str:
+    """A pair of steps per resource, in the order the board draws its readouts."""
+    return "".join(
+        f'<button type="button" data-resource-button="{resource["id"]}:{sign}">'
+        f"{RESOURCE_ABBREVIATIONS[resource['id']]}{sign}</button>"
+        for resource in board_layout["resources"]
+        for sign in ("+", "-")
+    )
+
+
 def render_compact_controls(board_layout: dict) -> str:
-    """Three compact rows under the Alms Table, with no labels or help text."""
+    """Four compact rows under the Alms Table, with no labels or help text."""
     count_buttons = "".join(
         f'<button type="button" data-player-count-button="{count}"'
         f' aria-pressed="{"true" if count == DEFAULT_PLAYER_COUNT else "false"}">{count}P</button>'
@@ -619,8 +659,15 @@ def render_compact_controls(board_layout: dict) -> str:
         '<button type="button" data-disc-track="alms" data-disc-delta="-1">A-</button>'
         '<button type="button" data-disc-track="piety" data-disc-delta="1">P+</button>'
         '<button type="button" data-disc-track="piety" data-disc-delta="-1">P-</button>'
+        f"{_resource_buttons(board_layout)}"
         "</div>"
         '<div class="control-row" data-controls-row="3">'
+        '<select id="alms-winner-player-seat" data-alms-winner-player-select="true">'
+        f"{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>"
+        '<button type="button" data-alms-winner-button="add">AT+</button>'
+        '<button type="button" data-alms-winner-button="reset">ATr</button>'
+        "</div>"
+        '<div class="control-row" data-controls-row="4">'
         f'<select id="acolyte-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
         f'<select id="acolyte-source">{_options(places, ABBEY_PLACE_ID)}</select>'
         f'<select id="acolyte-target">{_options(places, first_role)}</select>'
@@ -701,6 +748,24 @@ def disc_motion_data(alms_layout: dict, alms_config: dict, piety_layout: dict) -
     }
 
 
+def resource_control_data(board_layout: dict) -> dict:
+    """Every seat's resources, starting from the amounts the board is drawn holding."""
+    resources = board_layout["resources"]
+    return {
+        "ids": [resource["id"] for resource in resources],
+        "floor": RESOURCE_FLOOR,
+        "state": {
+            str(seat): {resource["id"]: int(resource["count"]) for resource in resources}
+            for seat in range(1, len(SEATED_PLAYERS) + 1)
+        },
+    }
+
+
+def season_winner_data(alms_layout: dict, alms_config: dict) -> dict:
+    """How many winner sockets the record has, which is what caps the row."""
+    return {"slotCount": len(placeholder_slots(alms_layout, alms_rules(alms_config)))}
+
+
 def acolyte_control_data(board_layout: dict) -> dict:
     default = default_player_board_v2_state(board_layout)
     roles = [role["id"] for role in board_layout["worker_roles"]]
@@ -729,7 +794,7 @@ def render_compact_controls_script(
     alms_layout: dict,
     alms_config: dict,
 ) -> str:
-    """Compact local controls for player count, setup roll, disc movement, and acolytes.
+    """Compact local controls for player count, setup roll, discs, resources, winners, acolytes.
 
     Duty Wheel player-count behaviour is intentionally deferred.
     """
@@ -740,6 +805,8 @@ def render_compact_controls_script(
   var SETUP = {json.dumps(setup_roll_data(map_layout), separators=(",", ":"))};
   var DISC = {json.dumps(disc_motion_data(alms_layout, alms_config, piety_layout), separators=(",", ":"))};
   var ACOLYTES = {json.dumps(acolyte_control_data(board_layout), separators=(",", ":"))};
+  var RESOURCES = {json.dumps(resource_control_data(board_layout), separators=(",", ":"))};
+  var WINNERS = {json.dumps(season_winner_data(alms_layout, alms_config), separators=(",", ":"))};
 
   var state = {{
     count: DEFAULT_COUNT,
@@ -747,7 +814,10 @@ def render_compact_controls_script(
     path: [],
     shipPosition: 0,
     discs: JSON.parse(JSON.stringify(DISC.initial)),
-    acolytes: JSON.parse(JSON.stringify(ACOLYTES.state))
+    acolytes: JSON.parse(JSON.stringify(ACOLYTES.state)),
+    resources: JSON.parse(JSON.stringify(RESOURCES.state)),
+    /* Seat numbers in slot order, so the row of sockets is just this list drawn. */
+    winners: []
   }};
 
   var countButtons = document.querySelectorAll('[data-player-count-button]');
@@ -760,6 +830,10 @@ def render_compact_controls_script(
   var acolyteTarget = document.getElementById('acolyte-target');
   var moveAcolyte = document.getElementById('move-acolyte');
   var shipButton = document.querySelector('[data-ship-advance]');
+  var resourceButtons = document.querySelectorAll('[data-resource-button]');
+  var winnerButtons = document.querySelectorAll('[data-alms-winner-button]');
+  var winnerPlayerSeat = document.getElementById('alms-winner-player-seat');
+  var almsPanel = document.querySelector('.p-alms');
   var mapPanel = document.querySelector('.p-map');
   var setupGroups = mapPanel ? mapPanel.querySelectorAll('g[data-slot]') : [];
   var shipMarker = mapPanel ? mapPanel.querySelector('#ship-marker') : null;
@@ -949,6 +1023,82 @@ def render_compact_controls_script(
     }});
   }}
 
+  function renderResources(seat) {{
+    var board = boardForSeat(seat);
+    var amounts = state.resources[String(seat)];
+    if (!board || !amounts) {{
+      return;
+    }}
+    RESOURCES.ids.forEach(function (id) {{
+      var readout = board.querySelector('[data-player-resource="' + id + '"]');
+      if (readout) {{
+        readout.textContent = String(amounts[id]);
+      }}
+    }});
+  }}
+
+  function stepResource(id, delta) {{
+    var seat = String(discPlayerSeat.value);
+    var amounts = state.resources[seat];
+    if (!amounts) {{
+      return;
+    }}
+    amounts[id] = Math.max(RESOURCES.floor, amounts[id] + delta);
+    renderResources(seat);
+  }}
+
+  /* The record's sockets, drawn from `state.winners`: slot n shows the cube of whichever seat
+     is nth in the list, and an empty slot shows its dashed socket back. Every cube is already
+     on the board, hidden, so this only ever flips opacity. */
+  function renderWinners() {{
+    if (!almsPanel) {{
+      return;
+    }}
+    for (var slot = 1; slot <= WINNERS.slotCount; slot += 1) {{
+      var seat = state.winners[slot - 1];
+      var cubes = almsPanel.querySelectorAll('[data-season-end-winner-slot="' + slot + '"]');
+      var owner = seat ? ACOLYTES.state[String(seat)].playerId : null;
+      Array.prototype.forEach.call(cubes, function (cube) {{
+        show(cube, cube.getAttribute('data-player') === owner);
+      }});
+      /* The socket goes out from under its cube, so no dashed edge shows around it. */
+      var socket = almsPanel.querySelector('[data-placeholder-slot="' + slot + '"]');
+      show(socket, !owner);
+    }}
+  }}
+
+  function addWinner() {{
+    var seat = Number(winnerPlayerSeat.value);
+    var playerState = state.acolytes[String(seat)];
+    if (state.winners.length >= WINNERS.slotCount || playerState.abbeyAcolytes < 1) {{
+      return;
+    }}
+    playerState.abbeyAcolytes -= 1;
+    state.winners.push(seat);
+    renderAcolyteBoard(seat);
+    renderWinners();
+    refreshMoveAcolyteButton();
+  }}
+
+  function resetWinners() {{
+    if (!state.winners.length) {{
+      return;
+    }}
+    var returning = state.winners.slice();
+    state.winners = [];
+    returning.forEach(function (seat) {{
+      var playerState = state.acolytes[String(seat)];
+      /* The Abbey holds what it holds: a cube coming back to a full one has nowhere to
+         stand, so it is not counted twice over. */
+      playerState.abbeyAcolytes = Math.min(
+        ACOLYTES.abbeyCapacity, playerState.abbeyAcolytes + 1
+      );
+      renderAcolyteBoard(seat);
+    }});
+    renderWinners();
+    refreshMoveAcolyteButton();
+  }}
+
   function canMoveAcolyte() {{
     var seat = String(acolytePlayerSeat.value);
     var playerState = state.acolytes[seat];
@@ -992,6 +1142,23 @@ def render_compact_controls_script(
     shipButton.addEventListener('click', advanceShip);
   }}
 
+  Array.prototype.forEach.call(resourceButtons, function (button) {{
+    button.addEventListener('click', function () {{
+      var step = button.getAttribute('data-resource-button').split(':');
+      stepResource(step[0], step[1] === '-' ? -1 : 1);
+    }});
+  }});
+
+  Array.prototype.forEach.call(winnerButtons, function (button) {{
+    button.addEventListener('click', function () {{
+      if (button.getAttribute('data-alms-winner-button') === 'add') {{
+        addWinner();
+      }} else {{
+        resetWinners();
+      }}
+    }});
+  }});
+
   Array.prototype.forEach.call(discButtons, function (button) {{
     button.addEventListener('click', function () {{
       var track = button.getAttribute('data-disc-track');
@@ -1020,7 +1187,9 @@ def render_compact_controls_script(
 
   Object.keys(state.acolytes).forEach(function (seat) {{
     renderAcolyteBoard(seat);
+    renderResources(seat);
   }});
+  renderWinners();
   applySetupRoll(SETUP.defaultRoll);
   applyPlayerCount(DEFAULT_COUNT);
   refreshMoveAcolyteButton();
@@ -1080,7 +1249,9 @@ def render_game_table_html(
     panels = []
     for index, seat in enumerate(SEATED_PLAYERS, start=1):
         player = player_by_id(board_layout, seat)
-        board = render_player_board_v2_svg(board_layout, player, interactive=True)
+        board = tag_resource_readouts(
+            render_player_board_v2_svg(board_layout, player, interactive=True), board_layout
+        )
         panels.append(
             f'<div class="panel p-player" data-component="player-board-v2"'
             f' data-player-seat="{index}"'
