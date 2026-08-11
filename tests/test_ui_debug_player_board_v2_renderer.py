@@ -20,6 +20,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     BUILDING_SLOT_DASH_ARRAY,
     BUILDING_SLOT_GAP,
     BUILDING_SLOT_HEX_SIZE,
+    COLUMN_HALF_WIDTH,
     COMPACT_ICON_SIZE,
     CORNER_TAG_OVERSHOOT,
     CORNER_TAG_SIZE,
@@ -232,57 +233,96 @@ def test_a_plain_board_slot_stays_the_single_dashed_hex_of_the_baseline(layout: 
         ) in svg
 
 
-def test_the_board_got_wider_and_then_shorter(layout: dict) -> None:
-    """Wider across for the slots, and since the readouts moved into the corner, shorter down.
+def test_the_board_got_wider_and_then_taller(layout: dict) -> None:
+    """Wider across for the columns, and taller down for the slots that outgrew them.
 
     The height was held for a long time because a seat on the composed game table was sized by
     fitting two boards into the duty wheel's height, which made the board's shape decide the scale
     it was drawn at there. The table sizes a seat from the wheel's cube now, so the height is the
-    board's own business again.
+    board's own business again -- which is what let the slots grow to the size of a map hex and
+    take the depth they needed for it.
     """
     geometry = board_geometry(len(layout["worker_roles"]))
     baseline = _svg_bodies(BASELINE_PROTOTYPE.read_text(encoding="utf-8"))[0]
     was_width, was_height = _view_box(baseline)
 
     assert geometry["panel_width"] > was_width * 1.25
-    assert geometry["panel_height"] < was_height * 0.87
+    assert geometry["panel_height"] > was_height * 1.03
 
 
-def test_the_slots_are_the_widest_thing_on_the_board_and_set_its_columns(layout: dict) -> None:
-    """One hex size and one pitch: there are no other horizontal spacings to get wrong."""
+def test_the_slots_zigzag_across_the_board_rather_than_standing_in_its_columns(
+    layout: dict,
+) -> None:
+    """Six of them are wider laid out than the board is, so they interlock instead.
+
+    A slot is a map hex, and a map hex is wider than one of this board's columns -- so the slots
+    cannot each stand in one any more. Offsetting every other slot by an apothem is how a flat-top
+    hexagon packs against its neighbour, and it buys back enough width to fit all six across a board
+    that has not grown at all.
+    """
     geometry = board_geometry(len(layout["worker_roles"]))
     slots = building_slot_centers(layout)
     xs = [x for x, _ in slots]
+    ys = [y for _, y in slots]
 
     assert len(slots) == int(layout["building_slot_count"]) == 6
     assert len(set(slots)) == len(slots)
-    # Left to right, level with each other, and evenly spaced.
+    # Left to right, evenly spaced, and alternating high and low from a high first slot.
     assert xs == sorted(xs)
-    assert len({y for _, y in slots}) == 1
-    assert [b - a for a, b in zip(xs, xs[1:], strict=False)] == [pytest.approx(column_pitch())] * 5
-    # Wider than a role circle, which is what made the board grow in the first place.
+    # Evenly to the hundredth the centres are rounded to.
+    steps = [b - a for a, b in zip(xs, xs[1:], strict=False)]
+    assert steps == [pytest.approx(steps[0], abs=0.011)] * 5
+    assert len(set(ys)) == 2
+    assert ys[0] < ys[1]
+    assert ys == [ys[index % 2] for index in range(6)]
+    # A row of six would not fit; this does, and with room to spare.
+    assert 6 * 2 * BUILDING_SLOT_HEX_SIZE > geometry["panel_width"] - 2 * SIDE_MARGIN
+    assert xs[-1] + BUILDING_SLOT_HEX_SIZE <= geometry["panel_width"] - SIDE_MARGIN + 0.005
+    # Wider than the column it used to stand in, which is the whole reason it left.
     assert BUILDING_SLOT_HEX_SIZE > ROLE_CIRCLE_RADIUS
-    assert geometry["role_x"] == [x for x, _ in slots]
+    assert BUILDING_SLOT_HEX_SIZE > COLUMN_HALF_WIDTH
 
 
 def test_a_slot_clears_its_neighbours_the_circle_above_it_and_the_board_edge(layout: dict) -> None:
     geometry = board_geometry(len(layout["worker_roles"]))
     slots = building_slot_centers(layout)
-    cy = slots[0][1]
+    xs = [x for x, _ in slots]
+    top, bottom = slots[0][1], slots[1][1]
 
-    assert column_pitch() - 2 * BUILDING_SLOT_HEX_SIZE == pytest.approx(BUILDING_SLOT_GAP)
-    # Below the role circles, and by the stated gap.
-    circle_bottom = geometry["role_circle_cy"] + ROLE_CIRCLE_RADIUS
-    # The slot centres are rounded to the two decimals a path is written at, so the gap they leave
-    # is that stated one to within half a hundredth.
-    assert cy - slot_apothem() - circle_bottom == pytest.approx(BUILDING_ROW_GAP, abs=0.005)
-    # The same margin either side, and the bottom margin the banners get at the top.
-    assert slots[0][0] - BUILDING_SLOT_HEX_SIZE == pytest.approx(SIDE_MARGIN)
-    assert geometry["panel_width"] - (slots[-1][0] + BUILDING_SLOT_HEX_SIZE) == pytest.approx(
-        SIDE_MARGIN
+    # Neighbours are a row apart and clear of each other by the stated gap, as they were when they
+    # stood side by side -- across the board now rather than corner to corner.
+    assert bottom - top == pytest.approx(slot_apothem(), abs=0.01)
+    assert xs[1] - xs[0] - 1.5 * BUILDING_SLOT_HEX_SIZE == pytest.approx(
+        BUILDING_SLOT_GAP, abs=0.05
     )
-    assert geometry["panel_height"] - (cy + slot_apothem()) == pytest.approx(
+    # The band hangs below the role circles by the stated gap. The centres are rounded to the two
+    # decimals a path is written at, so it holds to within half a hundredth.
+    circle_bottom = geometry["role_circle_cy"] + ROLE_CIRCLE_RADIUS
+    assert top - slot_apothem() - circle_bottom == pytest.approx(BUILDING_ROW_GAP, abs=0.005)
+    # The same margin either side, and the bottom margin the banners get at the top.
+    assert xs[0] - BUILDING_SLOT_HEX_SIZE == pytest.approx(SIDE_MARGIN, abs=0.005)
+    assert geometry["panel_width"] - (xs[-1] + BUILDING_SLOT_HEX_SIZE) == pytest.approx(
+        SIDE_MARGIN, abs=0.005
+    )
+    assert geometry["panel_height"] - (bottom + slot_apothem()) == pytest.approx(
         BANNER_CENTER_Y - BANNER_HEIGHT / 2, abs=0.005
+    )
+
+
+def test_the_columns_kept_the_width_the_slots_used_to_give_them(layout: dict) -> None:
+    """Nothing above the slots moved when they grew: the grid is its own measurement now.
+
+    The banners, the role circles and the readouts are all spaced on the board's six columns, and
+    those columns were the slots' width back when a slot stood in one. Freezing that width where it
+    was is what let the slots grow without dragging the whole board wider with them.
+    """
+    geometry = board_geometry(len(layout["worker_roles"]))
+
+    assert column_pitch() == pytest.approx(2 * COLUMN_HALF_WIDTH + BUILDING_SLOT_GAP)
+    assert geometry["panel_width"] == pytest.approx(692.8)
+    assert geometry["role_x"][0] - COLUMN_HALF_WIDTH == pytest.approx(SIDE_MARGIN)
+    assert geometry["panel_width"] - (geometry["role_x"][-1] + COLUMN_HALF_WIDTH) == pytest.approx(
+        SIDE_MARGIN
     )
 
 
@@ -615,8 +655,11 @@ def test_the_board_closed_the_gap_the_readouts_came_out_of(layout: dict) -> None
     tokens_bottom = geometry["token_grid_top"] + 2 * 2 * TOKEN_RADIUS + TOKEN_ROW_GAP
     label_top = geometry["role_label_baseline"] - ROLE_LINE_HEIGHT - LABEL_ASCENT
 
-    assert geometry["panel_height"] == pytest.approx(339.98, abs=0.005)
-    assert geometry["panel_height"] < 401.56
+    # Measured to the top of the slots rather than to the bottom of the board, so it reads the gap
+    # this closed and not the depth the slots later took when they grew to a map hex's size.
+    band_top = geometry["building_y"][0] - slot_apothem()
+    assert band_top == pytest.approx(237.42, abs=0.005)
+    assert band_top < 299.0
     # The labels clear the readouts' rules, which hang lower than the cubes do, by that one gap.
     rules_bottom = geometry["resources"]["bottom"] + RESOURCE_DIVIDER_OVERHANG
     assert tokens_bottom < rules_bottom
@@ -727,13 +770,15 @@ def test_v1_player_board_is_left_alone() -> None:
 def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Path) -> None:
     """Everything these boards no longer share with the prototype, and nothing else.
 
-    Five departures, all deliberate. The board got wider, because the prototype's building slots
-    are two thirds of a map hex and these are a whole one. Then the type grew, because it was sized
-    for a board that narrow and read small on this one. Then the cubes shrank to the duty wheel's,
-    so that a player's piece reads as one piece across the table. Then the resource readouts came
-    out of their circles and went to the corner, and the first-player card went with them. Then the
-    board got shorter, closing the gap they had stood in. What is left is what the prototype set
-    and no reason has come up to change: the worker circles, and the number of every piece.
+    Six departures, all deliberate. The board got wider, because the prototype's building slots are
+    two thirds of a map hex and these are a whole one. Then the type grew, because it was sized for
+    a board that narrow and read small on this one. Then the cubes shrank to the duty wheel's, so
+    that a player's piece reads as one piece across the table. Then the resource readouts came out
+    of their circles and went to the corner, and the first-player card went with them. Then the
+    board got shorter, closing the gap they had stood in. Then the slots grew to the size a map hex
+    renders at on the composed table, which took more depth than that gap gave back. What is left is
+    what the prototype set and no reason has come up to change: the worker circles, and the number
+    of every piece.
     """
     generated = _svg_bodies(
         generate_player_boards_v2_page(output_path=tmp_path / "player_boards_v2.html").read_text(
@@ -756,7 +801,7 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
         old_width, old_height = _view_box(was)
 
         assert width > old_width
-        assert height < old_height
+        assert height > old_height
         for size in kept:
             assert board.count(size) == was.count(size), size
         # Drawn bigger, with nothing left behind at the old size.

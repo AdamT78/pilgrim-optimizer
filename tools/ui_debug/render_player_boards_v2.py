@@ -59,19 +59,23 @@ DEFAULT_PLAYER = "player_one"
 ROLE_ACOLYTE_LIMIT = 2
 
 # A building slot is a map hex, and the two are drawn the same way -- flat-top, from the centre out
-# to a corner -- so making a building tile the size on a board that it is on the map comes down to
-# one number: how many cubes it measures across. That number is the map's:
-#
-#   a map hex is 46.0 map units across the radius, and a cube renders as 13.03 map units,
-#   so a hex is 3.531 cubes; and this board is written in MARKER_CUBE units to the cube, so a slot
-#   is 3.531 * 14.0.
-#
-# Written out rather than read from `map_layout.json`, so that drawing a player board does not mean
-# loading the map. The arithmetic is checked against the real map layout in the tests instead.
-BUILDING_SLOT_HEX_SIZE = 49.4
-# Clear air between neighbouring slots. The slots are the widest thing in a column, so this is what
-# sets the column pitch and, through it, the width of the board.
+# to a corner -- so a slot ought to come out on screen the size a map hex does. It does not follow
+# from the arithmetic, because the composed table draws the map at one scale and a seat at another:
+# the wheel is fitted to the height its row leaves it and comes out about three quarters of the
+# size the table's cube would make it, and a seat is shrunk by that same shortfall so a Village cube
+# keeps matching a duty tile's. The map never was. So a slot has to be drawn this much larger in the
+# board's own units to land at a map hex's size once both shortfalls are taken -- measured off the
+# real solve, and held there by a test in `test_ui_debug_game_table.py`, which is what to re-run if
+# either board's scale ever moves.
+BUILDING_SLOT_HEX_SIZE = 62.394
+# Clear air between neighbouring slots, and between the columns the board is spaced on.
 BUILDING_SLOT_GAP = 10.0
+# Half of one of the board's six columns. The slots used to set this -- they were the widest thing
+# in a column, and the column was drawn around them -- and it is still the width they had then, so
+# nothing on the grid has moved. They no longer set it: a slot that big will not fit six to a row,
+# so the slots left the row and took a zigzag of their own, and the columns the banners, the role
+# circles and the readouts line up on are their own measurement now.
+COLUMN_HALF_WIDTH = 49.4
 # Clear air between the bottom of a role circle and the top of the slot below it.
 BUILDING_ROW_GAP = 12.0
 
@@ -174,8 +178,10 @@ RESOURCE_DIVIDER_OVERHANG = 4.0
 RESOURCE_DIVIDER_WIDTH = 1.5
 
 # The unit this board's geometry is written in, and the size its cubes were drawn at before they
-# were matched to the duty wheel's. The building slots and the banner type are multiples of it, so
-# it stays where it is: resizing the cubes was never a reason to resize the slots or reset the type.
+# were matched to the duty wheel's. The banner type is still a multiple of it, so it stays where it
+# is: resizing the cubes was never a reason to reset the type. The building slots were multiples of
+# it too, and should not have been -- a slot stands for a map hex, so it has to be measured against
+# what a map hex renders at rather than against a unit that stopped being this board's cube.
 MARKER_CUBE = 14.0
 
 CORNER_TAG_SIZE = 48.0
@@ -233,7 +239,7 @@ def default_player_board_v2_state(layout: dict) -> dict:
 def building_slot_centers(layout: dict) -> list[tuple[float, float]]:
     """Where the six bottom building slots sit, left to right — slot 1 is the first of them."""
     geometry = board_geometry(len(layout["worker_roles"]))
-    return list(zip(geometry["role_x"], geometry["building_y"], strict=True))
+    return list(zip(geometry["building_x"], geometry["building_y"], strict=True))
 
 
 def token_slot_count(layout: dict) -> int:
@@ -272,9 +278,18 @@ def slot_apothem() -> float:
     return BUILDING_SLOT_HEX_SIZE * math.sqrt(3) / 2
 
 
+def slot_band_half_height() -> float:
+    """Half the depth the zigzag of slots takes up.
+
+    Two rows offset by an apothem, each an apothem deep either side of its own middle, so the band
+    is three apothems from the top of the high row to the bottom of the low one.
+    """
+    return 1.5 * slot_apothem()
+
+
 def column_pitch() -> float:
-    """Centre to centre between neighbouring columns, which the building slots set."""
-    return 2 * BUILDING_SLOT_HEX_SIZE + BUILDING_SLOT_GAP
+    """Centre to centre between neighbouring columns."""
+    return 2 * COLUMN_HALF_WIDTH + BUILDING_SLOT_GAP
 
 
 def resource_block(panel_width: float) -> dict:
@@ -325,8 +340,8 @@ def board_geometry(role_count: int) -> dict:
     been and a seat on the composed table is drawn at the scale it always was.
     """
     pitch = column_pitch()
-    role_x = [SIDE_MARGIN + BUILDING_SLOT_HEX_SIZE + index * pitch for index in range(role_count)]
-    panel_width = role_x[-1] + BUILDING_SLOT_HEX_SIZE + SIDE_MARGIN
+    role_x = [SIDE_MARGIN + COLUMN_HALF_WIDTH + index * pitch for index in range(role_count)]
+    panel_width = role_x[-1] + COLUMN_HALF_WIDTH + SIDE_MARGIN
 
     band_top = BANNER_CENTER_Y + BANNER_HEIGHT / 2 + TOKEN_GRID_TOP_GAP
     tokens_bottom = band_top + TOKEN_BAND_HEIGHT
@@ -345,13 +360,37 @@ def board_geometry(role_count: int) -> dict:
     role_baseline = label_top + (ROLE_LABEL_MAX_LINES - 1) * ROLE_LINE_HEIGHT + LABEL_ASCENT
     role_circle_top = role_baseline + ROLE_LABEL_GAP
 
-    # The slots hang off the bottom of the role circles, all six level with each other.
-    building_cy = round(
-        role_circle_top + 2 * ROLE_CIRCLE_RADIUS + BUILDING_ROW_GAP + slot_apothem(), 2
+    # The slots hang off the bottom of the role circles as one band, and zigzag inside it: a slot
+    # is wider than the column it would have stood in, so a straight row of six will not fit across
+    # the board. Offsetting every other one by an apothem is how a flat-top hexagon packs against
+    # its neighbour, which buys the width back out of the depth -- six of them laid this way take
+    # less across the board than the smaller six took in a row, at the cost of a band half again as
+    # deep. The band is centred where the row's middle was, so the slots grew about it evenly.
+    band_middle = round(
+        role_circle_top + 2 * ROLE_CIRCLE_RADIUS + BUILDING_ROW_GAP + slot_band_half_height(), 2
     )
+    # The row still spans the board's whole inner width, as it did when the slots were the columns:
+    # the first and last sit against the side margins and the rest divide what is between them.
+    # There are as many slots as roles -- six of each -- even though a slot no longer stands in a
+    # role's column.
+    slot_count = role_count
+    inner = panel_width - 2 * SIDE_MARGIN - 2 * BUILDING_SLOT_HEX_SIZE
+    slot_pitch = inner / (slot_count - 1)
+    # Rounded for the same reason the band's middle is: a slot's path is written at two decimals and
+    # a building is placed by carrying that centre, so the centre has to be a number the path can
+    # hold exactly or a placed building lands a hundredth off its own dashes.
+    building_x = [
+        round(SIDE_MARGIN + BUILDING_SLOT_HEX_SIZE + index * slot_pitch, 2)
+        for index in range(slot_count)
+    ]
+    # Slot 1 rides high, and they alternate from there.
+    building_y = [
+        round(band_middle + (-1 if index % 2 == 0 else 1) * slot_apothem() / 2, 2)
+        for index in range(slot_count)
+    ]
 
     top_margin = BANNER_CENTER_Y - BANNER_HEIGHT / 2
-    panel_height = round(building_cy + slot_apothem() + top_margin, 2)
+    panel_height = round(band_middle + slot_band_half_height() + top_margin, 2)
 
     return {
         "panel_width": panel_width,
@@ -361,7 +400,8 @@ def board_geometry(role_count: int) -> dict:
         "role_label_baseline": role_baseline,
         "token_grid_top": token_top,
         "resources": resources,
-        "building_y": [building_cy] * role_count,
+        "building_x": building_x,
+        "building_y": building_y,
     }
 
 
@@ -371,8 +411,8 @@ def banner_center_x(geometry: dict, first_role_index: int) -> tuple[float, float
     Two columns, not two role circles: it is the columns the board is built on, and spanning them
     is what puts the outer banners' ends flush with the board's side margins.
     """
-    left = geometry["role_x"][first_role_index] - BUILDING_SLOT_HEX_SIZE
-    right = geometry["role_x"][first_role_index + 1] + BUILDING_SLOT_HEX_SIZE
+    left = geometry["role_x"][first_role_index] - COLUMN_HALF_WIDTH
+    right = geometry["role_x"][first_role_index + 1] + COLUMN_HALF_WIDTH
     return (left + right) / 2, right - left
 
 
@@ -643,7 +683,7 @@ def _render_building_slot(cx: float, cy: float, palette: dict, number: int = 0) 
     A numbered slot is the interactive form. It splits into the three layers a filled slot needs:
     the slot's own fill, the `use` that takes whatever building content a page points it at, and
     the dashed outline drawn last. Content goes inside the slot rather than on top of it, so the
-    dashed border stays the only boundary a slot ever has.
+    dashed border stays the only boundary a slot ever has, whether it holds a building or not.
 
     The `use` carries the slot's centre and nothing else -- no scale, no nudge -- so content drawn
     around the origin at this same hex size lands exactly on the dashes. The centre is written to
@@ -738,7 +778,7 @@ def render_player_board_v2_svg(
             parts.append(_render_role_acolytes(cx, role_cy, count, player, role["id"], interactive))
 
     for number, (cx, cy) in enumerate(
-        zip(geometry["role_x"], geometry["building_y"], strict=True), start=1
+        zip(geometry["building_x"], geometry["building_y"], strict=True), start=1
     ):
         parts.append(_render_building_slot(cx, cy, palette, number if interactive else 0))
     parts.append(_render_corner_tag(geometry, player))
