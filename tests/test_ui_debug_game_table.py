@@ -13,12 +13,14 @@ from pathlib import Path
 import pytest
 
 from tools.ui_debug.generate_game_table import (
+    BODY_CHROME,
     GAP_PX,
     PAGE_TITLE,
     PANEL_CHROME,
     PIETY_VARIANT_ID,
+    REF_AVAIL_WIDTH,
+    REF_VIEWPORT_HEIGHT,
     SEAT_COLS,
-    SEAT_ROWS,
     SEATED_PLAYERS,
     board_measurements,
     crop_svg,
@@ -76,11 +78,8 @@ ALMS_LAYOUT = load_alms_table_layout()
 
 
 def _row_height(solved) -> float:
-    """How tall the row comes out: whichever of the two self-sizing columns needs more of it."""
-    return max(
-        solved.cube * solved.map_cubes + PANEL_CHROME,
-        solved.cube * solved.left_cubes + solved.left_panels,
-    )
+    """How tall the main row comes out: whichever of the map or the alms table needs more of it."""
+    return solved.cube * solved.row_cubes + PANEL_CHROME
 
 
 def _per_unit(solved, board: str) -> float:
@@ -168,23 +167,36 @@ def test_no_styling_is_left_over_from_the_removed_heading(page: str) -> None:
         assert stale not in stylesheet, stale
 
 
-def test_page_has_a_three_column_stage(page: str) -> None:
-    """One row of three: the alms/seats column, the piety/duty column, and the map."""
+def test_the_main_row_is_the_alms_table_the_piety_duty_column_and_the_map(page: str) -> None:
+    """Three across, in that order, and no seat among them.
+
+    The seats used to stand under the alms table in a column of their own here. Taking them out
+    leaves the alms table a panel of the row rather than the head of a column.
+    """
     assert '<div class="game-table-stage">' in page
     row = _block(page, "row")
 
-    for class_name in ("left", "col", "panel p-map"):
+    for class_name in ("panel p-alms", "col", "panel p-map"):
         assert f'<div class="{class_name}">' in row, class_name
-    assert row.index('class="left"') < row.index('class="col"') < row.index('class="panel p-map"')
+    assert row.index("p-alms") < row.index('class="col"') < row.index("p-map")
+    assert "p-player" not in row
+    assert 'class="left"' not in page, "the left column went with the seats"
 
 
-def test_column_one_holds_the_alms_table_above_the_player_boards(page: str) -> None:
-    left = _block(page, "left")
+def test_the_seats_stand_in_one_row_below_the_main_row(page: str) -> None:
+    """All four boards side by side, under everything else on the stage.
 
-    assert left.index("p-alms") < left.index('class="seats"')
-    assert left.index("p-alms") < left.index("p-player")
-    assert 'data-component="alms-table"' in left
-    assert left.count('data-component="player-board-v2"') == len(SEATED_PLAYERS)
+    The stage is left-aligned rather than centred, which is what lines the row up: the seat row
+    and the main row start on the same vertical, so the first board sits under the first panel of
+    the row above -- the alms table.
+    """
+    stage = _block(page, "game-table-stage")
+    seats = _block(page, "seats")
+
+    assert stage.index('<div class="row">') < stage.index('<div class="seats">')
+    assert seats.count('data-component="player-board-v2"') == 4
+    assert ".seats { display: flex; gap: var(--gap); }" in page
+    assert "align-items: flex-start" in page[page.index(".game-table-stage") :][:200]
 
 
 def test_column_two_holds_the_piety_track_above_the_duty_wheel(page: str) -> None:
@@ -233,20 +245,39 @@ def test_page_shows_only_the_three_four_player_piety_track(page: str) -> None:
     assert "Piety Track" in page
 
 
-def test_page_seats_two_of_the_four_players(page: str) -> None:
-    """Two boards of the four the layout describes, drawn one above the other.
+def test_the_table_seats_every_player_the_layout_describes(page: str) -> None:
+    """All four boards now, where it used to draw the second column of a four-seat grid.
 
-    Which two is layout state to look at rather than a seating rule: player counts are not wired
-    up on this page, so the pair is fixed.
+    Which board leads is layout state to look at rather than a seating rule: player counts are not
+    wired up on this page, so the order is fixed.
     """
     layout = load_player_boards_v2_layout()
     seats = _block(page, "seats")
 
-    assert len(SEATED_PLAYERS) == 2
-    assert seats.count('data-component="player-board-v2"') == 2
-    assert {player["id"] for player in players_of(layout)} >= set(SEATED_PLAYERS)
+    assert len(SEATED_PLAYERS) == SEAT_COLS == 4
+    assert seats.count('data-component="player-board-v2"') == 4
+    assert {player["id"] for player in players_of(layout)} == set(SEATED_PLAYERS)
     for player_id in SEATED_PLAYERS:
         assert f'data-player="{player_id}"' in seats
+
+
+def test_the_red_board_leads_the_row_and_the_rest_follow_in_the_layouts_order(page: str) -> None:
+    """Red first, then the layout's own order read on from it and round to the board it skipped.
+
+    Reading on rather than restarting keeps the run the seating order the layout already gives,
+    with red simply the board it is read from.
+    """
+    layout = load_player_boards_v2_layout()
+    order = [player["id"] for player in players_of(layout)]
+    seats = _block(page, "seats")
+
+    seated = re.findall(r'data-player="(\w+)" data-player-color="(\w+)"', seats)
+    assert [colour for _, colour in seated] == ["red", "yellow", "blue", "white"]
+    assert seated[0][1] == "red"
+
+    start = order.index(seated[0][0])
+    rotated = order[start:] + order[:start]
+    assert [player_id for player_id, _ in seated] == rotated
 
 
 def test_no_board_at_this_table_says_who_starts(page: str) -> None:
@@ -295,7 +326,7 @@ def test_the_duty_wheel_is_the_one_panel_sized_by_height(page: str) -> None:
     Sizing it by height rather than by a scale factor is what keeps that true at any window size,
     rather than only at the one the constants were solved against.
     """
-    assert "--row-height: max(" in page
+    assert "--row-height: calc(" in page
     assert "--h-action: calc(" in page
     assert "var(--row-height) - var(--cube)" in page
     assert "- var(--gap)" in page
@@ -389,7 +420,7 @@ def test_the_alms_table_now_overhangs_the_seats_it_stands_above(scale) -> None:
 
     assert overhang == pytest.approx(1.145, abs=0.01)
     # The width it would have to be drawn in to sit flush again.
-    assert seat["panel_width"] * player / alms == pytest.approx(468.2, abs=0.5)
+    assert seat["panel_width"] * player / alms == pytest.approx(465.9, abs=0.5)
 
 
 def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) -> None:
@@ -476,28 +507,56 @@ def test_the_seats_are_wider_than_they_are_tall(scale) -> None:
     crop = solved.crop["player"]
 
     assert crop[2] > crop[3]
-    assert solved.width_cubes > SEAT_COLS * solved.player_k > 0
+    assert solved.seats_cubes > 0
+    assert solved.seats_cubes == pytest.approx(SEAT_COLS * solved.player_k)
 
 
-def test_the_seats_take_less_of_the_row_than_they_are_given(scale) -> None:
-    """The seat block used to be stretched to the duty wheel's height. It is not any more.
+def test_the_two_rows_each_ask_for_the_width_and_stack_for_the_height(scale) -> None:
+    """The shape the page solves against, now that the seats are a row rather than a column.
 
-    Sizing a seat from the wheel's cube is what freed it: the block comes to whatever two boards
-    at that size come to, which is less than the row, and the left column ends above the others.
-    That slack is the room a shorter board was asked to give back, and the reason the row is now
-    as tall as the map rather than as tall as the seats.
+    Neither row is inside the other any more, so neither one's width bounds the other's; what they
+    do share is the window's height, which they take one after the other. That is the whole of
+    what moved: the seats left the left column and became the second row of the stack.
     """
     _, _, _, solved = scale
+
+    assert solved.seats_cubes == pytest.approx(SEAT_COLS * solved.player_k)
+    assert solved.seats_fixed == SEAT_COLS * PANEL_CHROME + (SEAT_COLS - 1) * GAP_PX
+    assert solved.width_fixed == 3 * PANEL_CHROME + 2 * GAP_PX, "three panels across, two gaps"
+
     aspect = solved.crop["player"][3] / solved.crop["player"][2]
+    seat_height = solved.cube * solved.player_k * aspect
+    assert solved.stack_cubes * solved.cube + solved.stack_fixed == pytest.approx(
+        _row_height(solved) + GAP_PX + seat_height + PANEL_CHROME + BODY_CHROME
+    )
+    # The map is what the main row stands to; the alms table alone no longer reaches it.
+    assert solved.row_cubes == pytest.approx(solved.map_cubes)
 
-    board_height = solved.cube * solved.player_k * aspect
-    left = solved.cube * solved.left_cubes + solved.left_panels
-    seats = SEAT_ROWS * (board_height + PANEL_CHROME) + (SEAT_ROWS - 1) * GAP_PX
 
-    assert seats < solved.cube * solved.duty_cubes + PANEL_CHROME
-    assert left < _row_height(solved)
-    assert _row_height(solved) == pytest.approx(solved.cube * solved.map_cubes + PANEL_CHROME)
-    assert solved.left_cubes > solved.duty_cubes, "the alms table sits above the seats"
+def test_the_window_height_is_what_the_table_is_solved_against(scale) -> None:
+    """Two rows in the same window is what sets the cube now, where three panels across used to.
+
+    Nothing is scaled to fit: there is one cube and every panel is a fixed multiple of it, so the
+    seats joining the stack shows up as a smaller cube for everything rather than as a board drawn
+    at a size of its own. It only binds on a short window -- give the page the height the two rows
+    want and the width takes over again, at a larger cube than the two-seat table ever reached.
+    """
+    _, _, _, solved = scale
+
+    height_bound = (REF_VIEWPORT_HEIGHT - solved.stack_fixed) / solved.stack_cubes
+    width_bound = min(
+        (REF_AVAIL_WIDTH - solved.width_fixed) / solved.width_cubes,
+        (REF_AVAIL_WIDTH - solved.seats_fixed) / solved.seats_cubes,
+    )
+
+    assert solved.cube == pytest.approx(height_bound)
+    assert height_bound < width_bound
+    # Roughly what the window would have to give the stack for the width to bind instead -- read
+    # off these coefficients, which are themselves solved at the reference height, so it is the
+    # size of the answer rather than the answer. Solving at that height puts it at 1142.
+    assert width_bound * solved.stack_cubes + solved.stack_fixed == pytest.approx(1142, abs=10)
+    # And the cube it settles at there, which is a fifth larger than the two-seat table reached.
+    assert width_bound == pytest.approx(10.5, abs=0.2)
 
 
 def test_the_solve_settles(scale) -> None:

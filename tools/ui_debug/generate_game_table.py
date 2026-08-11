@@ -1,14 +1,16 @@
 """Write the generated game table layout page.
 
-This page is composition only: it arranges renderers that already exist into the three-column
-2-player table the physical game reads as. The renderers keep owning what each component looks
-like; nothing here draws geometry of its own.
-
-    column 1        column 2        column 3
+This page is composition only: it arranges renderers that already exist into the four-player table
+the physical game reads as -- the shared boards across the top, the seats in a row underneath. The
+renderers keep owning what each component looks like; nothing here draws geometry of its own.
 
     alms table      piety track     map
-    player board    duty wheel
-    player board
+                    duty wheel
+
+    red seat        seat            seat            seat
+
+The stage is left-aligned, so the two rows start on the same vertical and the red seat comes out
+under the alms table.
 
 ONE SHARED SCALE
 Each renderer draws in its own units and was authored as its own standalone page, so handing
@@ -28,6 +30,11 @@ its own, so it draws a smaller cube than `--cube` names, and a seat -- which has
 for piece -- is sized against the wheel rather than against the cube. That is what lets a player
 board be any shape it likes: the seats used to be stacked to the wheel's height instead, which made
 a board's proportions decide the scale it was drawn at here.
+
+The two rows then compete differently. Each asks for the window's width on its own, since neither is
+inside the other, while for height they take the window one after the other. Nothing is scaled to
+fit: there is one cube and every panel is a fixed multiple of it, so seating four rather than two
+shows up as a smaller cube for the whole table rather than as a board drawn at a size of its own.
 
 CROPPED, NOT REDRAWN
 Those same standalone pages put a heading, a subtitle and a backdrop inside the viewBox -- nearly
@@ -109,14 +116,14 @@ PAGE_BACKGROUND = "#000000"
 # standalone v2 page.
 PIETY_VARIANT_ID = "3_4_player"
 
-# The two seats this table shows. They are the second column of the four-seat grid the layout
-# describes, which is what the 2-player reference layout kept; the first column (white, yellow) is
-# simply not drawn. This is debug/layout state to look at, not a seating rule: player counts are
-# not wired up here, and no board says who starts.
-SEATED_PLAYERS = ("player_two", "player_four")
+# Every seat the layout describes, in the order they sit along the row. It is the layout's own
+# order read from the red board rather than from the first one, so the run is the seating order
+# the layout already gives and red simply leads it. This is debug/layout state to look at, not a
+# seating rule: player counts are not wired up here, and no board says who starts.
+SEATED_PLAYERS = ("player_two", "player_three", "player_four", "player_one")
 
 # --- page chrome, in px ----------------------------------------------------------------------
-# The gap between panels, and between the two player boards.
+# The gap between panels, between the two rows, and between the player boards.
 GAP_PX = 20
 PANEL_PADDING = 9
 PANEL_BORDER = 1
@@ -129,12 +136,9 @@ BODY_CHROME = 2 * BODY_PADDING
 REF_AVAIL_WIDTH = 1860.0
 REF_VIEWPORT_HEIGHT = 900.0
 
-# Every board's size is solved against the original four-seat block -- two rows of two -- so that
-# showing two of them changes what is drawn and nothing about how big anything is. Only the
-# rendered grid is told there is one column now.
-SEAT_ROWS = 2
-SEAT_COLS = 2
-RENDER_SEAT_COLS = 1
+# The seats stand in one row of four under the main row, so the block is as wide as four boards
+# and as tall as one.
+SEAT_COLS = len(SEATED_PLAYERS)
 
 # Dead canvas left around a player board, in its own units. Every other board's margin is solved
 # to match whatever this comes out as on screen.
@@ -324,8 +328,11 @@ class TableScale:
     mult: dict[str, float]
     width_cubes: float
     width_fixed: float
-    left_cubes: float
-    left_panels: float
+    seats_cubes: float
+    seats_fixed: float
+    stack_cubes: float
+    stack_fixed: float
+    row_cubes: float
     map_cubes: float
     piety_cubes: float
     duty_cubes: float
@@ -398,27 +405,37 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         piety_share = hexagon_share * crop["piety"][2] / content["piety"][2]
         alms_over_piety = crop["alms"][2] / crop["piety"][2]
 
-        # Each panel's outer height, in cubes.
+        # Each panel's outer width and height, in cubes.
+        duty_coef = mult["action"] * duty_scale
+        piety_coef = duty_coef * piety_share
+        alms_coef = piety_coef * alms_over_piety
         map_cubes = mult["map"] * aspect["map"]
-        duty_cubes = mult["action"] * duty_scale * aspect["action"]
-        piety_cubes = mult["action"] * duty_scale * piety_share * aspect["piety"]
-        alms_cubes = piety_cubes * alms_over_piety * aspect["alms"] / aspect["piety"]
+        duty_cubes = duty_coef * aspect["action"]
+        piety_cubes = piety_coef * aspect["piety"]
+        alms_cubes = alms_coef * aspect["alms"]
 
+        # The page is two rows: the alms table, the piety-over-duty column and the map across the
+        # top, then the four seats underneath. Each row competes for the width on its own, and the
+        # two of them stack for the height.
+        #
         # `--avail` has already taken the body padding out of the width, so only the panels' own
-        # chrome and the gaps between them are counted here. The height budgets below work off a
-        # raw 100vh, so they have to subtract the page's own chrome themselves.
-        width_cubes = mult["action"] * duty_scale + mult["map"] + SEAT_COLS * player_k
-        width_fixed = (2 + SEAT_COLS) * PANEL_CHROME + (1 + SEAT_COLS) * GAP_PX
-        # The alms table over the seats: three panels and two gaps, standing to whatever height
-        # they come to. They used to be stretched to the duty wheel's height instead, which is
-        # what made this column the tall one by construction; now either it or the map can be.
-        left_cubes = alms_cubes + SEAT_ROWS * player_k * player_aspect
-        left_panels = (1 + SEAT_ROWS) * PANEL_CHROME + SEAT_ROWS * GAP_PX
+        # chrome and the gaps between them are counted here. The height budget below works off a
+        # raw 100vh, so it has to subtract the page's own chrome itself.
+        width_cubes = alms_coef + duty_coef + mult["map"]
+        width_fixed = 3 * PANEL_CHROME + 2 * GAP_PX
+        seats_cubes = SEAT_COLS * player_k
+        seats_fixed = SEAT_COLS * PANEL_CHROME + (SEAT_COLS - 1) * GAP_PX
+        # How tall the main row comes out: whichever of the map or the alms table stands taller.
+        # The piety-over-duty column is not in it -- the wheel is sized afterwards to fill exactly
+        # what the row leaves, so it cannot ask for more room than the row already has.
+        row_cubes = max(map_cubes, alms_cubes)
+        stack_cubes = row_cubes + player_k * player_aspect
+        stack_fixed = BODY_CHROME + 2 * PANEL_CHROME + GAP_PX
 
         cube = min(
             (REF_AVAIL_WIDTH - width_fixed) / width_cubes,
-            (REF_VIEWPORT_HEIGHT - BODY_CHROME - left_panels) / left_cubes,
-            (REF_VIEWPORT_HEIGHT - BODY_CHROME - PANEL_CHROME) / map_cubes,
+            (REF_AVAIL_WIDTH - seats_fixed) / seats_cubes,
+            (REF_VIEWPORT_HEIGHT - stack_fixed) / stack_cubes,
         )
 
         # A seat is sized so its cube comes out the size the duty wheel's does, which is what makes
@@ -426,10 +443,10 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         # the wheel is the one panel not drawn at that size, being handed whatever height the row
         # has left over instead, so matching it means reading that height back.
         #
-        # Which makes the two mutually dependent -- the seats stand in one of the columns the row's
-        # height is the greater of -- so they are left to settle together in the fixed point rather
-        # than one being solved before the other.
-        row_height = max(cube * map_cubes + PANEL_CHROME, cube * left_cubes + left_panels)
+        # Which makes the two mutually dependent -- the seat row is part of the height the cube is
+        # solved against -- so they are left to settle together in the fixed point rather than one
+        # being solved before the other.
+        row_height = cube * row_cubes + PANEL_CHROME
         duty_height = row_height - cube * piety_cubes - 2 * PANEL_CHROME - GAP_PX
         duty_cube_px = cubes["action"] * duty_height / crop["action"][3]
         player_k = mult["player"] * duty_cube_px / cube
@@ -438,16 +455,15 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         # units, which is what the next pass crops to.
         margin_px = PLAYER_MARGIN * cube * player_k / player_crop[2]
         per_unit = {
-            "action": cube * mult["action"] * duty_scale / crop["action"][2],
+            "action": cube * duty_coef / crop["action"][2],
             "map": cube * mult["map"] / crop["map"][2],
-            "piety": cube * mult["action"] * duty_scale * piety_share / crop["piety"][2],
+            "piety": cube * piety_coef / crop["piety"][2],
         }
         margins = {key: margin_px / value for key, value in per_unit.items()}
 
     # The piety track keeps the size it has here. The duty wheel does not: it grows into whatever
     # height the row has left over, which the stylesheet works out for itself from these
     # coefficients rather than from a scale frozen at one window size.
-    piety_coef = mult["action"] * duty_scale * piety_share
 
     return TableScale(
         cube=cube,
@@ -455,8 +471,11 @@ def solve_table_scale(content: dict, hexes: dict, cubes: dict) -> TableScale:
         mult=mult,
         width_cubes=width_cubes,
         width_fixed=width_fixed,
-        left_cubes=left_cubes,
-        left_panels=left_panels,
+        seats_cubes=seats_cubes,
+        seats_fixed=seats_fixed,
+        stack_cubes=stack_cubes,
+        stack_fixed=stack_fixed,
+        row_cubes=row_cubes,
         map_cubes=map_cubes,
         piety_cubes=piety_cubes,
         duty_cubes=duty_cubes,
@@ -546,7 +565,7 @@ def render_game_table_html(
             f' data-player="{player["id"]}" data-player-color="{player["color"]}">'
             f"{crop_svg(board, scale.crop['player'])}</div>"
         )
-    seats = "\n        ".join(panels)
+    seats = "\n      ".join(panels)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -564,24 +583,21 @@ def render_game_table_html(
     --gap: {GAP_PX}px;
     --avail: min(2400px, 100vw - {BODY_CHROME}px);
 
-    /* The row competes for the width, and the two columns that stand to their
-       own height for the height; the cube is the smallest solution, so the
+    /* Each of the two rows competes for the width on its own, and the two of
+       them stack for the height; the cube is the smallest solution, so the
        table fits the window. The piety-over-duty column is not part of it: the
        wheel is sized afterwards to fill exactly what the row leaves it, so it
        cannot need more room than the row already provides. */
     --cube: min(
       calc((var(--avail) - {scale.width_fixed:.2f}px) / {scale.width_cubes:.3f}),
-      calc((100vh - {BODY_CHROME + scale.left_panels:.0f}px) / {scale.left_cubes:.3f}),
-      calc((100vh - {BODY_CHROME + PANEL_CHROME}px) / {scale.map_cubes:.3f})
+      calc((var(--avail) - {scale.seats_fixed:.2f}px) / {scale.seats_cubes:.3f}),
+      calc((100vh - {scale.stack_fixed:.0f}px) / {scale.stack_cubes:.3f})
     );
 
-    /* How tall the row comes out: whichever of the map or the alms-over-seats
-       column needs more of it. Neither depends on the duty wheel, so this can
-       be read before the wheel is sized. */
-    --row-height: max(
-      calc(var(--cube) * {scale.map_cubes:.3f} + {PANEL_CHROME}px),
-      calc(var(--cube) * {scale.left_cubes:.3f} + {scale.left_panels:.0f}px)
-    );
+    /* How tall the main row comes out: whichever of the map or the alms table
+       stands taller. Neither depends on the duty wheel, so this can be read
+       before the wheel is sized. */
+    --row-height: calc(var(--cube) * {scale.row_cubes:.3f} + {PANEL_CHROME}px);
     /* The duty wheel is then handed whatever height that leaves once the piety
        track, both panels' chrome and one gap are taken out -- so the space
        between the two is var(--gap) exactly, at any window size, and the
@@ -611,28 +627,27 @@ def render_game_table_html(
     padding: {BODY_PADDING}px;
   }}
 
+  /* Left-aligned rather than centred so the seat row starts on the same
+     vertical as the main row does -- which is what puts the red board under
+     the alms table, the two of them being the leftmost panel of each row. */
   .game-table-stage {{
-    display: flex; flex-direction: column; gap: var(--gap); align-items: center;
+    display: flex; flex-direction: column; gap: var(--gap); align-items: flex-start;
   }}
-  /* All three columns stretch to the row's height, whichever of them is tallest. */
+  /* The row stands to whichever of its three needs the most height, and they
+     stretch to it unless they say otherwise. Only the piety-over-duty column
+     wants to: the other two are single panels, and a panel taller than its own
+     drawing is a border round empty canvas. */
   .row  {{ display: flex; gap: var(--gap); align-items: stretch; }}
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short
      of the row, so space-between produces precisely that gap rather than a
      leftover of whatever height happens to remain. */
-  .col, .left {{
+  .col {{
     display: flex; flex-direction: column; align-items: center;
     align-self: stretch; justify-content: space-between; gap: var(--gap);
   }}
-  /* The left column no longer fills the row -- the seats are sized from the
-     cube rather than stretched to the wheel's height, and come to less -- so
-     its panels stay together at the top and the slack falls under them. */
-  .left {{ justify-content: flex-start; }}
-  .seats {{
-    display: grid;
-    grid-template-columns: repeat({RENDER_SEAT_COLS}, max-content);
-    gap: var(--gap);
-  }}
+  /* One row of four, under the main row. */
+  .seats {{ display: flex; gap: var(--gap); }}
 
   .panel {{
     width: fit-content;
@@ -647,6 +662,9 @@ def render_game_table_html(
      shorter panel until its bottom edge sits on the row's bottom -- the same
      line the duty wheel's bottom sits on. Its width is untouched. */
   .p-map {{ align-self: flex-end; }}
+  /* Its own height too: stretched, its border would run the depth of the row
+     with the table stranded at the top of the box. */
+  .p-alms {{ align-self: flex-start; }}
   /* The only panel sized by height rather than width; see --h-action. */
   .p-action > svg {{ height: var(--h-action); width: auto; }}
   .p-map    > svg {{ width: var(--w-map); }}
@@ -658,8 +676,8 @@ def render_game_table_html(
      sized by width like everything else. */
   @media (max-width: {STACK_BELOW}px) {{
     :root {{ --cube: calc((100vw - 60px) / {scale.mult["action"]:.3f}); }}
-    .row {{ flex-wrap: wrap; }}
-    .col, .left {{ align-self: flex-start; gap: var(--gap); }}
+    .row, .seats {{ flex-wrap: wrap; }}
+    .col {{ align-self: flex-start; gap: var(--gap); }}
     .p-action > svg {{ height: auto; width: calc(var(--cube) * {scale.mult["action"]:.3f}); }}
     .p-map {{ align-self: flex-start; }}
   }}
@@ -668,17 +686,15 @@ def render_game_table_html(
 <body>
   <div class="game-table-stage">
     <div class="row">
-      <div class="left">
-        <div class="panel p-alms">{alms_svg}</div>
-        <div class="seats">
-        {seats}
-        </div>
-      </div>
+      <div class="panel p-alms">{alms_svg}</div>
       <div class="col">
         <div class="panel p-piety">{piety_svg}</div>
         <div class="panel p-action">{duty_svg}</div>
       </div>
       <div class="panel p-map">{map_svg}</div>
+    </div>
+    <div class="seats">
+      {seats}
     </div>
   </div>
 </body>
