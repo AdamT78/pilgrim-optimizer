@@ -546,6 +546,19 @@ def test_row_four_has_acolyte_controls_with_game_setup_places(page: str) -> None
         assert f">{label}</option>" in body
 
 
+def test_the_serf_move_comes_last_on_the_row_it_shares_a_player_with(page: str) -> None:
+    """One button rather than the setup page's four: the row already says whose board it is."""
+    controls = _block(page, "table-controls")
+    row_four = re.search(r'data-controls-row="4">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_four is not None
+    body = row_four.group(1)
+
+    assert '<button type="button" data-serf-to-abbey-button="true">S-&gt;A</button>' in body
+    assert body.index('id="acolyte-player-seat"') < body.index("data-serf-to-abbey-button")
+    assert body.index('id="move-acolyte"') < body.index("data-serf-to-abbey-button")
+    assert body.count("data-serf-to-abbey-button") == 1
+
+
 def test_controls_stay_compact_without_explanatory_text(page: str) -> None:
     controls = _block(page, "table-controls")
 
@@ -639,7 +652,7 @@ def test_a_winner_cube_comes_out_of_the_abbey_it_is_taken_from(page: str) -> Non
     assert "if (state.winners.length >= WINNERS.slotCount || playerState.abbeyAcolytes < 1)" in page
     assert "playerState.abbeyAcolytes -= 1;" in page
     assert "state.winners.push(seat);" in page
-    assert "renderAcolyteBoard(seat);" in page
+    assert "renderBoardCubes(seat);" in page
 
 
 def test_the_row_of_winners_is_as_long_as_the_record_has_sockets(page: str) -> None:
@@ -667,6 +680,47 @@ def test_a_reset_sends_every_cube_back_to_the_abbey_it_came_from(page: str) -> N
     assert "var returning = state.winners.slice();" in page
     assert "state.winners = [];" in page
     assert "ACOLYTES.abbeyCapacity, playerState.abbeyAcolytes + 1" in page
+
+
+def test_a_serf_walks_to_the_abbey_and_becomes_an_acolyte_there(page: str) -> None:
+    """One cube crosses the board rather than a cube being made: the Village is one shorter.
+
+    The same two conditions the game setup page checks, and for the same reasons: an empty Village
+    has nobody to send, and a full Abbey has nowhere to put him.
+    """
+    assert "function canMoveSerf()" in page
+    assert (
+        "return playerState.villageSerfs > 0 && playerState.abbeyAcolytes < ACOLYTES.abbeyCapacity;"
+        in page
+    )
+    assert "if (!canMoveSerf())" in page
+    assert "playerState.villageSerfs -= 1;" in page
+    assert "playerState.abbeyAcolytes += 1;" in page
+
+
+def test_the_serf_button_takes_the_seat_the_acolyte_row_is_set_to(page: str) -> None:
+    """The row already names a player, so the button reads that rather than carrying four of its
+    own, which is what the game setup page needs.
+    """
+    assert "var serfToAbbey = document.querySelector('[data-serf-to-abbey-button]');" in page
+    assert page.count("acolytePlayerSeat.value") >= 2
+    assert "serfToAbbey.disabled = !canMoveSerf();" in page
+    assert "control.addEventListener('change', refreshBoardButtons);" in page
+
+
+def test_a_board_draws_its_village_from_the_count_it_holds(page: str) -> None:
+    """Serfs had no reason to be redrawn until one could leave; now they do.
+
+    Both grids are drawn the same way, from the number of cubes standing in them, which is what
+    lets a serf leaving the Village and arriving in the Abbey be the one move it looks like.
+    """
+    held = "var held = { village: playerState.villageSerfs, abbey: playerState.abbeyAcolytes };"
+
+    assert "function renderBoardCubes(seat)" in page
+    assert held in page
+    assert "board.querySelectorAll('[data-token=\"' + area + '\"]')" in page
+    assert "show(slot, Number(slot.getAttribute('data-token-index')) < held[area]);" in page
+    assert "renderAcolyteBoard" not in page
 
 
 def test_every_building_starts_on_the_map_owing_to_nobody(
@@ -1308,8 +1362,8 @@ def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
     resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
     # counts, setup rolls, R/S+/M+, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
-    # and Move acolyte
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 1
+    # Move acolyte and S->A
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 2
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
@@ -1322,6 +1376,7 @@ def test_page_carries_only_local_compact_controls(page: str) -> None:
     assert "data-duty-randomize-button" in page
     assert "data-merchant-advance-button" in page
     assert "move-acolyte" in page
+    assert "data-serf-to-abbey-button" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page
 

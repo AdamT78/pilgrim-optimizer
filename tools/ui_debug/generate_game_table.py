@@ -12,9 +12,10 @@ renderers keep owning what each component looks like; nothing here draws geometr
     red seat        seat            seat            seat
 
 The stage is left-aligned, so the two rows start on the same vertical and the red seat comes out
-under the alms table. Under that table sits one compact three-row control stack: player count with
-setup roll buttons, Alms/Piety disc movement, and acolyte movement. These controls are local page
-state only: no GameState, no rules, and no scaling solve changes.
+under the alms table. Under that table sits one compact four-row control stack: the table's own
+buttons, then Alms/Piety discs and resources, then winners and buildings, then the cubes on a
+board. These controls are local page state only: no GameState, no rules, and no scaling solve
+changes.
 
 ONE SHARED SCALE
 Each renderer draws in its own units and was authored as its own standalone page, so handing
@@ -711,6 +712,7 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         f'<select id="acolyte-source">{_options(places, ABBEY_PLACE_ID)}</select>'
         f'<select id="acolyte-target">{_options(places, first_role)}</select>'
         '<button type="button" id="move-acolyte">Move acolyte</button>'
+        '<button type="button" data-serf-to-abbey-button="true">S-&gt;A</button>'
         "</div>"
         "</div>"
     )
@@ -885,7 +887,7 @@ def render_compact_controls_script(
     duty_layout: dict,
 ) -> str:
     """Compact local controls: player count, setup roll, discs, resources, winners, buildings,
-    acolytes, and the duty wheel.
+    serfs and acolytes, and the duty wheel.
     """
     buildings = json.dumps(building_control_data(board_layout, placements), separators=(",", ":"))
     duty = json.dumps(duty_control_data(duty_layout), separators=(",", ":"))
@@ -925,6 +927,7 @@ def render_compact_controls_script(
   var acolyteSource = document.getElementById('acolyte-source');
   var acolyteTarget = document.getElementById('acolyte-target');
   var moveAcolyte = document.getElementById('move-acolyte');
+  var serfToAbbey = document.querySelector('[data-serf-to-abbey-button]');
   var shipButton = document.querySelector('[data-ship-advance]');
   var resourceButtons = document.querySelectorAll('[data-resource-button]');
   var winnerButtons = document.querySelectorAll('[data-alms-winner-button]');
@@ -1111,15 +1114,21 @@ def render_compact_controls_script(
     return document.querySelector('.p-player[data-player-seat="' + seat + '"]');
   }}
 
-  function renderAcolyteBoard(seat) {{
+  /* A cube is a serf while it stands in the Village and an acolyte once it reaches the Abbey or a
+     role circle, so both grids are drawn from the one count each holds: every slot is already on
+     the board and a move is a change of opacity. */
+  function renderBoardCubes(seat) {{
     var board = boardForSeat(seat);
     var playerState = state.acolytes[String(seat)];
     if (!board || !playerState) {{
       return;
     }}
-    var abbeySlots = board.querySelectorAll('[data-token="abbey"]');
-    Array.prototype.forEach.call(abbeySlots, function (slot) {{
-      show(slot, Number(slot.getAttribute('data-token-index')) < playerState.abbeyAcolytes);
+    var held = {{ village: playerState.villageSerfs, abbey: playerState.abbeyAcolytes }};
+    Object.keys(held).forEach(function (area) {{
+      var slots = board.querySelectorAll('[data-token="' + area + '"]');
+      Array.prototype.forEach.call(slots, function (slot) {{
+        show(slot, Number(slot.getAttribute('data-token-index')) < held[area]);
+      }});
     }});
 
     ACOLYTES.roles.forEach(function (role) {{
@@ -1183,9 +1192,9 @@ def render_compact_controls_script(
     }}
     playerState.abbeyAcolytes -= 1;
     state.winners.push(seat);
-    renderAcolyteBoard(seat);
+    renderBoardCubes(seat);
     renderWinners();
-    refreshMoveAcolyteButton();
+    refreshBoardButtons();
   }}
 
   function resetWinners() {{
@@ -1201,10 +1210,10 @@ def render_compact_controls_script(
       playerState.abbeyAcolytes = Math.min(
         ACOLYTES.abbeyCapacity, playerState.abbeyAcolytes + 1
       );
-      renderAcolyteBoard(seat);
+      renderBoardCubes(seat);
     }});
     renderWinners();
-    refreshMoveAcolyteButton();
+    refreshBoardButtons();
   }}
 
   /* Each player count has its own tally drawn on every space, already centred for that many
@@ -1394,8 +1403,16 @@ def render_compact_controls_script(
     );
   }}
 
-  function refreshMoveAcolyteButton() {{
+  /* A serf becomes an acolyte by walking to the Abbey, so the move needs a cube in the Village
+     and a free slot in the Abbey -- the same pair of conditions the game setup page checks. */
+  function canMoveSerf() {{
+    var playerState = state.acolytes[String(acolytePlayerSeat.value)];
+    return playerState.villageSerfs > 0 && playerState.abbeyAcolytes < ACOLYTES.abbeyCapacity;
+  }}
+
+  function refreshBoardButtons() {{
     moveAcolyte.disabled = !canMoveAcolyte();
+    serfToAbbey.disabled = !canMoveSerf();
   }}
 
   function applyPlayerCount(count) {{
@@ -1476,16 +1493,28 @@ def render_compact_controls_script(
     var target = acolyteTarget.value;
     setAcolytesAt(playerState, source, acolytesAt(playerState, source) - 1);
     setAcolytesAt(playerState, target, acolytesAt(playerState, target) + 1);
-    renderAcolyteBoard(seat);
-    refreshMoveAcolyteButton();
+    renderBoardCubes(seat);
+    refreshBoardButtons();
+  }});
+
+  serfToAbbey.addEventListener('click', function () {{
+    if (!canMoveSerf()) {{
+      return;
+    }}
+    var seat = String(acolytePlayerSeat.value);
+    var playerState = state.acolytes[seat];
+    playerState.villageSerfs -= 1;
+    playerState.abbeyAcolytes += 1;
+    renderBoardCubes(seat);
+    refreshBoardButtons();
   }});
 
   [acolytePlayerSeat, acolyteSource, acolyteTarget].forEach(function (control) {{
-    control.addEventListener('change', refreshMoveAcolyteButton);
+    control.addEventListener('change', refreshBoardButtons);
   }});
 
   Object.keys(state.acolytes).forEach(function (seat) {{
-    renderAcolyteBoard(seat);
+    renderBoardCubes(seat);
     renderResources(seat);
   }});
   renderWinners();
@@ -1494,7 +1523,7 @@ def render_compact_controls_script(
   renderMerchant();
   applySetupRoll(SETUP.defaultRoll);
   applyPlayerCount(DEFAULT_COUNT);
-  refreshMoveAcolyteButton();
+  refreshBoardButtons();
 }})();
 </script>"""
 
