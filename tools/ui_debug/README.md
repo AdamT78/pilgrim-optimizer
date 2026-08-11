@@ -119,31 +119,34 @@ extraction. The split between them is worth knowing: the JSON says what a board 
 players and their colours, the palette, the Village/Abbey banners and how many starting workers
 each shows, the six worker roles, the three resource readouts, which roles already hold workers),
 and the module says where it all goes. The geometry stays in the module because it is derived
-rather than chosen: the six building slots along the bottom are the widest thing on a board, so
-they set the column pitch, and the banners, the worker circles and the resource readouts all line
-up on the columns they make.
+rather than chosen: the board is built on six columns, and the banners, the worker circles and the
+resource readouts all line up on them. The columns were the building slots' width, back when a slot
+stood in one; `COLUMN_HALF_WIDTH` is that width, kept where it was after the slots outgrew it.
 
-### The board is wider than the baseline, and only wider
+### The board is wider than the baseline, and taller
 
-The board is wider in its own geometry than `prototypes/player_boards_v2.html` draws it, so that
-its bottom building slots can be the size of a map hex. The prototype's slots were about two thirds
-of one, which is why the bottom row looked cramped: a building tile dropped into a slot was a
-different size there than the same tile on the map.
+The board is wider in its own geometry than `prototypes/player_boards_v2.html` draws it, and then
+taller, both for the same reason: its bottom building slots are the size of a map hex. The
+prototype's slots were about two thirds of one, which is why the bottom row looked cramped — a
+building tile dropped into a slot was a different size there than the same tile on the map.
 
-Matching them is one number. A slot and a map hex are both flat-top hexagons measured from the
-centre out to a corner, so they are the same size on screen exactly when they are the same number
-of cubes across — and `BUILDING_SLOT_HEX_SIZE` is the map's figure converted into this board's
-units. It is written out rather than read from `map_layout.json`, so that drawing a player board
-does not mean loading the map; a test re-runs the arithmetic against the real map layout instead.
+Matching them is not arithmetic the board can do on its own. A slot and a map hex are both flat-top
+hexagons measured from the centre out to a corner, so they come out the same size when they render
+at the same width — but the composed game table draws the map at the full table cube and a seat at
+the shortfall the duty wheel is fitted into, so equal figures do not render equally.
+`BUILDING_SLOT_HEX_SIZE` is therefore measured off the real solve rather than derived, and a game
+table test holds it against a map hex; that test is what to re-run if either board's scale moves.
+It used to be derived, as a map hex counted in `MARKER_CUBE`s, and rendered a fifth short.
 
-Nothing was rescaled to make the room. The slots grew and the board grew with them; the worker
-circles are the size they always were — they kept their own `ROLE_CIRCLE_RADIUS` when the slots
-stopped sharing it — and the board is the height it always was, to within a unit.
-The height is the part that matters beyond this page: a board shown beside other components is
-given a height and takes its width from that, so leaving the height alone is what keeps everything
-already on the board rendering at the size it used to, wherever it is shown. In particular the game
-table should not scale a player board to compensate for the extra width; it inherits the
-component's geometry and the shared table scale, and comes out a little wider for it.
+A slot that size is wider than one of the board's columns, so six will not fit across in a row. The
+slots left the columns and interlock instead, every other one offset by an apothem — the way two
+flat-top hexagons pack against each other — which fits all six across a board that has not grown at
+all, and costs a band half again as deep. The columns above them did not move: the banners, the
+worker circles and the readouts are all where they were, to the unit, and the worker circles are the
+size they always were. The board is 22% taller for the band, and the game table does not scale a
+seat to compensate; it inherits the component's geometry and the shared table scale, and gives the
+seats' row the room. A Village cube still matches a duty tile's cube exactly, because a seat is
+sized from the wheel's rendered cube rather than stretched to fit a height.
 
 ### Type and readouts are sized against the duty wheel
 
@@ -250,19 +253,21 @@ cube was about 10% over. A game table test measures both against the real solve 
 either renderer.
 
 `MARKER_CUBE` stays at 14.0 through all of this. It is no longer the size of a drawn cube but it is
-still the unit the board's geometry is written in — the building slots and the banner type are
-multiples of it — and matching the cubes to the wheel was never a reason to resize the slots or
-reset the type. The grids also keep the band they had at the old cube size,
-`TOKEN_BAND_HEIGHT`, with the shorter grid centred in it, so nothing below them moved: the role
-circles, the readouts, the building slots and the panel height are all where they were to the unit.
+still the unit the board's geometry is written in — the banner type is a multiple of it — and
+matching the cubes to the wheel was never a reason to reset the type. The building slots were
+multiples of it too, and should not have been: a slot stands for a map hex, so it has to be measured
+against what a map hex renders at rather than against a unit that had stopped being this board's
+cube. The grids keep the band they had at the old cube size, `TOKEN_BAND_HEIGHT`, with the shorter
+grid centred in it, so nothing below them moved: the role circles, the readouts and the top of the
+slot band are all where they were to the unit.
 The Alms Table draws the same cube too, taken from the seats the way the seats take theirs from the
 wheel, so the three boards are one chain from the wheel's `CUBE_SIZE` down.
 
 The generated SVGs are therefore no longer byte-identical to the baseline's. The test that used to
-pin that parity now pins the divergence instead, and only that: a wider board of the same height,
-with the type bigger and the cubes smaller, the readouts moved out of their circles and into the
-corner with the first-player card gone, and the worker circles and the count of every piece — cubes
-included — exactly as the prototype left them. The baseline itself is untouched.
+pin that parity now pins the divergence instead, and only that: a board wider and taller, with the
+type bigger and the cubes smaller, the readouts moved out of their circles and into the corner with
+the first-player card gone, and the worker circles and the count of every piece — cubes included —
+exactly as the prototype left them. The baseline itself is untouched.
 
 Generate the output page with:
 
@@ -316,13 +321,13 @@ level III (light green) = 6 VP
 The tile colours are imported from `render_buildings.py` rather than repeated, so the donated
 tiles cannot drift away from the regular building tiles.
 
-Donated building VP stars now match the Pilgrimage Site VP star sizing while remaining centered in
-the donated hex. Neither tile is ever seen at its own size — a donated tile is drawn into a player
-board's building slot and a site into a map hex, and the composed game table scales those two
-differently — so `STAR_OUTER_RADIUS` here is what the star has to be in this tile's units to come
-out a site star's size on that page. `test_ui_debug_game_table.py` measures the two against each
-other, so the table is what to re-measure if either board's scale moves. The VP inside the star is
-set at the piety track's star-to-label proportion, the same one the site uses.
+Donated building VP stars match the Pilgrimage Site VP star sizing while remaining centered in the
+donated hex. Neither tile is ever seen at its own size — a donated tile is drawn into a player
+board's building slot and a site into a map hex — so `STAR_OUTER_RADIUS` here is a site star's share
+of the hex it is drawn onto, applied to this tile's hex. That is the whole of it now that a building
+slot renders at a map hex's size; it took a larger figure while the slot came out short, and
+`test_ui_debug_game_table.py` still measures the two against each other on the real solve. The VP
+inside the star is set at the piety track's star-to-label proportion, the same one the site uses.
 
 Generate the output page with:
 
@@ -624,10 +629,9 @@ state. Nothing here says what any of it means: there is no Tithe token logic, no
 sowing or acolyte placement, and no sow animation. Those belong in later PRs.
 
 The cube itself keeps the size it has always had, and this is the board that sets it. It is the
-reference the rest of the composed table is calibrated against — `render_player_boards_v2.py` sizes
-a building slot by how many of these a map hex measures across, and a game table test holds that
-arithmetic — so what a cube here is worth in another board's units is not this renderer's to
-restate. When the seats' cubes read larger than these on the composed pages, it was the seats that
+reference the rest of the composed table is calibrated against — a seat is sized from this cube as
+it renders, which is also what fixes the scale a seat's building slots have to be measured against —
+so what a cube here is worth in another board's units is not this renderer's to restate. When the seats' cubes read larger than these on the composed pages, it was the seats that
 were brought to this size rather than this number that moved.
 
 `render_duty_wheel_panel()` returns the controls and the board as one fragment, which is how the
@@ -908,7 +912,9 @@ once into a `defs` block, as the building's own tile colour and label for the bo
 the donated tile's star and VP value from `render_donated_buildings.py` for the flipped side; a
 slot shows one by pointing its `use` element at it. Both sides recolour the slot the way a setup
 slot recolours a map hex — a fill on the slot's own hex path, `stroke="none"`, no tile border of
-its own — and the slot's dashed outline is drawn last, so it stays the only boundary a slot has. `building_ownership_state`, `buy_building`, and
+its own — and the slot's dashed outline is drawn last, over the content, so it stays the only
+boundary a slot has whether it holds a building or not. `building_ownership_state`, `buy_building`,
+and
 `donate_building` are the same two moves in Python, so the rules the buttons follow — first empty
 slot, one flip per building — can be tested without a browser.
 
@@ -1007,15 +1013,15 @@ One consequence worth knowing about, not new to this arrangement so much as unco
   is pinned to the Piety Track rather than to the seats, which is what keeps the two boards' player
   discs the same size. It therefore stands about a seventh proud of the board below it until its
   own width is re-fitted. `UNITS_PER_PLAYER_UNIT` is re-solved whenever the table is recomposed —
-  moving the seats into a row of their own moved it by half a percent — so pieces and type written
-  in a seat's units, its cubes and its labels, do still come out a seat's size.
+  growing the building slots to a map hex's size moved it last, by a third of a percent — so pieces
+  and type written in a seat's units, its cubes and its labels, do still come out a seat's size.
 
-A third was already there and is now further out: a building slot is `BUILDING_SLOT_HEX_SIZE` across
-where that was solved as a number of `MARKER_CUBE`s, the unit a player board writes its geometry in,
-which stopped being the board's cube when the cubes were resized to the wheel's. Slots have
-therefore always rendered short of the map hex they were matched to. Closing that means drawing them
-bigger, which sets the board's column pitch and so its width, so it is left alone and recorded in
-the tests instead.
+A third was there for a long time and is now closed: a building slot used to be a map hex counted in
+`MARKER_CUBE`s, the unit a player board writes its geometry in, which stopped being the board's cube
+when the cubes were resized to the wheel's — so slots rendered a fifth short of the map hex they
+stood for. `BUILDING_SLOT_HEX_SIZE` is measured off this solve now rather than derived, and the
+slots interlock rather than sit one to a column, which is how they grew to a map hex's size without
+taking the board wider with them. `test_ui_debug_game_table.py` holds the two together.
 
 ### Cropping, and the one place a drawing is touched
 

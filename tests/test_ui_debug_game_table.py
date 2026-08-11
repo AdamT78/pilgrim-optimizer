@@ -720,6 +720,17 @@ def test_a_slot_shows_its_building_by_pointing_at_content_the_page_defined(page:
     )
 
 
+def test_a_building_keeps_the_dashed_border_of_the_slot_it_fills(page: str) -> None:
+    """A filled slot is bordered like an empty one: the dashes are the slot, not a placeholder.
+
+    They land on the building exactly, because a building's hexagon is the slot's hexagon drawn
+    from the same centre at the same size, so the border reads as the slot's own edge rather than
+    as something showing round what took it.
+    """
+    assert "show(content, entry !== null);" in page
+    assert "data-slot-outline" not in page.split("<script")[-1]
+
+
 def test_the_donated_side_of_a_slot_is_the_donated_tile_for_that_level(
     page: str, placements: list[dict]
 ) -> None:
@@ -1069,7 +1080,7 @@ def test_the_alms_table_now_overhangs_the_seats_it_stands_above(scale) -> None:
 
     assert overhang == pytest.approx(1.145, abs=0.01)
     # The width it would have to be drawn in to sit flush again.
-    assert seat["panel_width"] * player / alms == pytest.approx(465.9, abs=0.5)
+    assert seat["panel_width"] * player / alms == pytest.approx(464.3, abs=0.5)
 
 
 def test_a_players_cube_is_the_same_cube_in_a_village_and_on_a_duty_tile(scale) -> None:
@@ -1110,40 +1121,26 @@ def test_the_duty_wheel_and_the_map_are_anchored_on_the_same_hexagon(scale) -> N
     assert solved.mult["action"] == pytest.approx(solved.mult["map"], abs=0.5)
 
 
-def test_a_building_slot_is_the_map_hex_measured_in_the_unit_the_board_writes_in(scale) -> None:
-    """Where the player board's slot size comes from, checked against the map it was taken from.
+def test_a_building_slot_renders_the_size_of_the_map_hex_it_stands_for(scale) -> None:
+    """A building is the same hexagon whether it is still on the map or bought into a slot.
 
-    `BUILDING_SLOT_HEX_SIZE` was solved as a number of MARKER_CUBEs, the unit the board writes its
-    geometry in -- which was the board's cube when the figure was chosen, and has not been one
-    since the cubes were resized to the duty wheel's. So this is the arithmetic behind the constant
-    rather than a claim about what renders; the next test is what renders.
+    This is the measurement `BUILDING_SLOT_HEX_SIZE` is written from, and the reason it cannot be
+    worked out from the board alone: the table draws the map at the full cube and a seat at the
+    shortfall the duty wheel is fitted to, so a slot has to be drawn about a quarter larger in the
+    board's units to come out level. Re-measure here if either board's scale ever moves.
+
+    It was long the other way about -- the slot was a map hex counted in MARKER_CUBEs, the unit the
+    board writes its geometry in, which stopped being its cube when the cubes were matched to the
+    wheel -- and it rendered a fifth short.
     """
-    _, _, cubes, _ = scale
-    hex_in_cubes = load_map_layout()["hex_size"] / cubes["map"]
-
-    assert cubes["player"] == 2 * TOKEN_RADIUS
-    assert BUILDING_SLOT_HEX_SIZE / MARKER_CUBE == pytest.approx(hex_in_cubes, rel=0.002)
-
-
-def test_a_building_slot_does_not_yet_render_the_size_of_a_map_hex(scale) -> None:
-    """The gap that constant leaves, recorded rather than asserted away.
-
-    A slot and a map hex are both flat-top hexagons measured from the centre out to a corner, so
-    the two are the same size on screen exactly when they are the same number of CUBES across --
-    and a slot is that many MARKER_CUBEs across, which is a larger unit. It has therefore always
-    rendered short of a map hex; sizing the seats from the wheel's cube widened the gap, because
-    it moved the scale a seat is drawn at without moving the map's.
-
-    Closing it means drawing the slots bigger, which sets the board's column pitch and so its
-    width. That is a change to the player board rather than to the table, and is left alone here.
-    """
-    _, _, _, solved = scale
+    _, _, cubes, solved = scale
     slot = BUILDING_SLOT_HEX_SIZE * _per_unit(solved, "player")
     map_hex = load_map_layout()["hex_size"] * _per_unit(solved, "map")
 
-    assert slot / map_hex == pytest.approx(0.798, abs=0.01)
-    # What the board would have to draw a slot at for the two to meet.
-    assert map_hex / _per_unit(solved, "player") == pytest.approx(61.9, abs=0.5)
+    assert cubes["player"] == 2 * TOKEN_RADIUS
+    assert slot == pytest.approx(map_hex, rel=1e-4)
+    # Larger in the board's own units than the hex is in the map's, by the seats' shortfall.
+    assert BUILDING_SLOT_HEX_SIZE > load_map_layout()["hex_size"]
 
 
 def test_the_seats_are_wider_than_they_are_tall(scale) -> None:
@@ -1202,10 +1199,10 @@ def test_the_window_height_is_what_the_table_is_solved_against(scale) -> None:
     assert height_bound < width_bound
     # Roughly what the window would have to give the stack for the width to bind instead -- read
     # off these coefficients, which are themselves solved at the reference height, so it is the
-    # size of the answer rather than the answer. Solving at that height puts it at 1142.
-    assert width_bound * solved.stack_cubes + solved.stack_fixed == pytest.approx(1142, abs=10)
+    # size of the answer rather than the answer. Solving at that height puts it at 1188.
+    assert width_bound * solved.stack_cubes + solved.stack_fixed == pytest.approx(1194, abs=10)
     # And the cube it settles at there, which is a fifth larger than the two-seat table reached.
-    assert width_bound == pytest.approx(10.5, abs=0.2)
+    assert width_bound == pytest.approx(10.6, abs=0.2)
 
 
 def test_the_solve_settles(scale) -> None:

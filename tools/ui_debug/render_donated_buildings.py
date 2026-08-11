@@ -29,14 +29,14 @@ HEX_RADIUS = 60.0
 COLUMN_SPACING = 160.0
 MARGIN = 78.0
 
-# The pilgrimage site's star written in this tile's units: what it has to be drawn at here to come
-# out the size a site star does, once the composed game table has scaled a player board's building
-# slot and a map hex to their places. A donated tile is only ever seen in a board slot and a site
-# only on a map hex, and those two are drawn at different scales, so a star of the same size in
-# either tile's own units does not come out the same size on the page -- this figure is that round
-# trip solved for. `test_ui_debug_game_table.py` measures the two against each other and holds it
-# there, so the table is what to re-measure if either board's scale ever moves.
-STAR_OUTER_RADIUS = 32.506
+# The pilgrimage site's star written in this tile's units. A donated tile is only ever seen in a
+# player board's building slot and a site only on a map hex, so the two match on the page when they
+# are the same share of the hex each is scaled onto -- and a site's star is 22.386 of a building
+# tile's 52, which is this of a donated tile's 60. It used to take a larger figure than that, since
+# a slot came out well short of a map hex on the composed table and the star had to make the
+# difference up; the slots are drawn at a map hex's size now, so the plain proportion is the whole
+# of it. `test_ui_debug_game_table.py` measures the two against each other on the real solve.
+STAR_OUTER_RADIUS = 25.830
 STAR_INNER_RATIO = 0.45
 STAR_POINTS = 5
 STAR_FILL = "#F4D03F"
