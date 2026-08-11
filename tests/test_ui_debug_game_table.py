@@ -2,10 +2,11 @@
 
 They check that every component reached the page through its own renderer, that the three columns
 hold the right things in the right order, that the shared cube scale is what sizes them, and that
-the only page-local control is the 2P/3P/4P bar under the Alms Table. Nothing here looks at the
-drawing itself; each renderer's own tests do that, and nothing here renders a browser.
+the compact control stack under the Alms Table wires only local debug behaviour. Nothing here looks
+at the drawing itself; each renderer's own tests do that, and nothing here renders a browser.
 """
 
+import json
 import math
 import re
 from pathlib import Path
@@ -24,6 +25,7 @@ from tools.ui_debug.generate_game_table import (
     REF_VIEWPORT_HEIGHT,
     SEAT_COLS,
     SEATED_PLAYERS,
+    SETUP_ROLLS,
     board_measurements,
     crop_svg,
     default_output_path,
@@ -35,10 +37,12 @@ from tools.ui_debug.generate_game_table import (
     solve_table_scale,
     visible_seats_by_count,
 )
+from tools.ui_debug.generate_game_setup import EDGE_HEX_PATH, START_HEX_BY_ROLL, acolyte_places
 from tools.ui_debug.render_alms_table import (
     CUBE_SIZE as ALMS_CUBE_SIZE,
 )
 from tools.ui_debug.render_alms_table import (
+    RANK_FIRST,
     SEASON_END_LABEL_FONT_SIZE,
     UNITS_PER_PLAYER_UNIT,
     load_alms_config,
@@ -168,22 +172,22 @@ def test_the_page_opens_straight_into_the_table(page: str) -> None:
 
 
 def test_no_styling_is_left_over_from_the_removed_heading(page: str) -> None:
-    """The old page heading is gone; button chrome is page-local and does not revive it."""
+    """The old page heading is gone; compact-control chrome is page-local only."""
     stylesheet = page[page.index("<style>") : page.index("</style>")]
-    buttons = stylesheet[stylesheet.index(".player-count-controls") :]
+    controls = stylesheet[stylesheet.index(".table-controls") :]
 
-    for stale in ("game-table-subtitle", "h1 ", "--ink", "Georgia", "font-family"):
+    for stale in ("game-table-subtitle", "h1 ", "--ink", "Georgia"):
         assert stale not in stylesheet, stale
-    # Colour only appears once the 2P/3P/4P bar's rules begin.
-    assert "color:" not in stylesheet[: stylesheet.index(".player-count-controls")]
-    assert "color:" in buttons
+    # Colour only appears once the compact controls' rules begin.
+    assert "color:" not in stylesheet[: stylesheet.index(".table-controls")]
+    assert "color:" in controls
 
 
 def test_the_main_row_is_the_alms_column_the_piety_duty_column_and_the_map(page: str) -> None:
     """Three across, in that order, and no seat among them.
 
-    The left column is only the Alms Table and the 2P/3P/4P bar under it. The seats stay in their
-    own row below, so changing the player count never has to ask this column for more height.
+    The left column is only the Alms Table and compact control stack under it. The seats stay in
+    their own row below, so changing player count never has to ask this column for more height.
     """
     assert '<div class="game-table-stage">' in page
     row = _block(page, "row")
@@ -193,7 +197,7 @@ def test_the_main_row_is_the_alms_column_the_piety_duty_column_and_the_map(page:
         assert f'<div class="{class_name}">' in row, class_name
     assert row.index('class="left"') < row.index('class="col"') < row.index("p-map")
     assert "p-player" not in row
-    assert left.index("p-alms") < left.index("player-count-controls")
+    assert left.index("p-alms") < left.index("table-controls")
     assert "p-player" not in left
 
 
@@ -332,37 +336,171 @@ def test_no_board_at_this_table_says_who_starts(page: str) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# Player-count controls
+# Compact controls
 # ---------------------------------------------------------------------------------------------
 
 
-def test_the_player_count_buttons_sit_under_the_alms_table(page: str) -> None:
-    """2P/3P/4P under the Alms Table, left of the Duty Wheel, defaulting to 4P."""
+def test_the_compact_controls_sit_under_the_alms_table(page: str) -> None:
     left = _block(page, "left")
-    controls = _block(page, "player-count-controls")
+    controls = _block(page, "table-controls")
 
-    assert left.index("p-alms") < left.index("player-count-controls")
+    assert left.index("p-alms") < left.index("table-controls")
     assert "p-action" not in left
-    assert "duty-wheel-counts" not in page
+    assert 'data-component="game-table-controls"' in controls
     assert PLAYER_COUNTS == (2, 3, 4)
     assert DEFAULT_PLAYER_COUNT == 4
+    assert SETUP_ROLLS == (1, 2, 3, 4, 5, 6)
 
-    buttons = re.findall(
+
+def test_row_one_has_player_count_then_setup_roll_buttons(page: str) -> None:
+    controls = _block(page, "table-controls")
+    row_one = re.search(r'data-controls-row="1">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_one is not None
+    body = row_one.group(1)
+
+    assert "2P</button>" in body
+    assert "3P</button>" in body
+    assert "4P</button>" in body
+    assert body.index(">2P<") < body.index(">3P<") < body.index(">4P<")
+    for roll in SETUP_ROLLS:
+        assert f'data-setup-roll-button="{roll}"' in body
+        assert f">{roll}</button>" in body
+    assert body.index(">4P<") < body.index(">1<")
+    # the ship comes last, after the setup rolls it rides with
+    assert 'data-ship-advance="true">S+</button>' in body
+    assert body.index(">6<") < body.index(">S+<")
+
+
+def test_player_count_and_setup_roll_defaults_are_tagged(page: str) -> None:
+    controls = _block(page, "table-controls")
+    count_buttons = re.findall(
         r'data-player-count-button="(\d)" aria-pressed="(\w+)">([^<]+)</button>',
         controls,
     )
-    assert buttons == [("2", "false", "2P"), ("3", "false", "3P"), ("4", "true", "4P")]
+    roll_buttons = re.findall(
+        r'data-setup-roll-button="(\d)" aria-pressed="(\w+)">([^<]+)</button>',
+        controls,
+    )
+
+    assert count_buttons == [("2", "false", "2P"), ("3", "false", "3P"), ("4", "true", "4P")]
+    assert [button[0] for button in roll_buttons] == [str(roll) for roll in SETUP_ROLLS]
+    assert roll_buttons[0] == ("1", "true", "1")
 
 
-def test_the_player_count_script_hides_later_seats_without_reflowing_the_row(page: str) -> None:
-    """The mapping the script uses, and the hide style that keeps empty slots in the flex row."""
+def test_row_two_has_disc_player_dropdown_and_step_buttons(page: str) -> None:
+    controls = _block(page, "table-controls")
+    row_two = re.search(r'data-controls-row="2">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_two is not None
+    body = row_two.group(1)
+
+    options = re.findall(r'<option value="(\d)"(?: selected)?>(P\d)</option>', body)
+    assert options == [("1", "P1"), ("2", "P2"), ("3", "P3"), ("4", "P4")]
+    assert 'id="disc-player-seat"' in body
+    assert 'data-disc-track="alms" data-disc-delta="1">A+</button>' in body
+    assert 'data-disc-track="alms" data-disc-delta="-1">A-</button>' in body
+    assert 'data-disc-track="piety" data-disc-delta="1">P+</button>' in body
+    assert 'data-disc-track="piety" data-disc-delta="-1">P-</button>' in body
+
+
+def test_row_three_has_acolyte_controls_with_game_setup_places(page: str) -> None:
+    controls = _block(page, "table-controls")
+    row_three = re.search(r'data-controls-row="3">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_three is not None
+    body = row_three.group(1)
+
+    assert 'id="acolyte-player-seat"' in body
+    assert 'id="acolyte-source"' in body
+    assert 'id="acolyte-target"' in body
+    assert 'id="move-acolyte">Move acolyte</button>' in body
+
+    places = acolyte_places(load_player_boards_v2_layout())
+    for place_id, label in places:
+        expected = f'<option value="{place_id}"'
+        assert expected in body
+        assert f">{label}</option>" in body
+
+
+def test_controls_stay_compact_without_explanatory_text(page: str) -> None:
+    controls = _block(page, "table-controls")
+
+    for forbidden in ("<label", "<p ", "<h1", "<h2", "<h3", "slot-list", "subtitle"):
+        assert forbidden not in controls
+    assert controls.count('data-controls-row="') == 3
+
+
+def test_player_count_script_hides_later_seats_without_reflowing(page: str) -> None:
     assert visible_seats_by_count() == {"2": [1, 2], "3": [1, 2, 3], "4": [1, 2, 3, 4]}
     assert 'var VISIBLE = {"2":[1,2],"3":[1,2,3],"4":[1,2,3,4]};' in page
-    assert f"var defaultCount = {DEFAULT_PLAYER_COUNT};" in page
-    assert "seat.style.visibility" in page
+    assert f"var DEFAULT_COUNT = {DEFAULT_PLAYER_COUNT};" in page
+    assert "board.style.visibility" in page
     assert "disc.style.visibility" in page
     assert "display: none" not in page
-    assert "Duty Wheel player-count" in page
+
+
+def test_setup_roll_script_uses_game_setup_mapping(page: str) -> None:
+    mapping = json.dumps(
+        {str(roll): label for roll, label in START_HEX_BY_ROLL.items()},
+        separators=(",", ":"),
+    )
+    edge_path = json.dumps(list(EDGE_HEX_PATH), separators=(",", ":"))
+
+    assert '"startHexByRoll":' + mapping in page
+    assert '"defaultRoll":1' in page
+    assert "function rotatedPath(roll)" in page
+    assert "setupGroups" in page
+    assert "placeOnHex(group, state.path[slot - 1]);" in page
+    assert "shipMarker" in page
+    assert "data-setup-roll-button" in page
+    assert '"edgePath":' + edge_path in page
+
+
+def test_the_ship_button_walks_the_path_the_setup_rolls_rotate(page: str) -> None:
+    """S+ takes one stop clockwise and wraps, as the setup page's Advance ship does.
+
+    It rides `state.path`, so it follows whichever rotation the last setup roll produced, and a
+    roll puts it back on the first stop -- which is the reset the setup page has a button for.
+    """
+    assert "function advanceShip()" in page
+    assert "state.shipPosition = (state.shipPosition + 1) % state.path.length;" in page
+    assert "shipButton.addEventListener('click', advanceShip);" in page
+    assert "state.shipPosition = 0;" in page
+    assert "placeOnHex(shipMarker, state.path[state.shipPosition]);" in page
+    # no reset button was asked for, so none was added
+    assert "reset-ship" not in page
+    assert "Reset ship" not in page
+
+
+def test_alms_and_piety_scripts_clamp_movement_deterministically(page: str) -> None:
+    assert "function moveDisc(track, delta)" in page
+    assert "Math.max(0, Math.min(maximum" in page
+    assert "function nextAlmsPosition(current, delta, seat)" in page
+    assert "almsFirstOccupied(seat)" in page
+    assert "if (step === maximum && !almsFirstOccupied(seat))" in page
+    assert "return DISC.first.alms;" in page
+    assert "renderDiscTrack('alms')" in page
+    assert "renderDiscTrack('piety')" in page
+    assert "data-disc-track" in page
+    assert '"max":{"alms":' in page
+    assert '"piety":12' in page
+    assert f'"first":{{"alms":"{RANK_FIRST}"}}' in page
+
+
+def test_a_disc_in_the_first_pocket_is_drawn_on_top_of_it(page: str) -> None:
+    """The pocket is painted solid, so the discs have to be drawn after it, not inside a step.
+
+    A disc parented to its step group renders under the pocket, which is why one moved there
+    vanished rather than filling the dashed socket. The renderer's interactive form lifts every
+    disc into one layer above the pocket, and that is what this page asks for.
+    """
+    alms = _block(page, "panel p-alms")
+
+    assert 'data-alms-bonus-pocket="true"' in alms
+    assert 'data-alms-discs="true"' in alms
+    assert alms.index('data-alms-bonus-pocket="true"') < alms.index('data-alms-discs="true"')
+    # every disc is in that one layer, so none is left parented to a step
+    layer = alms[alms.index('data-alms-discs="true"') :]
+    assert len(re.findall(r'data-player-disc="\d"', layer)) == len(SEATED_PLAYERS)
+    assert len(re.findall(r'data-player-disc="\d"', alms)) == len(SEATED_PLAYERS)
 
 
 def test_alms_and_piety_discs_share_the_seat_order_the_boards_use(page: str) -> None:
@@ -388,11 +526,7 @@ def test_alms_and_piety_discs_share_the_seat_order_the_boards_use(page: str) -> 
 
 
 def test_two_player_mode_centres_the_red_over_yellow_stack(page: str) -> None:
-    """2P keeps two rows / one column (red over yellow), centred on the track value.
-
-    Home seats stay the 2x2 (so 3P/4P restore cleanly). The script reads midX and the top/bottom
-    rows from those homes and parks both visible discs on that one centred column.
-    """
+    """2P keeps red over yellow but centres both columns on the value."""
     alms_players = {
         player["color"]: (player["seat"]["column"], player["seat"]["row"])
         for player in load_alms_table_layout()["players"]
@@ -411,14 +545,11 @@ def test_two_player_mode_centres_the_red_over_yellow_stack(page: str) -> None:
     assert alms_players["white"] == (1, 1)
     assert piety_seats == alms_players
 
-    assert "function pairLayout(discs)" in page
-    assert "midX: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2" in page
-    assert "if (pair && n === 1)" in page
-    assert "disc.setAttribute('cx', pair.midX);" in page
-    assert "disc.setAttribute('cy', pair.top);" in page
-    assert "disc.setAttribute('cy', pair.bottom);" in page
-    assert "data-home-cx" in page
-    assert ".p-alms" in page and ".p-piety" in page
+    assert '"pair":{"alms":' in page
+    assert '"piety":' in page
+    assert "pairPoint(track, position)" in page
+    assert "if (state.count === 2 && (seat === 1 || seat === 2))" in page
+    assert "y = seat === 1 ? pair[1] : pair[2];" in page
 
 
 def test_the_duty_wheel_is_not_wired_to_the_player_count_buttons(page: str) -> None:
@@ -790,11 +921,16 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 # ---------------------------------------------------------------------------------------------
 
 
-def test_page_carries_only_the_player_count_control(page: str) -> None:
-    """The control-heavy sandbox is still game_setup.html; this page only has 2P/3P/4P."""
-    assert page.count("<button") == len(PLAYER_COUNTS)
+def test_page_carries_only_local_compact_controls(page: str) -> None:
+    """Controls stay local to this page; richer setup controls remain in game_setup.html."""
+    # counts, setup rolls, the ship, the four disc steps, and Move acolyte
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + 1
+    assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
+    assert "data-setup-roll-button" in page
+    assert "data-disc-track" in page
+    assert "move-acolyte" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page
 
