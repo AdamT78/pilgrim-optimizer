@@ -98,10 +98,10 @@
       "label": "3\u20134 player track",
       "disc_rows": 2,
       "seats": [
-        { "player": "player_one", "row": -1, "column": -1 },
-        { "player": "player_two", "row": -1, "column": 1 },
+        { "player": "player_one", "row": 1, "column": 1 },
+        { "player": "player_two", "row": -1, "column": -1 },
         { "player": "player_three", "row": 1, "column": -1 },
-        { "player": "player_four", "row": 1, "column": 1 }
+        { "player": "player_four", "row": -1, "column": 1 }
       ]
     },
     {

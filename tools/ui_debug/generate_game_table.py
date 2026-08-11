@@ -5,12 +5,14 @@ the physical game reads as -- the shared boards across the top, the seats in a r
 renderers keep owning what each component looks like; nothing here draws geometry of its own.
 
     alms table      piety track     map
-                    duty wheel
+    2P 3P 4P        duty wheel
 
     red seat        seat            seat            seat
 
 The stage is left-aligned, so the two rows start on the same vertical and the red seat comes out
-under the alms table.
+under the alms table. The 2P/3P/4P bar under the Alms Table only toggles which fixed seats and
+which Alms/Piety discs are visible; it does not reseat anyone, recompute scale, or touch the Duty
+Wheel yet.
 
 ONE SHARED SCALE
 Each renderer draws in its own units and was authored as its own standalone page, so handing
@@ -52,6 +54,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import sys
@@ -118,8 +121,8 @@ PIETY_VARIANT_ID = "3_4_player"
 
 # Every seat the layout describes, in the order they sit along the row. It is the layout's own
 # order read from the red board rather than from the first one, so the run is the seating order
-# the layout already gives and red simply leads it. This is debug/layout state to look at, not a
-# seating rule: player counts are not wired up here, and no board says who starts.
+# the layout already gives and red simply leads it. The 2P/3P/4P control only toggles which of
+# these fixed seats are visible; it does not reseat anyone or ask the scale to recompute.
 SEATED_PLAYERS = ("player_two", "player_three", "player_four", "player_one")
 
 # --- page chrome, in px ----------------------------------------------------------------------
@@ -137,8 +140,18 @@ REF_AVAIL_WIDTH = 1860.0
 REF_VIEWPORT_HEIGHT = 900.0
 
 # The seats stand in one row of four under the main row, so the block is as wide as four boards
-# and as tall as one.
+# and as tall as one. Every seat is drawn whatever the player count is; the count only decides
+# which of them are visible, so that nothing moves when it changes.
 SEAT_COLS = len(SEATED_PLAYERS)
+
+# The player counts the control bar offers, and the count it opens on.
+PLAYER_COUNTS = (2, 3, 4)
+DEFAULT_PLAYER_COUNT = 4
+
+# The control bar under the alms table. Its height is fixed rather than left to the type, so the
+# left column's height is a number this module knows: it has to stay well inside the row, which is
+# the map's to set, or the duty wheel would be handed a short height to fill.
+CONTROLS_HEIGHT_PX = 32
 
 # Dead canvas left around a player board, in its own units. Every other board's margin is solved
 # to match whatever this comes out as on screen.
@@ -520,6 +533,146 @@ def regularise_duty_hexagon(fragment: str, hexagon: dict) -> str:
     return fragment.replace(hexagon["drawn"], hexagon["regular"], 1)
 
 
+def seat_numbers_by_player() -> dict[str, int]:
+    """Seat index for each seated player id: red is 1, then yellow, blue, white."""
+    return {player_id: index for index, player_id in enumerate(SEATED_PLAYERS, start=1)}
+
+
+def visible_seats_by_count() -> dict[str, list[int]]:
+    """Which seat numbers stay visible at each player count.
+
+    Seats are fixed slots. Lower counts only drop the later ones, so nothing moves.
+    """
+    return {str(count): list(range(1, count + 1)) for count in PLAYER_COUNTS}
+
+
+def tag_player_discs(fragment: str) -> str:
+    """Stamp each rendered disc with the seat number the player-count control uses.
+
+    The standalone renderers already tag discs with `data-player`; this only adds the seat index
+    the composed page needs, without changing what the standalone pages emit.
+    """
+    tagged = fragment
+    for player_id, seat in seat_numbers_by_player().items():
+        needle = f'data-player-disc="true" data-player="{player_id}"'
+        if needle not in tagged:
+            raise ValueError(f"no disc for {player_id} to tag with seat {seat}")
+        tagged = tagged.replace(
+            needle,
+            f'data-player-disc="{seat}" data-player-seat="{seat}" data-player="{player_id}"',
+            1,
+        )
+    return tagged
+
+
+def render_player_count_controls() -> str:
+    """The 2P/3P/4P bar that sits under the Alms Table."""
+    buttons = []
+    for count in PLAYER_COUNTS:
+        pressed = "true" if count == DEFAULT_PLAYER_COUNT else "false"
+        buttons.append(
+            f'<button type="button" data-player-count-button="{count}"'
+            f' aria-pressed="{pressed}">{count}P</button>'
+        )
+    return (
+        '<div class="player-count-controls" role="group" aria-label="Player count">'
+        f"{''.join(buttons)}</div>"
+    )
+
+
+def render_player_count_script() -> str:
+    """Toggle seat boards and Alms/Piety discs. Duty Wheel player-count is deferred."""
+    visible = json.dumps(visible_seats_by_count(), separators=(",", ":"))
+    return f"""<script>
+(function () {{
+  /* Seat slots stay in the flex row; only visibility flips. Duty Wheel player-count
+     behaviour is deferred to a later PR. */
+  var VISIBLE = {visible};
+  var defaultCount = {DEFAULT_PLAYER_COUNT};
+  var buttons = document.querySelectorAll('[data-player-count-button]');
+  var seats = document.querySelectorAll('[data-player-seat].p-player');
+  var discBoards = [
+    document.querySelector('.p-alms'),
+    document.querySelector('.p-piety')
+  ];
+
+  function boardDiscs(board) {{
+    return board ? board.querySelectorAll('[data-player-disc][data-player-seat]') : [];
+  }}
+
+  function rememberHomes(discs) {{
+    Array.prototype.forEach.call(discs, function (disc) {{
+      if (!disc.hasAttribute('data-home-cx')) {{
+        disc.setAttribute('data-home-cx', disc.getAttribute('cx'));
+        disc.setAttribute('data-home-cy', disc.getAttribute('cy'));
+      }}
+    }});
+  }}
+
+  function pairLayout(discs) {{
+    /* Still two rows / one column (red over yellow), but centred on the value so the
+       stack is horizontally aligned inside the step rather than parked in the left
+       column of the 2x2. Board height is unchanged. */
+    var xs = [];
+    var ys = [];
+    Array.prototype.forEach.call(discs, function (disc) {{
+      xs.push(Number(disc.getAttribute('data-home-cx')));
+      ys.push(Number(disc.getAttribute('data-home-cy')));
+    }});
+    return {{
+      midX: (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2,
+      top: Math.min.apply(null, ys),
+      bottom: Math.max.apply(null, ys)
+    }};
+  }}
+
+  function placeDiscs(discs, count) {{
+    rememberHomes(discs);
+    var pair = count === 2 ? pairLayout(discs) : null;
+    Array.prototype.forEach.call(discs, function (disc) {{
+      var n = Number(disc.getAttribute('data-player-seat'));
+      var shown = VISIBLE[String(count)].indexOf(n) !== -1;
+      disc.style.visibility = shown ? 'visible' : 'hidden';
+      if (pair && n === 1) {{
+        disc.setAttribute('cx', pair.midX);
+        disc.setAttribute('cy', pair.top);
+      }} else if (pair && n === 2) {{
+        disc.setAttribute('cx', pair.midX);
+        disc.setAttribute('cy', pair.bottom);
+      }} else {{
+        disc.setAttribute('cx', disc.getAttribute('data-home-cx'));
+        disc.setAttribute('cy', disc.getAttribute('data-home-cy'));
+      }}
+    }});
+  }}
+
+  function apply(count) {{
+    var shown = VISIBLE[String(count)] || VISIBLE[String(defaultCount)];
+    Array.prototype.forEach.call(seats, function (seat) {{
+      var n = Number(seat.getAttribute('data-player-seat'));
+      /* visibility, not display: the empty slot has to keep its width so the
+         remaining boards do not slide left when a count drops. */
+      seat.style.visibility = shown.indexOf(n) === -1 ? 'hidden' : 'visible';
+    }});
+    discBoards.forEach(function (board) {{
+      placeDiscs(boardDiscs(board), count);
+    }});
+    Array.prototype.forEach.call(buttons, function (button) {{
+      var active = Number(button.getAttribute('data-player-count-button')) === count;
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }});
+  }}
+
+  Array.prototype.forEach.call(buttons, function (button) {{
+    button.addEventListener('click', function () {{
+      apply(Number(button.getAttribute('data-player-count-button')));
+    }});
+  }});
+  apply(defaultCount);
+}})();
+</script>"""
+
+
 # ---------------------------------------------------------------------------------------------
 # The page
 # ---------------------------------------------------------------------------------------------
@@ -542,30 +695,38 @@ def render_game_table_html(
     scale = solve_table_scale(content, hexes, cubes)
     hexagon = duty_hexagon(duty_wheel_layout)
 
-    alms_svg = crop_svg(render_alms_table_svg(alms_layout, alms_config), scale.crop["alms"])
-    piety_svg = crop_svg(
-        render_piety_track_v2_svg(piety_layout, piety_config, PIETY_VARIANT_ID),
-        scale.crop["piety"],
+    alms_svg = tag_player_discs(
+        crop_svg(render_alms_table_svg(alms_layout, alms_config), scale.crop["alms"])
+    )
+    piety_svg = tag_player_discs(
+        crop_svg(
+            render_piety_track_v2_svg(piety_layout, piety_config, PIETY_VARIANT_ID),
+            scale.crop["piety"],
+        )
     )
     map_svg = crop_svg(
         render_setup_map_svg(map_layout, setup_placements(DEFAULT_START_ROLL, catalog, site_data)),
         scale.crop["map"],
     )
-    # No controls: this page is about where things sit, and the buttons would only add height.
+    # The wheel's own controls stay off: they would add height, and the player count does not
+    # reach the wheel yet in any case. TODO: duty wheel player-count behaviour, a later pass.
     duty_svg = crop_svg(
         regularise_duty_hexagon(render_duty_wheel_svg(duty_wheel_layout), hexagon),
         scale.crop["action"],
     )
     panels = []
-    for seat in SEATED_PLAYERS:
+    for index, seat in enumerate(SEATED_PLAYERS, start=1):
         player = player_by_id(board_layout, seat)
         board = render_player_board_v2_svg(board_layout, player)
         panels.append(
             f'<div class="panel p-player" data-component="player-board-v2"'
+            f' data-player-seat="{index}"'
             f' data-player="{player["id"]}" data-player-color="{player["color"]}">'
             f"{crop_svg(board, scale.crop['player'])}</div>"
         )
     seats = "\n      ".join(panels)
+    controls = render_player_count_controls()
+    count_script = render_player_count_script()
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -635,9 +796,16 @@ def render_game_table_html(
   }}
   /* The row stands to whichever of its three needs the most height, and they
      stretch to it unless they say otherwise. Only the piety-over-duty column
-     wants to: the other two are single panels, and a panel taller than its own
-     drawing is a border round empty canvas. */
+     wants to: the other two are single panels or short stacks, and a panel
+     taller than its own drawing is a border round empty canvas. */
   .row  {{ display: flex; gap: var(--gap); align-items: stretch; }}
+  /* Alms Table over the 2P/3P/4P bar. The bar sits in the slack under the alms
+     table rather than stretching the left column past the map, so the scale
+     solver never has to know about it. */
+  .left {{
+    display: flex; flex-direction: column; align-items: center;
+    align-self: stretch; justify-content: flex-start; gap: 10px;
+  }}
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short
      of the row, so space-between produces precisely that gap rather than a
@@ -646,7 +814,8 @@ def render_game_table_html(
     display: flex; flex-direction: column; align-items: center;
     align-self: stretch; justify-content: space-between; gap: var(--gap);
   }}
-  /* One row of four, under the main row. */
+  /* One row of four fixed slots, under the main row. Hiding a seat leaves its
+     width in place so the others do not slide. */
   .seats {{ display: flex; gap: var(--gap); }}
 
   .panel {{
@@ -662,9 +831,6 @@ def render_game_table_html(
      shorter panel until its bottom edge sits on the row's bottom -- the same
      line the duty wheel's bottom sits on. Its width is untouched. */
   .p-map {{ align-self: flex-end; }}
-  /* Its own height too: stretched, its border would run the depth of the row
-     with the table stranded at the top of the box. */
-  .p-alms {{ align-self: flex-start; }}
   /* The only panel sized by height rather than width; see --h-action. */
   .p-action > svg {{ height: var(--h-action); width: auto; }}
   .p-map    > svg {{ width: var(--w-map); }}
@@ -672,12 +838,26 @@ def render_game_table_html(
   .p-piety  > svg {{ width: var(--w-piety); }}
   .p-alms   > svg {{ width: var(--w-alms); }}
 
+  .player-count-controls {{
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    height: {CONTROLS_HEIGHT_PX}px;
+  }}
+  .player-count-controls button {{
+    background: #1C1C1C; border: 1px solid #4A4A4A; border-radius: 6px;
+    color: #F2EEDF; cursor: pointer; font: inherit; font-size: 13px;
+    min-width: 2.75em; padding: 7px 12px;
+  }}
+  .player-count-controls button:hover {{ background: #2A2A2A; }}
+  .player-count-controls button[aria-pressed="true"] {{
+    background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
+  }}
+
   /* Stacked, there is no row height to fill, so the wheel goes back to being
      sized by width like everything else. */
   @media (max-width: {STACK_BELOW}px) {{
     :root {{ --cube: calc((100vw - 60px) / {scale.mult["action"]:.3f}); }}
     .row, .seats {{ flex-wrap: wrap; }}
-    .col {{ align-self: flex-start; gap: var(--gap); }}
+    .left, .col {{ align-self: flex-start; gap: var(--gap); }}
     .p-action > svg {{ height: auto; width: calc(var(--cube) * {scale.mult["action"]:.3f}); }}
     .p-map {{ align-self: flex-start; }}
   }}
@@ -686,7 +866,10 @@ def render_game_table_html(
 <body>
   <div class="game-table-stage">
     <div class="row">
-      <div class="panel p-alms">{alms_svg}</div>
+      <div class="left">
+        <div class="panel p-alms">{alms_svg}</div>
+        {controls}
+      </div>
       <div class="col">
         <div class="panel p-piety">{piety_svg}</div>
         <div class="panel p-action">{duty_svg}</div>
@@ -697,6 +880,7 @@ def render_game_table_html(
       {seats}
     </div>
   </div>
+  {count_script}
 </body>
 </html>
 """

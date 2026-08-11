@@ -59,7 +59,7 @@
       "color": "white",
       "fill": "#FFFFFF",
       "stroke": "#8B7B4E",
-      "seat": { "column": -1, "row": -1 },
+      "seat": { "column": 1, "row": 1 },
       "cube_fill": "#FFFFFF",
       "cube_stroke": "#8B7B4E"
     },
@@ -69,7 +69,7 @@
       "color": "red",
       "fill": "#C0392B",
       "stroke": "#7A2020",
-      "seat": { "column": 1, "row": -1 },
+      "seat": { "column": -1, "row": -1 },
       "cube_fill": "#B7382E",
       "cube_stroke": "#7A241C"
     },
@@ -89,7 +89,7 @@
       "color": "blue",
       "fill": "#2E86C1",
       "stroke": "#1B4F72",
-      "seat": { "column": 1, "row": 1 },
+      "seat": { "column": 1, "row": -1 },
       "cube_fill": "#3B6EA5",
       "cube_stroke": "#254A73"
     }

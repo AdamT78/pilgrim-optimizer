@@ -561,10 +561,18 @@ def test_the_race_track_survived_the_widening_element_for_element() -> None:
     assert len([e for e in kept if 'fill-opacity="0.65"' in e]) == len(THRESHOLD_POSITIONS)
     for prose in layout()["reward_text"].values():
         assert any(prose in element for element in kept)
-    # Four discs on step zero, where the baseline draws its diagram of four.
-    on_step_zero = [disc_center(layout(), player, 0) for player in players_of(layout())]
-    for x, y in on_step_zero:
-        assert any(f'cx="{x:.1f}" cy="{y:.1f}"' in element for element in kept)
+    # Four discs on step zero. Who sits in which corner was remapped for the game-table
+    # player-count control (red/yellow stay in the left column), so the coloured circles are no
+    # longer byte-identical to the baseline — only the four corner centres still are.
+    on_step_zero = {disc_center(layout(), player, 0) for player in players_of(layout())}
+    assert len(on_step_zero) == 4
+    baseline_disc_centres = {
+        (float(match.group(1)), float(match.group(2)))
+        for match in re.finditer(
+            r'<circle[^>]*\bcx="([\d.]+)" cy="([\d.]+)"[^>]*\br="9"', "".join(baseline)
+        )
+    }
+    assert on_step_zero <= baseline_disc_centres
 
 
 def test_the_extra_width_all_went_to_the_record_side_of_the_divider() -> None:
