@@ -34,6 +34,8 @@ from tools.ui_debug.generate_game_table import (
     duty_hexagon,
     generate_game_table_page,
     building_control_data,
+    duty_control_data,
+    duty_wheel_seating,
     regular_hexagon_path,
     regularise_duty_hexagon,
     resource_control_data,
@@ -79,8 +81,12 @@ from tools.ui_debug.render_duty_wheel import (
     CUBE_SIZE as DUTY_CUBE_SIZE,
 )
 from tools.ui_debug.render_duty_wheel import (
+    duty_position_by_id,
+    duty_setups,
     load_duty_wheel_layout,
+    merchant_path,
     render_duty_wheel_controls_html,
+    tally_pieces,
 )
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout, variant_by_id
@@ -277,7 +283,9 @@ def test_page_embeds_the_rendered_map(page: str) -> None:
 def test_page_embeds_the_duty_wheel(page: str) -> None:
     assert 'data-component="duty-wheel"' in page
     assert 'data-token="merchant"' in page
-    assert page.count('data-component="duty-wheel"') == 1
+    # counted in the markup: the compact rows' script names the board too, to drive it
+    markup = page[: page.index("<script")]
+    assert markup.count('data-component="duty-wheel"') == 1
 
 
 def test_page_embeds_the_alms_table(page: str) -> None:
@@ -396,9 +404,11 @@ def test_row_one_has_player_count_then_setup_roll_buttons(page: str) -> None:
         assert f'data-setup-roll-button="{roll}"' in body
         assert f">{roll}</button>" in body
     assert body.index(">4P<") < body.index(">1<")
-    # the ship comes last, after the setup rolls it rides with
+    # then the three that move a piece: the wheel's tiles, the ship, the Merchant
+    assert 'data-duty-randomize-button="true">R</button>' in body
     assert 'data-ship-advance="true">S+</button>' in body
-    assert body.index(">6<") < body.index(">S+<")
+    assert 'data-merchant-advance-button="true">M+</button>' in body
+    assert body.index(">6<") < body.index(">R<") < body.index(">S+<") < body.index(">M+<")
 
 
 def test_player_count_and_setup_roll_defaults_are_tagged(page: str) -> None:
@@ -812,13 +822,104 @@ def test_two_player_mode_centres_the_red_over_yellow_stack(page: str) -> None:
     assert "y = seat === 1 ? pair[1] : pair[2];" in page
 
 
-def test_the_duty_wheel_is_not_wired_to_the_player_count_buttons(page: str) -> None:
-    """Buttons may sit near the wheel, but they must not drive its tallies yet."""
+def test_the_duty_wheel_is_driven_from_the_compact_rows_not_its_own_controls(page: str) -> None:
+    """The wheel's own control bar would add height, so this page drives the board directly."""
     action = _block(page, "panel p-action")
 
     assert "data-player-count-button" not in action
     assert "duty-wheel-controls" not in page
-    assert "deferred to a later PR" in page
+    assert "duty-wheel-readout" not in page
+    # the interactive board is what the compact rows switch between
+    assert 'data-cube-tally="city"' in action
+    assert 'data-token="merchant"' in action
+
+
+def test_the_wheel_seats_the_players_this_table_seats(page: str) -> None:
+    """2P is red and yellow here, not the red and blue the wheel's own layout seats.
+
+    Every other board on this page counts players in one order -- the seats in the row, the discs
+    on both tracks -- so a wheel that dropped a different colour would be the one board disagreeing
+    about who is playing. Only the seating is overridden; the neutral column is still the wheel's.
+    """
+    layout = duty_wheel_seating(load_duty_wheel_layout())
+    colours = {player["id"]: player["color"] for player in layout["players"]}
+    columns = {
+        count: [
+            colours.get(piece["id"], piece["color"])
+            for piece in tally_pieces(layout, duty_position_by_id(layout, "produce"), count)
+        ]
+        for count in PLAYER_COUNTS
+    }
+
+    assert columns[2] == ["red", "yellow", "black"]
+    assert columns[3] == ["red", "yellow", "blue", "black"]
+    assert columns[4] == ["red", "yellow", "blue", "white"]
+    assert layout["default_player_count"] == DEFAULT_PLAYER_COUNT
+    # the City is not on the duty ring, so no neutral column stands on it
+    city = tally_pieces(layout, duty_position_by_id(layout, layout["city_id"]), 2)
+    assert [colours[piece["id"]] for piece in city] == ["red", "yellow"]
+
+
+def test_the_wheels_own_page_still_seats_red_and_blue() -> None:
+    """The override is this page's, so the standalone wheel is left as it was."""
+    layout = load_duty_wheel_layout()
+
+    assert layout["seats_by_player_count"]["2"] == ["player_two", "player_four"]
+    assert layout["default_player_count"] == 2
+
+
+def test_the_player_count_picks_the_wheels_tally_rather_than_dealing_cubes(page: str) -> None:
+    """Every count's tally is already drawn, centred for that many columns; this picks one."""
+    assert "function renderDutyTallies()" in page
+    assert "dutyPanel.querySelectorAll('[data-cube-tally]')" in page
+    assert "show(tally, tally.getAttribute('data-player-count') === String(state.count));" in page
+
+    applied = re.search(r"function applyPlayerCount\(count\) \{(.+?)\n  \}", page, flags=re.DOTALL)
+    assert applied is not None
+    assert "renderDutyTallies();" in applied.group(1)
+
+
+def test_the_r_button_cycles_the_wheels_own_sample_setups(page: str) -> None:
+    """The same three arrangements the wheel's own button walks, and in the same order."""
+    layout = duty_wheel_seating(load_duty_wheel_layout())
+    data = duty_control_data(layout)
+
+    assert data["setups"] == duty_setups(layout)
+    assert len(data["setups"]) == 3
+    assert "var DUTY = " + json.dumps(data, separators=(",", ":")) + ";" in page
+    assert "function randomizeDuties()" in page
+    assert "state.dutySetup = (state.dutySetup + 1) % DUTY.setups.length;" in page
+    assert "dutyRandomize.addEventListener('click', randomizeDuties);" in page
+    assert "label.textContent = entry.label;" in page
+    assert "show(icon, icon.getAttribute('data-tithe-token') === entry.tithe_icon);" in page
+
+
+def test_taxation_stays_put_and_stays_the_tile_without_a_tithe_token(page: str) -> None:
+    """It is the one duty with no Tithe token, so it is the one position drawn without a capsule."""
+    layout = duty_wheel_seating(load_duty_wheel_layout())
+
+    for setup in duty_setups(layout):
+        landed = {entry["position"]: entry for entry in setup}
+        assert landed["taxation"]["duty"] == "taxation"
+        assert landed["taxation"]["label"] == "Taxation"
+        assert landed["taxation"]["tithe_icon"] in (None, "")
+    assert duty_position_by_id(layout, layout["city_id"])["label"] == "City"
+
+
+def test_the_merchant_walks_the_ring_and_never_stands_in_the_city(page: str) -> None:
+    layout = load_duty_wheel_layout()
+    path = merchant_path(layout)
+
+    assert path == list(layout["clockwise_order"])
+    assert len(path) == 8
+    assert "taxation" in path
+    assert layout["city_id"] not in path
+    assert layout["merchant_token"]["starts_on"] == "taxation"
+
+    assert "function advanceMerchant()" in page
+    assert "state.merchant = path[(path.indexOf(state.merchant) + 1) % path.length];" in page
+    assert "merchantAdvance.addEventListener('click', advanceMerchant);" in page
+    assert "show(token, token.getAttribute('data-duty-position') === state.merchant);" in page
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1209,9 +1310,9 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
     resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
-    # counts, setup rolls, the ship, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
+    # counts, setup rolls, R/S+/M+, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
     # and Move acolyte
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + resource_steps + 2 + 2 + 1
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 1
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
@@ -1221,6 +1322,8 @@ def test_page_carries_only_local_compact_controls(page: str) -> None:
     assert "data-alms-winner-button" in page
     assert "data-building-buy-button" in page
     assert "data-building-donate-button" in page
+    assert "data-duty-randomize-button" in page
+    assert "data-merchant-advance-button" in page
     assert "move-acolyte" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page

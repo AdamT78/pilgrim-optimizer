@@ -102,7 +102,9 @@ from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     CUBE_SIZE as DUTY_CUBE_UNITS,  # noqa: E402
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
+    duty_setups,
     load_duty_wheel_layout,
+    merchant_path,
     render_duty_wheel_svg,
 )
 from tools.ui_debug.render_map import load_map_layout  # noqa: E402
@@ -680,7 +682,9 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         '<div class="table-controls" data-component="game-table-controls">'
         '<div class="control-row" data-controls-row="1">'
         f"{count_buttons}{setup_buttons}"
+        '<button type="button" data-duty-randomize-button="true">R</button>'
         '<button type="button" data-ship-advance="true">S+</button>'
+        '<button type="button" data-merchant-advance-button="true">M+</button>'
         "</div>"
         '<div class="control-row" data-controls-row="2">'
         f'<select id="disc-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
@@ -796,6 +800,33 @@ def resource_control_data(board_layout: dict) -> dict:
     }
 
 
+def duty_wheel_seating(layout: dict) -> dict:
+    """The wheel drawn with this table's seating rather than its own.
+
+    The wheel's layout seats a short table on red and blue, the pair that carries against its own
+    parchment. This page seats P1 to P4 in one order everywhere else it counts players -- the boards
+    in the row, the discs on both tracks -- so a wheel that dropped a different colour would be the
+    one board disagreeing about who is playing. Only who sits where changes: the neutral column, the
+    geometry, and the standalone wheel page are all untouched.
+    """
+    seated = dict(layout)
+    seated["seats_by_player_count"] = {
+        str(count): list(SEATED_PLAYERS[:count]) for count in layout["player_counts"]
+    }
+    # This table opens on four players, so that is the tally the wheel should open showing.
+    seated["default_player_count"] = DEFAULT_PLAYER_COUNT
+    return seated
+
+
+def duty_control_data(layout: dict) -> dict:
+    """What the wheel's two buttons walk through: its sample setups and the Merchant's ring."""
+    return {
+        "setups": duty_setups(layout),
+        "merchantPath": merchant_path(layout),
+        "merchantStart": layout["merchant_token"]["starts_on"],
+    }
+
+
 def building_control_data(board_layout: dict, placements: list[dict]) -> dict:
     """Where every building stands before anything is bought: all on the map, no board owns one.
 
@@ -851,13 +882,13 @@ def render_compact_controls_script(
     alms_layout: dict,
     alms_config: dict,
     placements: list[dict],
+    duty_layout: dict,
 ) -> str:
     """Compact local controls: player count, setup roll, discs, resources, winners, buildings,
-    acolytes.
-
-    Duty Wheel player-count behaviour is intentionally deferred.
+    acolytes, and the duty wheel.
     """
     buildings = json.dumps(building_control_data(board_layout, placements), separators=(",", ":"))
+    duty = json.dumps(duty_control_data(duty_layout), separators=(",", ":"))
     return f"""<script>
 (function () {{
   var VISIBLE = {json.dumps(visible_seats_by_count(), separators=(",", ":"))};
@@ -868,6 +899,7 @@ def render_compact_controls_script(
   var RESOURCES = {json.dumps(resource_control_data(board_layout), separators=(",", ":"))};
   var WINNERS = {json.dumps(season_winner_data(alms_layout, alms_config), separators=(",", ":"))};
   var BUILDINGS = {buildings};
+  var DUTY = {duty};
 
   var state = {{
     count: DEFAULT_COUNT,
@@ -879,7 +911,9 @@ def render_compact_controls_script(
     resources: JSON.parse(JSON.stringify(RESOURCES.state)),
     /* Seat numbers in slot order, so the row of sockets is just this list drawn. */
     winners: [],
-    buildings: JSON.parse(JSON.stringify(BUILDINGS.state))
+    buildings: JSON.parse(JSON.stringify(BUILDINGS.state)),
+    dutySetup: 0,
+    merchant: DUTY.merchantStart
   }};
 
   var countButtons = document.querySelectorAll('[data-player-count-button]');
@@ -901,7 +935,10 @@ def render_compact_controls_script(
   var buyButton = document.querySelector('[data-building-buy-button]');
   var donateSlot = document.getElementById('donate-building-slot');
   var donateButton = document.querySelector('[data-building-donate-button]');
+  var dutyRandomize = document.querySelector('[data-duty-randomize-button]');
+  var merchantAdvance = document.querySelector('[data-merchant-advance-button]');
   var almsPanel = document.querySelector('.p-alms');
+  var dutyPanel = document.querySelector('.p-action');
   var mapPanel = document.querySelector('.p-map');
   var setupGroups = mapPanel ? mapPanel.querySelectorAll('g[data-slot]') : [];
   var shipMarker = mapPanel ? mapPanel.querySelector('#ship-marker') : null;
@@ -1170,6 +1207,66 @@ def render_compact_controls_script(
     refreshMoveAcolyteButton();
   }}
 
+  /* Each player count has its own tally drawn on every space, already centred for that many
+     columns, so the count only decides which of them shows. A short table plays a black neutral
+     column beside the seats and a full one plays none, which is the wheel's own seeding: this
+     picks a tally, it does not deal any cubes. */
+  function renderDutyTallies() {{
+    if (!dutyPanel) {{
+      return;
+    }}
+    var tallies = dutyPanel.querySelectorAll('[data-cube-tally]');
+    Array.prototype.forEach.call(tallies, function (tally) {{
+      show(tally, tally.getAttribute('data-player-count') === String(state.count));
+    }});
+  }}
+
+  /* One of the wheel's sample arrangements: the eight titles are rewritten and each space shows
+     the Tithe token the tile that landed there brought with it. Taxation is the one tile with no
+     Tithe token, so it is drawn without a capsule and stays where it is. */
+  function renderDutySetup() {{
+    if (!dutyPanel) {{
+      return;
+    }}
+    DUTY.setups[state.dutySetup].forEach(function (entry) {{
+      var label = dutyPanel.querySelector('[data-duty-label="' + entry.position + '"]');
+      if (label) {{
+        label.textContent = entry.label;
+      }}
+      var icons = dutyPanel.querySelectorAll(
+        '[data-duty-position="' + entry.position + '"][data-tithe-token]');
+      Array.prototype.forEach.call(icons, function (icon) {{
+        show(icon, icon.getAttribute('data-tithe-token') === entry.tithe_icon);
+      }});
+    }});
+  }}
+
+  function renderMerchant() {{
+    if (!dutyPanel) {{
+      return;
+    }}
+    var tokens = dutyPanel.querySelectorAll('[data-token="merchant"]');
+    Array.prototype.forEach.call(tokens, function (token) {{
+      show(token, token.getAttribute('data-duty-position') === state.merchant);
+    }});
+    var board = dutyPanel.querySelector('[data-component="duty-wheel"]');
+    if (board) {{
+      board.setAttribute('data-merchant-token', state.merchant);
+    }}
+  }}
+
+  function randomizeDuties() {{
+    state.dutySetup = (state.dutySetup + 1) % DUTY.setups.length;
+    renderDutySetup();
+  }}
+
+  /* The next duty tile clockwise, wrapping round the ring. The City is not on the path. */
+  function advanceMerchant() {{
+    var path = DUTY.merchantPath;
+    state.merchant = path[(path.indexOf(state.merchant) + 1) % path.length];
+    renderMerchant();
+  }}
+
   function buildingSlotsOf(seat) {{
     return state.buildings.players[String(seat)].buildingSlots;
   }}
@@ -1306,6 +1403,7 @@ def render_compact_controls_script(
     renderSeatBoards();
     renderDiscTrack('alms');
     renderDiscTrack('piety');
+    renderDutyTallies();
     Array.prototype.forEach.call(countButtons, function (button) {{
       var active = Number(button.getAttribute('data-player-count-button')) === count;
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -1326,6 +1424,14 @@ def render_compact_controls_script(
 
   if (shipButton) {{
     shipButton.addEventListener('click', advanceShip);
+  }}
+
+  if (dutyRandomize) {{
+    dutyRandomize.addEventListener('click', randomizeDuties);
+  }}
+
+  if (merchantAdvance) {{
+    merchantAdvance.addEventListener('click', advanceMerchant);
   }}
 
   Array.prototype.forEach.call(resourceButtons, function (button) {{
@@ -1384,10 +1490,11 @@ def render_compact_controls_script(
   }});
   renderWinners();
   renderBuildings();
+  renderDutySetup();
+  renderMerchant();
   applySetupRoll(SETUP.defaultRoll);
   applyPlayerCount(DEFAULT_COUNT);
   refreshMoveAcolyteButton();
-  /* Duty Wheel player-count behaviour is deferred to a later PR. */
 }})();
 </script>"""
 
@@ -1435,10 +1542,12 @@ def render_game_table_html(
     # Every side of every building a board slot can show, defined once and pointed at, so buying
     # or donating is a change of reference rather than SVG built in the browser.
     content_defs = render_building_content_defs(placements, load_donated_building_tiles())
-    # The wheel's own controls stay off: they would add height, and the player count does not
-    # reach the wheel yet in any case. TODO: duty wheel player-count behaviour, a later pass.
+    # The wheel's own controls stay off -- they would add height, and this page drives it from the
+    # compact rows instead. Its interactive form is what they drive: every tally, Tithe token and
+    # Merchant slot drawn hidden, so a click flips opacity rather than redrawing the board.
+    duty_seated = duty_wheel_seating(duty_wheel_layout)
     duty_svg = crop_svg(
-        regularise_duty_hexagon(render_duty_wheel_svg(duty_wheel_layout), hexagon),
+        regularise_duty_hexagon(render_duty_wheel_svg(duty_seated, interactive=True), hexagon),
         scale.crop["action"],
     )
     panels = []
@@ -1456,7 +1565,7 @@ def render_game_table_html(
     seats = "\n      ".join(panels)
     controls = render_compact_controls(board_layout, placements)
     control_script = render_compact_controls_script(
-        map_layout, piety_layout, board_layout, alms_layout, alms_config, placements
+        map_layout, piety_layout, board_layout, alms_layout, alms_config, placements, duty_seated
     )
 
     return f"""<!DOCTYPE html>

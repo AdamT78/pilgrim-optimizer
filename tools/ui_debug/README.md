@@ -1092,7 +1092,14 @@ player's Abbey into the first empty Season End Winners socket, and `ATr` returns
 to the Abbey of the player whose colour it carries. The same row buys and donates buildings: `Buy`
 takes the chosen building off the setup map into the selected player's first empty slot, and
 `Donate` flips the chosen slot to its donated side (level 1 is 2 VP, level 2 is 4 VP, level 3 is
-6 VP). A bought building does not come back when a setup roll moves the map around. These are local
+6 VP). A bought building does not come back when a setup roll moves the map around. The compact
+controls now include Duty Wheel randomize and Merchant advance buttons: `R` cycles the wheel's own
+sample Duty tile arrangements and `M+` walks the Merchant clockwise around the eight duty tiles,
+Taxation included and the City excluded. Player-count controls also update Duty Wheel starting cube
+columns locally: 2P uses two player columns plus black, 3P uses three player columns plus black, and
+4P uses four player columns without black. The wheel is seated in this page's own order — red,
+yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
+here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
 yellow) but centred horizontally inside each track value; 3P/4P restore the 2x2. No board says who
 starts.
