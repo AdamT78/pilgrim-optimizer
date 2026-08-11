@@ -1081,8 +1081,11 @@ Alms Table: player count plus setup-roll buttons, Alms/Piety disc movement contr
 Board v2 acolyte movement controls. The game table also includes compact resource controls for the
 selected player and Alms Table season-end winner controls: `AT+` moves one cube from the selected
 player's Abbey into the first empty Season End Winners socket, and `ATr` returns every placed cube
-to the Abbey of the player whose colour it carries. These are local debug UI controls only and do
-not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
+to the Abbey of the player whose colour it carries. The same row buys and donates buildings: `Buy`
+takes the chosen building off the setup map into the selected player's first empty slot, and
+`Donate` flips the chosen slot to its donated side (level 1 is 2 VP, level 2 is 4 VP, level 3 is
+6 VP). A bought building does not come back when a setup roll moves the map around. These are local
+debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
 yellow) but centred horizontally inside each track value; 3P/4P restore the 2x2. No board says who
 starts.
 
