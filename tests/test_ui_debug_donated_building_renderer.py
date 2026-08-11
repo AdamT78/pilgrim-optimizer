@@ -1,18 +1,28 @@
 import re
 from pathlib import Path
 
+import pytest
+
 from tools.ui_debug.generate_donated_buildings import (
     default_output_path,
     generate_donated_building_tiles_page,
 )
 from tools.ui_debug.render_donated_buildings import (
+    HEX_RADIUS,
+    STAR_OUTER_RADIUS,
     TITLE,
+    VP_TEXT_FONT_SIZE,
+    VP_TEXT_OFFSET,
     default_data_path,
     load_donated_building_tiles,
+    render_donated_building_contents,
     render_donated_building_tiles_svg,
     render_star_path,
     tiles_of,
 )
+from tools.ui_debug.render_pilgrimage_sites import STAR_OUTER_RADIUS as SITE_STAR_RADIUS
+from tools.ui_debug.render_pilgrimage_sites import VP_TEXT_FONT_SIZE as SITE_VP_FONT_SIZE
+from tools.ui_debug.render_pilgrimage_sites import VP_TEXT_OFFSET as SITE_VP_OFFSET
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
@@ -61,6 +71,57 @@ def test_render_star_path_returns_a_closed_star() -> None:
     assert "#F4D03F" in star
     assert star.count("L ") == 9
     assert " Z" in star
+
+
+def test_the_vp_is_set_inside_the_star_at_the_proportion_a_site_sets_its_own() -> None:
+    """The two stars are different sizes in their tiles' units, so this is what can be compared.
+
+    What each renderer's own units come out as on the page is the composed table's business, and
+    `test_ui_debug_game_table.py` is where the two are measured against each other. Here the star
+    and the number inside it only have to stand in the same relation on both tiles.
+    """
+    assert VP_TEXT_FONT_SIZE / STAR_OUTER_RADIUS == pytest.approx(
+        SITE_VP_FONT_SIZE / SITE_STAR_RADIUS
+    )
+    assert VP_TEXT_OFFSET / VP_TEXT_FONT_SIZE == pytest.approx(SITE_VP_OFFSET / SITE_VP_FONT_SIZE)
+
+
+def test_the_star_stands_in_the_middle_of_the_hex() -> None:
+    """A site's star hangs below its ship marker; this one has no ship over it to clear."""
+    contents = render_donated_building_contents(tiles_of(load_donated_building_tiles())[0])
+    star = re.search(r'<path d="M ([-\d.]+),([-\d.]+)', contents)
+    number = re.search(r'<text x="([-\d.]+)" y="([-\d.]+)"', contents)
+    assert star is not None and number is not None
+
+    # a star is drawn from its top point, standing its outer radius above its middle
+    assert float(star.group(1)) == pytest.approx(0.0, abs=0.01)
+    assert float(star.group(2)) == pytest.approx(-STAR_OUTER_RADIUS, abs=0.01)
+    assert float(number.group(1)) == pytest.approx(0.0, abs=0.05)
+    assert float(number.group(2)) == pytest.approx(VP_TEXT_OFFSET, abs=0.05)
+
+
+def test_the_star_scales_whole_with_the_slot_it_is_drawn_into() -> None:
+    """A board slot asks for the contents at its own size; nothing inside is sized separately."""
+    tile = tiles_of(load_donated_building_tiles())[0]
+    half = render_donated_building_contents(tile, scale=0.5)
+
+    star = re.search(r'<path d="M ([-\d.]+),([-\d.]+)', half)
+    assert star is not None
+    assert float(star.group(2)) == pytest.approx(-STAR_OUTER_RADIUS / 2, abs=0.01)
+    assert f'font-size="{VP_TEXT_FONT_SIZE / 2:g}"' in half
+
+
+def test_the_hex_keeps_its_size_and_its_colours() -> None:
+    """Only the star was polished: the tile it stands on is untouched."""
+    assert HEX_RADIUS == 60.0
+
+    svg = render_donated_building_tiles_svg(load_donated_building_tiles())
+    for fill in BUILDING_FILLS:
+        assert fill in svg
+    corner = max(
+        float(x) for x, _ in re.findall(r"[ML] ([-\d.]+),([-\d.]+)", svg[: svg.index("<text")])
+    )
+    assert corner == pytest.approx(HEX_RADIUS)
 
 
 def test_render_donated_building_tiles_svg_returns_svg_string() -> None:
