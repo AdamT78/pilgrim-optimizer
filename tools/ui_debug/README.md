@@ -1078,8 +1078,11 @@ Every seat the layout describes is drawn, in the layout's own order read from th
 than from the first one — red, yellow, blue, white — so the run is the seating order the layout
 already gives and red simply leads it. The generated game table now has compact controls under the
 Alms Table: player count plus setup-roll buttons, Alms/Piety disc movement controls, and Player
-Board v2 acolyte movement controls. These are local debug UI controls only and do not change
-GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
+Board v2 acolyte movement controls. The game table also includes compact resource controls for the
+selected player and Alms Table season-end winner controls: `AT+` moves one cube from the selected
+player's Abbey into the first empty Season End Winners socket, and `ATr` returns every placed cube
+to the Abbey of the player whose colour it carries. These are local debug UI controls only and do
+not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
 yellow) but centred horizontally inside each track value; 3P/4P restore the 2x2. No board says who
 starts.
 

@@ -23,6 +23,8 @@ from tools.ui_debug.generate_game_table import (
     PLAYER_COUNTS,
     REF_AVAIL_WIDTH,
     REF_VIEWPORT_HEIGHT,
+    RESOURCE_ABBREVIATIONS,
+    RESOURCE_FLOOR,
     SEAT_COLS,
     SEATED_PLAYERS,
     SETUP_ROLLS,
@@ -33,6 +35,7 @@ from tools.ui_debug.generate_game_table import (
     generate_game_table_page,
     regular_hexagon_path,
     regularise_duty_hexagon,
+    resource_control_data,
     seat_numbers_by_player,
     solve_table_scale,
     visible_seats_by_count,
@@ -45,8 +48,10 @@ from tools.ui_debug.render_alms_table import (
     RANK_FIRST,
     SEASON_END_LABEL_FONT_SIZE,
     UNITS_PER_PLAYER_UNIT,
+    alms_rules,
     load_alms_config,
     load_alms_table_layout,
+    placeholder_slots,
     render_alms_table_controls_html,
 )
 from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_FONT_SIZE
@@ -402,11 +407,55 @@ def test_row_two_has_disc_player_dropdown_and_step_buttons(page: str) -> None:
     assert 'data-disc-track="piety" data-disc-delta="-1">P-</button>' in body
 
 
-def test_row_three_has_acolyte_controls_with_game_setup_places(page: str) -> None:
+def test_row_two_steps_the_resources_after_the_discs(page: str) -> None:
+    """The resource steps share the row's player dropdown, so they come after the disc steps."""
+    controls = _block(page, "table-controls")
+    row_two = re.search(r'data-controls-row="2">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_two is not None
+    body = row_two.group(1)
+
+    steps = re.findall(r'data-resource-button="([\w:+-]+)">([^<]+)</button>', body)
+    assert steps == [
+        ("wheat:+", "Wh+"),
+        ("wheat:-", "Wh-"),
+        ("stone:+", "St+"),
+        ("stone:-", "St-"),
+        ("silver:+", "Si+"),
+        ("silver:-", "Si-"),
+    ]
+    assert body.index(">P-<") < body.index(">Wh+<")
+
+
+def test_the_resource_steps_name_the_resources_the_board_draws(page: str) -> None:
+    """A step button and the readout it moves are the same resource, named the same way."""
+    resources = [resource["id"] for resource in load_player_boards_v2_layout()["resources"]]
+    seats = _block(page, "seats")
+
+    assert resources == ["wheat", "stone", "silver"]
+    assert set(RESOURCE_ABBREVIATIONS) == set(resources)
+    for resource in resources:
+        assert seats.count(f'data-player-resource="{resource}"') == len(SEATED_PLAYERS)
+
+
+def test_row_three_carries_the_season_end_winner_controls(page: str) -> None:
     controls = _block(page, "table-controls")
     row_three = re.search(r'data-controls-row="3">(.+?)</div>', controls, flags=re.DOTALL)
     assert row_three is not None
     body = row_three.group(1)
+
+    options = re.findall(r'<option value="(\d)"(?: selected)?>(P\d)</option>', body)
+    assert options == [("1", "P1"), ("2", "P2"), ("3", "P3"), ("4", "P4")]
+    assert 'id="alms-winner-player-seat" data-alms-winner-player-select="true"' in body
+    assert 'data-alms-winner-button="add">AT+</button>' in body
+    assert 'data-alms-winner-button="reset">ATr</button>' in body
+    assert body.index(">AT+<") < body.index(">ATr<")
+
+
+def test_row_four_has_acolyte_controls_with_game_setup_places(page: str) -> None:
+    controls = _block(page, "table-controls")
+    row_four = re.search(r'data-controls-row="4">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_four is not None
+    body = row_four.group(1)
 
     assert 'id="acolyte-player-seat"' in body
     assert 'id="acolyte-source"' in body
@@ -425,7 +474,7 @@ def test_controls_stay_compact_without_explanatory_text(page: str) -> None:
 
     for forbidden in ("<label", "<p ", "<h1", "<h2", "<h3", "slot-list", "subtitle"):
         assert forbidden not in controls
-    assert controls.count('data-controls-row="') == 3
+    assert controls.count('data-controls-row="') == 4
 
 
 def test_player_count_script_hides_later_seats_without_reflowing(page: str) -> None:
@@ -483,6 +532,64 @@ def test_alms_and_piety_scripts_clamp_movement_deterministically(page: str) -> N
     assert '"max":{"alms":' in page
     assert '"piety":12' in page
     assert f'"first":{{"alms":"{RANK_FIRST}"}}' in page
+
+
+def test_the_resource_script_starts_from_the_amounts_the_board_is_drawn_holding(page: str) -> None:
+    """Every seat opens on the board's own amounts, so the page reads the same before a click."""
+    board_layout = load_player_boards_v2_layout()
+    data = resource_control_data(board_layout)
+
+    assert data["ids"] == ["wheat", "stone", "silver"]
+    assert data["state"] == {
+        str(seat): {"wheat": 1, "stone": 1, "silver": 1}
+        for seat in range(1, len(SEATED_PLAYERS) + 1)
+    }
+    assert "var RESOURCES = " + json.dumps(data, separators=(",", ":")) + ";" in page
+
+
+def test_a_resource_stops_at_nothing_and_only_moves_the_chosen_seat(page: str) -> None:
+    assert RESOURCE_FLOOR == 0
+    assert "function stepResource(id, delta)" in page
+    assert "amounts[id] = Math.max(RESOURCES.floor, amounts[id] + delta);" in page
+    assert "var seat = String(discPlayerSeat.value);" in page
+    assert "board.querySelector('[data-player-resource=\"' + id + '\"]')" in page
+    assert "readout.textContent = String(amounts[id]);" in page
+
+
+def test_a_winner_cube_comes_out_of_the_abbey_it_is_taken_from(page: str) -> None:
+    """AT+ moves a cube rather than making one: the Abbey it left is one cube shorter."""
+    assert "function addWinner()" in page
+    assert "if (state.winners.length >= WINNERS.slotCount || playerState.abbeyAcolytes < 1)" in page
+    assert "playerState.abbeyAcolytes -= 1;" in page
+    assert "state.winners.push(seat);" in page
+    assert "renderAcolyteBoard(seat);" in page
+
+
+def test_the_row_of_winners_is_as_long_as_the_record_has_sockets(page: str) -> None:
+    layout, config = load_alms_table_layout(), load_alms_config()
+    slots = len(placeholder_slots(layout, alms_rules(config)))
+
+    assert slots == 4
+    assert 'var WINNERS = {"slotCount":' + str(slots) + "};" in page
+
+
+def test_a_placed_cube_takes_its_dashed_socket_out_from_under_it(page: str) -> None:
+    """The cube exactly fills the socket, so a socket left showing would fringe it."""
+    assert "function renderWinners()" in page
+    assert "for (var slot = 1; slot <= WINNERS.slotCount; slot += 1)" in page
+    assert "almsPanel.querySelectorAll('[data-season-end-winner-slot=\"' + slot + '\"]')" in page
+    assert "show(cube, cube.getAttribute('data-player') === owner);" in page
+    assert "almsPanel.querySelector('[data-placeholder-slot=\"' + slot + '\"]')" in page
+    assert "show(socket, !owner);" in page
+
+
+def test_a_reset_sends_every_cube_back_to_the_abbey_it_came_from(page: str) -> None:
+    """Colours are kept because the seat is what is remembered, not the cube."""
+    assert "function resetWinners()" in page
+    assert "if (!state.winners.length)" in page
+    assert "var returning = state.winners.slice();" in page
+    assert "state.winners = [];" in page
+    assert "ACOLYTES.abbeyCapacity, playerState.abbeyAcolytes + 1" in page
 
 
 def test_a_disc_in_the_first_pocket_is_drawn_on_top_of_it(page: str) -> None:
@@ -923,13 +1030,16 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 
 def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
-    # counts, setup rolls, the ship, the four disc steps, and Move acolyte
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + 1
+    resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
+    # counts, setup rolls, the ship, four disc steps, the resource steps, AT+/ATr, Move acolyte
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 1 + 4 + resource_steps + 2 + 1
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
     assert "data-setup-roll-button" in page
     assert "data-disc-track" in page
+    assert "data-resource-button" in page
+    assert "data-alms-winner-button" in page
     assert "move-acolyte" in page
     assert render_duty_wheel_controls_html(load_duty_wheel_layout()) not in page
     assert render_alms_table_controls_html(load_alms_table_layout(), load_alms_config()) not in page
