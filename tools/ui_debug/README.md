@@ -1092,7 +1092,11 @@ Every seat the layout describes is drawn, in the layout's own order read from th
 than from the first one — red, yellow, blue, white — so the run is the seating order the layout
 already gives and red simply leads it. The generated game table now has compact controls under the
 Alms Table: player count plus setup-roll buttons, Alms/Piety disc movement controls, and Player
-Board v2 acolyte movement controls. The game table also includes compact resource controls for the
+Board v2 acolyte movement controls. `S->A` on that last row moves one cube from the selected
+player's Village to their Abbey, which is a serf becoming an acolyte — the game setup page's
+serf helper, as one button rather than four, because the row already names the player it acts on. It
+stops for the two reasons that page stops: an empty Village has nobody to send, and a full Abbey has
+nowhere to put him. The game table also includes compact resource controls for the
 selected player and Alms Table season-end winner controls: `AT+` moves one cube from the selected
 player's Abbey into the first empty Season End Winners socket, and `ATr` returns every placed cube
 to the Abbey of the player whose colour it carries. The same row buys and donates buildings: `Buy`
