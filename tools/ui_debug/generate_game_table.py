@@ -177,6 +177,15 @@ SEAT_COLS = len(SEATED_PLAYERS)
 PLAYER_COUNTS = (2, 3, 4)
 DEFAULT_PLAYER_COUNT = 4
 
+# The turn flow's own colours. The board rings the seat whose turn it is, and the space that seat
+# starts from, in that seat's own colour, and lights the ways out of it in a green dark enough to
+# read against the ground the arrows are drawn on. The fallback is only what the stylesheet opens
+# with; the page sets the variable from the seat itself.
+ACTIVE_PLAYER_FALLBACK = "#C94C4C"
+TURN_BRANCH_GREEN = "#1E7A34"
+TURN_BRANCH_EDGE = "#0C3D1A"
+TURN_DIMMED_OPACITY = "0.4"
+
 # The setup rolls and players the compact controls offer.
 SETUP_ROLLS = tuple(sorted(START_HEX_BY_ROLL))
 DEFAULT_CONTROL_PLAYER_SEAT = 1
@@ -888,6 +897,339 @@ def acolyte_control_data(board_layout: dict) -> dict:
     }
 
 
+def turn_flow_data(duty_layout: dict) -> dict:
+    """Who the turn belongs to, and the colour the board should ring their choices in.
+
+    One seat, because nothing on this page picks an active player yet: the compact rows each name
+    a seat of their own for the move they make, and none of them speaks for the turn. The whole
+    map is carried anyway, so the seat a turn belongs to becomes a variable rather than a rewrite
+    when there is something to set it from.
+    """
+    fills = {player["id"]: player["fill"] for player in duty_layout["players"]}
+    return {
+        "seat": DEFAULT_CONTROL_PLAYER_SEAT,
+        "colors": {
+            str(seat): fills[player_id] for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
+        },
+    }
+
+
+def render_turn_flow_script() -> str:
+    """The turn flow, as the phases a click moves the wheel between.
+
+        idle -> sow_armed -> start_selected
+                          -> branch_choice -> start_selected
+
+    Sow arms the nine spaces; clicking one lifts the cubes standing there into the counter in the
+    corner; a space with more than one way out lights those arrows and waits for one to be picked;
+    Reset puts everything back. That is the whole of it. No cube is sown, no route is walked, no
+    action is resolved, and nothing here reads or writes `GameState`: this is the shape of a turn
+    drawn on the board, so the flow can be looked at before it is implemented.
+
+    Everything it moves by is a board position -- `city`, `north`, `north_east` and the rest, as
+    `configs/board.json` names them -- read off `data-board-position` and the arrows' own
+    `data-from-position` and `data-to-position`. The names printed on the tiles are never consulted,
+    because turning the tiles moves a duty to another position and moves no position at all.
+
+    A cube picked up is the same cube put down -- the rects are hidden and remembered rather than
+    removed -- so Reset restores the board exactly, including a City column that was only partly
+    standing to begin with.
+    """
+    return """
+  /* --- the turn flow ------------------------------------------------------------------------
+     Local UI phases only: nothing below sows a cube, resolves an action, or touches GameState. */
+  var turnOverlay = dutyPanel
+    ? dutyPanel.querySelector('[data-component="duty-wheel-turn-controls"]')
+    : null;
+  /* Movement is in board positions -- city, north, north_east and the rest -- and never in the
+     names printed on the tiles. Turning the tiles moves a duty to another position; it moves no
+     position anywhere, so a flow keyed to the labels would start walking the wrong way round the
+     board the first time the tiles were turned. */
+  var dutySpaces = dutyPanel ? dutyPanel.querySelectorAll('[data-board-position]') : [];
+  var dutyArrows = dutyPanel
+    ? dutyPanel.querySelectorAll('[data-from-position][data-to-position]')
+    : [];
+  /* The board's directed graph, as the arrows drawn on it: every way out of every position. */
+  var outgoingEdgesByPosition = {};
+  Array.prototype.forEach.call(dutyArrows, function (arrow) {
+    var from = arrow.getAttribute('data-from-position');
+    outgoingEdgesByPosition[from] = (outgoingEdgesByPosition[from] || []).concat([arrow]);
+  });
+
+  function turnControl(name) {
+    return turnOverlay ? turnOverlay.querySelector('[data-turn-control="' + name + '"]') : null;
+  }
+
+  /* Enabled is what the plaque looks like, not what it accepts: the handlers ask the phase. */
+  function setTurnControlState(name, enabled, active) {
+    var control = turnControl(name);
+    if (!control) {
+      return;
+    }
+    control.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
+    control.setAttribute('data-turn-control-active', active ? 'true' : 'false');
+    control.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  }
+
+  function refreshTurnControls() {
+    var started = state.turn.phase !== 'idle';
+    setTurnControlState('sow', true, started);
+    setTurnControlState('reset', started, false);
+    /* Nothing behind these three yet, so they stay as the shell drew them. */
+    ['confirm', 'action', 'tithe'].forEach(function (name) {
+      setTurnControlState(name, false, false);
+    });
+  }
+
+  function setTurnPhase(phase) {
+    state.turn.phase = phase;
+    if (turnOverlay) {
+      turnOverlay.setAttribute('data-turn-state', phase);
+    }
+    refreshTurnControls();
+  }
+
+  function setCubesInHand(count) {
+    state.turn.cubesInHand = count;
+    var counter = turnOverlay ? turnOverlay.querySelector('[data-turn-counter]') : null;
+    if (!counter) {
+      return;
+    }
+    counter.setAttribute('data-turn-counter-value', String(count));
+    counter.setAttribute('aria-label', 'Cubes in hand: ' + count);
+    var label = counter.querySelector('text');
+    if (label) {
+      label.textContent = '\\u00d7 ' + count;
+    }
+  }
+
+  function spaceAt(position) {
+    return dutyPanel
+      ? dutyPanel.querySelector('[data-board-position="' + position + '"]')
+      : null;
+  }
+
+  function activeSeatElement() {
+    return document.querySelector(
+      '[data-component="player-board-v2"][data-player-seat="' + state.activeSeat + '"]');
+  }
+
+  /* Which player the active seat is, asked of the board that is actually on the table rather
+     than worked out here. Seat order and player ids are not the same list -- the first seat is
+     red, and red is `player_two` -- so anything pairing them up itself would pair them wrongly. */
+  function activePlayerId() {
+    var board = activeSeatElement();
+    return board ? board.getAttribute('data-player') : null;
+  }
+
+  function activePlayerColor() {
+    var board = activeSeatElement();
+    return board ? board.getAttribute('data-player-color') : null;
+  }
+
+  /* The board whose turn it is is ringed in its own colour, and the same colour rings the space
+     that turn starts from. Outline rather than border: it is drawn outside the panel and moves
+     nothing on the table. */
+  function updateActiveSeatIndicator() {
+    Array.prototype.forEach.call(seatBoards, function (board) {
+      var active = Number(board.getAttribute('data-player-seat')) === state.activeSeat;
+      board.setAttribute('data-active-seat', active ? 'true' : 'false');
+    });
+    if (!stage) {
+      return;
+    }
+    stage.setAttribute('data-active-player-seat', String(state.activeSeat));
+    stage.setAttribute('data-active-player-color', activePlayerColor() || '');
+    stage.style.setProperty('--active-player', TURN.colors[String(state.activeSeat)]);
+  }
+
+  function setActiveSeat(seat) {
+    state.activeSeat = seat;
+    updateActiveSeatIndicator();
+  }
+
+  function armStartSpaces(armed) {
+    Array.prototype.forEach.call(dutySpaces, function (space) {
+      if (armed) {
+        space.setAttribute('data-turn-start-candidate', 'true');
+      } else {
+        space.removeAttribute('data-turn-start-candidate');
+      }
+    });
+  }
+
+  function markStartSpace(position) {
+    Array.prototype.forEach.call(dutySpaces, function (space) {
+      if (space.getAttribute('data-board-position') === position) {
+        space.setAttribute('data-turn-start-selected', 'true');
+      } else {
+        space.removeAttribute('data-turn-start-selected');
+      }
+    });
+  }
+
+  /* The tally the table is playing: every count has one drawn, and only this one is showing. It
+     is looked for inside the space itself, so what the tally happens to be named never matters. */
+  function activeTallyForPosition(position) {
+    var space = spaceAt(position);
+    return space
+      ? space.querySelector('[data-cube-tally][data-player-count="' + state.count + '"]')
+      : null;
+  }
+
+  function visibleCubesForPosition(position) {
+    var tally = activeTallyForPosition(position);
+    if (!tally) {
+      return [];
+    }
+    return Array.prototype.filter.call(tally.querySelectorAll('rect'), function (cube) {
+      return cube.getAttribute('opacity') !== '0';
+    });
+  }
+
+  /* A hand picks up its own cubes and nothing else. Every cube says whose it is, so the other
+     seats' cubes, the neutral column's black ones, and the City slots nobody is standing in --
+     drawn but hidden, so not visible to begin with -- are all left exactly where they are. */
+  function visibleActivePlayerCubesForPosition(position) {
+    var playerId = activePlayerId();
+    return visibleCubesForPosition(position).filter(function (cube) {
+      return cube.getAttribute('data-player') === playerId;
+    });
+  }
+
+  /* Picked up, not taken away: what each cube was showing is remembered so that putting them
+     back cannot turn on a City slot that was standing empty. */
+  function hidePickupCubes(cubes) {
+    state.turn.pickedUp = cubes.map(function (cube) {
+      return { cube: cube, opacity: cube.getAttribute('opacity') };
+    });
+    cubes.forEach(function (cube) {
+      cube.setAttribute('opacity', '0');
+    });
+    setCubesInHand(cubes.length);
+  }
+
+  function restorePickupCubes() {
+    state.turn.pickedUp.forEach(function (held) {
+      if (held.opacity === null) {
+        held.cube.removeAttribute('opacity');
+      } else {
+        held.cube.setAttribute('opacity', held.opacity);
+      }
+    });
+    state.turn.pickedUp = [];
+  }
+
+  /* Every way out of a position, ring arrows and middle arrows alike, since both carry the pair
+     of positions they join. One way out is not a choice, so only a position with more than one
+     lights up: on this board that is the City, east and west, and no rule had to be written down
+     to say so -- it falls out of the graph, and it keeps falling out of it however the tiles are
+     turned. Kogge and Cloisters would add and drop edges here; neither is drawn yet. */
+  function branchArrowsFrom(position) {
+    return outgoingEdgesByPosition[position] || [];
+  }
+
+  function highlightBranchChoices(arrows) {
+    arrows.forEach(function (arrow) {
+      arrow.setAttribute('data-turn-branch-choice', 'true');
+    });
+  }
+
+  function clearBranchChoices() {
+    Array.prototype.forEach.call(dutyArrows, function (arrow) {
+      arrow.removeAttribute('data-turn-branch-choice');
+    });
+  }
+
+  function armSow() {
+    if (state.turn.phase !== 'idle') {
+      return;
+    }
+    armStartSpaces(true);
+    setTurnPhase('sow_armed');
+  }
+
+  /* A space with none of the active seat's cubes on it is nothing to start from, so the click
+     does nothing at all and the board stays armed for another one. */
+  function selectStartSpace(position) {
+    if (state.turn.phase !== 'sow_armed') {
+      return;
+    }
+    var cubes = visibleActivePlayerCubesForPosition(position);
+    if (!cubes.length) {
+      return;
+    }
+    state.turn.start = position;
+    armStartSpaces(false);
+    markStartSpace(position);
+    hidePickupCubes(cubes);
+    var branches = branchArrowsFrom(position);
+    if (branches.length > 1) {
+      highlightBranchChoices(branches);
+      setTurnPhase('branch_choice');
+      return;
+    }
+    setTurnPhase('start_selected');
+  }
+
+  /* A route is recorded and the arrows go out. Where the cubes go is the next PR's to say. */
+  function chooseRoute(arrow) {
+    if (state.turn.phase !== 'branch_choice') {
+      return;
+    }
+    state.turn.routeChoice =
+      arrow.getAttribute('data-from-position') + ':' + arrow.getAttribute('data-to-position');
+    if (turnOverlay) {
+      turnOverlay.setAttribute('data-last-route-choice', state.turn.routeChoice);
+    }
+    clearBranchChoices();
+    setTurnPhase('start_selected');
+  }
+
+  function resetTurnFlow() {
+    restorePickupCubes();
+    setCubesInHand(0);
+    armStartSpaces(false);
+    markStartSpace(null);
+    clearBranchChoices();
+    state.turn.start = null;
+    state.turn.routeChoice = null;
+    if (turnOverlay) {
+      turnOverlay.removeAttribute('data-last-route-choice');
+    }
+    setTurnPhase('idle');
+  }
+
+  Array.prototype.forEach.call(dutySpaces, function (space) {
+    space.addEventListener('click', function () {
+      selectStartSpace(space.getAttribute('data-board-position'));
+    });
+  });
+
+  Array.prototype.forEach.call(dutyArrows, function (arrow) {
+    arrow.addEventListener('click', function () {
+      if (arrow.getAttribute('data-turn-branch-choice') === 'true') {
+        chooseRoute(arrow);
+      }
+    });
+  });
+
+  if (turnControl('sow')) {
+    turnControl('sow').addEventListener('click', armSow);
+  }
+
+  if (turnControl('reset')) {
+    turnControl('reset').addEventListener('click', function () {
+      if (state.turn.phase !== 'idle') {
+        resetTurnFlow();
+      }
+    });
+  }
+
+  updateActiveSeatIndicator();
+"""
+
+
 def render_compact_controls_script(
     map_layout: dict,
     piety_layout: dict,
@@ -898,10 +1240,11 @@ def render_compact_controls_script(
     duty_layout: dict,
 ) -> str:
     """Compact local controls: player count, setup roll, discs, resources, winners, buildings,
-    serfs and acolytes, and the duty wheel.
+    serfs and acolytes, the duty wheel, and the turn flow drawn on it.
     """
     buildings = json.dumps(building_control_data(board_layout, placements), separators=(",", ":"))
     duty = json.dumps(duty_control_data(duty_layout), separators=(",", ":"))
+    turn_flow = render_turn_flow_script()
     return f"""<script>
 (function () {{
   var VISIBLE = {json.dumps(visible_seats_by_count(), separators=(",", ":"))};
@@ -913,6 +1256,7 @@ def render_compact_controls_script(
   var WINNERS = {json.dumps(season_winner_data(alms_layout, alms_config), separators=(",", ":"))};
   var BUILDINGS = {buildings};
   var DUTY = {duty};
+  var TURN = {json.dumps(turn_flow_data(duty_layout), separators=(",", ":"))};
 
   function cityOpening() {{
     var opening = {{}};
@@ -936,7 +1280,19 @@ def render_compact_controls_script(
     /* What each seat is standing in the City, which every column opens holding. */
     city: cityOpening(),
     dutySetup: 0,
-    merchant: DUTY.merchantStart
+    merchant: DUTY.merchantStart,
+    /* Whose turn it is. Nothing advances it yet, so it stays on the first seat; it is kept out
+       here rather than inside the turn because a seat outlives any one sow. */
+    activeSeat: TURN.seat,
+    /* The turn drawn on the wheel: which phase it is in, where it started, what is in hand, the
+       cubes lifted off the board to put it there, and which way out was picked. */
+    turn: {{
+      phase: 'idle',
+      start: null,
+      cubesInHand: 0,
+      pickedUp: [],
+      routeChoice: null
+    }}
   }};
 
   var countButtons = document.querySelectorAll('[data-player-count-button]');
@@ -963,6 +1319,7 @@ def render_compact_controls_script(
   var donateButton = document.querySelector('[data-building-donate-button]');
   var dutyRandomize = document.querySelector('[data-duty-randomize-button]');
   var merchantAdvance = document.querySelector('[data-merchant-advance-button]');
+  var stage = document.querySelector('.game-table-stage');
   var almsPanel = document.querySelector('.p-alms');
   var dutyPanel = document.querySelector('.p-action');
   var mapPanel = document.querySelector('.p-map');
@@ -1188,6 +1545,8 @@ def render_compact_controls_script(
     if (!playerState || !cityRoom(seat) || playerState[area] < 1) {{
       return;
     }}
+    /* This redraws the City column, so a turn holding cubes out of it is put back first. */
+    resetTurnFlow();
     playerState[area] -= 1;
     state.city[String(seat)] += 1;
     renderBoardCubes(seat);
@@ -1288,11 +1647,18 @@ def render_compact_controls_script(
   /* One of the wheel's sample arrangements: the eight titles are rewritten and each space shows
      the Tithe token the tile that landed there brought with it. Taxation is the one tile with no
      Tithe token, so it is drawn without a capsule and stays where it is. */
+  /* Turning the tiles changes which duty lies at a position -- its title, its Tithe token, and
+     the category the space reports. Where the space stands is not the tiles' to change, so the
+     board positions the arrows and the turn flow move by are left exactly as they were. */
   function renderDutySetup() {{
     if (!dutyPanel) {{
       return;
     }}
     DUTY.setups[state.dutySetup].forEach(function (entry) {{
+      var space = dutyPanel.querySelector('[data-duty="' + entry.position + '"]');
+      if (space) {{
+        space.setAttribute('data-duty-category', entry.duty);
+      }}
       var label = dutyPanel.querySelector('[data-duty-label="' + entry.position + '"]');
       if (label) {{
         label.textContent = entry.label;
@@ -1474,7 +1840,10 @@ def render_compact_controls_script(
     villageToCity.disabled = !cityRoom(seat) || playerState.villageSerfs < 1;
   }}
 
+  /* A count change redraws the tallies a turn may have cubes lifted out of, so the turn is put
+     back first rather than being left holding cubes the board has since redrawn. */
   function applyPlayerCount(count) {{
+    resetTurnFlow();
     state.count = count;
     renderSeatBoards();
     renderDiscTrack('alms');
@@ -1484,6 +1853,8 @@ def render_compact_controls_script(
       var active = Number(button.getAttribute('data-player-count-button')) === count;
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }});
+    /* A seat that has just left the table cannot be the one whose turn it is. */
+    setActiveSeat(state.activeSeat > count ? {DEFAULT_CONTROL_PLAYER_SEAT} : state.activeSeat);
   }}
 
   Array.prototype.forEach.call(countButtons, function (button) {{
@@ -1580,6 +1951,7 @@ def render_compact_controls_script(
     control.addEventListener('change', refreshBoardButtons);
   }});
 
+{turn_flow}
   Object.keys(state.acolytes).forEach(function (seat) {{
     renderBoardCubes(seat);
     renderResources(seat);
@@ -1650,18 +2022,28 @@ def render_game_table_html(
         scale.crop["action"],
     )
     panels = []
+    active_color = ""
     for index, seat in enumerate(SEATED_PLAYERS, start=1):
         player = player_by_id(board_layout, seat)
+        active = index == DEFAULT_CONTROL_PLAYER_SEAT
+        if active:
+            active_color = player["color"]
         board = tag_resource_readouts(
             render_player_board_v2_svg(board_layout, player, interactive=True), board_layout
         )
         panels.append(
             f'<div class="panel p-player" data-component="player-board-v2"'
             f' data-player-seat="{index}"'
-            f' data-player="{player["id"]}" data-player-color="{player["color"]}">'
+            f' data-player="{player["id"]}" data-player-color="{player["color"]}"'
+            f' data-active-seat="{str(active).lower()}">'
             f"{crop_svg(board, scale.crop['player'])}</div>"
         )
     seats = "\n      ".join(panels)
+    # Whose turn it is, said once where anything on the page can read it.
+    active_seat_hooks = (
+        f'data-active-player-seat="{DEFAULT_CONTROL_PLAYER_SEAT}"'
+        f' data-active-player-color="{active_color}"'
+    )
     controls = render_compact_controls(board_layout, placements)
     control_script = render_compact_controls_script(
         map_layout, piety_layout, board_layout, alms_layout, alms_config, placements, duty_seated
@@ -1800,6 +2182,30 @@ def render_game_table_html(
     background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
   }}
 
+  /* The turn flow, drawn on the wheel. The renderer draws the plaques, the spaces and the
+     arrows; these say what a phase changes about them. Everything a phase touches is an
+     attribute, so a click sets a word rather than restyling anything. */
+  .game-table-stage {{ --active-player: {ACTIVE_PLAYER_FALLBACK}; }}
+  /* Whose turn it is, said once in the seat's own colour and read here and on the wheel.
+     Outlines are drawn outside the panel, so the row's widths and heights do not move. */
+  .p-player[data-active-seat="true"] {{
+    outline: 2px solid var(--active-player); outline-offset: 3px;
+  }}
+  [data-turn-control][data-turn-control-enabled="true"] {{ opacity: 1; cursor: pointer; }}
+  [data-turn-control][data-turn-control-enabled="false"] {{ opacity: {TURN_DIMMED_OPACITY}; }}
+  [data-turn-control][data-turn-control-active="true"] rect {{ fill: #F2EEDF; }}
+  [data-turn-control][data-turn-control-active="true"] text {{ fill: #1C1C1C; }}
+  /* A space that can be started from is outlined rather than filled: the green under a duty
+     tile means the board, not a selection. */
+  [data-turn-start-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-start-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-start-selected="true"] .board-circle {{
+    stroke: var(--active-player); stroke-width: 5.5;
+  }}
+  [data-turn-branch-choice="true"] {{ cursor: pointer; }}
+  [data-turn-branch-choice="true"] .arrow-interior {{ fill: {TURN_BRANCH_GREEN}; }}
+  [data-turn-branch-choice="true"] .arrow-border {{ stroke: {TURN_BRANCH_EDGE}; }}
+
   /* Stacked, there is no row height to fill, so the wheel goes back to being
      sized by width like everything else. */
   @media (max-width: {STACK_BELOW}px) {{
@@ -1812,7 +2218,7 @@ def render_game_table_html(
 </style>
 </head>
 <body>
-  <div class="game-table-stage">
+  <div class="game-table-stage" {active_seat_hooks}>
     <div class="row">
       <div class="left">
         <div class="panel p-alms">{alms_svg}</div>
