@@ -917,23 +917,27 @@ def turn_flow_data(duty_layout: dict) -> dict:
 def render_turn_flow_script() -> str:
     """The turn flow, as the phases a click moves the wheel between.
 
-        idle -> sow_armed -> start_selected
-                          -> branch_choice -> start_selected
+        idle -> sow_armed -> sowing -> sow_complete
+                                ^         |
+                                |         v
+                          branch_choice   idle
 
-    Sow arms the nine spaces; clicking one lifts the cubes standing there into the counter in the
-    corner; a space with more than one way out lights those arrows and waits for one to be picked;
-    Reset puts everything back. That is the whole of it. No cube is sown, no route is walked, no
-    action is resolved, and nothing here reads or writes `GameState`: this is the shape of a turn
-    drawn on the board, so the flow can be looked at before it is implemented.
+    Sow arms the nine spaces; clicking one lifts the active seat's cubes there into the counter in
+    the corner and the hand starts walking, putting one cube down at each position it comes to. It
+    stops at a fork, lights the ways out and waits for one to be clicked; then it walks on. When
+    the hand is empty the turn is `sow_complete`, and `Reset` puts the board back the way Sow found
+    it. That is the whole of it. No duty is selected, no action or tithe is resolved, no turn is
+    passed on, and nothing here reads or writes `GameState`: this is a turn drawn on the board.
 
     Everything it moves by is a board position -- `city`, `north`, `north_east` and the rest, as
     `configs/board.json` names them -- read off `data-board-position` and the arrows' own
     `data-from-position` and `data-to-position`. The names printed on the tiles are never consulted,
     because turning the tiles moves a duty to another position and moves no position at all.
 
-    A cube picked up is the same cube put down -- the rects are hidden and remembered rather than
-    removed -- so Reset restores the board exactly, including a City column that was only partly
-    standing to begin with.
+    Both halves of it are the same trick, run in opposite directions: a cube is picked up by hiding
+    the rect it stands in and put down by showing an empty one, so nothing is ever drawn into or
+    cut out of the wheel and Reset can hand the board straight back -- including a City column that
+    was only partly standing to begin with.
     """
     return """
   /* --- the turn flow ------------------------------------------------------------------------
@@ -1097,6 +1101,40 @@ def render_turn_flow_script() -> str:
     });
   }
 
+  /* Where the next cube can be put down: the lowest empty slot in the active seat's column there.
+     The wheel draws every slot a column has room for and hides the empty ones, so putting a cube
+     on a space is turning one of them on rather than drawing into the board. A column with none
+     left is a column with no room, which is what stops a sow short. */
+  function firstEmptySlotForPosition(position) {
+    var playerId = activePlayerId();
+    var tally = activeTallyForPosition(position);
+    if (!tally) {
+      return null;
+    }
+    return Array.prototype.filter.call(tally.querySelectorAll('rect'), function (cube) {
+      return cube.getAttribute('data-player') === playerId
+        && cube.getAttribute('opacity') === '0';
+    })[0] || null;
+  }
+
+  function placeOneCubeAtPosition(position) {
+    var slot = firstEmptySlotForPosition(position);
+    if (!slot) {
+      return false;
+    }
+    slot.setAttribute('opacity', '1');
+    state.turn.sown.push(slot);
+    setCubesInHand(state.turn.cubesInHand - 1);
+    return true;
+  }
+
+  function resetSownCubes() {
+    state.turn.sown.forEach(function (slot) {
+      slot.setAttribute('opacity', '0');
+    });
+    state.turn.sown = [];
+  }
+
   /* Picked up, not taken away: what each cube was showing is remembered so that putting them
      back cannot turn on a City slot that was standing empty. */
   function hidePickupCubes(cubes) {
@@ -1149,6 +1187,55 @@ def render_turn_flow_script() -> str:
     setTurnPhase('sow_armed');
   }
 
+  /* Where the hand stands, and the way it came. */
+  function setCurrentPosition(position) {
+    state.turn.current = position;
+    state.turn.route.push(position);
+    if (turnOverlay) {
+      turnOverlay.setAttribute('data-turn-current-position', position);
+      turnOverlay.setAttribute('data-turn-route', state.turn.route.join('>'));
+    }
+  }
+
+  function sowAlong(arrow) {
+    var next = arrow.getAttribute('data-to-position');
+    if (!placeOneCubeAtPosition(next)) {
+      return false;
+    }
+    setCurrentPosition(next);
+    return true;
+  }
+
+  /* The hand walks the board and puts one cube down at each position it comes to. It stops only
+     at a fork: one way out is not a choice, so nothing is asked about it, and the walk runs on
+     until either the hand is empty or the board asks which way.
+
+     It also stops where there is nowhere to put the next cube -- a column with no room left, or a
+     position with no way out of it. Neither should happen on this board, since every position has
+     an arrow leaving it and a sow is short, but a tile only shows three cubes to a seat while the
+     rules cap nothing, so a column can fill. The hand keeps what it is still holding, the counter
+     goes on showing it, and `Reset` is the way out. */
+  function continueSowing() {
+    setTurnPhase('sowing');
+    while (state.turn.cubesInHand > 0) {
+      var ways = branchArrowsFrom(state.turn.current);
+      if (ways.length > 1) {
+        highlightBranchChoices(ways);
+        setTurnPhase('branch_choice');
+        return;
+      }
+      if (!ways.length || !sowAlong(ways[0])) {
+        return;
+      }
+    }
+    completeSowing();
+  }
+
+  function completeSowing() {
+    clearBranchChoices();
+    setTurnPhase('sow_complete');
+  }
+
   /* A space with none of the active seat's cubes on it is nothing to start from, so the click
      does nothing at all and the board stays armed for another one. */
   function selectStartSpace(position) {
@@ -1163,18 +1250,17 @@ def render_turn_flow_script() -> str:
     armStartSpaces(false);
     markStartSpace(position);
     hidePickupCubes(cubes);
-    var branches = branchArrowsFrom(position);
-    if (branches.length > 1) {
-      highlightBranchChoices(branches);
-      setTurnPhase('branch_choice');
-      return;
-    }
-    setTurnPhase('start_selected');
+    setCurrentPosition(position);
+    continueSowing();
   }
 
-  /* A route is recorded and the arrows go out. Where the cubes go is the next PR's to say. */
+  /* The way out that was asked for: one cube goes down at the far end of the arrow, and the walk
+     picks up again from there. */
   function chooseRoute(arrow) {
     if (state.turn.phase !== 'branch_choice') {
+      return;
+    }
+    if (arrow.getAttribute('data-from-position') !== state.turn.current) {
       return;
     }
     state.turn.routeChoice =
@@ -1183,19 +1269,29 @@ def render_turn_flow_script() -> str:
       turnOverlay.setAttribute('data-last-route-choice', state.turn.routeChoice);
     }
     clearBranchChoices();
-    setTurnPhase('start_selected');
+    setTurnPhase('sowing');
+    if (sowAlong(arrow)) {
+      continueSowing();
+    }
   }
 
   function resetTurnFlow() {
+    /* Sown first, then picked up. A cube can be sown back into the very slot it was lifted out
+       of, so what that slot was showing when the turn began has to be the last word on it. */
+    resetSownCubes();
     restorePickupCubes();
     setCubesInHand(0);
     armStartSpaces(false);
     markStartSpace(null);
     clearBranchChoices();
     state.turn.start = null;
+    state.turn.current = null;
+    state.turn.route = [];
     state.turn.routeChoice = null;
     if (turnOverlay) {
       turnOverlay.removeAttribute('data-last-route-choice');
+      turnOverlay.removeAttribute('data-turn-current-position');
+      turnOverlay.removeAttribute('data-turn-route');
     }
     setTurnPhase('idle');
   }
@@ -1284,13 +1380,17 @@ def render_compact_controls_script(
     /* Whose turn it is. Nothing advances it yet, so it stays on the first seat; it is kept out
        here rather than inside the turn because a seat outlives any one sow. */
     activeSeat: TURN.seat,
-    /* The turn drawn on the wheel: which phase it is in, where it started, what is in hand, the
-       cubes lifted off the board to put it there, and which way out was picked. */
+    /* The turn drawn on the wheel: which phase it is in, where it started and where the hand
+       stands now, the way it came, what is in hand, the cubes lifted off the board to put it
+       there, the slots it has since stood cubes in, and which way out was last picked. */
     turn: {{
       phase: 'idle',
       start: null,
+      current: null,
+      route: [],
       cubesInHand: 0,
       pickedUp: [],
+      sown: [],
       routeChoice: null
     }}
   }};
