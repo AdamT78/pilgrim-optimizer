@@ -62,8 +62,10 @@ CUBE_STACK_LIMIT = 3
 TALLY_OFFSET_Y = 19.0
 
 # The City stacks a seat's whole holding rather than a duty tile's handful, so its columns are
-# taller than a tile's and stand lower in the space to make room.
-CITY_STACK_HEIGHT = 4
+# taller than a tile's and stand lower in the space to make room. This is the room a column has
+# rather than what stands in it: an interactive board draws all six and hides the ones nothing is
+# standing on, so a page can send a cube to the City by turning one on.
+CITY_STACK_HEIGHT = 6
 
 # Tithe capsule: a stadium under the title, its left cap holding the Tithe token icon and its
 # right cap the Merchant token when the Merchant stands here.
@@ -219,8 +221,9 @@ def cubes_standing(layout: dict, duty: dict, piece: dict, counts: dict, count: i
     """How many cubes one column shows.
 
     A seat on a duty tile shows what the debug state puts there, capped at what a tile has room
-    for. The City is drawn as a full holding instead, and the neutral column reads its own
-    seeding out of the layout, since neutrals are not part of the players' state.
+    for. Every City column opens on the same sample, which is well short of what the space holds so
+    that a page with buttons has somewhere to put a cube. The neutral column reads its own seeding
+    out of the layout, since neutrals are not part of the players' state.
     """
     if piece["id"] == layout["dummy_acolytes"]["id"]:
         seeded = layout["dummy_acolytes"]["sample_cubes"].get(str(count), {})
@@ -308,6 +311,7 @@ def render_cube_tally(
     counts: dict,
     count: int | None = None,
     visible: bool = True,
+    interactive: bool = False,
 ) -> str:
     """The cubes standing on one space, one column per piece, growing up from the baseline.
 
@@ -315,6 +319,10 @@ def render_cube_tally(
     centred on the space either way, so the two- and three-player tallies sit in the middle of it
     rather than off to the left. On a duty tile the seats are followed by the neutral column when
     the table plays with one. The City's stacks are taller, so they stand lower in their space.
+
+    An interactive City draws every cube its columns have room for and hides the ones nothing is
+    standing on, in the same way the boards draw every slot a cube can stand in: a page can then
+    send a cube here by turning one on rather than by drawing into the wheel.
     """
     _, cy = duty["center"]
     seats = count or layout["default_player_count"]
@@ -330,18 +338,27 @@ def render_cube_tally(
         f'<line x1="{left:.1f}" y1="{baseline:.1f}" x2="{right:.1f}" y2="{baseline:.1f}"'
         f' stroke="{ink}" stroke-opacity="0.55" stroke-width="1.6" stroke-linecap="round"/>'
     ]
+    city_slots = is_city and interactive
     for piece, column in zip(pieces, columns, strict=True):
-        for index in range(cubes_standing(layout, duty, piece, counts, seats)):
+        standing = cubes_standing(layout, duty, piece, counts, seats)
+        for index in range(CITY_STACK_HEIGHT if city_slots else standing):
             y = baseline - (index + 1) * CUBE_CELL_HEIGHT + (CUBE_CELL_HEIGHT - CUBE_SIZE) / 2
+            slot = (
+                f' data-city-column-player="{piece["id"]}" data-city-cube="{index}"'
+                f' opacity="{1 if index < standing else 0:g}"'
+                if city_slots
+                else ""
+            )
             parts.append(
                 f'<rect x="{column["x"]:.1f}" y="{y:.1f}" width="{CUBE_SIZE:g}"'
                 f' height="{CUBE_SIZE:g}" fill="{piece["fill"]}" stroke="#000000"'
                 f' stroke-width="{piece["cube_stroke_width"]:g}"'
-                f' data-player="{piece["id"]}"/>'
+                f' data-player="{piece["id"]}"{slot}/>'
             )
+    capacity = f' data-city-capacity="{CITY_STACK_HEIGHT}"' if city_slots else ""
     return (
         f'<g class="{_class_name(duty["id"], "cube-tally")}" data-cube-tally="{duty["id"]}"'
-        f' data-player-count="{seats}" opacity="{1 if visible else 0}"'
+        f' data-player-count="{seats}"{capacity} opacity="{1 if visible else 0}"'
         f' aria-label="cube counts">{"".join(parts)}</g>'
     )
 
@@ -536,7 +553,7 @@ def _render_tallies(layout: dict, duty: dict, counts: dict, interactive: bool) -
         return render_cube_tally(layout, duty, counts)
     default = layout["default_player_count"]
     return "".join(
-        render_cube_tally(layout, duty, counts, count, visible=count == default)
+        render_cube_tally(layout, duty, counts, count, visible=count == default, interactive=True)
         for count in layout["player_counts"]
     )
 
