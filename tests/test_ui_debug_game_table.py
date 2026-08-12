@@ -1280,10 +1280,12 @@ def test_the_board_whose_turn_it_is_is_asked_who_it_is(page: str) -> None:
     ]
 
 
-def test_the_seat_whose_turn_it_is_is_ringed_and_says_so(page: str) -> None:
-    """One board ringed in its own colour, and the same seat named on the stage for anything else.
+def test_the_seat_whose_turn_it_is_lights_its_own_board_and_says_so(page: str) -> None:
+    """One board lit in its own colour, and the same seat named on the stage for anything else.
 
-    An outline is drawn outside the panel, so the ring costs the row no width and moves nothing.
+    The board says it itself, with the wash its renderer drew up off its bottom edge and left
+    hidden. Nothing here draws or sizes anything: each board is told whether it is the one, and the
+    only rule is the one that turns that layer up from nothing, so the row cannot move.
     """
     assert 'data-active-player-seat="1"' in page
     assert 'data-active-player-color="red"' in page
@@ -1292,12 +1294,26 @@ def test_the_seat_whose_turn_it_is_is_ringed_and_says_so(page: str) -> None:
     assert seats.count('data-active-seat="true"') == 1
     assert seats.count('data-active-seat="false"') == 3
     assert (
-        ".p-player[data-active-seat=\"true\"] {\n"
-        "    outline: 2px solid var(--active-player); outline-offset: 3px;\n"
-        "  }"
+        '.p-player[data-active-seat="true"] [data-active-player-glow="true"] { opacity: 1; }'
     ) in page
     assert "board.setAttribute('data-active-seat', active ? 'true' : 'false');" in page
     assert "stage.setAttribute('data-active-player-color', activePlayerColor() || '');" in page
+
+
+def test_no_seat_is_ringed_round_the_outside_of_its_panel(page: str) -> None:
+    """A ring round the outside of a board is a browser's idea of a selected thing, not a table's.
+
+    Which is the whole reason the wash exists, so nothing is left drawing one: no outline on a
+    panel, and the seat's colour reaches the board through the layer inside it and nowhere else.
+    """
+    assert "outline:" not in page
+    assert "outline-offset" not in page
+    assert ".p-player[data-active-seat" not in page.replace(
+        '.p-player[data-active-seat="true"] [data-active-player-glow="true"]', ""
+    )
+    # And it is the wash the boards are drawn holding, not one the table adds on top of them.
+    assert page.count('data-active-player-glow="true"') == 5
+    assert "data-active-player-glow" not in render_turn_flow_script()
 
 
 def test_a_cube_taken_off_the_board_is_the_cube_put_back_on_it(page: str) -> None:

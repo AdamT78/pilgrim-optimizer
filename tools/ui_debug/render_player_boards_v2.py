@@ -87,6 +87,13 @@ SIDE_MARGIN = 25.0
 PANEL_CORNER_RADIUS = 12
 PANEL_STROKE_WIDTH = 2
 
+# How strong the active seat's wash is where it is strongest, along the very bottom edge. Enough to
+# read as a colour against the parchment across a room, and not enough to be read as a thing on the
+# board: everything drawn over it -- cubes, ink, the dashed slots -- has to stay exactly as legible.
+# The ceiling is about a third. Past that the bottom of the board stops being parchment lit by a
+# colour and becomes a panel painted in one, which is the highlight box this was drawn to avoid.
+ACTIVE_GLOW_OPACITY = 0.28
+
 BANNER_CENTER_Y = 30.0
 BANNER_HEIGHT = 26.0
 # Village and Abbey are set to read at the size the duty wheel sets its duty names -- Produce,
@@ -431,6 +438,34 @@ def _render_panel(geometry: dict, palette: dict) -> str:
     )
 
 
+def _render_active_glow(geometry: dict, player: dict) -> str:
+    """A wash of the seat's own colour up off the bottom edge, for a page that wants to say whose
+    turn it is. It is drawn here dark and hidden, at `opacity="0"`; the page that knows about turns
+    is the one that turns it on, and the boards' own page never does.
+
+    Off the bottom rather than round the outside, because a board is a thing on a table and a ring
+    round it is a browser's idea of a selected thing. It covers the whole panel and takes the
+    panel's corner radius, so the shaping is the fade's work and not a clip's: the colour is at its
+    strongest along the bottom edge and gone by the top of the building band, which leaves the
+    slots to be passed behind and the role circles, the readouts and the banners never reached.
+    """
+    height = geometry["panel_height"]
+    # Where the band of building slots begins, read back off the height it was one of the terms in.
+    band_top = height - (BANNER_CENTER_Y - BANNER_HEIGHT / 2) - 2 * slot_band_half_height()
+    fade = (height - band_top) / height
+    colour = player.get("glow", player["fill"])
+    gradient_id = f"activeGlow_{player['fill'].lstrip('#')}"
+    return (
+        f'<defs><linearGradient id="{gradient_id}" x1="0" y1="1" x2="0" y2="0">'
+        f'<stop offset="0" stop-color="{colour}" stop-opacity="{ACTIVE_GLOW_OPACITY:g}"/>'
+        f'<stop offset="{fade:.3f}" stop-color="{colour}" stop-opacity="0"/>'
+        "</linearGradient></defs>"
+        f'<rect data-active-player-glow="true" x="0" y="0"'
+        f' width="{geometry["panel_width"]:.0f}" height="{height:.0f}"'
+        f' rx="{PANEL_CORNER_RADIUS:g}" fill="url(#{gradient_id})" opacity="0"/>'
+    )
+
+
 def _render_banner(cx: float, width: float, label: str, palette: dict) -> str:
     left = cx - width / 2
     top = BANNER_CENTER_Y - BANNER_HEIGHT / 2
@@ -747,7 +782,7 @@ def render_player_board_v2_svg(
         "abbey": min(int(state["abbey_acolytes"]), capacity),
     }
 
-    parts = [_render_panel(geometry, palette)]
+    parts = [_render_panel(geometry, palette), _render_active_glow(geometry, player)]
     for banner in layout["banners"]:
         cx, width = banner_center_x(geometry, banner["first_role_index"])
         parts.append(_render_banner(cx, width, banner["label"], palette))
