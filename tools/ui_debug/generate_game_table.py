@@ -1091,9 +1091,10 @@ def render_turn_flow_script() -> str:
     return board ? board.getAttribute('data-player-color') : null;
   }
 
-  /* The board whose turn it is is ringed in its own colour, and the same colour rings the space
-     that turn starts from. Outline rather than border: it is drawn outside the panel and moves
-     nothing on the table. */
+  /* The board whose turn it is says so itself, with the wash of its own colour its renderer left
+     hidden along its bottom edge; the same colour rings the space that turn starts from. Nothing
+     is restyled and no size is written, so the row's widths and heights do not move: each board is
+     told whether it is the one, and the stylesheet does the rest. */
   function updateActiveSeatIndicator() {
     Array.prototype.forEach.call(seatBoards, function (board) {
       var active = Number(board.getAttribute('data-player-seat')) === state.activeSeat;
@@ -2664,11 +2665,12 @@ def render_game_table_html(
      arrows; these say what a phase changes about them. Everything a phase touches is an
      attribute, so a click sets a word rather than restyling anything. */
   .game-table-stage {{ --active-player: {ACTIVE_PLAYER_FALLBACK}; }}
-  /* Whose turn it is, said once in the seat's own colour and read here and on the wheel.
-     Outlines are drawn outside the panel, so the row's widths and heights do not move. */
-  .p-player[data-active-seat="true"] {{
-    outline: 2px solid var(--active-player); outline-offset: 3px;
-  }}
+  /* Whose turn it is, said once in the seat's own colour and read here and on the wheel. The board
+     says it itself, with the wash of its own colour the renderer drew up off its bottom edge and
+     left hidden: a board is a thing on a table, and a ring drawn round the outside of one is a
+     browser's idea of a selected thing rather than a table's. Only the showing of it is here, so
+     nothing about the board moves or is restyled -- the rule turns a layer up from nothing. */
+  .p-player[data-active-seat="true"] [data-active-player-glow="true"] {{ opacity: 1; }}
   [data-turn-control][data-turn-control-enabled="true"] {{ opacity: 1; cursor: pointer; }}
   [data-turn-control][data-turn-control-enabled="false"] {{ opacity: {TURN_DIMMED_OPACITY}; }}
   [data-turn-control][data-turn-control-active="true"] rect {{ fill: #F2EEDF; }}

@@ -1202,7 +1202,7 @@ space's title, Tithe token and `data-duty-category` — and the board still bran
 places, because a roll moves duties between positions and never moves a position. The Kogge and
 Cloisters modifiers that would add and drop these edges are still to come.
 
-A hand picks up its own cubes and nothing else. The turn belongs to a seat — seat 1, red, ringed in
+A hand picks up its own cubes and nothing else. The turn belongs to a seat — seat 1, red, named in
 its own colour on the stage as `data-active-player-seat` and `data-active-player-color`, and on its
 board as `data-active-seat` — and the player that seat is is asked of the board itself rather than
 worked out, since seat order and player ids are not the same list: the first seat is red, and red is
@@ -1212,6 +1212,24 @@ and the City slots nobody is standing in are hidden and so never counted. A spac
 that seat's cubes is nothing to start from: the click is spent, the board stays armed, and the next
 one still works. Turn order and turn advancement are still to come, so the active seat only ever
 moves when a count change leaves it with no board to sit at.
+
+The board whose turn it is says so itself, rather than being ringed. Every Player Board v2 is drawn
+holding a wash of its own colour rising off its bottom edge — `data-active-player-glow`, laid
+straight onto the parchment under everything else and left at `opacity="0"` — and the game table's
+one rule turns up the wash on the board wearing `data-active-seat="true"`. A ring drawn round the
+outside of a panel is a browser's idea of a selected thing; a board on a table lights up instead.
+Because the layer is drawn with the board and only shown from the page, the table writes no size and
+restyles nothing, so a change of seat cannot move a row. The rect covers the whole panel and takes
+the panel's corner radius, and the shaping is the fade's: strongest along the bottom edge at
+`ACTIVE_GLOW_OPACITY`, gone by the top of the building band, which it reads back off the panel
+height it was one of the terms in. So it passes behind the dashed slots and never reaches the role
+circles, the readouts or the banners, and nothing about the geometry, the cubes or the type changes.
+The wash is a colour of its own in the layout beside `fill` and `stroke`, because white had a
+problem the other three do not: white on parchment is barely a change, and turned up until it is one
+it reads as a glow round the board. So white's wash is `#8B7B4E`, the warm brown its own cubes are
+outlined in — the colour already on that board for making white legible against this parchment,
+which is the same problem twice. The boards' own page never turns any of it up, so
+`player_boards_v2.html` looks exactly as it did.
 
 Picking a cube up and putting one down are the same trick run in opposite directions. The wheel
 draws every slot a seat's column has room for and hides the empty ones, so a cube is lifted by

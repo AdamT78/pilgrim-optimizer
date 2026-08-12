@@ -12,6 +12,7 @@ from tools.ui_debug.render_duty_wheel import CUBE_COLUMN_WIDTH as DUTY_CUBE_COLU
 from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
 from tools.ui_debug.render_duty_wheel import LABEL_FONT_SIZE as DUTY_LABEL_FONT_SIZE
 from tools.ui_debug.render_player_boards_v2 import (
+    ACTIVE_GLOW_OPACITY,
     ASCENT_RATIO,
     BANNER_CENTER_Y,
     BANNER_FONT_SIZE,
@@ -29,6 +30,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     LABEL_ASCENT,
     LINE_HEIGHT_RATIO,
     MARKER_CUBE,
+    PANEL_CORNER_RADIUS,
     RESOURCE_BAND_COLUMNS,
     RESOURCE_COUNT_FONT_SIZE,
     RESOURCE_DIVIDER_OVERHANG,
@@ -62,6 +64,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     resource_icon_height,
     resource_icon_size,
     slot_apothem,
+    slot_band_half_height,
     token_slot_count,
     wrap_label,
 )
@@ -189,6 +192,88 @@ def test_one_board_draws_its_slots_labels_and_colour_tag(layout: dict) -> None:
     assert svg.count(f'fill="{player["fill"]}"') > 0
     assert f'clip-path="url(#panelClip_{player["fill"].lstrip("#")})"' in svg
     assert len(geometry["role_x"]) == len(geometry["building_y"]) == 6
+
+
+@pytest.mark.parametrize("player_id", sorted(PLAYER_COLORS))
+def test_a_board_is_drawn_holding_a_wash_of_its_own_colour_it_does_not_show(
+    layout: dict, player_id: str
+) -> None:
+    """For a page that has turns to show. Drawn dark at `opacity="0"`, and never shown from here.
+
+    It goes second, straight onto the panel and under everything else, so that whatever is turned
+    up is only ever the parchment's colour changing under the board rather than a film over it.
+    """
+    player = player_by_id(layout, player_id)
+    svg = render_player_board_v2_svg(layout, player)
+    geometry = board_geometry(len(layout["worker_roles"]))
+    gradient_id = f"activeGlow_{player['fill'].lstrip('#')}"
+
+    assert svg.count('data-active-player-glow="true"') == 1
+    assert f'fill="url(#{gradient_id})" opacity="0"' in svg
+    assert f'<linearGradient id="{gradient_id}" x1="0" y1="1" x2="0" y2="0">' in svg
+    # Second of all, so the panel is under it and every drawn thing is over it.
+    assert svg.index("<rect") < svg.index("<defs>") < svg.index("<g ")
+    assert svg.index("data-active-player-glow") < svg.index("Village")
+    assert svg.index("data-active-player-glow") < svg.index('stroke-dasharray="5,3"')
+    # It covers the panel and takes the panel's corner, so no clip is needed to shape it.
+    assert (
+        f'x="0" y="0" width="{geometry["panel_width"]:.0f}"'
+        f' height="{geometry["panel_height"]:.0f}" rx="{PANEL_CORNER_RADIUS:g}"'
+    ) in svg
+    assert "clip-path" not in svg[svg.index("<defs>") : svg.index("Village")]
+
+
+def test_the_wash_is_strongest_at_the_bottom_edge_and_gone_by_the_building_band(
+    layout: dict,
+) -> None:
+    """So it is under the slots and never reaches the circles, the readouts or the banners.
+
+    Which is the fade's own work: the rect covers the whole board, and where the colour has run out
+    is where the board stops being washed. Reading it back off the height means the two cannot
+    drift apart -- the band is one of the terms that height was added up from.
+    """
+    player = player_by_id(layout, "player_two")
+    svg = render_player_board_v2_svg(layout, player)
+    geometry = board_geometry(len(layout["worker_roles"]))
+    height = geometry["panel_height"]
+    stops = re.findall(
+        r'<stop offset="([\d.]+)" stop-color="(\S+?)" stop-opacity="([\d.]+)"/>', svg
+    )
+
+    assert stops == [
+        ("0", player["fill"], str(ACTIVE_GLOW_OPACITY)),
+        ("0.430", player["fill"], "0"),
+    ]
+    # Strong enough at the edge to be a colour and not a suggestion, and short of the third at
+    # which the bottom of the board stops being parchment lit by a colour and becomes a panel
+    # painted in one.
+    assert 0.25 <= ACTIVE_GLOW_OPACITY <= 0.3
+    # Nothing above the top of the slot band is touched, and the slots are only passed behind.
+    band_top = height - (BANNER_CENTER_Y - BANNER_HEIGHT / 2) - 2 * slot_band_half_height()
+    reaches = height - float(stops[1][0]) * height
+    assert reaches == pytest.approx(band_top, abs=0.5)
+    assert reaches < min(building_y for _, building_y in building_slot_centers(layout))
+    assert reaches > geometry["role_circle_cy"] + ROLE_CIRCLE_RADIUS
+
+
+def test_the_white_seat_is_washed_in_the_colour_its_own_pieces_are_drawn_with(
+    layout: dict,
+) -> None:
+    """White on parchment is barely a change, and turned up until it is one it reads as a glow.
+
+    So the wash is a colour of its own in the layout beside the fill and the stroke, and white's is
+    the warm brown its cubes are outlined in -- the colour that already exists on that board to
+    make white legible against this parchment, which is the same problem being solved twice.
+    """
+    white = player_by_id(layout, "player_one")
+
+    assert white["fill"] == "#FFFFFF"
+    assert white["glow"] == white["stroke"] == "#8B7B4E"
+    assert f'stop-color="{white["glow"]}"' in render_player_board_v2_svg(layout, white)
+    # The other three have nothing to solve: their own colour is a colour on parchment.
+    for player_id in ("player_two", "player_three", "player_four"):
+        player = player_by_id(layout, player_id)
+        assert player["glow"] == player["fill"]
 
 
 def test_an_interactive_board_slot_keeps_its_dashed_outline_on_top(layout: dict) -> None:
