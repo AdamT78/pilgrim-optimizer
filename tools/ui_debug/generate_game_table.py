@@ -1427,15 +1427,17 @@ def render_turn_flow_script() -> str:
 
      A turn is asked which space to start from and a setup sow is not -- it always starts from the
      City -- so where the start comes from is the caller's business, and only the starting is
-     here. */
-  function beginSowFrom(position) {
+     here. For the same reason a setup sow passes `{ ring: false }`: the ring round a space is the
+     answer to a question, and one that was never asked has no answer to show. What a setup is
+     waiting for is a road, and the roads are lit. */
+  function beginSowFrom(position, options) {
     var cubes = visibleActivePlayerCubesForPosition(position);
     if (!cubes.length) {
       return;
     }
     state.turn.start = position;
     armStartSpaces(false);
-    markStartSpace(position);
+    markStartSpace(options && options.ring === false ? null : position);
     hidePickupCubes(cubes);
     setCurrentPosition(position);
     continueSowing();
@@ -2232,9 +2234,13 @@ def render_compact_controls_script(
 
   /* A setup sow always starts from the City, so there is nothing to ask the seat and nothing for
      `Sow` to do: its five acolytes come up into the hand the moment the wheel reaches it, and what
-     it is waiting for is the first fork -- which, starting where it starts, is immediate. */
+     it is waiting for is the first fork -- which, starting where it starts, is immediate.
+
+     And the City is not ringed for it. The ring marks the space a seat chose to start from, and
+     this seat chose nothing; ringing it would colour in an answer to a question it was never
+     asked. The two green roads out are the whole of what a setup is waiting on. */
   function startSetupSow() {{
-    beginSowFrom(cityPosition);
+    beginSowFrom(cityPosition, {{ ring: false }});
   }}
 
   /* Which seat is sowing is not written down again here: the board already rings it, and says so

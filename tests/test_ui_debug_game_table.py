@@ -1237,7 +1237,7 @@ def test_a_space_holding_nothing_of_the_seat_s_is_nothing_to_start_from(page: st
     Marking a space with no cubes on it would put the turn into a phase holding an empty hand,
     and Reset would then be the only way back out of a turn that never began.
     """
-    select = page[page.index("function beginSowFrom(position)") :]
+    select = page[page.index("function beginSowFrom(position, options)") :]
     select = select[: select.index("\n  }\n")]
     nothing = select[: select.index("state.turn.start = position;")]
 
@@ -1452,7 +1452,7 @@ def test_the_hand_walks_the_forced_ways_and_stops_only_at_a_fork(page: str) -> N
     assert "if (!ways.length || !sowAlong(ways[0])) {\n        return;\n      }" in sowing
     assert sowing.rstrip().endswith("completeSowing();")
     # The start is picked up and then walked from, in that order.
-    begin = page[page.index("function beginSowFrom(position)") :]
+    begin = page[page.index("function beginSowFrom(position, options)") :]
     begin = begin[: begin.index("\n  }\n")]
     assert begin.index("hidePickupCubes(cubes);") < begin.index("setCurrentPosition(position);")
     assert begin.rstrip().endswith("continueSowing();")
@@ -1683,7 +1683,7 @@ def test_a_setup_sow_starts_itself_from_the_city_with_nothing_to_ask(page: str) 
     enter = page[page.index("function enterSetupMode()") :]
     enter = enter[: enter.index("\n  }\n")]
 
-    assert start == "function startSetupSow() {\n    beginSowFrom(cityPosition);"
+    assert start == "function startSetupSow() {\n    beginSowFrom(cityPosition, { ring: false });"
     # Dealt to, seated, and then set going, in that order.
     assert enter.index("dealSetupCubes();") < enter.index("setActiveSeat(1);")
     assert enter.index("setActiveSeat(1);") < enter.index("startSetupSow();")
@@ -1696,6 +1696,32 @@ def test_a_setup_sow_starts_itself_from_the_city_with_nothing_to_ask(page: str) 
     for setup in ("function startSetupSow()", "function enterSetupMode()"):
         block = page[page.index(setup) :]
         assert "armStartSpaces" not in block[: block.index("\n  }\n")], setup
+
+
+def test_the_city_is_not_ringed_for_a_setup_sow_it_was_never_asked_about(page: str) -> None:
+    """The ring marks the space a seat chose to start from, and a setup seat chose nothing.
+
+    Every setup sow begins at the City -- pressing `Setup`, confirming onto the next seat, and
+    `Reset` all go through the one function -- so colouring it in would be an answer shown to a
+    question never asked, on the one space it could ever be shown on. The two green roads out of
+    the City are what a setup is waiting on, and they are lit as they are for any other fork.
+    """
+    begin = page[page.index("function beginSowFrom(position, options)") :]
+    begin = begin[: begin.index("\n  }\n")]
+
+    assert "markStartSpace(options && options.ring === false ? null : position);" in begin
+    # Passing nothing rings the space, so an ordinary turn is asked for in the same words as before.
+    assert "beginSowFrom(position);" in page
+    # And the one that is not rung is the one the seat never picked.
+    assert "beginSowFrom(cityPosition, { ring: false });" in page
+    assert page.count("beginSowFrom(") == 3
+    # Not ringing it means clearing the ring, so no space is left wearing one from before.
+    mark = page[page.index("function markStartSpace(position)") :]
+    mark = mark[: mark.index("\n  }\n")]
+    assert "space.removeAttribute('data-turn-start-selected');" in mark
+    # The roads are lit by the walk itself, which a setup sow runs like any other.
+    assert begin.rstrip().endswith("continueSowing();")
+    assert "highlightBranchChoices(ways);" in page
 
 
 def test_a_setup_sow_offers_no_duty_at_the_end_of_it(page: str) -> None:

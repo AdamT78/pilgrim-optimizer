@@ -1251,8 +1251,14 @@ A setup sow starts itself. There is one place it can begin from, so asking which
 for nothing: the seat's five come up into the hand the moment the wheel reaches it and the walk
 begins, which — starting where it starts — means it stops at the City's fork straight away with
 `city -> north` and `city -> south` lit. So `Sow` has nothing to ask and stays dark for the whole of
-a setup, no space is ever armed to be clicked, and the first thing to do is take a road. From there
-it is the sowing already described, unchanged. What is different is the end of it: a setup sow
+a setup, no space is ever armed to be clicked, and the first thing to do is take a road. Nor is the
+City ringed in the seat's colour the way a space a turn started from is: the ring is the answer to
+which space to start from, and a setup seat was never asked, so on the one space it could ever
+appear it would be colouring in an answer to nothing. The two green roads out are the whole of what
+a setup is waiting on. `beginSowFrom` is asked for that with `{ ring: false }`, which is the only
+difference between a setup's start and any other; leave it out and the ring goes on as it always
+did. From there it is the sowing already described, unchanged. What is different is the end of it: a
+setup sow
 chooses no duty, so nothing is offered to pick from and `Action` and `Tithe` stay dark. `Confirm`
 lights instead, and pressing it accepts where that seat put its acolytes and hands the wheel to the
 next seat, which is then holding its own five with the City's roads lit, again with nothing to
