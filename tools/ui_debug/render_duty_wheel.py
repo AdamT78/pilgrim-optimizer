@@ -724,7 +724,12 @@ def render_duty_space(
 
 
 def _render_ornaments(layout: dict) -> str:
-    """The inset margin and the trefoil rule above each title, identical on all nine spaces."""
+    """The inset margin and the trefoil rule above each title, identical on all nine spaces.
+
+    They are drawn as one layer over the board rather than inside the spaces, so each header says
+    which position it stands over: a page that wants to mark a space -- by colouring in the three
+    lobes of its trefoil, say -- has no other way of finding the right one.
+    """
     ink = layout["palette"]["ink"]
     insets, headers = [], []
     for duty in duties_of(layout):
@@ -743,7 +748,8 @@ def _render_ornaments(layout: dict) -> str:
         )
         half = ORNAMENT_RULE_HALF_WIDTH
         headers.append(
-            f'<g fill="none" stroke="{ink}" stroke-opacity="0.34" stroke-width="1.3"'
+            f'<g data-ornament-position="{board_position_of(duty)}" fill="none"'
+            f' stroke="{ink}" stroke-opacity="0.34" stroke-width="1.3"'
             f' stroke-linecap="round">{lobes}'
             f'<path d="M {cx - half:.1f},{y:.1f} H {cx - ORNAMENT_RULE_GAP:.1f}'
             f' M {cx + ORNAMENT_RULE_GAP:.1f},{y:.1f} H {cx + half:.1f}"/></g>'

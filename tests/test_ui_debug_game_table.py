@@ -1148,16 +1148,15 @@ def test_a_turn_is_five_phases_and_the_clicks_that_move_between_them(page: str) 
         assert f"{opening}\n    if (state.turn.phase !== '{phase}') {{" in page, opening
 
 
-def test_sow_and_reset_are_the_only_plaques_a_click_reaches(page: str) -> None:
-    """The other three are drawn dimmed and left there: there is nothing behind them yet."""
+def test_confirm_is_the_only_plaque_a_click_never_reaches(page: str) -> None:
+    """It is drawn dimmed and left there: there is nothing behind it yet."""
     script = page[page.index("<script>") :]
 
     assert "turnControl('sow').addEventListener('click', armSow);" in script
     assert "turnControl('reset').addEventListener('click', function () {" in script
-    for name in ("confirm", "action", "tithe"):
-        assert f"turnControl('{name}')" not in script
-    assert "['confirm', 'action', 'tithe'].forEach(function (name) {" in script
-    assert "setTurnControlState(name, false, false);" in script
+    assert "turnControl(resolution).addEventListener('click', function () {" in script
+    assert "turnControl('confirm')" not in script
+    assert "setTurnControlState('confirm', false, false);" in script
     # Sow stays lit and turns active while a turn is open; Reset is only lit once one is.
     assert "setTurnControlState('sow', true, started);" in script
     assert "setTurnControlState('reset', started, false);" in script
@@ -1179,7 +1178,8 @@ def test_a_turn_starts_from_a_board_position_not_from_a_tile(page: str) -> None:
         "var dutySpaces = dutyPanel ? dutyPanel.querySelectorAll('[data-board-position]') : [];"
         in page
     )
-    assert "selectStartSpace(space.getAttribute('data-board-position'));" in page
+    assert "var position = space.getAttribute('data-board-position');" in page
+    assert "selectStartSpace(position);\n      selectDuty(position);" in page
     assert "space.getAttribute('data-board-position') === position" in page
     assert "space.setAttribute('data-turn-start-candidate', 'true');" in page
     assert "space.setAttribute('data-turn-start-selected', 'true');" in page
@@ -1295,16 +1295,21 @@ def test_the_seat_whose_turn_it_is_is_ringed_and_says_so(page: str) -> None:
     assert "stage.setAttribute('data-active-player-color', activePlayerColor() || '');" in page
 
 
-def test_a_cube_picked_up_is_the_cube_put_back_down(page: str) -> None:
+def test_a_cube_taken_off_the_board_is_the_cube_put_back_on_it(page: str) -> None:
     """What each cube was showing is remembered, which a half-full City column needs it to be.
 
     The City draws all six of a column's slots and hides the ones nobody is standing in, so
-    putting cubes back by simply showing them would stand a seat in slots it never held.
+    putting cubes back by simply showing them would stand a seat in slots it never held. The hand
+    that picks cubes up to sow them and the recall that sends them home both take them off the
+    board the same way, so they are remembered and put back by the one pair of helpers.
     """
-    assert "return { cube: cube, opacity: cube.getAttribute('opacity') };" in page
-    assert "if (held.opacity === null) {\n        held.cube.removeAttribute('opacity');" in page
-    assert "held.cube.setAttribute('opacity', held.opacity);" in page
-    assert "state.turn.pickedUp = [];" in page
+    assert "var held = { cube: cube, opacity: cube.getAttribute('opacity') };" in page
+    assert "if (entry.opacity === null) {\n        entry.cube.removeAttribute('opacity');" in page
+    assert "entry.cube.setAttribute('opacity', entry.opacity);" in page
+    assert "state.turn.pickedUp = hideCubes(cubes);" in page
+    assert "restoreCubes(state.turn.pickedUp);\n    state.turn.pickedUp = [];" in page
+    assert "state.turn.recalled = hideCubes(sent);" in page
+    assert "restoreCubes(state.turn.recalled);\n    state.turn.recalled = [];" in page
 
 
 def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
@@ -1312,23 +1317,32 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
     reset = reset[: reset.index("\n  }")]
 
     for step in (
+        "undoRecall();",
         "resetSownCubes();",
         "restorePickupCubes();",
         "setCubesInHand(0);",
         "armStartSpaces(false);",
         "markStartSpace(null);",
+        "armDutyChoices(false);",
+        "markDutyChoice(null);",
         "clearBranchChoices();",
         "state.turn.start = null;",
         "state.turn.current = null;",
         "state.turn.route = [];",
         "state.turn.routeChoice = null;",
+        "state.turn.duty = null;",
+        "state.turn.resolution = null;",
         "turnOverlay.removeAttribute('data-last-route-choice');",
         "turnOverlay.removeAttribute('data-turn-current-position');",
         "turnOverlay.removeAttribute('data-turn-route');",
+        "turnOverlay.removeAttribute('data-turn-duty');",
+        "turnOverlay.removeAttribute('data-turn-resolution');",
         "setTurnPhase('idle');",
     ):
         assert step in reset, step
-    # A cube can be sown into the slot it was picked up from, so the pickup has the last word.
+    # The turn is undone in the order it was done, last thing first: a cube can be sown into the
+    # slot it was picked up from and then recalled out of it again.
+    assert reset.index("undoRecall();") < reset.index("resetSownCubes();")
     assert reset.index("resetSownCubes();") < reset.index("restorePickupCubes();")
 
 
@@ -1458,19 +1472,128 @@ def test_a_column_with_no_room_stops_the_walk_where_it_stands(page: str) -> None
     assert "setCubesInHand(0)" not in sowing[: sowing.index("\n  }\n")]
 
 
-def test_an_empty_hand_is_the_end_of_the_sowing_and_not_of_anything_else(page: str) -> None:
-    """The green goes out and the board says so, and that is as far as this page goes.
-
-    Which duty was landed on, what it does, whose turn is next: all of that is still to come, so
-    the three plaques that would do it stay dimmed and unwired.
-    """
+def test_an_empty_hand_leaves_the_duties_the_sow_reached_to_be_picked_from(page: str) -> None:
+    """The green goes out, and the tiles the cubes landed on are offered as the duty to take."""
     complete = page[page.index("function completeSowing()") :]
     complete = complete[: complete.index("\n  }\n")]
 
     assert "clearBranchChoices();" in complete
     assert "setTurnPhase('sow_complete');" in complete
-    for deferred in ("confirm", "action", "tithe", "duty", "advance"):
-        assert deferred not in complete, deferred
+    assert "armDutyChoices(true);" in complete
+
+
+def test_the_duties_on_offer_are_the_ones_the_sow_put_a_cube_on(page: str) -> None:
+    """Read off the way the hand walked, not off what happens to be standing on the board.
+
+    A seat's cubes were already sitting on half the wheel before the turn began, and asking which
+    tiles it has a cube on would offer all of those too. What the walk did is the whole of it: the
+    route is where a cube went down, minus the space it started from, which is where they came up.
+    """
+    positions = page[page.index("function sownDutyPositions()") :]
+    positions = positions[: positions.index("\n  }\n")]
+
+    assert "state.turn.route.slice(1).filter(function (position, index, walked) {" in positions
+    assert "walked.indexOf(position) === index" in positions
+    # The City is not a duty. It is asked for by the one thing that sets it apart on this board.
+    assert "position !== cityPosition" in positions
+    assert "if (!space.hasAttribute('data-duty-ring-index')) {" in page
+    assert "cityPosition = space.getAttribute('data-board-position');" in page
+    assert re.findall(r'data-board-position="city"[^>]*data-duty-ring-index', page) == []
+    assert len(re.findall(r'<g data-duty="\w+"[^>]*data-duty-ring-index="\d"', page)) == 8
+
+
+def test_a_duty_can_be_picked_and_picked_again_before_it_is_taken(page: str) -> None:
+    """Only from what is on offer, and the mark moves to whichever is picked last."""
+    select = page[page.index("function selectDuty(position)") :]
+    select = select[: select.index("\n  }\n")]
+
+    assert "if (state.turn.phase !== 'sow_complete' && state.turn.phase !== 'duty_selected') {" in (
+        select
+    )
+    assert "if (sownDutyPositions().indexOf(position) === -1) {\n      return;\n    }" in select
+    assert "state.turn.duty = position;" in select
+    assert "turnOverlay.setAttribute('data-turn-duty', position);" in select
+    assert "setTurnPhase('duty_selected');" in select
+
+    # The tile is ringed and its trefoil coloured in, and whatever was marked before is not.
+    mark = page[page.index("function markDutyChoice(position)") :]
+    mark = mark[: mark.index("\n  }\n")]
+    assert mark.index("space.removeAttribute('data-turn-duty-selected');") < mark.index(
+        "node.setAttribute('data-turn-duty-selected', 'true');"
+    )
+    assert "ornament.removeAttribute('data-turn-duty-selected');" in mark
+    assert "[spaceAt(position), ornamentAt(position)].forEach(function (node) {" in mark
+    assert '[data-turn-duty-selected="true"] .board-circle {' in page
+    # Filled, and still outlined as the board drew it: the lobes overlap, so without the lines
+    # between them a coloured trefoil is a coloured blob.
+    assert '[data-ornament-position][data-turn-duty-selected="true"] circle {' in page
+    assert "fill: var(--active-player); stroke-opacity: 0.7;" in page
+
+
+def test_the_trefoil_over_a_space_can_be_found_from_the_space(page: str) -> None:
+    """The ornaments are one layer drawn over the whole board, not part of the nine spaces.
+
+    So each says which position it stands over. Without that the only way to the right trefoil
+    would be counting groups in the order they were drawn, which is exactly what every other hook
+    on this board exists to avoid.
+    """
+    action = _block(page, "panel p-action")
+    over = re.findall(r'<g data-ornament-position="(\w+)"', action)
+
+    # One over each of the nine spaces. What order they were drawn in is what the hook makes moot.
+    assert sorted(over) == sorted(board_positions())
+    assert len(over) == 9
+    assert "dutyPanel.querySelectorAll('[data-ornament-position]')" in page
+    assert "dutyPanel.querySelector('[data-ornament-position=\"' + position + '\"]')" in page
+
+
+def test_action_and_tithe_wake_up_only_once_a_duty_is_chosen(page: str) -> None:
+    """Not while the hand is still walking, and not on an empty board: only on a chosen duty.
+
+    Which of the two was pressed is kept and shown, because it is the one thing about them this
+    page knows. What either actually does is still to come, and Confirm is not wired at all.
+    """
+    controls = page[page.index("function refreshTurnControls()") :]
+    controls = controls[: controls.index("\n  }\n")]
+
+    assert "['action', 'tithe'].forEach(function (name) {" in controls
+    assert "var chosen = state.turn.phase === 'duty_selected';" in controls
+    assert "setTurnControlState(name, chosen, state.turn.resolution === name);" in controls
+    assert "setTurnControlState('confirm', false, false);" in controls
+    # Both plaques are wired to the one thing there is to do, and it is the phase that gates them.
+    assert "['action', 'tithe'].forEach(function (resolution) {" in page
+    assert "resolveDuty(resolution);" in page
+    resolve = page[page.index("function resolveDuty(resolution)") :]
+    resolve = resolve[: resolve.index("\n  }\n")]
+    assert "if (state.turn.phase !== 'duty_selected') {\n      return;\n    }" in resolve
+    assert "state.turn.resolution = resolution;" in resolve
+    assert "turnOverlay.setAttribute('data-turn-resolution', resolution);" in resolve
+    assert "setTurnPhase('resolution_selected');" in resolve
+
+
+def test_taking_a_duty_sends_that_seat_s_cubes_home_and_nobody_else_s(page: str) -> None:
+    """Off the chosen tile and into the seat's own City column, one slot per cube.
+
+    It is the pickup's filter again, so the other seats' cubes and the neutral column's stay
+    standing on the tile, and it is the sow's slot search again, so the cubes arrive in the City
+    the same way a sown cube arrives anywhere. A cube with no slot waiting for it is left where it
+    is: the City draws a seat six and the rules cap nothing, so a column can fill.
+    """
+    resolve = page[page.index("function resolveDuty(resolution)") :]
+    resolve = resolve[: resolve.index("\n  }\n")]
+
+    assert "visibleActivePlayerCubesForPosition(state.turn.duty).forEach(function (cube) {" in (
+        resolve
+    )
+    assert "var slot = firstEmptySlotForPosition(cityPosition);" in resolve
+    assert "if (!slot) {\n        return;\n      }" in resolve
+    assert "slot.setAttribute('opacity', '1');" in resolve
+    assert "home.push(slot);\n      sent.push(cube);" in resolve
+    assert "state.turn.standingInCity = home;" in resolve
+    assert "state.turn.recalled = hideCubes(sent);" in resolve
+    # Nothing here sorts a cube by colour, by column, or by the tile it is standing on.
+    for guess in ("fill", "dummy", "data-city-column-player", "data-duty-category"):
+        assert guess not in resolve, guess
 
 
 def test_a_phase_only_ever_sets_a_word_on_the_board(page: str) -> None:

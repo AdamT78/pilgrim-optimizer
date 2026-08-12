@@ -609,6 +609,29 @@ def test_a_tile_draws_the_three_cubes_it_has_room_for_and_stands_what_it_stood_b
     ] * (TILE_STACK_HEIGHT - 1)
 
 
+def test_each_trefoil_says_which_space_it_stands_over() -> None:
+    """The ornaments are one layer over the whole board rather than a part of the nine spaces.
+
+    Which is on purpose -- a mark that never varies cannot be read as per-space meaning -- but it
+    leaves a page that wants to mark one space with no way to its trefoil except by counting the
+    groups in the order they were drawn. So each says the position it stands over, and the three
+    lobes stay the only circles in it, which is what lets them be coloured in on their own.
+    """
+    data = layout()
+    svg = generated_svg()
+    start = svg.index('<g data-ornament-position="north"')
+    trefoil = svg[start : svg.index("</g>", start)]
+
+    assert sorted(re.findall(r'<g data-ornament-position="(\w+)"', svg)) == sorted(
+        board_position_of(duty) for duty in data["duties"]
+    )
+    assert trefoil.count("<circle") == 3
+    assert trefoil.count("<path") == 1
+    # Marking one is a page's business, not the board's: it is drawn the same on all nine.
+    assert "data-turn-duty-selected" not in svg
+    assert len(set(re.findall(r'<g data-ornament-position="\w+"([^>]*)>', svg))) == 1
+
+
 def test_a_column_is_only_given_room_where_a_cube_could_arrive() -> None:
     """The neutral column gets none: no seat plays those cubes, so none will ever be put there.
 
