@@ -130,7 +130,7 @@
     ]
   },
   "default_player_count": 2,
-  "city_sample_cubes_per_seat": 4,
+  "city_sample_cubes_per_seat": 2,
   "duties": [
     {
       "id": "produce",

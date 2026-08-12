@@ -417,21 +417,76 @@ def test_rendered_svg_tallies_cubes_in_the_colours_the_opening_table_seats() -> 
     assert 'data-player-count="4"' not in svg
 
 
-def test_the_city_stands_two_full_columns_below_its_title() -> None:
+def test_the_city_stands_below_its_title_with_room_for_a_full_column() -> None:
+    """The space is measured for what a column can hold, not for what is standing in it."""
     data = layout()
     city = duty_position_by_id(data, data["city_id"])
     svg = generated_svg()
     tally = svg[svg.index('data-cube-tally="city"') :]
     cubes = re.findall(r'<rect [^>]*data-player="(\w+)"', tally[: tally.index("</g>")])
+    opening = int(data["city_sample_cubes_per_seat"])
     _, cy = city["center"]
 
-    assert Counter(cubes) == {"player_two": CITY_STACK_HEIGHT, "player_four": CITY_STACK_HEIGHT}
+    # Drawn plain, a column is the cubes standing in it and no more.
+    assert opening < CITY_STACK_HEIGHT
+    assert Counter(cubes) == {"player_two": opening, "player_four": opening}
     # It stands lower than a duty tile's, with the room under the title shared evenly around it.
     assert CITY_TALLY_OFFSET_Y > TALLY_OFFSET_Y
     title = cy + LABEL_OFFSET_Y
     inset_bottom = cy + SPACE_RADIUS - ORNAMENT_INSET
     top = cy + CITY_TALLY_OFFSET_Y - CITY_STACK_HEIGHT * CUBE_CELL_HEIGHT
     assert top - title == pytest.approx(inset_bottom - (cy + CITY_TALLY_OFFSET_Y))
+
+
+def test_the_city_holds_six_cubes_a_seat_and_opens_holding_two() -> None:
+    """Room for six, two standing in it: the four left over are what a page can fill.
+
+    The cubes are the size and the pitch they have everywhere else on the wheel -- what changed to
+    make room is where the column stands, not how big the cubes in it are.
+    """
+    data = layout()
+    svg = render_duty_wheel_svg(data, interactive=True)
+    tally = svg[svg.index('data-cube-tally="city" data-player-count="2"') :]
+    two_player = tally[: tally.index("</g>")]
+    drawn = re.findall(
+        r'data-city-column-player="(\w+)" data-city-cube="(\d)" opacity="(\d)"', two_player
+    )
+    standing = [player for player, _, opacity in drawn if opacity == "1"]
+
+    assert CITY_STACK_HEIGHT == 6
+    assert int(data["city_sample_cubes_per_seat"]) == 2
+    assert f'data-city-capacity="{CITY_STACK_HEIGHT}"' in two_player
+    # Every space in the column is drawn, numbered from the baseline up, and the first two of each
+    # are the ones standing.
+    assert Counter(player for player, _, _ in drawn) == {
+        "player_two": CITY_STACK_HEIGHT,
+        "player_four": CITY_STACK_HEIGHT,
+    }
+    for column in ("player_two", "player_four"):
+        indices = [index for player, index, _ in drawn if player == column]
+        assert indices == [str(index) for index in range(CITY_STACK_HEIGHT)]
+    assert Counter(standing) == {"player_two": 2, "player_four": 2}
+
+    # Same cube and same pitch as everywhere else on the wheel: the column found its room by
+    # standing lower, not by drawing anything smaller or closer together.
+    boxes = re.findall(r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)"', two_player)
+    assert {width for _, _, width in boxes} == {f"{CUBE_SIZE:g}"}
+    column = sorted(float(y) for x, y, _ in boxes if x == boxes[0][0])
+    assert [b - a for a, b in zip(column, column[1:], strict=False)] == [
+        pytest.approx(CUBE_CELL_HEIGHT)
+    ] * (CITY_STACK_HEIGHT - 1)
+
+
+def test_only_the_city_draws_the_spaces_nothing_stands_in() -> None:
+    """A duty tile's tally is what is on it; the City's is what it can hold."""
+    data = layout()
+    svg = render_duty_wheel_svg(data, interactive=True)
+    produce = svg[svg.index('data-cube-tally="produce" data-player-count="4"') :]
+
+    assert "data-city-cube" not in produce[: produce.index("</g>")]
+    assert "data-city-capacity" not in produce[: produce.index("</g>")]
+    # And a plain board draws no empty spaces at all, City included.
+    assert "data-city-cube" not in generated_svg()
 
 
 def test_sample_setups_start_from_the_layout_and_then_turn_the_tiles() -> None:
@@ -505,7 +560,9 @@ def test_interactive_board_tags_each_ring_position_with_its_index() -> None:
 def test_interactive_board_draws_a_cube_tally_for_every_player_count() -> None:
     data = layout()
     svg = render_duty_wheel_svg(data, interactive=True)
-    tallies = re.findall(r'data-cube-tally="(\w+)" data-player-count="(\d)" opacity="(\d)"', svg)
+    tallies = re.findall(
+        r'data-cube-tally="(\w+)" data-player-count="(\d)"[^>]*? opacity="(\d)"', svg
+    )
     shown = [(duty, count) for duty, count, opacity in tallies if opacity == "1"]
     spaces = [data["city_id"], *data["clockwise_order"]]
 

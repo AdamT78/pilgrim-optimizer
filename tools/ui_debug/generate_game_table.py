@@ -13,9 +13,9 @@ renderers keep owning what each component looks like; nothing here draws geometr
 
 The stage is left-aligned, so the two rows start on the same vertical and the red seat comes out
 under the alms table. Under that table sits one compact four-row control stack: the table's own
-buttons, then Alms/Piety discs and resources, then winners and buildings, then the cubes on a
-board. These controls are local page state only: no GameState, no rules, and no scaling solve
-changes.
+buttons, then Alms/Piety discs and resources, then winners and buildings, then a seat's cubes and
+where they walk -- around its own board, and out to the City in the middle of the wheel. These
+controls are local page state only: no GameState, no rules, and no scaling solve changes.
 
 ONE SHARED SCALE
 Each renderer draws in its own units and was authored as its own standalone page, so handing
@@ -103,6 +103,7 @@ from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     CUBE_SIZE as DUTY_CUBE_UNITS,  # noqa: E402
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
+    CITY_STACK_HEIGHT,
     duty_setups,
     load_duty_wheel_layout,
     merchant_path,
@@ -713,6 +714,8 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         f'<select id="acolyte-target">{_options(places, first_role)}</select>'
         '<button type="button" id="move-acolyte">Move acolyte</button>'
         '<button type="button" data-serf-to-abbey-button="true">S-&gt;A</button>'
+        '<button type="button" data-abbey-to-city-button="true">A-&gt;C</button>'
+        '<button type="button" data-village-to-city-button="true">V-&gt;C</button>'
         "</div>"
         "</div>"
     )
@@ -821,11 +824,19 @@ def duty_wheel_seating(layout: dict) -> dict:
 
 
 def duty_control_data(layout: dict) -> dict:
-    """What the wheel's two buttons walk through: its sample setups and the Merchant's ring."""
+    """What the wheel's buttons walk through: its sample setups, the Merchant's ring, and the City.
+
+    The City is the one space cubes arrive at from off the wheel, so the room a column has and the
+    number opening in it are both read from the wheel rather than restated here.
+    """
     return {
         "setups": duty_setups(layout),
         "merchantPath": merchant_path(layout),
         "merchantStart": layout["merchant_token"]["starts_on"],
+        "city": {
+            "capacity": CITY_STACK_HEIGHT,
+            "opening": int(layout["city_sample_cubes_per_seat"]),
+        },
     }
 
 
@@ -903,6 +914,14 @@ def render_compact_controls_script(
   var BUILDINGS = {buildings};
   var DUTY = {duty};
 
+  function cityOpening() {{
+    var opening = {{}};
+    Object.keys(ACOLYTES.state).forEach(function (seat) {{
+      opening[seat] = DUTY.city.opening;
+    }});
+    return opening;
+  }}
+
   var state = {{
     count: DEFAULT_COUNT,
     roll: SETUP.defaultRoll,
@@ -914,6 +933,8 @@ def render_compact_controls_script(
     /* Seat numbers in slot order, so the row of sockets is just this list drawn. */
     winners: [],
     buildings: JSON.parse(JSON.stringify(BUILDINGS.state)),
+    /* What each seat is standing in the City, which every column opens holding. */
+    city: cityOpening(),
     dutySetup: 0,
     merchant: DUTY.merchantStart
   }};
@@ -928,6 +949,8 @@ def render_compact_controls_script(
   var acolyteTarget = document.getElementById('acolyte-target');
   var moveAcolyte = document.getElementById('move-acolyte');
   var serfToAbbey = document.querySelector('[data-serf-to-abbey-button]');
+  var abbeyToCity = document.querySelector('[data-abbey-to-city-button]');
+  var villageToCity = document.querySelector('[data-village-to-city-button]');
   var shipButton = document.querySelector('[data-ship-advance]');
   var resourceButtons = document.querySelectorAll('[data-resource-button]');
   var winnerButtons = document.querySelectorAll('[data-alms-winner-button]');
@@ -1138,6 +1161,38 @@ def render_compact_controls_script(
         show(slot, count === (slot.getAttribute('data-role-slot') === 'single' ? 1 : 2));
       }});
     }});
+  }}
+
+  /* The City column a seat stands in, in every tally the wheel drew: a column is redrawn once and
+     the player-count buttons then show whichever of those tallies the table is playing. */
+  function renderCity(seat) {{
+    var playerId = (state.acolytes[String(seat)] || {{}}).playerId;
+    var standing = state.city[String(seat)];
+    if (!dutyPanel || !playerId) {{
+      return;
+    }}
+    var cubes = dutyPanel.querySelectorAll('[data-city-column-player="' + playerId + '"]');
+    Array.prototype.forEach.call(cubes, function (cube) {{
+      show(cube, Number(cube.getAttribute('data-city-cube')) < standing);
+    }});
+  }}
+
+  /* A cube leaves the seat's board and stands in its City column. Nothing is checked but room:
+     somewhere to take it from, and somewhere for it to stand. */
+  function cityRoom(seat) {{
+    return state.city[String(seat)] < DUTY.city.capacity;
+  }}
+
+  function sendToCity(seat, area) {{
+    var playerState = state.acolytes[String(seat)];
+    if (!playerState || !cityRoom(seat) || playerState[area] < 1) {{
+      return;
+    }}
+    playerState[area] -= 1;
+    state.city[String(seat)] += 1;
+    renderBoardCubes(seat);
+    renderCity(seat);
+    refreshBoardButtons();
   }}
 
   function renderResources(seat) {{
@@ -1411,8 +1466,12 @@ def render_compact_controls_script(
   }}
 
   function refreshBoardButtons() {{
+    var seat = String(acolytePlayerSeat.value);
+    var playerState = state.acolytes[seat];
     moveAcolyte.disabled = !canMoveAcolyte();
     serfToAbbey.disabled = !canMoveSerf();
+    abbeyToCity.disabled = !cityRoom(seat) || playerState.abbeyAcolytes < 1;
+    villageToCity.disabled = !cityRoom(seat) || playerState.villageSerfs < 1;
   }}
 
   function applyPlayerCount(count) {{
@@ -1509,6 +1568,14 @@ def render_compact_controls_script(
     refreshBoardButtons();
   }});
 
+  abbeyToCity.addEventListener('click', function () {{
+    sendToCity(String(acolytePlayerSeat.value), 'abbeyAcolytes');
+  }});
+
+  villageToCity.addEventListener('click', function () {{
+    sendToCity(String(acolytePlayerSeat.value), 'villageSerfs');
+  }});
+
   [acolytePlayerSeat, acolyteSource, acolyteTarget].forEach(function (control) {{
     control.addEventListener('change', refreshBoardButtons);
   }});
@@ -1516,6 +1583,7 @@ def render_compact_controls_script(
   Object.keys(state.acolytes).forEach(function (seat) {{
     renderBoardCubes(seat);
     renderResources(seat);
+    renderCity(seat);
   }});
   renderWinners();
   renderBuildings();

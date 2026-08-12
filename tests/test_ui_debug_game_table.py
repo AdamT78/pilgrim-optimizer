@@ -81,6 +81,7 @@ from tools.ui_debug.render_duty_wheel import (
     CUBE_SIZE as DUTY_CUBE_SIZE,
 )
 from tools.ui_debug.render_duty_wheel import (
+    CITY_STACK_HEIGHT,
     duty_position_by_id,
     duty_setups,
     load_duty_wheel_layout,
@@ -546,17 +547,30 @@ def test_row_four_has_acolyte_controls_with_game_setup_places(page: str) -> None
         assert f">{label}</option>" in body
 
 
-def test_the_serf_move_comes_last_on_the_row_it_shares_a_player_with(page: str) -> None:
-    """One button rather than the setup page's four: the row already says whose board it is."""
+def test_the_cube_moves_share_the_player_the_row_already_names(page: str) -> None:
+    """One button each rather than the setup page's four: the row already says whose board it is.
+
+    They read left to right in the order a cube travels -- around the board, then off it -- and all
+    four take the seat from the one dropdown the row opens with.
+    """
     controls = _block(page, "table-controls")
     row_four = re.search(r'data-controls-row="4">(.+?)</div>', controls, flags=re.DOTALL)
     assert row_four is not None
     body = row_four.group(1)
+    moves = [
+        "data-serf-to-abbey-button",
+        "data-abbey-to-city-button",
+        "data-village-to-city-button",
+    ]
 
     assert '<button type="button" data-serf-to-abbey-button="true">S-&gt;A</button>' in body
-    assert body.index('id="acolyte-player-seat"') < body.index("data-serf-to-abbey-button")
-    assert body.index('id="move-acolyte"') < body.index("data-serf-to-abbey-button")
-    assert body.count("data-serf-to-abbey-button") == 1
+    assert '<button type="button" data-abbey-to-city-button="true">A-&gt;C</button>' in body
+    assert '<button type="button" data-village-to-city-button="true">V-&gt;C</button>' in body
+    assert all(body.count(move) == 1 for move in moves)
+    places = [body.index('id="acolyte-player-seat"'), body.index('id="move-acolyte"')]
+    assert places + [body.index(move) for move in moves] == sorted(
+        places + [body.index(move) for move in moves]
+    )
 
 
 def test_controls_stay_compact_without_explanatory_text(page: str) -> None:
@@ -721,6 +735,78 @@ def test_a_board_draws_its_village_from_the_count_it_holds(page: str) -> None:
     assert "board.querySelectorAll('[data-token=\"' + area + '\"]')" in page
     assert "show(slot, Number(slot.getAttribute('data-token-index')) < held[area]);" in page
     assert "renderAcolyteBoard" not in page
+
+
+def test_a_cube_sent_to_the_city_leaves_the_board_it_was_standing_on(page: str) -> None:
+    """Abbey or Village, it is the one move: take from there, stand in the City column."""
+    assert "function sendToCity(seat, area)" in page
+    assert "if (!playerState || !cityRoom(seat) || playerState[area] < 1)" in page
+    assert "playerState[area] -= 1;" in page
+    assert "state.city[String(seat)] += 1;" in page
+    assert "renderBoardCubes(seat);\n    renderCity(seat);" in page
+    assert "sendToCity(String(acolytePlayerSeat.value), 'abbeyAcolytes');" in page
+    assert "sendToCity(String(acolytePlayerSeat.value), 'villageSerfs');" in page
+
+
+def test_a_city_column_takes_no_more_cubes_than_it_has_room_for(page: str) -> None:
+    """Six a seat, opening on two, and the wheel is the one asked how many that is."""
+    duty = duty_control_data(load_duty_wheel_layout())
+
+    assert duty["city"] == {"capacity": CITY_STACK_HEIGHT, "opening": 2}
+    assert CITY_STACK_HEIGHT == 6
+    assert '"city":{"capacity":6,"opening":2}' in page
+    assert "function cityRoom(seat)" in page
+    assert "return state.city[String(seat)] < DUTY.city.capacity;" in page
+    assert "opening[seat] = DUTY.city.opening;" in page
+    assert "city: cityOpening()," in page
+
+
+def test_a_full_city_or_an_empty_board_leaves_the_buttons_dead(page: str) -> None:
+    assert "abbeyToCity.disabled = !cityRoom(seat) || playerState.abbeyAcolytes < 1;" in page
+    assert "villageToCity.disabled = !cityRoom(seat) || playerState.villageSerfs < 1;" in page
+    assert "var abbeyToCity = document.querySelector('[data-abbey-to-city-button]');" in page
+    assert "var villageToCity = document.querySelector('[data-village-to-city-button]');" in page
+
+
+def test_a_city_column_is_redrawn_in_every_tally_the_wheel_holds(page: str) -> None:
+    """The wheel draws one tally per player count, so a column stands in three of them at once.
+
+    Redrawing all three is what lets the count buttons keep doing the only thing they did before:
+    show a tally. A seat that walked cubes into the City finds them there at any table size.
+    """
+    assert "function renderCity(seat)" in page
+    assert "var playerId = (state.acolytes[String(seat)] || {}).playerId;" in page
+    assert "dutyPanel.querySelectorAll('[data-city-column-player=\"' + playerId + '\"]')" in page
+    assert "show(cube, Number(cube.getAttribute('data-city-cube')) < standing);" in page
+    # The count buttons still only pick a tally; they deal no cubes of their own.
+    assert "function renderDutyTallies()" in page
+    assert "renderCity" not in page[page.index("function renderDutyTallies()") :].split("}")[0]
+
+
+def test_the_city_only_seats_the_players_the_table_is_playing(page: str) -> None:
+    """A dropped seat's City column goes with the tally it was drawn in, like every other column."""
+    wheel = _block(page, "panel p-action")
+    tallies = re.findall(
+        r'data-cube-tally="city" data-player-count="(\d)"[^>]*opacity="(\d)"', wheel
+    )
+    columns = {
+        count: set(
+            re.findall(
+                r'data-city-column-player="(\w+)"',
+                wheel[wheel.index(f'data-cube-tally="city" data-player-count="{count}"') :].split(
+                    "</g>"
+                )[0],
+            )
+        )
+        for count, _ in tallies
+    }
+
+    assert [count for count, opacity in tallies if opacity == "1"] == [str(DEFAULT_PLAYER_COUNT)]
+    assert columns["2"] == {SEATED_PLAYERS[0], SEATED_PLAYERS[1]}
+    assert columns["3"] == set(SEATED_PLAYERS[:3])
+    assert columns["4"] == set(SEATED_PLAYERS)
+    # The City seats players and nobody else: the neutral column belongs to the ring.
+    assert all("neutral" not in column for column in columns.values())
 
 
 def test_every_building_starts_on_the_map_owing_to_nobody(
@@ -1362,8 +1448,8 @@ def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
     resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
     # counts, setup rolls, R/S+/M+, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
-    # Move acolyte and S->A
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 2
+    # Move acolyte, S->A, A->C and V->C
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 4
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page

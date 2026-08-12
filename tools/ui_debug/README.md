@@ -620,9 +620,14 @@ They are not a seat — they take no turn and hold nothing — so they are not i
 and read their own seeding out of the layout, one group of three clockwise from the top and one
 from the bottom at two players, two and two at three. That mirrors `docs/rules/DummyAcolytes.md`,
 which is also why the City has no neutral column: dummy acolytes are seeded and moved on the duty
-ring, and the City is not on that ring. The City's own columns are drawn as a full holding,
-`city_sample_cubes_per_seat` high, standing lower in the space so the taller stacks share the room
-under the title evenly.
+ring, and the City is not on that ring. The City's own columns have room for six cubes a seat —
+`CITY_STACK_HEIGHT`, a seat's whole holding rather than a duty tile's handful — and stand lower in
+the space so the taller stacks share the room under the title evenly. They open holding
+`city_sample_cubes_per_seat`, which is two, leaving four spaces free for a page with buttons to fill.
+Drawn `interactive`, the City draws all six and hides the empty ones, the way every other board here
+draws the slots a cube can stand in; drawn plain, a column is the two cubes standing in it and no
+more. Cube size and pitch are the wheel's throughout: what makes room for six is where the column
+stands, not how big the cubes in it are.
 
 All of it is sample debug state, not `GameState`, in the same spirit as the v1 player board's mock
 state. Nothing here says what any of it means: there is no Tithe token logic, no Taxation rule, no
@@ -1096,7 +1101,10 @@ Board v2 acolyte movement controls. `S->A` on that last row moves one cube from 
 player's Village to their Abbey, which is a serf becoming an acolyte — the game setup page's
 serf helper, as one button rather than four, because the row already names the player it acts on. It
 stops for the two reasons that page stops: an empty Village has nobody to send, and a full Abbey has
-nowhere to put him. The game table also includes compact resource controls for the
+nowhere to put him. `A->C` and `V->C` sit beside it and send one cube on to the City in the middle
+of the Duty Wheel, from the Abbey or straight out of the Village; each stops when there is nothing
+to take or no room to stand, and the City column holds six. The game table also includes compact
+resource controls for the
 selected player and Alms Table season-end winner controls: `AT+` moves one cube from the selected
 player's Abbey into the first empty Season End Winners socket, and `ATr` returns every placed cube
 to the Abbey of the player whose colour it carries. The same row buys and donates buildings: `Buy`
@@ -1107,7 +1115,11 @@ controls now include Duty Wheel randomize and Merchant advance buttons: `R` cycl
 sample Duty tile arrangements and `M+` walks the Merchant clockwise around the eight duty tiles,
 Taxation included and the City excluded. Player-count controls also update Duty Wheel starting cube
 columns locally: 2P uses two player columns plus black, 3P uses three player columns plus black, and
-4P uses four player columns without black. The wheel is seated in this page's own order — red,
+4P uses four player columns without black. The City takes no neutral column, so it simply drops the
+seats that are not playing: 2P leaves red and yellow standing there, 3P adds blue, 4P adds white.
+Cubes walked into the City stay where they were put when the count changes, since the count only
+picks which of the wheel's tallies shows and a column is redrawn in all three. The wheel is seated
+in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
