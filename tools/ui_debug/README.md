@@ -1173,19 +1173,24 @@ carries its turn-control shell — `Sow`, the cubes-in-hand counter, `Reset`/`Co
 `Action`/`Tithe`, in the four black corners of the hexagon's box — which is drawn inside the wheel's
 SVG and so is scaled and cropped along with it.
 
-Two of those plaques are wired here, as the shape of a turn drawn on the board. `Sow` arms the nine
+Four of those plaques are wired here, as the shape of a turn drawn on the board. `Sow` arms the nine
 spaces: each is outlined in cream and takes a click, the eight duty tiles and the City alike.
 Clicking one lifts the active seat's cubes there into the counter in the corner — `■ × N` — outlines
 the space in the colour of the seat the turn belongs to, and sets the hand walking: one cube goes
 down at each position it comes to, and the counter falls as they do. It stops only at a fork, where
 it turns the ways out green and waits for one to be clicked; clicking one puts a cube down at the far
 end, records which way was asked for in `data-last-route-choice`, and walks on. When the hand is
-empty the turn is `sow_complete`. `Reset` hands the board straight back. The phases are `idle`,
-`sow_armed`, `sowing`, `branch_choice` and `sow_complete`, carried on `data-turn-state` beside
-`data-turn-current-position` and the `data-turn-route` walked so far, and the styling all hangs off
-attributes — `data-turn-start-candidate`, `data-turn-start-selected`, `data-turn-branch-choice`,
-`data-turn-control-enabled` and `data-turn-control-active` — so a click sets a word and the
-stylesheet does the rest.
+empty the turn is `sow_complete`, and the tiles the sow put a cube on are outlined in cream to be
+picked from: clicking one takes it as the turn's duty, rings it in the seat's colour, colours in the
+three lobes of its trefoil, and lights `Action` and `Tithe`. Pressing either sends that seat's cubes
+home from that tile to its City column, and stays lit to say which was pressed. `Reset` hands the
+board straight back. The phases are `idle`, `sow_armed`, `sowing`, `branch_choice`, `sow_complete`,
+`duty_selected` and `resolution_selected`, carried on `data-turn-state` beside
+`data-turn-current-position`, the `data-turn-route` walked so far, `data-turn-duty` and
+`data-turn-resolution`, and the styling all hangs off attributes — `data-turn-start-candidate`,
+`data-turn-start-selected`, `data-turn-branch-choice`, `data-turn-duty-candidate`,
+`data-turn-duty-selected`, `data-turn-control-enabled` and `data-turn-control-active` — so a click
+sets a word and the stylesheet does the rest.
 
 All of it moves in board positions. A click hands on `data-board-position`, the cubes to pick up
 are the ones showing inside that space, and the ways out are the arrows whose `data-from-position`
@@ -1211,22 +1216,37 @@ moves when a count change leaves it with no board to sit at.
 Picking a cube up and putting one down are the same trick run in opposite directions. The wheel
 draws every slot a seat's column has room for and hides the empty ones, so a cube is lifted by
 hiding the rect it stands in and sown by showing an empty one: nothing is ever drawn into the wheel
-or cut out of it, and a turn is a set of opacities to put back. `Reset` puts the sown cubes away
-before it puts the picked-up ones back, since a cube can be sown into the very slot it was lifted
-out of and what that slot was showing when the turn began has to be the last word on it.
+or cut out of it, and a turn is a set of opacities to put back. Sending cubes home at the end of the
+turn is the same trick a third time: they are hidden on the tile and empty slots are shown in the
+City column. So `Reset` undoes the turn in the order it was done, last thing first — what came home,
+then what was sown, then what was picked up — since a cube can be sown into the very slot it was
+lifted out of and recalled out of that same slot again, and each layer has to hand the board back to
+the one beneath it before that one has its say.
+
+Which tiles are on offer at the end is read off the way the hand walked rather than off what is
+standing on the board: `sownDutyPositions` is the route with the space it started from dropped, and
+the City dropped with it, since the City is not a duty. Asking instead which tiles the seat has a
+cube on would offer every tile it was already sitting on before the turn began. The City is found as
+the one space with no place in the ring of arrows — the eight tiles each carry a
+`data-duty-ring-index` and it does not — rather than by its name. The trefoils are drawn as one layer
+over the whole board rather than inside the nine spaces, so each carries a `data-ornament-position`
+saying which space it stands over; without it the only way to the right trefoil would be counting
+groups in the order they were drawn.
 
 A column can fill up. A tile shows a seat three cubes — what fits between the baseline and the
 title — while the rules cap nothing, so a hand can reach a position with nowhere to put the next
 cube. It stops there and keeps what it is still holding, the counter goes on showing it, and `Reset`
-is the way out; this is a limit of what the wheel can draw, not a rule.
+is the way out; this is a limit of what the wheel can draw, not a rule. The City column can fill the
+same way, six to a seat, so a cube sent home that finds no slot waiting is left standing on its tile;
+nothing is lost either way, since a cube is only ever hidden in one place and shown in another.
 
 The flow reads the tally the table is currently
 playing and touches nothing the compact rows keep, which is why a count change simply puts a turn
 down first — `applyPlayerCount` calls `resetTurnFlow` before anything else, as do `A->C` and
-`V->C`, since both redraw a City column a turn may be holding cubes out of. `Confirm`, `Action` and
-`Tithe` stay dimmed and unwired. Which duty a finished sow landed on, resolving an action or a
-tithe, passing the turn on, and anything at all to do with `GameState` are still to come; this page
-knows no rules. The wheel is seated in this page's own order — red,
+`V->C`, since both redraw a City column a turn may be holding cubes out of. `Confirm` stays dimmed
+and unwired, and `Action` and `Tithe` do the one same thing: sending the cubes home is all either
+knows how to do. Resolving an action, taking a tithe, spending or collecting anything, passing the
+turn on, and anything at all to do with `GameState` are still to come; this page knows no rules. The wheel is seated in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over

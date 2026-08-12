@@ -950,9 +950,18 @@ def render_turn_flow_script() -> str:
      position anywhere, so a flow keyed to the labels would start walking the wrong way round the
      board the first time the tiles were turned. */
   var dutySpaces = dutyPanel ? dutyPanel.querySelectorAll('[data-board-position]') : [];
+  var dutyOrnaments = dutyPanel ? dutyPanel.querySelectorAll('[data-ornament-position]') : [];
   var dutyArrows = dutyPanel
     ? dutyPanel.querySelectorAll('[data-from-position][data-to-position]')
     : [];
+  /* The middle space, as the one the ring of arrows does not run through: every duty tile has a
+     place in that ring and says which, and the City is the space that has none. */
+  var cityPosition = null;
+  Array.prototype.forEach.call(dutySpaces, function (space) {
+    if (!space.hasAttribute('data-duty-ring-index')) {
+      cityPosition = space.getAttribute('data-board-position');
+    }
+  });
   /* The board's directed graph, as the arrows drawn on it: every way out of every position. */
   var outgoingEdgesByPosition = {};
   Array.prototype.forEach.call(dutyArrows, function (arrow) {
@@ -979,10 +988,14 @@ def render_turn_flow_script() -> str:
     var started = state.turn.phase !== 'idle';
     setTurnControlState('sow', true, started);
     setTurnControlState('reset', started, false);
-    /* Nothing behind these three yet, so they stay as the shell drew them. */
-    ['confirm', 'action', 'tithe'].forEach(function (name) {
-      setTurnControlState(name, false, false);
+    /* A duty has to be chosen before there is anything to do to it, and once one of the two has
+       been pressed the pressed one stays lit to say which it was. */
+    ['action', 'tithe'].forEach(function (name) {
+      var chosen = state.turn.phase === 'duty_selected';
+      setTurnControlState(name, chosen, state.turn.resolution === name);
     });
+    /* Nothing behind this one yet, so it stays as the shell drew it. */
+    setTurnControlState('confirm', false, false);
   }
 
   function setTurnPhase(phase) {
@@ -1010,6 +1023,14 @@ def render_turn_flow_script() -> str:
   function spaceAt(position) {
     return dutyPanel
       ? dutyPanel.querySelector('[data-board-position="' + position + '"]')
+      : null;
+  }
+
+  /* The trefoil drawn over a space. The ornaments are one layer across the whole board rather
+     than part of the spaces, so each says which position it stands over. */
+  function ornamentAt(position) {
+    return dutyPanel
+      ? dutyPanel.querySelector('[data-ornament-position="' + position + '"]')
       : null;
   }
 
@@ -1135,26 +1156,34 @@ def render_turn_flow_script() -> str:
     state.turn.sown = [];
   }
 
-  /* Picked up, not taken away: what each cube was showing is remembered so that putting them
-     back cannot turn on a City slot that was standing empty. */
-  function hidePickupCubes(cubes) {
-    state.turn.pickedUp = cubes.map(function (cube) {
-      return { cube: cube, opacity: cube.getAttribute('opacity') };
-    });
-    cubes.forEach(function (cube) {
+  /* Taken off the board, not taken away: what each cube was showing is remembered, so putting it
+     back cannot stand a seat in a slot it was not standing in. Both the hand that picks cubes up
+     to sow them and the recall that sends them home from a duty use this pair. */
+  function hideCubes(cubes) {
+    return cubes.map(function (cube) {
+      var held = { cube: cube, opacity: cube.getAttribute('opacity') };
       cube.setAttribute('opacity', '0');
+      return held;
     });
+  }
+
+  function restoreCubes(held) {
+    held.forEach(function (entry) {
+      if (entry.opacity === null) {
+        entry.cube.removeAttribute('opacity');
+      } else {
+        entry.cube.setAttribute('opacity', entry.opacity);
+      }
+    });
+  }
+
+  function hidePickupCubes(cubes) {
+    state.turn.pickedUp = hideCubes(cubes);
     setCubesInHand(cubes.length);
   }
 
   function restorePickupCubes() {
-    state.turn.pickedUp.forEach(function (held) {
-      if (held.opacity === null) {
-        held.cube.removeAttribute('opacity');
-      } else {
-        held.cube.setAttribute('opacity', held.opacity);
-      }
-    });
+    restoreCubes(state.turn.pickedUp);
     state.turn.pickedUp = [];
   }
 
@@ -1234,6 +1263,102 @@ def render_turn_flow_script() -> str:
   function completeSowing() {
     clearBranchChoices();
     setTurnPhase('sow_complete');
+    armDutyChoices(true);
+  }
+
+  /* The duties a finished sow leaves standing to be picked from: the positions it put a cube on,
+     less the City, which is not a duty. It is read off the way the hand walked rather than off
+     what is standing on the board, so cubes that were already there before the turn began -- this
+     seat's, another seat's, or the neutral column's -- are no part of the choice. */
+  function sownDutyPositions() {
+    return state.turn.route.slice(1).filter(function (position, index, walked) {
+      return position !== cityPosition && walked.indexOf(position) === index;
+    });
+  }
+
+  function armDutyChoices(armed) {
+    var eligible = armed ? sownDutyPositions() : [];
+    Array.prototype.forEach.call(dutySpaces, function (space) {
+      if (eligible.indexOf(space.getAttribute('data-board-position')) === -1) {
+        space.removeAttribute('data-turn-duty-candidate');
+      } else {
+        space.setAttribute('data-turn-duty-candidate', 'true');
+      }
+    });
+  }
+
+  /* The chosen duty is marked twice over: ringed like the space the turn started from, and with
+     the three lobes of its trefoil coloured in. The trefoil is drawn in a layer of its own above
+     the board rather than inside the space, so the two are marked separately. */
+  function markDutyChoice(position) {
+    Array.prototype.forEach.call(dutySpaces, function (space) {
+      space.removeAttribute('data-turn-duty-selected');
+    });
+    Array.prototype.forEach.call(dutyOrnaments, function (ornament) {
+      ornament.removeAttribute('data-turn-duty-selected');
+    });
+    [spaceAt(position), ornamentAt(position)].forEach(function (node) {
+      if (node) {
+        node.setAttribute('data-turn-duty-selected', 'true');
+      }
+    });
+  }
+
+  function selectDuty(position) {
+    if (state.turn.phase !== 'sow_complete' && state.turn.phase !== 'duty_selected') {
+      return;
+    }
+    if (sownDutyPositions().indexOf(position) === -1) {
+      return;
+    }
+    state.turn.duty = position;
+    markDutyChoice(position);
+    if (turnOverlay) {
+      turnOverlay.setAttribute('data-turn-duty', position);
+    }
+    setTurnPhase('duty_selected');
+  }
+
+  /* Both plaques do the one thing there is to do yet: the seat's cubes come off the duty it chose
+     and go home to its City column. What either of them is actually for -- resolving the duty,
+     taking the tithe -- is still to come, so all that is kept is which of them was pressed.
+
+     A cube that finds no room in the City is left standing where it is. The City draws a seat six
+     slots while the rules cap nothing, so a column can fill; a cube is only ever hidden in one
+     place and shown in another, so nothing is lost either way. */
+  function resolveDuty(resolution) {
+    if (state.turn.phase !== 'duty_selected') {
+      return;
+    }
+    var home = [];
+    var sent = [];
+    visibleActivePlayerCubesForPosition(state.turn.duty).forEach(function (cube) {
+      var slot = firstEmptySlotForPosition(cityPosition);
+      if (!slot) {
+        return;
+      }
+      slot.setAttribute('opacity', '1');
+      home.push(slot);
+      sent.push(cube);
+    });
+    state.turn.standingInCity = home;
+    state.turn.recalled = hideCubes(sent);
+    state.turn.resolution = resolution;
+    /* The choice is closed once the cubes are home, so the other tiles stop offering themselves. */
+    armDutyChoices(false);
+    if (turnOverlay) {
+      turnOverlay.setAttribute('data-turn-resolution', resolution);
+    }
+    setTurnPhase('resolution_selected');
+  }
+
+  function undoRecall() {
+    state.turn.standingInCity.forEach(function (slot) {
+      slot.setAttribute('opacity', '0');
+    });
+    state.turn.standingInCity = [];
+    restoreCubes(state.turn.recalled);
+    state.turn.recalled = [];
   }
 
   /* A space with none of the active seat's cubes on it is nothing to start from, so the click
@@ -1275,30 +1400,43 @@ def render_turn_flow_script() -> str:
     }
   }
 
+  /* The turn is undone in the order it was done, last thing first: what the recall moved, then
+     what the sow put down, then what the hand picked up. A cube can be sown into the very slot it
+     was lifted out of and recalled out of that same slot again, so each layer has to hand the
+     board back to the one beneath it before that one has its say. */
   function resetTurnFlow() {
-    /* Sown first, then picked up. A cube can be sown back into the very slot it was lifted out
-       of, so what that slot was showing when the turn began has to be the last word on it. */
+    undoRecall();
     resetSownCubes();
     restorePickupCubes();
     setCubesInHand(0);
     armStartSpaces(false);
     markStartSpace(null);
+    armDutyChoices(false);
+    markDutyChoice(null);
     clearBranchChoices();
     state.turn.start = null;
     state.turn.current = null;
     state.turn.route = [];
     state.turn.routeChoice = null;
+    state.turn.duty = null;
+    state.turn.resolution = null;
     if (turnOverlay) {
       turnOverlay.removeAttribute('data-last-route-choice');
       turnOverlay.removeAttribute('data-turn-current-position');
       turnOverlay.removeAttribute('data-turn-route');
+      turnOverlay.removeAttribute('data-turn-duty');
+      turnOverlay.removeAttribute('data-turn-resolution');
     }
     setTurnPhase('idle');
   }
 
+  /* A space is clicked for two different reasons at two different points in a turn: to start from
+     before the sow, and to choose a duty after it. */
   Array.prototype.forEach.call(dutySpaces, function (space) {
     space.addEventListener('click', function () {
-      selectStartSpace(space.getAttribute('data-board-position'));
+      var position = space.getAttribute('data-board-position');
+      selectStartSpace(position);
+      selectDuty(position);
     });
   });
 
@@ -1321,6 +1459,14 @@ def render_turn_flow_script() -> str:
       }
     });
   }
+
+  ['action', 'tithe'].forEach(function (resolution) {
+    if (turnControl(resolution)) {
+      turnControl(resolution).addEventListener('click', function () {
+        resolveDuty(resolution);
+      });
+    }
+  });
 
   updateActiveSeatIndicator();
 """
@@ -1382,7 +1528,8 @@ def render_compact_controls_script(
     activeSeat: TURN.seat,
     /* The turn drawn on the wheel: which phase it is in, where it started and where the hand
        stands now, the way it came, what is in hand, the cubes lifted off the board to put it
-       there, the slots it has since stood cubes in, and which way out was last picked. */
+       there, the slots it has since stood cubes in, which way out was last picked, the duty it
+       chose at the end of it, and what it chose to do there. */
     turn: {{
       phase: 'idle',
       start: null,
@@ -1391,7 +1538,11 @@ def render_compact_controls_script(
       cubesInHand: 0,
       pickedUp: [],
       sown: [],
-      routeChoice: null
+      routeChoice: null,
+      duty: null,
+      resolution: null,
+      recalled: [],
+      standingInCity: []
     }}
   }};
 
@@ -2301,6 +2452,19 @@ def render_game_table_html(
   [data-turn-start-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
   [data-turn-start-selected="true"] .board-circle {{
     stroke: var(--active-player); stroke-width: 5.5;
+  }}
+  /* And a duty a finished sow left standing to be picked from, in the same cream and then the
+     same colour: what marks the chosen one apart from the space the turn started at is its
+     trefoil, coloured in above the title. */
+  [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-duty-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-duty-selected="true"] .board-circle {{
+    stroke: var(--active-player); stroke-width: 3.5;
+  }}
+  /* Filled, but still outlined as it was drawn: the three lobes overlap, and without the lines
+     between them a coloured trefoil is a coloured blob. */
+  [data-ornament-position][data-turn-duty-selected="true"] circle {{
+    fill: var(--active-player); stroke-opacity: 0.7;
   }}
   [data-turn-branch-choice="true"] {{ cursor: pointer; }}
   [data-turn-branch-choice="true"] .arrow-interior {{ fill: {TURN_BRANCH_GREEN}; }}
