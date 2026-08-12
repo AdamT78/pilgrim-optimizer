@@ -190,6 +190,11 @@ TURN_DIMMED_OPACITY = "0.4"
 SETUP_ROLLS = tuple(sorted(START_HEX_BY_ROLL))
 DEFAULT_CONTROL_PLAYER_SEAT = 1
 
+# What each seat has in the City to sow out before the first turn. The engine's own setup deals the
+# same five -- `_starting_player_state` in `pilgrim/setup/generator.py` -- but this page reads
+# nothing from it: the number is written down here so the board can be dealt without asking.
+SETUP_CITY_CUBES = 5
+
 # What a resource's step buttons are called. The board writes the names out in full beside its
 # icons; a control row this tight has room for two letters, so the buttons say `Wh+` where the
 # board says `Wheat`. Keyed by the layout's own resource ids, so a resource the board stops
@@ -694,6 +699,7 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         '<div class="control-row" data-controls-row="1">'
         f"{count_buttons}{setup_buttons}"
         '<button type="button" data-duty-randomize-button="true">R</button>'
+        '<button type="button" data-setup-mode-button="true" aria-pressed="false">Setup</button>'
         '<button type="button" data-ship-advance="true">S+</button>'
         '<button type="button" data-merchant-advance-button="true">M+</button>'
         "</div>"
@@ -917,17 +923,26 @@ def turn_flow_data(duty_layout: dict) -> dict:
 def render_turn_flow_script() -> str:
     """The turn flow, as the phases a click moves the wheel between.
 
-        idle -> sow_armed -> sowing -> sow_complete
+        idle -> sow_armed -> sowing -> sow_complete -> duty_selected -> resolution_selected
                                 ^         |
                                 |         v
                           branch_choice   idle
 
     Sow arms the nine spaces; clicking one lifts the active seat's cubes there into the counter in
     the corner and the hand starts walking, putting one cube down at each position it comes to. It
-    stops at a fork, lights the ways out and waits for one to be clicked; then it walks on. When
-    the hand is empty the turn is `sow_complete`, and `Reset` puts the board back the way Sow found
-    it. That is the whole of it. No duty is selected, no action or tithe is resolved, no turn is
-    passed on, and nothing here reads or writes `GameState`: this is a turn drawn on the board.
+    stops at a fork, lights the ways out and waits for one to be clicked; then it walks on. When the
+    hand is empty the tiles it reached are offered as the duty to take, and taking one with `Action`
+    or `Tithe` sends that seat's cubes there home to the City. `Reset` puts the board back the way
+    Sow found it at any point along the way.
+
+    A setup sow is the same walk with a different frame around it: every seat starts with five
+    acolytes in the City and puts them out, one seat after another, before the first turn. It
+    starts itself, since the City is the only place it could start from -- so `Sow` has nothing to
+    ask and stays dark, and the walk stops at the City's fork straight away. And it ends with no
+    duty offered, `Action` and `Tithe` dark, and `Confirm` lit to hand the wheel to the next seat.
+
+    What any of it is worth is another matter. Nothing here resolves an action or a tithe, scores
+    anything, or reads or writes `GameState`: this is the shape of a turn drawn on a board.
 
     Everything it moves by is a board position -- `city`, `north`, `north_east` and the rest, as
     `configs/board.json` names them -- read off `data-board-position` and the arrows' own
@@ -984,18 +999,25 @@ def render_turn_flow_script() -> str:
     control.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   }
 
+  /* A setup sow is not a turn: the seat is putting its acolytes out, not taking a duty. So the
+     two plaques that do something to a duty stay dark all through it, and `Confirm` -- which has
+     nothing behind it in a normal turn -- is the one that lights, to hand the wheel to the next
+     seat. */
   function refreshTurnControls() {
     var started = state.turn.phase !== 'idle';
-    setTurnControlState('sow', true, started);
-    setTurnControlState('reset', started, false);
+    var sown = state.turn.phase === 'sow_complete';
+    /* A setup sow starts itself from the City, so `Sow` has nothing to ask and stays dark; and
+       `Reset`, which is then the only way back to the start of one, stays lit throughout. */
+    var asking = !state.setup.on;
+    setTurnControlState('sow', asking, asking && started);
+    setTurnControlState('reset', started || state.setup.on, false);
     /* A duty has to be chosen before there is anything to do to it, and once one of the two has
        been pressed the pressed one stays lit to say which it was. */
     ['action', 'tithe'].forEach(function (name) {
-      var chosen = state.turn.phase === 'duty_selected';
+      var chosen = !state.setup.on && state.turn.phase === 'duty_selected';
       setTurnControlState(name, chosen, state.turn.resolution === name);
     });
-    /* Nothing behind this one yet, so it stays as the shell drew it. */
-    setTurnControlState('confirm', false, false);
+    setTurnControlState('confirm', state.setup.on && sown, false);
   }
 
   function setTurnPhase(phase) {
@@ -1034,17 +1056,34 @@ def render_turn_flow_script() -> str:
       : null;
   }
 
-  function activeSeatElement() {
+  function seatBoard(seat) {
     return document.querySelector(
-      '[data-component="player-board-v2"][data-player-seat="' + state.activeSeat + '"]');
+      '[data-component="player-board-v2"][data-player-seat="' + seat + '"]');
   }
 
-  /* Which player the active seat is, asked of the board that is actually on the table rather
-     than worked out here. Seat order and player ids are not the same list -- the first seat is
-     red, and red is `player_two` -- so anything pairing them up itself would pair them wrongly. */
-  function activePlayerId() {
-    var board = activeSeatElement();
+  function activeSeatElement() {
+    return seatBoard(state.activeSeat);
+  }
+
+  function playerIdForSeat(seat) {
+    var board = seatBoard(seat);
     return board ? board.getAttribute('data-player') : null;
+  }
+
+  /* The seats in play, in the order they are dealt to and take their turns. */
+  function seatsAtTable() {
+    var seats = [];
+    for (var seat = 1; seat <= state.count; seat += 1) {
+      seats.push(seat);
+    }
+    return seats;
+  }
+
+  /* Which player a seat is, asked of the board that is actually on the table rather than worked
+     out here. Seat order and player ids are not the same list -- the first seat is red, and red is
+     `player_two` -- so anything pairing them up itself would pair them wrongly. */
+  function activePlayerId() {
+    return playerIdForSeat(state.activeSeat);
   }
 
   function activePlayerColor() {
@@ -1112,13 +1151,32 @@ def render_turn_flow_script() -> str:
     });
   }
 
-  /* A hand picks up its own cubes and nothing else. Every cube says whose it is, so the other
-     seats' cubes, the neutral column's black ones, and the City slots nobody is standing in --
-     drawn but hidden, so not visible to begin with -- are all left exactly where they are. */
-  function visibleActivePlayerCubesForPosition(position) {
-    var playerId = activePlayerId();
-    return visibleCubesForPosition(position).filter(function (cube) {
+  /* One seat's column on one space, bottom cube first, which is the order the wheel draws them
+     in. Every cube says whose it is, so this is also what keeps the other seats' cubes and the
+     neutral column's black ones out of anything a seat does. */
+  function columnForPosition(position, playerId) {
+    var tally = activeTallyForPosition(position);
+    if (!tally) {
+      return [];
+    }
+    return Array.prototype.filter.call(tally.querySelectorAll('rect'), function (cube) {
       return cube.getAttribute('data-player') === playerId;
+    });
+  }
+
+  /* A hand picks up its own cubes and nothing else: the other seats' cubes, the neutral column's,
+     and the slots nobody is standing in -- drawn but hidden, so not visible -- all stay put. */
+  function visibleActivePlayerCubesForPosition(position) {
+    return columnForPosition(position, activePlayerId()).filter(function (cube) {
+      return cube.getAttribute('opacity') !== '0';
+    });
+  }
+
+  /* Stand a column at a given height, which is how a deal is made: the wheel draws every slot a
+     column has room for, so setting one is showing the cubes up to it and hiding the rest. */
+  function standColumn(position, playerId, standing) {
+    columnForPosition(position, playerId).forEach(function (cube, index) {
+      cube.setAttribute('opacity', index < standing ? '1' : '0');
     });
   }
 
@@ -1209,7 +1267,7 @@ def render_turn_flow_script() -> str:
   }
 
   function armSow() {
-    if (state.turn.phase !== 'idle') {
+    if (state.setup.on || state.turn.phase !== 'idle') {
       return;
     }
     armStartSpaces(true);
@@ -1260,10 +1318,12 @@ def render_turn_flow_script() -> str:
     completeSowing();
   }
 
+  /* A setup sow ends with no duty on offer: the seat was putting its acolytes out, not taking a
+     duty, and what is waiting for it is `Confirm` rather than `Action` or `Tithe`. */
   function completeSowing() {
     clearBranchChoices();
     setTurnPhase('sow_complete');
-    armDutyChoices(true);
+    armDutyChoices(!state.setup.on);
   }
 
   /* The duties a finished sow leaves standing to be picked from: the positions it put a cube on,
@@ -1304,11 +1364,12 @@ def render_turn_flow_script() -> str:
     });
   }
 
+  /* What may be picked is what is on offer, and what is on offer is what `armDutyChoices` marked:
+     the tiles the sow reached, from when the hand empties until one of them is taken. Nothing is
+     ever marked during a setup sow, so nothing can be picked during one either. */
   function selectDuty(position) {
-    if (state.turn.phase !== 'sow_complete' && state.turn.phase !== 'duty_selected') {
-      return;
-    }
-    if (sownDutyPositions().indexOf(position) === -1) {
+    var space = spaceAt(position);
+    if (!space || space.getAttribute('data-turn-duty-candidate') !== 'true') {
       return;
     }
     state.turn.duty = position;
@@ -1361,12 +1422,13 @@ def render_turn_flow_script() -> str:
     state.turn.recalled = [];
   }
 
-  /* A space with none of the active seat's cubes on it is nothing to start from, so the click
-     does nothing at all and the board stays armed for another one. */
-  function selectStartSpace(position) {
-    if (state.turn.phase !== 'sow_armed') {
-      return;
-    }
+  /* The seat's cubes there come up into the hand and the walk begins. A space with none of them
+     on it is nothing to start from, so nothing happens at all.
+
+     A turn is asked which space to start from and a setup sow is not -- it always starts from the
+     City -- so where the start comes from is the caller's business, and only the starting is
+     here. */
+  function beginSowFrom(position) {
     var cubes = visibleActivePlayerCubesForPosition(position);
     if (!cubes.length) {
       return;
@@ -1377,6 +1439,15 @@ def render_turn_flow_script() -> str:
     hidePickupCubes(cubes);
     setCurrentPosition(position);
     continueSowing();
+  }
+
+  /* Clicking an armed space. The click is spent either way, so the board stays armed for another
+     one rather than refusing this one. */
+  function selectStartSpace(position) {
+    if (state.turn.phase !== 'sow_armed') {
+      return;
+    }
+    beginSowFrom(position);
   }
 
   /* The way out that was asked for: one cube goes down at the far end of the arrow, and the walk
@@ -1400,14 +1471,24 @@ def render_turn_flow_script() -> str:
     }
   }
 
-  /* The turn is undone in the order it was done, last thing first: what the recall moved, then
-     what the sow put down, then what the hand picked up. A cube can be sown into the very slot it
-     was lifted out of and recalled out of that same slot again, so each layer has to hand the
-     board back to the one beneath it before that one has its say. */
-  function resetTurnFlow() {
+  /* Putting a turn down is two separate things, and they are kept apart because there is one
+     caller -- a confirmed setup sow -- that wants the second without the first.
+
+     Every cube goes back where the turn found it, in the order the turn moved them, last thing
+     first: what the recall took home, then what the sow put down, then what the hand picked up. A
+     cube can be sown into the very slot it was lifted out of and recalled out of that same slot
+     again, so each layer has to hand the board back to the one beneath it before that one has its
+     say. Which cubes those are is the three ledgers, and nothing else: a turn that has been
+     accepted drops them, and then this moves nothing at all. */
+  function putCubesBack() {
     undoRecall();
     resetSownCubes();
     restorePickupCubes();
+  }
+
+  /* And everything the turn wrote on the board about itself comes off. Not one cube is touched
+     here, which is what lets an accepted setup sow be cleaned up without being undone. */
+  function clearTurnMarks() {
     setCubesInHand(0);
     armStartSpaces(false);
     markStartSpace(null);
@@ -1428,6 +1509,11 @@ def render_turn_flow_script() -> str:
       turnOverlay.removeAttribute('data-turn-resolution');
     }
     setTurnPhase('idle');
+  }
+
+  function resetTurnFlow() {
+    putCubesBack();
+    clearTurnMarks();
   }
 
   /* A space is clicked for two different reasons at two different points in a turn: to start from
@@ -1454,10 +1540,16 @@ def render_turn_flow_script() -> str:
 
   if (turnControl('reset')) {
     turnControl('reset').addEventListener('click', function () {
-      if (state.turn.phase !== 'idle') {
+      if (state.setup.on) {
+        restartSetupSow();
+      } else if (state.turn.phase !== 'idle') {
         resetTurnFlow();
       }
     });
+  }
+
+  if (turnControl('confirm')) {
+    turnControl('confirm').addEventListener('click', confirmSetupSow);
   }
 
   ['action', 'tithe'].forEach(function (resolution) {
@@ -1499,6 +1591,7 @@ def render_compact_controls_script(
   var BUILDINGS = {buildings};
   var DUTY = {duty};
   var TURN = {json.dumps(turn_flow_data(duty_layout), separators=(",", ":"))};
+  var SETUP_CUBES = {SETUP_CITY_CUBES};
 
   function cityOpening() {{
     var opening = {{}};
@@ -1543,6 +1636,13 @@ def render_compact_controls_script(
       resolution: null,
       recalled: [],
       standingInCity: []
+    }},
+    /* The setup sow: whether the board is dealt for one now, which seats have confirmed theirs,
+       and whether one has been run through to the end since the page opened. */
+    setup: {{
+      on: false,
+      done: [],
+      finished: false
     }}
   }};
 
@@ -1569,6 +1669,7 @@ def render_compact_controls_script(
   var donateSlot = document.getElementById('donate-building-slot');
   var donateButton = document.querySelector('[data-building-donate-button]');
   var dutyRandomize = document.querySelector('[data-duty-randomize-button]');
+  var setupButton = document.querySelector('[data-setup-mode-button]');
   var merchantAdvance = document.querySelector('[data-merchant-advance-button]');
   var stage = document.querySelector('.game-table-stage');
   var almsPanel = document.querySelector('.p-alms');
@@ -2091,8 +2192,117 @@ def render_compact_controls_script(
     villageToCity.disabled = !cityRoom(seat) || playerState.villageSerfs < 1;
   }}
 
+  /* --- the setup sow -------------------------------------------------------------------------
+     The game before the game. Every seat starts with five acolytes in the City and sows them out
+     onto the wheel, one seat after another, and only when the last has finished does the first
+     turn begin. The sowing is the turn flow's, unchanged: setup only deals the board for it, then
+     hands it from seat to seat. What is dealt is a board to click on rather than a position in a
+     game -- nothing here is worth anything until something that knows the rules is asked.
+
+     It sits with the compact rows and not with the turn flow because it changes what they keep. A
+     turn hides cubes and remembers them, so Reset can hand the board straight back; a deal is
+     meant to stick, and the City count it writes is the same one `A->C` and `V->C` read. */
+
+  /* A deal is made on the tally the table is playing and nowhere else. The wheel drew a tally for
+     every count and shows one at a time, and `renderCity` writes a seat's City column in all of
+     them at once -- which would leave the other three saying a seat is in the City while their own
+     duty tiles still hold the cubes it sowed out of it. So the columns are stood by hand here, and
+     the City count the compact rows keep is written to match what was dealt. */
+  function dealSetupCubes() {{
+    seatsAtTable().forEach(function (seat) {{
+      var playerId = playerIdForSeat(seat);
+      Array.prototype.forEach.call(dutySpaces, function (space) {{
+        var position = space.getAttribute('data-board-position');
+        standColumn(position, playerId, position === cityPosition ? SETUP_CUBES : 0);
+      }});
+      state.city[String(seat)] = SETUP_CUBES;
+    }});
+  }}
+
+  /* Pressing `Setup` deals again from the top, whether or not one was already under way. */
+  function enterSetupMode() {{
+    resetTurnFlow();
+    state.setup.on = true;
+    state.setup.done = [];
+    dealSetupCubes();
+    setActiveSeat(1);
+    startSetupSow();
+    refreshSetupMode();
+  }}
+
+  /* A setup sow always starts from the City, so there is nothing to ask the seat and nothing for
+     `Sow` to do: its five acolytes come up into the hand the moment the wheel reaches it, and what
+     it is waiting for is the first fork -- which, starting where it starts, is immediate. */
+  function startSetupSow() {{
+    beginSowFrom(cityPosition);
+  }}
+
+  /* Which seat is sowing is not written down again here: the board already rings it, and says so
+     on the stage as `data-active-player-seat`. */
+  function refreshSetupMode() {{
+    if (setupButton) {{
+      setupButton.setAttribute('aria-pressed', state.setup.on ? 'true' : 'false');
+    }}
+    if (stage) {{
+      stage.setAttribute(
+        'data-setup-mode',
+        state.setup.on ? 'active' : state.setup.finished ? 'complete' : 'inactive');
+      stage.setAttribute('data-setup-completed-seats', state.setup.done.join(','));
+    }}
+    refreshTurnControls();
+  }}
+
+  /* Where a seat put its acolytes is where they stay. So confirming moves not one cube: the sow's
+     ledgers -- what it would need in order to take them back -- are dropped rather than played
+     back, and only the marks the sow made about itself are cleared. The City count the compact
+     rows keep is set to what the seat actually left there, which is a number in the record and not
+     a redraw of the board; the board is already showing it, because the sow put it there.
+
+     That holds for the last seat as much as for the others. All that is different about the last
+     is what happens next: there is no seat to hand the wheel to, so the table goes back to the
+     first to begin and setup lets go of the board exactly as it stands. */
+  function confirmSetupSow() {{
+    if (!state.setup.on || state.turn.phase !== 'sow_complete') {{
+      return;
+    }}
+    var seat = state.activeSeat;
+    state.setup.done.push(seat);
+    state.city[String(seat)] = visibleActivePlayerCubesForPosition(cityPosition).length;
+    state.turn.pickedUp = [];
+    state.turn.sown = [];
+    clearTurnMarks();
+    var waiting = seatsAtTable().filter(function (other) {{
+      return state.setup.done.indexOf(other) === -1;
+    }});
+    if (waiting.length) {{
+      setActiveSeat(waiting[0]);
+      startSetupSow();
+    }} else {{
+      state.setup.on = false;
+      state.setup.finished = true;
+      setActiveSeat(1);
+    }}
+    refreshSetupMode();
+  }}
+
+  /* `Reset` in setup hands the seat its five acolytes back and sets it going again from the City,
+     which is the only place a setup sow starts. The seats that have already confirmed keep what
+     they placed: there is nothing of theirs left to undo.
+
+     It is also the way out of anything that has put the flow down mid-setup -- a compact row that
+     redraws a City column, say -- which is why `Reset` stays lit all through a setup even when
+     there is no sow standing to be put down. */
+  function restartSetupSow() {{
+    resetTurnFlow();
+    standColumn(cityPosition, activePlayerId(), SETUP_CUBES);
+    state.city[String(state.activeSeat)] = SETUP_CUBES;
+    startSetupSow();
+  }}
+
   /* A count change redraws the tallies a turn may have cubes lifted out of, so the turn is put
-     back first rather than being left holding cubes the board has since redrawn. */
+     back first rather than being left holding cubes the board has since redrawn. A setup deals
+     again afterwards for the same reason: the tally now on the table is a different one, drawn as
+     the wheel opens rather than as a setup left it, and the seats it holds are a different list. */
   function applyPlayerCount(count) {{
     resetTurnFlow();
     state.count = count;
@@ -2106,6 +2316,13 @@ def render_compact_controls_script(
     }});
     /* A seat that has just left the table cannot be the one whose turn it is. */
     setActiveSeat(state.activeSeat > count ? {DEFAULT_CONTROL_PLAYER_SEAT} : state.activeSeat);
+    if (state.setup.on) {{
+      enterSetupMode();
+    }} else {{
+      /* The tally now on the table is one no setup has dealt, whatever was done to the last. */
+      state.setup.finished = false;
+      refreshSetupMode();
+    }}
   }}
 
   Array.prototype.forEach.call(countButtons, function (button) {{
@@ -2126,6 +2343,10 @@ def render_compact_controls_script(
 
   if (dutyRandomize) {{
     dutyRandomize.addEventListener('click', randomizeDuties);
+  }}
+
+  if (setupButton) {{
+    setupButton.addEventListener('click', enterSetupMode);
   }}
 
   if (merchantAdvance) {{
