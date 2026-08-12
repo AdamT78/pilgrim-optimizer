@@ -16,6 +16,12 @@ Two pieces of the picture are named here so a later renderer does not have to gu
   names (Taxation, for the debug page);
 - the resource icons in the capsules are **Tithe tokens**.
 
+Asked for `turn_controls`, the board also carries a shell of the turn flow to come: small plaques
+standing in the four black corners the green hexagon leaves — Sow, what is in hand, Reset and
+Confirm, Action and Tithe. They are a picture and nothing else. Nothing is clickable, nothing is
+counted, and only Sow is drawn as reachable; the rest are dimmed so the shape of a turn can be read
+off the board before any of it is wired up.
+
 Drawn plain, this is one fixed picture. Drawn `interactive`, the board also carries every slot the
 page's debug buttons can turn on — a Merchant token on each duty, every Tithe token icon on each
 duty that has a capsule, and a cube tally per player count — hidden until they are wanted, so a
@@ -90,6 +96,36 @@ CITY_TALLY_OFFSET_Y = (
 ) / 2.0
 
 RING_ARROW_COUNT = 8
+
+# Turn controls: small plaques standing in the black corners the hexagon leaves, drawn in the
+# board's own root units so they are part of the wheel rather than furniture around it -- the game
+# table sizes the wheel by its SVG and crops it to the hexagon's box, and a plaque inside that box
+# is carried along by both. The look is the game table's compact control bar, borrowed rather than
+# reinvented so the two read as one set of controls: charcoal fill, thin grey edge, pale text.
+TURN_CONTROL_FILL = "#1C1C1C"
+TURN_CONTROL_STROKE = "#4A4A4A"
+TURN_CONTROL_TEXT = "#F2EEDF"
+TURN_CONTROL_ACTIVE_FILL = "#F2EEDF"
+TURN_CONTROL_ACTIVE_TEXT = "#1C1C1C"
+TURN_CONTROL_DISABLED_OPACITY = "0.4"
+
+TURN_CONTROL_HEIGHT = 40.0
+TURN_CONTROL_RADIUS = 8.0
+TURN_CONTROL_STROKE_WIDTH = 1.6
+TURN_CONTROL_FONT_SIZE = 20.0
+TURN_CONTROL_PADDING_X = 14.0
+TURN_CONTROL_GAP = 8.0
+# The plaque is sized from the label rather than measured, so a button is as wide as its word at
+# roughly the average width of a Helvetica glyph, and never narrower than a two-letter one.
+TURN_CONTROL_CHAR_WIDTH = 11.0
+TURN_CONTROL_MIN_WIDTH = 62.0
+
+# Cubes in hand: a count of cubes picked up, which a sow can hold in more than one colour, so the
+# cube on the plaque is a neutral stone rather than any seat's.
+TURN_COUNTER_CUBE_SIZE = 16.0
+TURN_COUNTER_CUBE_FILL = "#B9B2A2"
+TURN_COUNTER_GAP = 8.0
+TURN_COUNTER_IDLE_VALUE = 0
 
 # How far the movable duty tiles are turned around the ring in each sample setup. The first is
 # the board as the layout describes it; the others are just far enough apart to look different.
@@ -649,6 +685,152 @@ def _render_middle_arrows(layout: dict) -> str:
     return '<g aria-label="Middle directional arrows">' + "".join(arrows) + "</g>"
 
 
+# ---------------------------------------------------------------------------------------------
+# Turn controls
+# ---------------------------------------------------------------------------------------------
+
+
+def turn_control_width(label: str) -> float:
+    """How wide a plaque has to be to hold its label."""
+    return max(
+        TURN_CONTROL_MIN_WIDTH, len(label) * TURN_CONTROL_CHAR_WIDTH + 2 * TURN_CONTROL_PADDING_X
+    )
+
+
+def _plaque(x: float, y: float, width: float, fill: str) -> str:
+    return (
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{width:.1f}"'
+        f' height="{TURN_CONTROL_HEIGHT:g}" rx="{TURN_CONTROL_RADIUS:g}" fill="{fill}"'
+        f' stroke="{TURN_CONTROL_STROKE}" stroke-width="{TURN_CONTROL_STROKE_WIDTH:g}"/>'
+    )
+
+
+def _plaque_text(x: float, y: float, label: str, fill: str, anchor: str = "middle") -> str:
+    return (
+        f'<text x="{x:.1f}" y="{y:.1f}" fill="{fill}"'
+        ' font-family="Helvetica, Arial, sans-serif"'
+        f' font-size="{TURN_CONTROL_FONT_SIZE:g}" text-anchor="{anchor}"'
+        f' dominant-baseline="middle">{escape(label)}</text>'
+    )
+
+
+def render_turn_control_button(
+    x: float, y: float, label: str, control: str, enabled: bool = True, active: bool = False
+) -> str:
+    """One control plaque, its top-left corner at `x, y`.
+
+    A control that cannot be used is dimmed rather than removed, so the row keeps its shape while
+    a turn moves through it. Nothing here listens for a click: the plaque is the shell a later
+    turn flow fills in, and `data-turn-control` is the handle it will take hold of.
+    """
+    fill = TURN_CONTROL_ACTIVE_FILL if active else TURN_CONTROL_FILL
+    ink = TURN_CONTROL_ACTIVE_TEXT if active else TURN_CONTROL_TEXT
+    width = turn_control_width(label)
+    dimmed = "" if enabled else f' opacity="{TURN_CONTROL_DISABLED_OPACITY}" aria-disabled="true"'
+    return (
+        f'<g data-turn-control="{control}" data-turn-control-enabled="{str(enabled).lower()}"'
+        f' role="button" aria-label="{escape(label)}"{dimmed}>'
+        f"{_plaque(x, y, width, fill)}"
+        f"{_plaque_text(x + width / 2, y + TURN_CONTROL_HEIGHT / 2, label, ink)}</g>"
+    )
+
+
+def turn_counter_width(value: int) -> float:
+    """A counter is its cube, its gap, and the `x N` beside them, inside the same padding."""
+    label = _turn_counter_label(value)
+    return (
+        2 * TURN_CONTROL_PADDING_X
+        + TURN_COUNTER_CUBE_SIZE
+        + TURN_COUNTER_GAP
+        + len(label) * TURN_CONTROL_CHAR_WIDTH
+    )
+
+
+def _turn_counter_label(value: int) -> str:
+    return f"\u00d7 {value}"
+
+
+def render_turn_cube_counter(x: float, y: float, value: int = TURN_COUNTER_IDLE_VALUE) -> str:
+    """The cubes-in-hand plaque, its top-left corner at `x, y`.
+
+    A readout rather than a button, so it takes no role and no enabled state. The cube on it is a
+    neutral stone: a handful picked up off a duty tile can hold more than one seat's colour, and a
+    plaque painted in one of them would be saying something the count does not.
+    """
+    width = turn_counter_width(value)
+    middle = y + TURN_CONTROL_HEIGHT / 2
+    cube_x = x + TURN_CONTROL_PADDING_X
+    count = _plaque_text(
+        cube_x + TURN_COUNTER_CUBE_SIZE + TURN_COUNTER_GAP,
+        middle,
+        _turn_counter_label(value),
+        TURN_CONTROL_TEXT,
+        anchor="start",
+    )
+    return (
+        f'<g data-turn-counter="cubes-in-hand" data-turn-counter-value="{value}"'
+        f' aria-label="Cubes in hand: {value}">'
+        f"{_plaque(x, y, width, TURN_CONTROL_FILL)}"
+        f'<rect x="{cube_x:.1f}" y="{middle - TURN_COUNTER_CUBE_SIZE / 2:.1f}"'
+        f' width="{TURN_COUNTER_CUBE_SIZE:g}" height="{TURN_COUNTER_CUBE_SIZE:g}"'
+        f' fill="{TURN_COUNTER_CUBE_FILL}"/>{count}</g>'
+    )
+
+
+def _turn_control_row(anchor: dict, corner: str, buttons: tuple[tuple[str, str, bool], ...]) -> str:
+    """A row of plaques hung on one corner anchor, growing away from the corner it stands in."""
+    widths = [turn_control_width(label) for label, _, _ in buttons]
+    total = sum(widths) + TURN_CONTROL_GAP * (len(buttons) - 1)
+    left = anchor["x"] - total if corner.endswith("right") else anchor["x"]
+    top = anchor["y"] - TURN_CONTROL_HEIGHT if corner.startswith("bottom") else anchor["y"]
+
+    rendered = []
+    for (label, control, enabled), width in zip(buttons, widths, strict=True):
+        rendered.append(render_turn_control_button(left, top, label, control, enabled=enabled))
+        left += width + TURN_CONTROL_GAP
+    return "".join(rendered)
+
+
+def render_turn_control_overlay(layout: dict, state: str = "idle") -> str:
+    """The four corner plaques, drawn in the board's root units above everything else.
+
+    This is the shell of a turn and none of its behaviour: the wheel draws Sow, what is in hand,
+    and the four ways a turn ends, so that the shape of the turn flow can be read off the board
+    before any of it is wired up. `data-turn-state` names the state the whole set is in, which is
+    `idle` and only `idle` until something can change it.
+
+    The plaques stand in the black the green hexagon leaves in the four corners of its box. That
+    is the one part of the canvas nothing else uses, and it is inside the box the game table crops
+    the wheel to, so the controls travel with the board rather than being cut off the side of it.
+
+    Each anchor in the layout is the corner of its own group nearest the corner of the board it
+    hangs in -- a left anchor gives the left edge and a bottom anchor the bottom edge -- so a row
+    grows inward and downward from the corner it belongs to whichever way round it is written.
+    """
+    anchors = layout["turn_controls"]
+    parts = [
+        _turn_control_row(anchors["top_left"], "top_left", (("Sow", "sow", True),)),
+        render_turn_cube_counter(
+            anchors["top_right"]["x"] - turn_counter_width(TURN_COUNTER_IDLE_VALUE),
+            anchors["top_right"]["y"],
+        ),
+        _turn_control_row(
+            anchors["bottom_left"],
+            "bottom_left",
+            (("Reset", "reset", False), ("Confirm", "confirm", False)),
+        ),
+        _turn_control_row(
+            anchors["bottom_right"],
+            "bottom_right",
+            (("Action", "action", False), ("Tithe", "tithe", False)),
+        ),
+    ]
+    return (
+        f'<g data-component="duty-wheel-turn-controls" data-turn-state="{state}"'
+        f' aria-label="Turn controls">{"".join(parts)}</g>'
+    )
+
+
 _STYLE_TEMPLATE = (
     ".board-circle {{ fill: url(#parchment-gradient); stroke: {space_edge};"
     " stroke-width: {space_stroke_width}; }}"
@@ -705,12 +887,16 @@ def render_duty_wheel_svg(
     board_state: dict | None = None,
     merchant_on: str | None = None,
     interactive: bool = False,
+    turn_controls: bool = False,
 ) -> str:
     """The whole board: title, ground, arrows, and the nine spaces with their contents.
 
     `merchant_on` overrides where the Merchant stands, which the baseline parity check uses to
     ask for the board the prototype drew. `interactive` adds the hidden slots the page's debug
     controls switch between; left off, the board is the fixed picture the prototype shows.
+    `turn_controls` adds the turn-control shell in the corners, which is a picture of a turn flow
+    and none of its behaviour; it is off unless a page asks for it, so a page that has not been
+    designed around it does not quietly grow a set of controls.
     """
     board = layout["board"]
     palette = layout["palette"]
@@ -766,7 +952,11 @@ def render_duty_wheel_svg(
         f' stroke="{palette["ground_edge"]}" stroke-width="4" stroke-linejoin="round"/>'
         f"{_render_ring_arrows(layout)}{_render_middle_arrows(layout)}"
         f'<g aria-label="Board spaces">{"".join(spaces)}</g>'
-        "</g></svg>"
+        "</g>"
+        # Outside the scaled group: the corners are measured on the canvas the page is cropped
+        # against, so the plaques are written in those same units rather than the board's.
+        f"{render_turn_control_overlay(layout) if turn_controls else ''}"
+        "</svg>"
     )
 
 
@@ -946,30 +1136,43 @@ def render_duty_wheel_controls_html(layout: dict) -> str:
 
 
 def render_duty_wheel_panel(
-    layout: dict, board_state: dict | None = None, include_controls: bool = True
+    layout: dict,
+    board_state: dict | None = None,
+    include_controls: bool = True,
+    turn_controls: bool = False,
 ) -> str:
     """The controls and the board as one fragment a host page can drop into its own layout.
 
     This is what the generated setup view shows: it brings its own wrapper, heading, and width,
     and pairs this with `DUTY_WHEEL_CONTROL_STYLES` and `render_duty_wheel_controls_script()`.
-    Without controls the board is the fixed picture, so no hidden slots are drawn either.
+    Without controls the board is the fixed picture, so no hidden slots are drawn either. The
+    turn-control shell is asked for separately, since it is drawn on the board rather than beside
+    it and a host page may want the one without the other.
     """
     controls = render_duty_wheel_controls_html(layout) if include_controls else ""
-    board = render_duty_wheel_svg(layout, board_state, interactive=include_controls)
+    board = render_duty_wheel_svg(
+        layout, board_state, interactive=include_controls, turn_controls=turn_controls
+    )
     return f"{controls}{board}"
 
 
 def render_duty_wheel_html(
-    layout: dict, board_state: dict | None = None, interactive: bool = False
+    layout: dict,
+    board_state: dict | None = None,
+    interactive: bool = False,
+    turn_controls: bool = False,
 ) -> str:
     """The board on its own page, the way the baseline prototype presents it.
 
     `interactive` is what the generated page uses: it adds the two debug buttons, which cycle
-    sample duty setups and walk the Merchant token around the ring.
+    sample duty setups and walk the Merchant token around the ring. `turn_controls` adds the
+    corner plaques the turn flow will one day be driven from.
     """
     palette = layout["palette"]
     merchant = layout["merchant_token"]
-    panel = render_duty_wheel_panel(layout, board_state, include_controls=interactive)
+    panel = render_duty_wheel_panel(
+        layout, board_state, include_controls=interactive, turn_controls=turn_controls
+    )
     script = render_duty_wheel_controls_script(layout) if interactive else ""
     moves = (
         "The buttons above cycle sample Duty tile setups, walk the Merchant clockwise around the "

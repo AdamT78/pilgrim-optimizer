@@ -131,6 +131,24 @@
   },
   "default_player_count": 2,
   "city_sample_cubes_per_seat": 2,
+  "turn_controls": {
+    "top_left": {
+      "x": 205,
+      "y": 300
+    },
+    "top_right": {
+      "x": 897,
+      "y": 300
+    },
+    "bottom_left": {
+      "x": 205,
+      "y": 1105
+    },
+    "bottom_right": {
+      "x": 897,
+      "y": 1105
+    }
+  },
   "duties": [
     {
       "id": "produce",
