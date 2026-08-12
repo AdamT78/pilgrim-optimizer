@@ -1180,10 +1180,11 @@ the space in the colour of the seat the turn belongs to, and sets the hand walki
 down at each position it comes to, and the counter falls as they do. It stops only at a fork, where
 it turns the ways out green and waits for one to be clicked; clicking one puts a cube down at the far
 end, records which way was asked for in `data-last-route-choice`, and walks on. When the hand is
-empty the turn is `sow_complete`, and the tiles the sow put a cube on are outlined in cream to be
-picked from: clicking one takes it as the turn's duty, rings it in the seat's colour, colours in the
-three lobes of its trefoil, and lights `Action` and `Tithe`. Pressing either sends that seat's cubes
-home from that tile to its City column, and stays lit to say which was pressed. `Reset` hands the
+empty the turn is `sow_complete`, and every tile the seat has a cube standing on is outlined in cream
+to be picked from: clicking one takes it as the turn's duty, rings it in the seat's colour, colours
+in the three lobes of its trefoil, and lights `Action` and `Tithe`. Pressing either sends every one
+of that seat's cubes home from that tile to its City column — the ones that were standing there
+before the turn as much as the ones it has just sown — and stays lit to say which was pressed. `Reset` hands the
 board straight back. The phases are `idle`, `sow_armed`, `sowing`, `branch_choice`, `sow_complete`,
 `duty_selected` and `resolution_selected`, carried on `data-turn-state` beside
 `data-turn-current-position`, the `data-turn-route` walked so far, `data-turn-duty` and
@@ -1241,10 +1242,17 @@ then what was sown, then what was picked up — since a cube can be sown into th
 lifted out of and recalled out of that same slot again, and each layer has to hand the board back to
 the one beneath it before that one has its say.
 
-Which tiles are on offer at the end is read off the way the hand walked rather than off what is
-standing on the board: `sownDutyPositions` is the route with the space it started from dropped, and
-the City dropped with it, since the City is not a duty. Asking instead which tiles the seat has a
-cube on would offer every tile it was already sitting on before the turn began. The City is found as
+Which tiles are on offer at the end is read off the board rather than off the way the hand walked:
+`occupiedDutyPositions` is every tile the seat has a cube standing on, less the City, since the City
+is not a duty. A seat has acolytes out on the wheel before its turn begins and those are as much its
+own as the ones it has just sown, so asking where the walk went would offer it the tiles it happened
+to pass and hide the rest of its own — including, often, most of them, since a short walk touches
+two or three of eight. It also asks the same helper the hand picks up by,
+`visibleActivePlayerCubesForPosition`, which is what leaves the other three kinds of cube out of the
+choice without any of them being named: another seat's, the neutral column's, and the slots nobody
+is standing in — drawn but hidden, so not visible — are none of them this seat's standing cubes. The
+tile the turn started from usually drops off the offer for the same reason it is read off the board
+at all: the hand took everything of the seat's that was standing there. The City is found as
 the one space with no place in the ring of arrows — the eight tiles each carry a
 `data-duty-ring-index` and it does not — rather than by its name. The trefoils are drawn as one layer
 over the whole board rather than inside the nine spaces, so each carries a `data-ornament-position`
