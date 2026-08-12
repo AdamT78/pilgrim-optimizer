@@ -647,6 +647,31 @@ and heading. Every hook the panel owns is prefixed — `duty-wheel-randomize`,
 because the setup page already has a `.controls` row and `.readout` spans of its own, and the
 script is one IIFE that reaches for those hooks and nothing else on the host page.
 
+Asked for `turn_controls`, the wheel also draws a visual-only shell of the turn flow to come, as
+four plaques in the black corners the green hexagon leaves: `Sow` at the top left, a cubes-in-hand
+counter at the top right, `Reset` and `Confirm` at the bottom left, and `Action` and `Tithe` at the
+bottom right. It is a picture and nothing else — nothing is clickable, nothing is counted, no
+GameState is touched, and only `Sow` is drawn as reachable, the rest dimmed to
+`TURN_CONTROL_DISABLED_OPACITY`. `data-component="duty-wheel-turn-controls"`, `data-turn-state`,
+`data-turn-control` and `data-turn-counter` are the handles the turn flow will take hold of when
+there is one.
+
+Two things decide where the plaques stand. They are drawn inside the SVG rather than beside it,
+because the composed table sizes the wheel by its SVG and a control outside it would neither scale
+with the board nor stay anchored to it; and they are drawn outside the group the renderer scales
+the board in, in the canvas's own units, because that is the space the corners are measured in.
+The corners themselves are the one part of the canvas nothing else uses, and they sit inside the
+box the game table crops the wheel to — the hexagon's own bounding box — so the shell is carried
+onto the table rather than being cut off the side of it. `turn_controls` in
+`duty_wheel_layout.json` gives the four anchors, each the corner of its own group nearest the
+corner of the board it hangs in, so a row grows inward from the corner it belongs to. Tests pin
+both halves of that: no plaque corner falls on the green, and every plaque survives the table's
+crop with a cube's clearance to spare.
+
+The shell is off unless a page asks for it, so a page that was not designed around it does not
+quietly grow one: the generated duty wheel page and the game table both pass `turn_controls=True`,
+and `game_setup.html`, which hosts the same panel, is unchanged and shows no plaques.
+
 Asked for the board the prototype drew — static, with the Merchant on
 `merchant_token.baseline_position` — every drawing element the renderer emits matches the
 baseline's numerically, bar one: the Allocation title sits 0.1px lower, because the baseline's own
@@ -1118,8 +1143,12 @@ columns locally: 2P uses two player columns plus black, 3P uses three player col
 4P uses four player columns without black. The City takes no neutral column, so it simply drops the
 seats that are not playing: 2P leaves red and yellow standing there, 3P adds blue, 4P adds white.
 Cubes walked into the City stay where they were put when the count changes, since the count only
-picks which of the wheel's tallies shows and a column is redrawn in all three. The wheel is seated
-in this page's own order — red,
+picks which of the wheel's tallies shows and a column is redrawn in all three. The wheel here also
+carries its turn-control shell — `Sow`, the cubes-in-hand counter, `Reset`/`Confirm` and
+`Action`/`Tithe`, in the four black corners of the hexagon's box — which is drawn inside the wheel's
+SVG and so is scaled and cropped along with it. Those plaques are visual-only placeholders for
+future sow and turn-flow work: nothing on this page listens to them, and no compact row touches
+them. The wheel is seated in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over

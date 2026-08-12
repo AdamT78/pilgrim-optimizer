@@ -18,6 +18,7 @@ from tools.ui_debug.render_duty_wheel import (
     ORNAMENT_INSET,
     SPACE_RADIUS,
     TALLY_OFFSET_Y,
+    TURN_CONTROL_DISABLED_OPACITY,
     default_layout_path,
     dummy_acolytes,
     duties_of,
@@ -84,6 +85,51 @@ def interactive_html() -> str:
 def baseline_svg() -> str:
     content = PROTOTYPE_SVG.read_text(encoding="utf-8")
     return content[content.index("<svg") :]
+
+
+def turn_control_overlay(markup: str) -> str:
+    """The turn-control group, from its opening tag to the end of the SVG it is drawn last in."""
+    start = markup.index('<g data-component="duty-wheel-turn-controls"')
+    return markup[start : markup.index("</svg>", start)]
+
+
+def turn_control_plaques(markup: str) -> list[tuple[float, float, float, float]]:
+    """Every plaque the shell draws, as x, y, width, height, without the cube on the counter."""
+    rects = re.findall(
+        r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)" rx=',
+        turn_control_overlay(markup),
+    )
+    return [tuple(float(value) for value in rect) for rect in rects]
+
+
+def rect_corners(rect: tuple[float, float, float, float]) -> list[tuple[float, float]]:
+    x, y, width, height = rect
+    return [(x, y), (x + width, y), (x, y + height), (x + width, y + height)]
+
+
+def hexagon_corners(data: dict) -> list[tuple[float, float]]:
+    """The green hexagon's six points in the SVG's own units, scaling included.
+
+    The board is drawn inside a group the renderer scales about the board's centre, so a point at
+    `p` in the group's units lands at centre + (p - centre) * scale on the canvas.
+    """
+    board = data["board"]
+    scale = board["scale"]
+    cx, cy = board["center"]
+    points = [
+        tuple(float(value) for value in pair.split(","))
+        for pair in re.findall(r"(-?[\d.]+,-?[\d.]+)", board["ground_path"])
+    ]
+    return [(cx + (x - cx) * scale, cy + (y - cy) * scale) for x, y in points]
+
+
+def inside_polygon(polygon: list[tuple[float, float]], point: tuple[float, float]) -> bool:
+    """Whether a point falls inside a convex polygon, edges counting as inside."""
+    turns = [
+        (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])
+        for a, b in zip(polygon, polygon[1:] + polygon[:1], strict=True)
+    ]
+    return all(turn >= 0 for turn in turns) or all(turn <= 0 for turn in turns)
 
 
 def _is_cube(tag: str, body: str) -> bool:
@@ -679,6 +725,111 @@ def test_plain_page_has_no_controls() -> None:
     assert "<button" not in html
     assert "<script>" not in html
     assert "<svg" in html
+
+
+def test_the_corners_stay_empty_until_a_page_asks_for_the_turn_controls() -> None:
+    """A page that was not designed around the shell does not quietly grow one."""
+    data = layout()
+
+    assert "duty-wheel-turn-controls" not in render_duty_wheel_svg(data)
+    assert "duty-wheel-turn-controls" not in render_duty_wheel_svg(data, interactive=True)
+    assert "duty-wheel-turn-controls" not in render_duty_wheel_panel(data)
+    assert "duty-wheel-turn-controls" not in render_duty_wheel_html(data, interactive=True)
+    # The generated page is one of the two that does ask.
+    assert "duty-wheel-turn-controls" in render_duty_wheel_html(
+        data, interactive=True, turn_controls=True
+    )
+
+
+def test_the_shell_names_every_control_a_turn_will_be_driven_from() -> None:
+    """The whole turn is on the board: sow it, see what is in hand, and the four ways it ends."""
+    overlay = turn_control_overlay(render_duty_wheel_svg(layout(), turn_controls=True))
+    controls = re.findall(r'data-turn-control="(\w+)"', overlay)
+    labels = re.findall(r"<text[^>]*>([^<]+)</text>", overlay)
+
+    assert 'data-turn-state="idle"' in overlay
+    assert controls == ["sow", "reset", "confirm", "action", "tithe"]
+    assert labels == ["Sow", "\u00d7 0", "Reset", "Confirm", "Action", "Tithe"]
+    # The counter is a readout rather than a button, so it takes no control name of its own.
+    assert 'data-turn-counter="cubes-in-hand"' in overlay
+    assert 'data-turn-counter-value="0"' in overlay
+
+
+def test_nothing_but_sow_can_be_reached_before_a_turn_has_started() -> None:
+    """Dimmed rather than dropped, so the corners keep their shape as a turn moves through them."""
+    overlay = turn_control_overlay(render_duty_wheel_svg(layout(), turn_controls=True))
+    dimmed = re.findall(r'data-turn-control="(\w+)" data-turn-control-enabled="(\w+)"', overlay)
+
+    assert dimmed == [
+        ("sow", "true"),
+        ("reset", "false"),
+        ("confirm", "false"),
+        ("action", "false"),
+        ("tithe", "false"),
+    ]
+    assert overlay.count('aria-disabled="true"') == 4
+    assert overlay.count(f'opacity="{TURN_CONTROL_DISABLED_OPACITY}"') == 4
+    assert 'data-turn-control="sow" data-turn-control-enabled="true" role="button"' in overlay
+
+
+def test_the_shell_is_a_picture_of_a_turn_and_none_of_its_behaviour() -> None:
+    """This PR asks whether the controls fit, not what they do."""
+    html = render_duty_wheel_html(layout(), interactive=True, turn_controls=True)
+    overlay = turn_control_overlay(html)
+
+    assert "onclick" not in overlay
+    assert "<button" not in overlay
+    for word in ("sow(", "GameState", "legal_actions", "addEventListener"):
+        assert word not in overlay
+    # Nothing on the page reaches for the shell either: there is no turn flow to drive yet.
+    assert "data-turn-control" not in html[html.index("<script>") :]
+
+
+def test_the_plaques_stand_in_the_black_the_hexagon_leaves_in_its_corners() -> None:
+    """The one part of the canvas nothing else uses, and the part the game table crops to.
+
+    A plaque that strayed onto the green would cover a duty tile, an arrow or a tally; one that
+    strayed outside the hexagon's own box would be cut off the side of the board on the table.
+    """
+    data = layout()
+    plaques = turn_control_plaques(render_duty_wheel_svg(data, turn_controls=True))
+    green = hexagon_corners(data)
+    box = (
+        min(x for x, _ in green),
+        min(y for _, y in green),
+        max(x for x, _ in green),
+        max(y for _, y in green),
+    )
+
+    assert len(plaques) == 5 + 1
+    for corner in [point for plaque in plaques for point in rect_corners(plaque)]:
+        assert not inside_polygon(green, corner), corner
+        assert box[0] <= corner[0] <= box[2], corner
+        assert box[1] <= corner[1] <= box[3], corner
+    # And they hang off the four corners of it evenly, rather than drifting toward one side.
+    insets = (
+        min(x for x, _, _, _ in plaques) - box[0],
+        box[2] - max(x + width for x, _, width, _ in plaques),
+        min(y for _, y, _, _ in plaques) - box[1],
+        box[3] - max(y + height for _, y, _, height in plaques),
+    )
+    assert insets[0] == pytest.approx(insets[1], abs=1.0)
+    assert insets[2] == pytest.approx(insets[3], abs=1.0)
+    assert all(inset > 0 for inset in insets)
+
+
+def test_the_shell_is_drawn_on_the_board_rather_than_beside_it() -> None:
+    """It has to travel with the wheel: the game table sizes the wheel by its SVG and crops it."""
+    html = render_duty_wheel_html(layout(), interactive=True, turn_controls=True)
+    board = html[html.index("<svg") : html.index("</svg>")]
+
+    assert "duty-wheel-turn-controls" in board
+    assert html.count("duty-wheel-turn-controls") == 1
+    # Drawn after the board group closes, so the plaques sit above the board in root units and
+    # take none of the scaling the spaces are drawn under.
+    svg = render_duty_wheel_svg(layout(), turn_controls=True)
+    assert svg.index("</g>") < svg.index("duty-wheel-turn-controls")
+    assert svg.rindex("</g>") < svg.rindex("</svg>")
 
 
 def test_rendered_html_wraps_the_board_and_explains_what_it_is_not() -> None:

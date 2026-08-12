@@ -165,6 +165,18 @@ def scale():
     return content, hexes, cubes, solve_table_scale(content, hexes, cubes)
 
 
+def _turn_control_plaques(markup: str) -> list[tuple[float, float, float, float]]:
+    """Every plaque the wheel's turn-control shell draws, as x, y, width, height."""
+    start = markup.index('<g data-component="duty-wheel-turn-controls"')
+    overlay = markup[start : markup.index("</svg>", start)]
+    return [
+        tuple(float(value) for value in rect)
+        for rect in re.findall(
+            r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)" rx=', overlay
+        )
+    ]
+
+
 def _block(page: str, class_name: str) -> str:
     """One `<div class="...">` and its contents, nested divs included."""
     match = re.search(rf'<div\b[^>]*\bclass="{re.escape(class_name)}"[^>]*>', page)
@@ -1071,6 +1083,48 @@ def test_the_merchant_walks_the_ring_and_never_stands_in_the_city(page: str) -> 
     assert "state.merchant = path[(path.indexOf(state.merchant) + 1) % path.length];" in page
     assert "merchantAdvance.addEventListener('click', advanceMerchant);" in page
     assert "show(token, token.getAttribute('data-duty-position') === state.merchant);" in page
+
+
+def test_the_wheel_brings_its_turn_controls_onto_the_table(page: str) -> None:
+    """The table is the page the shell was designed for, so it asks for it by name."""
+    action = _block(page, "panel p-action")
+
+    assert 'data-component="duty-wheel-turn-controls"' in action
+    assert 'data-turn-state="idle"' in action
+    assert re.findall(r'data-turn-control="(\w+)"', action) == [
+        "sow",
+        "reset",
+        "confirm",
+        "action",
+        "tithe",
+    ]
+    assert 'data-turn-counter="cubes-in-hand"' in action
+    assert 'data-turn-counter-value="0"' in action
+    # A shell and nothing behind it: no compact row reaches for any of it yet.
+    assert "data-turn-control" not in page[page.index("<script>") :]
+
+
+def test_the_turn_plaques_survive_the_crop_the_table_takes_of_the_wheel(page: str, scale) -> None:
+    """The table points the wheel's viewBox at its hexagon, so a plaque outside that box is gone.
+
+    This is the question the shell was built to answer: the corners it stands in belong to the
+    hexagon's own box, which is what gets cropped to, so the plaques are carried onto the table at
+    the wheel's scale rather than being cut off the side of it.
+    """
+    left, top, width, height = scale[3].crop["action"]
+    # The cube the wheel draws, in the units the crop is written in.
+    cube = DUTY_CUBE_SIZE * load_duty_wheel_layout()["board"]["scale"]
+    plaques = _turn_control_plaques(_block(page, "panel p-action"))
+
+    assert len(plaques) == 6
+    for x, y, plaque_width, plaque_height in plaques:
+        assert left <= x and x + plaque_width <= left + width
+        assert top <= y and y + plaque_height <= top + height
+    # And they keep clear of the edge rather than sitting on the cut.
+    assert min(x for x, _, _, _ in plaques) - left > cube
+    assert left + width - max(x + plaque_width for x, _, plaque_width, _ in plaques) > cube
+    assert min(y for _, y, _, _ in plaques) - top > cube
+    assert top + height - max(y + plaque_height for _, y, _, plaque_height in plaques) > cube
 
 
 # ---------------------------------------------------------------------------------------------

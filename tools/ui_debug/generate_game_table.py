@@ -1644,7 +1644,9 @@ def render_game_table_html(
     # Merchant slot drawn hidden, so a click flips opacity rather than redrawing the board.
     duty_seated = duty_wheel_seating(duty_wheel_layout)
     duty_svg = crop_svg(
-        regularise_duty_hexagon(render_duty_wheel_svg(duty_seated, interactive=True), hexagon),
+        regularise_duty_hexagon(
+            render_duty_wheel_svg(duty_seated, interactive=True, turn_controls=True), hexagon
+        ),
         scale.crop["action"],
     )
     panels = []
