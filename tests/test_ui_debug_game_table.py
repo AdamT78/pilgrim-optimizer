@@ -1523,24 +1523,75 @@ def test_an_empty_hand_leaves_the_duties_the_sow_reached_to_be_picked_from(page:
     assert "armDutyChoices(!state.setup.on);" in complete
 
 
-def test_the_duties_on_offer_are_the_ones_the_sow_put_a_cube_on(page: str) -> None:
-    """Read off the way the hand walked, not off what happens to be standing on the board.
+def test_the_duties_on_offer_are_the_ones_the_seat_is_standing_on(page: str) -> None:
+    """Read off the board, not off the way the hand walked.
 
-    A seat's cubes were already sitting on half the wheel before the turn began, and asking which
-    tiles it has a cube on would offer all of those too. What the walk did is the whole of it: the
-    route is where a cube went down, minus the space it started from, which is where they came up.
+    A seat has acolytes out on the wheel before its turn begins, and those are as much its own as
+    the ones it has just sown; asking where the walk went would offer it the tiles it happened to
+    pass and hide the rest of its own. So the question is which tiles it has a cube standing on --
+    which is the same question the hand asks before it picks anything up, and asking it the same
+    way is what leaves the other three kinds of cube out of the choice without naming any of them.
     """
-    positions = page[page.index("function sownDutyPositions()") :]
+    positions = page[page.index("function occupiedDutyPositions()") :]
     positions = positions[: positions.index("\n  }\n")]
 
-    assert "state.turn.route.slice(1).filter(function (position, index, walked) {" in positions
-    assert "walked.indexOf(position) === index" in positions
+    assert "visibleActivePlayerCubesForPosition(position).length > 0" in positions
+    assert "space.getAttribute('data-board-position');" in positions
+    # And no reading of where the walk went is left anywhere near the choice.
+    assert "state.turn.route" not in positions
+    assert "state.turn.sown" not in positions
+    assert "data-duty-category" not in positions
+    assert "sownDutyPositions" not in page
     # The City is not a duty. It is asked for by the one thing that sets it apart on this board.
     assert "position !== cityPosition" in positions
     assert "if (!space.hasAttribute('data-duty-ring-index')) {" in page
     assert "cityPosition = space.getAttribute('data-board-position');" in page
     assert re.findall(r'data-board-position="city"[^>]*data-duty-ring-index', page) == []
     assert len(re.findall(r'<g data-duty="\w+"[^>]*data-duty-ring-index="\d"', page)) == 8
+
+
+def test_only_the_seats_own_standing_cubes_put_a_tile_on_offer(page: str) -> None:
+    """Which is not a rule written here: it is the one helper the hand already picks up by.
+
+    A tile holding only another seat's cubes, only the neutral column's black ones, or only slots
+    nobody is standing in is a tile this seat has none of its own standing on, and none of those
+    three had to be named to be left out. What is asked is who the cube belongs to and whether it
+    is showing, and the wheel draws a seat's empty slots hidden rather than not at all.
+    """
+    cubes = page[page.index("function visibleActivePlayerCubesForPosition(position)") :]
+    cubes = cubes[: cubes.index("\n  }\n")]
+    column = page[page.index("function columnForPosition(position, playerId)") :]
+    column = column[: column.index("\n  }\n")]
+
+    assert "columnForPosition(position, activePlayerId())" in cubes
+    assert "cube.getAttribute('opacity') !== '0'" in cubes
+    assert "cube.getAttribute('data-player') === playerId" in column
+    # The tally the table is playing, so a hidden count's cubes are nobody's to be offered either.
+    assert "activeTallyForPosition(position)" in column
+
+
+def test_a_taken_duty_sends_home_everything_of_the_seats_that_is_standing_there(
+    page: str,
+) -> None:
+    """Not only what this turn put there, now that a tile it never reached can be the one chosen.
+
+    Which needs nothing said: the recall asks the same question the offer did, and remembers each
+    cube by what it was showing rather than by how it came to be there, so a cube that was standing
+    on that tile before the turn began goes home with the rest and comes back with them.
+    """
+    resolve = page[page.index("function resolveDuty(resolution)") :]
+    resolve = resolve[: resolve.index("\n  }\n")]
+    undo = page[page.index("function undoRecall()") :]
+    undo = undo[: undo.index("\n  }\n")]
+
+    sends_home = "visibleActivePlayerCubesForPosition(state.turn.duty).forEach(function (cube) {"
+    assert sends_home in resolve
+    assert "state.turn.recalled = hideCubes(sent);" in resolve
+    for untouched in ("state.turn.route", "state.turn.sown", "state.turn.pickedUp"):
+        assert untouched not in resolve, untouched
+    # Every cube it hid is a cube it can put back exactly as it found it, whenever it got there.
+    assert "restoreCubes(state.turn.recalled);" in undo
+    assert "state.turn.standingInCity.forEach(function (slot) {" in undo
 
 
 def test_a_duty_can_be_picked_and_picked_again_before_it_is_taken(page: str) -> None:

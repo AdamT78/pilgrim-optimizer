@@ -1327,18 +1327,28 @@ def render_turn_flow_script() -> str:
     armDutyChoices(!state.setup.on);
   }
 
-  /* The duties a finished sow leaves standing to be picked from: the positions it put a cube on,
-     less the City, which is not a duty. It is read off the way the hand walked rather than off
-     what is standing on the board, so cubes that were already there before the turn began -- this
-     seat's, another seat's, or the neutral column's -- are no part of the choice. */
-  function sownDutyPositions() {
-    return state.turn.route.slice(1).filter(function (position, index, walked) {
-      return position !== cityPosition && walked.indexOf(position) === index;
-    });
+  /* The duties a finished sow leaves standing to be picked from: every tile the seat has an
+     acolyte standing on, less the City, which is not a duty.
+
+     It is read off the board rather than off the way the hand walked. A seat has acolytes out on
+     the wheel before its turn begins and they are as much its own as the ones it has just sown, so
+     asking where the walk went would offer it only the tiles it happened to pass and hide the rest
+     of its own. Asking the board is also the whole of what makes the other three kinds of cube no
+     part of the choice: another seat's, the neutral column's, and the slots nobody is standing in
+     -- drawn but hidden, so not visible -- are none of them this seat's visible cubes. */
+  function occupiedDutyPositions() {
+    return Array.prototype.map
+      .call(dutySpaces, function (space) {
+        return space.getAttribute('data-board-position');
+      })
+      .filter(function (position) {
+        return position !== cityPosition
+          && visibleActivePlayerCubesForPosition(position).length > 0;
+      });
   }
 
   function armDutyChoices(armed) {
-    var eligible = armed ? sownDutyPositions() : [];
+    var eligible = armed ? occupiedDutyPositions() : [];
     Array.prototype.forEach.call(dutySpaces, function (space) {
       if (eligible.indexOf(space.getAttribute('data-board-position')) === -1) {
         space.removeAttribute('data-turn-duty-candidate');
@@ -1366,8 +1376,8 @@ def render_turn_flow_script() -> str:
   }
 
   /* What may be picked is what is on offer, and what is on offer is what `armDutyChoices` marked:
-     the tiles the sow reached, from when the hand empties until one of them is taken. Nothing is
-     ever marked during a setup sow, so nothing can be picked during one either. */
+     the tiles the seat is standing on, from when the hand empties until one of them is taken.
+     Nothing is ever marked during a setup sow, so nothing can be picked during one either. */
   function selectDuty(position) {
     var space = spaceAt(position);
     if (!space || space.getAttribute('data-turn-duty-candidate') !== 'true') {
