@@ -82,13 +82,19 @@ LABEL_FONT_SIZE = 15.5
 CUBE_SIZE = 13.0
 CUBE_CELL_HEIGHT = 18.0
 CUBE_COLUMN_WIDTH = 22.0
-CUBE_STACK_LIMIT = 3
 TALLY_OFFSET_Y = 19.0
 
-# The City stacks a seat's whole holding rather than a duty tile's handful, so its columns are
-# taller than a tile's and stand lower in the space to make room. This is the room a column has
-# rather than what stands in it: an interactive board draws all six and hides the ones nothing is
-# standing on, so a page can send a cube to the City by turning one on.
+# How tall a column can stand. These are the room a column has rather than what is standing in it:
+# an interactive board draws every slot and hides the empty ones, so a page can put a cube on a
+# space by turning one on rather than by drawing into the wheel.
+#
+# A tile's three are what fits between its baseline and its title -- a fourth would be drawn across
+# the words -- and the room under the title is all the room there is, since the Tithe capsule takes
+# the space below the baseline. The engine caps nothing, so a seat can hold more acolytes on a
+# position than a tile can show; a page that puts cubes on the board has to stop when a column is
+# full rather than draw over the title. The City stacks a seat's whole holding rather than a tile's
+# handful, so its columns are taller and stand lower in the space to make room for it.
+TILE_STACK_HEIGHT = 3
 CITY_STACK_HEIGHT = 6
 
 # Tithe capsule: a stadium under the title, its left cap holding the Tithe token icon and its
@@ -334,7 +340,20 @@ def cubes_standing(layout: dict, duty: dict, piece: dict, counts: dict, count: i
         return int(seeded.get(duty["id"], 0))
     if duty["id"] == layout["city_id"]:
         return int(layout["city_sample_cubes_per_seat"])
-    return min(int(counts.get(piece["id"], 0)), CUBE_STACK_LIMIT)
+    return min(int(counts.get(piece["id"], 0)), TILE_STACK_HEIGHT)
+
+
+def column_room(layout: dict, duty: dict, piece: dict, interactive: bool) -> int | None:
+    """How many slots a column draws, or `None` when it only draws what is standing in it.
+
+    A board that is going to be clicked draws every slot a seat could stand in and hides the empty
+    ones, so a page can put a cube on a space by turning one on rather than by drawing into the
+    wheel. The neutral column gets none of this: no seat plays those cubes, so nothing will ever
+    arrive there. A board that is only being looked at draws the cubes and stops.
+    """
+    if not interactive or piece["id"] == layout["dummy_acolytes"]["id"]:
+        return None
+    return CITY_STACK_HEIGHT if duty["id"] == layout["city_id"] else TILE_STACK_HEIGHT
 
 
 def merchant_path(layout: dict) -> list[str]:
@@ -424,9 +443,9 @@ def render_cube_tally(
     rather than off to the left. On a duty tile the seats are followed by the neutral column when
     the table plays with one. The City's stacks are taller, so they stand lower in their space.
 
-    An interactive City draws every cube its columns have room for and hides the ones nothing is
-    standing on, in the same way the boards draw every slot a cube can stand in: a page can then
-    send a cube here by turning one on rather than by drawing into the wheel.
+    An interactive board draws every slot a seat's column has room for and hides the ones nothing
+    is standing on, in the same way the boards draw every slot a cube can stand in: a page can then
+    put a cube on a space by turning one on rather than by drawing into the wheel.
     """
     _, cy = duty["center"]
     seats = count or layout["default_player_count"]
@@ -445,13 +464,16 @@ def render_cube_tally(
     city_slots = is_city and interactive
     for piece, column in zip(pieces, columns, strict=True):
         standing = cubes_standing(layout, duty, piece, counts, seats)
-        for index in range(CITY_STACK_HEIGHT if city_slots else standing):
+        room = column_room(layout, duty, piece, interactive)
+        for index in range(standing if room is None else room):
             y = baseline - (index + 1) * CUBE_CELL_HEIGHT + (CUBE_CELL_HEIGHT - CUBE_SIZE) / 2
-            slot = (
+            city_hooks = (
                 f' data-city-column-player="{piece["id"]}" data-city-cube="{index}"'
-                f' opacity="{1 if index < standing else 0:g}"'
                 if city_slots
                 else ""
+            )
+            slot = (
+                "" if room is None else f'{city_hooks} opacity="{1 if index < standing else 0:g}"'
             )
             parts.append(
                 f'<rect x="{column["x"]:.1f}" y="{y:.1f}" width="{CUBE_SIZE:g}"'

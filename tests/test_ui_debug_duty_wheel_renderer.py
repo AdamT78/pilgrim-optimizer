@@ -21,6 +21,7 @@ from tools.ui_debug.render_duty_wheel import (
     RING_ARROW_COUNT,
     SPACE_RADIUS,
     TALLY_OFFSET_Y,
+    TILE_STACK_HEIGHT,
     TURN_CONTROL_DISABLED_OPACITY,
     board_edges,
     board_position_of,
@@ -107,6 +108,35 @@ def interactive_html() -> str:
 def baseline_svg() -> str:
     content = PROTOTYPE_SVG.read_text(encoding="utf-8")
     return content[content.index("<svg") :]
+
+
+def _tally_of(markup: str, position: str, count: int | None = None) -> str:
+    """One space's cube tally: the group drawn for a player count, or the only one a plain board
+    draws."""
+    opening = f'data-cube-tally="{position}"'
+    if count is not None:
+        opening += f' data-player-count="{count}"'
+    start = markup.index(opening)
+    return markup[start : markup.index("</g>", start)]
+
+
+def _boxes(tally: str, standing_only: bool = False) -> list[tuple[float, float]]:
+    """Where each of a tally's cubes is drawn, optionally only the ones standing."""
+    return [
+        (float(rect["x"]), float(rect["y"]))
+        for rect in re.finditer(r'<rect x="(?P<x>[\d.]+)" y="(?P<y>[\d.]+)"[^>]*?/>', tally)
+        if not (standing_only and 'opacity="0"' in rect.group(0))
+    ]
+
+
+def _cubes(tally: str) -> list[tuple[str, str | None]]:
+    """Every cube a tally draws: whose it is, and what it is showing where that is said at all."""
+    return [
+        (found["player"], found["opacity"])
+        for found in re.finditer(
+            r'data-player="(?P<player>\w+)"(?:[^/>]*?opacity="(?P<opacity>\d)")?', tally
+        )
+    ]
 
 
 def turn_control_overlay(markup: str) -> str:
@@ -545,16 +575,64 @@ def test_the_city_holds_six_cubes_a_seat_and_opens_holding_two() -> None:
     ] * (CITY_STACK_HEIGHT - 1)
 
 
-def test_only_the_city_draws_the_spaces_nothing_stands_in() -> None:
-    """A duty tile's tally is what is on it; the City's is what it can hold."""
+def test_a_tile_draws_the_three_cubes_it_has_room_for_and_stands_what_it_stood_before() -> None:
+    """The room a tile has, not what is on it: the empty slots are where a sown cube can arrive.
+
+    Three is what fits between the baseline the cubes have always stood on and the title above
+    them -- a fourth would be drawn across the words, and the Tithe capsule has the space below --
+    so a column is drawn out to its room and no further. The cubes are the size and the pitch they
+    are everywhere else on the wheel; the only new thing is the slots nothing is standing in.
+    """
+    data = layout()
+    slotted = _tally_of(render_duty_wheel_svg(data, interactive=True), "produce", count=4)
+
+    assert TILE_STACK_HEIGHT == 3
+    assert Counter(player for player, _ in _cubes(slotted)) == {
+        player: TILE_STACK_HEIGHT for player in PLAYER_FILLS
+    }
+    # A tile is not a City column, and keeps the City's hooks off it.
+    assert "data-city-cube" not in slotted
+    assert "data-city-capacity" not in slotted
+
+    # Nothing that was showing before there were slots to hide has changed: the same seats stand
+    # the same cubes, in the same boxes, at the same pitch.
+    plain = _tally_of(generated_svg(), "produce")
+    seated = _tally_of(render_duty_wheel_svg(data, interactive=True), "produce", count=2)
+    assert Counter(player for player, showing in _cubes(seated) if showing != "0") == Counter(
+        player for player, _ in _cubes(plain)
+    )
+    assert _boxes(seated, standing_only=True) == _boxes(plain)
+    assert set(re.findall(r'<rect [^>]*?width="([\d.]+)"', slotted)) == {f"{CUBE_SIZE:g}"}
+    column = sorted(y for x, y in _boxes(slotted) if x == _boxes(slotted)[0][0])
+    assert [b - a for a, b in zip(column, column[1:], strict=False)] == [
+        pytest.approx(CUBE_CELL_HEIGHT)
+    ] * (TILE_STACK_HEIGHT - 1)
+
+
+def test_a_column_is_only_given_room_where_a_cube_could_arrive() -> None:
+    """The neutral column gets none: no seat plays those cubes, so none will ever be put there.
+
+    Nor does a board that is only being looked at. Drawing the empty slots is what makes a board
+    clickable -- a page stands a cube on a space by turning one on, rather than by drawing into the
+    wheel -- and a page with no clicks in it has nothing to turn on.
+    """
     data = layout()
     svg = render_duty_wheel_svg(data, interactive=True)
-    produce = svg[svg.index('data-cube-tally="produce" data-player-count="4"') :]
+    dummy = data["dummy_acolytes"]["id"]
 
-    assert "data-city-cube" not in produce[: produce.index("</g>")]
-    assert "data-city-capacity" not in produce[: produce.index("</g>")]
-    # And a plain board draws no empty spaces at all, City included.
-    assert "data-city-cube" not in generated_svg()
+    for position, standing in data["dummy_acolytes"]["sample_cubes"]["2"].items():
+        drawn = [
+            showing
+            for player, showing in _cubes(_tally_of(svg, position, count=2))
+            if player == dummy
+        ]
+        assert drawn == [None] * standing, position
+    # And a plain board draws no empty slot at all, tile or City: every cube on it is standing.
+    plain = generated_svg()
+    for position in [data["city_id"], *data["clockwise_order"]]:
+        showing = [showing for _, showing in _cubes(_tally_of(plain, position))]
+        assert showing and set(showing) == {None}, position
+    assert "data-city-cube" not in plain
 
 
 def test_sample_setups_start_from_the_layout_and_then_turn_the_tiles() -> None:

@@ -1133,12 +1133,11 @@ def test_the_turn_plaques_survive_the_crop_the_table_takes_of_the_wheel(page: st
 # ---------------------------------------------------------------------------------------------
 
 
-def test_a_turn_is_four_phases_and_the_clicks_that_move_between_them(page: str) -> None:
-    """Sow arms the board, a space is picked, and a space with a choice waits for one."""
+def test_a_turn_is_five_phases_and_the_clicks_that_move_between_them(page: str) -> None:
+    """Sow arms the board, a space is picked, the hand walks, and a fork waits to be told."""
     assert "phase: 'idle'," in page
-    assert "setTurnPhase('sow_armed');" in page
-    assert "setTurnPhase('start_selected');" in page
-    assert "setTurnPhase('branch_choice');" in page
+    for phase in ("sow_armed", "sowing", "branch_choice", "sow_complete"):
+        assert f"setTurnPhase('{phase}');" in page, phase
     assert "turnOverlay.setAttribute('data-turn-state', phase);" in page
     # Each click only acts from the phase it belongs to, so a stray one changes nothing.
     for opening, phase in (
@@ -1313,17 +1312,24 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
     reset = reset[: reset.index("\n  }")]
 
     for step in (
+        "resetSownCubes();",
         "restorePickupCubes();",
         "setCubesInHand(0);",
         "armStartSpaces(false);",
         "markStartSpace(null);",
         "clearBranchChoices();",
         "state.turn.start = null;",
+        "state.turn.current = null;",
+        "state.turn.route = [];",
         "state.turn.routeChoice = null;",
         "turnOverlay.removeAttribute('data-last-route-choice');",
+        "turnOverlay.removeAttribute('data-turn-current-position');",
+        "turnOverlay.removeAttribute('data-turn-route');",
         "setTurnPhase('idle');",
     ):
         assert step in reset, step
+    # A cube can be sown into the slot it was picked up from, so the pickup has the last word.
+    assert reset.index("resetSownCubes();") < reset.index("restorePickupCubes();")
 
 
 def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
@@ -1349,7 +1355,8 @@ def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
     assert "dutyPanel.querySelectorAll('[data-from-position][data-to-position]')" in page
     assert "var from = arrow.getAttribute('data-from-position');" in page
     assert "return outgoingEdgesByPosition[position] || [];" in page
-    assert "if (branches.length > 1) {" in page
+    assert "var ways = branchArrowsFrom(state.turn.current);" in page
+    assert "if (ways.length > 1) {" in page
     assert "arrow.setAttribute('data-turn-branch-choice', 'true');" in page
 
 
@@ -1372,21 +1379,98 @@ def test_turning_the_tiles_moves_a_duty_and_never_a_position(page: str) -> None:
     assert page.count("setAttribute('data-duty-category'") == 1
 
 
-def test_taking_a_road_is_recorded_and_no_cube_moves(page: str) -> None:
-    """Where the cubes go is the next PR's to say: this one only remembers which way was asked."""
-    choose = page[page.index("function chooseRoute(arrow)") :]
-    choose = choose[: choose.index("\n  }")]
+def test_taking_a_road_puts_a_cube_down_and_walks_on(page: str) -> None:
+    """The answer to a fork is one cube at the far end of the arrow, and then the walk resumes.
 
+    The arrow has to be one of the ways out of where the hand is actually standing: a click on a
+    green arrow left over anywhere else would sow from a position the hand had already left.
+    """
+    choose = page[page.index("function chooseRoute(arrow)") :]
+    choose = choose[: choose.index("\n  }\n")]
+
+    assert "if (arrow.getAttribute('data-from-position') !== state.turn.current) {" in choose
     assert (
         "arrow.getAttribute('data-from-position') + ':' + arrow.getAttribute('data-to-position');"
         in choose
     )
     assert "turnOverlay.setAttribute('data-last-route-choice', state.turn.routeChoice);" in choose
     assert "clearBranchChoices();" in choose
-    assert "setTurnPhase('start_selected');" in choose
-    # The counter is untouched by a road being taken, and nothing is sown.
-    assert "setCubesInHand" not in choose
+    assert "if (sowAlong(arrow)) {\n      continueSowing();\n    }" in choose
     assert "if (arrow.getAttribute('data-turn-branch-choice') === 'true') {" in page
+
+
+def test_the_hand_walks_the_forced_ways_and_stops_only_at_a_fork(page: str) -> None:
+    """One way out is not a choice, so the walk never asks about it; two are, so it waits.
+
+    Nothing lists the forks. The hand puts a cube down and looks at how many arrows leave where it
+    now stands, which is the same question `configs/board.json` answers, and it keeps answering it
+    the same way however the tiles are turned.
+    """
+    sowing = page[page.index("function continueSowing()") :]
+    sowing = sowing[: sowing.index("\n  }\n")]
+
+    assert "while (state.turn.cubesInHand > 0) {" in sowing
+    assert "highlightBranchChoices(ways);\n        setTurnPhase('branch_choice');" in sowing
+    assert "if (!ways.length || !sowAlong(ways[0])) {\n        return;\n      }" in sowing
+    assert sowing.rstrip().endswith("completeSowing();")
+    # The start is picked up and then walked from, in that order.
+    select = page[page.index("function selectStartSpace(position)") :]
+    select = select[: select.index("\n  }\n")]
+    assert select.index("hidePickupCubes(cubes);") < select.index("setCurrentPosition(position);")
+    assert select.rstrip().endswith("continueSowing();")
+
+
+def test_a_cube_is_put_down_by_standing_it_in_an_empty_slot(page: str) -> None:
+    """The reverse of a pickup, and the reason the wheel draws slots nothing is standing in.
+
+    Nothing is drawn into the board and nothing is cut out of it, so a turn is a set of opacities
+    to put back. A cube can even be sown into the slot it was lifted out of, which is why Reset
+    puts the sown cubes away before it puts the picked-up ones back.
+    """
+    empty = page[page.index("function firstEmptySlotForPosition(position)") :]
+    empty = empty[: empty.index("\n  }\n")]
+
+    assert "var playerId = activePlayerId();" in empty
+    assert "return cube.getAttribute('data-player') === playerId\n" in empty
+    assert "&& cube.getAttribute('opacity') === '0';" in empty
+    assert "slot.setAttribute('opacity', '1');" in page
+    assert "state.turn.sown.push(slot);" in page
+    assert "setCubesInHand(state.turn.cubesInHand - 1);" in page
+    assert "slot.setAttribute('opacity', '0');" in page
+    assert "state.turn.sown = [];" in page
+
+
+def test_a_column_with_no_room_stops_the_walk_where_it_stands(page: str) -> None:
+    """A tile shows a seat three cubes and the rules cap nothing, so a column can fill up.
+
+    The hand keeps what it is still holding and the counter goes on showing it, which is the whole
+    of the signal: there is nowhere to put the next one. Reset is the way out, and it is lit,
+    because the turn is not over.
+    """
+    place = page[page.index("function placeOneCubeAtPosition(position)") :]
+    place = place[: place.index("\n  }\n")]
+
+    assert "if (!slot) {\n      return false;\n    }" in place
+    # A stopped walk is still a sow: the counter keeps its cubes and Reset stays lit.
+    assert "var started = state.turn.phase !== 'idle';" in page
+    assert "setTurnControlState('reset', started, false);" in page
+    sowing = page[page.index("function continueSowing()") :]
+    assert "setCubesInHand(0)" not in sowing[: sowing.index("\n  }\n")]
+
+
+def test_an_empty_hand_is_the_end_of_the_sowing_and_not_of_anything_else(page: str) -> None:
+    """The green goes out and the board says so, and that is as far as this page goes.
+
+    Which duty was landed on, what it does, whose turn is next: all of that is still to come, so
+    the three plaques that would do it stay dimmed and unwired.
+    """
+    complete = page[page.index("function completeSowing()") :]
+    complete = complete[: complete.index("\n  }\n")]
+
+    assert "clearBranchChoices();" in complete
+    assert "setTurnPhase('sow_complete');" in complete
+    for deferred in ("confirm", "action", "tithe", "duty", "advance"):
+        assert deferred not in complete, deferred
 
 
 def test_a_phase_only_ever_sets_a_word_on_the_board(page: str) -> None:
