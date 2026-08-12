@@ -650,11 +650,34 @@ script is one IIFE that reaches for those hooks and nothing else on the host pag
 Asked for `turn_controls`, the wheel also draws a visual-only shell of the turn flow to come, as
 four plaques in the black corners the green hexagon leaves: `Sow` at the top left, a cubes-in-hand
 counter at the top right, `Reset` and `Confirm` at the bottom left, and `Action` and `Tithe` at the
-bottom right. It is a picture and nothing else — nothing is clickable, nothing is counted, no
-GameState is touched, and only `Sow` is drawn as reachable, the rest dimmed to
+bottom right. The renderer draws a picture and nothing else — nothing here is clickable, nothing is
+counted, no GameState is touched, and only `Sow` is drawn as reachable, the rest dimmed to
 `TURN_CONTROL_DISABLED_OPACITY`. `data-component="duty-wheel-turn-controls"`, `data-turn-state`,
-`data-turn-control` and `data-turn-counter` are the handles the turn flow will take hold of when
-there is one.
+`data-turn-control` and `data-turn-counter` are the handles a page takes hold of to drive it, and
+the game table is the page that does.
+
+Movement on this wheel is keyed to **board positions**, not to the names printed on the tiles. A
+board position is where a space stands — `city`, `north`, `north_east` and the rest — and the
+renderer reads both the names and the directed edges between them out of the engine's own
+`configs/board.json` rather than keeping a copy. A **duty category** is the tile lying on a
+position, and turning the tiles moves categories around while moving no position at all. So every
+space carries three names: `data-duty`, the prototype's stable id for the space and no use for
+saying where a cube may go; `data-board-position` with `data-board-position-index`, which is what
+movement means; and `data-duty-category`, the tile there now, which is the one a roll rewrites.
+The wheel's own ids are the prototype's default arrangement, so `clerical` is the space Clerical
+happened to start on — the east one — and reading it as a duty is exactly the mistake this split
+exists to prevent.
+
+Every arrow carries the pair of positions it runs between, as `data-from-position` and
+`data-to-position`, each with its board index beside it. The middle four are named in the layout;
+the ring's eight are one shape turned around the board, so which pair each stands between is worked
+out from how far it has been turned — `ring_arrow_ends()` — and then said in the engine's terms.
+One question answers both families, which is how a page finds the ways out of a position without
+counting elements or trusting their order, and a test holds the drawn edge set to `board.json` edge
+for edge. The City, east and west turn out to be the only three positions with more than one arrow
+leaving them, and nothing had to be written down to say so. Kogge, which adds a first step from the
+City to east or west, and Cloisters, which drops one placement from a route, are graph modifiers
+the engine applies on top of these edges; neither is drawn here.
 
 Two things decide where the plaques stand. They are drawn inside the SVG rather than beside it,
 because the composed table sizes the wheel by its SVG and a control outside it would neither scale
@@ -1146,9 +1169,48 @@ Cubes walked into the City stay where they were put when the count changes, sinc
 picks which of the wheel's tallies shows and a column is redrawn in all three. The wheel here also
 carries its turn-control shell — `Sow`, the cubes-in-hand counter, `Reset`/`Confirm` and
 `Action`/`Tithe`, in the four black corners of the hexagon's box — which is drawn inside the wheel's
-SVG and so is scaled and cropped along with it. Those plaques are visual-only placeholders for
-future sow and turn-flow work: nothing on this page listens to them, and no compact row touches
-them. The wheel is seated in this page's own order — red,
+SVG and so is scaled and cropped along with it.
+
+Two of those plaques are wired here, as the shape of a turn drawn on the board. `Sow` arms the nine
+spaces: each is outlined in cream and takes a click, the eight duty tiles and the City alike.
+Clicking one lifts the active seat's cubes there into the counter in the corner — `■ × N` — outlines
+the space in the colour of the seat the turn belongs to, and, if more than one arrow leaves it, turns
+those arrows green and waits for one to be clicked. Clicking a green arrow records which way was
+asked for, in `data-last-route-choice`, and puts the arrows out. `Reset` hands the board straight
+back. The phases are `idle`, `sow_armed`, `start_selected` and `branch_choice`, carried on
+`data-turn-state`, and the styling all hangs off attributes — `data-turn-start-candidate`,
+`data-turn-start-selected`, `data-turn-branch-choice`, `data-turn-control-enabled` and
+`data-turn-control-active` — so a click sets a word and the stylesheet does the rest.
+
+All of it moves in board positions. A click hands on `data-board-position`, the cubes to pick up
+are the ones showing inside that space, and the ways out are the arrows whose `data-from-position`
+is that position, gathered once into `outgoingEdgesByPosition`. A route choice is recorded as
+`city:north`, not as the tiles that happen to be at either end. So `R` can turn the duty tiles as
+often as it likes — rewriting each space's title, Tithe token and `data-duty-category` — and the
+board still branches at the City, east and west, because a roll moves duties between positions and
+never moves a position. Sowing the cubes, walking the route and the Kogge and Cloisters modifiers
+that would change these edges are all still to come.
+
+A hand picks up its own cubes and nothing else. The turn belongs to a seat — seat 1, red, ringed in
+its own colour on the stage as `data-active-player-seat` and `data-active-player-color`, and on its
+board as `data-active-seat` — and the player that seat is is asked of the board itself rather than
+worked out, since seat order and player ids are not the same list: the first seat is red, and red is
+`player_two`. So clicking a space takes only the cubes there whose `data-player` is the active
+seat's. The other seats' cubes stay standing, the neutral column's black ones are nobody's to take,
+and the City slots nobody is standing in are hidden and so never counted. A space showing none of
+that seat's cubes is nothing to start from: the click is spent, the board stays armed, and the next
+one still works. Turn order and turn advancement are still to come, so the active seat only ever
+moves when a count change leaves it with no board to sit at.
+
+A cube is picked up rather than taken away: what each one was showing is remembered, so `Reset`
+cannot stand a seat in a City slot it never held, and only the cubes that hand lifted are put back.
+The flow reads the tally the table is currently
+playing and touches nothing the compact rows keep, which is why a count change simply puts a turn
+down first — `applyPlayerCount` calls `resetTurnFlow` before anything else, as do `A->C` and
+`V->C`, since both redraw a City column a turn may be holding cubes out of. `Confirm`, `Action` and
+`Tithe` stay dimmed and unwired. Sowing the cubes, walking the route, resolving an action and
+anything at all to do with `GameState` are still to come; this page moves no cube and knows no
+rules. The wheel is seated in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over

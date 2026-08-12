@@ -16,6 +16,15 @@ Two pieces of the picture are named here so a later renderer does not have to gu
   names (Taxation, for the debug page);
 - the resource icons in the capsules are **Tithe tokens**.
 
+Two more things are named because movement depends on telling them apart. A **board position** is
+where a space stands — `city`, `north`, `north_east` and the rest, as `configs/board.json` names
+and orders them — and a **duty category** is the tile lying on it. Turning the tiles moves the
+categories around and moves no position at all, so the arrows and anything that walks them are
+keyed to positions: every space carries `data-board-position`, and every arrow the pair of
+positions it joins. This board's own ids — `clerical`, `construct` and the rest — are the
+prototype's default arrangement of the tiles, kept as stable names for the spaces and no use at all
+for saying where a cube may go.
+
 Asked for `turn_controls`, the board also carries a shell of the turn flow to come: small plaques
 standing in the four black corners the green hexagon leaves — Sow, what is in hand, Reset and
 Confirm, Action and Tithe. They are a picture and nothing else. Nothing is clickable, nothing is
@@ -47,6 +56,15 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 LAYOUT_FILENAME = "duty_wheel_layout.json"
+
+# The engine's board, read rather than copied. `configs/board.json` names the nine positions and
+# the directed edges between them, and both are what movement on this wheel means: a space's
+# position is where it stands, and the arrows drawn between spaces are those edges. The wheel's own
+# ids -- `clerical`, `construct` and the rest -- are the prototype's default arrangement of the
+# tiles and say nothing about movement, because a tile can be turned round the ring and a position
+# cannot. Only the two data files are read here; no rules code is imported, and the Kogge and
+# Cloisters modifiers that add or skip edges are not part of this graph.
+BOARD_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "board.json"
 
 # One space: a flat top with a round bottom, the arc centre acting as its anchor.
 SPACE_RADIUS = 101.5
@@ -126,6 +144,8 @@ TURN_COUNTER_CUBE_SIZE = 16.0
 TURN_COUNTER_CUBE_FILL = "#B9B2A2"
 TURN_COUNTER_GAP = 8.0
 TURN_COUNTER_IDLE_VALUE = 0
+# `x` and a space and two figures, which is more cubes than any space on the board can hold.
+TURN_COUNTER_WIDEST_LABEL = 4
 
 # How far the movable duty tiles are turned around the ring in each sample setup. The first is
 # the board as the layout describes it; the others are just far enough apart to look different.
@@ -164,8 +184,56 @@ def load_duty_wheel_layout(path: Path | None = None) -> dict:
     return json.loads(layout_path.read_text(encoding="utf-8"))
 
 
+def load_board_config(path: Path | None = None) -> dict:
+    """The engine's `configs/board.json`: the nine position names and the edges between them."""
+    board_path = BOARD_CONFIG_PATH if path is None else Path(path)
+    return json.loads(board_path.read_text(encoding="utf-8"))
+
+
+def board_positions(board: dict | None = None) -> list[str]:
+    """The nine positions in the order the engine indexes them, City first."""
+    return list((board or load_board_config())["positions"])
+
+
+def board_edges(board: dict | None = None) -> dict[str, list[str]]:
+    """Where a cube may step to from each position, as the engine's directed graph."""
+    return {
+        position: list(targets)
+        for position, targets in (board or load_board_config())["edges"].items()
+    }
+
+
+def board_position_index(position: str, board: dict | None = None) -> int:
+    """A position's engine index, which is what the rules pass around instead of the name."""
+    positions = board_positions(board)
+    try:
+        return positions.index(position)
+    except ValueError as exc:
+        raise KeyError(f"unknown board position: {position!r}") from exc
+
+
+def branching_positions(board: dict | None = None) -> list[str]:
+    """The positions a cube can leave more than one way, in board order.
+
+    Nothing lists them: they fall out of the graph, and on this board they are the City and the two
+    ring positions the middle arrows run in from.
+    """
+    edges = board_edges(board)
+    return [position for position in board_positions(board) if len(edges.get(position, ())) > 1]
+
+
 def duties_of(layout: dict) -> list[dict]:
     return list(layout["duties"])
+
+
+def board_position_of(duty: dict) -> str:
+    """Which position on the engine's board one space of this wheel stands at.
+
+    The layout carries the pairing so it can be read and checked rather than inferred from a name
+    that means something else. A test holds it to the drawing: each space's position is the compass
+    point it is actually drawn at, so the two cannot drift apart silently.
+    """
+    return str(duty["board_position"])
 
 
 def duty_position_by_id(layout: dict, duty_id: str) -> dict:
@@ -619,7 +687,18 @@ def render_duty_space(
             parts.append(render_merchant_token(layout, slot_x, slot_y, position, merchant))
 
     index = "" if ring_index is None else f' data-duty-ring-index="{ring_index}"'
-    return f'<g data-duty="{duty["id"]}"{index}>{"".join(parts)}</g>'
+    position = board_position_of(duty)
+    # Three names for one space, and they answer three different questions. `data-duty` is the
+    # prototype's id for it and is only good for finding the same space twice. `data-board-position`
+    # is where it stands on the engine's board, which is what movement is defined in terms of and
+    # what a turned tile leaves alone. `data-duty-category` is the tile lying there now, which is
+    # exactly what turning the tiles changes.
+    return (
+        f'<g data-duty="{duty["id"]}"{index}'
+        f' data-board-position="{position}"'
+        f' data-board-position-index="{board_position_index(position)}"'
+        f' data-duty-category="{duty["id"]}">{"".join(parts)}</g>'
+    )
 
 
 def _render_ornaments(layout: dict) -> str:
@@ -653,33 +732,69 @@ def _render_ornaments(layout: dict) -> str:
     )
 
 
+def ring_arrow_ends(layout: dict, index: int) -> tuple[str, str]:
+    """The two board positions one clockwise arrow runs between, in the order it points.
+
+    The arrows are one shape turned around the board, so which pair an arrow stands between is a
+    matter of how far it has been turned rather than anything drawn into it: the arrow at rotation
+    zero sits between the last space clockwise and the first, and each turn moves it on one. What
+    comes back is the pair of board positions, because that is what a move is made of; the spaces
+    were only how the turning was counted.
+    """
+    order = layout["clockwise_order"]
+    ends = (order[(index - 1) % len(order)], order[index % len(order)])
+    origin, destination = (
+        board_position_of(duty_position_by_id(layout, duty_id)) for duty_id in ends
+    )
+    return origin, destination
+
+
+def _arrow_ends_markup(origin: str, destination: str, board: dict) -> str:
+    """The pair of positions one arrow joins, named and numbered as the engine names them."""
+    return (
+        f' data-from-position="{origin}" data-to-position="{destination}"'
+        f' data-from-position-index="{board_position_index(origin, board)}"'
+        f' data-to-position-index="{board_position_index(destination, board)}"'
+    )
+
+
 def _render_ring_arrows(layout: dict) -> str:
     cx, cy = layout["board"]["center"]
     path = layout["artwork"]["ring_arrow_path"]
     step = 360 // RING_ARROW_COUNT
-    return (
-        '<g aria-label="Clockwise outer arrows">'
-        + "".join(
+    board = load_board_config()
+    arrows = []
+    for index in range(RING_ARROW_COUNT):
+        origin, destination = ring_arrow_ends(layout, index)
+        arrows.append(
             f'<g transform="rotate({index * step:g} {_num(cx)} {_num(cy)})"'
-            f' data-ring-arrow="{index}">'
+            f' data-ring-arrow="{index}"{_arrow_ends_markup(origin, destination, board)}>'
             f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
-            for index in range(RING_ARROW_COUNT)
         )
-        + "</g>"
-    )
+    return '<g aria-label="Clockwise outer arrows">' + "".join(arrows) + "</g>"
 
 
 def _render_middle_arrows(layout: dict) -> str:
+    """The four arrows across the middle, tagged with the pair of positions each one joins.
+
+    The ring arrows carry the same pair of attributes, so a page asking which ways lead out of a
+    position puts the one question to both families of arrow -- and gets an answer in the names the
+    engine moves cubes by rather than in the names this board happens to print on its tiles.
+    """
     path = layout["artwork"]["middle_arrow_path"]
+    board = load_board_config()
     arrows = []
     for arrow in layout["middle_arrows"]:
         x, y = arrow["at"]
         transform = f"translate({_num(x)} {_num(y)})"
         if arrow["rotate"]:
             transform += f" rotate({arrow['rotate']:g})"
+        origin, destination = (
+            board_position_of(duty_position_by_id(layout, arrow[end])) for end in ("from", "to")
+        )
         arrows.append(
             f'<g transform="{transform}" data-middle-arrow="{arrow["id"]}"'
-            f' data-toward="{arrow["toward"]}">'
+            f"{_arrow_ends_markup(origin, destination, board)}>"
             f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
         )
     return '<g aria-label="Middle directional arrows">' + "".join(arrows) + "</g>"
@@ -736,13 +851,18 @@ def render_turn_control_button(
 
 
 def turn_counter_width(value: int) -> float:
-    """A counter is its cube, its gap, and the `x N` beside them, inside the same padding."""
+    """A counter is its cube, its gap, and the `x N` beside them, inside the same padding.
+
+    The count is measured at its widest rather than at the value the plaque opens on, so a page
+    that counts a handful up into two figures writes a longer number into a plaque already wide
+    enough to hold it, and the shell never has to be redrawn to fit what it says.
+    """
     label = _turn_counter_label(value)
     return (
         2 * TURN_CONTROL_PADDING_X
         + TURN_COUNTER_CUBE_SIZE
         + TURN_COUNTER_GAP
-        + len(label) * TURN_CONTROL_CHAR_WIDTH
+        + max(len(label), TURN_COUNTER_WIDEST_LABEL) * TURN_CONTROL_CHAR_WIDTH
     )
 
 
@@ -1021,8 +1141,13 @@ _CONTROLS_SCRIPT = """<script>
     return currentSetup().filter(function (entry) { return entry.position === position; })[0];
   }
 
+  /* Turning the tiles changes which duty lies at a position -- its title, its Tithe token, and
+     the category the space reports. Where the space stands is not the tiles' to change, so the
+     board-position hooks the arrows and any movement are keyed to are left alone. */
   function applySetup() {
     currentSetup().forEach(function (entry) {
+      var space = board.querySelector('[data-duty="' + entry.position + '"]');
+      if (space) { space.setAttribute('data-duty-category', entry.duty); }
       var label = board.querySelector('[data-duty-label="' + entry.position + '"]');
       if (label) { label.textContent = entry.label; }
       var icons = board.querySelectorAll(

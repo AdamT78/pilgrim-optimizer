@@ -38,6 +38,7 @@ from tools.ui_debug.generate_game_table import (
     duty_wheel_seating,
     regular_hexagon_path,
     regularise_duty_hexagon,
+    render_turn_flow_script,
     resource_control_data,
     seat_numbers_by_player,
     solve_table_scale,
@@ -82,6 +83,8 @@ from tools.ui_debug.render_duty_wheel import (
 )
 from tools.ui_debug.render_duty_wheel import (
     CITY_STACK_HEIGHT,
+    board_edges,
+    board_positions,
     duty_position_by_id,
     duty_setups,
     load_duty_wheel_layout,
@@ -201,7 +204,7 @@ def test_generator_writes_the_page_to_a_temp_path(tmp_path: Path) -> None:
 
     assert written == tmp_path / "nested" / "game_table.html"
     assert written.is_file()
-    assert '<div class="game-table-stage">' in written.read_text(encoding="utf-8")
+    assert '<div class="game-table-stage"' in written.read_text(encoding="utf-8")
 
 
 def test_the_page_opens_straight_into_the_table(page: str) -> None:
@@ -217,7 +220,7 @@ def test_the_page_opens_straight_into_the_table(page: str) -> None:
     assert FORMER_BLURB not in page
     for tag in ("<h1", "<h2", "<header", "<p "):
         assert tag not in body, tag
-    assert body.index('<div class="game-table-stage">') < body.index("<svg")
+    assert body.index('<div class="game-table-stage"') < body.index("<svg")
 
 
 def test_no_styling_is_left_over_from_the_removed_heading(page: str) -> None:
@@ -238,7 +241,7 @@ def test_the_main_row_is_the_alms_column_the_piety_duty_column_and_the_map(page:
     The left column is only the Alms Table and compact control stack under it. The seats stay in
     their own row below, so changing player count never has to ask this column for more height.
     """
-    assert '<div class="game-table-stage">' in page
+    assert '<div class="game-table-stage"' in page
     row = _block(page, "row")
     left = _block(page, "left")
 
@@ -381,8 +384,8 @@ def test_no_board_at_this_table_says_who_starts(page: str) -> None:
 
     assert "first-player" not in page
     assert ">First player</text>" not in page
-    assert re.findall(r'data-player="(\w+)" data-player-color="\w+">', seats) == list(
-        SEATED_PLAYERS
+    assert re.findall(r'data-player="(\w+)" data-player-color="\w+" data-active-seat=', seats) == (
+        list(SEATED_PLAYERS)
     )
 
 
@@ -1100,8 +1103,6 @@ def test_the_wheel_brings_its_turn_controls_onto_the_table(page: str) -> None:
     ]
     assert 'data-turn-counter="cubes-in-hand"' in action
     assert 'data-turn-counter-value="0"' in action
-    # A shell and nothing behind it: no compact row reaches for any of it yet.
-    assert "data-turn-control" not in page[page.index("<script>") :]
 
 
 def test_the_turn_plaques_survive_the_crop_the_table_takes_of_the_wheel(page: str, scale) -> None:
@@ -1125,6 +1126,317 @@ def test_the_turn_plaques_survive_the_crop_the_table_takes_of_the_wheel(page: st
     assert left + width - max(x + plaque_width for x, _, plaque_width, _ in plaques) > cube
     assert min(y for _, y, _, _ in plaques) - top > cube
     assert top + height - max(y + plaque_height for _, y, _, plaque_height in plaques) > cube
+
+
+# ---------------------------------------------------------------------------------------------
+# The turn drawn on the wheel
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_turn_is_four_phases_and_the_clicks_that_move_between_them(page: str) -> None:
+    """Sow arms the board, a space is picked, and a space with a choice waits for one."""
+    assert "phase: 'idle'," in page
+    assert "setTurnPhase('sow_armed');" in page
+    assert "setTurnPhase('start_selected');" in page
+    assert "setTurnPhase('branch_choice');" in page
+    assert "turnOverlay.setAttribute('data-turn-state', phase);" in page
+    # Each click only acts from the phase it belongs to, so a stray one changes nothing.
+    for opening, phase in (
+        ("function armSow() {", "idle"),
+        ("function selectStartSpace(position) {", "sow_armed"),
+        ("function chooseRoute(arrow) {", "branch_choice"),
+    ):
+        assert f"{opening}\n    if (state.turn.phase !== '{phase}') {{" in page, opening
+
+
+def test_sow_and_reset_are_the_only_plaques_a_click_reaches(page: str) -> None:
+    """The other three are drawn dimmed and left there: there is nothing behind them yet."""
+    script = page[page.index("<script>") :]
+
+    assert "turnControl('sow').addEventListener('click', armSow);" in script
+    assert "turnControl('reset').addEventListener('click', function () {" in script
+    for name in ("confirm", "action", "tithe"):
+        assert f"turnControl('{name}')" not in script
+    assert "['confirm', 'action', 'tithe'].forEach(function (name) {" in script
+    assert "setTurnControlState(name, false, false);" in script
+    # Sow stays lit and turns active while a turn is open; Reset is only lit once one is.
+    assert "setTurnControlState('sow', true, started);" in script
+    assert "setTurnControlState('reset', started, false);" in script
+    assert "var started = state.turn.phase !== 'idle';" in script
+
+
+def test_a_turn_starts_from_a_board_position_not_from_a_tile(page: str) -> None:
+    """Every space is one of the engine's nine positions, and that is what a click hands on.
+
+    A duty tile can be turned to another position; a position stays where it is. Keying the flow
+    to the tiles would have it walking the wrong way round the board the first time they moved.
+    """
+    action = _block(page, "panel p-action")
+    positions = re.findall(r'<g data-duty="\w+"[^>]*? data-board-position="(\w+)"', action)
+
+    assert positions == board_positions()
+    assert len(positions) == 9
+    assert (
+        "var dutySpaces = dutyPanel ? dutyPanel.querySelectorAll('[data-board-position]') : [];"
+        in page
+    )
+    assert "selectStartSpace(space.getAttribute('data-board-position'));" in page
+    assert "space.getAttribute('data-board-position') === position" in page
+    assert "space.setAttribute('data-turn-start-candidate', 'true');" in page
+    assert "space.setAttribute('data-turn-start-selected', 'true');" in page
+    # The tile lying on a space is drawn and named, and never asked about a move.
+    assert 'data-duty-category="clerical"' in action
+    assert "data-duty-category" not in render_turn_flow_script()
+
+
+def test_the_cubes_a_space_is_showing_are_lifted_into_the_counter(page: str) -> None:
+    """The tally the table is playing, so the count buttons decide what there is to pick up.
+
+    It is looked for inside the space rather than by name, so the one hook that matters is the
+    board position and the tally's own id never comes into it.
+    """
+    tally = "space.querySelector('[data-cube-tally][data-player-count=\"' + state.count + '\"]')"
+
+    assert "var space = spaceAt(position);" in page
+    assert tally in page
+    assert "dutyPanel.querySelector('[data-board-position=\"' + position + '\"]')" in page
+    assert "return cube.getAttribute('opacity') !== '0';" in page
+    assert "cube.setAttribute('opacity', '0');" in page
+    assert "setCubesInHand(cubes.length);" in page
+    assert "counter.setAttribute('data-turn-counter-value', String(count));" in page
+    assert "label.textContent = '\\u00d7 ' + count;" in page
+
+
+def test_a_seat_can_only_pick_up_its_own_cubes(page: str) -> None:
+    """A space is shared: the other seats' cubes and the neutral column's are standing on it too.
+
+    Every cube on the wheel is drawn with the player it belongs to, so the hand is one filter over
+    the cubes that space is showing. The neutral column is nobody's -- its cubes say `dummy` -- and
+    the City slots nobody is standing in are hidden, so neither can be picked up by accident.
+    """
+    picked = page[page.index("function visibleActivePlayerCubesForPosition(position)") :]
+    picked = picked[: picked.index("\n  }")]
+
+    assert "var playerId = activePlayerId();" in picked
+    assert "return visibleCubesForPosition(position).filter(function (cube) {" in picked
+    assert "return cube.getAttribute('data-player') === playerId;" in picked
+    # The hand is the seat's cubes, and the counter is how many of those there were.
+    assert "var cubes = visibleActivePlayerCubesForPosition(position);" in page
+    assert "hidePickupCubes(cubes);" in page
+    assert "function hidePickupCubes(cubes) {" in page
+    # Nothing sorts cubes by colour, id or column: the cube itself says whose it is.
+    for guess in ("dummy", "data-city-column-player", "player_one", "fill"):
+        assert guess not in picked, guess
+
+
+def test_a_space_holding_nothing_of_the_seat_s_is_nothing_to_start_from(page: str) -> None:
+    """The click is spent rather than refused: the board stays armed, so the next one still works.
+
+    Marking a space with no cubes on it would put the turn into a phase holding an empty hand,
+    and Reset would then be the only way back out of a turn that never began.
+    """
+    select = page[page.index("function selectStartSpace(position)") :]
+    select = select[: select.index("\n  }\n")]
+    nothing = select[: select.index("state.turn.start = position;")]
+
+    assert (
+        "var cubes = visibleActivePlayerCubesForPosition(position);\n"
+        "    if (!cubes.length) {\n      return;\n    }"
+    ) in nothing
+    # Nothing has happened yet at the point it gives up: no marking, no hiding, no phase change.
+    for untouched in ("markStartSpace", "hidePickupCubes", "setTurnPhase", "armStartSpaces"):
+        assert untouched not in nothing, untouched
+
+
+def test_the_board_whose_turn_it_is_is_asked_who_it_is(page: str) -> None:
+    """Seats and players are two different lists: the first seat is red, and red is `player_two`.
+
+    So the flow reads the player off the board that is on the table rather than pairing seat to
+    player itself, which is the one way of getting it that cannot drift from what is drawn.
+    """
+    active = page[page.index("function activeSeatElement()") :]
+    active = active[: active.index("function updateActiveSeatIndicator()")]
+
+    seat_query = "'[data-component=\"player-board-v2\"][data-player-seat=\"' + state.activeSeat"
+    assert f"{seat_query} + '\"]'" in active
+    assert "return board ? board.getAttribute('data-player') : null;" in active
+    assert "return board ? board.getAttribute('data-player-color') : null;" in active
+    # The seat the flow opens on, and the boards it can ask about.
+    assert "activeSeat: TURN.seat," in page
+    seats = re.findall(
+        r'data-component="player-board-v2" data-player-seat="(\d)"'
+        r' data-player="(\w+)" data-player-color="(\w+)"',
+        page,
+    )
+    assert seats == [
+        ("1", "player_two", "red"),
+        ("2", "player_three", "yellow"),
+        ("3", "player_four", "blue"),
+        ("4", "player_one", "white"),
+    ]
+
+
+def test_the_seat_whose_turn_it_is_is_ringed_and_says_so(page: str) -> None:
+    """One board ringed in its own colour, and the same seat named on the stage for anything else.
+
+    An outline is drawn outside the panel, so the ring costs the row no width and moves nothing.
+    """
+    assert 'data-active-player-seat="1"' in page
+    assert 'data-active-player-color="red"' in page
+    seats = _block(page, "seats")
+    assert 'data-player-color="red" data-active-seat="true"' in seats
+    assert seats.count('data-active-seat="true"') == 1
+    assert seats.count('data-active-seat="false"') == 3
+    assert (
+        ".p-player[data-active-seat=\"true\"] {\n"
+        "    outline: 2px solid var(--active-player); outline-offset: 3px;\n"
+        "  }"
+    ) in page
+    assert "board.setAttribute('data-active-seat', active ? 'true' : 'false');" in page
+    assert "stage.setAttribute('data-active-player-color', activePlayerColor() || '');" in page
+
+
+def test_a_cube_picked_up_is_the_cube_put_back_down(page: str) -> None:
+    """What each cube was showing is remembered, which a half-full City column needs it to be.
+
+    The City draws all six of a column's slots and hides the ones nobody is standing in, so
+    putting cubes back by simply showing them would stand a seat in slots it never held.
+    """
+    assert "return { cube: cube, opacity: cube.getAttribute('opacity') };" in page
+    assert "if (held.opacity === null) {\n        held.cube.removeAttribute('opacity');" in page
+    assert "held.cube.setAttribute('opacity', held.opacity);" in page
+    assert "state.turn.pickedUp = [];" in page
+
+
+def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
+    reset = page[page.index("function resetTurnFlow()") :]
+    reset = reset[: reset.index("\n  }")]
+
+    for step in (
+        "restorePickupCubes();",
+        "setCubesInHand(0);",
+        "armStartSpaces(false);",
+        "markStartSpace(null);",
+        "clearBranchChoices();",
+        "state.turn.start = null;",
+        "state.turn.routeChoice = null;",
+        "turnOverlay.removeAttribute('data-last-route-choice');",
+        "setTurnPhase('idle');",
+    ):
+        assert step in reset, step
+
+
+def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
+    """The arrows drawn on the wheel are `configs/board.json`'s edges, and the flow reads them.
+
+    Nothing lists which positions branch: a position with one arrow leaving it offers no choice,
+    and the City, east and west are simply the three with more than one. That stays true however
+    the tiles are turned, which is the whole reason for keying any of this to positions.
+    """
+    action = _block(page, "panel p-action")
+    leaving: dict[str, set[str]] = {}
+    for origin, target in re.findall(
+        r'data-from-position="(\w+)" data-to-position="(\w+)"', action
+    ):
+        leaving.setdefault(origin, set()).add(target)
+
+    assert leaving == {position: set(ways) for position, ways in board_edges().items()}
+    assert {position: sorted(ways) for position, ways in leaving.items() if len(ways) > 1} == {
+        "city": ["north", "south"],
+        "east": ["city", "south_east"],
+        "west": ["city", "north_west"],
+    }
+    assert "dutyPanel.querySelectorAll('[data-from-position][data-to-position]')" in page
+    assert "var from = arrow.getAttribute('data-from-position');" in page
+    assert "return outgoingEdgesByPosition[position] || [];" in page
+    assert "if (branches.length > 1) {" in page
+    assert "arrow.setAttribute('data-turn-branch-choice', 'true');" in page
+
+
+def test_turning_the_tiles_moves_a_duty_and_never_a_position(page: str) -> None:
+    """Which is what the whole split is for: labels are the tiles', the graph is the board's.
+
+    The roll writes the duty that landed on a space into `data-duty-category` and rewrites its
+    title and Tithe token. It never touches a board position, an arrow, or an index, so a turn
+    started after a roll branches at exactly the same three places as one started before it.
+    """
+    setup = page[page.index("function renderDutySetup()") :]
+    setup = setup[: setup.index("\n  }")]
+
+    assert "space.setAttribute('data-duty-category', entry.duty);" in setup
+    assert "label.textContent = entry.label;" in setup
+    assert "icon.getAttribute('data-tithe-token') === entry.tithe_icon" in setup
+    for untouched in ("data-board-position", "data-from-position", "data-to-position"):
+        assert untouched not in setup, untouched
+    # The roll is the only thing that rewrites a space's category, and it is not the turn flow.
+    assert page.count("setAttribute('data-duty-category'") == 1
+
+
+def test_taking_a_road_is_recorded_and_no_cube_moves(page: str) -> None:
+    """Where the cubes go is the next PR's to say: this one only remembers which way was asked."""
+    choose = page[page.index("function chooseRoute(arrow)") :]
+    choose = choose[: choose.index("\n  }")]
+
+    assert (
+        "arrow.getAttribute('data-from-position') + ':' + arrow.getAttribute('data-to-position');"
+        in choose
+    )
+    assert "turnOverlay.setAttribute('data-last-route-choice', state.turn.routeChoice);" in choose
+    assert "clearBranchChoices();" in choose
+    assert "setTurnPhase('start_selected');" in choose
+    # The counter is untouched by a road being taken, and nothing is sown.
+    assert "setCubesInHand" not in choose
+    assert "if (arrow.getAttribute('data-turn-branch-choice') === 'true') {" in page
+
+
+def test_a_phase_only_ever_sets_a_word_on_the_board(page: str) -> None:
+    """Which is what lets the styling live in the stylesheet rather than in the handlers."""
+    assert ".game-table-stage { --active-player: #C94C4C; }" in page
+    assert '[data-turn-control][data-turn-control-enabled="false"] { opacity: 0.4; }' in page
+    assert '[data-turn-control][data-turn-control-active="true"] rect { fill: #F2EEDF; }' in page
+    assert '[data-turn-start-candidate="true"] { cursor: pointer; }' in page
+    assert '[data-turn-start-candidate="true"] .board-circle { stroke: #F2EEDF' in page
+    assert "stroke: var(--active-player); stroke-width: 5.5;" in page
+    assert '[data-turn-branch-choice="true"] .arrow-interior { fill: #1E7A34; }' in page
+    # The seat whose turn it is is what both the board's ring and the outline are coloured from.
+    assert '"seat":1' in page
+    assert '"colors":{"1":"#C94C4C","2":"#E3C64A","3":"#3B6EA5","4":"#FFFFFF"}' in page
+    assert "setProperty('--active-player', TURN.colors[String(state.activeSeat)]);" in page
+
+
+def test_a_change_of_table_size_puts_a_turn_down_first(page: str) -> None:
+    """A count change redraws the very tallies a turn may be holding cubes out of.
+
+    Resetting first is the whole of the rule: the buttons keep working exactly as they did, and a
+    turn cannot be left holding cubes that a redraw has since put back on the board.
+    """
+    count = page[page.index("function applyPlayerCount(count)") :]
+    count = count[: count.index("\n  }\n")]
+
+    assert count[: count.index("state.count = count;")].endswith("resetTurnFlow();\n    ")
+    # And a seat that has just left the table cannot be left holding the turn.
+    assert "setActiveSeat(state.activeSeat > count ? 1 : state.activeSeat);" in count
+    # The City buttons redraw a column too, so they put a turn down before they move a cube.
+    city = page[page.index("function sendToCity(seat, area)") :]
+    assert "resetTurnFlow();\n    playerState[area] -= 1;" in city[: city.index("\n  }\n\n")]
+
+
+def test_a_turn_changes_what_is_drawn_and_nothing_that_is_kept(page: str) -> None:
+    """It hides cubes and remembers them. It moves none, and it owns nothing else on the page.
+
+    The compact rows keep the tallies -- who is standing where, in the City, on the tracks -- and
+    the turn flow does not reach into any of them. That is what makes it safe for Reset to hand
+    the board straight back, and it is the line the next PR will have to cross deliberately.
+    """
+    flow = render_turn_flow_script()
+    kept = ("city", "acolytes", "discs", "resources", "buildings")
+
+    assert flow in page
+    for owned in kept:
+        assert f"state.{owned}" not in flow, owned
+    for redraw in ("renderCity(", "renderBoardCubes(", "renderDutyTallies(", "fetch("):
+        assert redraw not in flow, redraw
+    assert "state.turn.cubesInHand = count;" in flow
 
 
 # ---------------------------------------------------------------------------------------------

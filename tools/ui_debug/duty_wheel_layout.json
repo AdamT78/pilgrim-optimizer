@@ -152,6 +152,7 @@
   "duties": [
     {
       "id": "produce",
+      "board_position": "north",
       "label": "Produce",
       "center": [
         551.3,
@@ -167,6 +168,7 @@
     },
     {
       "id": "allocation",
+      "board_position": "north_east",
       "label": "Allocation",
       "center": [
         775.5,
@@ -182,6 +184,7 @@
     },
     {
       "id": "clerical",
+      "board_position": "east",
       "label": "Clerical",
       "center": [
         868.3,
@@ -197,6 +200,7 @@
     },
     {
       "id": "build_roads",
+      "board_position": "south_east",
       "label": "Build Roads",
       "center": [
         775.4,
@@ -212,6 +216,7 @@
     },
     {
       "id": "taxation",
+      "board_position": "south",
       "label": "Taxation",
       "center": [
         551.5,
@@ -227,6 +232,7 @@
     },
     {
       "id": "ordination",
+      "board_position": "south_west",
       "label": "Ordination",
       "center": [
         328.5,
@@ -242,6 +248,7 @@
     },
     {
       "id": "construct",
+      "board_position": "west",
       "label": "Construct",
       "center": [
         235.5,
@@ -257,6 +264,7 @@
     },
     {
       "id": "give_alms",
+      "board_position": "north_west",
       "label": "Give Alms",
       "center": [
         328.0,
@@ -272,6 +280,7 @@
     },
     {
       "id": "city",
+      "board_position": "city",
       "label": "City",
       "center": [
         551.0,
@@ -323,39 +332,43 @@
   "middle_arrows": [
     {
       "id": "city_to_produce",
+      "from": "city",
       "at": [
         551.0,
         556.6
       ],
       "rotate": -90,
-      "toward": "produce"
+      "to": "produce"
     },
     {
       "id": "clerical_to_city",
+      "from": "clerical",
       "at": [
         709.6,
         718.8
       ],
       "rotate": 180,
-      "toward": "city"
+      "to": "city"
     },
     {
       "id": "city_to_taxation",
+      "from": "city",
       "at": [
         551.0,
         881.2
       ],
       "rotate": 90,
-      "toward": "taxation"
+      "to": "taxation"
     },
     {
       "id": "construct_to_city",
+      "from": "construct",
       "at": [
         393.2,
         718.8
       ],
       "rotate": 0,
-      "toward": "city"
+      "to": "city"
     }
   ],
   "artwork": {

@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from collections import Counter
 from pathlib import Path
@@ -10,15 +11,21 @@ from tools.ui_debug.generate_duty_wheel import (
     generate_duty_wheel_page,
 )
 from tools.ui_debug.render_duty_wheel import (
+    BOARD_CONFIG_PATH,
     CITY_STACK_HEIGHT,
     CITY_TALLY_OFFSET_Y,
     CUBE_CELL_HEIGHT,
     CUBE_SIZE,
     LABEL_OFFSET_Y,
     ORNAMENT_INSET,
+    RING_ARROW_COUNT,
     SPACE_RADIUS,
     TALLY_OFFSET_Y,
     TURN_CONTROL_DISABLED_OPACITY,
+    board_edges,
+    board_position_of,
+    board_positions,
+    branching_positions,
     default_layout_path,
     dummy_acolytes,
     duties_of,
@@ -34,6 +41,7 @@ from tools.ui_debug.render_duty_wheel import (
     render_duty_wheel_html,
     render_duty_wheel_panel,
     render_duty_wheel_svg,
+    ring_arrow_ends,
     ring_duties,
     tally_columns,
     tally_pieces,
@@ -68,6 +76,20 @@ PLAYER_FILLS = {
 DUMMY_BLACK = "#1F1F1F"
 MERCHANT_PURPLE = "#8E63D7"
 ALLOWED_DRIFT = 0.1
+
+# The engine's nine positions, in its own order, written out here rather than read from the
+# renderer so that the file both are checked against has something to be checked against.
+BOARD_POSITIONS = [
+    "city",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west",
+]
 
 
 def layout() -> dict:
@@ -725,6 +747,145 @@ def test_plain_page_has_no_controls() -> None:
     assert "<button" not in html
     assert "<script>" not in html
     assert "<svg" in html
+
+
+def test_the_board_the_wheel_is_drawn_from_is_the_board_the_engine_plays_on() -> None:
+    """Read, not copied: `configs/board.json` is the engine's file, and the wheel loads it."""
+    board = json.loads((REPO_ROOT / "configs" / "board.json").read_text(encoding="utf-8"))
+
+    assert BOARD_CONFIG_PATH == REPO_ROOT / "configs" / "board.json"
+    assert board_positions() == BOARD_POSITIONS == board["positions"]
+    assert board_edges() == board["edges"]
+
+
+def test_every_space_stands_at_a_board_position_the_engine_knows() -> None:
+    """The nine positions of `configs/board.json`, each on the space that is drawn where it is.
+
+    The wheel's own ids are the prototype's default arrangement of the tiles, so `clerical` names
+    the space Clerical happened to start on rather than anything about the board. Movement is in
+    positions, and the two vocabularies are kept side by side rather than one being made to stand
+    in for the other.
+    """
+    svg = generated_svg()
+    spaces = re.findall(
+        r'<g data-duty="(\w+)"[^>]*? data-board-position="(\w+)"'
+        r' data-board-position-index="(\d)" data-duty-category="(\w+)"',
+        svg,
+    )
+
+    assert [position for _, position, _, _ in spaces] == BOARD_POSITIONS
+    assert [int(index) for _, _, index, _ in spaces] == list(range(len(BOARD_POSITIONS)))
+    # A space opens holding the tile it is named after; turning the tiles is what parts them.
+    assert [duty for duty, _, _, _ in spaces] == [category for _, _, _, category in spaces]
+    assert {duty for duty, _, _, _ in spaces} == {layout()["city_id"], *layout()["clockwise_order"]}
+
+
+def test_a_space_stands_at_the_compass_point_it_is_drawn_at() -> None:
+    """Which is what makes the pairing a fact about the board rather than a decision about it.
+
+    The layout carries the pairing so it can be read; this holds it to the drawing. Take the
+    bearing of each space from the middle of the board, round it to the nearest eighth of a turn,
+    and the position it is paired with is the one it is standing on.
+    """
+    data = layout()
+    cx, cy = data["board"]["center"]
+    ring = [position for position in BOARD_POSITIONS if position != "city"]
+
+    for duty in duties_of(data):
+        if duty["id"] == data["city_id"]:
+            # The middle space is the middle position, and it is the only one off the ring.
+            assert board_position_of(duty) == "city"
+            assert math.dist(duty["center"], (cx, cy)) < SPACE_RADIUS
+            continue
+        x, y = duty["center"]
+        bearing = (math.degrees(math.atan2(x - cx, cy - y)) + 360) % 360
+        assert board_position_of(duty) == ring[round(bearing / 45) % 8], duty["id"]
+
+
+def test_the_arrows_drawn_on_the_board_are_the_moves_the_engine_allows() -> None:
+    """Edge for edge, the same directed graph -- which is the whole point of this renderer.
+
+    The ring arrows are one shape turned around the board, so nothing in the markup said which
+    pair each stood between; it is worked out from how far each has been turned and then named in
+    the engine's terms. Kogge and Cloisters add and drop edges of their own; neither is drawn here.
+    """
+    svg = generated_svg()
+    drawn: dict[str, set[str]] = {}
+    for origin, target in re.findall(
+        r'data-from-position="(\w+)" data-to-position="(\w+)"', svg
+    ):
+        drawn.setdefault(origin, set()).add(target)
+
+    assert drawn == {position: set(ways) for position, ways in board_edges().items()}
+    assert sum(len(ways) for ways in drawn.values()) == len(
+        re.findall(r"data-from-position=", svg)
+    )
+
+
+def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
+    """Names read, indexes travel: the engine passes positions around as their board index."""
+    svg = generated_svg()
+    indexed = re.findall(
+        r'data-from-position="(\w+)" data-to-position="(\w+)"'
+        r' data-from-position-index="(\d)" data-to-position-index="(\d)"',
+        svg,
+    )
+
+    assert len(indexed) == RING_ARROW_COUNT + len(layout()["middle_arrows"])
+    for origin, target, origin_index, target_index in indexed:
+        assert BOARD_POSITIONS[int(origin_index)] == origin
+        assert BOARD_POSITIONS[int(target_index)] == target
+    # And the ring arrows still say what they say by where they were turned to.
+    assert [ring_arrow_ends(layout(), index) for index in range(RING_ARROW_COUNT)] == [
+        (origin, target)
+        for origin, target in re.findall(
+            r'data-ring-arrow="\d" data-from-position="(\w+)" data-to-position="(\w+)"', svg
+        )
+    ]
+
+
+def test_only_three_positions_have_more_than_one_way_out_of_them() -> None:
+    """Which is the whole of the branching on this board, and nobody had to write it down.
+
+    A position with one arrow leaving it offers no choice at all. The City, east and west each
+    have two, and they are the three a turn has to stop and ask about -- whatever duty tiles
+    happen to be lying on them at the time.
+    """
+    svg = generated_svg()
+    drawn: dict[str, set[str]] = {}
+    for origin, target in re.findall(
+        r'data-from-position="(\w+)" data-to-position="(\w+)"', svg
+    ):
+        drawn.setdefault(origin, set()).add(target)
+
+    assert branching_positions() == ["city", "east", "west"]
+    assert sorted(position for position, ways in drawn.items() if len(ways) > 1) == [
+        "city",
+        "east",
+        "west",
+    ]
+    assert {position: sorted(drawn[position]) for position in branching_positions()} == {
+        "city": ["north", "south"],
+        "east": ["city", "south_east"],
+        "west": ["city", "north_west"],
+    }
+    # And every position leads somewhere, so no start space is a dead end.
+    assert set(drawn) == set(BOARD_POSITIONS)
+
+
+def test_the_tiles_are_still_the_ones_the_board_has_always_shown() -> None:
+    """The new vocabulary is added beside the old one rather than in place of it."""
+    svg = generated_svg()
+    data = layout()
+
+    assert dict(re.findall(r'data-duty-label="(\w+)">([^<]+)</text>', svg)) == {
+        duty["id"]: duty["label"] for duty in duties_of(data)
+    }
+    for duty in duties_of(data):
+        assert f'data-duty="{duty["id"]}"' in svg
+    assert re.findall(r'data-duty-ring-index="(\d)"', interactive_html()) == [
+        str(index) for index in range(len(data["clockwise_order"]))
+    ]
 
 
 def test_the_corners_stay_empty_until_a_page_asks_for_the_turn_controls() -> None:
