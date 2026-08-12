@@ -1173,8 +1173,8 @@ carries its turn-control shell — `Sow`, the cubes-in-hand counter, `Reset`/`Co
 `Action`/`Tithe`, in the four black corners of the hexagon's box — which is drawn inside the wheel's
 SVG and so is scaled and cropped along with it.
 
-Four of those plaques are wired here, as the shape of a turn drawn on the board. `Sow` arms the nine
-spaces: each is outlined in cream and takes a click, the eight duty tiles and the City alike.
+All five of those plaques are wired here, as the shape of a turn drawn on the board. `Sow` arms the
+nine spaces: each is outlined in cream and takes a click, the eight duty tiles and the City alike.
 Clicking one lifts the active seat's cubes there into the counter in the corner — `■ × N` — outlines
 the space in the colour of the seat the turn belongs to, and sets the hand walking: one cube goes
 down at each position it comes to, and the counter falls as they do. It stops only at a fork, where
@@ -1240,13 +1240,65 @@ is the way out; this is a limit of what the wheel can draw, not a rule. The City
 same way, six to a seat, so a cube sent home that finds no slot waiting is left standing on its tile;
 nothing is lost either way, since a cube is only ever hidden in one place and shown in another.
 
+`Setup`, the button after `R` on the first row, deals the game before the game. Every seat starts
+with five acolytes in the City and sows them out onto the wheel, one seat after another, and only
+when the last has finished does the first turn begin. Pressing it clears the seats' cubes off the
+eight duty tiles — the neutral column's black ones are seeded onto the ring and no seat plays them,
+so they stay where they are — stands five in each playing seat's City column, and hands the wheel to
+the first seat.
+
+A setup sow starts itself. There is one place it can begin from, so asking which would be a click
+for nothing: the seat's five come up into the hand the moment the wheel reaches it and the walk
+begins, which — starting where it starts — means it stops at the City's fork straight away with
+`city -> north` and `city -> south` lit. So `Sow` has nothing to ask and stays dark for the whole of
+a setup, no space is ever armed to be clicked, and the first thing to do is take a road. From there
+it is the sowing already described, unchanged. What is different is the end of it: a setup sow
+chooses no duty, so nothing is offered to pick from and `Action` and `Tithe` stay dark. `Confirm`
+lights instead, and pressing it accepts where that seat put its acolytes and hands the wheel to the
+next seat, which is then holding its own five with the City's roads lit, again with nothing to
+press first.
+
+Confirming moves not one cube. Where a seat put its acolytes is where they stay, so what a reset
+would need in order to take them back is dropped rather than played back, and all that comes off is
+what the sow wrote about itself: the counter, the lit roads, the ring round the space it started
+from, the route. That is why putting a turn down is written as its two halves — the cubes back where
+the turn found them, and the marks off the board — with confirming taking only the second. The last
+seat to confirm is no different from the others in this; the only thing different about it is what
+comes after, which is that there is no seat to hand the wheel to, so the table goes back to the
+first to begin and setup lets go of the board exactly as the four of them left it.
+
+`Reset` deals the seat its five back and sets it going again the same way, and the seats that have
+already confirmed keep what they placed — what a reset would need in order to take their acolytes
+back was dropped when they confirmed, so there is nothing of theirs left to undo. It stays lit all
+through a setup even with no sow standing to be put down, since with `Sow` dark it is the only way
+back to the start of one: a compact row that redraws a City column mid-setup puts the flow down, and
+`Reset` is what picks it back up. When the last seat confirms, the wheel is set, the table goes back
+to the first seat, and `Setup` comes back up; the stage says which of the three it is on
+`data-setup-mode` — `inactive`, `active`, `complete` — beside the seats that have finished on
+`data-setup-completed-seats`. Five is what the engine's own setup deals, and the shape of the phase
+is the engine's too, but nothing here is read from it: this is a board dealt to be clicked on, not a
+position in a game.
+
+A deal is the one thing on this page that a turn is not: it means to stick. So it sits with the
+compact rows rather than with the turn flow, and it writes the City count those rows keep — the same
+one `A->C` and `V->C` read and redraw from — instead of leaving the board saying one thing and the
+rows another. It is made on the tally the table is playing and nowhere else: the wheel drew a tally
+for every count and shows one at a time, and redrawing a City column writes a seat's column in all
+of them at once, which would leave the other three saying a seat is in the City while their own duty
+tiles still hold the cubes it sowed out of it. So a deal stands the columns it is dealing and writes
+the count, and leaves the redrawing to the rows that own it. A change of table size deals again for
+the same reason the count change puts a turn down: the tally now on the table is a different one,
+drawn as the wheel opens rather than as a setup left it, and the seats it holds are a different
+list.
+
 The flow reads the tally the table is currently
 playing and touches nothing the compact rows keep, which is why a count change simply puts a turn
 down first — `applyPlayerCount` calls `resetTurnFlow` before anything else, as do `A->C` and
-`V->C`, since both redraw a City column a turn may be holding cubes out of. `Confirm` stays dimmed
-and unwired, and `Action` and `Tithe` do the one same thing: sending the cubes home is all either
-knows how to do. Resolving an action, taking a tithe, spending or collecting anything, passing the
-turn on, and anything at all to do with `GameState` are still to come; this page knows no rules. The wheel is seated in this page's own order — red,
+`V->C`, since both redraw a City column a turn may be holding cubes out of. `Action` and `Tithe` do
+the one same thing — sending the cubes home is all either knows how to do — and `Confirm` knows only
+how to hand a setup sow on. Resolving an action, taking a tithe, spending or collecting anything,
+passing an ordinary turn on, and anything at all to do with `GameState` are still to come; this page
+knows no rules. The wheel is seated in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over

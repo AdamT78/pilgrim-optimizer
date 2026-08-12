@@ -27,6 +27,7 @@ from tools.ui_debug.generate_game_table import (
     RESOURCE_FLOOR,
     SEAT_COLS,
     SEATED_PLAYERS,
+    SETUP_CITY_CUBES,
     SETUP_ROLLS,
     board_measurements,
     crop_svg,
@@ -1141,25 +1142,25 @@ def test_a_turn_is_five_phases_and_the_clicks_that_move_between_them(page: str) 
     assert "turnOverlay.setAttribute('data-turn-state', phase);" in page
     # Each click only acts from the phase it belongs to, so a stray one changes nothing.
     for opening, phase in (
-        ("function armSow() {", "idle"),
         ("function selectStartSpace(position) {", "sow_armed"),
         ("function chooseRoute(arrow) {", "branch_choice"),
     ):
         assert f"{opening}\n    if (state.turn.phase !== '{phase}') {{" in page, opening
+    # And `Sow` asks only when there is something to ask: not mid-turn, and not during a setup.
+    assert "function armSow() {\n    if (state.setup.on || state.turn.phase !== 'idle') {" in page
 
 
-def test_confirm_is_the_only_plaque_a_click_never_reaches(page: str) -> None:
-    """It is drawn dimmed and left there: there is nothing behind it yet."""
+def test_every_plaque_on_the_wheel_is_wired_to_something(page: str) -> None:
+    """Five of them now: the last, `Confirm`, only has a setup sow to accept."""
     script = page[page.index("<script>") :]
 
     assert "turnControl('sow').addEventListener('click', armSow);" in script
     assert "turnControl('reset').addEventListener('click', function () {" in script
     assert "turnControl(resolution).addEventListener('click', function () {" in script
-    assert "turnControl('confirm')" not in script
-    assert "setTurnControlState('confirm', false, false);" in script
+    assert "turnControl('confirm').addEventListener('click', confirmSetupSow);" in script
     # Sow stays lit and turns active while a turn is open; Reset is only lit once one is.
-    assert "setTurnControlState('sow', true, started);" in script
-    assert "setTurnControlState('reset', started, false);" in script
+    assert "setTurnControlState('sow', asking, asking && started);" in script
+    assert "setTurnControlState('reset', started || state.setup.on, false);" in script
     assert "var started = state.turn.phase !== 'idle';" in script
 
 
@@ -1213,12 +1214,14 @@ def test_a_seat_can_only_pick_up_its_own_cubes(page: str) -> None:
     the cubes that space is showing. The neutral column is nobody's -- its cubes say `dummy` -- and
     the City slots nobody is standing in are hidden, so neither can be picked up by accident.
     """
+    column = page[page.index("function columnForPosition(position, playerId)") :]
+    column = column[: column.index("\n  }")]
     picked = page[page.index("function visibleActivePlayerCubesForPosition(position)") :]
     picked = picked[: picked.index("\n  }")]
 
-    assert "var playerId = activePlayerId();" in picked
-    assert "return visibleCubesForPosition(position).filter(function (cube) {" in picked
-    assert "return cube.getAttribute('data-player') === playerId;" in picked
+    assert "return cube.getAttribute('data-player') === playerId;" in column
+    assert "return columnForPosition(position, activePlayerId()).filter(function (cube) {" in picked
+    assert "return cube.getAttribute('opacity') !== '0';" in picked
     # The hand is the seat's cubes, and the counter is how many of those there were.
     assert "var cubes = visibleActivePlayerCubesForPosition(position);" in page
     assert "hidePickupCubes(cubes);" in page
@@ -1234,7 +1237,7 @@ def test_a_space_holding_nothing_of_the_seat_s_is_nothing_to_start_from(page: st
     Marking a space with no cubes on it would put the turn into a phase holding an empty hand,
     and Reset would then be the only way back out of a turn that never began.
     """
-    select = page[page.index("function selectStartSpace(position)") :]
+    select = page[page.index("function beginSowFrom(position)") :]
     select = select[: select.index("\n  }\n")]
     nothing = select[: select.index("state.turn.start = position;")]
 
@@ -1253,11 +1256,13 @@ def test_the_board_whose_turn_it_is_is_asked_who_it_is(page: str) -> None:
     So the flow reads the player off the board that is on the table rather than pairing seat to
     player itself, which is the one way of getting it that cannot drift from what is drawn.
     """
-    active = page[page.index("function activeSeatElement()") :]
+    active = page[page.index("function seatBoard(seat)") :]
     active = active[: active.index("function updateActiveSeatIndicator()")]
 
-    seat_query = "'[data-component=\"player-board-v2\"][data-player-seat=\"' + state.activeSeat"
+    seat_query = "'[data-component=\"player-board-v2\"][data-player-seat=\"' + seat"
     assert f"{seat_query} + '\"]'" in active
+    assert "return seatBoard(state.activeSeat);" in active
+    assert "return playerIdForSeat(state.activeSeat);" in active
     assert "return board ? board.getAttribute('data-player') : null;" in active
     assert "return board ? board.getAttribute('data-player-color') : null;" in active
     # The seat the flow opens on, and the boards it can ask about.
@@ -1313,13 +1318,33 @@ def test_a_cube_taken_off_the_board_is_the_cube_put_back_on_it(page: str) -> Non
 
 
 def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
+    """A reset is the cubes and the marks, and it is written as those two halves.
+
+    Confirming a setup sow wants the second half without the first -- the marks off, the cubes
+    where the seat put them -- so the halves are separate functions rather than one run of
+    statements a caller has to stop halfway through.
+    """
     reset = page[page.index("function resetTurnFlow()") :]
     reset = reset[: reset.index("\n  }")]
+    assert reset.index("putCubesBack();") < reset.index("clearTurnMarks();")
+
+    put_back = page[page.index("function putCubesBack()") :]
+    put_back = put_back[: put_back.index("\n  }")]
+    marks = page[page.index("function clearTurnMarks()") :]
+    marks = marks[: marks.index("\n  }\n")]
 
     for step in (
         "undoRecall();",
         "resetSownCubes();",
         "restorePickupCubes();",
+    ):
+        assert step in put_back, step
+    # The turn is undone in the order it was done, last thing first: a cube can be sown into the
+    # slot it was picked up from and then recalled out of it again.
+    assert put_back.index("undoRecall();") < put_back.index("resetSownCubes();")
+    assert put_back.index("resetSownCubes();") < put_back.index("restorePickupCubes();")
+
+    for step in (
         "setCubesInHand(0);",
         "armStartSpaces(false);",
         "markStartSpace(null);",
@@ -1339,11 +1364,10 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
         "turnOverlay.removeAttribute('data-turn-resolution');",
         "setTurnPhase('idle');",
     ):
-        assert step in reset, step
-    # The turn is undone in the order it was done, last thing first: a cube can be sown into the
-    # slot it was picked up from and then recalled out of it again.
-    assert reset.index("undoRecall();") < reset.index("resetSownCubes();")
-    assert reset.index("resetSownCubes();") < reset.index("restorePickupCubes();")
+        assert step in marks, step
+    # And clearing the marks moves nothing, which is what makes it safe on an accepted setup.
+    for moves_a_cube in ("opacity", "hideCubes", "restoreCubes", "standColumn", "renderCity"):
+        assert moves_a_cube not in marks, moves_a_cube
 
 
 def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
@@ -1428,10 +1452,10 @@ def test_the_hand_walks_the_forced_ways_and_stops_only_at_a_fork(page: str) -> N
     assert "if (!ways.length || !sowAlong(ways[0])) {\n        return;\n      }" in sowing
     assert sowing.rstrip().endswith("completeSowing();")
     # The start is picked up and then walked from, in that order.
-    select = page[page.index("function selectStartSpace(position)") :]
-    select = select[: select.index("\n  }\n")]
-    assert select.index("hidePickupCubes(cubes);") < select.index("setCurrentPosition(position);")
-    assert select.rstrip().endswith("continueSowing();")
+    begin = page[page.index("function beginSowFrom(position)") :]
+    begin = begin[: begin.index("\n  }\n")]
+    assert begin.index("hidePickupCubes(cubes);") < begin.index("setCurrentPosition(position);")
+    assert begin.rstrip().endswith("continueSowing();")
 
 
 def test_a_cube_is_put_down_by_standing_it_in_an_empty_slot(page: str) -> None:
@@ -1467,7 +1491,7 @@ def test_a_column_with_no_room_stops_the_walk_where_it_stands(page: str) -> None
     assert "if (!slot) {\n      return false;\n    }" in place
     # A stopped walk is still a sow: the counter keeps its cubes and Reset stays lit.
     assert "var started = state.turn.phase !== 'idle';" in page
-    assert "setTurnControlState('reset', started, false);" in page
+    assert "setTurnControlState('reset', started || state.setup.on, false);" in page
     sowing = page[page.index("function continueSowing()") :]
     assert "setCubesInHand(0)" not in sowing[: sowing.index("\n  }\n")]
 
@@ -1479,7 +1503,8 @@ def test_an_empty_hand_leaves_the_duties_the_sow_reached_to_be_picked_from(page:
 
     assert "clearBranchChoices();" in complete
     assert "setTurnPhase('sow_complete');" in complete
-    assert "armDutyChoices(true);" in complete
+    # Unless the sow was a setup sow, which chooses no duty at the end of it.
+    assert "armDutyChoices(!state.setup.on);" in complete
 
 
 def test_the_duties_on_offer_are_the_ones_the_sow_put_a_cube_on(page: str) -> None:
@@ -1503,14 +1528,17 @@ def test_the_duties_on_offer_are_the_ones_the_sow_put_a_cube_on(page: str) -> No
 
 
 def test_a_duty_can_be_picked_and_picked_again_before_it_is_taken(page: str) -> None:
-    """Only from what is on offer, and the mark moves to whichever is picked last."""
+    """Only from what is on offer, and the mark moves to whichever is picked last.
+
+    What is on offer is what `armDutyChoices` marked, and asking the mark is the whole of the
+    check: it is put on when the hand empties, taken off when one of them is taken, and never put
+    on at all during a setup sow. A second reading of who is eligible could only drift from it.
+    """
     select = page[page.index("function selectDuty(position)") :]
     select = select[: select.index("\n  }\n")]
 
-    assert "if (state.turn.phase !== 'sow_complete' && state.turn.phase !== 'duty_selected') {" in (
-        select
-    )
-    assert "if (sownDutyPositions().indexOf(position) === -1) {\n      return;\n    }" in select
+    assert "var space = spaceAt(position);" in select
+    assert "if (!space || space.getAttribute('data-turn-duty-candidate') !== 'true') {" in select
     assert "state.turn.duty = position;" in select
     assert "turnOverlay.setAttribute('data-turn-duty', position);" in select
     assert "setTurnPhase('duty_selected');" in select
@@ -1557,9 +1585,9 @@ def test_action_and_tithe_wake_up_only_once_a_duty_is_chosen(page: str) -> None:
     controls = controls[: controls.index("\n  }\n")]
 
     assert "['action', 'tithe'].forEach(function (name) {" in controls
-    assert "var chosen = state.turn.phase === 'duty_selected';" in controls
+    assert "var chosen = !state.setup.on && state.turn.phase === 'duty_selected';" in controls
     assert "setTurnControlState(name, chosen, state.turn.resolution === name);" in controls
-    assert "setTurnControlState('confirm', false, false);" in controls
+    assert "setTurnControlState('confirm', state.setup.on && sown, false);" in controls
     # Both plaques are wired to the one thing there is to do, and it is the phase that gates them.
     assert "['action', 'tithe'].forEach(function (resolution) {" in page
     assert "resolveDuty(resolution);" in page
@@ -1596,6 +1624,222 @@ def test_taking_a_duty_sends_that_seat_s_cubes_home_and_nobody_else_s(page: str)
         assert guess not in resolve, guess
 
 
+def test_the_setup_button_stands_between_the_wheel_and_the_ship(page: str) -> None:
+    """One more button on the first row, and nothing else about the rows changes."""
+    row = _block(page, 'control-row" data-controls-row="1')
+    labels = re.findall(r"<button[^>]*>([^<]+)</button>", row)
+
+    assert labels == ["2P", "3P", "4P", "1", "2", "3", "4", "5", "6", "R", "Setup", "S+", "M+"]
+    assert '<button type="button" data-setup-mode-button="true" aria-pressed="false">' in row
+    assert page.count("data-setup-mode-button") == 2
+    assert "var setupButton = document.querySelector('[data-setup-mode-button]');" in page
+    assert "setupButton.addEventListener('click', enterSetupMode);" in page
+
+
+def test_a_setup_deals_every_seat_five_acolytes_in_the_city_and_clears_the_tiles(
+    page: str,
+) -> None:
+    """The game before the game: nobody is on the wheel yet and everybody is holding five.
+
+    The seats are dealt to by name, so the neutral column's black cubes are not touched by it --
+    they are seeded onto the ring at the start and no seat plays them. The number is five because
+    that is what the engine's own setup deals; this page reads nothing from it.
+
+    The deal is made on the tally the table is playing and nowhere else. The wheel drew a tally for
+    every count and shows one at a time, and `renderCity` writes a seat's City column in all of
+    them at once -- which would leave the other three saying a seat is in the City while their own
+    duty tiles still hold the cubes it sowed out of it.
+    """
+    deal = page[page.index("function dealSetupCubes()") :]
+    deal = deal[: deal.index("\n  }\n")]
+
+    assert f"var SETUP_CUBES = {SETUP_CITY_CUBES};" in page
+    assert SETUP_CITY_CUBES == 5
+    assert "seatsAtTable().forEach(function (seat) {" in deal
+    assert "var playerId = playerIdForSeat(seat);" in deal
+    assert "standColumn(position, playerId, position === cityPosition ? SETUP_CUBES : 0);" in deal
+    assert "state.city[String(seat)] = SETUP_CUBES;" in deal
+    assert "renderCity" not in deal
+    # Only the seats in play are dealt to, so a hidden seat's cubes are left where they were drawn.
+    seats = page[page.index("function seatsAtTable()") :]
+    assert "for (var seat = 1; seat <= state.count; seat += 1) {" in seats[: seats.index("\n  }\n")]
+    # Standing a column is the same trick as sowing: the wheel drew the slots, this shows them.
+    stand = page[page.index("function standColumn(position, playerId, standing)") :]
+    stand = stand[: stand.index("\n  }\n")]
+    assert "columnForPosition(position, playerId).forEach(function (cube, index) {" in stand
+    assert "cube.setAttribute('opacity', index < standing ? '1' : '0');" in stand
+
+
+def test_a_setup_sow_starts_itself_from_the_city_with_nothing_to_ask(page: str) -> None:
+    """There is one place a setup sow can start from, so asking which would be a click for nothing.
+
+    The seat's five come up into the hand the moment the wheel reaches it and the walk begins,
+    which -- starting where it starts -- means it stops at the City's fork straight away with the
+    two ways out lit. So `Sow` has nothing to ask and is dark for the whole of a setup, and no
+    space is ever armed to be clicked.
+    """
+    start = page[page.index("function startSetupSow()") :]
+    start = start[: start.index("\n  }\n")]
+    enter = page[page.index("function enterSetupMode()") :]
+    enter = enter[: enter.index("\n  }\n")]
+
+    assert start == "function startSetupSow() {\n    beginSowFrom(cityPosition);"
+    # Dealt to, seated, and then set going, in that order.
+    assert enter.index("dealSetupCubes();") < enter.index("setActiveSeat(1);")
+    assert enter.index("setActiveSeat(1);") < enter.index("startSetupSow();")
+    # The next seat is set going the same way, and so is a seat starting over.
+    assert "setActiveSeat(waiting[0]);\n      startSetupSow();" in page
+    restart = page[page.index("function restartSetupSow()") :]
+    assert restart[: restart.index("\n  }\n")].rstrip().endswith("startSetupSow();")
+    # Nothing is armed to be clicked, because nothing is waiting to be asked.
+    assert "armStartSpaces(true);" in page[page.index("function armSow()") :][:200]
+    for setup in ("function startSetupSow()", "function enterSetupMode()"):
+        block = page[page.index(setup) :]
+        assert "armStartSpaces" not in block[: block.index("\n  }\n")], setup
+
+
+def test_a_setup_sow_offers_no_duty_at_the_end_of_it(page: str) -> None:
+    """The seat was putting its acolytes out, not taking a duty.
+
+    So the two plaques that do something to a duty stay dark the whole way through, nothing is
+    marked to be picked from, and `Confirm` -- which a normal turn never lights -- is what is
+    waiting when the hand empties.
+    """
+    controls = page[page.index("function refreshTurnControls()") :]
+    controls = controls[: controls.index("\n  }\n")]
+
+    assert "var sown = state.turn.phase === 'sow_complete';" in controls
+    assert "var chosen = !state.setup.on && state.turn.phase === 'duty_selected';" in controls
+    assert "setTurnControlState('confirm', state.setup.on && sown, false);" in controls
+    assert "armDutyChoices(!state.setup.on);" in page
+    # `Sow` is dark all through it, and `Reset` -- the only way back to the start of one -- is lit.
+    assert "var asking = !state.setup.on;" in controls
+    assert "setTurnControlState('sow', asking, asking && started);" in controls
+    assert "setTurnControlState('reset', started || state.setup.on, false);" in controls
+    # And a setup sow is a sow like any other: setup starts one and does none of the walking.
+    setup = page[page.index("function dealSetupCubes()") :]
+    setup = setup[: setup.index("function applyPlayerCount")]
+    for untouched in ("continueSowing", "selectStartSpace", "sowAlong", "placeOneCubeAtPosition"):
+        assert untouched not in setup, untouched
+
+
+def test_confirming_a_setup_sow_hands_the_wheel_to_the_next_seat(page: str) -> None:
+    """And the acolytes it put out stay out: what a reset would need in order to take them back is
+    dropped rather than played back, which is the whole of what confirming means here.
+
+    The seats go in the order they are dealt to, and when the last has sown the table goes back to
+    the first to begin. Setup lets go of the board then, and the button comes back up.
+    """
+    confirm = page[page.index("function confirmSetupSow()") :]
+    confirm = confirm[: confirm.index("\n  }\n")]
+
+    assert "if (!state.setup.on || state.turn.phase !== 'sow_complete') {" in confirm
+    assert "state.setup.done.push(seat);" in confirm
+    assert "state.city[String(seat)] = " in confirm
+    assert "visibleActivePlayerCubesForPosition(cityPosition).length;" in confirm
+    # The ledgers are dropped and only the marks come off, so no cube is moved by confirming.
+    assert "state.turn.pickedUp = [];" in confirm
+    assert confirm.index("state.turn.sown = [];") < confirm.index("clearTurnMarks();")
+    assert "return state.setup.done.indexOf(other) === -1;" in confirm
+    assert "setActiveSeat(waiting[0]);" in confirm
+    assert "state.setup.on = false;\n      state.setup.finished = true;" in confirm
+    assert "setActiveSeat(1);" in confirm
+    assert "turnControl('confirm').addEventListener('click', confirmSetupSow);" in page
+
+
+def test_the_last_seat_to_confirm_leaves_the_wheel_exactly_as_it_stands(page: str) -> None:
+    """A confirmed placement is confirmed whoever made it, so the last seat is not a special case.
+
+    The one thing the last seat does differently is what comes after: there is no seat to hand the
+    wheel to, so the table goes back to the first to begin and setup lets go of the board. Nothing
+    on that path deals, redeals, stands a column up or puts a turn back -- the whole of the
+    finishing is a flag, a seat number and the marks coming off -- so what the four of them sowed
+    is still standing there when the button comes back up.
+    """
+    confirm = page[page.index("function confirmSetupSow()") :]
+    confirm = confirm[: confirm.index("\n  }\n")]
+    finish = confirm[confirm.index("} else {") :]
+    finish = finish[: finish.index("\n    }") + len("\n    }")]
+
+    for moves_a_cube in (
+        "dealSetupCubes",
+        "restartSetupSow",
+        "resetTurnFlow",
+        "putCubesBack",
+        "standColumn",
+        "renderCity",
+        "renderDutyTallies",
+        "hideCubes",
+        "restoreCubes",
+        "opacity",
+    ):
+        assert moves_a_cube not in confirm, moves_a_cube
+    assert [line.strip() for line in finish.splitlines() if line.strip()] == [
+        "} else {",
+        "state.setup.on = false;",
+        "state.setup.finished = true;",
+        "setActiveSeat(1);",
+        "}",
+    ]
+    # And the button comes up and `Sow` goes back to work, both off the one flag.
+    assert "setupButton.setAttribute('aria-pressed', state.setup.on ? 'true' : 'false');" in page
+    assert "var asking = !state.setup.on;" in page
+
+
+def test_reset_in_a_setup_restarts_the_sow_in_hand_and_no_other(page: str) -> None:
+    """The seats that have already confirmed keep what they placed, and setup stays on the board.
+
+    Which is the ordinary reset, the seat's five acolytes stood back up -- the compact rows can
+    move acolytes in and out of the City between one press and the next -- and then the same seat
+    set going again from the City, since that is the only place a setup sow starts from and `Sow`
+    is dark. It is also the way back from anything that has put the flow down mid-setup.
+    """
+    restart = page[page.index("function restartSetupSow()") :]
+    restart = restart[: restart.index("\n  }\n")]
+
+    assert "resetTurnFlow();" in restart
+    assert "standColumn(cityPosition, activePlayerId(), SETUP_CUBES);" in restart
+    assert "state.city[String(state.activeSeat)] = SETUP_CUBES;" in restart
+    assert restart.index("standColumn(") < restart.index("startSetupSow();")
+    for untouched in ("state.setup.on", "setActiveSeat", "state.setup.done"):
+        assert untouched not in restart, untouched
+    assert "if (state.setup.on) {\n        restartSetupSow();\n      } else if (" in page
+
+
+def test_a_setup_says_where_it_has_got_to(page: str) -> None:
+    """Three words for the board and the seats that have finished with it.
+
+    Which seat is sowing is not among them: the board already rings it, and the stage already says
+    so. A second copy could only fall out of step with the first.
+    """
+    refresh = page[page.index("function refreshSetupMode()") :]
+    refresh = refresh[: refresh.index("\n  }\n")]
+
+    assert "setupButton.setAttribute('aria-pressed', state.setup.on ? 'true' : 'false');" in refresh
+    assert "state.setup.on ? 'active' : state.setup.finished ? 'complete' : 'inactive');" in refresh
+    assert "'data-setup-completed-seats', state.setup.done.join(',')" in refresh
+    assert "data-setup-active-seat" not in page
+    assert "stage.setAttribute('data-active-player-seat', String(state.activeSeat));" in page
+    assert "setup: {\n      on: false,\n      done: [],\n      finished: false\n    }" in page
+
+
+def test_a_deal_changes_what_is_kept_and_a_turn_does_not(page: str) -> None:
+    """Which is why the two live apart.
+
+    A turn hides cubes and remembers them, so Reset can hand the board straight back. A deal is
+    meant to stick, so it writes the City count the compact rows keep -- the same one `A->C` and
+    `V->C` read and redraw from -- rather than leaving the board saying one thing and the rows
+    another.
+    """
+    flow = render_turn_flow_script()
+
+    assert "state.city" not in flow
+    assert "renderCity" not in flow
+    assert "function dealSetupCubes()" not in flow
+    # What the flow does know is whether a setup is on, which is what a plaque hangs off.
+    assert "state.setup.on" in flow
+
+
 def test_a_phase_only_ever_sets_a_word_on_the_board(page: str) -> None:
     """Which is what lets the styling live in the stylesheet rather than in the handlers."""
     assert ".game-table-stage { --active-player: #C94C4C; }" in page
@@ -1623,6 +1867,9 @@ def test_a_change_of_table_size_puts_a_turn_down_first(page: str) -> None:
     assert count[: count.index("state.count = count;")].endswith("resetTurnFlow();\n    ")
     # And a seat that has just left the table cannot be left holding the turn.
     assert "setActiveSeat(state.activeSeat > count ? 1 : state.activeSeat);" in count
+    # A setup is dealt again for the same reason, onto a tally drawn as the wheel opens.
+    assert "if (state.setup.on) {\n      enterSetupMode();\n    } else {" in count
+    assert "state.setup.finished = false;" in count
     # The City buttons redraw a column too, so they put a turn down before they move a cube.
     city = page[page.index("function sendToCity(seat, area)") :]
     assert "resetTurnFlow();\n    playerState[area] -= 1;" in city[: city.index("\n  }\n\n")]
@@ -2020,9 +2267,9 @@ def test_the_two_hexagons_keep_their_own_widths(scale) -> None:
 def test_page_carries_only_local_compact_controls(page: str) -> None:
     """Controls stay local to this page; richer setup controls remain in game_setup.html."""
     resource_steps = 2 * len(RESOURCE_ABBREVIATIONS)
-    # counts, setup rolls, R/S+/M+, four disc steps, the resource steps, AT+/ATr, Buy, Donate,
-    # Move acolyte, S->A, A->C and V->C
-    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 3 + 4 + resource_steps + 2 + 2 + 4
+    # counts, setup rolls, R/Setup/S+/M+, four disc steps, the resource steps, AT+/ATr, Buy,
+    # Donate, Move acolyte, S->A, A->C and V->C
+    compact_buttons = len(PLAYER_COUNTS) + len(SETUP_ROLLS) + 4 + 4 + resource_steps + 2 + 2 + 4
     assert page.count("<button") == compact_buttons
     assert page.count("<script") == 1
     assert "data-player-count-button" in page
