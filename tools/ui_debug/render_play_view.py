@@ -11,13 +11,14 @@ WHAT IS REAL AND WHAT IS STILL THE SAMPLE
 A page that looks finished while half of it is baked into the layout JSON is worse than one that
 obviously is not, so the split is written down rather than left to a screenshot:
 
-  drawn from the scenario   the duty lying at each position, the tithe counter on each space, every
-                            seat's acolytes on the board, the neutral acolytes, which seats are
-                            occupied, the buildings and pilgrimage sites on the rounds they are
-                            live on, each seat's wheat/stone/silver, each seat's Alms row, who
-                            holds the first player seal, and every line of the log
-  still the layout's sample the piety discs, the merchant, the acolytes inside each player board
-                            (village, abbey and roles), and which map hex round 1 starts on
+  drawn from the scenario   the duty lying at each position, the tithe counter on each space, the
+                            space the Merchant stands on, every seat's acolytes on the board, the
+                            neutral acolytes, which seats are occupied, the buildings and
+                            pilgrimage sites on the rounds they are live on, each seat's
+                            wheat/stone/silver, each seat's Alms row, who holds the first player
+                            seal, and every line of the log
+  still the layout's sample the piety discs, the acolytes inside each player board (village, abbey
+                            and roles), and which map hex round 1 starts on
   in the state, drawn here  special activities, committed acolytes, donated buildings, cardinal
   by nothing                favour tiles, victory points, ship position, and trade routes
 
@@ -47,6 +48,7 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     acolytes_by_position,
     dummy_acolytes_by_position,
     duty_by_position_name,
+    merchant_position_name,
     resources_for,
     seated_player_ids,
     state_header,
@@ -171,6 +173,23 @@ def _position_index(payload: dict, tile: dict, by_position: list[int]) -> int:
     names = payload["board_positions"]
     position = tile["board_position"]
     return by_position[names.index(position)] if position in names else 0
+
+
+def merchant_duty_for(payload: dict, duty_layout: dict) -> str:
+    """Which tile the Merchant token is drawn on, found by the space it stands on.
+
+    The wheel marks the Merchant by duty id, so a duty id is what comes back -- but it is looked up
+    THROUGH the position, never asked for directly. `duty_wheel_layout.json` carries
+    `merchant_token.starts_on = "taxation"`, which is the debug page's default and is ignored here:
+    the Merchant occupies a space under the current rule, and the tile lying on that space is dealt
+    afresh per seed. Asking for Taxation would give a token that follows the Taxation tile around
+    the ring instead of standing where the engine put it, which is right only until it advances.
+    """
+    position = merchant_position_name(payload)
+    for tile in duty_layout["duties"]:
+        if tile["board_position"] == position:
+            return tile["id"]
+    raise ValueError(f"No duty tile lies on board position {position!r}.")
 
 
 def duty_board_state_for(payload: dict, duty_layout: dict) -> dict:
@@ -298,7 +317,11 @@ def render_play_view_html(
     )
     duty_svg = crop_svg(
         regularise_duty_hexagon(
-            render_duty_wheel_svg(scenario_duty, duty_board_state_for(payload, scenario_duty)),
+            render_duty_wheel_svg(
+                scenario_duty,
+                duty_board_state_for(payload, scenario_duty),
+                merchant_on=merchant_duty_for(payload, scenario_duty),
+            ),
             hexagon,
         ),
         scale.crop["action"],
