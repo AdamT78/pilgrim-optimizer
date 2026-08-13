@@ -12,7 +12,9 @@ Future work can extract structured geometry/layout data one prototype at a time 
 Each kind of file here has one job, and mixing them up is how this layer starts to drift:
 
 - **Prototype HTML** (`prototypes/*.html`) are visual baselines. Once a prototype lands it is
-  not edited; renderers are judged against it.
+  not edited; renderers are judged against it. The wax seals are the one exception, and are
+  documented as such below: that page was never drawn by hand, so it is its renderer's committed
+  output rather than a baseline the renderer is measured against.
 - **Prototype sources** (`prototype_sources/*.py.txt`) are reference copies of the throwaway
   scripts that drew a baseline. They are kept as `.txt` on purpose: they are read for intent when
   reverse-engineering, never imported, run, or refactored.
@@ -55,9 +57,9 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype in `prototypes/` has been through this checklist except the wax seals, which are at
-step 1: a baseline and its source, filed and linked, with no layout data, no renderer and no
-generated page yet. New prototypes start at step 1 again.
+Every prototype in `prototypes/` has been through this checklist. The wax seals skip step 3 and
+always will: there is no baseline to reverse-engineer structured data out of, because the page is
+what its own renderer draws. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -705,16 +707,12 @@ title is that far off the offset the other eight share. The generated markup als
 `data-duty`, `data-token`, and `data-tithe-token` attributes the baseline has no need for, so the
 two files are not byte identical.
 
-## Wax seals prototype
+## Wax seals renderer extraction
 
-`prototypes/seal_prototypes.html` is the untouched visual baseline for the wax seals that will mark
-which duty tile a turn started from and which duty it took. `prototype_sources/seal_prototypes.py.txt`
-preserves the Python that drew it, reference-only as always: read for intent, never imported or run.
-
-This one is a baseline and nothing else. There is no layout JSON, no renderer and no generated page,
-which is step 1 of the checklist above and the whole of what has been done; the renderer comes
-separately, judged against this. So there is nothing here to run, and no link to a generated view in
-`index.html` or the overview, because there is no generated view to link to.
+`prototypes/seal_prototypes.html` is the wax seals that will mark which duty tile a turn started
+from and which duty it took, drawn on their own so the artwork can be judged before anything is
+built on it. `render_seal_prototypes.py` draws them and `generate_seal_prototypes.py` writes the
+page.
 
 The page is the artwork on its own. Four seals at 96px — the square, the shield, and the letters `S`
 and `A` — each on a chip of the tile parchment, `#EFE4C6`, because a seal is struck on a duty tile
@@ -725,10 +723,51 @@ left of the ring as bare wax. That clearance is what the page exists to be looke
 written down rather than left to be measured off the picture, and a change to either can be seen
 against the other. The wax is `#DC6A61`, the glyph `#6E1A14` and the ring `#A83F36`.
 
-Everything is inline SVG. Nothing is fetched, nothing is scripted, and the only address on the page
-is the SVG namespace, which names a dialect rather than a file — a baseline that needed an asset
-beside it could not be opened on its own, and being openable on its own is most of what a baseline
-is for.
+Generate the output page with:
+
+```bash
+python3 tools/ui_debug/generate_seal_prototypes.py
+```
+
+### The one page here that is output rather than baseline
+
+Everywhere else in this directory, `prototypes/` holds something a person drew and a renderer is
+later judged against. The seals never had one. The page came off this code from the start, so there
+is nothing for the renderer to be judged against and no second copy worth keeping: running the
+generator writes `prototypes/seal_prototypes.html` itself, and the test suite holds the committed
+file to being byte identical to what the code produces rather than merely alike. A regenerate that
+dirties the working tree is a failure, not a diff to commit.
+
+That is also why there is no `prototype_sources/seal_prototypes.py.txt`. Those are reference copies
+of throwaway scripts, kept as `.txt` because they are read for intent and never run. This script is
+not throwaway and is still what writes the page, so it is a module like any other renderer here.
+
+The generated overview keeps its own copy under `generated/` like it does for every other view, and
+`index.html` links both. It gets there the same way the rest do — the overview hands every generator
+a destination — which is what keeps a routine rebuild out of `prototypes/`.
+
+### What it reads, and the assert it will not render past
+
+Nothing, and no layout JSON: everything the seal is made of is in the constants at the top of
+`render_seal_prototypes.py`, which is what lets the seal be tuned there without the duty wheel
+around it. So there is no data-against-drawing parity check to be had here, only the drawing.
+
+`check_clearance()` runs on every render and stops it dead if the glyph would foul the impression
+ring. A square of side B has a half-diagonal of `B/2*sqrt(2)`, and that — not B — is what has to
+stay inside the ring. At `GLYPH_BOX = 18` against `SEAL_R = 20` the corners reach 12.73 while the
+ring sits at 15.60, leaving about three units of bare wax. An earlier `GLYPH_BOX = 23` reached 16.26
+and crossed it. Nothing downstream notices that: it renders perfectly well and merely looks wrong,
+so the assert is the only place it can be caught, and it stays an assert rather than a comment or a
+test for exactly that reason.
+
+`GLYPHS` is four entries and `TREATMENTS` is `[False]`, but the keyline path through `seal()` and
+the `HEX_GREEN` / `PAGE_BLACK` grounds are still wired up. They are the variants this page exists to
+compare, kept switchable because the comparison will be wanted again — two reds at a small size may
+yet need a light line between them — and turning either back on is one line.
+
+Everything is inline SVG. Nothing is fetched and nothing is scripted, so the page opens from the
+file system on its own. Like the other renderers, this one does not connect to `GameState` and does
+not implement game rules: a seal is a mark drawn on a tile, not a rule about the tile.
 
 ## Alms Table renderer extraction
 

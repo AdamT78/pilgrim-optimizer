@@ -89,6 +89,12 @@ from tools.ui_debug.generate_player_boards_v2 import (  # noqa: E402
 from tools.ui_debug.generate_player_boards_v2 import (  # noqa: E402
     generate_player_boards_v2_page,
 )
+from tools.ui_debug.generate_seal_prototypes import (  # noqa: E402
+    OUTPUT_FILENAME as SEAL_PROTOTYPES_FILENAME,
+)
+from tools.ui_debug.generate_seal_prototypes import (  # noqa: E402
+    generate_seal_prototypes_page,
+)
 from tools.ui_debug.generate_ship_marker import (  # noqa: E402
     OUTPUT_FILENAME as SHIP_MARKER_FILENAME,
 )
@@ -119,6 +125,7 @@ class GeneratedViews:
     piety_tracks_v2: Path
     pilgrimage_sites: Path
     duty_wheel: Path
+    seal_prototypes: Path
     alms_table: Path
     game_setup: Path
     game_table: Path
@@ -136,6 +143,7 @@ class GeneratedViews:
             self.piety_tracks_v2,
             self.pilgrimage_sites,
             self.duty_wheel,
+            self.seal_prototypes,
             self.alms_table,
             self.game_setup,
             self.game_table,
@@ -181,6 +189,7 @@ def render_debug_overview_html() -> str:
     <li><a href="{PIETY_TRACKS_V2_FILENAME}">Generated piety tracks v2</a></li>
     <li><a href="{PILGRIMAGE_SITES_FILENAME}">Generated pilgrimage sites</a></li>
     <li><a href="{DUTY_WHEEL_FILENAME}">Generated duty wheel</a></li>
+    <li><a href="{SEAL_PROTOTYPES_FILENAME}">Generated wax seals</a></li>
     <li><a href="{ALMS_TABLE_FILENAME}">Generated Alms Table</a></li>
     <li><a href="{GAME_SETUP_FILENAME}">Generated game setup debug view (piety track v2 above the
       map, and the duty wheel panel)</a></li>
@@ -220,6 +229,11 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         output_path=destination_dir / PILGRIMAGE_SITES_FILENAME
     )
     duty_wheel = generate_duty_wheel_page(output_path=destination_dir / DUTY_WHEEL_FILENAME)
+    # Asked for by destination like the rest, which for this one also keeps the overview out of
+    # `prototypes/`: the seal generator is the only one whose own default writes a committed file.
+    seal_prototypes = generate_seal_prototypes_page(
+        output_path=destination_dir / SEAL_PROTOTYPES_FILENAME
+    )
     alms_table = generate_alms_table_page(output_path=destination_dir / ALMS_TABLE_FILENAME)
     game_setup = write_game_setup_page(destination_dir / GAME_SETUP_FILENAME)
     game_table = generate_game_table_page(output_path=destination_dir / GAME_TABLE_FILENAME)
@@ -238,6 +252,7 @@ def generate_debug_views(*, output_dir: Path | None = None) -> GeneratedViews:
         piety_tracks_v2=piety_tracks_v2,
         pilgrimage_sites=pilgrimage_sites,
         duty_wheel=duty_wheel,
+        seal_prototypes=seal_prototypes,
         alms_table=alms_table,
         game_setup=game_setup,
         game_table=game_table,
