@@ -647,7 +647,7 @@ def test_the_seat_order_is_the_one_the_game_table_seats_its_players_in() -> None
     Red is seat 1 there and it must be seat 1 here, or the same marker would name one player on
     the panel and another on the page around it.
     """
-    from tools.ui_debug.generate_game_table import SEATED_PLAYERS
+    from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
     assert SEAT_ORDER == SEATED_PLAYERS
 

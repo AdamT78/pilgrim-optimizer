@@ -13,40 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from tools.ui_debug.generate_game_table import (
-    BODY_CHROME,
-    DEFAULT_CONTROL_PLAYER_SEAT,
-    DEFAULT_PLAYER_COUNT,
-    FIRST_PLAYER_SEAT_AT_START,
-    GAP_PX,
-    PAGE_TITLE,
-    PANEL_CHROME,
-    PIETY_VARIANT_ID,
-    PLAYER_COUNTS,
-    REF_AVAIL_WIDTH,
-    REF_VIEWPORT_HEIGHT,
-    RESOURCE_ABBREVIATIONS,
-    RESOURCE_FLOOR,
-    SEAT_COLS,
-    SEATED_PLAYERS,
-    SETUP_CITY_CUBES,
-    SETUP_ROLLS,
-    board_measurements,
-    crop_svg,
-    default_output_path,
-    duty_hexagon,
-    generate_game_table_page,
-    building_control_data,
-    duty_control_data,
-    duty_wheel_seating,
-    regular_hexagon_path,
-    regularise_duty_hexagon,
-    render_turn_flow_script,
-    resource_control_data,
-    seat_numbers_by_player,
-    solve_table_scale,
-    visible_seats_by_count,
-)
 from tools.ui_debug.generate_game_setup import (
     DEFAULT_START_ROLL,
     EDGE_HEX_PATH,
@@ -56,14 +22,26 @@ from tools.ui_debug.generate_game_setup import (
     donated_vp_by_level,
     setup_placements,
 )
-from tools.ui_debug.render_donated_buildings import HEX_RADIUS as DONATED_HEX_RADIUS
-from tools.ui_debug.render_donated_buildings import (
-    STAR_OUTER_RADIUS as DONATED_STAR_RADIUS,
+from tools.ui_debug.generate_game_table import (
+    DEFAULT_CONTROL_PLAYER_SEAT,
+    DEFAULT_PLAYER_COUNT,
+    FIRST_PLAYER_SEAT_AT_START,
+    PAGE_TITLE,
+    PLAYER_COUNTS,
+    RESOURCE_ABBREVIATIONS,
+    RESOURCE_FLOOR,
+    SETUP_CITY_CUBES,
+    SETUP_ROLLS,
+    building_control_data,
+    default_output_path,
+    duty_control_data,
+    duty_wheel_seating,
+    generate_game_table_page,
+    render_turn_flow_script,
+    resource_control_data,
+    seat_numbers_by_player,
+    visible_seats_by_count,
 )
-from tools.ui_debug.render_donated_buildings import (
-    VP_TEXT_FONT_SIZE as DONATED_VP_FONT_SIZE,
-)
-from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_alms_table import (
     CUBE_SIZE as ALMS_CUBE_SIZE,
 )
@@ -81,9 +59,14 @@ from tools.ui_debug.render_alms_table import STAR_LABEL_FONT_SIZE as TRACK_STAR_
 from tools.ui_debug.render_alms_table import STAR_OUTER_RADIUS as TRACK_STAR_RADIUS
 from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS
 from tools.ui_debug.render_buildings import load_building_catalog
-from tools.ui_debug.render_duty_wheel import (
-    CUBE_SIZE as DUTY_CUBE_SIZE,
+from tools.ui_debug.render_donated_buildings import HEX_RADIUS as DONATED_HEX_RADIUS
+from tools.ui_debug.render_donated_buildings import (
+    STAR_OUTER_RADIUS as DONATED_STAR_RADIUS,
 )
+from tools.ui_debug.render_donated_buildings import (
+    VP_TEXT_FONT_SIZE as DONATED_VP_FONT_SIZE,
+)
+from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_duty_wheel import (
     CITY_STACK_HEIGHT,
     CORNUCOPIA_TOKEN,
@@ -95,6 +78,9 @@ from tools.ui_debug.render_duty_wheel import (
     merchant_path,
     render_duty_wheel_controls_html,
     tally_pieces,
+)
+from tools.ui_debug.render_duty_wheel import (
+    CUBE_SIZE as DUTY_CUBE_SIZE,
 )
 from tools.ui_debug.render_map import load_map_layout, render_map_svg
 from tools.ui_debug.render_piety_track_v2 import load_piety_track_v2_layout, variant_by_id
@@ -110,6 +96,22 @@ from tools.ui_debug.render_player_boards_v2 import (
     load_player_boards_v2_layout,
     player_by_id,
     players_of,
+)
+from tools.ui_debug.render_table_layout import (
+    BODY_CHROME,
+    GAP_PX,
+    PANEL_CHROME,
+    PIETY_VARIANT_ID,
+    REF_AVAIL_WIDTH,
+    REF_VIEWPORT_HEIGHT,
+    SEAT_COLS,
+    SEATED_PLAYERS,
+    board_measurements,
+    crop_svg,
+    duty_hexagon,
+    regular_hexagon_path,
+    regularise_duty_hexagon,
+    solve_table_scale,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
