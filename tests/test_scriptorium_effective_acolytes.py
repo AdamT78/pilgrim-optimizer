@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.merchant import taxation_board_position
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 
@@ -48,7 +49,11 @@ def test_own_active_scriptorium_generates_effective_acolyte_variants() -> None:
 
 def test_own_active_scriptorium_works_when_merchant_resource_is_none() -> None:
     scenario = load_scenario("scenarios/scriptorium_active_majority_selected_duty_001.json")
-    taxation_state = replace(scenario.state, merchant_position=0)
+    taxation_state = replace(
+        scenario.state,
+        # Taxation is a looked-up tile now, not index 0 of the retired six-step path.
+        merchant_board_position=taxation_board_position(scenario.config),
+    )
     actions = legal_actions(taxation_state, scenario.config)
     scriptorium_actions = [
         action

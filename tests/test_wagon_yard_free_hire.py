@@ -289,7 +289,7 @@ def test_wagon_yard_guild_moves_merchant_and_pays_no_hire_fee() -> None:
 
     assert hired_details["building_id"] == "guild"
     assert hired_details["amount"] == 0
-    assert result.state.merchant_position == 3
+    assert result.state.merchant_board_position == 3
     assert any(
         dict(event.details).get("building") == "guild"
         for event in _events_of_type(result.events, EventType.BUILDING_BONUS)

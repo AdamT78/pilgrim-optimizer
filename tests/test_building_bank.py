@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.merchant import taxation_board_position
 from pilgrim.rules.transition import (
     TransitionValidationError,
     _costs_with_bank_substitution,
@@ -236,7 +237,11 @@ def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 0
 
-    merchant_none_state = scenario.state.with_merchant_position(0)
+    # 0 used to be Taxation, the first entry of the retired six-step path. It is the City now,
+    # which the Merchant can never occupy, so the tile offering nothing is looked up instead.
+    merchant_none_state = scenario.state.with_merchant_board_position(
+        taxation_board_position(scenario.config)
+    )
     actions_when_none = [
         action
         for action in legal_actions(merchant_none_state, scenario.config)

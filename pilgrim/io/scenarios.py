@@ -11,6 +11,7 @@ from typing import Any
 from pilgrim.model.buildings import BuildingsConfig, PlayerBoardSlots
 from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.dummy import DummyAcolyteGroups
+from pilgrim.model.duties import DUTY_POSITIONS
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS, SpecialActivities
@@ -82,7 +83,7 @@ def load_scenario(path: str | Path) -> LoadedScenario:
     state = _game_state_from_dict(
         merged["initial_state"],
         scenario_raw=merged,
-        merchant_path_length=len(config.merchant.path),
+        taxation_board_position=config.duty_tiles.board_index_for_category("taxation"),
         ship_start_position=config.ship.start_position,
         ship_path_length=config.ship.path_length,
         buildings_config=config.buildings,
@@ -127,7 +128,7 @@ def _game_state_from_dict(
     raw: Mapping[str, Any],
     *,
     scenario_raw: Mapping[str, Any],
-    merchant_path_length: int,
+    taxation_board_position: int,
     ship_start_position: int,
     ship_path_length: int,
     buildings_config: BuildingsConfig,
@@ -138,7 +139,9 @@ def _game_state_from_dict(
     parsed_players = _players_from_dict(players_raw, acolytes_raw=acolytes_raw)
     player_states = tuple(player_state for _, player_state in parsed_players)
     timing = _timing_state_from_dict(raw)
-    merchant_position = _merchant_position_from_dict(raw)
+    merchant_board_position = _merchant_board_position_from_dict(
+        raw, taxation_board_position=taxation_board_position
+    )
     ship_position = int(raw.get("ship_position", ship_start_position))
     completed_rounds = int(raw.get("completed_rounds", max(0, timing.round_number - 1)))
     start_player = _start_player_from_dict(raw)
@@ -161,11 +164,6 @@ def _game_state_from_dict(
         raw,
         scenario_raw=scenario_raw,
     )
-    if merchant_position >= merchant_path_length:
-        raise ValueError(
-            "Scenario merchant_position must be within Merchant path bounds: "
-            f"{merchant_position} not in [0, {merchant_path_length - 1}]."
-        )
     if ship_position < 0 or ship_position >= ship_path_length:
         raise ValueError(
             "Scenario ship_position must be within Ship path bounds: "
@@ -179,7 +177,7 @@ def _game_state_from_dict(
         timing=timing,
         table_player_count=table_player_count,
         dummy_acolytes=dummy_acolytes,
-        merchant_position=merchant_position,
+        merchant_board_position=merchant_board_position,
         ship_position=ship_position,
         completed_rounds=completed_rounds,
         game_over=game_over,
@@ -371,11 +369,38 @@ def _timing_state_from_dict(raw: Mapping[str, Any]) -> TimingState:
     )
 
 
-def _merchant_position_from_dict(raw: Mapping[str, Any]) -> int:
-    merchant_raw = raw.get("merchant")
-    if isinstance(merchant_raw, Mapping):
-        return int(merchant_raw.get("position", 0))
-    return int(raw.get("merchant_position", 0))
+def _merchant_board_position_from_dict(
+    raw: Mapping[str, Any], *, taxation_board_position: int
+) -> int:
+    """Where the Merchant stands, refusing to read a pre-rename value as a board position.
+
+    `merchant_position` used to index a six-step path in which 0 meant Taxation. A board ring
+    position is a different quantity: 0 is the City and the valid range is 1..8. The two ranges
+    OVERLAP -- an old value of 1 or 2 is a perfectly legal board position and would have loaded
+    silently under the new meaning, quietly moving the Merchant to a different tile and, for the
+    two that changed resource, altering what the scenario was testing without failing.
+
+    So the old name is refused rather than migrated in place. A range check could not have caught
+    this; only the name can.
+    """
+    for stale, form in (
+        (raw.get("merchant_position"), "merchant_position"),
+        (raw.get("merchant"), "merchant.position"),
+    ):
+        if stale is not None:
+            raise ValueError(
+                f"Scenario carries `{form}`, which indexed the Merchant's old six-step path. "
+                "The Merchant now rides the eight duty tiles: rename the field to "
+                "`merchant_board_position` and give it a board ring position, 1..8, where 1 is "
+                "north and the City (0) is never valid."
+            )
+    position = int(raw.get("merchant_board_position", taxation_board_position))
+    if not 1 <= position <= len(DUTY_POSITIONS):
+        raise ValueError(
+            "Scenario merchant_board_position must be a duty tile, 1..8; the Merchant is never "
+            f"in the City. Got {position}."
+        )
+    return position
 
 
 def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
@@ -441,8 +466,7 @@ def _building_availability_from_dict(
     if not isinstance(availability_raw, Mapping):
         raise ValueError("building_availability must be an object mapping building ids to rounds.")
     entries = tuple(
-        (str(building_id), int(live_round))
-        for building_id, live_round in availability_raw.items()
+        (str(building_id), int(live_round)) for building_id, live_round in availability_raw.items()
     )
     return tuple(sorted(entries))
 
@@ -475,9 +499,7 @@ def _parse_pilgrimage_rounds_mapping(raw: Any) -> tuple[int, ...]:
     for site_key, round_number in raw.items():
         site_text = str(site_key).strip().lower()
         if not site_text.startswith("site_"):
-            raise ValueError(
-                "pilgrimage_rounds keys must be site identifiers like 'site_1'."
-            )
+            raise ValueError("pilgrimage_rounds keys must be site identifiers like 'site_1'.")
         try:
             site_index = int(site_text.split("_", maxsplit=1)[1])
         except ValueError as exc:
@@ -536,9 +558,7 @@ def _special_activities_from_dict(raw: Any) -> SpecialActivities:
     counts.pop("grain", None)
     unknown_ids = set(counts) - set(SPECIAL_ACTIVITY_IDS)
     if unknown_ids:
-        raise ValueError(
-            "Unknown special activity id(s): " + ", ".join(sorted(unknown_ids)) + "."
-        )
+        raise ValueError("Unknown special activity id(s): " + ", ".join(sorted(unknown_ids)) + ".")
     return SpecialActivities(
         fields=counts.get("fields", 0),
         road_engineer=counts.get("road_engineer", 0),

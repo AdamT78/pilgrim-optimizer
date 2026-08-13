@@ -42,7 +42,7 @@ def test_non_round_ending_turn_does_not_advance_merchant_or_ship() -> None:
     assert EventType.TURN_ADVANCE in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
     assert EventType.SHIP_ADVANCE not in event_types
-    assert result.state.merchant_position == scenario.state.merchant_position
+    assert result.state.merchant_board_position == scenario.state.merchant_board_position
     assert result.state.ship_position == scenario.state.ship_position
 
 
@@ -57,7 +57,7 @@ def test_round_end_emits_excess_ship_merchant_start_player_and_round_advance() -
     assert EventType.SEASON_END not in event_types
     assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
     assert result.state.ship_position == 2
-    assert result.state.merchant_position == 1
+    assert result.state.merchant_board_position == 1
     assert result.state.start_player is PlayerId.PLAYER_TWO
     assert result.state.timing.round_number == 3
 

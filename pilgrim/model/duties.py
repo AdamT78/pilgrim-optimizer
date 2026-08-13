@@ -40,6 +40,14 @@ _DEFAULT_DUTY_TILES: tuple[tuple[str, str], ...] = (
 )
 
 
+# Where Taxation sits when nothing shuffles the tiles, derived from the default layout rather
+# than written down again. The Merchant starts on Taxation, so this is where it starts on a state
+# built directly rather than loaded from a scenario; a loaded scenario looks up its own.
+DEFAULT_TAXATION_BOARD_POSITION: int = 1 + DUTY_POSITIONS.index(
+    next(position for position, category in _DEFAULT_DUTY_TILES if category == "taxation")
+)
+
+
 @dataclass(frozen=True, slots=True)
 class DutyTilesLayout:
     """Resolved duty-tile layout for one scenario configuration."""

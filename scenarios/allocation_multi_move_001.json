@@ -18,7 +18,7 @@
   },
   "initial_state": {
     "start_player_id": "player_one",
-    "merchant_position": 0,
+    "merchant_board_position": 7,
     "ship_position": 0,
     "completed_rounds": 0,
     "game_over": false,

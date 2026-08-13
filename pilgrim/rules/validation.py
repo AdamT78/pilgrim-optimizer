@@ -77,9 +77,7 @@ def ensure_valid_workforce(state: GameState) -> None:
                 f"{player_id.name} village workforce cannot be negative."
             )
         if workforce.abbey < 0:
-            raise TransitionValidationError(
-                f"{player_id.name} abbey workforce cannot be negative."
-            )
+            raise TransitionValidationError(f"{player_id.name} abbey workforce cannot be negative.")
         committed = workforce.committed
         if committed.roads < 0:
             raise TransitionValidationError(
@@ -147,8 +145,17 @@ def ensure_valid_timing(state: GameState) -> None:
 
 
 def ensure_valid_merchant_state(state: GameState) -> None:
-    if state.merchant_position < 0:
-        raise TransitionValidationError("Merchant position cannot be negative.")
+    """The Merchant stands on a duty tile, 1..8, and never in the City.
+
+    0 is not a low value here; it is the City, and the Merchant cannot be there. Checked in the
+    rules layer as well as on the state so that a position reached by advancing is held to it too,
+    not only one that was loaded.
+    """
+    if not 1 <= state.merchant_board_position <= 8:
+        raise TransitionValidationError(
+            "Merchant board position must be a duty tile, 1..8; the Merchant is never in the "
+            f"City. Got {state.merchant_board_position}."
+        )
 
 
 def ensure_valid_round_end_state(state: GameState) -> None:
@@ -192,8 +199,7 @@ def ensure_valid_player_board_slots_structure(state: GameState) -> None:
         overlap = set(slots.active_buildings).intersection(slots.donated_buildings)
         if overlap:
             raise TransitionValidationError(
-                f"{player_id.name} building cannot be both active and donated: "
-                f"{sorted(overlap)}."
+                f"{player_id.name} building cannot be both active and donated: {sorted(overlap)}."
             )
 
 
@@ -241,15 +247,11 @@ def ensure_valid_setup_state(state: GameState) -> None:
                 "setup_sow_complete=true requires setup_sow_completed_by to contain all players."
             )
         if state.phase is TurnPhase.SETUP_SOW:
-            raise TransitionValidationError(
-                "setup_sow_complete=true cannot keep phase=setup_sow."
-            )
+            raise TransitionValidationError("setup_sow_complete=true cannot keep phase=setup_sow.")
         return
 
     if state.phase is not TurnPhase.SETUP_SOW:
-        raise TransitionValidationError(
-            "Incomplete setup sow must use phase=setup_sow."
-        )
+        raise TransitionValidationError("Incomplete setup sow must use phase=setup_sow.")
     if state.active_player in completed_set:
         raise TransitionValidationError(
             "active_player cannot already be in setup_sow_completed_by."

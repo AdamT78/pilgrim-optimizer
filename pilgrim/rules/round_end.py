@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from pilgrim.model.actions import StartPlayerConfessionBoxUse
-from pilgrim.model.config import GameConfig, MerchantConfig
+from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.resources import Resources
@@ -13,11 +13,11 @@ from pilgrim.model.state import GameState
 from pilgrim.rules.buildings import (
     BuildingAbilitySource,
     apply_building_hire_payment,
-    building_live_round,
     building_ability_source,
+    building_live_round,
     is_building_live,
 )
-from pilgrim.rules.merchant import trade_route_income_resource
+from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, trade_route_income_resource
 from pilgrim.rules.validation import TransitionValidationError
 
 EXCESS_RESOURCE_CAP = 6
@@ -84,14 +84,29 @@ def apply_excess_resource_caps(
 def resolve_trade_route_income(
     state: GameState,
     *,
-    merchant_config: MerchantConfig,
+    config: GameConfig,
     actor: PlayerId,
     action_id: str,
 ) -> tuple[GameState, tuple[GameEvent, ...]]:
-    """Apply post-merchant trade-route income by current Merchant resource."""
-    resource = trade_route_income_resource(state, merchant_config)
+    """Apply post-merchant trade-route income in the Merchant's current resource."""
+    resource = trade_route_income_resource(state, config)
     if resource is None:
         return state, ()
+
+    if resource == CORNUCOPIA_COUNTER:
+        # A cornucopia here would need each player to choose what their routes pay in, and that
+        # choice deliberately does not exist: every trade_routes_count is 0 until map tile
+        # placement lands, so there is nothing to choose about and no income to pay. Adding a
+        # per-player round-end prompt now would be a phase built for no one. When trade routes
+        # arrive, this is where the choice goes.
+        return state, (
+            GameEvent(
+                event_type=EventType.TRADE_ROUTE_INCOME_SKIPPED,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(reason="cornucopia_choice_not_implemented"),
+            ),
+        )
 
     next_state = state
     events: list[GameEvent] = []
@@ -150,9 +165,7 @@ def select_next_start_player(
 
     next_state = state
     events: list[GameEvent] = []
-    temporary_bonus_by_player: dict[PlayerId, int] = {
-        player_id: 0 for player_id in players
-    }
+    temporary_bonus_by_player: dict[PlayerId, int] = {player_id: 0 for player_id in players}
     for player_id in ordered_players:
         directive = use_by_player.get(player_id)
         if directive is None:

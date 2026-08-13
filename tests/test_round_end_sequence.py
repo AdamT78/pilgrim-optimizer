@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.merchant import advance_merchant_position
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
@@ -13,7 +14,7 @@ def test_non_round_ending_turn_does_not_run_round_end_phases() -> None:
 
     assert result.state.active_player is PlayerId.PLAYER_TWO
     assert result.state.timing.round_number == scenario.state.timing.round_number
-    assert result.state.merchant_position == scenario.state.merchant_position
+    assert result.state.merchant_board_position == scenario.state.merchant_board_position
     assert EventType.MERCHANT_ADVANCE not in event_types
     assert EventType.START_PLAYER_SELECTION not in event_types
     assert EventType.EXCESS_RESOURCE_CAP not in event_types
@@ -84,7 +85,7 @@ def test_merchant_moves_once_at_round_end_only() -> None:
         non_round_action,
         non_round_scenario.config,
     )
-    assert non_round_result.state.merchant_position == non_round_scenario.state.merchant_position
+    assert non_round_result.state.merchant_board_position == non_round_scenario.state.merchant_board_position
     assert not any(
         event.event_type is EventType.MERCHANT_ADVANCE for event in non_round_result.events
     )
@@ -96,7 +97,11 @@ def test_merchant_moves_once_at_round_end_only() -> None:
         event for event in round_end_result.events if event.event_type is EventType.MERCHANT_ADVANCE
     ]
     assert len(merchant_events) == 1
-    assert round_end_result.state.merchant_position == round_end_scenario.state.merchant_position + 1
+    # `+ 1` held while the Merchant walked a six-step list and wrapped with modulo. It rides the
+    # board ring now, so the step after north_west is north, not a ninth position: ask the ring.
+    assert round_end_result.state.merchant_board_position == advance_merchant_position(
+        round_end_scenario.state.merchant_board_position, round_end_scenario.config
+    )
 
 
 def test_season_end_scoring_uses_incremented_round_and_orders_events_before_merchant() -> None:

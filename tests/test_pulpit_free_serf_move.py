@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.merchant import taxation_board_position
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 
@@ -49,7 +50,11 @@ def test_own_active_pulpit_generates_no_variants_when_village_has_no_serfs() -> 
 
 def test_own_active_pulpit_works_when_merchant_resource_is_none() -> None:
     scenario = load_scenario("scenarios/pulpit_active_move_serf_001.json")
-    taxation_state = replace(scenario.state, merchant_position=0)
+    taxation_state = replace(
+        scenario.state,
+        # Taxation is a looked-up tile now, not index 0 of the retired six-step path.
+        merchant_board_position=taxation_board_position(scenario.config),
+    )
     actions = legal_actions(taxation_state, scenario.config)
     pulpit_actions = [
         action for action in actions if action.workforce_move_building_id == "pulpit"

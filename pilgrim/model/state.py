@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 
 from pilgrim.model.buildings import PlayerBoardSlots
 from pilgrim.model.dummy import DummyAcolyteGroups
+from pilgrim.model.duties import DEFAULT_TAXATION_BOARD_POSITION, DUTY_POSITIONS
 from pilgrim.model.enums import PlayerId, TurnPhase
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SpecialActivities
@@ -59,7 +60,7 @@ class GameState:
     timing: TimingState = field(default_factory=TimingState)
     table_player_count: int = 4
     dummy_acolytes: DummyAcolyteGroups = field(default_factory=DummyAcolyteGroups)
-    merchant_position: int = 0
+    merchant_board_position: int = DEFAULT_TAXATION_BOARD_POSITION
     ship_position: int = 0
     completed_rounds: int = 0
     game_over: bool = False
@@ -99,8 +100,14 @@ class GameState:
             raise ValueError("ship_position cannot be negative.")
         if self.completed_rounds < 0:
             raise ValueError("completed_rounds cannot be negative.")
-        if self.merchant_position < 0:
-            raise ValueError("merchant_position cannot be negative.")
+        # The Merchant rides the eight duty tiles and never enters the City, so 0 is not a
+        # low value here -- it is an impossible one. This is also the guard that catches a state
+        # built from a pre-rename scenario, whose values indexed a six-step path.
+        if not 1 <= self.merchant_board_position <= len(DUTY_POSITIONS):
+            raise ValueError(
+                "merchant_board_position must be a duty tile, 1..8; the Merchant is never in "
+                f"the City. Got {self.merchant_board_position}."
+            )
         if len(set(self.setup_sow_completed_by)) != len(self.setup_sow_completed_by):
             raise ValueError("setup_sow_completed_by cannot contain duplicates.")
         for player_id in self.setup_sow_completed_by:
@@ -164,8 +171,8 @@ class GameState:
     def with_timing(self, timing: TimingState) -> GameState:
         return replace(self, timing=timing, turn=timing.absolute_turn)
 
-    def with_merchant_position(self, merchant_position: int) -> GameState:
-        return replace(self, merchant_position=merchant_position)
+    def with_merchant_board_position(self, merchant_board_position: int) -> GameState:
+        return replace(self, merchant_board_position=merchant_board_position)
 
     def with_ship_position(self, ship_position: int) -> GameState:
         return replace(self, ship_position=ship_position)

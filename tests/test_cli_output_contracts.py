@@ -271,7 +271,7 @@ def test_cli_guild_hired_contract_reports_hire_bonus_and_effect_order(capsys) ->
         [
             "BUILDING_HIRED: player_one hired Guild from market; paid wheat 1 to bank",
             "BUILDING_BONUS: guild moved Merchant clockwise +1",
-            "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild",
+            "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild",
             "SOWING:",
             "DUTY_RESOLUTION:",
         ],
@@ -293,8 +293,8 @@ def test_cli_guild_round_end_contract_shows_two_merchant_movements(capsys) -> No
     assert len(merchant_lines) == 2
     assert any("cause=guild" in line for line in merchant_lines)
     assert any("cause=guild" not in line for line in merchant_lines)
-    assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat; cause=guild" in output
-    assert "MERCHANT_ADVANCE: produce -> clerical; current resource=silver" in output
+    assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" in output
 
 
 def test_cli_brewery_contract_reports_conversion_and_resource_delta(capsys) -> None:

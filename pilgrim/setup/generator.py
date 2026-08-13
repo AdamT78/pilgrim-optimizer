@@ -110,7 +110,7 @@ def generate_setup_scenario(
                 "setup_sow_complete": False,
                 "setup_sow_completed_by": [],
             },
-            "merchant_position": 0,
+            "merchant_board_position": _taxation_board_position(duty_tiles),
             "ship_position": 0,
             "completed_rounds": 0,
             "game_over": False,
@@ -137,22 +137,30 @@ def _generate_duty_tiles(rng: random.Random) -> dict[str, str]:
     return dict(zip(DUTY_POSITIONS, categories, strict=True))
 
 
+def _taxation_board_position(duty_tiles: dict[str, str]) -> int:
+    """Where the Merchant starts: a lookup on this seed's shuffle, not a constant.
+
+    The tiles are dealt before this is read, so Taxation lands somewhere different from seed to
+    seed and the Merchant's opening position moves with it.
+    """
+    taxation_position = next(
+        position for position, category in duty_tiles.items() if category == "taxation"
+    )
+    return 1 + DUTY_POSITIONS.index(taxation_position)
+
+
 def _generate_tithe_counters(
     rng: random.Random,
     duty_tiles: dict[str, str],
 ) -> dict[str, str]:
     taxation_position = next(
-        position_name
-        for position_name, category in duty_tiles.items()
-        if category == "taxation"
+        position_name for position_name, category in duty_tiles.items() if category == "taxation"
     )
     counters = list(SETUP_TITHE_COUNTER_POOL)
     rng.shuffle(counters)
 
     non_taxation_positions = [
-        position_name
-        for position_name in DUTY_POSITIONS
-        if position_name != taxation_position
+        position_name for position_name in DUTY_POSITIONS if position_name != taxation_position
     ]
     return dict(zip(non_taxation_positions, counters, strict=True))
 

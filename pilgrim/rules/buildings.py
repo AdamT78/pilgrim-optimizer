@@ -18,7 +18,7 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
-from pilgrim.rules.merchant import current_merchant_resource
+from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, current_merchant_resource
 from pilgrim.rules.validation import TransitionValidationError
 
 _EXPECTED_DONATION_VP_BY_LEVEL: dict[int, int] = {
@@ -156,10 +156,7 @@ def default_building_market(config: BuildingsConfig) -> tuple[str, ...]:
     market: list[str] = []
     for level in BUILDING_LEVELS:
         level_buildings = buildings_by_level(config, level)
-        market.extend(
-            building.id
-            for building in level_buildings[: config.setup.draw_count(level)]
-        )
+        market.extend(building.id for building in level_buildings[: config.setup.draw_count(level)])
     validate_building_market(tuple(market), config)
     return tuple(market)
 
@@ -253,9 +250,7 @@ def construct_building_from_market(
     stone_cost = building_stone_cost(definition)
     resources_after_cost = player_state.resources.add(stone=-stone_cost)
     if resources_after_cost.stone < 0:
-        raise ValueError(
-            f"Insufficient stone to construct '{building_id}': need {stone_cost}."
-        )
+        raise ValueError(f"Insufficient stone to construct '{building_id}': need {stone_cost}.")
 
     updated_slots = PlayerBoardSlots(
         active_buildings=(*player_state.player_board_slots.active_buildings, building_id),
@@ -334,11 +329,7 @@ def mill_actual_wheat_cost(required_wheat: int) -> int:
 def used_player_board_slots(player_state: PlayerState) -> int:
     """Return number of occupied shared board slots."""
     slots = player_state.player_board_slots
-    return (
-        len(slots.active_buildings)
-        + len(slots.donated_buildings)
-        + slots.cardinal_favor_tiles
-    )
+    return len(slots.active_buildings) + len(slots.donated_buildings) + slots.cardinal_favor_tiles
 
 
 def available_player_board_slots(player_state: PlayerState, config: GameConfig) -> int:
@@ -374,9 +365,7 @@ def validate_player_board_slots(
         building_by_id(config, building_id)
 
     used_slots = (
-        len(slots.active_buildings)
-        + len(slots.donated_buildings)
-        + slots.cardinal_favor_tiles
+        len(slots.active_buildings) + len(slots.donated_buildings) + slots.cardinal_favor_tiles
     )
     limit = config.player_board.building_and_cardinal_slot_limit
     if used_slots > limit:
@@ -436,8 +425,7 @@ def validate_building_availability(state: GameState, config: GameConfig) -> None
     for building_id in state.building_market:
         if building_id not in availability_map:
             raise TransitionValidationError(
-                "building_market entry missing building_availability round: "
-                f"{building_id}."
+                f"building_market entry missing building_availability round: {building_id}."
             )
 
 
@@ -597,9 +585,7 @@ def building_hire_cost(
 
 def normalize_hire_building_key(building_key: str) -> str:
     """Normalize building ids used by turn-hire tracking helpers."""
-    normalized = "_".join(
-        building_key.strip().lower().replace("-", " ").replace("_", " ").split()
-    )
+    normalized = "_".join(building_key.strip().lower().replace("-", " ").replace("_", " ").split())
     if not normalized:
         raise ValueError("Building key cannot be empty for hire tracking.")
     return normalized
@@ -786,7 +772,7 @@ def _hired_source(
     owner: str | None,
     payable_to: str,
 ) -> BuildingAbilitySource:
-    hire_resource = current_merchant_resource(state, config.merchant)
+    hire_resource = current_merchant_resource(state, config)
     if hire_resource is None:
         return BuildingAbilitySource(
             building_key=building_key,
@@ -797,6 +783,23 @@ def _hired_source(
             payable_to=payable_to,
             usable=False,
             reason="merchant_resource_none",
+        )
+
+    if hire_resource == CORNUCOPIA_COUNTER:
+        # The cornucopia is a wildcard: the hiring player chooses which of wheat, stone or silver
+        # to pay in, which means one legal-action variant per resource they can afford. That
+        # choice does not exist on the action yet, so hiring is refused here rather than guessed
+        # at -- paying in an arbitrary resource would silently spend the wrong stock. Until it
+        # lands, a Merchant on the cornucopia blocks hiring the way Taxation does.
+        return BuildingAbilitySource(
+            building_key=building_key,
+            source_type="unavailable",
+            owner=owner,
+            hire_resource=hire_resource,
+            hire_cost=_HIRE_COST,
+            payable_to=payable_to,
+            usable=False,
+            reason="cornucopia_choice_not_implemented",
         )
 
     acting_resources = state.player_state(acting_player).resources

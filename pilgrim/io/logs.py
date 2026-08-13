@@ -59,7 +59,7 @@ def state_to_record(state: GameState) -> dict[str, Any]:
         "table_player_count": state.table_player_count,
         "ship_position": state.ship_position,
         "completed_rounds": state.completed_rounds,
-        "merchant_position": state.merchant_position,
+        "merchant_board_position": state.merchant_board_position,
         "building_market": list(state.building_market),
         "building_availability": {
             building_id: live_round for building_id, live_round in state.building_availability
