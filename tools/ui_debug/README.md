@@ -464,6 +464,60 @@ the panel's far padding, which is a wider header than the Alms Table's — so th
 They stay equal to each other and centred on the lobes, and the tests hold the left one clear of a
 measured `TITLE_RIGHT_EDGE`, as the Alms Table's tests do.
 
+### The first player marker
+
+Turn order is decided on this track — highest piety takes the marker, and whoever holds it says who
+starts — so the marker belongs on this panel: the thing that decides it and the thing itself end up
+in one frame. It is a wax seal, struck in the holder's own seat colour and pressed into the top
+right corner, and it is the second caller of `render_seal.py`.
+
+One attribute drives it. `render_piety_track_v2_svg(..., first_player_seat=N)` strikes seat `N`'s
+seal and writes `data-first-player-seat="N"` on the root SVG; left out, no seal is drawn and the
+panel is byte-for-byte what it was before. Nothing else on the board reads the seat — no restyled
+disc, no CSS rule, no second highlight — and the composed game table does not pass one yet, so its
+output is unchanged too.
+
+The seat colours are the ones already in `piety_track_v2_layout.json` under `players`, which is what
+draws the four discs; there is no second seat-colour table. From that one colour the rest of the
+seal follows by `darken()`: rim at 0.45, ring at 0.72, crown at 0.50. A re-tuned palette therefore
+needs nothing rewritten.
+
+What the module does name is `SEAT_ORDER` — red is seat 1, then yellow, blue, white. That is not a
+duplicate of anything here: this renderer never resolves a seat to a player. It tags each disc with
+whose it is and not with which seat, and `data-player-seat` is stamped on afterwards by
+`tag_player_discs()` in `generate_game_table.py`, onto markup this module has already finished with.
+The layout's own `seats` describe the 2×2 cluster — which corner a disc stands in — and carry no
+seat number to read one off. Since the renderer cannot import the page that composes it, the order
+is named here and two tests hold it: one against the game table's `SEATED_PLAYERS`, so the marker
+cannot name one player on the panel and another on the page around it, and one against the premise,
+which fails if a seat ever does become derivable here and `SEAT_ORDER` should then go.
+
+`SEAT_ORDER` is **board order, not turn order**. Where a player sits is fixed for the whole game;
+who plays first changes every round. A later PR is to permute the discs within the cluster at
+position 0 to show the turn sequence, which re-shuffles whenever the start player does. That
+permutation must come from turn state rather than from this list, and `data-player-seat` must go on
+meaning which seat a player occupies rather than which slot their disc has been moved into —
+otherwise a marker naming seat 1 and a disc labelled seat 1 stop being the same player.
+
+The crown is one closed polygon rather than a shape standing on a band, because at this size two
+shapes leave a visible seam across the middle that reads as a crack in the wax. It lives here and
+not in the shared module: glyphs go with their consumer, the way the duty tiles' square, shield, `S`
+and `A` stay with the prototype page. It is handed to `render_seal` as its `inner` rather than drawn
+after it, so it turns with the wax and the ring — one die, one strike, one rotation.
+
+The seal is struck **on** the header rule, not in a gap left for it, so the rule runs under the wax
+and comes out the far side. That only reads as a line passing underneath while there is a decent run
+of it beyond the seal, and `check_rule_stub()` is the assert that keeps it so. It measures at the
+trough of the wobble rather than at the nominal radius — at `r` a seal can be declared clear and
+still show a hair where the ripple runs wide — and takes the factor off `WOBBLE`, so re-tuning the
+ripple re-tunes the check with it. At the approved position 38.9 units of rule are left, against a
+floor of 18. Nothing downstream notices a rule that stops just short of the wax; it renders fine and
+merely looks like a stray hair, so the assert is the only place it can be caught.
+
+The seal also laps the inner hairline at the top by about 2.5 units. That is intended: wax is
+applied over an edge, not inside a margin. The rule keeps its original geometry and the trefoil is
+not re-centred — the wax goes over them, nothing moves out of its way.
+
 The VP numbers on the stars are **not** in the layout JSON, exactly as in v1. They are read from
 `configs/piety.json`, parsed with the game's own `piety_from_dict`, so the drawn track cannot
 disagree with the scoring the engine uses, and the renderer fails loudly if the config stops
@@ -713,12 +767,29 @@ two files are not byte identical.
 from and which duty it took, drawn on their own so the artwork can be judged before anything is
 built on it. `render_seal_prototypes.py` draws the page and `generate_seal_prototypes.py` writes it.
 
-The seal itself is `render_seal.py`, which is shared: `render_seal(cx, cy, r)` returns the blob of
-wax and the impression ring struck into it, as a fragment with no `<svg>` around it, and
-`check_clearance()` lives with it. It is separate because the seal is about to be struck twice —
-here, and on the Piety Track for the first player marker — and the wobbled outline is exactly the
-kind of thing that gets copied and then quietly drifts. The wax is shared; what is struck into it is
-not, so the glyphs, the grounds and the page layout stay with the page.
+The seal itself is `render_seal.py`, which is shared: `render_seal(cx, cy, r, wax, rim, ring)`
+returns the blob of wax and the impression ring struck into it, as a fragment with no `<svg>` around
+it. It is separate because the seal is struck twice — here, and on the Piety Track for the first
+player marker — and the wobbled outline is exactly the kind of thing that gets copied and then
+quietly drifts. The wax is shared; what is struck into it is not, so the glyphs, the grounds and the
+page layout stay with the page.
+
+Colour is asked for rather than kept there, because the two callers have two palettes: these seals
+are one fixed red, and the first player seal is whichever seat is holding it. `darken()` is what
+turns one colour into the three a seal needs, by scaling each channel toward black, which keeps the
+hue and drops the value. The Piety Track uses it; this page passes its own `WAX`, `WAX_RIM` and
+`WAX_DEEP` and does not.
+
+`tilt` turns the wax about its own centre. It wraps the seal in a group only when there is a turn to
+make, so the four square-struck seals on this page carry no transform of nothing.
+
+`inner` is whatever the die struck into the wax. Glyphs belong to their consumer, so it is taken as
+a fragment rather than drawn here — but it has to be taken at all, because the ring and the glyph
+come off the same die and have to turn together. A caller that appended its glyph after this
+returned would be tilting half the die and leaving the other half square. That goes unnoticed on the
+ring, which is a circle whose turn cannot be seen, and would leave `tilt` doing nothing but rotating
+the wobble. This page strikes its seals square and passes no `inner`, so its bytes are untouched by
+either parameter.
 
 Both lines on the seal are drawn in proportion to `r` rather than at a fixed width, so a seal struck
 smaller is the same drawing rather than the same drawing under a heavier pen. `RIM_STROKE_R` and
@@ -759,9 +830,9 @@ a destination — which is what keeps a routine rebuild out of `prototypes/`.
 
 ### What it reads, and the assert it will not render past
 
-Nothing, and no layout JSON: everything the seal is made of is in constants, the geometry in
-`render_seal.py` and the page's own glyphs and grounds in `render_seal_prototypes.py`. That is what
-lets the seal be tuned without the duty wheel around it, and it means there is no
+Nothing, and no layout JSON: everything the seal is made of is in constants, the shared geometry in
+`render_seal.py` and the page's own glyphs, grounds and colours in `render_seal_prototypes.py`. That
+is what lets the seal be tuned without the duty wheel around it, and it means there is no
 data-against-drawing parity check to be had here, only the drawing.
 
 `check_clearance()` runs on every render and stops it dead if the glyph would foul the impression
@@ -771,6 +842,11 @@ ring sits at 15.60, leaving about three units of bare wax. An earlier `GLYPH_BOX
 and crossed it. Nothing downstream notices that: it renders perfectly well and merely looks wrong,
 so the assert is the only place it can be caught, and it stays an assert rather than a comment or a
 test for exactly that reason.
+
+It sits here with the glyphs and not in the shared module, because a glyph in a box is a property of
+these four and of nothing else. The first player seal's crown is sized off the radius and has no box
+to measure, so an assert kept next to the wax would have covered one caller of two while reading as
+though it covered both.
 
 `GLYPHS` is four entries and `TREATMENTS` is `[False]`, but the keyline path through `seal()` and
 the `HEX_GREEN` / `PAGE_BLACK` grounds are still wired up. They are the variants this page exists to

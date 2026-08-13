@@ -4,27 +4,24 @@ from pathlib import Path
 
 import pytest
 
-from tools.ui_debug import render_seal as seal_module
+from tools.ui_debug import render_seal_prototypes as prototypes_module
 from tools.ui_debug.generate_seal_prototypes import (
     default_output_path,
     generate_seal_prototypes_page,
 )
 from tools.ui_debug.render_seal import (
-    GLYPH_BOX,
     RIM_STROKE_R,
     RING_R,
     RING_STROKE_R,
     SEAL_R,
-    WAX,
-    WAX_DEEP,
-    WAX_RIM,
     WOBBLE,
-    check_clearance,
+    darken,
     render_seal,
 )
 from tools.ui_debug.render_seal_prototypes import (
     BACKGROUNDS,
     GLYPH,
+    GLYPH_BOX,
     GLYPHS,
     HEX_GREEN,
     KEY,
@@ -32,6 +29,10 @@ from tools.ui_debug.render_seal_prototypes import (
     PARCHMENT,
     SEAL_PX,
     TREATMENTS,
+    WAX,
+    WAX_DEEP,
+    WAX_RIM,
+    check_clearance,
     g_square,
     render_seal_prototypes_html,
     seal,
@@ -45,6 +46,11 @@ PROTOTYPES_MODULE = UI_DEBUG_DIR / "render_seal_prototypes.py"
 COMMITTED_PAGE = UI_DEBUG_DIR / "prototypes" / "seal_prototypes.html"
 
 GLYPH_NAMES = ["square", "shield", "S", "A"]
+
+
+def struck(cx: float, cy: float, r: float, **kwargs: object) -> str:
+    """The shared seal in the prototype's own three reds, which is what most of these check."""
+    return render_seal(cx, cy, r, WAX, WAX_RIM, WAX_DEEP, **kwargs)  # type: ignore[arg-type]
 
 
 def _polygon_points(drawn: str) -> list[str]:
@@ -118,7 +124,7 @@ def test_a_glyph_too_big_for_the_ring_stops_the_render_rather_than_spoiling_it()
     and merely looks wrong — so the failure has to happen here or not at all. No page comes out.
     """
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(seal_module, "GLYPH_BOX", 23.0)
+        patch.setattr(prototypes_module, "GLYPH_BOX", 23.0)
 
         with pytest.raises(AssertionError) as raised:
             check_clearance()
@@ -134,7 +140,7 @@ def test_the_page_is_written_only_after_the_clearance_is_checked(tmp_path: Path)
     destination = tmp_path / "seal_prototypes.html"
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(seal_module, "GLYPH_BOX", 23.0)
+        patch.setattr(prototypes_module, "GLYPH_BOX", 23.0)
         with pytest.raises(AssertionError):
             generate_seal_prototypes_page(output_path=destination)
 
@@ -192,8 +198,8 @@ def test_the_seal_can_be_struck_at_a_point_rather_than_only_about_the_origin() -
     Wax and ring move together: a seal that placed its blob and left its impression behind would be
     a seal in two halves, so the ring is asked for at the same centre rather than assumed at 0,0.
     """
-    here = render_seal(0, 0, SEAL_R)
-    there = render_seal(140, 62, SEAL_R)
+    here = struck(0, 0, SEAL_R)
+    there = struck(140, 62, SEAL_R)
 
     assert '<circle cx="140" cy="62"' in there
     assert '<circle cx="0" cy="0"' in here
@@ -211,12 +217,12 @@ def test_the_two_lines_on_a_seal_thicken_with_it_and_the_ring_keeps_its_share() 
     agreed radius they must still emit those exact literals -- `2`, not `2.00`, which would be the
     same width and a different file.
     """
-    at_agreed = render_seal(0, 0, SEAL_R)
+    at_agreed = struck(0, 0, SEAL_R)
     assert 'stroke-width="2"' in at_agreed
     assert 'stroke-width="1.6"' in at_agreed
     assert f'r="{SEAL_R * RING_R:.2f}"' in at_agreed
 
-    halved = render_seal(0, 0, SEAL_R / 2)
+    halved = struck(0, 0, SEAL_R / 2)
     assert f'stroke-width="{SEAL_R / 2 * RIM_STROKE_R:g}"' in halved
     assert f'stroke-width="{SEAL_R / 2 * RING_STROKE_R:g}"' in halved
     assert f'r="{SEAL_R / 2 * RING_R:.2f}"' in halved
@@ -224,7 +230,7 @@ def test_the_two_lines_on_a_seal_thicken_with_it_and_the_ring_keeps_its_share() 
 
 def test_the_wobble_is_what_stops_the_wax_reading_as_a_circle() -> None:
     """Twenty-six points off a modulated radius: never round, never the same shape twice over."""
-    points = _polygon_points(render_seal(0, 0, SEAL_R))
+    points = _polygon_points(struck(0, 0, SEAL_R))
     radii = {
         round((float(x) ** 2 + float(y) ** 2) ** 0.5, 2)
         for x, y in (point.split(",") for point in points)
@@ -236,10 +242,70 @@ def test_the_wobble_is_what_stops_the_wax_reading_as_a_circle() -> None:
     assert max(radii) < SEAL_R * (1 + sum(WOBBLE))
 
 
+def test_the_wax_is_whatever_colour_it_is_asked_for_rather_than_one_fixed_red() -> None:
+    """Two callers, two palettes: the duty tiles are red, the first player seal is a seat colour.
+
+    So the three colours are asked for. Nothing about the drawing changes with them -- the same
+    blob at the same points -- which is what makes it the same seal in another wax.
+    """
+    red = struck(0, 0, SEAL_R)
+    blue = render_seal(0, 0, SEAL_R, "#2E86C1", "#153C57", "#21608B")
+
+    assert _polygon_points(red) == _polygon_points(blue)
+    for mine, theirs in ((WAX, "#2E86C1"), (WAX_RIM, "#153C57"), (WAX_DEEP, "#21608B")):
+        assert mine in red and mine not in blue
+        assert theirs in blue and theirs not in red
+
+
+def test_a_seal_pulled_toward_black_keeps_its_hue_and_loses_its_value() -> None:
+    """How a seat's one disc colour becomes a whole seal without a second palette being written."""
+    assert darken("#FFFFFF", 0.45) == "#737373"
+    assert darken("#2E86C1", 0.5) == "#174360"
+    assert darken("#C0392B", 1.0) == "#C0392B"
+    assert darken("#C0392B", 0.0) == "#000000"
+
+    # Hue survives because every channel is scaled by the same amount: the ratios hold.
+    full = tuple(int("C0392B"[at : at + 2], 16) for at in (0, 2, 4))
+    half = tuple(int(darken("#C0392B", 0.5).lstrip("#")[at : at + 2], 16) for at in (0, 2, 4))
+    assert all(abs(h - f / 2) <= 0.5 for f, h in zip(full, half, strict=True))
+
+
+def test_a_seal_is_only_wrapped_in_a_turn_when_there_is_a_turn_to_make() -> None:
+    """An unconditional group would be a transform of nothing on every seal that does not tilt.
+
+    It would also have moved the prototype page, which strikes its four seals square and had no
+    group around them before this. The turn is about the seal's own centre, so tilting it does not
+    also shift it off the spot it was placed on.
+    """
+    square = struck(516, 27, 22)
+    tilted = struck(516, 27, 22, tilt=-14.0)
+
+    assert "transform" not in square
+    assert struck(516, 27, 22, tilt=0.0) == square
+    assert tilted == f'<g transform="rotate(-14 516 27)">{square}</g>'
+
+
+def test_whatever_the_die_struck_turns_with_the_wax_rather_than_staying_square() -> None:
+    """The ring and the glyph come off one die, so a tilt that moved only one of them would be a
+    strike where half the die turned. It goes unnoticed only because a ring is rotationally
+    symmetric and its turn cannot be seen -- which would leave the tilt doing nothing but rotating
+    the wobble. So the impression is taken in rather than appended after, and lands inside the
+    group: over the ring, under nothing.
+    """
+    crown = '<polygon points="1,2 3,4" fill="#601C16"/>'
+    tilted = struck(516, 27, 22, tilt=-14.0, inner=crown)
+
+    assert tilted.startswith('<g transform="rotate(-14 516 27)">')
+    assert tilted.endswith(f"{crown}</g>")
+    assert tilted.index("<circle") < tilted.index(crown)
+    # Nothing to strike is the prototype's case, and it must cost nothing at all.
+    assert struck(516, 27, 22, inner="") == struck(516, 27, 22)
+
+
 def test_the_prototype_strikes_the_shared_seal_at_the_size_it_was_agreed_at() -> None:
     """The page is one caller of the seal now, not the place the seal lives."""
-    assert seal(g_square).startswith(render_seal(0, 0, SEAL_R))
-    assert WAX_RIM in render_seal(0, 0, SEAL_R)
+    assert seal(g_square).startswith(struck(0, 0, SEAL_R))
+    assert WAX_RIM in struck(0, 0, SEAL_R)
 
 
 def test_nothing_in_the_shared_module_sits_there_without_a_caller() -> None:
@@ -322,4 +388,4 @@ def test_the_seals_know_nothing_about_the_game_they_will_be_struck_in() -> None:
     """
     assert _imports_of(SEAL_MODULE) == {"__future__", "math"}
     # The page reaches for the wax and nothing else; the drawing is all in the standard library.
-    assert _imports_of(PROTOTYPES_MODULE) == {"__future__", "collections", "tools"}
+    assert _imports_of(PROTOTYPES_MODULE) == {"__future__", "collections", "math", "tools"}
