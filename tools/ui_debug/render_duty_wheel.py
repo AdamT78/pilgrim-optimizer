@@ -507,7 +507,7 @@ def _capsule_caps(cx: float, cy: float) -> tuple[float, float, float]:
     return cx - CAPSULE_WAIST / 2, cx + CAPSULE_WAIST / 2, cap_y
 
 
-def _icon_coin(ink: str) -> str:
+def _icon_silver(ink: str) -> str:
     return (
         f'<circle cx="0" cy="0" r="9.6" fill="none" stroke="{ink}" stroke-width="1.45"/>'
         f'<circle cx="0" cy="0" r="6.55" fill="none" stroke="{ink}" stroke-width="0.98"/>'
@@ -556,7 +556,7 @@ def _icon_cornucopia(ink: str, horn_path: str) -> str:
     )
 
 
-_ICON_BODIES = {"coin": _icon_coin, "stone": _icon_stone, "wheat": _icon_wheat}
+_ICON_BODIES = {"silver": _icon_silver, "stone": _icon_stone, "wheat": _icon_wheat}
 
 
 def render_tithe_icon(

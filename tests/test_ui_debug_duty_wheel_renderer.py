@@ -488,7 +488,7 @@ def test_walking_the_ring_visits_every_duty_tile_and_comes_back_to_taxation() ->
 def test_rendered_svg_marks_the_tithe_token_icons() -> None:
     svg = generated_svg()
 
-    assert 'data-tithe-token="coin"' in svg
+    assert 'data-tithe-token="silver"' in svg
     assert 'data-tithe-token="cornucopia"' in svg
     assert 'data-tithe-token="wheat"' in svg
     assert 'data-tithe-token="stone"' in svg
