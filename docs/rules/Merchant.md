@@ -75,24 +75,35 @@ consequence of `path[0]` rather than of the rule.
 ## Cornucopia
 
 Building hire is the live consumer of the Merchant resource. When the Merchant sits on the
-cornucopia, the hiring player is meant to choose which of wheat, stone or silver to pay in, as one
-action variant per resource they can afford.
+cornucopia, the hiring player chooses which of wheat, stone or silver to pay in, and the choice
+shows up as one hire variant per resource they can afford. The action records it in
+`hire_payment_resource`, which is set on nothing else — every other hire has exactly one resource
+it could be paid in, so naming it would say nothing.
 
-That choice does not exist yet. Until it does, a cornucopia Merchant **blocks hiring** the way
-Taxation does, with source reason `cornucopia_choice_not_implemented`. Refusing spends nothing;
-guessing a resource would quietly spend the wrong stock.
+Affordability decides how wide the choice is:
 
-Trade-route income reads the same resource. It emits `TRADE_ROUTE_INCOME_SKIPPED` on a cornucopia
-rather than growing a per-player round-end prompt, because every `trade_routes_count` is 0 until
-map tile placement exists and so there is nothing to choose about. The choice will be needed when
-trade routes arrive.
+- can afford all three: three variants
+- can afford one: one variant, identical to what a plain counter of that resource would generate
+  apart from the record of the choice
+- can afford none: hiring is unavailable, for want of resources rather than for the reason Taxation
+  gives — there the Merchant offers nothing at all, whatever the player holds
+
+Only affordable resources are offered. A variant that cannot be paid is a legal action that fails
+on contact, and pruning a choice down to its one real option is the no-op pruning applied elsewhere.
+
+Trade-route income reads the same resource and does **not** have the choice. It emits
+`TRADE_ROUTE_INCOME_SKIPPED` on a cornucopia, because every `trade_routes_count` is 0 until map tile
+placement exists and so there is nothing to choose about. The asymmetry is not an oversight: hiring
+happens on one player's turn and that player can be asked, whereas round-end income would need every
+player to answer at once. The choice will be needed when trade routes arrive.
 
 ### A coverage note worth keeping
 
 The fallback tithe counters that hand-written scenarios inherit deal 2 wheat, 3 silver and 2 stone
 and **no cornucopia**, while the generator deals 2/2/2/1 with one. No fixture in the repository can
 therefore put the Merchant on a cornucopia, which is why a reachable crash in building hire sat
-under a green suite. `tests/test_merchant_cornucopia.py` reaches that state deliberately.
+under a green suite. `tests/test_merchant_cornucopia.py` reaches that state deliberately, and is
+the only coverage the hire choice has for as long as that stays true.
 
 ## What this replaced
 

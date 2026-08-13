@@ -99,12 +99,16 @@ def resolve_trade_route_income(
         # placement lands, so there is nothing to choose about and no income to pay. Adding a
         # per-player round-end prompt now would be a phase built for no one. When trade routes
         # arrive, this is where the choice goes.
+        #
+        # Hiring makes the same choice and does have it, because hiring happens on a turn where
+        # one player is acting and can be asked. This is round end, where every player would have
+        # to answer at once.
         return state, (
             GameEvent(
                 event_type=EventType.TRADE_ROUTE_INCOME_SKIPPED,
                 actor=actor,
                 action_id=action_id,
-                details=make_event_details(reason="cornucopia_choice_not_implemented"),
+                details=make_event_details(reason="cornucopia_income_choice_not_implemented"),
             ),
         )
 

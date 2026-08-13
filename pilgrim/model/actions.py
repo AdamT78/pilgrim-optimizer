@@ -79,6 +79,10 @@ class FullTurnAction:
     start_player_confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...] = ()
     hired_building_id: str | None = None
     hired_building_source: str | None = None
+    # Only set when the Merchant stands on the cornucopia, where the hire cost is a wildcard and
+    # the payer picks which stock it comes out of. Every other hire has one possible resource, so
+    # naming it on the action would say nothing the action does not already imply.
+    hire_payment_resource: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
@@ -307,6 +311,10 @@ def action_id(action: GameAction) -> str:
             f":hire_building:{action.hired_building_id or 'none'}"
             f":from:{action.hired_building_source or 'unknown'}"
         )
+    # Appended only when a choice was actually made, so that the id of every hire paid the one way
+    # it could be paid stays exactly what it was before the cornucopia had a say.
+    if action.hire_payment_resource is not None:
+        hire_suffix += f":paid_in:{action.hire_payment_resource}"
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
