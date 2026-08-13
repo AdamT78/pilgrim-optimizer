@@ -41,7 +41,7 @@ def _with_cornucopia_under_the_merchant(scenario):
 
 
 def _with_stock(state, *, stone: int, silver: int, wheat: int):
-    """Set the acting player's goods, so affordability is the thing under test and not the fixture."""
+    """Set the acting player's goods, so affordability is under test and not the fixture."""
     player = state.active_player
     player_state = state.player_state(player)
     resources = replace(player_state.resources, stone=stone, silver=silver, wheat=wheat)
@@ -146,6 +146,65 @@ def test_a_single_affordable_resource_costs_nothing_in_extra_actions() -> None:
     wildcard_ids = {action_id(a) for a in legal_actions(state, cornucopia_config)}
     plain_ids = {action_id(a) for a in legal_actions(state, wheat_config)}
     assert {a.replace(":paid_in:wheat", "") for a in wildcard_ids} == plain_ids
+
+
+@pytest.mark.parametrize(
+    ("paid_in", "expected_stone", "expected_silver", "expected_wheat"),
+    [
+        ("stone", 4, 5, 7),
+        ("silver", 5, 4, 7),
+        ("wheat", 5, 5, 6),
+    ],
+)
+def test_a_cornucopia_hire_is_paid_out_of_the_named_stock_and_no_other(
+    paid_in: str,
+    expected_stone: int,
+    expected_silver: int,
+    expected_wheat: int,
+) -> None:
+    """Guards that the resource is settled once, at enumeration, and not re-derived at apply time.
+
+    Apply re-derives the hire source from the state, where the counter is still the wildcard. If it
+    reads the resource off that source instead of off the action, it spends whichever stock the
+    wildcard is compared against first, and every variant quietly pays in the same one. Nothing that
+    only inspects `legal_actions` can see it: the three variants are generated correctly and tagged
+    correctly, and the divergence is entirely in what the payment takes.
+
+    So the assertion that carries the weight is the two stocks that must NOT move. That the named
+    stock falls by the hire cost is true under the bug as well, for one of the three resources.
+
+    The player holds five of each, and the resolution these hires attach to is Produce Wheat, worth
+    +2 wheat whichever stock paid for the hire. Expected totals are written out in full rather than
+    derived, so the test states an outcome instead of restating the arithmetic under test.
+    """
+    scenario = load_scenario(HIRE_SCENARIO)
+    _unused, config = _with_cornucopia_under_the_merchant(scenario)
+    state = _with_stock(scenario.state, stone=5, silver=5, wheat=5)
+
+    variants = [
+        action
+        for action in legal_actions(state, config)
+        if action.hired_building_id is not None and action.hire_payment_resource == paid_in
+    ]
+    assert len(variants) == 1, f"expected exactly one hire variant paid in {paid_in}"
+
+    after = apply_action(state, variants[0], config).state
+    resources = after.player_state(state.active_player).resources
+
+    # The stocks the hire must leave alone are checked first, so that a payment taken from the
+    # wrong one is reported as what it is rather than as the named stock failing to fall.
+    untouched = {"stone", "silver", "wheat"} - {paid_in}
+    expected_untouched = {
+        "stone": expected_stone,
+        "silver": expected_silver,
+        "wheat": expected_wheat,
+    }
+    for resource in sorted(untouched):
+        assert getattr(resources, resource) == expected_untouched[resource], (
+            f"hire paid in {paid_in} moved {resource}"
+        )
+
+    assert getattr(resources, paid_in) == expected_untouched[paid_in]
 
 
 def test_paying_a_cornucopia_hire_spends_the_resource_the_action_named() -> None:
