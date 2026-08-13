@@ -32,6 +32,9 @@ from tools.ui_debug.render_player_boards_v2 import (
     MARKER_CUBE,
     PANEL_CORNER_RADIUS,
     RESOURCE_BAND_COLUMNS,
+    RESOURCE_CHOICE_HEIGHT,
+    RESOURCE_CHOICE_TOP,
+    RESOURCE_CHOICE_WIDTH,
     RESOURCE_COUNT_FONT_SIZE,
     RESOURCE_DIVIDER_OVERHANG,
     RESOURCE_READOUT_COUNT,
@@ -60,6 +63,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     players_of,
     render_player_board_v2_svg,
     render_player_boards_v2_html,
+    resource_choice_styles,
     resource_icon_center_y,
     resource_icon_height,
     resource_icon_size,
@@ -106,6 +110,16 @@ def page(layout: dict) -> str:
 
 def _svg_bodies(text: str) -> list[str]:
     return re.findall(r"<svg\b.*?</svg>", text, re.S)
+
+
+def _boards_grid(text: str) -> str:
+    """The page's grid, stopping where the state panels below it begin.
+
+    The grid is a fixed four; what follows is however many of the board's states are worth
+    showing, and that number moves. A test about the grid has to say which of the two it is
+    counting, or it starts failing every time the page grows a panel.
+    """
+    return text[: text.index("<h2>")]
 
 
 def _board_wraps(text: str) -> list[str]:
@@ -654,6 +668,90 @@ def test_every_icon_centres_in_the_band_however_it_is_drawn(layout: dict) -> Non
     assert abs(resource_icon_center_y("cube")) < 0.5
 
 
+def test_every_stock_gets_a_key_big_enough_to_press(layout: dict) -> None:
+    """The key is the whole pill, not the picture on it.
+
+    Silver's coin is about 23 across and the amounts are set at 16. Neither is a thing to ask
+    anyone to aim at, so the target is the pill and the artwork merely sits inside it.
+    """
+    svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+    keys = re.findall(r"<rect data-resource-choice-key=\"(\w+)\"[^>]*/>", svg)
+    block = board_geometry(len(layout["worker_roles"]))["resources"]
+
+    assert keys == [resource["id"] for resource in layout["resources"]]
+    for cx, resource in zip(block["cell_x"], layout["resources"], strict=True):
+        assert (
+            f'data-resource-choice-key="{resource["id"]}"'
+            f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
+            f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
+        ) in svg
+    assert RESOURCE_CHOICE_WIDTH == 66.0 and RESOURCE_CHOICE_HEIGHT == 61.0
+    assert resource_icon_size("coin") < RESOURCE_CHOICE_WIDTH / 2
+
+
+def test_a_key_is_drawn_hidden_and_only_an_attribute_shows_it(layout: dict) -> None:
+    """So the page reveals and hides, and never has a fill to assign."""
+    svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+
+    for key in re.findall(r"<rect data-resource-choice-key=[^>]*/>", svg):
+        assert 'visibility="hidden"' in key
+    styles = resource_choice_styles()
+    assert '[data-resource-choice="true"] [data-resource-choice-key]' in styles
+    assert "visibility: visible; cursor: pointer;" in styles
+    # And the rules go while the keys are up: three keys with rules between them read as a table.
+    assert '[data-resource-choice="true"] [data-resource-divider]' in styles
+    assert styles.count("visibility: hidden;") == 1
+    assert "fill" not in styles and "#" not in styles
+
+
+def test_the_keys_go_under_the_artwork_they_highlight(layout: dict) -> None:
+    """SVG has no z-index and only document order, so an appended key would bury the readout."""
+    svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+    order = [
+        match.lastgroup
+        for match in re.finditer(
+            r"(?P<divider>data-resource-divider)|(?P<key>data-resource-choice-key)"
+            r"|(?P<readout><g data-resource=)",
+            svg,
+        )
+    ]
+
+    assert order == ["divider"] * 2 + ["key"] * 3 + ["readout"] * 3
+
+
+def test_a_board_that_will_never_be_asked_does_not_carry_the_keys(layout: dict) -> None:
+    """Opt in, as the first player seal does.
+
+    Three rects a board that no stylesheet on the page can reveal and no script on it would ever
+    want to are not hidden markup, they are dead markup: nothing distinguishes them from a mistake,
+    and the next reader has to prove they are unreachable before touching anything near them.
+    """
+    plain = render_player_board_v2_svg(layout, players_of(layout)[0])
+
+    assert "data-resource-choice-key" not in plain
+    # And nothing else moves when they are asked for: the keys are the whole of the difference.
+    asked = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+    assert re.sub(r"<rect data-resource-choice-key=[^>]*/>", "", asked) == plain
+
+
+def test_the_page_that_shows_the_board_shows_it_being_asked(layout: dict) -> None:
+    """A board mid-question is a state of the board, so the page for the board's states has it.
+
+    Shown by asking the renderer for the keys and then setting the attribute the game table sets,
+    rather than by drawing a picture of the state, so what is reviewed here is what is shipped.
+    """
+    page = render_player_boards_v2_html(layout)
+    panel = page[page.index("<h2>") :]
+
+    assert panel.count('data-resource-choice="true"') == 1
+    assert panel.count("data-resource-choice-key") == 3
+    # The pair is the point: the rules going is half of what the choosing state looks like.
+    assert panel.count("<figcaption>") == 2
+    assert '[data-resource-choice="true"] [data-resource-divider]' in page
+    # And the four boards the page opened with are not touched by any of it.
+    assert page[: page.index("<h2>")].count("data-resource-choice-key") == 1
+
+
 def test_the_readouts_start_where_the_colour_tag_stops(layout: dict) -> None:
     """Two things want this corner, and they divide it between them.
 
@@ -787,9 +885,10 @@ def test_html_shows_four_boards_in_a_two_by_two_grid(page: str) -> None:
     assert page.startswith("<!DOCTYPE html>")
     assert TITLE in page
     assert SUBTITLE_START in page
-    assert len(_svg_bodies(page)) == 4
-    assert page.count('<div class="board-row">') == 2
-    assert page.count('data-component="player-board-v2"') == 4
+    grid = _boards_grid(page)
+    assert len(_svg_bodies(grid)) == 4
+    assert grid.count('<div class="board-row">') == 2
+    assert grid.count('data-component="player-board-v2"') == 4
     assert "<iframe" not in page
 
 
@@ -823,7 +922,7 @@ def test_generator_writes_generated_page(tmp_path: Path) -> None:
     assert written == output_path
     content = output_path.read_text(encoding="utf-8")
     assert TITLE in content
-    assert len(_svg_bodies(content)) == 4
+    assert len(_svg_bodies(_boards_grid(content))) == 4
 
 
 def test_baseline_prototype_is_untouched() -> None:
@@ -866,8 +965,10 @@ def test_generated_boards_are_the_baseline_boards_on_a_wider_board(tmp_path: Pat
     of every piece.
     """
     generated = _svg_bodies(
-        generate_player_boards_v2_page(output_path=tmp_path / "player_boards_v2.html").read_text(
-            encoding="utf-8"
+        _boards_grid(
+            generate_player_boards_v2_page(
+                output_path=tmp_path / "player_boards_v2.html"
+            ).read_text(encoding="utf-8")
         )
     )
     baseline = _svg_bodies(BASELINE_PROTOTYPE.read_text(encoding="utf-8"))
@@ -924,7 +1025,7 @@ def test_generated_page_matches_baseline_facts(page: str) -> None:
     for _, fill, _ in PLAYER_COLORS.values():
         assert fill in baseline
         assert fill in page
-    assert len(_svg_bodies(baseline)) == len(_svg_bodies(page)) == 4
+    assert len(_svg_bodies(baseline)) == len(_svg_bodies(_boards_grid(page))) == 4
     # The first-player card is the one thing the prototype names that these boards do not draw.
     assert ">First player</text>" in baseline and ">marker</text>" in baseline
     assert "First player" not in page

@@ -86,6 +86,7 @@ from tools.ui_debug.render_duty_wheel import (
 )
 from tools.ui_debug.render_duty_wheel import (
     CITY_STACK_HEIGHT,
+    CORNUCOPIA_TOKEN,
     board_edges,
     board_positions,
     duty_position_by_id,
@@ -738,13 +739,231 @@ def test_the_resource_script_starts_from_the_amounts_the_board_is_drawn_holding(
     assert "var RESOURCES = " + json.dumps(data, separators=(",", ":")) + ";" in page
 
 
-def test_a_resource_stops_at_nothing_and_only_moves_the_chosen_seat(page: str) -> None:
+def test_a_resource_stops_at_nothing_and_only_moves_the_seat_it_is_given(page: str) -> None:
+    """Every stock moves through one place, and that place is told whose stock it is.
+
+    Row two's steppers act on row two's dropdown; a tithe pays whoever's turn it is. Those are two
+    different seats most of the time, so the seat is an argument rather than something read out of
+    the page from inside -- reading the dropdown for a tithe would pay the wrong player in silence.
+    """
     assert RESOURCE_FLOOR == 0
-    assert "function stepResource(id, delta)" in page
+    assert "function creditResource(seat, id, delta)" in page
+    assert "var amounts = state.resources[String(seat)];" in page
     assert "amounts[id] = Math.max(RESOURCES.floor, amounts[id] + delta);" in page
-    assert "var seat = String(discPlayerSeat.value);" in page
+    assert "function stepResource(id, delta)" in page
+    assert "creditResource(discPlayerSeat.value, id, delta);" in page
     assert "board.querySelector('[data-player-resource=\"' + id + '\"]')" in page
     assert "readout.textContent = String(amounts[id]);" in page
+    # Nothing else may read the debug dropdown to decide who is paid.
+    assert page.count("discPlayerSeat.value") == 2  # the stepper, and moveDisc's own seat
+
+
+def test_a_tithe_pays_the_seat_whose_turn_it_is(page: str) -> None:
+    """Not the debug dropdown, which is the seat the resource steppers act on and nothing else."""
+    assert "function takeTithe()" in page
+    assert "payTithe(state.activeSeat, token);" in page
+    assert "if (resolution === 'tithe') {\n      takeTithe();\n    }" in page
+
+
+def test_the_token_is_read_off_the_tile_lying_at_the_position_not_the_position(page: str) -> None:
+    """A turn moves by board position; an arrangement is written against the slots tiles lie in.
+
+    The space carries both names, so it is where one is turned into the other. A second table
+    pairing them up would be a thing to keep in step by hand every time the wheel is re-laid.
+    """
+    assert "function titheTokenAt(position)" in page
+    assert "var space = spaceAt(position);" in page
+    assert "var slot = space ? space.getAttribute('data-duty') : null;" in page
+    assert "if (entry.position === slot) {" in page
+    assert "token = entry.tithe_icon;" in page
+
+
+def test_the_tile_that_brings_no_token_offers_nothing_to_take(page: str) -> None:
+    """Taxation. The plaque goes dark, and pressing it anyway is not a move."""
+    assert "if (resolution === 'tithe' && !titheTokenAt(state.turn.duty)) {" in page
+    assert "if (chosen && !titheTokenAt(state.turn.duty)) {\n          chosen = false;" in page
+    landed = {
+        entry["position"]: entry["tithe_icon"]
+        for entry in duty_setups(load_duty_wheel_layout())[0]
+    }
+    assert landed["taxation"] is None
+    assert [slot for slot, token in landed.items() if token is None] == ["taxation"]
+
+
+def test_the_cornucopia_asks_the_seat_instead_of_paying_it(page: str) -> None:
+    assert f"var CORNUCOPIA = '{CORNUCOPIA_TOKEN}';" in page
+    assert "if (token === CORNUCOPIA) {\n      openTitheChoice();" in page
+    assert "state.turn.titheChoice = 'pending';" in page
+    # The payment is the key press, which is why a Reset before one costs the seat nothing.
+    assert "function chooseTitheResource(id)" in page
+    assert "if (state.turn.titheChoice !== 'pending') {\n      return;\n    }" in page
+    assert "closeTitheChoice();\n    payTithe(seat, id);" in page
+
+
+def test_only_the_seat_being_asked_has_its_board_light(page: str) -> None:
+    """Three other boards are on screen and not one of them is anyone else's to press."""
+    assert (
+        "var asking = Number(board.getAttribute('data-player-seat')) === state.activeSeat;" in page
+    )
+    assert "board.setAttribute('data-resource-choice', 'true');" in page
+    assert "board.removeAttribute('data-resource-choice');" in page
+    # And the key checks the board it stands on, so a revealed key still cannot pay a bystander.
+    guard = "if (!board || Number(board.getAttribute('data-player-seat')) !== state.activeSeat) {"
+    assert guard in page
+
+
+def test_the_wheel_stays_lit_while_the_board_is_being_asked(page: str) -> None:
+    """The press has been taken but the turn is not done with it, and the answer is elsewhere.
+
+    Without this the plaque goes quiet the moment it is pressed while nothing on the wheel has
+    changed, and anyone watching the wheel presses it again. Nothing moves on its own here, so the
+    lit plaque is the only thing saying the turn is still waiting.
+    """
+    assert "if (state.turn.titheChoice === 'pending') {\n          chosen = true;" in page
+
+
+def test_putting_a_turn_down_takes_an_unanswered_choice_with_it(page: str) -> None:
+    assert "state.turn.resolution = null;" in page
+    assert page.index("closeTitheChoice();") < page.index("function resetTurnFlow()")
+    assert "function clearTurnMarks()" in page
+
+
+def test_a_tithe_writes_down_what_it_paid_rather_than_where_it_came_from(page: str) -> None:
+    """A receipt, not a rule: seat, stock and amount, kept by the turn that paid them.
+
+    Working it out again from the tile on the way back would be a different question asked at a
+    different time. The R button rewrites which duty lies where, so the tile that answers at reset
+    need not be the tile that paid -- and a Cornucopia never said what it paid at all.
+    """
+    assert "function payTithe(seat, id) {" in page
+    assert "creditResource(seat, id, 1);" in page
+    assert "state.turn.paid = { seat: seat, id: id, amount: 1 };" in page
+    # Both ways of paying go through it, so neither can pay without leaving the receipt.
+    assert "payTithe(state.activeSeat, token);" in page
+    assert "payTithe(seat, id);" in page
+    assert "creditResource(state.activeSeat, token, 1);" not in page
+
+
+def test_reset_takes_back_exactly_what_was_paid_and_no_more(page: str) -> None:
+    """Named seat, named stock, named amount, and no floor on the way down.
+
+    A floor would be a guess that the subtraction might be wrong. It cannot be: the only thing
+    ever taken back is something this same turn added, so the stock cannot go below what the turn
+    found -- and a floor would quietly forgive the day that stopped being true.
+    """
+    assert "function takeTitheBack() {" in page
+    assert "creditResource(paid.seat, paid.id, -paid.amount);" in page
+    assert "Math.max" not in page[page.index("function takeTitheBack()") :][:400]
+    # Nothing recorded, nothing to take back: a still-pending choice needs no case of its own.
+    assert "var paid = state.turn.paid;\n    if (!paid) {\n      return;\n    }" in page
+    body = page[page.index("function resetTurnFlow()") :][:200]
+    assert body.index("takeTitheBack();") < body.index("putCubesBack();")
+
+
+def test_a_turn_that_has_been_handed_on_is_out_of_reach_of_the_next_reset(page: str) -> None:
+    """The receipt is torn up as the wheel passes, so Reset can only ever reach its own turn."""
+    ending = page[page.index("function endTurn()") :]
+    ending = ending[: ending.index("\n  }")]
+
+    assert "state.turn.paid = null;" in ending
+    assert ending.index("state.turn.paid = null;") < ending.index("clearTurnMarks();")
+    # And the ledgers go the same way, so what the turn sowed and sent home stands.
+    for ledger in ("pickedUp", "sown", "recalled", "standingInCity"):
+        assert f"state.turn.{ledger} = [];" in ending
+
+
+def test_confirm_lights_only_once_there_is_a_finished_turn_to_end(page: str) -> None:
+    """A Cornucopia still asking is a press taken, not a turn resolved.
+
+    The wheel says as much by keeping `Tithe` lit, and the two plaques have to agree: one saying
+    the turn is waiting while the other offers to end it is the table contradicting itself.
+    """
+    resolved = (
+        "var resolved =\n"
+        "      state.turn.phase === 'resolution_selected'"
+        " && state.turn.titheChoice !== 'pending';"
+    )
+    assert resolved in page
+    assert "setTurnControlState('confirm', state.setup.on ? sown : resolved, false);" in page
+    # And the handler asks the same two questions, so the darkness is a statement and not a look.
+    guard = "if (state.setup.on || state.turn.phase !== 'resolution_selected') {"
+    assert guard in page
+    assert "if (state.turn.titheChoice === 'pending') {\n      return;\n    }" in page
+
+
+def test_confirm_hands_the_wheel_to_the_next_seat_the_count_actually_seats(page: str) -> None:
+    """White back to red at four, and the pair alternating at two.
+
+    The list is asked for rather than counted to, so the wrap is whatever the table currently
+    seats: a count change that empties a chair cannot leave the wheel pointing at it.
+    """
+    assert "function nextSeatedSeat(seat) {" in page
+    assert "var seats = seatsAtTable();" in page
+    assert "return seats[(at + 1) % seats.length];" in page
+    assert "setActiveSeat(nextSeatedSeat(state.activeSeat));" in page
+    # Turn order is not being decided here: no start player, and no reordering of anything.
+    ending = page[page.index("function endTurn()") :][:900]
+    assert "firstPlayerSeat" not in ending
+    assert "sort" not in ending
+
+
+def test_one_plaque_confirms_two_different_things(page: str) -> None:
+    """A setup sow while setup is on, and a finished turn the rest of the time.
+
+    Setup keeps the path it had; ending a turn is the branch that did not exist before, which is
+    why the branch is on `state.setup.on` and not on anything the turn knows.
+    """
+    handler = page[page.index("turnControl('confirm').addEventListener") :][:260]
+
+    assert "if (state.setup.on) {" in handler
+    assert "confirmSetupSow();" in handler
+    assert "endTurn();" in handler
+
+
+def test_ending_a_turn_still_writes_down_nothing_the_flow_does_not_own(page: str) -> None:
+    """Confirm accepts the turn without reaching into the tallies the compact rows keep.
+
+    The consequence is stated rather than hidden: `A->C` redraws the City column from the kept
+    count, so pressing it after a turn is confirmed puts the recalled cubes back. Keeping the flow
+    on its own side of the line is the smaller of the two, and moving the line is a decision of its
+    own rather than something an unrelated PR does on the way past.
+    """
+    ending = page[page.index("function endTurn()") :][:900]
+
+    assert "state.city" not in ending
+    assert "renderCity" not in ending
+
+
+def test_the_board_draws_the_keys_and_the_script_only_shows_them(page: str) -> None:
+    """The seal's bargain again: the renderer strikes them, the page reveals and hides."""
+    boards = re.findall(r'<rect data-resource-choice-key="(\w+)"[^>]*>', page)
+
+    assert boards == ["wheat", "stone", "silver"] * len(SEATED_PLAYERS)
+    assert page.count('data-resource-choice-key="wheat" x="453.5" y="45"') == len(SEATED_PLAYERS)
+    for key in re.findall(r"<rect data-resource-choice-key=[^>]*>", page):
+        assert 'visibility="hidden"' in key
+        assert 'fill="#F3EAD2"' in key and 'stroke="#B8952F"' in key
+    assert '[data-resource-choice="true"] [data-resource-choice-key] {' in page
+    assert '[data-resource-choice="true"] [data-resource-divider] {' in page
+
+
+def test_the_choice_keys_have_no_motion_yet(page: str) -> None:
+    """TEMPORARY. Delete this test when the confirmation flash lands.
+
+    The flash is deferred, not refused: "no animation for now" was the ask, and this holds the
+    page to it until the work arrives. So this is a guard on an unfinished decision rather than a
+    property of the page, and it is expected to fail exactly once -- when the flash is written --
+    at which point deleting it is the right fix and the only one.
+
+    That distinction matters because the other reading is corrosive: a test whose first act is to
+    be deleted so the new code passes teaches that assertions are obstacles. Saying here, in
+    advance, that this one is due to go stops its removal from being an argument.
+    """
+    script = page[page.rindex("<script>") :]
+
+    moving = ("setTimeout", "setInterval", "requestAnimationFrame", "transition", "@keyframes")
+    for name in moving:
+        assert name not in script, name
 
 
 def test_a_winner_cube_comes_out_of_the_abbey_it_is_taken_from(page: str) -> None:
@@ -1228,7 +1447,7 @@ def test_every_plaque_on_the_wheel_is_wired_to_something(page: str) -> None:
     assert "turnControl('sow').addEventListener('click', armSow);" in script
     assert "turnControl('reset').addEventListener('click', function () {" in script
     assert "turnControl(resolution).addEventListener('click', function () {" in script
-    assert "turnControl('confirm').addEventListener('click', confirmSetupSow);" in script
+    assert "turnControl('confirm').addEventListener('click', function () {" in script
     # Sow stays lit and turns active while a turn is open; Reset is only lit once one is.
     assert "setTurnControlState('sow', asking, asking && started);" in script
     assert "setTurnControlState('reset', started || state.setup.on, false);" in script
@@ -1717,7 +1936,7 @@ def test_action_and_tithe_wake_up_only_once_a_duty_is_chosen(page: str) -> None:
     """Not while the hand is still walking, and not on an empty board: only on a chosen duty.
 
     Which of the two was pressed is kept and shown, because it is the one thing about them this
-    page knows. What either actually does is still to come, and Confirm is not wired at all.
+    page knows.
     """
     controls = page[page.index("function refreshTurnControls()") :]
     controls = controls[: controls.index("\n  }\n")]
@@ -1725,7 +1944,7 @@ def test_action_and_tithe_wake_up_only_once_a_duty_is_chosen(page: str) -> None:
     assert "['action', 'tithe'].forEach(function (name) {" in controls
     assert "var chosen = !state.setup.on && state.turn.phase === 'duty_selected';" in controls
     assert "setTurnControlState(name, chosen, state.turn.resolution === name);" in controls
-    assert "setTurnControlState('confirm', state.setup.on && sown, false);" in controls
+    assert "setTurnControlState('confirm', state.setup.on ? sown : resolved, false);" in controls
     # Both plaques are wired to the one thing there is to do, and it is the phase that gates them.
     assert "['action', 'tithe'].forEach(function (resolution) {" in page
     assert "resolveDuty(resolution);" in page
@@ -1866,15 +2085,15 @@ def test_a_setup_sow_offers_no_duty_at_the_end_of_it(page: str) -> None:
     """The seat was putting its acolytes out, not taking a duty.
 
     So the two plaques that do something to a duty stay dark the whole way through, nothing is
-    marked to be picked from, and `Confirm` -- which a normal turn never lights -- is what is
-    waiting when the hand empties.
+    marked to be picked from, and `Confirm` -- which in a normal turn ends the turn -- is here
+    waiting on the hand emptying instead.
     """
     controls = page[page.index("function refreshTurnControls()") :]
     controls = controls[: controls.index("\n  }\n")]
 
     assert "var sown = state.turn.phase === 'sow_complete';" in controls
     assert "var chosen = !state.setup.on && state.turn.phase === 'duty_selected';" in controls
-    assert "setTurnControlState('confirm', state.setup.on && sown, false);" in controls
+    assert "setTurnControlState('confirm', state.setup.on ? sown : resolved, false);" in controls
     assert "armDutyChoices(!state.setup.on);" in page
     # `Sow` is dark all through it, and `Reset` -- the only way back to the start of one -- is lit.
     assert "var asking = !state.setup.on;" in controls
@@ -1908,7 +2127,7 @@ def test_confirming_a_setup_sow_hands_the_wheel_to_the_next_seat(page: str) -> N
     assert "setActiveSeat(waiting[0]);" in confirm
     assert "state.setup.on = false;\n      state.setup.finished = true;" in confirm
     assert "setActiveSeat(1);" in confirm
-    assert "turnControl('confirm').addEventListener('click', confirmSetupSow);" in page
+    assert "turnControl('confirm').addEventListener('click', function () {" in page
 
 
 def test_the_last_seat_to_confirm_leaves_the_wheel_exactly_as_it_stands(page: str) -> None:

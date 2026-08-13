@@ -104,6 +104,7 @@ from tools.ui_debug.render_duty_wheel import (  # noqa: E402
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     CITY_STACK_HEIGHT,
+    CORNUCOPIA_TOKEN,
     duty_setups,
     load_duty_wheel_layout,
     merchant_path,
@@ -133,6 +134,7 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     load_player_boards_v2_layout,
     player_by_id,
     render_player_board_v2_svg,
+    resource_choice_styles,
     token_slot_count,
 )
 
@@ -1019,9 +1021,9 @@ def render_turn_flow_script() -> str:
   }
 
   /* A setup sow is not a turn: the seat is putting its acolytes out, not taking a duty. So the
-     two plaques that do something to a duty stay dark all through it, and `Confirm` -- which has
-     nothing behind it in a normal turn -- is the one that lights, to hand the wheel to the next
-     seat. */
+     two plaques that do something to a duty stay dark all through it, and `Confirm` -- which in a
+     normal turn ends the turn -- is there confirming the sow instead. Either way it is the plaque
+     that hands the wheel to the next seat. */
   function refreshTurnControls() {
     var started = state.turn.phase !== 'idle';
     var sown = state.turn.phase === 'sow_complete';
@@ -1034,9 +1036,26 @@ def render_turn_flow_script() -> str:
        been pressed the pressed one stays lit to say which it was. */
     ['action', 'tithe'].forEach(function (name) {
       var chosen = !state.setup.on && state.turn.phase === 'duty_selected';
+      if (name === 'tithe') {
+        /* Taxation brings no token, so there is nothing to take and the plaque says so. */
+        if (chosen && !titheTokenAt(state.turn.duty)) {
+          chosen = false;
+        }
+        /* And a Cornucopia keeps it lit until the seat has answered. The press has been taken but
+           the turn is not finished with it, and the answer happens on a board in another panel:
+           a plaque that went quiet here would be pressed again by anyone watching the wheel. */
+        if (state.turn.titheChoice === 'pending') {
+          chosen = true;
+        }
+      }
       setTurnControlState(name, chosen, state.turn.resolution === name);
     });
-    setTurnControlState('confirm', state.setup.on && sown, false);
+    /* Confirm accepts a setup sow, and in normal play it ends the turn -- so it lights once there
+       is a finished turn to end. A Cornucopia still asking is not one: the press has been taken
+       but the seat has not answered, and the wheel says as much by keeping `Tithe` lit. */
+    var resolved =
+      state.turn.phase === 'resolution_selected' && state.turn.titheChoice !== 'pending';
+    setTurnControlState('confirm', state.setup.on ? sown : resolved, false);
   }
 
   function setTurnPhase(phase) {
@@ -1417,8 +1436,115 @@ def render_turn_flow_script() -> str:
      A cube that finds no room in the City is left standing where it is. The City draws a seat six
      slots while the rules cap nothing, so a column can fill; a cube is only ever hidden in one
      place and shown in another, so nothing is lost either way. */
+  /* What the tile lying at a board position brings with it, and null where it brings nothing.
+
+     Two names meet here and they are not the same name. A turn moves by board position -- north,
+     north_east, and so on round the ring -- while an arrangement is written against the fixed
+     slots the tiles lie in, which each space carries as `data-duty`. The space is the one place
+     the two are tied together, so the position is turned into a slot by asking it rather than by
+     a second table that would have to be kept in step by hand.
+
+     Asked of the arrangement on the table rather than of the board under it, because the tiles
+     turn: which tile lies on a slot, and so which token it brings, changes with the setup roll. */
+  function titheTokenAt(position) {
+    var space = spaceAt(position);
+    var slot = space ? space.getAttribute('data-duty') : null;
+    if (!slot) {
+      return null;
+    }
+    var token = null;
+    DUTY.setups[state.dutySetup].forEach(function (entry) {
+      if (entry.position === slot) {
+        token = entry.tithe_icon;
+      }
+    });
+    return token;
+  }
+
+  function resourceChoiceBoards() {
+    return document.querySelectorAll('[data-component="player-board-v2"][data-player-seat]');
+  }
+
+  /* The Cornucopia is the one token that does not say what it pays, so the seat is asked. Its own
+     board puts up the three keys; the other three boards on the table are left alone, because the
+     stock being picked is this seat's and nobody else may reach for it. */
+  function openTitheChoice() {
+    state.turn.titheChoice = 'pending';
+    Array.prototype.forEach.call(resourceChoiceBoards(), function (board) {
+      var asking = Number(board.getAttribute('data-player-seat')) === state.activeSeat;
+      if (asking) {
+        board.setAttribute('data-resource-choice', 'true');
+      } else {
+        board.removeAttribute('data-resource-choice');
+      }
+    });
+  }
+
+  function closeTitheChoice() {
+    state.turn.titheChoice = null;
+    Array.prototype.forEach.call(resourceChoiceBoards(), function (board) {
+      board.removeAttribute('data-resource-choice');
+    });
+  }
+
+  /* Pressing a key is the payment. Guarded on the pending state rather than on the keys being up,
+     so a second press cannot pay twice however it arrives. */
+  function chooseTitheResource(id) {
+    if (state.turn.titheChoice !== 'pending') {
+      return;
+    }
+    var seat = state.activeSeat;
+    closeTitheChoice();
+    payTithe(seat, id);
+    refreshTurnControls();
+  }
+
+  /* The stock moves and the turn writes down what it moved: whose, which, and how much. Written at
+     the moment of payment rather than worked out again on the way back, because the tile is only
+     where the amount came from and is not a record of it. Re-reading the tile at reset time would
+     answer with whatever lies there then -- and the R button rewrites which duty lies where -- and
+     a Cornucopia never said what it paid at all, only that the seat was asked. */
+  function payTithe(seat, id) {
+    creditResource(seat, id, 1);
+    state.turn.paid = { seat: seat, id: id, amount: 1 };
+  }
+
+  /* And exactly that comes back off, the seat named rather than assumed. Nothing is floored on the
+     way down and nothing needs to be: the only thing ever taken back here is something this same
+     turn put there, so the stock cannot be walked below what the turn found. A reset with nothing
+     recorded -- no tithe taken, or a Cornucopia still asking -- has nothing to take back, which is
+     how a pending choice leaves the counts alone without being a case. */
+  function takeTitheBack() {
+    var paid = state.turn.paid;
+    if (!paid) {
+      return;
+    }
+    state.turn.paid = null;
+    creditResource(paid.seat, paid.id, -paid.amount);
+  }
+
+  /* What the seat takes for the duty it chose: one of whatever that tile carries. Taxation carries
+     nothing, so there is nothing to take and the plaque is dark; the Cornucopia carries the choice
+     of any, so the seat is asked instead of paid. */
+  function takeTithe() {
+    var token = titheTokenAt(state.turn.duty);
+    if (!token) {
+      return;
+    }
+    if (token === CORNUCOPIA) {
+      openTitheChoice();
+    } else {
+      payTithe(state.activeSeat, token);
+    }
+  }
+
   function resolveDuty(resolution) {
     if (state.turn.phase !== 'duty_selected') {
+      return;
+    }
+    /* A tile with no token has nothing to give, so Tithe on it is not a move. The plaque is dark
+       for the same reason; this is what makes the darkness mean something. */
+    if (resolution === 'tithe' && !titheTokenAt(state.turn.duty)) {
       return;
     }
     var home = [];
@@ -1439,6 +1565,9 @@ def render_turn_flow_script() -> str:
     armDutyChoices(false);
     if (turnOverlay) {
       turnOverlay.setAttribute('data-turn-resolution', resolution);
+    }
+    if (resolution === 'tithe') {
+      takeTithe();
     }
     setTurnPhase('resolution_selected');
   }
@@ -1533,6 +1662,9 @@ def render_turn_flow_script() -> str:
     state.turn.routeChoice = null;
     state.turn.duty = null;
     state.turn.resolution = null;
+    /* An unanswered Cornucopia is taken down with the rest of the turn's marks. Nothing was paid
+       while it was up, so putting it away costs the seat nothing. */
+    closeTitheChoice();
     if (turnOverlay) {
       turnOverlay.removeAttribute('data-last-route-choice');
       turnOverlay.removeAttribute('data-turn-current-position');
@@ -1543,9 +1675,50 @@ def render_turn_flow_script() -> str:
     setTurnPhase('idle');
   }
 
+  /* Putting a turn down puts back everything it took, and a tithe is one of those things: the
+     cubes go back where they were and the stock goes back to what it was, so a seat that resets is
+     standing exactly where it stood before it began. */
   function resetTurnFlow() {
+    takeTitheBack();
     putCubesBack();
     clearTurnMarks();
+  }
+
+  /* The seat after this one, among the seats this player count actually seats: at four, white
+     hands back to red; at two, the pair alternate. That is the whole of it. Who plays first, and
+     in what order the seats take their turns, is not decided here and is not decided anywhere yet
+     -- the first player marker is a debug control that moves a seal and settles nothing. */
+  function nextSeatedSeat(seat) {
+    var seats = seatsAtTable();
+    var at = seats.indexOf(seat);
+    return seats[(at + 1) % seats.length];
+  }
+
+  /* The turn is over and it stands. The ledgers are dropped before anything else, so what the seat
+     sowed and what it sent home stay where they are and `clearTurnMarks` has nothing left it could
+     undo -- the same move an accepted setup sow makes. The paid record goes with them: from the
+     next line on, Reset belongs to another seat's turn and must never reach back into this one's
+     stock.
+
+     What it does not do is write down the City column the recall has just changed. The flow owns
+     what is drawn and none of what is kept, and an accepted setup sow reaches across that line
+     from the other side, where `confirmSetupSow` sits. The consequence is real and is not fixed
+     here: `A->C` redraws that column from the kept count, so pressing it after a turn has been
+     confirmed puts the recalled cubes back where they were. */
+  function endTurn() {
+    if (state.setup.on || state.turn.phase !== 'resolution_selected') {
+      return;
+    }
+    if (state.turn.titheChoice === 'pending') {
+      return;
+    }
+    state.turn.pickedUp = [];
+    state.turn.sown = [];
+    state.turn.recalled = [];
+    state.turn.standingInCity = [];
+    state.turn.paid = null;
+    clearTurnMarks();
+    setActiveSeat(nextSeatedSeat(state.activeSeat));
   }
 
   /* A space is clicked for two different reasons at two different points in a turn: to start from
@@ -1580,8 +1753,16 @@ def render_turn_flow_script() -> str:
     });
   }
 
+  /* One plaque, two things to confirm: a setup sow while setup is on, and a finished turn the rest
+     of the time. */
   if (turnControl('confirm')) {
-    turnControl('confirm').addEventListener('click', confirmSetupSow);
+    turnControl('confirm').addEventListener('click', function () {
+      if (state.setup.on) {
+        confirmSetupSow();
+      } else {
+        endTurn();
+      }
+    });
   }
 
   ['action', 'tithe'].forEach(function (resolution) {
@@ -1591,6 +1772,26 @@ def render_turn_flow_script() -> str:
       });
     }
   });
+
+  /* The key is the whole pill, which is why the handler is on it and not on the icon or the
+     numeral inside it: the coin is about 23 across and the amounts are set at 16. The seat is read
+     off the board the key stands on rather than trusted from the state, so a key on a board that
+     is not being asked cannot pay anyone even if something else reveals it. */
+  Array.prototype.forEach.call(
+    document.querySelectorAll('[data-resource-choice-key]'),
+    function (key) {
+      key.addEventListener('click', function () {
+        var board = key.parentNode;
+        while (board && !board.getAttribute('data-player-seat')) {
+          board = board.parentNode;
+        }
+        if (!board || Number(board.getAttribute('data-player-seat')) !== state.activeSeat) {
+          return;
+        }
+        chooseTitheResource(key.getAttribute('data-resource-choice-key'));
+      });
+    }
+  );
 
   updateActiveSeatIndicator();
 """
@@ -1624,6 +1825,7 @@ def render_compact_controls_script(
   var DUTY = {duty};
   var TURN = {json.dumps(turn_flow_data(duty_layout), separators=(",", ":"))};
   var SETUP_CUBES = {SETUP_CITY_CUBES};
+  var CORNUCOPIA = '{CORNUCOPIA_TOKEN}';
 
   function cityOpening() {{
     var opening = {{}};
@@ -1648,8 +1850,8 @@ def render_compact_controls_script(
     city: cityOpening(),
     dutySetup: 0,
     merchant: DUTY.merchantStart,
-    /* Whose turn it is. Nothing advances it yet, so it stays on the first seat; it is kept out
-       here rather than inside the turn because a seat outlives any one sow. */
+    /* Whose turn it is. Confirm hands it to the next seated seat; it is kept out here rather than
+       inside the turn because a seat outlives any one sow. */
     activeSeat: TURN.seat,
     /* Which seat the first player marker sits with. It is always with someone, and it opens with
        seat 1 because every piety disc starts on 0 and the tie resolves to the first board. It
@@ -1670,6 +1872,15 @@ def render_compact_controls_script(
       routeChoice: null,
       duty: null,
       resolution: null,
+      /* Set while a Cornucopia tithe is waiting on the seat to say which stock it wants. Nothing
+         has been paid at that point: the payment happens when a key is pressed, which is why a
+         Reset here costs the seat nothing. */
+      titheChoice: null,
+      /* What a tithe on this turn actually paid -- seat, stock and amount -- so that Reset can
+         take back that and nothing else. It is the turn's own receipt: it is written when the
+         stock moves and torn up when the turn ends, so no Reset can ever reach a seat that has
+         already handed the wheel on. */
+      paid: null,
       recalled: [],
       standingInCity: []
     }},
@@ -1984,14 +2195,23 @@ def render_compact_controls_script(
     }});
   }}
 
-  function stepResource(id, delta) {{
-    var seat = String(discPlayerSeat.value);
-    var amounts = state.resources[seat];
+  /* Moving a stock, said once and with the seat spelled out. Everything that pays or charges a
+     player goes through here, and every caller has to name whose stock it is moving: what a turn
+     hands out belongs to the seat whose turn it is, and what the debug row hands out belongs to
+     whichever seat that row's dropdown is pointing at. Those are two different seats most of the
+     time, and reading one where the other was meant pays the wrong player in silence. */
+  function creditResource(seat, id, delta) {{
+    var amounts = state.resources[String(seat)];
     if (!amounts) {{
       return;
     }}
     amounts[id] = Math.max(RESOURCES.floor, amounts[id] + delta);
     renderResources(seat);
+  }}
+
+  /* Row two's steppers, which act on that row's dropdown and not on the turn. */
+  function stepResource(id, delta) {{
+    creditResource(discPlayerSeat.value, id, delta);
   }}
 
   /* The record's sockets, drawn from `state.winners`: slot n shows the cube of whichever seat
@@ -2586,7 +2806,10 @@ def render_game_table_html(
         if active:
             active_color = player["color"]
         board = tag_resource_readouts(
-            render_player_board_v2_svg(board_layout, player, interactive=True), board_layout
+            render_player_board_v2_svg(
+                board_layout, player, interactive=True, choice_keys=True
+            ),
+            board_layout,
         )
         panels.append(
             f'<div class="panel p-player" data-component="player-board-v2"'
@@ -2776,6 +2999,10 @@ def render_game_table_html(
   [data-turn-branch-choice="true"] {{ cursor: pointer; }}
   [data-turn-branch-choice="true"] .arrow-interior {{ fill: {TURN_BRANCH_GREEN}; }}
   [data-turn-branch-choice="true"] .arrow-border {{ stroke: {TURN_BRANCH_EDGE}; }}
+
+  /* And the three keys a Cornucopia tithe puts up on the seat's own board. The board renderer
+     draws them and this is what shows them; the rules are the renderer's too. */
+{resource_choice_styles()}
 
   /* Stacked, there is no row height to fill, so the wheel goes back to being
      sized by width like everything else. */

@@ -184,6 +184,17 @@ RESOURCE_VALUE_GAP = 6.0
 RESOURCE_DIVIDER_OVERHANG = 4.0
 RESOURCE_DIVIDER_WIDTH = 1.5
 
+# The three keys a page shows when something asks this seat to pick a stock -- the Cornucopia is
+# the one that does. A key is the whole pill and not the picture on it: the silver coin is about 23
+# across and the amounts are set at 16, and neither is a thing to ask anyone to aim at.
+RESOURCE_CHOICE_WIDTH = 66.0
+RESOURCE_CHOICE_HEIGHT = 61.0
+RESOURCE_CHOICE_TOP = 45.0
+RESOURCE_CHOICE_RADIUS = 9.0
+RESOURCE_CHOICE_FILL = "#F3EAD2"
+RESOURCE_CHOICE_STROKE = "#B8952F"
+RESOURCE_CHOICE_STROKE_WIDTH = 1.6
+
 # The unit this board's geometry is written in, and the size its cubes were drawn at before they
 # were matched to the duty wheel's. The banner type is still a multiple of it, so it stays where it
 # is: resizing the cubes was never a reason to reset the type. The building slots were multiples of
@@ -652,8 +663,33 @@ def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> s
     )
 
 
-def _render_resource_block(geometry: dict, resources: list[dict], palette: dict) -> str:
-    """The three readouts in their corner, with a rule standing on each seam between them."""
+def _render_resource_choice_keys(block: dict, resources: list[dict]) -> str:
+    """One key per stock, drawn hidden, for a page that has to ask this seat which one it wants.
+
+    Struck here rather than in the page's script for the same reason the first player seal is: the
+    script reveals and hides, and never assigns a fill. A key carries the id of the stock it stands
+    for, so a page can tell which was pressed without knowing where any of them sit.
+    """
+    return "".join(
+        f'<rect data-resource-choice-key="{escape(str(resource["id"]))}"'
+        f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
+        f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
+        f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{RESOURCE_CHOICE_FILL}"'
+        f' stroke="{RESOURCE_CHOICE_STROKE}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
+        ' visibility="hidden"/>'
+        for cx, resource in zip(block["cell_x"], resources, strict=True)
+    )
+
+
+def _render_resource_block(
+    geometry: dict, resources: list[dict], palette: dict, choice_keys: bool = False
+) -> str:
+    """The three readouts in their corner, with a rule standing on each seam between them.
+
+    The keys go down between the rules and the readouts. SVG has no z-index and only document
+    order, so a key appended after them would bury the icon and the amount it is meant to be
+    highlighting; drawn here it lies under both and behind neither.
+    """
     block = geometry["resources"]
     parts = [
         f'<line data-resource-divider="true" x1="{x:.1f}"'
@@ -663,6 +699,8 @@ def _render_resource_block(geometry: dict, resources: list[dict], palette: dict)
         ' stroke-linecap="round"/>'
         for x in block["divider_x"]
     ]
+    if choice_keys:
+        parts.append(_render_resource_choice_keys(block, resources))
     parts += [
         _render_resource(block, cx, resource, palette)
         for cx, resource in zip(block["cell_x"], resources, strict=True)
@@ -765,11 +803,17 @@ def render_player_board_v2_svg(
     player: dict,
     board_state: dict | None = None,
     interactive: bool = False,
+    choice_keys: bool = False,
 ) -> str:
     """One player's board, holding `board_state` (the starting board when none is given).
 
     `interactive` tags the cubes and draws every slot they can occupy, hidden where the state does
     not need them, so a page can move a cube by flipping opacity.
+
+    `choice_keys` adds the three hidden keys a page needs to ask this seat which stock it wants.
+    Opt in, because a page that will never ask should not carry three rects a board it has no way
+    of ever showing. Pair it with `resource_choice_styles()`: without those, nothing can reveal
+    them and the keys are exactly the dead markup this flag exists to avoid.
     """
     palette = layout["palette"]
     roles = layout["worker_roles"]
@@ -800,7 +844,7 @@ def render_player_board_v2_svg(
             )
         )
 
-    parts.append(_render_resource_block(geometry, layout["resources"], palette))
+    parts.append(_render_resource_block(geometry, layout["resources"], palette, choice_keys))
 
     role_cy = geometry["role_circle_cy"]
     label_baseline = geometry["role_label_baseline"]
@@ -850,6 +894,26 @@ def render_player_boards_v2_grid(layout: dict) -> str:
     return f'<div class="board-col">\n{rows}\n  </div>'
 
 
+def resource_choice_styles() -> str:
+    """What one attribute on a board does to it, for any page that shows the choice keys.
+
+    The keys are drawn hidden and this is the only thing that shows them, so a page asks by setting
+    `data-resource-choice="true"` on the board and takes it off again when the choice is answered.
+    Reveal, hide, and a cursor -- no fill is named here or anywhere the script can reach.
+
+    The rules between the readouts go while the keys are up. During a choice these three are keys
+    rather than readouts, and keys with rules ruled between them read as a table again.
+    """
+    return (
+        '  [data-resource-choice="true"] [data-resource-choice-key] {\n'
+        "    visibility: visible; cursor: pointer;\n"
+        "  }\n"
+        '  [data-resource-choice="true"] [data-resource-divider] {\n'
+        "    visibility: hidden;\n"
+        "  }\n"
+    )
+
+
 def player_board_v2_grid_styles(layout: dict, gap: float | None = None) -> str:
     """The CSS the grid fragment needs. A host page sets the board width itself.
 
@@ -873,13 +937,43 @@ def player_board_v2_grid_styles(layout: dict, gap: float | None = None) -> str:
     background: {PAGE_BACKGROUND}; border: 1px solid #333333; border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.5); padding: 10px;
   }}
-"""
+{resource_choice_styles()}"""
+
+
+def render_resource_choice_panel(layout: dict) -> str:
+    """One board mid-question, beside the same board at rest.
+
+    A board being asked which stock it wants is a state this board can be in, so this page shows
+    it: that is what the page is for. Rendered by asking the real renderer for the keys and then
+    setting the real attribute, rather than drawn as a picture of the state, so what is reviewed
+    here is what the game table puts on screen.
+
+    The pair is the point. The keys are only legible against the readouts they replace -- the rules
+    going is half of what the change is -- and one board on its own does not show that.
+    """
+    player = players_of(layout)[0]
+    asked = (
+        '    <figure class="board-wrap" data-resource-choice="true">'
+        f"{render_player_board_v2_svg(layout, player, choice_keys=True)}"
+        "<figcaption>Being asked which stock: three keys, and the rules stood down"
+        "</figcaption></figure>"
+    )
+    resting = (
+        '    <figure class="board-wrap">'
+        f"{render_player_board_v2_svg(layout, player)}"
+        "<figcaption>The same board at rest</figcaption></figure>"
+    )
+    return (
+        "  <h2>The resource choice</h2>\n"
+        '  <div class="board-row">\n' + asked + "\n" + resting + "\n  </div>"
+    )
 
 
 def render_player_boards_v2_html(layout: dict) -> str:
-    """All four boards in the layout's grid."""
+    """All four boards in the layout's grid, and the one state of a board that is not a board."""
     page = layout["page"]
     boards = render_player_boards_v2_grid(layout)
+    choice = render_resource_choice_panel(layout)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -906,12 +1000,16 @@ def render_player_boards_v2_html(layout: dict) -> str:
     max-width: 640px;
   }}
 {player_board_v2_grid_styles(layout)}  svg {{ display: block; max-width: 95vw; height: auto; }}
+  h2 {{ font-family: Georgia, serif; font-size: 18px; color: #F2EEDF; margin: 34px 0 14px; }}
+  figure.board-wrap {{ margin: 0; }}
+  figcaption {{ color: #A8A296; font-size: 12px; margin-top: 9px; text-align: center; }}
 </style>
 </head>
 <body>
   <h1>{page["title"]}</h1>
   <p class="subtitle">{escape(page["subtitle"])} Generated from {LAYOUT_FILENAME}.</p>
   {boards}
+{choice}
 </body>
 </html>
 """
