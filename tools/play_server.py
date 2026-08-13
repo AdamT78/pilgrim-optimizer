@@ -49,7 +49,12 @@ if __package__ in (None, ""):
 from pilgrim.io.event_text import format_event  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
-from pilgrim.model.actions import SetupSowAction, action_id  # noqa: E402
+from pilgrim.model.actions import (  # noqa: E402
+    FullTurnAction,
+    SetupSowAction,
+    action_id,
+    action_summary,
+)
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
 
@@ -114,21 +119,85 @@ class UnknownAction(Exception):
     """The submission named an action that is not legal in the position now held."""
 
 
-def sow_candidates(state: Any, config: Any) -> list[dict]:
-    """The setup sows on offer, each as the sequence of spaces it visits.
+DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
+RESIDUE_FIELDS = tuple(
+    field.name
+    for field in dataclasses.fields(FullTurnAction)
+    if field.name not in DECIDED_FIELDS and field.name != "action_type"
+)
 
-    A candidate is its `action_id` and its PATH -- the origin followed by every step of the route.
-    Nothing else crosses: the page narrows this list by comparing paths position by position, which
-    is why it can offer legal moves without owning a rule about what makes one legal.
 
-    Only setup sows. A normal turn's action has no single path to walk and the page cannot ask for
-    one yet, so offering them would be offering something nothing can accept.
+def decision_steps(action: Any) -> list[dict]:
+    """The questions this action is an answer to, in the order the page asks them.
+
+    Origin, then the route one space at a time, then which duty was selected, then what to do with
+    it. A setup sow stops after the route because that is all it has.
+
+    Each step says what KIND of thing it is, because they are not answered the same way: a position
+    is a space on the board and a resolution is not on the board at all. The page needs to know
+    which affordance to reveal without knowing what any particular step means.
+
+    Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
+    by turn, and nothing here or on the page may assume a number.
+    """
+    steps = [{"kind": "position", "value": action.origin}]
+    steps += [{"kind": "position", "value": position} for position in action.route]
+    if isinstance(action, SetupSowAction):
+        return steps
+    steps.append({"kind": "position", "value": action.selected_duty})
+    steps.append({"kind": "resolution", "value": action.resolution.value})
+    return steps
+
+
+def _unresolved_fields(members: list[Any]) -> list[str]:
+    """Which fields the actions in one group still disagree about.
+
+    `FullTurnAction` carries some forty optional fields and this page presents four of them, so
+    answering all four can still leave several actions standing, alike in everything asked and
+    different in something never asked. This names those differences rather than guessing between
+    them: the list IS the backlog, worked out from the position in front of the player instead of
+    from anyone's memory of what is unbuilt, and it shrinks as each field gets a way to be chosen.
     """
     return [
-        {"action_id": action_id(action), "path": [action.origin, *action.route]}
-        for action in legal_actions(state, config)
-        if isinstance(action, SetupSowAction)
+        name for name in RESIDUE_FIELDS if len({getattr(member, name) for member in members}) > 1
     ]
+
+
+def turn_candidates(state: Any, config: Any) -> list[dict]:
+    """The moves on offer, grouped by the decisions the page can actually put to a player.
+
+    One candidate per distinct answer to the four questions above, which is not one per legal
+    action: several actions can share all four and differ only further down. Those arrive here as
+    one candidate carrying the count and the disagreement, so the page can refuse it honestly
+    instead of picking one of them on the player's behalf.
+
+    The summary is the CLI's own, so the words somebody confirms are the words the tool would
+    print for the same action, and there is no second description to keep in step with the first.
+    """
+    grouped: dict[tuple, list[Any]] = {}
+    for action in legal_actions(state, config):
+        key = tuple(
+            tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
+            for step in decision_steps(action)
+        )
+        grouped.setdefault(key, []).append(action)
+
+    candidates = []
+    for members in grouped.values():
+        unresolved = _unresolved_fields(members) if len(members) > 1 else []
+        settled = not unresolved
+        candidates.append(
+            {
+                "steps": decision_steps(members[0]),
+                # Nothing to submit while the choice is incomplete, so there is no id to quote and
+                # no summary to agree to. The page has to say so rather than send something.
+                "action_id": action_id(members[0]) if settled else None,
+                "summary": action_summary(members[0], config) if settled else None,
+                "unresolved": unresolved,
+                "variants": len(members),
+            }
+        )
+    return candidates
 
 
 class PlayServer(ThreadingHTTPServer):
@@ -155,7 +224,7 @@ class PlayServer(ThreadingHTTPServer):
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
-            sow_candidates=sow_candidates(self.state, self.config),
+            turn_candidates=turn_candidates(self.state, self.config),
             log=list(self.log_lines),
         )
 

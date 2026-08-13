@@ -264,13 +264,78 @@ def render_log_box(payload: dict) -> str:
         f'<div class="log-event">{escape(str(line))}</div>' for line in payload.get("log", ())
     )
     transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
-    abandon = (
-        '<button type="button" data-sow-abandon data-sow-started="false">Start this sow again'
-        "</button>"
-        if payload.get("sow_candidates")
-        else ""
+    return (
+        f'<div class="play-log" data-component="play-log">{rows}{transcript}</div>'
+        f"{render_turn_panel(payload)}"
     )
-    return f'<div class="play-log" data-component="play-log">{rows}{transcript}{abandon}</div>'
+
+
+def _resolution_keys(candidates: list[dict]) -> str:
+    """One key per resolution any candidate offers, all struck here and all hidden.
+
+    The board can be asked for a position by pointing at it. What to DO with a duty is not on the
+    board at all, so it needs somewhere to be asked, and the keys are drawn for the same reason the
+    seals and the stock keys are: the page reveals one, and never makes one.
+    """
+    seen: list[str] = []
+    for candidate in candidates:
+        for step in candidate["steps"]:
+            if step["kind"] == "resolution" and step["value"] not in seen:
+                seen.append(step["value"])
+    return "".join(
+        f'<button type="button" class="turn-key" data-resolution-key="{escape(name)}"'
+        f' data-turn-offered="false">{escape(name.replace("_", " "))}</button>'
+        for name in sorted(seen)
+    )
+
+
+def _turn_panels(candidates: list[dict]) -> str:
+    """What each candidate would say if it were the one left standing, written out in advance.
+
+    Two kinds, and which one a candidate gets is settled here rather than in the browser. A turn
+    that is fully decided shows the words it would be committed as -- the CLI's own sentence for
+    that action -- above the button that commits it. One that is not shows what is still open.
+
+    Nothing is composed in the page. The script reveals a panel; it never builds a sentence, which
+    is the same rule that keeps it from building a route.
+    """
+    panels = []
+    for index, candidate in enumerate(candidates):
+        if candidate["action_id"] is not None:
+            body = (
+                f'<div class="turn-summary">{escape(str(candidate["summary"]))}</div>'
+                f'<button type="button" class="turn-commit"'
+                f' data-turn-confirm="{escape(str(candidate["action_id"]))}">Confirm this turn'
+                "</button>"
+            )
+        else:
+            fields = "".join(
+                f'<li class="turn-field">{escape(name)}</li>' for name in candidate["unresolved"]
+            )
+            body = (
+                '<div class="turn-blocked">This turn is not decided yet. '
+                f"{candidate['variants']} legal actions match everything asked so far and differ "
+                "in fields this page cannot put to you, so it will not choose between them for "
+                "you:</div>"
+                f'<ul class="turn-fields">{fields}</ul>'
+            )
+        panels.append(f'<div class="turn-panel" data-turn-panel="{index}">{body}</div>')
+    return "".join(panels)
+
+
+def render_turn_panel(payload: dict) -> str:
+    """Where a turn is answered and agreed to, beside the log rather than on the board."""
+    candidates = payload.get("turn_candidates") or []
+    if not candidates:
+        return ""
+    return (
+        '<div class="play-turn" data-component="play-turn">'
+        f'<div class="turn-keys">{_resolution_keys(candidates)}</div>'
+        f"{_turn_panels(candidates)}"
+        '<button type="button" class="turn-reset" data-turn-reset data-turn-started="false">'
+        "Start this turn again</button>"
+        "</div>"
+    )
 
 
 def log_styles() -> str:
@@ -295,41 +360,53 @@ def log_styles() -> str:
   .p-player[data-seat-taken="false"] { visibility: hidden; }"""
 
 
-_SOW_SCRIPT = """<script>
+_TURN_SCRIPT = """<script>
 (function () {
   'use strict';
   /* CLICKING FILTERS. IT DOES NOT CONSTRUCT.
 
-     Every candidate below is a complete legal action the engine handed over, each carrying the
-     sequence of spaces it visits. This narrows that list; it never builds a route, never asks
-     whether a step is allowed, and never decides what is adjacent to what. An illegal move cannot
-     be expressed here because it was never in the list to begin with. */
+     Every candidate below is an answer the engine already offered, carrying the sequence of
+     decisions that reaches it: where to pick up from, each step of the route, which duty was
+     selected, and what to do with it. This narrows that list. It never builds a route, never asks
+     whether a step is allowed, never decides what lies next to what, and never counts how long a
+     route should be -- routes are as long as they are. An illegal turn cannot be expressed here
+     because it was never in the list to begin with. */
   var CANDIDATES = __CANDIDATES__;
   var TOKEN = __TOKEN__;
   if (!CANDIDATES.length) { return; }
 
   var board = document.querySelector('[data-component="duty-wheel"]');
-  if (!board) { return; }
+  var aside = document.querySelector('[data-component="play-turn"]');
+  if (!board || !aside) { return; }
   var spaces = board.querySelectorAll('[data-board-position-index]');
-  var abandon = document.querySelector('[data-sow-abandon]');
+  var keys = aside.querySelectorAll('[data-resolution-key]');
+  var panels = aside.querySelectorAll('[data-turn-panel]');
+  var reset = aside.querySelector('[data-turn-reset]');
   var chosen = [];
 
   function surviving() {
     return CANDIDATES.filter(function (candidate) {
-      return chosen.every(function (step, index) { return candidate.path[index] === step; });
+      return chosen.every(function (answer, index) {
+        var step = candidate.steps[index];
+        return step !== undefined && step.value === answer;
+      });
     });
   }
 
-  function optionsAt(step, live) {
+  function stepsAt(index, live) {
     var seen = [];
     live.forEach(function (candidate) {
-      var value = candidate.path[step];
-      if (value !== undefined && seen.indexOf(value) === -1) { seen.push(value); }
+      var step = candidate.steps[index];
+      if (!step) { return; }
+      var known = seen.some(function (other) {
+        return other.kind === step.kind && other.value === step.value;
+      });
+      if (!known) { seen.push(step); }
     });
     return seen;
   }
 
-  function submit(candidate) {
+  function submit(actionId) {
     var request = new XMLHttpRequest();
     request.open('POST', '/action', true);
     request.setRequestHeader('Content-Type', 'application/json');
@@ -341,40 +418,76 @@ _SOW_SCRIPT = """<script>
       document.write(request.responseText);
       document.close();
     };
-    request.send(JSON.stringify({ action_id: candidate.action_id, state_token: TOKEN }));
+    request.send(JSON.stringify({ action_id: actionId, state_token: TOKEN }));
+  }
+
+  function show(offered, settled) {
+    var positions = [];
+    var resolutions = [];
+    offered.forEach(function (step) {
+      if (step.kind === 'position') { positions.push(step.value); }
+      else { resolutions.push(step.value); }
+    });
+    Array.prototype.forEach.call(spaces, function (space) {
+      var index = Number(space.getAttribute('data-board-position-index'));
+      space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
+      space.setAttribute('data-play-chosen', chosen.indexOf(index) === -1 ? 'false' : 'true');
+    });
+    Array.prototype.forEach.call(keys, function (key) {
+      var name = key.getAttribute('data-resolution-key');
+      key.setAttribute('data-turn-offered', resolutions.indexOf(name) === -1 ? 'false' : 'true');
+    });
+    Array.prototype.forEach.call(panels, function (panel) {
+      var index = Number(panel.getAttribute('data-turn-panel'));
+      panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
+    });
+    if (reset) { reset.setAttribute('data-turn-started', chosen.length ? 'true' : 'false'); }
   }
 
   function render() {
     var live = surviving();
     /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
        Which steps those are is not written down anywhere; it falls out of the candidates. */
-    while (live.length > 1 && optionsAt(chosen.length, live).length === 1) {
-      chosen.push(optionsAt(chosen.length, live)[0]);
+    while (live.length > 1 && stepsAt(chosen.length, live).length === 1) {
+      chosen.push(stepsAt(chosen.length, live)[0].value);
       live = surviving();
     }
-    if (live.length === 1) { submit(live[0]); return; }
-
-    var offered = optionsAt(chosen.length, live);
-    Array.prototype.forEach.call(spaces, function (space) {
-      var index = Number(space.getAttribute('data-board-position-index'));
-      space.setAttribute('data-sow-candidate', offered.indexOf(index) === -1 ? 'false' : 'true');
-      space.setAttribute('data-sow-on-route', chosen.indexOf(index) === -1 ? 'false' : 'true');
-    });
-    if (abandon) { abandon.setAttribute('data-sow-started', chosen.length ? 'true' : 'false'); }
+    /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
+       would be committed as, over the button that commits it, or what is still undecided about
+       it -- and the player says so. */
+    if (live.length === 1) { show([], CANDIDATES.indexOf(live[0])); return; }
+    show(stepsAt(chosen.length, live), -1);
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
     space.addEventListener('click', function () {
-      if (space.getAttribute('data-sow-candidate') !== 'true') { return; }
+      if (space.getAttribute('data-play-offered') !== 'true') { return; }
       chosen.push(Number(space.getAttribute('data-board-position-index')));
       render();
     });
   });
 
-  if (abandon) {
-    /* Purely local. Nothing has been sent, because nothing is sent until one candidate is left,
-       so giving up is forgetting the clicks rather than undoing anything. */
-    abandon.addEventListener('click', function () { chosen = []; render(); });
+  Array.prototype.forEach.call(keys, function (key) {
+    key.addEventListener('click', function () {
+      if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+      chosen.push(key.getAttribute('data-resolution-key'));
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(panels, function (panel) {
+    var commit = panel.querySelector('[data-turn-confirm]');
+    if (commit) {
+      commit.addEventListener('click', function () {
+        submit(commit.getAttribute('data-turn-confirm'));
+      });
+    }
+  });
+
+  if (reset) {
+    /* Purely local. Nothing has been sent, because nothing is sent until the player presses
+       confirm, so giving up is forgetting the clicks rather than undoing anything. */
+    reset.addEventListener('click', function () { chosen = []; render(); });
   }
 
   render();
@@ -382,26 +495,46 @@ _SOW_SCRIPT = """<script>
 </script>"""
 
 
-def sow_styles(route_color: str) -> str:
-    """What the two attributes the script sets do to a space.
+def turn_styles(route_color: str) -> str:
+    """What the attributes the script sets do, and the only place any of it is a colour.
 
-    Every affordance is drawn by the renderer and hidden here; the script only flips an attribute
-    between true and false. No position and no colour crosses into JavaScript -- the colour of the
-    route is the active seat's own, written in by the page that knows which seat that is.
+    Every affordance is drawn by the renderer and hidden here; the script flips an attribute
+    between true and false and does nothing else. No position and no colour crosses into
+    JavaScript -- the colour of the route is the active seat\'s own, written in by the page that
+    knows which seat that is.
 
-    The whole space is the target rather than the artwork on it: `.board-circle` is the space's
+    The whole space is the target rather than the artwork on it: `.board-circle` is the space\'s
     filled shape, so a click anywhere on the parchment counts and nobody has to hit a label.
     """
     return f"""  /* Hidden by default: a space is offered only while it is one of the moves left. */
-  [data-sow-candidate="true"] {{ cursor: pointer; }}
-  [data-sow-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
-  [data-sow-on-route="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
-  [data-sow-abandon] {{
-    display: none; margin-top: 8px; width: 100%; padding: 6px 10px; cursor: pointer;
-    color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
-    font: 13px/1.4 Helvetica, Arial, sans-serif;
+  [data-play-offered="true"] {{ cursor: pointer; }}
+  [data-play-offered="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-play-chosen="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
+
+  .play-turn {{
+    width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
+    background: #101010; border: 1px solid #333333; border-radius: 10px; padding: 10px 12px;
   }}
-  [data-sow-abandon][data-sow-started="true"] {{ display: block; }}"""
+  .turn-keys {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+  .turn-key, .turn-commit, .turn-reset {{
+    color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
+    padding: 6px 10px; cursor: pointer; font: 13px/1.4 Helvetica, Arial, sans-serif;
+  }}
+  /* A resolution is only pressable while it is one of the answers still standing. */
+  .turn-key {{ display: none; }}
+  .turn-key[data-turn-offered="true"] {{ display: inline-block; }}
+
+  /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
+  .turn-panel {{ display: none; }}
+  .turn-panel[data-turn-shown="true"] {{ display: block; }}
+  .turn-summary {{ margin: 8px 0; color: #F2EEDF; }}
+  .turn-commit {{ width: 100%; border-color: {route_color}; }}
+  .turn-blocked {{ margin: 8px 0; color: #E0C36A; }}
+  .turn-fields {{ margin: 0 0 4px 0; padding-left: 18px; color: #C9C4B4; }}
+  .turn-field {{ font-family: Menlo, monospace; font-size: 12px; }}
+
+  .turn-reset {{ display: none; margin-top: 8px; width: 100%; }}
+  .turn-reset[data-turn-started="true"] {{ display: block; }}"""
 
 
 def render_play_view_html(
@@ -481,18 +614,18 @@ def render_play_view_html(
 
     active_seat = seat_of(payload["state"]["active_player"])
     active_color = player_by_id(board_layout, payload["state"]["active_player"])["fill"]
-    candidates = payload.get("sow_candidates") or []
+    candidates = payload.get("turn_candidates") or []
     # Both are opt-in, the way the choice keys and the extra seals are: a position with nothing to
     # decide is a page with nothing to press, and it should not be carrying the styles for
     # affordances that can never appear on it.
     script = (
-        _SOW_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates)).replace(
+        _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates)).replace(
             "__TOKEN__", json.dumps(payload.get("state_token", ""))
         )
         if candidates
         else ""
     )
-    sow_css = sow_styles(active_color) if candidates else ""
+    turn_css = turn_styles(active_color) if candidates else ""
     stage = render_table_stage(
         alms_svg=alms_svg,
         piety_svg=piety_svg,
@@ -516,7 +649,7 @@ def render_play_view_html(
      the wash, and this only stops hiding it. Nothing is restyled and nothing moves. */
   .p-player[data-active-seat="true"] [data-active-player-glow="true"] {{ opacity: 1; }}
 
-{sow_css}
+{turn_css}
 
 {table_stacking_styles(scale)}
 </style>
