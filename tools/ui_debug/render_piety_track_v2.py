@@ -126,18 +126,27 @@ SEAL_CROWN_DARKEN = 0.50
 # which seat a player occupies rather than which slot their disc has been moved into -- otherwise a
 # marker naming seat 1 and a disc labelled seat 1 stop being the same player.
 #
-# THE TWO VARIANTS DO NOT LAY THEIR DISCS OUT THE SAME WAY. Do not assume one rule covers both:
+# THE DISC LAYOUT RULE, which is one rule and not a case per player count:
 #
-#   3-4 player: a 2x2 cluster on the value, filled column-major by turn order -- first player row 1
-#   column 1, second row 2 column 1, third row 1 column 2, fourth row 2 column 2.
+#   The discs at a track value are filled in TURN order. First player row 1, second player row 2.
+#   With three or four players a second column is added for the third and fourth. With two players
+#   there is one column, centred in the space.
 #
-#   2 player: NOT a cluster. The two discs sit horizontally side by side within each space 0 to 12,
-#   first player on the left and second on the right. THIS IS CORRECT AS IT STANDS AND MUST NOT BE
-#   CHANGED. A permutation PR must permute within that horizontal pair; it must not convert the
-#   2 player variant into a cluster to make one rule serve both.
+# The slot follows turn order and moves whenever the start player changes. The seat is fixed for
+# the whole game and the board ordering never changes.
 #
-# In both, the slot is a function of turn order and moves when the start player does. The seat is
-# fixed for the whole game and the board ordering never changes.
+# TWO KNOWN ISSUES, neither of them this module's to fix today:
+#
+#   The 2 player variant here seats white and red -- seats 4 and 1 -- side by side, which matches
+#   neither the game table's seating (it seats 1 and 2, red and yellow) nor its arrangement (one
+#   centred column, not a pair side by side). Where the two disagree the game table is the
+#   authority: `DISC.pair.piety["0"]` is `[34.6, 83.7, 103.7]`, one x at the midpoint of the two
+#   3-4 player columns and two ys.
+#
+#   The table places discs by seat rather than by turn order. `renderDiscTrack` reads
+#   `y = seat === 1 ? pair[1] : pair[2];` and `DISC.targets` is seat-keyed throughout, so handing
+#   the start to another player leaves that player's disc in the wrong row. That line is where the
+#   turn-order PR begins.
 SEAT_ORDER = ("player_two", "player_three", "player_four", "player_one")
 
 # The crown, as fractions of its own box about the seal's centre. It is one closed polygon and not
@@ -418,6 +427,17 @@ def first_player_by_seat(layout: dict, seat: int) -> dict:
     return player_by_id(layout, SEAT_ORDER[seat - 1])
 
 
+def seats_that_can_hold_the_marker(layout: dict, variant_id: str) -> list[int]:
+    """Seat numbers a variant puts a disc on, in seat order.
+
+    Read off the discs the variant actually seats rather than assumed to run 1..n, because it does
+    not: the 2 player variant seats white and red, which are seats 4 and 1. A marker can only be
+    held by someone at the table, so this is what a page can offer the marker to.
+    """
+    seated = {player["id"] for player in seated_players(layout, variant_id)}
+    return [seat for seat, player_id in enumerate(SEAT_ORDER, start=1) if player_id in seated]
+
+
 def render_crown(cx: float, cy: float, r: float, colour: str) -> str:
     """The die the first player seal is struck with, as one closed outline.
 
@@ -455,18 +475,18 @@ def check_rule_stub(layout: dict, geometry: dict) -> float:
     return stub
 
 
-def render_first_player_seal(layout: dict, geometry: dict, seat: int) -> str:
-    """The first player marker: a seal in the holder's own colour, pressed over the header rule.
+def _strike_first_player_seal(layout: dict, geometry: dict, seat: int, hooks: str) -> str:
+    """One seat's seal at the approved position, with whatever hooks the caller needs on the group.
 
-    Only the seat it is given. Which seat that is -- highest piety, and clockwise from there on a
-    tie -- is turn logic, and this draws whichever answer it is handed without checking it.
+    Every seal is struck the same: same centre, same radius, same seed, same tilt, same crown. Only
+    the colour differs, and it comes off the seat rather than out of a palette of its own.
     """
     check_rule_stub(layout, geometry)
     player = first_player_by_seat(layout, seat)
     wax = player["fill"]
     return (
         f'<g data-first-player-seal="true" data-player="{player["id"]}"'
-        f' data-player-color="{player["color"]}">'
+        f' data-player-color="{player["color"]}"{hooks}>'
         + render_seal(
             SEAL_CX,
             SEAL_CY,
@@ -482,6 +502,39 @@ def render_first_player_seal(layout: dict, geometry: dict, seat: int) -> str:
     )
 
 
+def render_first_player_seal(layout: dict, geometry: dict, seat: int) -> str:
+    """The first player marker: a seal in the holder's own colour, pressed over the header rule.
+
+    Only the seat it is given. Which seat that is -- highest piety, and clockwise from there on a
+    tie -- is turn logic, and this draws whichever answer it is handed without checking it.
+    """
+    return _strike_first_player_seal(layout, geometry, seat, "")
+
+
+def render_first_player_seals(
+    layout: dict, geometry: dict, variant_id: str, held_by: int | None
+) -> str:
+    """Every seat's seal, struck in its own colour, all hidden but the one the marker sits on.
+
+    For a page that has to move the marker after the SVG is written. The alternative is to emit the
+    holder's seal alone and restrike it in JavaScript when it moves, which means writing `darken()`
+    a second time in a second language and then keeping the two agreeing. Striking all four here
+    leaves the page nothing to do but show one and hide the rest -- no colour crosses the line.
+
+    Hidden with `visibility`, which is what the composed table already toggles its discs and its
+    seat boards with, so a hidden seal still occupies its place and nothing reflows when it appears.
+    """
+    return "".join(
+        _strike_first_player_seal(
+            layout,
+            geometry,
+            seat,
+            f' data-player-seat="{seat}"' + ("" if seat == held_by else ' visibility="hidden"'),
+        )
+        for seat in seats_that_can_hold_the_marker(layout, variant_id)
+    )
+
+
 def render_panel_title(layout: dict, geometry: dict) -> str:
     """The board's name, in the artwork rather than only in the page heading."""
     x = layout["panel"]["pad_x"] + layout["ornament"]["title"]["dx"]
@@ -494,13 +547,26 @@ def render_panel_title(layout: dict, geometry: dict) -> str:
 
 
 def render_piety_track_v2_svg(
-    layout: dict, config: dict, variant_id: str, first_player_seat: int | None = None
+    layout: dict,
+    config: dict,
+    variant_id: str,
+    first_player_seat: int | None = None,
+    interactive: bool = False,
 ) -> str:
     """One ornamented panel: the grey rounded rect, the ornament, then the track inside it.
 
     `first_player_seat` strikes that seat's wax seal into the top right corner and says so on the
     root element. Left out, no seal is drawn and the panel is what it has always been -- nothing
     else on it reads the seat, and nothing else about it changes when one is given.
+
+    `interactive` strikes every seat's seal instead of only the holder's, hidden but for the one
+    named, so a page can move the marker without building any SVG of its own. Left off, the panel
+    is the fixed picture every standalone page here draws. That is the same bargain the Alms Table
+    makes for its own discs and winner cubes.
+
+    No seat with `interactive` on is a legitimate state for a page mid-build: every seal is struck
+    and every one is hidden. It is not a game state -- the marker always sits with someone -- but
+    it is the rendering default, and it is what keeps the pages that ask for no marker unchanged.
     """
     variant = variant_by_id(layout, variant_id)
     vp_values = piety_vp_values(config)
@@ -538,7 +604,9 @@ def render_piety_track_v2_svg(
 
     # Struck last, because wax goes on top of what it is pressed onto.
     seal = "" if first_player_seat is None else f' data-first-player-seat="{first_player_seat}"'
-    if first_player_seat is not None:
+    if interactive:
+        parts.append(render_first_player_seals(layout, geometry, variant_id, first_player_seat))
+    elif first_player_seat is not None:
         parts.append(render_first_player_seal(layout, geometry, first_player_seat))
 
     padding = layout["padding"]
@@ -559,17 +627,6 @@ def render_piety_track_v2_svg(
         f' fill="{layout["page_background"]}"/>'
         f"\n  {''.join(parts)}\n</svg>"
     )
-
-
-def seats_that_can_hold_the_marker(layout: dict, variant_id: str) -> list[int]:
-    """Seat numbers a variant puts a disc on, in seat order.
-
-    Read off the discs the variant actually seats rather than assumed to run 1..n, because it does
-    not: the 2 player variant seats white and red, which are seats 4 and 1. A marker can only be
-    held by someone at the table, so this is what the debug page can show a seal for.
-    """
-    seated = {player["id"] for player in seated_players(layout, variant_id)}
-    return [seat for seat, player_id in enumerate(SEAT_ORDER, start=1) if player_id in seated]
 
 
 def render_first_player_seal_rows(layout: dict, config: dict) -> str:

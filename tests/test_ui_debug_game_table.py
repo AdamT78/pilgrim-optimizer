@@ -15,7 +15,9 @@ import pytest
 
 from tools.ui_debug.generate_game_table import (
     BODY_CHROME,
+    DEFAULT_CONTROL_PLAYER_SEAT,
     DEFAULT_PLAYER_COUNT,
+    FIRST_PLAYER_SEAT_AT_START,
     GAP_PX,
     PAGE_TITLE,
     PANEL_CHROME,
@@ -378,12 +380,14 @@ def test_the_four_seat_slots_carry_stable_player_count_hooks(page: str) -> None:
 def test_no_board_at_this_table_says_who_starts(page: str) -> None:
     """The first-player card is gone from the board, and so is the seat that used to carry it.
 
-    Nothing here ever worked out who starts -- it was layout state to look at, with no control to
-    move it -- and the corner it sat in is the resources' now.
+    The card was layout state to look at, with no control to move it, and the corner it sat in is
+    the resources' now. The marker itself has since arrived on the Piety Track, which is where the
+    thing that decides it is drawn -- so this is about the boards, not about the whole page, and it
+    is checked on the seats rather than by looking for the words anywhere at all.
     """
     seats = _block(page, "seats")
 
-    assert "first-player" not in page
+    assert "first-player" not in seats
     assert ">First player</text>" not in page
     assert re.findall(r'data-player="(\w+)" data-player-color="\w+" data-active-seat=', seats) == (
         list(SEATED_PLAYERS)
@@ -426,6 +430,73 @@ def test_row_one_has_player_count_then_setup_roll_buttons(page: str) -> None:
     assert 'data-ship-advance="true">S+</button>' in body
     assert 'data-merchant-advance-button="true">M+</button>' in body
     assert body.index(">6<") < body.index(">R<") < body.index(">S+<") < body.index(">M+<")
+
+
+def test_row_one_ends_with_the_control_that_says_who_holds_the_marker(page: str) -> None:
+    """A table-level thing, so it sits in the table-level row with the count and the setup roll."""
+    controls = _block(page, "table-controls")
+    row_one = re.search(r'data-controls-row="1">(.+?)</div>', controls, flags=re.DOTALL)
+    assert row_one is not None
+    body = row_one.group(1)
+
+    assert 'id="first-player-seat"' in body
+    assert body.index(">M+<") < body.index('id="first-player-seat"')
+    seats = re.findall(r'<option value="(\d)"( selected)?>FP\d</option>', body)
+    assert [seat for seat, _ in seats] == ["1", "2", "3", "4"]
+    # No "nobody" entry: the marker always sits with someone.
+    assert len(seats) == len(SEATED_PLAYERS)
+    assert [seat for seat, chosen in seats if chosen] == [str(FIRST_PLAYER_SEAT_AT_START)]
+
+
+def test_the_table_opens_with_the_marker_on_the_seat_that_starts_the_game(page: str) -> None:
+    """Every piety disc starts on 0, so the tie resolves to the first board: seat 1, red."""
+    assert FIRST_PLAYER_SEAT_AT_START == 1
+    assert SEATED_PLAYERS[FIRST_PLAYER_SEAT_AT_START - 1] == "player_two"  # red
+    assert f"firstPlayerSeat: {FIRST_PLAYER_SEAT_AT_START}," in page
+    assert f'data-first-player-seat="{FIRST_PLAYER_SEAT_AT_START}"' in page
+
+
+def test_the_track_carries_every_seat_s_seal_so_the_page_never_strikes_wax(page: str) -> None:
+    """The point of the renderer's mode: the page shows and hides, it does not draw."""
+    piety = _block(page, "panel p-piety")
+    groups = re.findall(r"<g data-first-player-seal=[^>]*>", piety)
+
+    assert len(groups) == len(SEATED_PLAYERS)
+    assert sum('visibility="hidden"' in group for group in groups) == len(SEATED_PLAYERS) - 1
+    held = next(group for group in groups if 'visibility="hidden"' not in group)
+    assert f'data-player-seat="{FIRST_PLAYER_SEAT_AT_START}"' in held
+    assert 'data-player-color="red"' in held
+
+
+def test_a_seat_that_leaves_the_table_hands_the_marker_back_rather_than_to_nobody(
+    page: str,
+) -> None:
+    """Mirrors what the active seat already does on a count change, and for the same reason."""
+    assert (
+        f"state.firstPlayerSeat > count ? {FIRST_PLAYER_SEAT_AT_START} : state.firstPlayerSeat"
+        in page
+    )
+    assert f"setActiveSeat(state.activeSeat > count ? {DEFAULT_CONTROL_PLAYER_SEAT}" in page
+
+
+def test_moving_the_marker_shows_and_hides_and_never_computes_a_colour(page: str) -> None:
+    """The whole reason every seal is struck up front, held here so it cannot quietly be undone.
+
+    A colour derived in JavaScript would be a second copy of `darken()` in a second language, to be
+    kept agreeing with the first. The script may set visibility on a seal and nothing else.
+    """
+    script = page[page.index("<script>") :]
+    seal_work = re.findall(r"^.*(?:Seal|firstPlayerSeat).*$", script, re.M)
+
+    assert seal_work, "nothing in the script touches the marker"
+    for line in seal_work:
+        assert "fill" not in line
+        assert "#" not in line
+        assert "darken" not in line.lower()
+    reveal = "seal.style.visibility = seat === state.firstPlayerSeat ? 'visible' : 'hidden';"
+    assert reveal in script
+    # The attribute names the holder, so it moves with the marker rather than going stale.
+    assert "pietyTrack.setAttribute('data-first-player-seat', String(seat));" in script
 
 
 def test_player_count_and_setup_roll_defaults_are_tagged(page: str) -> None:

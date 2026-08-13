@@ -177,6 +177,13 @@ SEAT_COLS = len(SEATED_PLAYERS)
 PLAYER_COUNTS = (2, 3, 4)
 DEFAULT_PLAYER_COUNT = 4
 
+# Who holds the first player marker when the table opens. Turn order is decided on the Piety Track
+# -- highest piety takes the marker -- and every disc starts on 0, so the tie resolves to the first
+# board: seat 1, red. It falls back here whenever the holder's seat leaves the table, because the
+# marker is always with someone. Nothing here makes the holder the first player; this PR moves a
+# seal and models no turn order at all.
+FIRST_PLAYER_SEAT_AT_START = 1
+
 # The turn flow's own colours. The board rings the seat whose turn it is, and the space that seat
 # starts from, in that seat's own colour, and lights the ways out of it in a green dark enough to
 # read against the ground the arrows are drawn on. The fallback is only what the stylesheet opens
@@ -647,6 +654,16 @@ def _control_player_options() -> list[tuple[str, str]]:
     return [(str(seat), f"P{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
 
 
+def _first_player_options() -> list[tuple[str, str]]:
+    """The seats the marker can sit with, and no other entry.
+
+    There is no `nobody` here on purpose: the marker always sits with someone. The renderer will
+    draw a panel with no marker on it, which is what leaves the standalone pages alone, but that is
+    a rendering default and not a state this table can be in.
+    """
+    return [(str(seat), f"FP{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
+
+
 def _resource_buttons(board_layout: dict) -> str:
     """A pair of steps per resource, in the order the board draws its readouts."""
     return "".join(
@@ -702,6 +719,8 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         '<button type="button" data-setup-mode-button="true" aria-pressed="false">Setup</button>'
         '<button type="button" data-ship-advance="true">S+</button>'
         '<button type="button" data-merchant-advance-button="true">M+</button>'
+        '<select id="first-player-seat" data-first-player-select="true">'
+        f"{_options(_first_player_options(), str(FIRST_PLAYER_SEAT_AT_START))}</select>"
         "</div>"
         '<div class="control-row" data-controls-row="2">'
         f'<select id="disc-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
@@ -1632,6 +1651,10 @@ def render_compact_controls_script(
     /* Whose turn it is. Nothing advances it yet, so it stays on the first seat; it is kept out
        here rather than inside the turn because a seat outlives any one sow. */
     activeSeat: TURN.seat,
+    /* Which seat the first player marker sits with. It is always with someone, and it opens with
+       seat 1 because every piety disc starts on 0 and the tie resolves to the first board. It
+       decides nothing about turn order here: it moves a seal and that is all. */
+    firstPlayerSeat: {FIRST_PLAYER_SEAT_AT_START},
     /* The turn drawn on the wheel: which phase it is in, where it started and where the hand
        stands now, the way it came, what is in hand, the cubes lifted off the board to put it
        there, the slots it has since stood cubes in, which way out was last picked, the duty it
@@ -1664,6 +1687,9 @@ def render_compact_controls_script(
   var seatBoards = document.querySelectorAll('[data-player-seat].p-player');
   var discButtons = document.querySelectorAll('[data-disc-track][data-disc-delta]');
   var discPlayerSeat = document.getElementById('disc-player-seat');
+  var firstPlayerSeat = document.getElementById('first-player-seat');
+  var firstPlayerSeals = document.querySelectorAll('[data-first-player-seal][data-player-seat]');
+  var pietyTrack = document.querySelector('[data-first-player-seat]');
   var acolytePlayerSeat = document.getElementById('acolyte-player-seat');
   var acolyteSource = document.getElementById('acolyte-source');
   var acolyteTarget = document.getElementById('acolyte-target');
@@ -1760,6 +1786,31 @@ def render_compact_controls_script(
       disc.style.visibility = shown.indexOf(seat) === -1 ? 'hidden' : 'visible';
       disc.setAttribute(track === 'alms' ? 'data-alms-position' : 'data-piety-position', String(position));
     }});
+  }}
+
+  /* Every seat's seal is already struck into the panel, in that seat's own colour, and all but one
+     are hidden. So moving the marker is showing one and hiding the rest -- exactly what
+     renderDiscTrack does with the discs. Nothing here computes a colour, and nothing here may:
+     the wax, the rim, the ring and the crown are all derived in the renderer, and a second
+     derivation written in JavaScript would be a copy to keep in step with the first. */
+  function renderFirstPlayerSeal() {{
+    Array.prototype.forEach.call(firstPlayerSeals, function (seal) {{
+      var seat = Number(seal.getAttribute('data-player-seat'));
+      seal.style.visibility = seat === state.firstPlayerSeat ? 'visible' : 'hidden';
+    }});
+  }}
+
+  function setFirstPlayerSeat(seat) {{
+    state.firstPlayerSeat = seat;
+    if (firstPlayerSeat) {{
+      firstPlayerSeat.value = String(seat);
+    }}
+    /* The attribute is what names the holder, so it moves with the marker rather than staying on
+       whichever seat the renderer struck it for. */
+    if (pietyTrack) {{
+      pietyTrack.setAttribute('data-first-player-seat', String(seat));
+    }}
+    renderFirstPlayerSeal();
   }}
 
   function moveDisc(track, delta) {{
@@ -2333,6 +2384,11 @@ def render_compact_controls_script(
     }});
     /* A seat that has just left the table cannot be the one whose turn it is. */
     setActiveSeat(state.activeSeat > count ? {DEFAULT_CONTROL_PLAYER_SEAT} : state.activeSeat);
+    /* Nor can it be holding the marker. It goes back to the seat it starts the game with, never
+       to nobody: there is no state in which the marker is off the table. */
+    setFirstPlayerSeat(
+      state.firstPlayerSeat > count ? {FIRST_PLAYER_SEAT_AT_START} : state.firstPlayerSeat
+    );
     if (state.setup.on) {{
       enterSetupMode();
     }} else {{
@@ -2440,6 +2496,12 @@ def render_compact_controls_script(
     control.addEventListener('change', refreshBoardButtons);
   }});
 
+  if (firstPlayerSeat) {{
+    firstPlayerSeat.addEventListener('change', function () {{
+      setFirstPlayerSeat(Number(firstPlayerSeat.value));
+    }});
+  }}
+
 {turn_flow}
   Object.keys(state.acolytes).forEach(function (seat) {{
     renderBoardCubes(seat);
@@ -2491,7 +2553,13 @@ def render_game_table_html(
     )
     piety_svg = tag_player_discs(
         crop_svg(
-            render_piety_track_v2_svg(piety_layout, piety_config, PIETY_VARIANT_ID),
+            render_piety_track_v2_svg(
+                piety_layout,
+                piety_config,
+                PIETY_VARIANT_ID,
+                FIRST_PLAYER_SEAT_AT_START,
+                interactive=True,
+            ),
             scale.crop["piety"],
         )
     )
