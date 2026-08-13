@@ -4,28 +4,34 @@ from pathlib import Path
 
 import pytest
 
-from tools.ui_debug import render_seal_prototypes
+from tools.ui_debug import render_seal as seal_module
 from tools.ui_debug.generate_seal_prototypes import (
     default_output_path,
     generate_seal_prototypes_page,
 )
+from tools.ui_debug.render_seal import (
+    GLYPH_BOX,
+    RIM_STROKE_R,
+    RING_R,
+    RING_STROKE_R,
+    SEAL_R,
+    WAX,
+    WAX_DEEP,
+    WAX_RIM,
+    WOBBLE,
+    check_clearance,
+    render_seal,
+)
 from tools.ui_debug.render_seal_prototypes import (
     BACKGROUNDS,
     GLYPH,
-    GLYPH_BOX,
     GLYPHS,
     HEX_GREEN,
     KEY,
     PAGE_BLACK,
     PARCHMENT,
-    RING_R,
     SEAL_PX,
-    SEAL_R,
     TREATMENTS,
-    WAX,
-    WAX_DEEP,
-    WOBBLE,
-    check_clearance,
     g_square,
     render_seal_prototypes_html,
     seal,
@@ -34,9 +40,37 @@ from tools.ui_debug.render_seal_prototypes import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
+SEAL_MODULE = UI_DEBUG_DIR / "render_seal.py"
+PROTOTYPES_MODULE = UI_DEBUG_DIR / "render_seal_prototypes.py"
 COMMITTED_PAGE = UI_DEBUG_DIR / "prototypes" / "seal_prototypes.html"
 
 GLYPH_NAMES = ["square", "shield", "S", "A"]
+
+
+def _polygon_points(drawn: str) -> list[str]:
+    match = re.search(r'<polygon points="([^"]*)"', drawn)
+    assert match is not None
+    return match.group(1).split(" ")
+
+
+def _imports_the_seal(module: Path) -> bool:
+    """Matched on the import rather than the filename, which `render_seal_prototypes` shadows."""
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    return any(
+        isinstance(node, ast.ImportFrom) and node.module == "tools.ui_debug.render_seal"
+        for node in ast.walk(tree)
+    )
+
+
+def _imports_of(module: Path) -> set[str]:
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Import):
+            imported.update(name.name.split(".")[0] for name in node.names)
+    return imported
 
 
 def test_the_page_the_repo_ships_is_the_page_this_generator_writes(tmp_path: Path) -> None:
@@ -84,7 +118,7 @@ def test_a_glyph_too_big_for_the_ring_stops_the_render_rather_than_spoiling_it()
     and merely looks wrong — so the failure has to happen here or not at all. No page comes out.
     """
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(render_seal_prototypes, "GLYPH_BOX", 23.0)
+        patch.setattr(seal_module, "GLYPH_BOX", 23.0)
 
         with pytest.raises(AssertionError) as raised:
             check_clearance()
@@ -100,7 +134,7 @@ def test_the_page_is_written_only_after_the_clearance_is_checked(tmp_path: Path)
     destination = tmp_path / "seal_prototypes.html"
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(render_seal_prototypes, "GLYPH_BOX", 23.0)
+        patch.setattr(seal_module, "GLYPH_BOX", 23.0)
         with pytest.raises(AssertionError):
             generate_seal_prototypes_page(output_path=destination)
 
@@ -152,6 +186,82 @@ def test_a_seal_is_wax_then_ring_then_glyph_about_the_origin() -> None:
     assert '<circle cx="0" cy="0"' in drawn
 
 
+def test_the_seal_can_be_struck_at_a_point_rather_than_only_about_the_origin() -> None:
+    """Which is the whole of what the extraction changed, and what the next panel needs.
+
+    Wax and ring move together: a seal that placed its blob and left its impression behind would be
+    a seal in two halves, so the ring is asked for at the same centre rather than assumed at 0,0.
+    """
+    here = render_seal(0, 0, SEAL_R)
+    there = render_seal(140, 62, SEAL_R)
+
+    assert '<circle cx="140" cy="62"' in there
+    assert '<circle cx="0" cy="0"' in here
+    moved = [
+        (round(float(x) - 140, 2), round(float(y) - 62, 2))
+        for x, y in (point.split(",") for point in _polygon_points(there))
+    ]
+    assert moved == [(float(x), float(y)) for x, y in (p.split(",") for p in _polygon_points(here))]
+
+
+def test_the_two_lines_on_a_seal_thicken_with_it_and_the_ring_keeps_its_share() -> None:
+    """A seal struck smaller should be the same drawing, not the same drawing under a heavier pen.
+
+    The ratios are chosen to land on the widths the seal has always been drawn with, so at the
+    agreed radius they must still emit those exact literals -- `2`, not `2.00`, which would be the
+    same width and a different file.
+    """
+    at_agreed = render_seal(0, 0, SEAL_R)
+    assert 'stroke-width="2"' in at_agreed
+    assert 'stroke-width="1.6"' in at_agreed
+    assert f'r="{SEAL_R * RING_R:.2f}"' in at_agreed
+
+    halved = render_seal(0, 0, SEAL_R / 2)
+    assert f'stroke-width="{SEAL_R / 2 * RIM_STROKE_R:g}"' in halved
+    assert f'stroke-width="{SEAL_R / 2 * RING_STROKE_R:g}"' in halved
+    assert f'r="{SEAL_R / 2 * RING_R:.2f}"' in halved
+
+
+def test_the_wobble_is_what_stops_the_wax_reading_as_a_circle() -> None:
+    """Twenty-six points off a modulated radius: never round, never the same shape twice over."""
+    points = _polygon_points(render_seal(0, 0, SEAL_R))
+    radii = {
+        round((float(x) ** 2 + float(y) ** 2) ** 0.5, 2)
+        for x, y in (point.split(",") for point in points)
+    }
+
+    assert len(points) == 26
+    assert len(radii) > 1
+    assert min(radii) > SEAL_R * RING_R  # the wax never dips inside its own impression ring
+    assert max(radii) < SEAL_R * (1 + sum(WOBBLE))
+
+
+def test_the_prototype_strikes_the_shared_seal_at_the_size_it_was_agreed_at() -> None:
+    """The page is one caller of the seal now, not the place the seal lives."""
+    assert seal(g_square).startswith(render_seal(0, 0, SEAL_R))
+    assert WAX_RIM in render_seal(0, 0, SEAL_R)
+
+
+def test_nothing_in_the_shared_module_sits_there_without_a_caller() -> None:
+    """It was split out to be used from more than one place, so nothing in it may be used from none.
+
+    Which modules count as callers is read off their imports rather than listed here, so the Piety
+    Track picking the seal up is something this notices by itself. What it will not let through is a
+    function added to the shared module ahead of the code that was supposed to call it.
+    """
+    callers = [
+        module
+        for module in sorted(UI_DEBUG_DIR.glob("*.py"))
+        if module != SEAL_MODULE and _imports_the_seal(module)
+    ]
+    assert callers, "the shared seal module is not imported by anything"
+
+    calling_source = "\n".join(module.read_text(encoding="utf-8") for module in callers)
+    for node in ast.parse(SEAL_MODULE.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
+            assert node.name in calling_source, node.name
+
+
 def test_the_seal_is_vector_at_whatever_size_it_is_asked_for() -> None:
     """The pixel figure sets the box, not the drawing, so a later size is exact, not resampled."""
     small = svg(g_square, False, 24)
@@ -181,11 +291,12 @@ def test_the_renderer_reads_nothing_and_so_cannot_disagree_with_anything() -> No
     It is the only renderer here with no layout JSON, which is why there is no parity check between
     data and drawing to be had — there is only the drawing.
     """
-    source = (UI_DEBUG_DIR / "render_seal_prototypes.py").read_text(encoding="utf-8")
+    for module in (SEAL_MODULE, PROTOTYPES_MODULE):
+        source = module.read_text(encoding="utf-8")
+        assert "import json" not in source, module.name
+        assert "open(" not in source, module.name
+        assert "read_text" not in source, module.name
 
-    assert "import json" not in source
-    assert "open(" not in source
-    assert "read_text" not in source
     assert render_seal_prototypes_html() == render_seal_prototypes_html()
 
 
@@ -209,12 +320,6 @@ def test_the_seals_know_nothing_about_the_game_they_will_be_struck_in() -> None:
     Read off the imports rather than the text, so the docstrings stay free to talk about the game
     the drawing is for without the test mistaking the mention for a dependency.
     """
-    tree = ast.parse((UI_DEBUG_DIR / "render_seal_prototypes.py").read_text(encoding="utf-8"))
-    imported = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module.split(".")[0])
-        elif isinstance(node, ast.Import):
-            imported.update(name.name.split(".")[0] for name in node.names)
-
-    assert imported == {"__future__", "math", "collections"}
+    assert _imports_of(SEAL_MODULE) == {"__future__", "math"}
+    # The page reaches for the wax and nothing else; the drawing is all in the standard library.
+    assert _imports_of(PROTOTYPES_MODULE) == {"__future__", "collections", "tools"}
