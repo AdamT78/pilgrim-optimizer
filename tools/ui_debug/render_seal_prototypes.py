@@ -6,10 +6,10 @@ their own so the artwork can be judged before anything is built on it.
 This is a debug/visual tool only. It emits SVG/HTML, is not connected to `GameState`, and decides
 nothing about the game: a seal is a mark drawn on a tile, not a rule about the tile.
 
-The wax itself is `render_seal.py`, which draws the blob and the impression ring at a given centre
-and radius. It is shared, because the Piety Track is about to strike the same seal for the first
-player marker. What stays here is what this page puts on top of and around the wax: the glyphs, the
-grounds they stand on, and the page.
+The wax itself is `render_seal.py`, which draws the blob and the impression ring at a given centre,
+radius and colour. It is shared, because the Piety Track strikes the same seal for the first player
+marker. What stays here is what this page puts on top of and around the wax: the glyphs, the grounds
+they stand on, the three reds the duty-tile seals are struck in, and the page.
 
 Unlike the other renderers here, this one reads nothing. There is no layout JSON and no config,
 because there is nothing to reverse-engineer: everything the seal is made of is in constants, here
@@ -35,28 +35,32 @@ circle below roughly 48px, and a keyline turns into a halo rather than an outlin
 
 THE ONE CONSTRAINT WORTH KNOWING
 
-The glyph must clear the impression ring, which is `check_clearance()` in `render_seal.py`. It runs
-on every render here, so a tweak to `GLYPH_BOX` or `RING_R` fails loudly instead of quietly ruining
-the seal.
+The glyph must clear the impression ring. A square of side B has a half-diagonal of B/2*sqrt(2),
+and that -- not B -- is what has to stay inside the ring. At B=18 against a seal of r=20 the
+corners reach 12.73 while the ring sits at 15.60, leaving about 3 units of bare wax. At B=23 the
+corners reach 16.26 and cross it. `check_clearance()` asserts this on every render, so a future
+tweak to either number fails loudly instead of quietly ruining the seal.
+
+It lives here rather than with the shared wax because it is about a glyph in a box, and only these
+four glyphs have one. The first player seal's crown is sized off the radius and has no box to
+measure, so an assert kept in the shared module would have covered one caller of two while reading
+as though it covered both.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
-from tools.ui_debug.render_seal import (
-    GLYPH_BOX,
-    RING_R,
-    SEAL_R,
-    WAX,
-    WAX_DEEP,
-    check_clearance,
-    render_seal,
-)
+from tools.ui_debug.render_seal import RING_R, SEAL_R, render_seal
 
 # ------------------------------------------------------------------ tuning
+GLYPH_BOX = 18.0  # all four glyphs fill this square, centred
 SEAL_PX = 96  # the one size rendered here; see the note on scaling
 
+WAX = "#DC6A61"  # the wax body: pushed light so the glyph can be deep
+WAX_RIM = "#5E1712"  # the blob outline
+WAX_DEEP = "#A83F36"  # the die impression, between wax and glyph in value
 GLYPH = "#6E1A14"  # the struck symbol
 KEY = "#F6EFDD"  # optional keyline, for when two reds are not enough
 
@@ -114,7 +118,20 @@ TREATMENTS = [False]
 def seal(glyph: GlyphDrawer, keyline: bool = False, seed: float = 0.4, ring: bool = True) -> str:
     """One seal, struck about the origin so it can be placed anywhere."""
     k = f' stroke="{KEY}" stroke-width="1.9" stroke-linejoin="round"' if keyline else ""
-    return render_seal(0, 0, SEAL_R, seed, ring) + glyph(k)
+    struck = render_seal(0, 0, SEAL_R, WAX, WAX_RIM, WAX_DEEP, seed, ring)
+    return struck + glyph(k)
+
+
+# ---------------------------------------------------------------- self-check
+def check_clearance() -> tuple[float, float, float]:
+    """The glyph's corners, not its side, are what must clear the ring."""
+    corner = GLYPH_BOX / 2 * math.sqrt(2)
+    ring = SEAL_R * RING_R
+    assert corner < ring, (
+        f"glyph corners reach {corner:.2f} but the ring sits at {ring:.2f}: "
+        f"shrink GLYPH_BOX below {ring / math.sqrt(2) * 2:.2f} or raise RING_R"
+    )
+    return corner, ring, ring - corner
 
 
 def svg(glyph: GlyphDrawer, keyline: bool, px: int, seed: float = 0.4, ring: bool = True) -> str:

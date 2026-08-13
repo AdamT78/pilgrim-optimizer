@@ -32,8 +32,24 @@ from tools.ui_debug.render_alms_table import (
 )
 from tools.ui_debug.render_donated_buildings import render_star_path
 from tools.ui_debug.render_piety_track_v2 import (
+    CROWN_HEIGHT_W,
+    CROWN_POINTS,
+    CROWN_WIDTH_R,
+    MIN_RULE_STUB,
+    SEAL_CROWN_DARKEN,
+    SEAL_CX,
+    SEAL_CY,
+    SEAL_RADIUS,
+    SEAL_RIM_DARKEN,
+    SEAL_RING_DARKEN,
+    SEAL_SEED,
+    SEAL_TILT,
+    SEAT_ORDER,
+    check_rule_stub,
     default_layout_path,
     default_piety_config_path,
+    first_player_by_seat,
+    header_rule_end_x,
     load_piety_config,
     load_piety_track_v2_layout,
     piety_vp_values,
@@ -46,6 +62,7 @@ from tools.ui_debug.render_piety_track_v2 import (
     track_geometry,
     variant_by_id,
 )
+from tools.ui_debug.render_seal import WOBBLE, darken
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
@@ -539,3 +556,232 @@ def test_prototype_source_is_still_the_reference_copy() -> None:
 
     assert "Piety Track" in content
     assert "Piety track with the house ornament applied" in content
+
+
+# --- the first player marker --------------------------------------------------------------------
+
+
+def sealed(seat: int, variant_id: str = "3_4_player") -> str:
+    return render_piety_track_v2_svg(layout(), config(), variant_id, seat)
+
+
+def test_a_panel_told_nothing_about_the_marker_is_the_panel_it_was_before() -> None:
+    """The marker is an addition, not a rearrangement: without a seat, nothing about this moved.
+
+    Byte equality rather than a look at the seal's own elements, because what is being claimed is
+    that the header, the title, the rule, the numbers, the discs and the stars are all untouched --
+    which is a claim about everything on the panel, not about the part that was added.
+    """
+    for variant_id in VARIANT_IDS:
+        plain = render_piety_track_v2_svg(layout(), config(), variant_id)
+
+        assert plain == render_piety_track_v2_svg(layout(), config(), variant_id, None)
+        assert "first-player" not in plain
+        assert "data-first-player-seat" not in plain
+
+
+def test_the_seal_is_struck_in_the_colour_of_whichever_seat_is_named() -> None:
+    """One attribute in, one seat's wax out. Four seats, four seals, no two the same colour."""
+    waxes = set()
+    for seat, colour in enumerate(("red", "yellow", "blue", "white"), start=1):
+        panel = sealed(seat)
+        player = first_player_by_seat(layout(), seat)
+
+        assert player["color"] == colour
+        assert f'data-first-player-seat="{seat}"' in panel
+        assert f'data-first-player-seal="true" data-player="{player["id"]}"' in panel
+        assert f'fill="{player["fill"]}"' in panel
+        waxes.add(player["fill"])
+
+    assert len(waxes) == 4
+
+
+def test_the_seal_takes_its_colour_from_the_same_players_the_discs_are_drawn_from() -> None:
+    """There is one seat-colour table on this board, and the seal reads that one.
+
+    A second copy would let the marker and the disc it stands for drift apart, which is the one
+    way this element could contradict the board it is drawn on.
+    """
+    for seat, player_id in enumerate(SEAT_ORDER, start=1):
+        assert first_player_by_seat(layout(), seat) == player_by_id(layout(), player_id)
+
+    assert set(SEAT_ORDER) == set(PLAYER_IDS)
+    assert [player_by_id(layout(), pid)["fill"] for pid in SEAT_ORDER] == [
+        "#C0392B",
+        "#F4D03F",
+        "#2E86C1",
+        "#FFFFFF",
+    ]
+
+
+def test_the_seat_order_is_the_one_the_game_table_seats_its_players_in() -> None:
+    """Named here because the renderer cannot import the page that composes it, so it is checked.
+
+    Red is seat 1 there and it must be seat 1 here, or the same marker would name one player on
+    the panel and another on the page around it.
+    """
+    from tools.ui_debug.generate_game_table import SEATED_PLAYERS
+
+    assert SEAT_ORDER == SEATED_PLAYERS
+
+
+def test_nothing_in_this_renderer_already_pairs_a_seat_with_a_player() -> None:
+    """The premise `SEAT_ORDER` rests on, checked rather than asserted in a comment.
+
+    The panel tags a disc with whose it is, never with which seat: `data-player-seat` is stamped on
+    afterwards by the game table, onto markup this module has already finished with. The layout's
+    own `seats` are the 2x2 cluster -- where a disc sits next to the others -- and carry no seat
+    number to read one off. If that ever changes, this fails and `SEAT_ORDER` should go.
+    """
+    panel = render_piety_track_v2_svg(layout(), config(), "3_4_player")
+
+    assert "data-player-seat" not in panel
+    assert panel.count('data-player-disc="true"') == 4  # whose, not which seat
+    for variant in layout()["variants"]:
+        for seat in variant["seats"]:
+            assert set(seat) == {"player", "row", "column"}
+
+
+def test_the_rest_of_the_seal_is_the_seat_colour_pulled_toward_black() -> None:
+    """Three shades off one colour, so a re-tuned palette needs nothing rewritten here."""
+    wax = first_player_by_seat(layout(), 3)["fill"]
+    panel = sealed(3)
+
+    assert (SEAL_RIM_DARKEN, SEAL_RING_DARKEN, SEAL_CROWN_DARKEN) == (0.45, 0.72, 0.50)
+    assert f'stroke="{darken(wax, SEAL_RIM_DARKEN)}"' in panel
+    assert f'stroke="{darken(wax, SEAL_RING_DARKEN)}"' in panel
+    assert f'fill="{darken(wax, SEAL_CROWN_DARKEN)}"' in panel
+
+
+def test_the_seal_is_struck_where_it_was_approved_and_nowhere_else() -> None:
+    """Pinned by value: the position was settled by eye, so nothing computes it back."""
+    assert (SEAL_CX, SEAL_CY, SEAL_RADIUS, SEAL_SEED, SEAL_TILT) == (516.0, 27.0, 22.0, 1.1, -14.0)
+
+    panel = sealed(1)
+    assert f'<g transform="rotate({SEAL_TILT:g} {SEAL_CX:g} {SEAL_CY:g})">' in panel
+    assert f'<circle cx="{SEAL_CX:g}" cy="{SEAL_CY:g}"' in panel
+    assert panel.count("data-first-player-seal") == 1
+
+
+def test_the_crown_is_one_closed_outline_rather_than_a_shape_on_a_band() -> None:
+    """Two shapes leave a seam across the middle at this size, which reads as a crack in the wax."""
+    panel = sealed(1)
+    width = SEAL_RADIUS * CROWN_WIDTH_R
+    height = width * CROWN_HEIGHT_W
+    points = " ".join(
+        f"{SEAL_CX + fx * width:.2f},{SEAL_CY + fy * height:.2f}" for fx, fy in CROWN_POINTS
+    )
+
+    assert len(CROWN_POINTS) == 7
+    assert f'<polygon points="{points}"' in panel
+    # Drawn last, over the wax and the ring rather than under either.
+    assert panel.index(points) > panel.index(f'<circle cx="{SEAL_CX:g}" cy="{SEAL_CY:g}"')
+
+
+def test_the_crown_turns_with_the_wax_because_it_came_off_the_same_die_as_the_ring() -> None:
+    """A tilt that moved the ring and left the crown square would depict half a die turning.
+
+    It is undetectable on the ring alone, which is a circle, so the crown is the only place the
+    strike can be seen to be at an angle. It is handed to the seal as its impression rather than
+    appended after it, which is what puts it inside the one rotation.
+    """
+    panel = sealed(1)
+    turn = f'<g transform="rotate({SEAL_TILT:g} {SEAL_CX:g} {SEAL_CY:g})">'
+    struck = panel[panel.index(turn) + len(turn) : panel.index("</g></g>")]
+
+    assert panel.count(turn) == 1  # one turn for the whole strike, not one per piece
+    crown_fill = darken(first_player_by_seat(layout(), 1)["fill"], SEAL_CROWN_DARKEN)
+    assert f'fill="{crown_fill}"' in struck  # the crown is inside it, not after it
+
+
+def test_the_wax_goes_on_over_the_header_rule_and_lets_it_out_the_far_side() -> None:
+    """Wax is pressed onto an edge, not parked in a gap left for it.
+
+    The rule is untouched -- it runs to where it always ran -- and the seal laps the inner hairline
+    at the top by a couple of units, which is what applying it over an edge looks like.
+    """
+    geometry = track_geometry(layout(), 2)
+    rule_end = header_rule_end_x(layout(), geometry)
+    panel = sealed(1)
+
+    assert rule_end == pytest.approx(575.3)
+    assert f"H {rule_end:.1f}" in panel
+    assert SEAL_CX + SEAL_RADIUS < rule_end  # the rule comes out the right of the wax
+    hairline = layout()["ornament"]["inset"]["offset"]
+    assert SEAL_CY - SEAL_RADIUS == pytest.approx(hairline - 2.5)  # laps it, on purpose
+
+
+def test_the_seal_clears_everything_it_was_measured_against() -> None:
+    """The four clearances the position was approved on, so a nudge has to move a number here."""
+    geometry = track_geometry(layout(), 2)
+    inset = layout()["ornament"]["inset"]["offset"]
+    inner_right = geometry["panel_width"] - inset
+    number_cap_y = geometry["number_baseline_y"] - 8.0  # cap height of the "12", at 11px
+
+    assert round(check_rule_stub(layout(), geometry), 1) == 38.9
+    assert round(number_cap_y - (SEAL_CY + SEAL_RADIUS), 1) == 10.0
+    assert round(inner_right - (SEAL_CX + SEAL_RADIUS), 1) == 51.8
+    assert round(SEAL_CY - SEAL_RADIUS, 1) == 5.0
+
+
+def test_a_seal_shoved_up_against_the_end_of_the_rule_stops_the_render(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The assertion is load-bearing, so this is the test that it fires at runtime.
+
+    Nothing downstream notices a rule that stops just short of the wax: it renders perfectly well
+    and merely looks like a stray hair on the seal, so the failure has to happen here or not at
+    all. `+18` past the trough is where the run of line stops being enough to read as a line.
+    """
+    module = "tools.ui_debug.render_piety_track_v2"
+    geometry = track_geometry(layout(), 2)
+    trough = SEAL_RADIUS * (1 - WOBBLE[0] - WOBBLE[1])
+    last_good = header_rule_end_x(layout(), geometry) - MIN_RULE_STUB - trough
+
+    monkeypatch.setattr(f"{module}.SEAL_CX", last_good)
+    assert check_rule_stub(layout(), geometry) == pytest.approx(MIN_RULE_STUB)
+
+    monkeypatch.setattr(f"{module}.SEAL_CX", last_good + 0.5)
+    with pytest.raises(AssertionError) as raised:
+        check_rule_stub(layout(), geometry)
+    assert "17.5" in str(raised.value)
+
+    # And no panel comes out of it, rather than a panel with a hair on the seal.
+    with pytest.raises(AssertionError):
+        render_piety_track_v2_svg(layout(), config(), "3_4_player", 1)
+
+
+def test_the_stub_is_measured_at_the_trough_of_the_wobble_not_at_the_radius() -> None:
+    """At the nominal radius a seal can be declared clear and still show a hair where wax runs wide.
+
+    The factor comes off `WOBBLE`, so re-tuning the ripple re-tunes this rather than leaving a
+    check that was true of the old edge.
+    """
+    geometry = track_geometry(layout(), 2)
+    trough = SEAL_RADIUS * (1 - WOBBLE[0] - WOBBLE[1])
+
+    assert trough < SEAL_RADIUS
+    assert check_rule_stub(layout(), geometry) == pytest.approx(
+        header_rule_end_x(layout(), geometry) - (SEAL_CX + trough)
+    )
+    assert MIN_RULE_STUB == 18.0
+
+
+def test_no_seat_outside_the_table_can_be_given_the_marker() -> None:
+    for seat in (0, 5, -1):
+        with pytest.raises(KeyError):
+            first_player_by_seat(layout(), seat)
+
+
+def test_the_marker_is_the_only_thing_the_seat_changes_about_the_panel() -> None:
+    """Nothing else on the board reads it: no restyled disc, no second highlight, no CSS hook."""
+    plain = render_piety_track_v2_svg(layout(), config(), "3_4_player")
+    marked = sealed(1)
+
+    # The seal is struck last, so lifting it off is a cut from where it starts to the end of the
+    # drawing. What is left has to be the panel as it was, attribute and all.
+    struck_at = marked.index("<g data-first-player-seal")
+    without = marked[:struck_at] + marked[marked.index("\n</svg>") :]
+
+    assert without.replace(' data-first-player-seat="1"', "") == plain
+    assert marked.count("data-player-disc") == plain.count("data-player-disc") == 4

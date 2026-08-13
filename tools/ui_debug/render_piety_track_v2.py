@@ -61,6 +61,7 @@ from tools.ui_debug.render_alms_table import (
     TITLE_FONT_WEIGHT,
 )
 from tools.ui_debug.render_donated_buildings import render_star_path, star_points
+from tools.ui_debug.render_seal import WOBBLE, darken, render_seal
 
 COMPONENT_NAME = "piety-track-v2"
 LAYOUT_FILENAME = "piety_track_v2_layout.json"
@@ -80,6 +81,66 @@ NUMBER_FONT = (
 # The score in a star is the one number on either board set plain: the star is already standing it
 # out, so the digits do not have to as well.
 STAR_LABEL_FONT = f'font-family="{INK_FONT}" font-size="{STAR_LABEL_FONT_SIZE:g}"'
+
+# --- the first player marker ------------------------------------------------------------------
+# Turn order is decided on this track -- highest piety takes the marker, and whoever holds it says
+# who starts -- so the marker belongs on this panel: the thing that decides it and the thing itself
+# end up in one frame. What is drawn here is only whichever seat it is told about. Who has the most
+# piety, and which way a tie walks, are turn logic and are decided nowhere near this file.
+#
+# It sits in the top right corner, struck across the header rule rather than tucked beside it. The
+# rule runs under the wax and comes out the far side, which is what makes it read as pressed on
+# rather than parked in a gap.
+SEAL_CX = 516.0
+SEAL_CY = 27.0
+SEAL_RADIUS = 22.0
+SEAL_SEED = 1.1
+SEAL_TILT = -14.0
+
+# How far the rule must still run past the wax before it stops. A short enough remainder stops
+# reading as a line passing underneath and starts reading as a hair poking out of the seal with
+# nothing beyond it, which looks like a bug rather than a join. `check_rule_stub` holds it.
+MIN_RULE_STUB = 18.0
+
+# The seat's own colour is the wax; the rest of the seal is that colour pulled toward black. Three
+# factors rather than three palettes, so a re-tuned seat colour drags its own seal along with it.
+SEAL_RIM_DARKEN = 0.45
+SEAL_RING_DARKEN = 0.72
+SEAL_CROWN_DARKEN = 0.50
+
+# Which player sits in which seat. Named here because nothing in this renderer resolves it: the
+# discs are drawn from `variant["seats"]`, which says where in the 2x2 cluster each player's disc
+# goes and nothing about seat numbers, and `data-player-seat` is not emitted here at all -- the
+# game table stamps it onto the rendered fragment afterwards, and this module cannot import the
+# page that composes it. Only the ids are named. The colours stay in the layout's own `players`,
+# which is what draws the discs, so there is no second seat-colour table to fall out of step with
+# that one. `test_the_seat_order_is_the_one_the_game_table_seats_its_players_in` holds the two
+# lists together.
+#
+# THIS IS BOARD ORDER, NOT TURN ORDER. Where a player sits is fixed for the whole game; who plays
+# first changes every round. The two are not the same list and must not be made into one.
+#
+# The distinction has teeth shortly: a later PR is to permute the discs in the cluster at position
+# 0 to show the turn sequence, which re-shuffles whenever the start player does. That permutation
+# must come from turn state and must not be read off this list, and `data-player-seat` must go on
+# meaning which seat a player occupies rather than which slot their disc has been moved into --
+# otherwise a marker naming seat 1 and a disc labelled seat 1 stop being the same player.
+SEAT_ORDER = ("player_two", "player_three", "player_four", "player_one")
+
+# The crown, as fractions of its own box about the seal's centre. It is one closed polygon and not
+# a band with points standing on it: at this size two shapes leave a seam across the middle where
+# they meet, which reads as a crack in the wax.
+CROWN_WIDTH_R = 0.90  # of the seal's radius
+CROWN_HEIGHT_W = 0.86  # of the crown's own width
+CROWN_POINTS = (
+    (-0.50, 0.42),
+    (-0.50, -0.34),
+    (-0.22, 0.02),
+    (0.0, -0.46),
+    (0.22, 0.02),
+    (0.50, -0.34),
+    (0.50, 0.42),
+)
 
 
 def repo_root() -> Path:
@@ -295,6 +356,17 @@ def render_panel_inset(layout: dict, geometry: dict) -> str:
     )
 
 
+def header_rule_end_x(layout: dict, geometry: dict) -> float:
+    """Where the header rule stops, short of the panel's own padding.
+
+    Read from one place because two things need it now: the rule is drawn to it, and the first
+    player seal is checked against it. A seal that cleared a number written down separately would
+    be cleared of the wrong line the first time the padding changed.
+    """
+    panel = layout["panel"]
+    return geometry["panel_width"] - panel["pad_x"] - layout["ornament"]["trefoil"]["end_dx"]
+
+
 def render_trefoil_rule(layout: dict, geometry: dict) -> str:
     """The house header: a rule broken by three lobes, running from the title to the far edge.
 
@@ -307,7 +379,7 @@ def render_trefoil_rule(layout: dict, geometry: dict) -> str:
     ink = layout["palette"]["ink"]
 
     x0 = panel["pad_x"] + trefoil["start_dx"]
-    x1 = geometry["panel_width"] - panel["pad_x"] - trefoil["end_dx"]
+    x1 = header_rule_end_x(layout, geometry)
     y = panel["pad_top"] + trefoil["dy"]
     center_x = (x0 + x1) / 2
     radius = ORNAMENT_TREFOIL_RADIUS
@@ -326,6 +398,77 @@ def render_trefoil_rule(layout: dict, geometry: dict) -> str:
     )
 
 
+def first_player_by_seat(layout: dict, seat: int) -> dict:
+    """Whose marker it is, taken from the same `players` the discs on the track are drawn from."""
+    if not 1 <= seat <= len(SEAT_ORDER):
+        raise KeyError(f"no seat {seat}: this table seats {len(SEAT_ORDER)}")
+    return player_by_id(layout, SEAT_ORDER[seat - 1])
+
+
+def render_crown(cx: float, cy: float, r: float, colour: str) -> str:
+    """The die the first player seal is struck with, as one closed outline.
+
+    Drawn square and handed to `render_seal` as its `inner`, which turns it with the wax and the
+    ring. The ring and this come off one die, so they turn together or the strike is depicted as
+    half a die turning.
+    """
+    width = r * CROWN_WIDTH_R
+    height = width * CROWN_HEIGHT_W
+    points = " ".join(f"{cx + fx * width:.2f},{cy + fy * height:.2f}" for fx, fy in CROWN_POINTS)
+    return f'<polygon points="{points}" fill="{colour}"/>'
+
+
+def check_rule_stub(layout: dict, geometry: dict) -> float:
+    """What is left of the header rule to the right of the wax, and whether it is enough to read.
+
+    The seal is struck ON the rule, so the rule goes under it and comes out the other side. That
+    only reads as a line passing underneath while there is a decent run of it beyond the wax. Move
+    the seal far enough right and what is left stops being a line and becomes a hair sticking out
+    of the blob with nothing on the end of it, which looks like a rendering fault.
+
+    Measured at the trough of the wobble rather than at the nominal radius, because the wax is not
+    a circle: at `r` a seal can be declared clear and still show a hair where the ripple runs wide.
+    The factor comes off `WOBBLE` so that re-tuning the ripple re-tunes this with it.
+    """
+    trough = SEAL_RADIUS * (1 - WOBBLE[0] - WOBBLE[1])
+    rule_end = header_rule_end_x(layout, geometry)
+    stub = rule_end - (SEAL_CX + trough)
+    assert stub >= MIN_RULE_STUB, (
+        f"only {stub:.1f} of header rule is left right of the seal, and {MIN_RULE_STUB:g} is the "
+        f"least that still reads as a rule running underneath rather than a hair poking out of "
+        f"the wax: move the seal left of x={rule_end - MIN_RULE_STUB - trough:.1f} or stop the "
+        f"rule further right than x={rule_end:.1f}"
+    )
+    return stub
+
+
+def render_first_player_seal(layout: dict, geometry: dict, seat: int) -> str:
+    """The first player marker: a seal in the holder's own colour, pressed over the header rule.
+
+    Only the seat it is given. Which seat that is -- highest piety, and clockwise from there on a
+    tie -- is turn logic, and this draws whichever answer it is handed without checking it.
+    """
+    check_rule_stub(layout, geometry)
+    player = first_player_by_seat(layout, seat)
+    wax = player["fill"]
+    return (
+        f'<g data-first-player-seal="true" data-player="{player["id"]}"'
+        f' data-player-color="{player["color"]}">'
+        + render_seal(
+            SEAL_CX,
+            SEAL_CY,
+            SEAL_RADIUS,
+            wax,
+            darken(wax, SEAL_RIM_DARKEN),
+            darken(wax, SEAL_RING_DARKEN),
+            seed=SEAL_SEED,
+            tilt=SEAL_TILT,
+            inner=render_crown(SEAL_CX, SEAL_CY, SEAL_RADIUS, darken(wax, SEAL_CROWN_DARKEN)),
+        )
+        + "</g>"
+    )
+
+
 def render_panel_title(layout: dict, geometry: dict) -> str:
     """The board's name, in the artwork rather than only in the page heading."""
     x = layout["panel"]["pad_x"] + layout["ornament"]["title"]["dx"]
@@ -337,8 +480,15 @@ def render_panel_title(layout: dict, geometry: dict) -> str:
     )
 
 
-def render_piety_track_v2_svg(layout: dict, config: dict, variant_id: str) -> str:
-    """One ornamented panel: the grey rounded rect, the ornament, then the track inside it."""
+def render_piety_track_v2_svg(
+    layout: dict, config: dict, variant_id: str, first_player_seat: int | None = None
+) -> str:
+    """One ornamented panel: the grey rounded rect, the ornament, then the track inside it.
+
+    `first_player_seat` strikes that seat's wax seal into the top right corner and says so on the
+    root element. Left out, no seal is drawn and the panel is what it has always been -- nothing
+    else on it reads the seat, and nothing else about it changes when one is given.
+    """
     variant = variant_by_id(layout, variant_id)
     vp_values = piety_vp_values(config)
     track = layout["track"]
@@ -373,6 +523,11 @@ def render_piety_track_v2_svg(layout: dict, config: dict, variant_id: str) -> st
             parts += [render_player_disc(layout, index, player) for player in seated]
         parts.append(render_vp_star(layout, geometry, index, vp))
 
+    # Struck last, because wax goes on top of what it is pressed onto.
+    seal = "" if first_player_seat is None else f' data-first-player-seat="{first_player_seat}"'
+    if first_player_seat is not None:
+        parts.append(render_first_player_seal(layout, geometry, first_player_seat))
+
     padding = layout["padding"]
     min_x, min_y = -padding["side"], -padding["top"]
     width = panel_width + 2 * padding["side"]
@@ -386,7 +541,7 @@ def render_piety_track_v2_svg(layout: dict, config: dict, variant_id: str) -> st
         f'<svg xmlns="http://www.w3.org/2000/svg"'
         f' viewBox="{min_x} {min_y} {width:.1f} {height:.1f}"'
         f' width="{width * display_scale:.1f}" height="{height * display_scale:.1f}"'
-        f' data-component="{COMPONENT_NAME}" data-piety-variant="{variant["id"]}">'
+        f' data-component="{COMPONENT_NAME}" data-piety-variant="{variant["id"]}"{seal}>'
         f'\n  <rect x="{min_x}" y="{min_y}" width="{width:.1f}" height="{height:.1f}"'
         f' fill="{layout["page_background"]}"/>'
         f"\n  {''.join(parts)}\n</svg>"
