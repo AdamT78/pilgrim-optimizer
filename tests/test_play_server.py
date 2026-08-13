@@ -27,7 +27,7 @@ import pytest
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
-from pilgrim.model.actions import action_id
+from pilgrim.model.actions import SetupSowAction, action_id, action_summary
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES
 from pilgrim.rules.transition import legal_actions
 from tools.play_server import PlayServer, actions_document, state_token
@@ -226,8 +226,9 @@ def test_the_page_the_server_serves_is_the_page_the_file_writer_writes(tmp_path:
 # Playing a setup sow
 # ---------------------------------------------------------------------------------------------
 
-HARNESS = Path(__file__).resolve().parent / "sow_script_harness.js"
+HARNESS = Path(__file__).resolve().parent / "turn_script_harness.js"
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+REFERENCE = Path(__file__).resolve().parents[1] / "scenarios" / "play_view_reference_4p_001.json"
 
 
 def _served(tmp_path: Path, players: int = 4, seed: int = 99):
@@ -238,6 +239,15 @@ def _served(tmp_path: Path, players: int = 4, seed: int = 99):
         ["generate-setup", "--players", str(players), "--seed", str(seed), "--output", str(path)]
     )
     return PlayServer(("127.0.0.1", 0), path)
+
+
+def _played_through_setup(server):
+    """Take the four setup sows so the position is one where a normal turn is legal."""
+    while server.payload["state"]["phase"] == "setup_sow":
+        server.apply(
+            server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"]
+        )
+    return server
 
 
 @contextlib.contextmanager
@@ -270,13 +280,32 @@ def _get_json(base: str, route: str):
         return json.loads(response.read())
 
 
-def _run_script(page: str, clicks: list[int], tmp_path: Path, abandon_at: int | None = None):
-    """Execute the page's own sow script against a stub board, and report what it did."""
+def _run_script(server, clicks, tmp_path: Path, *, reset: bool = False, confirm: bool = False):
+    """Execute the page's own turn script against a stub board, and report what it did."""
+    page = render_play_view_from_payload(server.payload)
     script = re.search(r"<script>\n(.*?)\n</script>", page, re.S)
-    assert script is not None, "the page carried no sow script"
+    assert script is not None, "the page carried no turn script"
+
+    candidates = server.payload["turn_candidates"]
     job = tmp_path / "job.json"
     job.write_text(
-        json.dumps({"script": script.group(1), "clicks": clicks, "abandonAt": abandon_at}),
+        json.dumps(
+            {
+                "script": script.group(1),
+                "resolutions": sorted(
+                    {
+                        step["value"]
+                        for candidate in candidates
+                        for step in candidate["steps"]
+                        if step["kind"] == "resolution"
+                    }
+                ),
+                "panels": [candidate["action_id"] for candidate in candidates],
+                "clicks": clicks,
+                "reset": reset,
+                "confirm": confirm,
+            }
+        ),
         encoding="utf-8",
     )
     finished = subprocess.run(
@@ -285,83 +314,132 @@ def _run_script(page: str, clicks: list[int], tmp_path: Path, abandon_at: int | 
     return json.loads(finished.stdout)
 
 
-def _distinct_next_steps(paths: list[list[int]], prefix: list[int]) -> list[int]:
-    """What legal_actions itself says may come next, given the steps taken so far.
+def _at(value):
+    return {"kind": "position", "value": value}
 
-    Derived from the actions rather than from a written-down list of routes, so a board whose
-    exits changed would move this expectation with it instead of failing it.
+
+def _do(name):
+    return {"kind": "resolution", "value": name}
+
+
+# ---------------------------------------------------------------------------------------------
+# What the engine says may come next
+# ---------------------------------------------------------------------------------------------
+
+
+def _engine_decisions(server) -> list[list]:
+    """Every legal move as the sequence of decisions that reaches it, derived here from scratch.
+
+    Deliberately not `turn_candidates`: comparing the page against the same function that fed it
+    would only show the page copied it faithfully. This walks `legal_actions` itself, so what the
+    offers are checked against is the engine's own answer about what is legal.
     """
-    live = [path for path in paths if path[: len(prefix)] == prefix]
+    decisions = []
+    for action in legal_actions(server.state, server.config):
+        steps = [action.origin, *action.route]
+        if not isinstance(action, SetupSowAction):
+            steps += [action.selected_duty, action.resolution.value]
+        if steps not in decisions:
+            decisions.append(steps)
+    return decisions
+
+
+def _next_values(decisions: list[list], prefix: list) -> list:
+    live = [steps for steps in decisions if steps[: len(prefix)] == prefix]
     seen = []
-    for path in live:
-        if len(path) > len(prefix) and path[len(prefix)] not in seen:
-            seen.append(path[len(prefix)])
+    for steps in live:
+        if len(steps) > len(prefix) and steps[len(prefix)] not in seen:
+            seen.append(steps[len(prefix)])
     return seen
 
 
-def _paths_from_engine(server) -> list[list[int]]:
-    return [[action.origin, *action.route] for action in legal_actions(server.state, server.config)]
+def _forced_prefix(decisions: list[list], prefix: list) -> list:
+    """Advance past every step the survivors agree on, as the page does."""
+    prefix = list(prefix)
+    while len(_next_values(decisions, prefix)) == 1:
+        prefix.append(_next_values(decisions, prefix)[0])
+    return prefix
+
+
+def _clicks_to(decisions: list[list], target: list) -> list[dict]:
+    """The clicks that reach one particular move, skipping every step the page takes by itself.
+
+    Handing over all of a move's steps would not work and should not: the page advances past the
+    forced ones on its own, so a caller supplying them too would answer the wrong questions.
+    """
+    clicks: list[dict] = []
+    prefix: list = []
+    while True:
+        prefix = _forced_prefix(decisions, prefix)
+        if len(prefix) >= len(target):
+            return clicks
+        step = target[len(prefix)]
+        prefix.append(step)
+        clicks.append(_do(step) if isinstance(step, str) else _at(step))
 
 
 @needs_node
-def test_what_is_offered_is_what_the_engine_says_may_come_next(tmp_path: Path) -> None:
-    """The options at each step are the distinct next steps of the surviving actions, and no more.
+@pytest.mark.parametrize("phase", ["setup_sow", "sow"])
+def test_what_is_offered_is_what_the_engine_says_may_come_next(phase, tmp_path: Path) -> None:
+    """The options at each point are the distinct next decisions of the surviving moves, no more.
 
-    Held against `legal_actions` rather than against a route anybody typed out. The page is allowed
-    to narrow the engine's list; it is not allowed to arrive at a different one.
+    Held against `legal_actions` rather than against any route somebody typed out, and run on both
+    a setup sow and a normal turn, because a normal turn asks two questions the sow never does:
+    which duty was selected, and what to do with it.
     """
     server = _served(tmp_path)
-    paths = _paths_from_engine(server)
-    page = render_play_view_from_payload(server.payload)
+    if phase == "sow":
+        _played_through_setup(server)
+    assert server.payload["state"]["phase"] == phase
 
-    clicks = [1, 4]
-    transcript = _run_script(page, clicks, tmp_path)
-
-    prefix: list[int] = []
-    for step, offered in enumerate(transcript["offered"][: len(clicks)]):
-        # Forced steps are taken by the page, so the engine's own prefix has to skip them too.
-        while len(_distinct_next_steps(paths, prefix)) == 1:
-            prefix.append(_distinct_next_steps(paths, prefix)[0])
-        assert sorted(offered) == sorted(_distinct_next_steps(paths, prefix)), f"at step {step}"
-        prefix.append(clicks[step])
+    decisions = _engine_decisions(server)
+    clicks: list = []
+    prefix: list = []
+    for _question in range(3):
+        prefix = _forced_prefix(decisions, prefix)
+        expected = _next_values(decisions, prefix)
+        if len(expected) <= 1:
+            break
+        transcript = _run_script(server, list(clicks), tmp_path)
+        assert sorted(map(str, transcript["offered"][-1])) == sorted(map(str, expected))
+        prefix.append(expected[0])
+        clicks.append(_do(expected[0]) if isinstance(expected[0], str) else _at(expected[0]))
+    assert clicks, "the position asked nothing, so nothing was checked"
 
 
 @needs_node
-def test_a_forced_step_is_never_offered_and_five_steps_are_asked_about_twice(
-    tmp_path: Path,
-) -> None:
-    """A step every survivor agrees on is not a choice, and is not presented as one.
+@pytest.mark.parametrize("phase", ["setup_sow", "sow"])
+def test_a_step_the_survivors_agree_on_is_never_put_as_a_question(phase, tmp_path: Path) -> None:
+    """Forced steps are taken, not asked about, at whatever length the decisions happen to run."""
+    server = _served(tmp_path)
+    if phase == "sow":
+        _played_through_setup(server)
+    decisions = _engine_decisions(server)
+    opening = _next_values(decisions, _forced_prefix(decisions, []))
 
-    On a freshly dealt board the route out of the City is five steps: two ways out, then three
-    steps nobody has any say in, then whether to duck back into the City. Two questions, not five.
+    transcript = _run_script(server, [_at(opening[0])], tmp_path)
+    for offered in transcript["offered"]:
+        assert len(offered) != 1, f"a single option was presented as a choice: {offered}"
+
+
+def test_the_two_phases_run_to_different_lengths_and_take_the_same_walk(tmp_path: Path) -> None:
+    """Nothing may assume how many decisions a move takes, so the two phases must not agree.
+
+    A setup sow decides six things here and a normal turn four, and the same script walks either.
+    A route is as long as the number of acolytes lifted; the day that varies within one position
+    too, this still holds, because no number is written down anywhere to have to be updated.
     """
     server = _served(tmp_path)
-    page = render_play_view_from_payload(server.payload)
-    transcript = _run_script(page, [1, 4], tmp_path)
+    setup_lengths = {len(steps) for steps in _engine_decisions(server)}
+    _played_through_setup(server)
+    turn_lengths = {len(steps) for steps in _engine_decisions(server)}
 
-    asked = [offered for offered in transcript["offered"] if offered]
-    assert all(len(offered) > 1 for offered in asked), "a single option was presented as a choice"
-    assert transcript["posted"]["action_id"] in {
-        action_id(action) for action in legal_actions(server.state, server.config)
-    }
-    # Two clicks settled a five-step route, and the City it started from is marked as travelled.
-    assert len(transcript["posted"]["action_id"].split(":")[-1].split("->")) == 5
-    assert 0 in transcript["onRoute"][1]
+    assert setup_lengths.isdisjoint(turn_lengths), "the two phases happen to run the same length"
 
 
-@needs_node
-def test_abandoning_a_half_built_route_sends_nothing_and_moves_nothing(tmp_path: Path) -> None:
-    """Nothing is sent until one candidate is left, so giving up is local and must stay local."""
-    server = _served(tmp_path)
-    with _running(server) as base:
-        before = _get_json(base, "/state.json")
-        page = render_play_view_from_payload(server.payload)
-        transcript = _run_script(page, [1], tmp_path, abandon_at=True)
-        after = _get_json(base, "/state.json")
-
-    assert transcript["posted"] is None, "a half-built route was submitted"
-    assert transcript["abandonedTo"]["onRoute"] == [0], "abandoning kept steps that were clicked"
-    assert after == before
+# ---------------------------------------------------------------------------------------------
+# Playing a turn
+# ---------------------------------------------------------------------------------------------
 
 
 def test_four_players_sow_in_turn_and_the_board_comes_back_with_the_acolytes_on_it(
@@ -381,13 +459,13 @@ def test_four_players_sow_in_turn_and_the_board_comes_back_with_the_acolytes_on_
 
         pages = []
         for _seat in range(4):
-            candidate = server.payload["sow_candidates"][0]
+            candidate = server.payload["turn_candidates"][0]
             status, page = _post(base, candidate["action_id"], server.payload["state_token"])
             assert status == 200
             pages.append(page)
         final = _get_json(base, "/state.json")
 
-    sown = [position for position in candidate["path"] if position != 0]
+    sown = [step["value"] for step in candidate["steps"] if step["value"] != 0]
     assert _cubes_at(page_before, sown[0], first) == 0
     assert _cubes_at(pages[0], sown[0], first) > 0
     assert final["state"]["acolytes"][0][0] < city_before
@@ -395,10 +473,123 @@ def test_four_players_sow_in_turn_and_the_board_comes_back_with_the_acolytes_on_
     # Setup is over: the phase has turned and the seat on is the one the round starts with.
     assert final["state"]["phase"] == "sow"
     assert final["state"]["active_player"] == final["state"]["start_player_id"]
-    assert not server.payload["sow_candidates"]
     log = server.payload["log"]
     assert any("SETUP_COMPLETE" in line for line in log)
     assert any(final["state"]["start_player_id"] in line for line in log)
+
+
+def test_a_normal_turn_moves_the_cubes_pays_for_itself_and_passes_the_seat(
+    tmp_path: Path,
+) -> None:
+    """A whole turn, played the way the page plays it, and the board comes back changed."""
+    server = _played_through_setup(_served(tmp_path))
+    with _running(server) as base:
+        before = _get_json(base, "/state.json")
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"])
+        status, _page = _post(base, settled["action_id"], server.payload["state_token"])
+        after = _get_json(base, "/state.json")
+
+    assert status == 200
+    assert after["state"]["acolytes"] != before["state"]["acolytes"], "no cube moved"
+    assert after["state"]["players"] != before["state"]["players"], "nothing was gained or spent"
+    assert after["state"]["active_player"] != before["state"]["active_player"]
+
+
+@needs_node
+def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: Path) -> None:
+    """Nothing is committed by running out of questions. The last click is agreeing to it.
+
+    The words are the CLI's, taken from `action_summary` rather than written again here, so the
+    sentence somebody confirms is the sentence the tool prints for that same action.
+    """
+    server = _played_through_setup(_served(tmp_path))
+    decisions = _engine_decisions(server)
+    candidates = server.payload["turn_candidates"]
+    index = next(i for i, c in enumerate(candidates) if c["action_id"])
+    candidate = candidates[index]
+    clicks = _clicks_to(decisions, [step["value"] for step in candidate["steps"]])
+
+    answered = _run_script(server, clicks, tmp_path)
+    assert answered["shownPanel"][-1] == index, "the decided turn was not the one shown"
+    assert answered["posted"] is None, "the turn went without anybody agreeing to it"
+
+    chosen = next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+    assert candidate["summary"] == action_summary(chosen, server.config)
+
+    confirmed = _run_script(server, clicks, tmp_path, confirm=True)
+    assert confirmed["posted"]["action_id"] == candidate["action_id"]
+    assert confirmed["posted"]["state_token"] == server.payload["state_token"]
+
+
+@needs_node
+def test_resetting_a_half_built_turn_sends_nothing_and_moves_nothing(tmp_path: Path) -> None:
+    """Nothing goes until confirm is pressed, so giving up is local and must stay local."""
+    server = _played_through_setup(_served(tmp_path))
+    with _running(server) as base:
+        before = _get_json(base, "/state.json")
+        transcript = _run_script(server, [_at(1)], tmp_path, reset=True)
+        after = _get_json(base, "/state.json")
+
+    assert transcript["posted"] is None, "a half-built turn was submitted"
+    assert transcript["afterReset"]["shown"] == -1, "reset left a turn ready to commit"
+    assert after == before
+
+
+# ---------------------------------------------------------------------------------------------
+# What the page will not do
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
+    tmp_path: Path,
+) -> None:
+    """Answering everything the page asks can still leave several actions standing.
+
+    `FullTurnAction` carries some forty optional fields and four of them are presented. When the
+    rest disagree, the honest answer is to say which -- picking one, or the first, or the simplest,
+    would be the page quietly making a decision the rules give to the player. The named fields are
+    the backlog, worked out from the position rather than remembered.
+    """
+    server = _played_through_setup(_served(tmp_path))
+    open_ended = [c for c in server.payload["turn_candidates"] if c["unresolved"]]
+    assert open_ended, "no ambiguous turn on this board, so nothing was exercised"
+
+    for candidate in open_ended:
+        assert candidate["action_id"] is None, "an undecided turn was given something to submit"
+        assert candidate["summary"] is None, "an undecided turn was described as if it were one"
+        assert candidate["variants"] > 1
+        assert all(isinstance(name, str) and name for name in candidate["unresolved"])
+
+    # The fields named are really the ones the survivors differ on, checked against the actions.
+    candidate = open_ended[0]
+    wanted = [step["value"] for step in candidate["steps"]]
+    members = [
+        action
+        for action in legal_actions(server.state, server.config)
+        if [action.origin, *action.route, action.selected_duty, action.resolution.value] == wanted
+    ]
+    assert len(members) == candidate["variants"]
+    for name in candidate["unresolved"]:
+        assert len({getattr(member, name) for member in members}) > 1
+
+
+@needs_node
+def test_an_undecided_turn_offers_no_way_to_commit_it(tmp_path: Path) -> None:
+    """The refusal has to be structural: there is no button on that panel to press."""
+    server = _played_through_setup(_served(tmp_path))
+    candidates = server.payload["turn_candidates"]
+    index = next(i for i, c in enumerate(candidates) if c["unresolved"])
+    target = [step["value"] for step in candidates[index]["steps"]]
+    clicks = _clicks_to(_engine_decisions(server), target)
+
+    transcript = _run_script(server, clicks, tmp_path, confirm=True)
+    assert transcript["shownPanel"][-1] == index, "the undecided turn's panel was not the one shown"
+    assert transcript["confirmable"] is False, "an undecided turn had a commit button"
+    assert transcript["posted"] is None
 
 
 def _cubes_at(page: str, position_index: int, player_id: str) -> int:
@@ -413,12 +604,12 @@ def test_a_stale_state_token_is_refused_and_changes_nothing(tmp_path: Path) -> N
     """A submission decided against a board that has since moved is refused, not reinterpreted."""
     server = _served(tmp_path)
     with _running(server) as base:
-        candidate = server.payload["sow_candidates"][0]
+        candidate = server.payload["turn_candidates"][0]
         stale = server.payload["state_token"]
         assert _post(base, candidate["action_id"], stale)[0] == 200
 
         before = _get_json(base, "/state.json")
-        status, body = _post(base, server.payload["sow_candidates"][0]["action_id"], stale)
+        status, body = _post(base, server.payload["turn_candidates"][0]["action_id"], stale)
         after = _get_json(base, "/state.json")
 
     assert status == 409
@@ -442,10 +633,10 @@ def test_an_action_id_that_is_not_legal_here_is_refused(tmp_path: Path) -> None:
 def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> None:
     """No rule may be computed in the browser, so there is nowhere for a second one to live.
 
-    Adjacency, route length and legality are the engine's, and every route the page can express
-    came from it whole. This greps for a second implementation rather than trusting the intent.
+    Adjacency, route length and legality are the engine's, and every turn the page can express came
+    from it whole. This greps for a second implementation rather than trusting the intent.
     """
-    server = _served(tmp_path)
+    server = _played_through_setup(_served(tmp_path))
     page = render_play_view_from_payload(server.payload)
     script = re.search(r"<script>\n(.*?)\n</script>", page, re.S).group(1)
     # Comments are stripped first: prose about what the code does not do is not the code doing it,
@@ -453,14 +644,16 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     code = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
     code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
 
-    for forbidden in ("adjacen", "neighbour", "neighbor", "legal", "Math.", "sqrt", ".length -"):
+    for forbidden in ("adjacen", "neighbour", "neighbor", "legal", "Math.", "sqrt", "route"):
         assert forbidden not in code, f"the script looks like it computes {forbidden!r}"
+    # No arithmetic on the decisions, so it cannot be counting steps or measuring a route.
+    assert not re.search(r"[-+*/%]=|[^-+]\+\+|--[^-]|\b\w+\s*[-+*/%]\s*\d", code)
     # No colour and no geometry either, which is the rule the seal established.
     assert not re.search(r"#[0-9A-Fa-f]{3,6}\b", code)
     assert not re.search(r"\b(cx|cy|stroke|fill|translate)\s*[=:]", code)
-    # It may say only these things about the board.
-    assert "setAttribute('data-sow-candidate'" in script
-    assert "setAttribute('data-sow-on-route'" in script
+    # It may say only these things about the board and the panel.
+    assert "setAttribute('data-play-offered'" in code
+    assert "setAttribute('data-turn-shown'" in code
 
 
 # ---------------------------------------------------------------------------------------------
