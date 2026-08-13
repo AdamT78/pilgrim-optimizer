@@ -1201,3 +1201,13 @@ def test_page_keeps_every_setup_control_beside_the_new_panel(page: str) -> None:
     for control_id in ("advance-ship", "reset-ship", "buy-building-button"):
         assert f'id="{control_id}"' in page
     assert 'id="donate-building-button"' in page
+
+
+def test_the_setup_page_does_not_carry_a_choice_it_can_never_offer(page: str) -> None:
+    """There is no turn on this page, so there is no tithe and nothing to be asked about.
+
+    The keys are opt-in for this reason. Carrying three rects a board here would be markup with no
+    stylesheet to reveal it and no script that would want to, which is indistinguishable from a
+    mistake and costs the next reader a proof before they can touch anything near it.
+    """
+    assert "data-resource-choice" not in page

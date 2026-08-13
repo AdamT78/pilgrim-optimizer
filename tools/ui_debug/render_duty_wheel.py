@@ -558,6 +558,11 @@ def _icon_cornucopia(ink: str, horn_path: str) -> str:
 
 _ICON_BODIES = {"silver": _icon_silver, "stone": _icon_stone, "wheat": _icon_wheat}
 
+# The one tithe token that is not a resource. The other three name the stock they pay; this one
+# says "any of them", so whoever takes it has to be asked which. Named because the page that does
+# the asking has to recognise it too, and a literal in each of two files is a literal that drifts.
+CORNUCOPIA_TOKEN = "cornucopia"
+
 
 def render_tithe_icon(
     layout: dict,
@@ -574,7 +579,7 @@ def render_tithe_icon(
     """
     spec = layout["tithe_icons"][icon_id]
     ink = layout["palette"]["ink"]
-    if icon_id == "cornucopia":
+    if icon_id == CORNUCOPIA_TOKEN:
         body = _icon_cornucopia(ink, layout["artwork"]["cornucopia_horn_path"])
     elif icon_id in _ICON_BODIES:
         body = _ICON_BODIES[icon_id](ink)

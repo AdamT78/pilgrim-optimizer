@@ -1570,16 +1570,73 @@ list.
 The flow reads the tally the table is currently
 playing and touches nothing the compact rows keep, which is why a count change simply puts a turn
 down first — `applyPlayerCount` calls `resetTurnFlow` before anything else, as do `A->C` and
-`V->C`, since both redraw a City column a turn may be holding cubes out of. `Action` and `Tithe` do
-the one same thing — sending the cubes home is all either knows how to do — and `Confirm` knows only
-how to hand a setup sow on. Resolving an action, taking a tithe, spending or collecting anything,
-passing an ordinary turn on, and anything at all to do with `GameState` are still to come; this page
-knows no rules. The wheel is seated in this page's own order — red,
+`V->C`, since both redraw a City column a turn may be holding cubes out of. `Action` and `Tithe`
+both send the seat's cubes home, and `Tithe` then takes what the tile carries (below). `Confirm`
+hands a setup sow on while setup is on, and ends the turn the rest of the time — `endTurn` drops
+the ledgers so what the turn did stands, then `setActiveSeat(nextSeatedSeat(...))` hands the wheel
+round. Resolving an action, spending anything, and anything at all to do with `GameState` are still
+to come; this page knows no rules. The wheel is seated in this page's own order — red,
 yellow, blue, white — rather than the red-and-blue pair its standalone page seats, so every board
 here agrees about who is playing; the standalone wheel is unchanged. These are local
 debug UI controls only and do not change GameState or rules behavior. In 2P, the remaining red and yellow discs stay stacked (red over
 yellow) but centred horizontally inside each track value; 3P/4P restore the 2x2. No board says who
 starts.
+
+### The tithe, and the trap underneath it
+
+`Tithe` credits the active seat one of whatever the chosen tile carries. Taxation carries nothing,
+so the plaque is dark on it and the handler refuses it for the same reason — the darkness is a
+statement rather than a look. Clerical carries a cornucopia, which is not a stock but a question:
+the seat's own board puts up three keys and the turn waits, with `Tithe` staying lit to say so and
+`Confirm` staying dark because a question outstanding is not a resolved turn.
+
+**A turn moves by board position; an arrangement is written against duty slots.** These are two
+different vocabularies and the tithe sits exactly on the seam. `state.turn.duty` is a position —
+`north`, `east` — because that is what the hand walked to. The duty arrangements in
+`duty_wheel_layout.json` are written against the fixed slots — `produce`, `clerical` — because that
+is what an arrangement is: which tile lies in which slot. Nothing pairs the two permanently, and the
+`R` button repairs them every time it is pressed.
+
+So `titheTokenAt(position)` reads `data-duty` off the space on the board and looks the token up from
+*that*, at the moment of resolution. Caching the pairing, or reading the token when the duty is
+chosen instead of when the tithe is taken, is not untidiness — it is wrong, and wrong in the worst
+way available: after a rearrangement every position looks up a slot that has moved, no token is
+found, and every tile silently pays nothing. Nothing throws, no tile looks unusual, and the only
+symptom is that the numbers stop going up.
+
+The payment is written down as it is made. `payTithe` records seat, stock and amount on
+`state.turn.paid`, and `takeTitheBack` subtracts exactly that on `Reset` — not re-derived from the
+tile, for the reason above, and with no floor, because the only thing ever subtracted is something
+the same turn added. A `Reset` while the choice is still up has no record and so takes nothing back,
+which is how "a pending choice costs the seat nothing" falls out rather than being a case. `endTurn`
+tears the record up, so a `Reset` can never reach into a seat that has already handed the wheel on.
+
+`Confirm` is the third and last route into `setActiveSeat`, alongside the setup sow and the
+player-count fallback. `nextSeatedSeat` asks `seatsAtTable()` rather than counting to four, so the
+wrap is whatever the table currently seats — white back to red at 4P, the pair alternating at 2P.
+This is turn *passing* and not turn *order*: nothing here decides who plays first, and the first
+player marker remains a seal a debug control moves.
+
+Two things `endTurn` deliberately does not do. It does not write the City count the compact rows
+keep, because the turn flow owns what is drawn and none of what is kept; the visible consequence is
+that `A->C` redraws that column from the kept count and so undoes an accepted turn's recall. And
+there is no confirmation flash: `test_the_choice_keys_have_no_motion_yet` holds the page to that
+until the flash is written, and is meant to be deleted when it is.
+
+### The choice keys are a renderer feature, and opt in
+
+`render_player_board_v2_svg(..., choice_keys=True)` draws three hidden rects, one over each stock,
+which `resource_choice_styles()` reveals when the board carries `data-resource-choice="true"`. The
+key is the whole pill rather than the icon or the numeral, because silver's coin is about 23 across
+and the amounts are set at 16, and neither is a thing to ask anyone to aim at. The rules between the
+readouts hide while the keys are up: three keys with rules between them read as a table. No colour
+crosses into the script — the same bargain the first player seal made.
+
+It is opt in for the same reason `interactive=True` is. `game_table.html` asks for the keys and
+`player_boards_v2.html` asks for them in one panel, showing the choosing state beside the same board
+at rest; `game_setup.html` does not, because there is no turn on that page and so nothing that could
+ever ask. Three rects a board that no stylesheet can reveal and no script would want are not hidden
+markup but dead markup, indistinguishable from a mistake.
 
 Generate the output page with:
 
