@@ -1,4 +1,5 @@
-from pilgrim.cli import _format_event, main
+from pilgrim.cli import main
+from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, action_summary, readable_route
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType, position_name
@@ -219,5 +220,5 @@ def test_format_building_hired_event_market_payment() -> None:
         ),
     )
 
-    text = _format_event(event, scenario.config)
+    text = format_event(event, scenario.config)
     assert text == "BUILDING_HIRED: player_one hired Well from market; paid wheat 1 to bank"

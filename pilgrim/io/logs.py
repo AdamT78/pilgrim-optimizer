@@ -25,12 +25,36 @@ def events_to_json_records(events: Iterable[GameEvent]) -> list[dict[str, Any]]:
 
 
 def state_to_record(state: GameState) -> dict[str, Any]:
-    """Serialize a full state snapshot for replay trails."""
+    """Serialize a full state snapshot for replay trails.
+
+    The timing block, each seat's Alms position and the setup-sow flags were missing rather than
+    withheld: `alms_position` sits between `piety` and `victory_points` on `PlayerState` and both
+    of its neighbours were already here. Adding them is safe to do in passing because nothing reads
+    the format -- `write_replay_log` has no callers and this has only that one -- so there is no
+    reader to break, and a state serializer that omits state is a trap for the first one written.
+
+    What is NOT here is anything from the config. The duty arrangement in particular lives on
+    `GameConfig` and not on `GameState`, so a caller that needs to know which duty lies where has
+    to be handed both; see `pilgrim.io.view`.
+    """
     return {
         "active_player": state.active_player.name.lower(),
         "start_player_id": state.start_player.name.lower(),
         "phase": state.phase.value,
         "turn": state.turn,
+        "timing": {
+            "absolute_turn": state.timing.absolute_turn,
+            "round_number": state.timing.round_number,
+            "season_number": state.timing.season_number,
+            "turn_in_round": state.timing.turn_in_round,
+        },
+        "setup": {
+            "setup_sow_required": state.setup_sow_required,
+            "setup_sow_complete": state.setup_sow_complete,
+            "setup_sow_completed_by": [
+                player_id.name.lower() for player_id in state.setup_sow_completed_by
+            ],
+        },
         "game_over": state.game_over,
         "table_player_count": state.table_player_count,
         "ship_position": state.ship_position,
@@ -50,6 +74,11 @@ def state_to_record(state: GameState) -> dict[str, Any]:
             {
                 "victory_points": player.victory_points,
                 "piety": player.piety,
+                "alms_position": player.alms_position,
+                # Carried but drawn nowhere yet: trade routes come from map tile placement, which
+                # is not built. Serializing it is not the same as drawing it, and a state snapshot
+                # that quietly drops a field is worse than one that carries an unused one.
+                "trade_routes_count": player.trade_routes_count,
                 "resources": {
                     "stone": player.resources.stone,
                     "silver": player.resources.silver,

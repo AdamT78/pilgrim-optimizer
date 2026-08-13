@@ -1647,6 +1647,93 @@ python3 tools/ui_debug/generate_game_table.py
 The generated overview below also produces it, and the index links it as `Generated game table
 layout`.
 
+## The play view, and the line it stands on
+
+The play view is the debug table's panel layout with a real engine position drawn on it and
+nothing to press. It is the other end of a seam:
+
+```text
+  GameState + GameConfig          a plain dict            the renderers
+  ----------------------          ------------            -------------
+  pilgrim/io/view.py       -->    view payload    -->     tools/ui_debug/play_view_adapter.py
+  tools/play_server.py                                    tools/ui_debug/render_play_view.py
+```
+
+Nothing under `tools/ui_debug` imports `pilgrim`, and a test asserts it rather than trusting
+anyone to remember. That is not tidiness: it is what makes the whole drawing side testable
+against hand-written JSON, and it is the one rule whose breach would let a game rule start
+quietly living in a renderer. There is a single exception, pinned by name in the same test:
+three renderers import `pilgrim.model.config` to parse the game's own config FILES, so a printed
+VP value cannot drift from the rule behind it. It touches no state, no action and no rule.
+
+`tools/play_server.py` lives one directory up for exactly this reason — it imports both sides,
+which is what a bridge does, and living inside `ui_debug` would make the rule unenforceable.
+
+### The payload is the state record plus the config facts a board needs
+
+`state_to_record` was extended rather than shadowed by a parallel serializer. It was missing the
+timing block, each seat's `alms_position` and the setup-sow flags — and `alms_position` sits on
+`PlayerState` between `piety` and `victory_points`, both of which were already serialized, so its
+absence reads as an omission rather than a decision. Nothing consumes the replay format: at the
+time of writing `write_replay_log` has no callers at all and `state_to_record` has only that one,
+so there was no reader to break.
+
+What did NOT go into it is the duty arrangement, because it is not state. `GameState` has no
+`duty_tiles` field; `duty_category_at_position` reads a `DutyTilesLayout` off the CONFIG, since a
+scenario's tiles are dealt when the scenario is written and no turn moves them. So the view
+payload is `state_to_record(state)` plus the config facts a board cannot be drawn without, joined
+on the engine's side in `pilgrim/io/view.py`.
+
+`players[].workforce.mancala` is authoritative. The record also carries a top-level `acolytes`
+array, but `GameState.acolytes` is a property that rebuilds it from those same tuples — one fact
+under two names. The adapter reads the first and never the second.
+
+### Position and slot, again, and this time on the board
+
+The same trap the tithe flow has, in its other form. A SLOT is a space on the wheel: it owns a
+centre, a compass point and a position index, and none of those move. A TILE is what lies on it:
+it owns a duty's name, and a scenario deals them out afresh. `duty_wheel_layout.json` ships the
+two fused, because in the default arrangement every tile sits on its own slot — which is exactly
+why reading either for the other looks right until the first shuffled scenario, and is then wrong
+on seven spaces out of eight.
+
+The tithe counter goes with the SLOT, not the tile. That is the engine's own answer: the setup
+generator deals counters onto positions after it has shuffled the tiles. Drawn with the tile, a
+counter would follow it around the ring and every space would pay the wrong resource.
+
+### Seat order is not player order, and 2P is where it shows
+
+`SEATED_PLAYERS` is `(player_two, player_three, player_four, player_one)`. The boards layout makes
+`player_one` white and the table seats red first, so `player_one` is seat 4. Every per-player
+value goes through that order and never through the players array index.
+
+This looks correct at four seats and is wrong at two. A two-player game seats `player_one` and
+`player_two` — white and red, seats 4 and 1, the two ENDS of the row. Slicing the seating order to
+its first two would seat red and yellow: entirely plausible, and the wrong two players. The play
+view therefore filters the seating order by who exists, and draws all four chairs, hiding the
+empty ones with `visibility` so the occupied ones do not slide along the row.
+
+### Writing it out, and looking at it live
+
+```bash
+python3 -m pilgrim.cli generate-setup --players 4 --seed 99 --output /tmp/scenario.json
+python3 tools/play_server.py /tmp/scenario.json          # http://127.0.0.1:8765/
+```
+
+The server holds one loaded position and answers `/`, `/state.json` and `/actions.json`. It
+applies nothing: `/actions.json` exists to prove the engine is live and to settle the shape before
+anything filters over it. Standard library only, since the repo declares no dependencies.
+
+To review the page as a file, like every other generated view, write the payload out and render
+from it — which also keeps the file-writing path free of the engine:
+
+```bash
+python3 -c "import json;from pilgrim.io.scenarios import load_scenario;from pilgrim.io.view \
+import view_payload;s=load_scenario('/tmp/scenario.json');print(json.dumps(view_payload(s.state,s.config)))" \
+  > /tmp/payload.json
+python3 tools/ui_debug/render_play_view.py /tmp/payload.json
+```
+
 ## Generated overview
 
 To build every generated view at once, plus an overview page linking them together:
