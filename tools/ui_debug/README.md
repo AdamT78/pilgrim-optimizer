@@ -480,8 +480,29 @@ right corner, and it is the second caller of `render_seal.py`.
 One attribute drives it. `render_piety_track_v2_svg(..., first_player_seat=N)` strikes seat `N`'s
 seal and writes `data-first-player-seat="N"` on the root SVG; left out, no seal is drawn and the
 panel is byte-for-byte what it was before. Nothing else on the board reads the seat — no restyled
-disc, no CSS rule, no second highlight — and the composed game table does not pass one yet, so its
-output is unchanged too.
+disc, no CSS rule, no second highlight.
+
+#### Striking every seat, so a page can move the marker
+
+`render_piety_track_v2_svg(..., interactive=True)` strikes **one seal per seat that can hold the
+marker** — each in its own colour, each tagged `data-player-seat`, all but the holder's carrying
+`visibility="hidden"`. Same centre, same radius, same seed, same tilt, same crown on every one: only
+the colour and the hidden flag differ.
+
+This exists because the game table is static HTML plus a script. If the renderer emitted only the
+holder's seal, moving the marker at runtime would mean restriking wax in JavaScript, which means
+writing `darken()` a second time in a second language and then keeping the two agreeing. Striking
+all four up front leaves the page nothing to do but show one and hide the rest, and **no colour
+crosses into the script**. It is the same bargain the Alms Table already makes for its discs and its
+winner cubes.
+
+Which seats can hold it comes from `seats_that_can_hold_the_marker()`, which reads the discs the
+variant actually seats rather than assuming seats run 1..n — they do not, as the 2 player variant
+below shows.
+
+`interactive` is off by default, and with it off the panel is the fixed picture every standalone
+page here draws, unchanged. Asking for every seat while naming none hides the lot: a page mid-build,
+not a game state.
 
 The seat colours are the ones already in `piety_track_v2_layout.json` under `players`, which is what
 draws the four discs; there is no second seat-colour table. From that one colour the rest of the
@@ -505,23 +526,35 @@ turn state rather than from this list, and `data-player-seat` must go on meaning
 occupies rather than which slot their disc has been moved into — otherwise a marker naming seat 1
 and a disc labelled seat 1 stop being the same player.
 
-#### The disc layout rule, which is not the same in both variants
+#### The disc layout rule
 
-Do not assume one rule covers both. It does not, and the difference is easy to flatten by accident.
+One rule, not a case per player count:
 
-**3–4 player.** The discs on a track value form a 2×2 cluster, filled **column-major by turn
-order**: first player row 1 column 1, second player row 2 column 1, third player row 1 column 2,
-fourth player row 2 column 2.
+> The discs at a track value are filled in **turn order**. First player row 1, second player row 2.
+> With three or four players a second column is added for the third and fourth. With two players
+> there is one column, centred in the space.
 
-**2 player.** The discs are **not** a cluster. They sit horizontally side by side within each space
-0 to 12, first player on the left and second on the right. **This layout is correct as it stands and
-must not be changed.** A PR permuting disc positions by turn order must permute within that
-horizontal pair — it must not convert the 2 player variant to a cluster so that one rule serves
-both.
+The slot follows turn order and moves whenever the start player changes. The seat is fixed for the
+whole game, the board ordering never changes, and `data-player-seat` must keep meaning seat rather
+than following the slot.
 
-In both variants the slot is a function of turn order and moves whenever the start player changes.
-The seat is fixed for the whole game, the board ordering never changes, and `data-player-seat` must
-keep meaning seat rather than following the slot.
+The composed table is where this is visible. `DISC.targets.piety` puts seat 1 at (24.6, 83.7) and
+seat 2 at (24.6, 103.7) — one column, two rows — with seats 3 and 4 in a second column at x=44.6.
+At two players `DISC.pair.piety["0"]` is `[34.6, 83.7, 103.7]`: one x at the midpoint of those two
+columns and the same two ys. "Horizontally aligned to each space" means centred within the space,
+not side by side.
+
+#### Two known issues here, neither fixed yet
+
+**The standalone 2 player variant disagrees with the table.** `piety_track_2p_v2` seats white and
+red — seats 4 and 1 — side by side, matching neither the table's seating (`VISIBLE` keeps seats 1
+and 2 at two players, red and yellow) nor its arrangement. Where they disagree the game table is the
+authority.
+
+**The table places discs by seat, not by turn order.** `renderDiscTrack` reads
+`y = seat === 1 ? pair[1] : pair[2];`, and `DISC.targets` is seat-keyed throughout. So if the first
+player hands the start to someone else, that player's disc stays in the wrong row. That line is
+where the turn-order PR begins.
 
 The crown is one closed polygon rather than a shape standing on a band, because at this size two
 shapes leave a visible seam across the middle that reads as a crack in the wax. It lives here and
@@ -542,12 +575,32 @@ The seal also laps the inner hairline at the top by about 2.5 units. That is int
 applied over an edge, not inside a margin. The rule keeps its original geometry and the trefoil is
 not re-centred — the wax goes over them, nothing moves out of its way.
 
-Nothing in the game sets the attribute yet, so the debug page carries a **First player marker**
-section under the two panels it already stacked: the 3–4 player panel with no seat set, then one
-panel per seat that can hold the marker, each captioned with its seat and colour. They are renders
-of the same panel asked for with a seat — the real renderer, no separate artwork — so what is
-reviewed is what would ship. The absence case is there for the same reason as the seals: that no
-one holding the marker leaves nothing behind is not something a seal can show.
+The standalone debug page carries a **First player marker** section under the two panels it already
+stacked: the 3–4 player panel with no seat set, then one panel per seat that can hold the marker,
+each captioned with its seat and colour. They are renders of the same panel asked for with a seat —
+the real renderer, no separate artwork — so what is reviewed is what would ship. The absence case is
+there for the same reason as the seals: that no one holding the marker leaves nothing behind is not
+something a seal can show.
+
+#### On the composed game table
+
+The table renders the Piety Track with `interactive=True` and a control, `FP1`–`FP4`, in the first
+row alongside the player count and the setup roll. It offers the four seats and nothing else: there
+is no "no holder" state, because the marker always sits with someone. It opens on seat 1, red —
+every piety disc starts on 0, so the tie resolves to the first board — and `FIRST_PLAYER_SEAT_AT_START`
+in `generate_game_table.py` is the one place that says so.
+
+On a player-count change, a holder whose seat has left the table hands the marker back to seat 1,
+never to nobody. That mirrors what the active seat already does
+(`setActiveSeat(state.activeSeat > count ? 1 : state.activeSeat)`), deliberately.
+
+The script's whole part in this is `renderFirstPlayerSeal()`, which sets `style.visibility` on each
+seal from `state.firstPlayerSeat` — the same thing `renderDiscTrack` does to the discs. **It must
+never compute or assign a fill.** A test holds that line: every line of the script that mentions the
+marker is checked for `fill`, `#` and `darken`.
+
+None of this models turn order. The holder does not become the first player, the discs do not
+reorder, and nothing about who plays first is decided here. It moves a seal.
 
 Which seats a variant offers is read off the discs it seats rather than assumed to run 1..n, because
 it does not. The 2 player variant seats white and red, which are seats 4 and 1 — the layout's

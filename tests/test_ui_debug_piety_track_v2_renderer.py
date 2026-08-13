@@ -857,6 +857,66 @@ def test_the_marker_section_is_an_addition_and_leaves_the_stack_above_it_alone()
     assert stack.count("<svg") == len(VARIANT_IDS)
 
 
+def test_asking_for_every_seat_strikes_every_seal_and_hides_all_but_the_holders() -> None:
+    """So a page can move the marker without restriking wax in JavaScript.
+
+    Emitting only the holder's seal would leave a page that wants to move it re-deriving rim, ring
+    and crown from a seat colour in a second language, and then keeping that copy agreeing with
+    `darken()`. Striking all four here leaves the page nothing to do but show one and hide three.
+    """
+    panel = render_piety_track_v2_svg(layout(), config(), "3_4_player", 2, interactive=True)
+    groups = re.findall(r"<g data-first-player-seal=[^>]*>", panel)
+
+    assert len(groups) == 4
+    assert sum('visibility="hidden"' in group for group in groups) == 3
+    for seat in (1, 2, 3, 4):
+        player = first_player_by_seat(layout(), seat)
+        assert f'data-player-seat="{seat}"' in panel
+        assert f'fill="{player["fill"]}"' in panel  # every seat's wax, not only the holder's
+    held = next(group for group in groups if 'visibility="hidden"' not in group)
+    assert 'data-player-seat="2"' in held and 'data-player-color="yellow"' in held
+
+
+def test_every_seal_in_that_mode_is_struck_at_the_one_approved_position() -> None:
+    """Only the colour and the hidden flag differ. Nothing is offset to make room for the others."""
+    panel = render_piety_track_v2_svg(layout(), config(), "3_4_player", 1, interactive=True)
+    turn = f'<g transform="rotate({SEAL_TILT:g} {SEAL_CX:g} {SEAL_CY:g})">'
+
+    assert panel.count(turn) == 4
+    assert panel.count(f'<circle cx="{SEAL_CX:g}" cy="{SEAL_CY:g}"') == 4
+    assert len(set(re.findall(r'<circle cx="516" cy="27" r="([\d.]+)"', panel))) == 1
+
+
+def test_which_seats_get_a_seal_comes_from_who_is_seated_not_from_counting_to_four() -> None:
+    """The same source that decides which discs a variant seats, so the two cannot disagree."""
+    two = render_piety_track_v2_svg(layout(), config(), "2_player", 1, interactive=True)
+    seats = [
+        int(seat) for seat in re.findall(r'data-first-player-seal[^>]*data-player-seat="(\d)"', two)
+    ]
+
+    assert seats == seats_that_can_hold_the_marker(layout(), "2_player") == [1, 4]
+
+
+def test_asking_for_every_seat_but_naming_none_hides_the_lot() -> None:
+    """A page mid-build, not a game state: the marker always sits with someone at a real table."""
+    panel = render_piety_track_v2_svg(layout(), config(), "3_4_player", None, interactive=True)
+    groups = re.findall(r"<g data-first-player-seal=[^>]*>", panel)
+
+    assert len(groups) == 4
+    assert all('visibility="hidden"' in group for group in groups)
+    assert "data-first-player-seat" not in panel
+
+
+def test_the_lone_seal_is_still_what_a_panel_draws_unless_asked_otherwise() -> None:
+    """The default is untouched, which is what leaves every standalone page byte-identical."""
+    for seat in (None, 1, 4):
+        plain = render_piety_track_v2_svg(layout(), config(), "3_4_player", seat)
+
+        assert "data-player-seat" not in plain
+        assert "visibility" not in plain
+        assert plain.count("data-first-player-seal") == (0 if seat is None else 1)
+
+
 def test_the_marker_is_the_only_thing_the_seat_changes_about_the_panel() -> None:
     """Nothing else on the board reads it: no restyled disc, no second highlight, no CSS hook."""
     plain = render_piety_track_v2_svg(layout(), config(), "3_4_player")
