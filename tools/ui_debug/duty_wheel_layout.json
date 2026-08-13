@@ -158,7 +158,7 @@
         551.3,
         394.5
       ],
-      "tithe_icon": "coin",
+      "tithe_icon": "silver",
       "sample_cubes": {
         "player_one": 2,
         "player_two": 1,
@@ -238,7 +238,7 @@
         328.5,
         949.1
       ],
-      "tithe_icon": "coin",
+      "tithe_icon": "silver",
       "sample_cubes": {
         "player_one": 2,
         "player_two": 2,
@@ -308,7 +308,7 @@
     "baseline_position": "produce"
   },
   "tithe_icons": {
-    "coin": {
+    "silver": {
       "label": "Silver coin",
       "scale": 1.22,
       "offset_y": 0.3
