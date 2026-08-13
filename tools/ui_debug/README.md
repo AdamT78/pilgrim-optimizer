@@ -26,6 +26,12 @@ Each kind of file here has one job, and mixing them up is how this layer starts 
   UI starts lying about the game.
 - **Generated HTML** (`generated/*.html`) are local debug artifacts. They are git-ignored,
   rebuilt on demand, and never hand-edited or committed.
+
+  Because they are git-ignored, **`git diff` on anything under `generated/` reports nothing no
+  matter what changed** — it passes vacuously and proves precisely nothing. To show a generated page
+  is byte-identical, copy the file before the change and `diff` or `cmp` against it afterwards. The
+  same goes for showing that a change to one page left the other fourteen alone: rebuild them all,
+  and compare against copies. Only `prototypes/` is tracked, and a `git diff` there is meaningful.
 - **`GameState`** remains the source of truth for gameplay once integration begins.
 - **UI debug renderers are derived views only.** They read data and draw it. They never decide
   anything about the game.
@@ -493,11 +499,29 @@ cannot name one player on the panel and another on the page around it, and one a
 which fails if a seat ever does become derivable here and `SEAT_ORDER` should then go.
 
 `SEAT_ORDER` is **board order, not turn order**. Where a player sits is fixed for the whole game;
-who plays first changes every round. A later PR is to permute the discs within the cluster at
-position 0 to show the turn sequence, which re-shuffles whenever the start player does. That
-permutation must come from turn state rather than from this list, and `data-player-seat` must go on
-meaning which seat a player occupies rather than which slot their disc has been moved into —
-otherwise a marker naming seat 1 and a disc labelled seat 1 stop being the same player.
+who plays first changes every round. A later PR is to permute the discs on a track value to show the
+turn sequence, which re-shuffles whenever the start player does. That permutation must come from
+turn state rather than from this list, and `data-player-seat` must go on meaning which seat a player
+occupies rather than which slot their disc has been moved into — otherwise a marker naming seat 1
+and a disc labelled seat 1 stop being the same player.
+
+#### The disc layout rule, which is not the same in both variants
+
+Do not assume one rule covers both. It does not, and the difference is easy to flatten by accident.
+
+**3–4 player.** The discs on a track value form a 2×2 cluster, filled **column-major by turn
+order**: first player row 1 column 1, second player row 2 column 1, third player row 1 column 2,
+fourth player row 2 column 2.
+
+**2 player.** The discs are **not** a cluster. They sit horizontally side by side within each space
+0 to 12, first player on the left and second on the right. **This layout is correct as it stands and
+must not be changed.** A PR permuting disc positions by turn order must permute within that
+horizontal pair — it must not convert the 2 player variant to a cluster so that one rule serves
+both.
+
+In both variants the slot is a function of turn order and moves whenever the start player changes.
+The seat is fixed for the whole game, the board ordering never changes, and `data-player-seat` must
+keep meaning seat rather than following the slot.
 
 The crown is one closed polygon rather than a shape standing on a band, because at this size two
 shapes leave a visible seam across the middle that reads as a crack in the wax. It lives here and
@@ -517,6 +541,20 @@ merely looks like a stray hair, so the assert is the only place it can be caught
 The seal also laps the inner hairline at the top by about 2.5 units. That is intended: wax is
 applied over an edge, not inside a margin. The rule keeps its original geometry and the trefoil is
 not re-centred — the wax goes over them, nothing moves out of its way.
+
+Nothing in the game sets the attribute yet, so the debug page carries a **First player marker**
+section under the two panels it already stacked: the 3–4 player panel with no seat set, then one
+panel per seat that can hold the marker, each captioned with its seat and colour. They are renders
+of the same panel asked for with a seat — the real renderer, no separate artwork — so what is
+reviewed is what would ship. The absence case is there for the same reason as the seals: that no
+one holding the marker leaves nothing behind is not something a seal can show.
+
+Which seats a variant offers is read off the discs it seats rather than assumed to run 1..n, because
+it does not. The 2 player variant seats white and red, which are seats 4 and 1 — the layout's
+`player_one`/`player_two` naming and the game table's board order number the same players
+differently, and the captions show it rather than hide it. Both variants take the seal at the same
+position: only `panel_height` differs between them, so the header, the rule terminus and all four
+clearances are identical and the stub comes to 38.9 on each.
 
 The VP numbers on the stars are **not** in the layout JSON, exactly as in v1. They are read from
 `configs/piety.json`, parsed with the game's own `piety_from_dict`, so the drawn track cannot
