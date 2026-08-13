@@ -108,6 +108,27 @@ def tithe_by_position_name(payload: dict) -> dict[str, str | None]:
     return {tile["position_name"]: tile["tithe"] for tile in payload["duty_tiles"]}
 
 
+def merchant_position_name(payload: dict) -> str:
+    """The board position the Merchant stands on, by name.
+
+    Read off `merchant_board_position`, which is a ring index of 1..8 and never 0 -- 0 is the City
+    and the Merchant is never there. The name is what the wheel's spaces are keyed by, so the index
+    is turned into one here rather than in the renderer.
+
+    A POSITION, deliberately, and not a duty. The Merchant opens on Taxation, which makes a lookup
+    by duty look right for as long as it has not moved and for as long as the tiles are in their
+    default arrangement. It is the same trap the tithe counters set: what stands on a space is a
+    fact about the space, and the tile lying there is shuffled per seed and is not.
+    """
+    names = payload["board_positions"]
+    index = payload["state"]["merchant_board_position"]
+    if not 1 <= index < len(names):
+        raise ValueError(
+            f"Merchant board position must be a duty tile, 1..{len(names) - 1}; got {index}."
+        )
+    return names[index]
+
+
 def dummy_acolytes_by_position(payload: dict) -> list[int]:
     """The neutral acolytes on each board position, both groups added together.
 

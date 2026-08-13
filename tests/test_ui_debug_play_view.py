@@ -125,7 +125,9 @@ def _payload(players, *, duty=None, tithe=None, dummy=None, **state):
         "table_player_count": len(players),
         "ship_position": 0,
         "completed_rounds": 0,
-        "merchant_board_position": 0,
+        # South, where this fixture's Taxation tile lies, because that is where the Merchant opens.
+        # Never 0: that is the City, and the Merchant does not stand there.
+        "merchant_board_position": 5,
         "building_market": [],
         "building_availability": {},
         "pilgrimage_rounds": [],
@@ -586,3 +588,149 @@ def _wheel(page: str) -> str:
 
 def _resource_amounts(fragment: str) -> list[str]:
     return re.findall(r'<g data-resource="[a-z]+">.*?<text[^>]*>(\d+)</text>', fragment)
+
+
+def _merchant_space_index(page: str) -> int:
+    """The board position index of the space the Merchant token was drawn inside.
+
+    Read off the space rather than off the token, because the space is what the mapping is supposed
+    to have chosen. `data-merchant-token` on the SVG root names a duty, which is the wheel's own way
+    of marking it and is exactly the thing these tests must not take at face value.
+    """
+    wheel = _wheel(page)
+    token = wheel.index('data-token="merchant"')
+    groups = list(re.finditer(r'data-board-position-index="(\d+)"', wheel[:token]))
+    assert groups, "the Merchant token was drawn outside any board space"
+    return int(groups[-1].group(1))
+
+
+def _generated_payload(tmp_path: Path, seed: int) -> dict:
+    import subprocess
+
+    from pilgrim.io.scenarios import load_scenario
+    from pilgrim.io.view import view_payload
+
+    destination = tmp_path / f"seed_{seed}.json"
+    subprocess.run(
+        [
+            "python3",
+            "-m",
+            "pilgrim.cli",
+            "generate-setup",
+            "--players",
+            "2",
+            "--seed",
+            str(seed),
+            "--out",
+            str(destination),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    scenario = load_scenario(destination)
+    return view_payload(scenario.state, scenario.config)
+
+
+def test_the_merchant_is_drawn_on_the_space_the_engine_put_it_on(tmp_path: Path) -> None:
+    """Three seeds that deal Taxation onto three different spaces, and the token follows it.
+
+    This is what kills a mapping keyed on a FIXED space: the Merchant opens on Taxation, Taxation
+    is dealt somewhere new each seed, so a token nailed to one position index is wrong on two of
+    the three. The seeds are chosen for that spread and the spread is asserted, so the test cannot
+    quietly stop discriminating if the generator's dealing changes.
+    """
+    indices = {}
+    for seed in (1, 2, 3):
+        payload = _generated_payload(tmp_path, seed)
+        page = render_play_view_from_payload(payload)
+        taxation = next(
+            tile["position"] for tile in payload["duty_tiles"] if tile["duty"] == "taxation"
+        )
+        assert _merchant_space_index(page) == payload["state"]["merchant_board_position"]
+        assert _merchant_space_index(page) == taxation
+        indices[seed] = taxation
+
+    assert len(set(indices.values())) == 3, f"seeds no longer spread Taxation about: {indices}"
+
+
+def test_the_merchant_walks_the_ring_clockwise_and_wraps_past_north_west(tmp_path: Path) -> None:
+    """Advancing the engine's Merchant moves the drawn token the same way, wrap included.
+
+    Keyed on the space at every step, and advanced by the engine's own walk rather than by a step
+    this test works out for itself -- otherwise it would be checking the page against a second
+    opinion instead of against the rule.
+
+    This is the check that a mapping asking the layout for `merchant_token.starts_on` cannot pass.
+    That answer is "taxation" forever, which happens to be right on a freshly dealt board however
+    the tiles fell, and is wrong the moment the Merchant leaves it.
+    """
+    import subprocess
+
+    from pilgrim.io.scenarios import load_scenario
+    from pilgrim.io.view import view_payload
+    from pilgrim.rules.merchant import advance_merchant_position
+
+    destination = tmp_path / "walk.json"
+    subprocess.run(
+        [
+            "python3",
+            "-m",
+            "pilgrim.cli",
+            "generate-setup",
+            "--players",
+            "2",
+            "--seed",
+            "2",
+            "--out",
+            str(destination),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    scenario = load_scenario(destination)
+    state, config = scenario.state, scenario.config
+    names = list(view_payload(state, config)["board_positions"])
+
+    walked = []
+    for _step in range(8):
+        page = render_play_view_from_payload(view_payload(state, config))
+        assert _merchant_space_index(page) == state.merchant_board_position
+        walked.append(names[state.merchant_board_position])
+        state = state.with_merchant_board_position(
+            advance_merchant_position(state.merchant_board_position, config)
+        )
+
+    # Eight steps visit all eight duty spaces exactly once and never the City.
+    assert len(set(walked)) == 8
+    assert "city" not in walked
+    # The wrap itself, named rather than left implied by the set above.
+    assert walked[(walked.index("north_west") + 1) % 8] == "north"
+    # And back where it started, which is what makes it a ring rather than a line.
+    assert state.merchant_board_position == scenario.state.merchant_board_position
+
+
+def test_the_merchant_token_is_visible_on_taxation_which_has_no_capsule(tmp_path: Path) -> None:
+    """Taxation carries no tithe counter, so there is no capsule for the token to share.
+
+    It goes in the empty band under the label instead. The risk is not that it is drawn but that it
+    is drawn somewhere the space's own clip path throws away, so this checks it is inside the space
+    and below its label rather than merely present in the markup.
+    """
+    payload = _generated_payload(tmp_path, 2)
+    page = render_play_view_from_payload(payload)
+    wheel = _wheel(page)
+
+    taxation_start = wheel.index('data-duty="taxation"')
+    taxation = wheel[
+        taxation_start : wheel.index("</g>", wheel.index("cube-tally", taxation_start))
+    ]
+    assert "data-tithe-icon" not in taxation, "Taxation should carry no counter to share a capsule"
+
+    token = re.search(
+        r'<circle cx="([\d.]+)" cy="([\d.]+)" r="(\d+)"[^>]*data-token="merchant"', wheel
+    )
+    assert token is not None, "no Merchant token was drawn"
+    label = re.search(r'<text x="([\d.]+)" y="([\d.]+)" class="circle-label"[^>]*taxation', wheel)
+    assert label is not None
+    assert float(token.group(2)) > float(label.group(2)), "token should sit below the label"
+    assert float(token.group(3)) > 0
