@@ -23,7 +23,6 @@ def _parse_route(route_text: str) -> tuple[int, ...]:
     return tuple(int(piece) for piece in route_text.split("->"))
 
 
-
 def format_event(event: GameEvent, config: GameConfig) -> str | None:
     details = dict(event.details)
     positions = config.board.positions
@@ -69,8 +68,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.SETUP_COMPLETE:
         start_player = str(details.get("start_player", "unknown"))
         return (
-            f"{event_name}: all players completed setup sow; "
-            f"normal play begins with {start_player}"
+            f"{event_name}: all players completed setup sow; normal play begins with {start_player}"
         )
 
     if event.event_type is EventType.DUTY_RESOLUTION:
@@ -81,9 +79,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
             else "unknown"
         )
         duty_category = str(details.get("duty_category", "")).strip()
-        duty_with_category = (
-            f"{duty_label} ({duty_category})" if duty_category else duty_label
-        )
+        duty_with_category = f"{duty_label} ({duty_category})" if duty_category else duty_label
         if details.get("mode") == "tithe":
             return f"{event_name}: selected {duty_with_category}; mode tithe"
         fragments = [f"selected {duty_with_category}"]
@@ -188,8 +184,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
             total_workforce = details.get("total_workforce")
             if isinstance(total_workforce, int):
                 return (
-                    f"{event_name}: passed "
-                    f"(acolytes conserved; total workforce={total_workforce})"
+                    f"{event_name}: passed (acolytes conserved; total workforce={total_workforce})"
                 )
             return f"{event_name}: passed (acolytes conserved)"
         return f"{event_name}: {details}"
@@ -293,9 +288,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         wheat_paid = int(details.get("wheat_paid", 1))
         bank_silver_paid = int(details.get("bank_silver_paid", 0))
         bank_paid_suffix = (
-            f"; paid {bank_silver_paid} silver via Bank"
-            if bank_silver_paid > 0
-            else ""
+            f"; paid {bank_silver_paid} silver via Bank" if bank_silver_paid > 0 else ""
         )
         if step == "ordain":
             return (
@@ -397,9 +390,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_position = int(details.get("from_position", -1))
         to_position = int(details.get("to_position", -1))
         amount = int(details.get("amount", 1))
-        building_name = str(
-            details.get("building_name", details.get("building", "unknown"))
-        )
+        building_name = str(details.get("building_name", details.get("building", "unknown")))
         return (
             f"{event_name}: {actor_name} moved {amount} acolyte "
             f"{position_name(from_position, positions)} -> {position_name(to_position, positions)} "
@@ -410,9 +401,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_pool = str(details.get("from_pool", "city"))
         to_pool = str(details.get("to_pool", "unknown"))
         amount = int(details.get("amount", 1))
-        building_name = str(
-            details.get("building_name", details.get("building", "unknown"))
-        )
+        building_name = str(details.get("building_name", details.get("building", "unknown")))
         return (
             f"{event_name}: {actor_name} moved {amount} acolyte "
             f"{from_pool} -> {to_pool} using {building_name}"
@@ -441,56 +430,28 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         if building == "cloisters" and "skipped_location" in details:
             skipped_location = str(details.get("skipped_location", "unknown"))
             return f"{event_name}: cloisters skipped {skipped_location} during sow route"
-        if (
-            building == "grain_store"
-            and "conversion_direction" in details
-            and "amount" in details
-        ):
+        if building == "grain_store" and "conversion_direction" in details and "amount" in details:
             amount = int(details.get("amount", 0))
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_wheat":
-                return (
-                    f"{event_name}: grain_store sold {amount} wheat for {amount} silver"
-                )
+                return f"{event_name}: grain_store sold {amount} wheat for {amount} silver"
             if direction == "buy_wheat":
-                return (
-                    f"{event_name}: grain_store bought {amount} wheat for {amount} silver"
-                )
-        if (
-            building == "indulgences"
-            and "conversion_direction" in details
-            and "amount" in details
-        ):
+                return f"{event_name}: grain_store bought {amount} wheat for {amount} silver"
+        if building == "indulgences" and "conversion_direction" in details and "amount" in details:
             amount = int(details.get("amount", 0))
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_piety":
-                return (
-                    f"{event_name}: indulgences sold {amount} piety for {amount} silver"
-                )
+                return f"{event_name}: indulgences sold {amount} piety for {amount} silver"
             if direction == "buy_piety":
-                return (
-                    f"{event_name}: indulgences bought {amount} piety for {amount} silver"
-                )
-        if (
-            building == "stone_yard"
-            and "conversion_direction" in details
-            and "amount" in details
-        ):
+                return f"{event_name}: indulgences bought {amount} piety for {amount} silver"
+        if building == "stone_yard" and "conversion_direction" in details and "amount" in details:
             amount = int(details.get("amount", 0))
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_stone":
-                return (
-                    f"{event_name}: stone_yard sold {amount} stone for {amount} silver"
-                )
+                return f"{event_name}: stone_yard sold {amount} stone for {amount} silver"
             if direction == "buy_stone":
-                return (
-                    f"{event_name}: stone_yard bought {amount} stone for {amount} silver"
-                )
-        if (
-            building == "brewery"
-            and "conversion_direction" in details
-            and "amount" in details
-        ):
+                return f"{event_name}: stone_yard bought {amount} stone for {amount} silver"
+        if building == "brewery" and "conversion_direction" in details and "amount" in details:
             direction = str(details.get("conversion_direction", "unknown"))
             if direction == "sell_wheat_for_silver":
                 return f"{event_name}: brewery sold 1 wheat for 2 silver"
@@ -536,17 +497,10 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
                 f"{event_name}: inquisition moved 1 acolyte from "
                 f"{start_turn_from} to {start_turn_to}"
             )
-        if (
-            building == "library"
-            and "end_turn_from" in details
-            and "end_turn_to" in details
-        ):
+        if building == "library" and "end_turn_from" in details and "end_turn_to" in details:
             end_turn_from = str(details.get("end_turn_from", "unknown"))
             end_turn_to = str(details.get("end_turn_to", "unknown"))
-            return (
-                f"{event_name}: library moved 1 acolyte from "
-                f"{end_turn_from} to {end_turn_to}"
-            )
+            return f"{event_name}: library moved 1 acolyte from {end_turn_from} to {end_turn_to}"
         bonuses: list[str] = []
         if "wheat_bonus" in details:
             bonuses.append(f"wheat +{int(details['wheat_bonus'])}")
@@ -579,8 +533,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
                 )
             return text
         if activity == "road_engineer" and (
-            details.get("construct_extra_road") is True
-            or "construct_extra_roads" in details
+            details.get("construct_extra_road") is True or "construct_extra_roads" in details
         ):
             extra_roads = int(details.get("construct_extra_roads", 1))
             if extra_roads <= 1:
@@ -624,13 +577,9 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         player = str(details.get("player", "unknown"))
         parts: list[str] = []
         if "stone_before" in details and "stone_after" in details:
-            parts.append(
-                f"stone {int(details['stone_before'])} -> {int(details['stone_after'])}"
-            )
+            parts.append(f"stone {int(details['stone_before'])} -> {int(details['stone_after'])}")
         if "wheat_before" in details and "wheat_after" in details:
-            parts.append(
-                f"wheat {int(details['wheat_before'])} -> {int(details['wheat_after'])}"
-            )
+            parts.append(f"wheat {int(details['wheat_before'])} -> {int(details['wheat_after'])}")
         if not parts:
             return f"{event_name}: {player} had capped resources"
         return f"{event_name}: {player} " + "; ".join(parts)
@@ -642,8 +591,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         after = int(details.get("after", 0))
         returned = int(details.get("returned", max(before - after, 0)))
         return (
-            f"{event_name}: {player} {resource} {before} -> {after}; "
-            f"returned {returned} to supply"
+            f"{event_name}: {player} {resource} {before} -> {after}; returned {returned} to supply"
         )
 
     if event.event_type is EventType.SHIP_ADVANCE:
@@ -677,10 +625,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_duty = str(details.get("from_duty", "unknown"))
         to_duty = str(details.get("to_duty", "unknown"))
         current_resource = str(details.get("current_resource", "none"))
-        text = (
-            f"{event_name}: {from_duty} -> {to_duty}; "
-            f"current resource={current_resource}"
-        )
+        text = f"{event_name}: {from_duty} -> {to_duty}; current resource={current_resource}"
         cause = details.get("cause")
         if cause is not None:
             text += f"; cause={str(cause)}"
@@ -693,8 +638,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         trade_routes = int(details.get("trade_routes", 0))
         route_label = "trade route" if trade_routes == 1 else "trade routes"
         return (
-            f"{event_name}: {player} gained {resource} +{amount} "
-            f"from {trade_routes} {route_label}"
+            f"{event_name}: {player} gained {resource} +{amount} from {trade_routes} {route_label}"
         )
 
     if event.event_type is EventType.CONFESSION_BOX_BONUS:
@@ -733,10 +677,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
     if event.event_type is EventType.START_PLAYER_SELECTION:
         deciding_player = str(details.get("deciding_player", "unknown"))
         selected_player = str(details.get("selected_start_player", "unknown"))
-        return (
-            f"{event_name}: {deciding_player} selected {selected_player} "
-            f"as next start player"
-        )
+        return f"{event_name}: {deciding_player} selected {selected_player} as next start player"
 
     if event.event_type is EventType.GAME_END:
         reason = str(details.get("reason", "")).strip()
