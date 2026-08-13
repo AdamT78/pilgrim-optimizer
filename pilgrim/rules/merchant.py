@@ -34,6 +34,11 @@ CITY_POSITION = 0
 DUTY_TILE_COUNT = 8
 TAXATION_DUTY = "taxation"
 CORNUCOPIA_COUNTER = "cornucopia"
+# What the wildcard stands for when someone pays a hire with it. Ordered, because the order decides
+# the order the hire variants come out in, and a stable action order is worth more than the choice
+# of order itself. Piety is deliberately absent: no tithe counter offers it and hires are paid in
+# goods.
+CORNUCOPIA_HIRE_RESOURCES: tuple[str, ...] = ("wheat", "stone", "silver")
 
 
 def _require_duty_tile(position: int) -> int:

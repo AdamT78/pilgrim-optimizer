@@ -18,7 +18,7 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import DutyStrength, EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
-from pilgrim.model.state import GameState
+from pilgrim.model.state import GameState, PlayerState
 from pilgrim.rules.alms import (
     AlmsPayment,
     resolve_alms_season_end,
@@ -55,6 +55,8 @@ from pilgrim.rules.duties import (
 )
 from pilgrim.rules.mancala import generate_routes, occupied_positions, sow_vector
 from pilgrim.rules.merchant import (
+    CORNUCOPIA_COUNTER,
+    CORNUCOPIA_HIRE_RESOURCES,
     advance_merchant_position,
     current_merchant_duty,
     current_merchant_resource,
@@ -188,6 +190,25 @@ class _ResolvedGrainStoreConversion:
     source: BuildingAbilitySource
     direction: str
     amount: int
+
+
+@dataclass(frozen=True, slots=True)
+class _HirePaymentOption:
+    """One way of paying for one hire: the resource, and the source resolved to expect it.
+
+    There is exactly one of these per hire today, because the Merchant offers a single resource
+    and the payer has no say in it. The type exists so that the day the Merchant offers a wildcard
+    -- the cornucopia, where the payer chooses between wheat, stone and silver -- the choice is a
+    longer list from one function rather than a new branch at each of the sixteen places that
+    construct a hire.
+
+    `source` is the hire source with `hire_resource` resolved to `resource`, so affordability
+    checks and payment keep reading it the way they already do.
+    """
+
+    resource: str
+    source: BuildingAbilitySource
+    chosen: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -704,29 +725,38 @@ def _legal_full_turn_actions_for_state(
                                         ) and base_action not in actions:
                                             actions.append(base_action)
                                     elif _is_hired_source(mill_source) and mill_source.usable:
-                                        if not _can_afford_resolution_costs(
-                                            player_state,
-                                            required_silver=required_silver,
-                                            required_wheat=mill_wheat_spent,
-                                            hired_source=mill_source,
+                                        for hire_option in _legal_hire_payment_options(
+                                            source=mill_source,
+                                            player_state=player_state,
                                         ):
-                                            continue
-                                        hired_action = FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                            alms_payment_silver=payment.silver,
-                                            alms_payment_wheat=payment.wheat,
-                                            alms_house_extra_silver=extra_silver,
-                                            alms_house_extra_wheat=extra_wheat,
-                                            hired_building_id="mill",
-                                            hired_building_source=_hired_building_source_label(
-                                                mill_source
-                                            ),
-                                        )
-                                        if hired_action not in actions:
-                                            actions.append(hired_action)
+                                            if not _can_afford_resolution_costs(
+                                                player_state,
+                                                required_silver=required_silver,
+                                                required_wheat=mill_wheat_spent,
+                                                hired_source=hire_option.source,
+                                            ):
+                                                continue
+                                            hired_action = _with_hire_payment_fields(
+                                                FullTurnAction(
+                                                    origin=origin,
+                                                    route=route,
+                                                    selected_duty=duty_position,
+                                                    resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                                    alms_payment_silver=payment.silver,
+                                                    alms_payment_wheat=payment.wheat,
+                                                    alms_house_extra_silver=extra_silver,
+                                                    alms_house_extra_wheat=extra_wheat,
+                                                    hired_building_id="mill",
+                                                    hired_building_source=(
+                                                        _hired_building_source_label(
+                                                            hire_option.source
+                                                        )
+                                                    ),
+                                                ),
+                                                option=hire_option,
+                                            )
+                                            if hired_action not in actions:
+                                                actions.append(hired_action)
                             if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
                                 for building_id in _legal_give_alms_donation_buildings(
                                     player_state,
@@ -789,15 +819,16 @@ def _legal_full_turn_actions_for_state(
                                         allocation_moves=move_sequence,
                                     )
                                 )
-                            if (
-                                _is_hired_source(infirmary_source)
-                                and infirmary_source.usable
-                                and _can_afford_resolution_costs(
+                            for hire_option in _legal_hire_payment_options(
+                                source=infirmary_source,
+                                player_state=player_state,
+                            ):
+                                if not _can_afford_resolution_costs(
                                     player_state,
                                     required_silver=silver_cost,
-                                    hired_source=infirmary_source,
-                                )
-                            ):
+                                    hired_source=hire_option.source,
+                                ):
+                                    continue
                                 for move_sequence in _allocation_move_sequences(
                                     player_state,
                                     max_moves=duty_value + 1,
@@ -806,16 +837,19 @@ def _legal_full_turn_actions_for_state(
                                     if len(move_sequence) <= duty_value:
                                         continue
                                     actions.append(
-                                        FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.ALLOCATION,
-                                            allocation_moves=move_sequence,
-                                            hired_building_id="infirmary",
-                                            hired_building_source=_hired_building_source_label(
-                                                infirmary_source
+                                        _with_hire_payment_fields(
+                                            FullTurnAction(
+                                                origin=origin,
+                                                route=route,
+                                                selected_duty=duty_position,
+                                                resolution=TurnResolutionType.ALLOCATION,
+                                                allocation_moves=move_sequence,
+                                                hired_building_id="infirmary",
+                                                hired_building_source=(
+                                                    _hired_building_source_label(hire_option.source)
+                                                ),
                                             ),
+                                            option=hire_option,
                                         )
                                     )
                     elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
@@ -1085,11 +1119,14 @@ def _legal_full_turn_actions_for_state(
                                         required_wheat=required_wheat,
                                     )
 
-                        if _is_hired_source(infirmary_source) and infirmary_source.usable:
+                        for hire_option in _legal_hire_payment_options(
+                            source=infirmary_source,
+                            player_state=player_state,
+                        ):
                             hired_infirmary_player_state = _player_state_with_wheat_delta(
                                 player_state,
                                 wheat_delta=(2 if owns_active_mill else 0)
-                                - _hire_wheat_cost(infirmary_source),
+                                - _hire_wheat_cost(hire_option.source),
                             )
                             if hired_infirmary_player_state is not None:
                                 bonus_sequences = legal_ordination_step_sequences(
@@ -1107,27 +1144,33 @@ def _legal_full_turn_actions_for_state(
                                         player_state,
                                         required_silver=silver_cost,
                                         required_wheat=required_wheat,
-                                        hired_source=infirmary_source,
+                                        hired_source=hire_option.source,
                                     ):
                                         continue
-                                    hired_infirmary_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ORDINATION,
-                                        ordination_steps=step_sequence,
-                                        hired_building_id="infirmary",
-                                        hired_building_source=_hired_building_source_label(
-                                            infirmary_source
+                                    hired_infirmary_action = _with_hire_payment_fields(
+                                        FullTurnAction(
+                                            origin=origin,
+                                            route=route,
+                                            selected_duty=duty_position,
+                                            resolution=TurnResolutionType.ORDINATION,
+                                            ordination_steps=step_sequence,
+                                            hired_building_id="infirmary",
+                                            hired_building_source=(
+                                                _hired_building_source_label(hire_option.source)
+                                            ),
                                         ),
+                                        option=hire_option,
                                     )
                                     if hired_infirmary_action not in actions:
                                         actions.append(hired_infirmary_action)
 
-                        if _is_hired_source(mill_source) and mill_source.usable:
+                        for hire_option in _legal_hire_payment_options(
+                            source=mill_source,
+                            player_state=player_state,
+                        ):
                             hired_mill_player_state = _player_state_with_wheat_delta(
                                 player_state,
-                                wheat_delta=2 - _hire_wheat_cost(mill_source),
+                                wheat_delta=2 - _hire_wheat_cost(hire_option.source),
                             )
                             if hired_mill_player_state is not None:
                                 base_sequences = legal_ordination_step_sequences(
@@ -1143,19 +1186,22 @@ def _legal_full_turn_actions_for_state(
                                         player_state,
                                         required_silver=silver_cost,
                                         required_wheat=required_wheat,
-                                        hired_source=mill_source,
+                                        hired_source=hire_option.source,
                                     ):
                                         continue
-                                    hired_mill_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ORDINATION,
-                                        ordination_steps=step_sequence,
-                                        hired_building_id="mill",
-                                        hired_building_source=_hired_building_source_label(
-                                            mill_source
+                                    hired_mill_action = _with_hire_payment_fields(
+                                        FullTurnAction(
+                                            origin=origin,
+                                            route=route,
+                                            selected_duty=duty_position,
+                                            resolution=TurnResolutionType.ORDINATION,
+                                            ordination_steps=step_sequence,
+                                            hired_building_id="mill",
+                                            hired_building_source=(
+                                                _hired_building_source_label(hire_option.source)
+                                            ),
                                         ),
+                                        option=hire_option,
                                     )
                                     if hired_mill_action not in actions:
                                         actions.append(hired_mill_action)
@@ -1176,19 +1222,22 @@ def _legal_full_turn_actions_for_state(
                                             player_state,
                                             required_silver=silver_cost,
                                             required_wheat=required_wheat,
-                                            hired_source=mill_source,
+                                            hired_source=hire_option.source,
                                         ):
                                             continue
-                                        hired_mill_bonus_action = FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.ORDINATION,
-                                            ordination_steps=step_sequence,
-                                            hired_building_id="mill",
-                                            hired_building_source=_hired_building_source_label(
-                                                mill_source
+                                        hired_mill_bonus_action = _with_hire_payment_fields(
+                                            FullTurnAction(
+                                                origin=origin,
+                                                route=route,
+                                                selected_duty=duty_position,
+                                                resolution=TurnResolutionType.ORDINATION,
+                                                ordination_steps=step_sequence,
+                                                hired_building_id="mill",
+                                                hired_building_source=(
+                                                    _hired_building_source_label(hire_option.source)
+                                                ),
                                             ),
+                                            option=hire_option,
                                         )
                                         if hired_mill_bonus_action not in actions:
                                             actions.append(hired_mill_bonus_action)
@@ -4813,34 +4862,38 @@ def _legal_dormitory_relocation_options(
     ):
         return ()
 
-    state_after_hire = _state_after_optional_start_turn_hire_payment(
-        state,
-        player=state.active_player,
-        source=source,
-    )
-    if state_after_hire is None:
-        return ()
-
     city_position = config.board.index_for_name("city")
-    player_vector = state_after_hire.player_vector(state.active_player)
     options: list[_StartTurnRelocationOption] = []
-    for duty_position in config.duty_positions():
-        if player_vector[duty_position] <= 0:
-            continue
-        relocated_vector = _relocate_one_acolyte_in_mancala_vector(
-            player_vector,
-            from_position=duty_position,
-            to_position=city_position,
+    payer = state.player_state(state.active_player)
+    for hire_source in _hire_payment_source_variants(source, payer):
+        state_after_hire = _state_after_optional_start_turn_hire_payment(
+            state,
+            player=state.active_player,
+            source=hire_source,
         )
-        options.append(
-            _StartTurnRelocationOption(
-                state=state_after_hire.with_player_vector(state.active_player, relocated_vector),
-                building_id="dormitory",
-                source=source,
+        if state_after_hire is None:
+            continue
+
+        player_vector = state_after_hire.player_vector(state.active_player)
+        for duty_position in config.duty_positions():
+            if player_vector[duty_position] <= 0:
+                continue
+            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+                player_vector,
                 from_position=duty_position,
                 to_position=city_position,
             )
-        )
+            options.append(
+                _StartTurnRelocationOption(
+                    state=state_after_hire.with_player_vector(
+                        state.active_player, relocated_vector
+                    ),
+                    building_id="dormitory",
+                    source=hire_source,
+                    from_position=duty_position,
+                    to_position=city_position,
+                )
+            )
     return tuple(options)
 
 
@@ -4859,35 +4912,39 @@ def _legal_inquisition_relocation_options(
     ):
         return ()
 
-    state_after_hire = _state_after_optional_start_turn_hire_payment(
-        state,
-        player=state.active_player,
-        source=source,
-    )
-    if state_after_hire is None:
-        return ()
-
     city_position = config.board.index_for_name("city")
-    player_vector = state_after_hire.player_vector(state.active_player)
-    if player_vector[city_position] <= 0:
-        return ()
-
     options: list[_StartTurnRelocationOption] = []
-    for duty_position in config.duty_positions():
-        relocated_vector = _relocate_one_acolyte_in_mancala_vector(
-            player_vector,
-            from_position=city_position,
-            to_position=duty_position,
+    payer = state.player_state(state.active_player)
+    for hire_source in _hire_payment_source_variants(source, payer):
+        state_after_hire = _state_after_optional_start_turn_hire_payment(
+            state,
+            player=state.active_player,
+            source=hire_source,
         )
-        options.append(
-            _StartTurnRelocationOption(
-                state=state_after_hire.with_player_vector(state.active_player, relocated_vector),
-                building_id="inquisition",
-                source=source,
+        if state_after_hire is None:
+            continue
+
+        player_vector = state_after_hire.player_vector(state.active_player)
+        if player_vector[city_position] <= 0:
+            continue
+
+        for duty_position in config.duty_positions():
+            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+                player_vector,
                 from_position=city_position,
                 to_position=duty_position,
             )
-        )
+            options.append(
+                _StartTurnRelocationOption(
+                    state=state_after_hire.with_player_vector(
+                        state.active_player, relocated_vector
+                    ),
+                    building_id="inquisition",
+                    source=hire_source,
+                    from_position=city_position,
+                    to_position=duty_position,
+                )
+            )
     return tuple(options)
 
 
@@ -5121,7 +5178,10 @@ def _legal_sow_routes_for_origin(
             _SowRouteOption(
                 route=route,
                 building_id=_ROUTE_BUILDING_KOGGE,
-                source=kogge_source,
+                source=hire_source,
+            )
+            for hire_source in _hire_payment_source_variants(
+                kogge_source, state.player_state(state.active_player)
             )
             for route in kogge_city_start_routes(
                 origin=origin,
@@ -5182,8 +5242,11 @@ def _legal_cloisters_route_options(
         _SowRouteOption(
             route=variant.route,
             building_id=_ROUTE_BUILDING_CLOISTERS,
-            source=source,
+            source=hire_source,
             omitted_location=variant.omitted_location,
+        )
+        for hire_source in _hire_payment_source_variants(
+            source, state.player_state(state.active_player)
         )
         for variant in cloisters_route_variants(
             origin=origin,
@@ -5225,14 +5288,23 @@ def _legal_combined_kogge_cloisters_route_options(
     ):
         return ()
 
+    # Two hires in one action, each paid for separately, so the ways of paying multiply rather
+    # than add. That is one variant today and could be nine once the Merchant offers a wildcard --
+    # the only place in the game where a single action carries two independent payment choices.
     return tuple(
         _SowRouteOption(
             route=variant.route,
             building_id=_ROUTE_BUILDING_KOGGE,
-            source=kogge_source,
+            source=kogge_hire,
             secondary_building_id=_ROUTE_BUILDING_CLOISTERS,
-            secondary_source=cloisters_source,
+            secondary_source=cloisters_hire,
             omitted_location=variant.omitted_location,
+        )
+        for kogge_hire in _hire_payment_source_variants(
+            kogge_source, state.player_state(state.active_player)
+        )
+        for cloisters_hire in _hire_payment_source_variants(
+            cloisters_source, state.player_state(state.active_player)
         )
         for variant in combined_kogge_cloisters_route_variants(
             origin=origin,
@@ -5367,59 +5439,48 @@ def _legal_grain_store_conversion_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _hire_payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    player_state = state_after_hire.player_state(state.active_player)
-    resources = player_state.resources
     options: list[_BuildingConversionOption] = []
+    for hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        resources = player_state.resources
 
-    for amount in range(1, resources.wheat + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                resources=resources.add(wheat=-amount, silver=amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_GRAIN_STORE,
-                source=source,
-                direction=_GRAIN_STORE_SELL_WHEAT,
-                amount=amount,
+        for amount in range(1, resources.wheat + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    resources=resources.add(wheat=-amount, silver=amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_GRAIN_STORE,
+                    source=hire_source,
+                    direction=_GRAIN_STORE_SELL_WHEAT,
+                    amount=amount,
+                )
+            )
 
-    for amount in range(1, resources.silver + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                resources=resources.add(silver=-amount, wheat=amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_GRAIN_STORE,
-                source=source,
-                direction=_GRAIN_STORE_BUY_WHEAT,
-                amount=amount,
+        for amount in range(1, resources.silver + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    resources=resources.add(silver=-amount, wheat=amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_GRAIN_STORE,
+                    source=hire_source,
+                    direction=_GRAIN_STORE_BUY_WHEAT,
+                    amount=amount,
+                )
+            )
 
     return tuple(options)
-
 
 def _legal_indulgences_conversion_options(
     state: GameState,
@@ -5436,64 +5497,53 @@ def _legal_indulgences_conversion_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _hire_payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    player_state = state_after_hire.player_state(state.active_player)
-    resources = player_state.resources
-    piety_position = player_state.piety
-    piety_space = max(0, config.piety.max_position - piety_position)
     options: list[_BuildingConversionOption] = []
+    for hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        resources = player_state.resources
+        piety_position = player_state.piety
+        piety_space = max(0, config.piety.max_position - piety_position)
 
-    for amount in range(1, piety_position + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                piety=piety_position - amount,
-                resources=resources.add(silver=amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_INDULGENCES,
-                source=source,
-                direction=_INDULGENCES_SELL_PIETY,
-                amount=amount,
+        for amount in range(1, piety_position + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    piety=piety_position - amount,
+                    resources=resources.add(silver=amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_INDULGENCES,
+                    source=hire_source,
+                    direction=_INDULGENCES_SELL_PIETY,
+                    amount=amount,
+                )
+            )
 
-    max_buy_amount = min(resources.silver, piety_space)
-    for amount in range(1, max_buy_amount + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                piety=piety_position + amount,
-                resources=resources.add(silver=-amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_INDULGENCES,
-                source=source,
-                direction=_INDULGENCES_BUY_PIETY,
-                amount=amount,
+        max_buy_amount = min(resources.silver, piety_space)
+        for amount in range(1, max_buy_amount + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    piety=piety_position + amount,
+                    resources=resources.add(silver=-amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_INDULGENCES,
+                    source=hire_source,
+                    direction=_INDULGENCES_BUY_PIETY,
+                    amount=amount,
+                )
+            )
 
     return tuple(options)
-
 
 def _legal_stone_yard_conversion_options(
     state: GameState,
@@ -5510,59 +5560,48 @@ def _legal_stone_yard_conversion_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _hire_payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    player_state = state_after_hire.player_state(state.active_player)
-    resources = player_state.resources
     options: list[_BuildingConversionOption] = []
+    for hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        resources = player_state.resources
 
-    for amount in range(1, resources.stone + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                resources=resources.add(stone=-amount, silver=amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_STONE_YARD,
-                source=source,
-                direction=_STONE_YARD_SELL_STONE,
-                amount=amount,
+        for amount in range(1, resources.stone + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    resources=resources.add(stone=-amount, silver=amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_STONE_YARD,
+                    source=hire_source,
+                    direction=_STONE_YARD_SELL_STONE,
+                    amount=amount,
+                )
+            )
 
-    for amount in range(1, resources.silver + 1):
-        converted_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(
-                player_state,
-                resources=resources.add(silver=-amount, stone=amount),
-            ),
-        )
-        options.append(
-            _BuildingConversionOption(
-                state=converted_state,
-                building_id=_BUILDING_STONE_YARD,
-                source=source,
-                direction=_STONE_YARD_BUY_STONE,
-                amount=amount,
+        for amount in range(1, resources.silver + 1):
+            converted_state = state_after_hire.with_player_state(
+                state.active_player,
+                replace(
+                    player_state,
+                    resources=resources.add(silver=-amount, stone=amount),
+                ),
             )
-        )
+            options.append(
+                _BuildingConversionOption(
+                    state=converted_state,
+                    building_id=_BUILDING_STONE_YARD,
+                    source=hire_source,
+                    direction=_STONE_YARD_BUY_STONE,
+                    amount=amount,
+                )
+            )
 
     return tuple(options)
-
 
 def _legal_brewery_conversion_options(
     state: GameState,
@@ -5579,38 +5618,31 @@ def _legal_brewery_conversion_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _hire_payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
+    options: list[_BuildingConversionOption] = []
+    for hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        resources = player_state.resources
+        if resources.wheat < 1:
+            continue
+
+        converted_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(
+                player_state,
+                resources=resources.add(wheat=-1, silver=2),
+            ),
+        )
+        options.append(
+            _BuildingConversionOption(
+                state=converted_state,
+                building_id=_BUILDING_BREWERY,
+                source=hire_source,
+                direction=_BREWERY_SELL_WHEAT_FOR_SILVER,
+                amount=1,
             )
-        except ValueError:
-            return ()
+        )
 
-    player_state = state_after_hire.player_state(state.active_player)
-    resources = player_state.resources
-    if resources.wheat < 1:
-        return ()
-
-    converted_state = state_after_hire.with_player_state(
-        state.active_player,
-        replace(
-            player_state,
-            resources=resources.add(wheat=-1, silver=2),
-        ),
-    )
-    return (
-        _BuildingConversionOption(
-            state=converted_state,
-            building_id=_BUILDING_BREWERY,
-            source=source,
-            direction=_BREWERY_SELL_WHEAT_FOR_SILVER,
-            amount=1,
-        ),
-    )
+    return tuple(options)
 
 
 def _costs_with_bank_substitution(
@@ -5654,6 +5686,147 @@ def _costs_with_bank_substitution(
     return adjusted_stone, adjusted_silver, adjusted_wheat, adjusted_piety
 
 
+def _legal_hire_payment_options(
+    *,
+    source: BuildingAbilitySource,
+    player_state: PlayerState | None = None,
+) -> tuple[_HirePaymentOption, ...]:
+    """Enumerate the ways one hire may be paid for.
+
+    Usually one: the Merchant offers a single resource and the payer takes it or cannot afford it.
+    On the cornucopia it is one per resource the payer can actually afford, because the wildcard
+    lets them choose. If they can afford none, there are no options and the hire is unavailable,
+    which is the same answer Taxation gives for a different reason.
+
+    Only affordable resources are listed. Offering a variant that cannot be paid would be a legal
+    action that immediately fails, and pruning a choice down to its one real option is the same
+    no-op pruning applied elsewhere.
+
+    Free sources are not hires and are not enumerated here; Wagon Yard's free hire pays nothing,
+    so it has no payment resource to choose and stays outside this entirely.
+    """
+    if not _is_hired_source(source) or not source.usable:
+        return ()
+    if source.hire_resource is None or source.hire_cost <= 0:
+        return ()
+    if source.hire_resource != CORNUCOPIA_COUNTER:
+        return (_HirePaymentOption(resource=source.hire_resource, source=source),)
+
+    if player_state is None:
+        raise TransitionValidationError(
+            "A wildcard hire cannot be enumerated without the payer's stock; the affordable "
+            "resources are what the choice is drawn from."
+        )
+    return tuple(
+        _HirePaymentOption(
+            resource=candidate,
+            source=replace(source, hire_resource=candidate),
+            chosen=True,
+        )
+        for candidate in CORNUCOPIA_HIRE_RESOURCES
+        if _resource_amount_of(player_state, candidate) >= source.hire_cost
+    )
+
+
+def _resource_amount_of(player_state: PlayerState, resource: str) -> int:
+    resources = player_state.resources
+    if resource == "stone":
+        return resources.stone
+    if resource == "silver":
+        return resources.silver
+    if resource == "wheat":
+        return resources.wheat
+    if resource == "piety":
+        return resources.piety
+    raise TransitionValidationError(f"Unknown hire payment resource: {resource}.")
+
+
+def _hire_source_for_action(
+    source: BuildingAbilitySource,
+    action: FullTurnAction,
+) -> BuildingAbilitySource:
+    """Resolve a wildcard hire source to the resource the action chose to pay in.
+
+    Enumeration settles the choice and records it on the action; resolution re-derives the source
+    from the state and finds the wildcard again. This is where the two meet, so that payment spends
+    the stock the action named rather than whichever one the wildcard is compared against first.
+    """
+    chosen = action.hire_payment_resource
+    if source.hire_resource != CORNUCOPIA_COUNTER or chosen is None:
+        return source
+    if chosen not in CORNUCOPIA_HIRE_RESOURCES:
+        raise TransitionValidationError(
+            f"hire_payment_resource must be one of {', '.join(CORNUCOPIA_HIRE_RESOURCES)}; "
+            f"got {chosen}."
+        )
+    return replace(source, hire_resource=chosen)
+
+
+def _hire_payment_source_variants(
+    source: BuildingAbilitySource,
+    player_state: PlayerState | None = None,
+) -> tuple[BuildingAbilitySource, ...]:
+    """The sources an ability should be enumerated against, one per way of paying for it.
+
+    A free source is returned unchanged -- there is nothing to pay, so nothing to choose. A hired
+    source becomes one resolved source per payment option, which is one today and may be three
+    once the Merchant offers a wildcard. Enumerators that already own an option type call this and
+    keep their own shape rather than growing a hire branch of their own.
+    """
+    if not _is_hired_source(source):
+        return (source,)
+    return tuple(
+        option.source
+        for option in _legal_hire_payment_options(source=source, player_state=player_state)
+    )
+
+
+def _hire_payment_states(
+    state: GameState,
+    source: BuildingAbilitySource,
+) -> tuple[tuple[BuildingAbilitySource, GameState], ...]:
+    """Pair each way of paying for an ability with the state left after paying it.
+
+    A free source pays nothing and yields the state untouched. A hired source yields one pair per
+    payment option, dropping any the player cannot actually settle. Enumerators that need to see
+    the post-payment stock -- the conversions, which offer amounts out of it -- read it from here
+    rather than each repeating the hire-payment prologue.
+    """
+    pairs: list[tuple[BuildingAbilitySource, GameState]] = []
+    for hire_source in _hire_payment_source_variants(
+        source,
+        state.player_state(state.active_player),
+    ):
+        if not _is_hired_source(hire_source):
+            pairs.append((hire_source, state))
+            continue
+        try:
+            paid_state, _hire_payment = apply_building_hire_payment(
+                state,
+                acting_player=state.active_player,
+                source=hire_source,
+            )
+        except ValueError:
+            continue
+        pairs.append((hire_source, paid_state))
+    return tuple(pairs)
+
+
+def _with_hire_payment_fields(
+    action: FullTurnAction,
+    *,
+    option: _HirePaymentOption,
+) -> FullTurnAction:
+    """Stamp the chosen payment onto a constructed hire action.
+
+    Left alone unless there was a choice. Where the Merchant offers one resource the action already
+    implies it, and recording it would change the id of every hire in the game to say nothing.
+    """
+    if not option.chosen:
+        return action
+    return replace(action, hire_payment_resource=option.resource)
+
+
 def _legal_bank_payment_options_for_action(
     *,
     state: GameState,
@@ -5678,60 +5851,51 @@ def _legal_bank_payment_options_for_action(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    player_state = state_after_hire.player_state(state.active_player)
     substitutions: list[_BankPaymentOption] = []
-    required_amounts = {
-        "stone": max(0, required_stone),
-        "wheat": max(0, required_wheat),
-        "piety": max(0, required_piety),
-    }
-    for replaced_resource, required_amount in required_amounts.items():
-        if required_amount <= 0:
-            continue
-        max_substitution = min(required_amount, player_state.resources.silver)
-        for silver_amount in range(1, max_substitution + 1):
-            (
-                adjusted_stone,
-                adjusted_silver,
-                adjusted_wheat,
-                adjusted_piety,
-            ) = _costs_with_bank_substitution(
-                required_stone=required_stone,
-                required_silver=required_silver,
-                required_wheat=required_wheat,
-                required_piety=required_piety,
-                replaced_resource=replaced_resource,
-                silver_amount=silver_amount,
-            )
-            if not _can_afford_resolution_costs(
-                player_state,
-                required_stone=adjusted_stone,
-                required_silver=adjusted_silver,
-                required_wheat=adjusted_wheat,
-                required_piety=adjusted_piety,
-                hired_source=hired_source,
-            ):
+    for bank_hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        required_amounts = {
+            "stone": max(0, required_stone),
+            "wheat": max(0, required_wheat),
+            "piety": max(0, required_piety),
+        }
+        for replaced_resource, required_amount in required_amounts.items():
+            if required_amount <= 0:
                 continue
-            substitutions.append(
-                _BankPaymentOption(
-                    state=state_after_hire,
-                    building_id=_BUILDING_BANK,
-                    source=source,
+            max_substitution = min(required_amount, player_state.resources.silver)
+            for silver_amount in range(1, max_substitution + 1):
+                (
+                    adjusted_stone,
+                    adjusted_silver,
+                    adjusted_wheat,
+                    adjusted_piety,
+                ) = _costs_with_bank_substitution(
+                    required_stone=required_stone,
+                    required_silver=required_silver,
+                    required_wheat=required_wheat,
+                    required_piety=required_piety,
                     replaced_resource=replaced_resource,
                     silver_amount=silver_amount,
                 )
-            )
+                if not _can_afford_resolution_costs(
+                    player_state,
+                    required_stone=adjusted_stone,
+                    required_silver=adjusted_silver,
+                    required_wheat=adjusted_wheat,
+                    required_piety=adjusted_piety,
+                    hired_source=hired_source,
+                ):
+                    continue
+                substitutions.append(
+                    _BankPaymentOption(
+                        state=state_after_hire,
+                        building_id=_BUILDING_BANK,
+                        source=bank_hire_source,
+                        replaced_resource=replaced_resource,
+                        silver_amount=silver_amount,
+                    )
+                )
+
     return tuple(substitutions)
 
 
@@ -5749,20 +5913,12 @@ def _legal_guild_merchant_advance_options(
         source.source_type != "own_active" and not _is_hired_source(source)
     ):
         return ()
-    if _is_hired_source(source):
-        try:
-            _paid_state, _payment = apply_building_hire_payment(
-                state,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-    return (
+    return tuple(
         _GuildMerchantAdvanceOption(
             building_id=_BUILDING_GUILD,
-            source=source,
-        ),
+            source=hire_source,
+        )
+        for hire_source, _state_after_hire in _hire_payment_states(state, source)
     )
 
 
@@ -5781,23 +5937,13 @@ def _legal_scriptorium_effective_acolyte_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    return (
+    return tuple(
         _ScriptoriumEffectiveAcolyteOption(
             state=state_after_hire,
             building_id=_BUILDING_SCRIPTORIUM,
-            source=source,
-        ),
+            source=hire_source,
+        )
+        for hire_source, state_after_hire in _hire_payment_states(state, source)
     )
 
 
@@ -5816,23 +5962,13 @@ def _legal_customs_house_taxation_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
-            )
-        except ValueError:
-            return ()
-
-    return (
+    return tuple(
         _CustomsHouseTaxationOption(
             state=state_after_hire,
             building_id=_BUILDING_CUSTOMS_HOUSE,
-            source=source,
-        ),
+            source=hire_source,
+        )
+        for hire_source, state_after_hire in _hire_payment_states(state, source)
     )
 
 
@@ -5882,36 +6018,29 @@ def _legal_pulpit_workforce_move_options(
     ):
         return ()
 
-    state_after_hire = state
-    if _is_hired_source(source):
-        try:
-            state_after_hire, _payment = apply_building_hire_payment(
-                state_after_hire,
-                acting_player=state.active_player,
-                source=source,
+    options: list[_PulpitWorkforceMoveOption] = []
+    for hire_source, state_after_hire in _hire_payment_states(state, source):
+        player_state = state_after_hire.player_state(state.active_player)
+        if player_state.workforce.village < 1:
+            continue
+        moved_workforce = replace(
+            player_state.workforce,
+            village=player_state.workforce.village - 1,
+            abbey=player_state.workforce.abbey + 1,
+        )
+        moved_state = state_after_hire.with_player_state(
+            state.active_player,
+            replace(player_state, workforce=moved_workforce),
+        )
+        options.append(
+            _PulpitWorkforceMoveOption(
+                state=moved_state,
+                building_id=_BUILDING_PULPIT,
+                source=hire_source,
             )
-        except ValueError:
-            return ()
+        )
 
-    player_state = state_after_hire.player_state(state.active_player)
-    if player_state.workforce.village < 1:
-        return ()
-    moved_workforce = replace(
-        player_state.workforce,
-        village=player_state.workforce.village - 1,
-        abbey=player_state.workforce.abbey + 1,
-    )
-    moved_state = state_after_hire.with_player_state(
-        state.active_player,
-        replace(player_state, workforce=moved_workforce),
-    )
-    return (
-        _PulpitWorkforceMoveOption(
-            state=moved_state,
-            building_id=_BUILDING_PULPIT,
-            source=source,
-        ),
-    )
+    return tuple(options)
 
 
 def _state_after_guild_merchant_advance_for_legal_generation(
@@ -6448,15 +6577,22 @@ def _legal_action_variants_for_resolution(
                     resolution=resolution,
                 ),
             )
-        return (
-            FullTurnAction(
-                origin=origin,
-                route=route,
-                selected_duty=selected_duty,
-                resolution=resolution,
-                hired_building_id=hire_context.hired_buildings[0],
-                hired_building_source=_hired_building_source_label(source),
-            ),
+        return tuple(
+            _with_hire_payment_fields(
+                FullTurnAction(
+                    origin=origin,
+                    route=route,
+                    selected_duty=selected_duty,
+                    resolution=resolution,
+                    hired_building_id=hire_context.hired_buildings[0],
+                    hired_building_source=_hired_building_source_label(hire_option.source),
+                ),
+                option=hire_option,
+            )
+            for hire_option in _legal_hire_payment_options(
+                source=source,
+                player_state=state.player_state(state.active_player),
+            )
         )
 
     # own_active uses the free source without a dedicated hire suffix.
@@ -6511,6 +6647,7 @@ def _resolved_start_turn_relocation_for_action(
         acting_player=player,
         building_key=building_id,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -6604,6 +6741,7 @@ def _resolved_end_turn_relocation_for_action(
         acting_player=player,
         building_key=building_id,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -6765,6 +6903,7 @@ def _resolved_guild_merchant_advance_for_action(
         acting_player=player,
         building_key=_BUILDING_GUILD,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -6821,6 +6960,7 @@ def _resolved_scriptorium_effective_acolyte_for_action(
         acting_player=player,
         building_key=_BUILDING_SCRIPTORIUM,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -6882,6 +7022,7 @@ def _resolved_customs_house_taxation_for_action(
         acting_player=player,
         building_key=_BUILDING_CUSTOMS_HOUSE,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -6960,6 +7101,7 @@ def _resolved_bank_payment_for_action(
         acting_player=player,
         building_key=_BUILDING_BANK,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -7099,6 +7241,7 @@ def _resolved_pulpit_workforce_move_for_action(
         acting_player=player,
         building_key=_BUILDING_PULPIT,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -7207,6 +7350,7 @@ def _resolved_grain_store_conversion_for_action(
         acting_player=player,
         building_key=building_id,
     )
+    source = _hire_source_for_action(source, action)
     if source.source_type == "own_active" and source.usable:
         if source_label != "own_active":
             raise TransitionValidationError(
@@ -7266,6 +7410,7 @@ def _resolved_cloisters_route_for_action(
         acting_player=player,
         building_key=_ROUTE_BUILDING_CLOISTERS,
     )
+    source = _hire_source_for_action(source, action)
     if not source.usable or (
         source.source_type != "own_active" and not _is_hired_source(source)
     ):
@@ -7345,6 +7490,7 @@ def _resolved_kogge_source_for_action(
         acting_player=player,
         building_key="kogge",
     )
+    source = _hire_source_for_action(source, action)
     expected_source_label = (
         "own_active"
         if source.source_type == "own_active"
@@ -7398,6 +7544,7 @@ def _resolved_simple_bonus_source_for_action(
         acting_player=player,
         building_key=building_key,
     )
+    source = _hire_source_for_action(source, action)
     action_has_hire_fields = action.hired_building_id is not None
 
     if source.source_type == "own_active" and source.usable:
@@ -7449,6 +7596,7 @@ def _resolved_infirmary_source_for_action(
         acting_player=player,
         building_key="infirmary",
     )
+    source = _hire_source_for_action(source, action)
     action_hires_infirmary = action.hired_building_id == "infirmary"
     uses_infirmary_bonus = False
     if mode == "allocation":
@@ -7531,6 +7679,7 @@ def _resolved_mill_source_for_action(
         acting_player=player,
         building_key="mill",
     )
+    source = _hire_source_for_action(source, action)
     action_hires_mill = action.hired_building_id == "mill"
     if required_wheat < 0:
         raise TransitionValidationError("Mill required wheat cannot be negative.")

@@ -18,7 +18,11 @@ from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
-from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, current_merchant_resource
+from pilgrim.rules.merchant import (
+    CORNUCOPIA_COUNTER,
+    CORNUCOPIA_HIRE_RESOURCES,
+    current_merchant_resource,
+)
 from pilgrim.rules.validation import TransitionValidationError
 
 _EXPECTED_DONATION_VP_BY_LEVEL: dict[int, int] = {
@@ -785,24 +789,37 @@ def _hired_source(
             reason="merchant_resource_none",
         )
 
+    acting_resources = state.player_state(acting_player).resources
+
     if hire_resource == CORNUCOPIA_COUNTER:
-        # The cornucopia is a wildcard: the hiring player chooses which of wheat, stone or silver
-        # to pay in, which means one legal-action variant per resource they can afford. That
-        # choice does not exist on the action yet, so hiring is refused here rather than guessed
-        # at -- paying in an arbitrary resource would silently spend the wrong stock. Until it
-        # lands, a Merchant on the cornucopia blocks hiring the way Taxation does.
+        # A wildcard is affordable if any one of the stocks it stands for is. Which one the payer
+        # actually spends is settled later, when the action is built; the source stays wild so that
+        # the choice is enumerated in one place rather than guessed at here.
+        if not any(
+            _resource_amount(acting_resources, candidate) >= _HIRE_COST
+            for candidate in CORNUCOPIA_HIRE_RESOURCES
+        ):
+            return BuildingAbilitySource(
+                building_key=building_key,
+                source_type="unavailable",
+                owner=owner,
+                hire_resource=hire_resource,
+                hire_cost=_HIRE_COST,
+                payable_to=payable_to,
+                usable=False,
+                reason="insufficient_resource",
+            )
         return BuildingAbilitySource(
             building_key=building_key,
-            source_type="unavailable",
+            source_type=source_type,
             owner=owner,
             hire_resource=hire_resource,
             hire_cost=_HIRE_COST,
             payable_to=payable_to,
-            usable=False,
-            reason="cornucopia_choice_not_implemented",
+            usable=True,
+            reason=None,
         )
 
-    acting_resources = state.player_state(acting_player).resources
     if _resource_amount(acting_resources, hire_resource) < _HIRE_COST:
         return BuildingAbilitySource(
             building_key=building_key,
