@@ -711,8 +711,19 @@ two files are not byte identical.
 
 `prototypes/seal_prototypes.html` is the wax seals that will mark which duty tile a turn started
 from and which duty it took, drawn on their own so the artwork can be judged before anything is
-built on it. `render_seal_prototypes.py` draws them and `generate_seal_prototypes.py` writes the
-page.
+built on it. `render_seal_prototypes.py` draws the page and `generate_seal_prototypes.py` writes it.
+
+The seal itself is `render_seal.py`, which is shared: `render_seal(cx, cy, r)` returns the blob of
+wax and the impression ring struck into it, as a fragment with no `<svg>` around it, and
+`check_clearance()` lives with it. It is separate because the seal is about to be struck twice —
+here, and on the Piety Track for the first player marker — and the wobbled outline is exactly the
+kind of thing that gets copied and then quietly drifts. The wax is shared; what is struck into it is
+not, so the glyphs, the grounds and the page layout stay with the page.
+
+Both lines on the seal are drawn in proportion to `r` rather than at a fixed width, so a seal struck
+smaller is the same drawing rather than the same drawing under a heavier pen. `RIM_STROKE_R` and
+`RING_STROKE_R` are 0.10 and 0.08, which come out at the 2 and the 1.6 the seal has always been
+drawn with when `r` is `SEAL_R`.
 
 The page is the artwork on its own. Four seals at 96px — the square, the shield, and the letters `S`
 and `A` — each on a chip of the tile parchment, `#EFE4C6`, because a seal is struck on a duty tile
@@ -748,9 +759,10 @@ a destination — which is what keeps a routine rebuild out of `prototypes/`.
 
 ### What it reads, and the assert it will not render past
 
-Nothing, and no layout JSON: everything the seal is made of is in the constants at the top of
-`render_seal_prototypes.py`, which is what lets the seal be tuned there without the duty wheel
-around it. So there is no data-against-drawing parity check to be had here, only the drawing.
+Nothing, and no layout JSON: everything the seal is made of is in constants, the geometry in
+`render_seal.py` and the page's own glyphs and grounds in `render_seal_prototypes.py`. That is what
+lets the seal be tuned without the duty wheel around it, and it means there is no
+data-against-drawing parity check to be had here, only the drawing.
 
 `check_clearance()` runs on every render and stops it dead if the glyph would foul the impression
 ring. A square of side B has a half-diagonal of `B/2*sqrt(2)`, and that — not B — is what has to

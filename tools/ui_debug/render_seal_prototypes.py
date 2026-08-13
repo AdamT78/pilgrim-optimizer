@@ -6,12 +6,17 @@ their own so the artwork can be judged before anything is built on it.
 This is a debug/visual tool only. It emits SVG/HTML, is not connected to `GameState`, and decides
 nothing about the game: a seal is a mark drawn on a tile, not a rule about the tile.
 
+The wax itself is `render_seal.py`, which draws the blob and the impression ring at a given centre
+and radius. It is shared, because the Piety Track is about to strike the same seal for the first
+player marker. What stays here is what this page puts on top of and around the wax: the glyphs, the
+grounds they stand on, and the page.
+
 Unlike the other renderers here, this one reads nothing. There is no layout JSON and no config,
-because there is nothing to reverse-engineer: everything the seal is made of is in the constants
-below, which is what lets the seal be tuned here without the duty wheel around it. That also makes
-`prototypes/seal_prototypes.html` unusual for this directory — it is the output of this module
-rather than a hand-drawn baseline it is judged against, and the test suite holds the two to being
-byte identical instead of merely alike.
+because there is nothing to reverse-engineer: everything the seal is made of is in constants, here
+and in `render_seal.py`, which is what lets the seal be tuned without the duty wheel around it.
+That also makes `prototypes/seal_prototypes.html` unusual for this directory — it is the output of
+this module rather than a hand-drawn baseline it is judged against, and the test suite holds the
+two to being byte identical instead of merely alike.
 
 WHAT IT RENDERS
 
@@ -30,28 +35,28 @@ circle below roughly 48px, and a keyline turns into a halo rather than an outlin
 
 THE ONE CONSTRAINT WORTH KNOWING
 
-The glyph must clear the impression ring. A square of side B has a half-diagonal of B/2*sqrt(2),
-and that -- not B -- is what has to stay inside the ring. At B=18 against a seal of r=20 the
-corners reach 12.73 while the ring sits at 15.60, leaving about 3 units of bare wax. At B=23 the
-corners reach 16.26 and cross it. `check_clearance()` asserts this on every render, so a future
-tweak to either number fails loudly instead of quietly ruining the seal.
+The glyph must clear the impression ring, which is `check_clearance()` in `render_seal.py`. It runs
+on every render here, so a tweak to `GLYPH_BOX` or `RING_R` fails loudly instead of quietly ruining
+the seal.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 
+from tools.ui_debug.render_seal import (
+    GLYPH_BOX,
+    RING_R,
+    SEAL_R,
+    WAX,
+    WAX_DEEP,
+    check_clearance,
+    render_seal,
+)
+
 # ------------------------------------------------------------------ tuning
-SEAL_R = 20.0  # seal radius, in the wheel's own units
-RING_R = 0.78  # impression ring, as a fraction of SEAL_R
-GLYPH_BOX = 18.0  # both glyphs fill this square, centred
-WOBBLE = (0.045, 0.026)  # 3-period and 5-period ripple on the wax edge
 SEAL_PX = 96  # the one size rendered here; see the note on scaling
 
-WAX = "#DC6A61"  # the wax body: pushed light so the glyph can be deep
-WAX_RIM = "#5E1712"  # the blob outline
-WAX_DEEP = "#A83F36"  # the die impression, between wax and glyph in value
 GLYPH = "#6E1A14"  # the struck symbol
 KEY = "#F6EFDD"  # optional keyline, for when two reds are not enough
 
@@ -107,28 +112,9 @@ TREATMENTS = [False]
 
 # --------------------------------------------------------------------- seal
 def seal(glyph: GlyphDrawer, keyline: bool = False, seed: float = 0.4, ring: bool = True) -> str:
-    """One seal, drawn about the origin so it can be placed anywhere."""
-    pts = []
-    n = 26
-    for i in range(n):
-        a = 2 * math.pi * i / n
-        rr = SEAL_R * (
-            1 + WOBBLE[0] * math.sin(3 * a + seed) + WOBBLE[1] * math.sin(5 * a + seed * 1.7)
-        )
-        pts.append(f"{math.cos(a) * rr:.2f},{math.sin(a) * rr:.2f}")
-    out = [
-        f'<polygon points="{" ".join(pts)}" fill="{WAX}" stroke="{WAX_RIM}" '
-        f'stroke-width="2" stroke-linejoin="round"/>'
-    ]
-    if ring:
-        out.append(
-            f'<circle cx="0" cy="0" r="{SEAL_R * RING_R:.2f}" fill="none" '
-            f'stroke="{WAX_DEEP}" stroke-width="1.6" '
-            f'stroke-opacity="0.95"/>'
-        )
+    """One seal, struck about the origin so it can be placed anywhere."""
     k = f' stroke="{KEY}" stroke-width="1.9" stroke-linejoin="round"' if keyline else ""
-    out.append(glyph(k))
-    return "".join(out)
+    return render_seal(0, 0, SEAL_R, seed, ring) + glyph(k)
 
 
 def svg(glyph: GlyphDrawer, keyline: bool, px: int, seed: float = 0.4, ring: bool = True) -> str:
@@ -138,18 +124,6 @@ def svg(glyph: GlyphDrawer, keyline: bool, px: int, seed: float = 0.4, ring: boo
         f'viewBox="{-m:.1f} {-m:.1f} {2 * m:.1f} {2 * m:.1f}">'
         f"{seal(glyph, keyline, seed, ring)}</svg>"
     )
-
-
-# ---------------------------------------------------------------- self-check
-def check_clearance() -> tuple[float, float, float]:
-    """The glyph's corners, not its side, are what must clear the ring."""
-    corner = GLYPH_BOX / 2 * math.sqrt(2)
-    ring = SEAL_R * RING_R
-    assert corner < ring, (
-        f"glyph corners reach {corner:.2f} but the ring sits at {ring:.2f}: "
-        f"shrink GLYPH_BOX below {ring / math.sqrt(2) * 2:.2f} or raise RING_R"
-    )
-    return corner, ring, ring - corner
 
 
 # --------------------------------------------------------------------- page
