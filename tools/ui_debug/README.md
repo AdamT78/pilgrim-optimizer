@@ -55,8 +55,9 @@ across PRs in this order:
 3. Extract the renderer in a separate PR.
 4. Wire it into the generated overview only after renderer parity is acceptable.
 
-Every prototype currently in `prototypes/` has been through this checklist, so there are no
-baseline-only prototypes left. New prototypes start at step 1 again.
+Every prototype in `prototypes/` has been through this checklist except the wax seals, which are at
+step 1: a baseline and its source, filed and linked, with no layout data, no renderer and no
+generated page yet. New prototypes start at step 1 again.
 
 ## Building tiles renderer extraction
 
@@ -703,6 +704,31 @@ baseline's numerically, bar one: the Allocation title sits 0.1px lower, because 
 title is that far off the offset the other eight share. The generated markup also carries
 `data-duty`, `data-token`, and `data-tithe-token` attributes the baseline has no need for, so the
 two files are not byte identical.
+
+## Wax seals prototype
+
+`prototypes/seal_prototypes.html` is the untouched visual baseline for the wax seals that will mark
+which duty tile a turn started from and which duty it took. `prototype_sources/seal_prototypes.py.txt`
+preserves the Python that drew it, reference-only as always: read for intent, never imported or run.
+
+This one is a baseline and nothing else. There is no layout JSON, no renderer and no generated page,
+which is step 1 of the checklist above and the whole of what has been done; the renderer comes
+separately, judged against this. So there is nothing here to run, and no link to a generated view in
+`index.html` or the overview, because there is no generated view to link to.
+
+The page is the artwork on its own. Four seals at 96px — the square, the shield, and the letters `S`
+and `A` — each on a chip of the tile parchment, `#EFE4C6`, because a seal is struck on a duty tile
+and nowhere else and judging the wax against any other colour would be judging it against one it
+will never be seen on. Beside them is the geometry the four were drawn to: the seal's radius, the
+impression ring at 0.78 of it, the box the glyph sits in and how far its corners reach, and what is
+left of the ring as bare wax. That clearance is what the page exists to be looked at for, so it is
+written down rather than left to be measured off the picture, and a change to either can be seen
+against the other. The wax is `#DC6A61`, the glyph `#6E1A14` and the ring `#A83F36`.
+
+Everything is inline SVG. Nothing is fetched, nothing is scripted, and the only address on the page
+is the SVG namespace, which names a dialect rather than a file — a baseline that needed an asset
+beside it could not be opened on its own, and being openable on its own is most of what a baseline
+is for.
 
 ## Alms Table renderer extraction
 

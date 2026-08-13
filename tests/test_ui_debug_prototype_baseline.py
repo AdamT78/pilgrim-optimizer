@@ -29,6 +29,12 @@ DUTY_WHEEL_RENDER_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_wheel_render.py.txt"
 ALMS_TABLE_HTML = PROTOTYPES_DIR / "alms_table.html"
 ALMS_TABLE_SVG = PROTOTYPES_DIR / "alms_table.svg"
 ALMS_TABLE_SOURCE = PROTOTYPE_SOURCES_DIR / "alms_table.py.txt"
+SEALS_HTML = PROTOTYPES_DIR / "seal_prototypes.html"
+SEALS_SOURCE = PROTOTYPE_SOURCES_DIR / "seal_prototypes.py.txt"
+
+# The four glyphs a seal can be struck with, and the numbers the page is drawn to.
+SEAL_GLYPHS = ("square", "shield", "S", "A")
+SEAL_COLOURS = ("#DC6A61", "#6E1A14", "#A83F36")
 
 # The three threshold rewards the board prints beside steps 2, 4, and 6.
 ALMS_THRESHOLD_TEXT = (
@@ -316,6 +322,75 @@ def test_alms_table_prototype_source_is_the_generator_code() -> None:
     assert "Season end winners" in content
 
 
+def test_seal_prototype_page_and_source_exist_and_the_root_is_clear_of_them() -> None:
+    """Filed with the other baselines rather than left at the top of the repo where it was drawn."""
+    assert SEALS_HTML.is_file()
+    assert SEALS_SOURCE.is_file()
+    assert not (REPO_ROOT / "seal_prototypes.html").exists()
+    assert not (REPO_ROOT / "build_seal_prototypes.txt").exists()
+
+
+def test_seal_prototype_shows_four_glyphs_on_the_tile_parchment() -> None:
+    """The page is the artwork on its own, so what it is for is the four seals and one background.
+
+    A seal is struck on a duty tile and nowhere else, so the chip behind each one is that tile's
+    parchment: judging the wax against anything else would be judging it against a colour it will
+    never be seen on.
+    """
+    content = SEALS_HTML.read_text(encoding="utf-8")
+
+    assert "On the tile parchment" in content
+    for glyph in SEAL_GLYPHS:
+        assert f"<figcaption>{glyph}</figcaption>" in content
+    assert content.count("<svg") == len(SEAL_GLYPHS)
+    assert content.count("background:#EFE4C6") == len(SEAL_GLYPHS)
+
+
+def test_seal_prototype_writes_down_the_geometry_it_was_drawn_to() -> None:
+    """Which is the point of it as a debug view: the artwork beside the numbers behind it.
+
+    A glyph has to sit inside the impression ring with wax still showing between the two, and that
+    clearance is the whole of what the four seals are being reviewed for. Read off the page rather
+    than measured off the picture, so a change to either can be seen against the other.
+    """
+    content = SEALS_HTML.read_text(encoding="utf-8")
+
+    for measure in ("seal radius", "impression ring", "glyph box", "glyph corner reach"):
+        assert measure in content, measure
+    assert "clearance" in content
+    for colour in SEAL_COLOURS:
+        assert colour in content
+    # Each colour is named in the table and then used by all four seals.
+    assert content.count("#DC6A61") == len(SEAL_GLYPHS) + 1
+
+
+def test_seal_prototype_is_the_artwork_and_asks_nothing_of_the_page_it_is_on() -> None:
+    """No image, no script, no fetch: a baseline that needed any of those could not be a baseline.
+
+    It is a standalone document like every other prototype here, styled in its own head, so it
+    opens from the file system on its own and there is nothing for it to drift out of step with.
+    """
+    content = SEALS_HTML.read_text(encoding="utf-8")
+
+    assert content.startswith("<!DOCTYPE html>")
+    assert "<style>" in content
+    for asked_for in ("<script", "<img", "<link", "fetch(", ".css", ".png"):
+        assert asked_for not in content, asked_for
+    # The only address on the page is the SVG namespace, which names a dialect and fetches nothing.
+    assert content.count("http") == content.count('xmlns="http://www.w3.org/2000/svg"')
+    # And it knows nothing about a renderer, since there is not one yet.
+    assert "data-component" not in content
+
+
+def test_seal_prototype_source_is_the_script_that_drew_it() -> None:
+    """Kept as `.txt` like the others: read for intent when the renderer is written, never run."""
+    content = SEALS_SOURCE.read_text(encoding="utf-8")
+
+    assert "SEAL PROTOTYPES" in content
+    assert "SEAL_R" in content
+    assert "GLYPH_BOX" in content
+
+
 def test_index_page_links_to_every_prototype() -> None:
     content = INDEX_HTML.read_text(encoding="utf-8")
     assert "prototypes/map.html" in content
@@ -342,3 +417,5 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "Alms Table prototype baseline" in content
     assert "prototypes/alms_table.svg" in content
     assert "Alms Table SVG prototype baseline" in content
+    assert "prototypes/seal_prototypes.html" in content
+    assert "Wax seals prototype baseline" in content
