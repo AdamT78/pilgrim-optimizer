@@ -59,6 +59,7 @@ from tools.ui_debug.render_piety_track_v2 import (
     position_rule_x,
     render_piety_track_v2_svg,
     render_piety_tracks_v2_html,
+    seats_that_can_hold_the_marker,
     track_geometry,
     variant_by_id,
 )
@@ -125,6 +126,21 @@ def baseline_svg(path: Path) -> str:
 
 def strip_data_hooks(content: str) -> str:
     return re.sub(r'\s*data-[a-z-]+="[^"]*"', "", content)
+
+
+def variant_stack(page: str) -> str:
+    """The panels the page stacks for its variants, and nothing else on it.
+
+    Picked out by the class that marks them rather than by cutting the page at the first heading:
+    the marker section below has panels of its own, and a boundary measured off a heading's
+    position quietly means something else the day a second heading lands between the two.
+    """
+    return "".join(re.findall(r'<figure class="track-row">.*?</figure>', page, re.S))
+
+
+def marker_panels(page: str) -> str:
+    """The first player marker panels, picked out the same way and for the same reason."""
+    return "".join(re.findall(r'<figure class="seal-row">.*?</figure>', page, re.S))
 
 
 def test_layout_file_exists_and_is_json() -> None:
@@ -408,8 +424,15 @@ def test_the_two_player_panel_is_one_disc_row_shorter() -> None:
 def test_the_page_stacks_every_variant() -> None:
     content = render_piety_tracks_v2_html(layout(), config())
 
-    assert content.count("<svg") == len(VARIANT_IDS)
+    # Counted on the stack rather than on every `<svg>` on the page: the first player marker has
+    # its own section below with a panel per seat, and this is about the stack at the top of it.
     assert content.count('class="track-row"') == len(VARIANT_IDS)
+    # Captioned like every other panel here, rather than named by position in the subtitle: the
+    # page grew a second section, so "top" and "bottom" stopped identifying anything.
+    for variant_id in VARIANT_IDS:
+        label = variant_by_id(layout(), variant_id)["label"]
+        assert f"<figcaption>{label}</figcaption>" in content
+    assert "Top: " not in content and "Bottom: " not in content
     for variant_id in VARIANT_IDS:
         assert f'data-piety-variant="{variant_id}"' in content
     assert "Piety Track" in content
@@ -521,8 +544,12 @@ def test_the_data_hooks_are_the_only_difference_from_the_baseline() -> None:
 
 
 def test_the_page_and_the_baseline_page_agree_on_what_is_drawn() -> None:
-    """Coarse parity: the same two tracks, the same labels, the same VP values."""
-    generated = render_piety_tracks_v2_html(layout(), config())
+    """Coarse parity: the same two tracks, the same labels, the same VP values.
+
+    Measured on the stack the baseline drew and not on the whole page, which has since grown a
+    marker section the baseline never had. What is being compared is still two tracks against two.
+    """
+    generated = variant_stack(render_piety_tracks_v2_html(layout(), config()))
     baseline = BASELINE_HTML.read_text(encoding="utf-8")
 
     for content in (generated, baseline):
@@ -771,6 +798,63 @@ def test_no_seat_outside_the_table_can_be_given_the_marker() -> None:
     for seat in (0, 5, -1):
         with pytest.raises(KeyError):
             first_player_by_seat(layout(), seat)
+
+
+def test_the_debug_page_shows_the_marker_at_every_seat_that_can_hold_it() -> None:
+    """Nothing sets the attribute yet, so without these the seal renders nowhere to be looked at.
+
+    The absence case is on the page for the same reason as the four seats: a reviewer has to see
+    that no one holding the marker leaves nothing behind, which is not visible from a seal.
+    """
+    section = marker_panels(render_piety_tracks_v2_html(layout(), config()))
+
+    assert section.count('class="seal-row"') == 7  # one absent, four seats, two on the 2p panel
+    assert section.count("data-first-player-seal") == 6
+    for seat, colour in enumerate(("red", "yellow", "blue", "white"), start=1):
+        assert f"<figcaption>3–4 player track — seat {seat}, {colour}</figcaption>" in section
+    assert "<figcaption>3–4 player track — no seat set, no seal struck</figcaption>" in section
+
+
+def test_the_page_shows_the_marker_on_whichever_seats_a_variant_actually_sits() -> None:
+    """Not 1..n: the 2 player variant seats white and red, which are seats 4 and 1.
+
+    Read off the discs the variant puts on the board, so a variant that later seats a different
+    pair shows seals for that pair rather than for the first two seat numbers.
+    """
+    assert seats_that_can_hold_the_marker(layout(), "3_4_player") == [1, 2, 3, 4]
+    assert seats_that_can_hold_the_marker(layout(), "2_player") == [1, 4]
+
+    section = marker_panels(render_piety_tracks_v2_html(layout(), config()))
+    assert "<figcaption>2 player track — seat 1, red</figcaption>" in section
+    assert "<figcaption>2 player track — seat 4, white</figcaption>" in section
+    assert "2 player track — seat 2" not in section
+
+
+def test_the_marker_section_renders_the_real_panel_rather_than_a_picture_of_one() -> None:
+    """So what is reviewed is what would ship. Same renderer, same call, only a seat added."""
+    section = marker_panels(render_piety_tracks_v2_html(layout(), config()))
+
+    for variant_id, seat in (("3_4_player", 1), ("2_player", 4), ("3_4_player", None)):
+        assert render_piety_track_v2_svg(layout(), config(), variant_id, seat) in section
+
+
+def test_captioning_the_old_panels_did_not_touch_what_they_draw() -> None:
+    """A caption is chrome around a panel, not part of it: the SVG is the same SVG to the byte."""
+    stack = variant_stack(render_piety_tracks_v2_html(layout(), config()))
+    drawn = re.findall(r"<svg\b.*?</svg>", stack, re.S)
+
+    assert drawn == [svg(variant_id) for variant_id in VARIANT_IDS]
+    assert "<figcaption>" not in "".join(drawn)
+
+
+def test_the_marker_section_is_an_addition_and_leaves_the_stack_above_it_alone() -> None:
+    """The two panels the page already showed are the same two panels, drawn the same way."""
+    stack = variant_stack(render_piety_tracks_v2_html(layout(), config()))
+
+    for variant_id in VARIANT_IDS:
+        assert svg(variant_id) in stack
+    assert "data-first-player-seat" not in stack
+    assert stack.count("<svg") == len(VARIANT_IDS)
 
 
 def test_the_marker_is_the_only_thing_the_seat_changes_about_the_panel() -> None:

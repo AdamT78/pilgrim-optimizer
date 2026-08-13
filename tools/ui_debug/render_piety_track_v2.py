@@ -120,11 +120,24 @@ SEAL_CROWN_DARKEN = 0.50
 # THIS IS BOARD ORDER, NOT TURN ORDER. Where a player sits is fixed for the whole game; who plays
 # first changes every round. The two are not the same list and must not be made into one.
 #
-# The distinction has teeth shortly: a later PR is to permute the discs in the cluster at position
-# 0 to show the turn sequence, which re-shuffles whenever the start player does. That permutation
-# must come from turn state and must not be read off this list, and `data-player-seat` must go on
-# meaning which seat a player occupies rather than which slot their disc has been moved into --
-# otherwise a marker naming seat 1 and a disc labelled seat 1 stop being the same player.
+# The distinction has teeth shortly: a later PR is to permute the discs on a track value to show
+# the turn sequence, which re-shuffles whenever the start player does. That permutation must come
+# from turn state and must not be read off this list, and `data-player-seat` must go on meaning
+# which seat a player occupies rather than which slot their disc has been moved into -- otherwise a
+# marker naming seat 1 and a disc labelled seat 1 stop being the same player.
+#
+# THE TWO VARIANTS DO NOT LAY THEIR DISCS OUT THE SAME WAY. Do not assume one rule covers both:
+#
+#   3-4 player: a 2x2 cluster on the value, filled column-major by turn order -- first player row 1
+#   column 1, second row 2 column 1, third row 1 column 2, fourth row 2 column 2.
+#
+#   2 player: NOT a cluster. The two discs sit horizontally side by side within each space 0 to 12,
+#   first player on the left and second on the right. THIS IS CORRECT AS IT STANDS AND MUST NOT BE
+#   CHANGED. A permutation PR must permute within that horizontal pair; it must not convert the
+#   2 player variant into a cluster to make one rule serve both.
+#
+# In both, the slot is a function of turn order and moves when the start player does. The seat is
+# fixed for the whole game and the board ordering never changes.
 SEAT_ORDER = ("player_two", "player_three", "player_four", "player_one")
 
 # The crown, as fractions of its own box about the seal's centre. It is one closed polygon and not
@@ -548,13 +561,62 @@ def render_piety_track_v2_svg(
     )
 
 
+def seats_that_can_hold_the_marker(layout: dict, variant_id: str) -> list[int]:
+    """Seat numbers a variant puts a disc on, in seat order.
+
+    Read off the discs the variant actually seats rather than assumed to run 1..n, because it does
+    not: the 2 player variant seats white and red, which are seats 4 and 1. A marker can only be
+    held by someone at the table, so this is what the debug page can show a seal for.
+    """
+    seated = {player["id"] for player in seated_players(layout, variant_id)}
+    return [seat for seat, player_id in enumerate(SEAT_ORDER, start=1) if player_id in seated]
+
+
+def render_first_player_seal_rows(layout: dict, config: dict) -> str:
+    """The marker at real scale on the real renderer: the absence case, then one panel per seat.
+
+    Nothing in the game sets `data-first-player-seat` yet, so without these the seal renders nowhere
+    and cannot be looked at. These are renders of the same panel the page already shows, asked for
+    with a seat -- no separate artwork, so what is reviewed here is what would ship.
+    """
+    panels = [(variant["id"], None) for variant in layout["variants"][:1]]
+    panels += [
+        (variant["id"], seat)
+        for variant in layout["variants"]
+        for seat in seats_that_can_hold_the_marker(layout, variant["id"])
+    ]
+
+    rows = []
+    for variant_id, seat in panels:
+        label = variant_by_id(layout, variant_id)["label"]
+        if seat is None:
+            caption = f"{label} — no seat set, no seal struck"
+        else:
+            caption = f"{label} — seat {seat}, {first_player_by_seat(layout, seat)['color']}"
+        rows.append(
+            '    <figure class="seal-row">\n'
+            f"      {render_piety_track_v2_svg(layout, config, variant_id, seat)}\n"
+            f"      <figcaption>{escape(caption)}</figcaption>\n"
+            "    </figure>"
+        )
+    return "\n".join(rows)
+
+
 def render_piety_tracks_v2_html(layout: dict, config: dict) -> str:
     """The debug page: every variant the layout describes, stacked as the prototype stacks them."""
     rows = "\n".join(
-        '    <div class="track-row">\n'
+        '    <figure class="track-row">\n'
         f"      {render_piety_track_v2_svg(layout, config, variant['id'])}\n"
-        "    </div>"
+        f"      <figcaption>{escape(variant['label'])}</figcaption>\n"
+        "    </figure>"
         for variant in layout["variants"]
+    )
+    seal_rows = render_first_player_seal_rows(layout, config)
+    seal_note = (
+        "The same panels, asked for with data-first-player-seat. The seal is struck in the "
+        "holder's own seat colour and pressed over the header rule; with no seat set nothing is "
+        "drawn and nothing is left behind. The 2 player variant seats white and red, which are "
+        "seats 4 and 1 rather than 1 and 2."
     )
     background = layout["page_background"]
     subtitle = f"{layout['subtitle']} Generated from {LAYOUT_FILENAME}, VP values from "
@@ -599,8 +661,20 @@ def render_piety_tracks_v2_html(layout: dict, config: dict) -> str:
     align-items: center;
   }}
   .board-wrap svg {{ display: block; max-width: 95vw; height: auto; }}
-  .track-row {{ margin-bottom: 18px; }}
-  .track-row:last-child {{ margin-bottom: 0; }}
+  h2 {{
+    font-family: Georgia, serif;
+    font-size: 18px;
+    color: #F2EEDF;
+    margin: 34px 0 2px;
+  }}
+  .track-row, .seal-row {{ margin: 0 0 18px; }}
+  .track-row:last-child, .seal-row:last-child {{ margin-bottom: 0; }}
+  figcaption {{
+    color: #A8A296;
+    font-size: 12px;
+    margin-top: 7px;
+    text-align: center;
+  }}
 </style>
 </head>
 <body>
@@ -608,6 +682,11 @@ def render_piety_tracks_v2_html(layout: dict, config: dict) -> str:
   <p class="subtitle">{escape(subtitle)}</p>
   <div class="board-wrap">
 {rows}
+  </div>
+  <h2>First player marker</h2>
+  <p class="subtitle">{escape(seal_note)}</p>
+  <div class="board-wrap">
+{seal_rows}
   </div>
 </body>
 </html>
