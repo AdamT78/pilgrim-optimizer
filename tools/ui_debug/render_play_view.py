@@ -256,7 +256,21 @@ def render_log_box(payload: dict) -> str:
         f'<span class="log-value">{escape(value)}</span></div>'
         for key, value in state_header(payload)
     )
-    return f'<div class="play-log" data-component="play-log">{rows}</div>'
+    # Already formatted when it got here. The sentences are the CLI's own, written by the shared
+    # formatter on the engine's side of the seam, so the two accounts of a game cannot drift; an
+    # event the formatter declines to describe never becomes a line and is not represented by a
+    # blank one.
+    entries = "".join(
+        f'<div class="log-event">{escape(str(line))}</div>' for line in payload.get("log", ())
+    )
+    transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
+    abandon = (
+        '<button type="button" data-sow-abandon data-sow-started="false">Start this sow again'
+        "</button>"
+        if payload.get("sow_candidates")
+        else ""
+    )
+    return f'<div class="play-log" data-component="play-log">{rows}{transcript}{abandon}</div>'
 
 
 def log_styles() -> str:
@@ -270,10 +284,124 @@ def log_styles() -> str:
   .log-line { display: flex; justify-content: space-between; gap: 12px; }
   .log-key { color: #9A9A9A; }
   .log-value { color: #F2EEDF; text-align: right; }
+  .log-transcript {
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid #333333;
+    max-height: 220px; overflow-y: auto;
+  }
+  .log-event { color: #C9C4B4; font-size: 12px; margin-bottom: 3px; }
 
   /* Visibility, not display: an empty chair keeps its width so the seated ones stay where the
      table would put them. At two players those are the two ends of the row, not the first two. */
   .p-player[data-seat-taken="false"] { visibility: hidden; }"""
+
+
+_SOW_SCRIPT = """<script>
+(function () {
+  'use strict';
+  /* CLICKING FILTERS. IT DOES NOT CONSTRUCT.
+
+     Every candidate below is a complete legal action the engine handed over, each carrying the
+     sequence of spaces it visits. This narrows that list; it never builds a route, never asks
+     whether a step is allowed, and never decides what is adjacent to what. An illegal move cannot
+     be expressed here because it was never in the list to begin with. */
+  var CANDIDATES = __CANDIDATES__;
+  var TOKEN = __TOKEN__;
+  if (!CANDIDATES.length) { return; }
+
+  var board = document.querySelector('[data-component="duty-wheel"]');
+  if (!board) { return; }
+  var spaces = board.querySelectorAll('[data-board-position-index]');
+  var abandon = document.querySelector('[data-sow-abandon]');
+  var chosen = [];
+
+  function surviving() {
+    return CANDIDATES.filter(function (candidate) {
+      return chosen.every(function (step, index) { return candidate.path[index] === step; });
+    });
+  }
+
+  function optionsAt(step, live) {
+    var seen = [];
+    live.forEach(function (candidate) {
+      var value = candidate.path[step];
+      if (value !== undefined && seen.indexOf(value) === -1) { seen.push(value); }
+    });
+    return seen;
+  }
+
+  function submit(candidate) {
+    var request = new XMLHttpRequest();
+    request.open('POST', '/action', true);
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.onload = function () {
+      /* The server sends the whole page back, drawn from the state it now holds. Swapping it in
+         is the only way anything on this board changes: nothing here draws a piece. */
+      if (request.status !== 200) { window.alert('refused: ' + request.responseText); return; }
+      document.open();
+      document.write(request.responseText);
+      document.close();
+    };
+    request.send(JSON.stringify({ action_id: candidate.action_id, state_token: TOKEN }));
+  }
+
+  function render() {
+    var live = surviving();
+    /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
+       Which steps those are is not written down anywhere; it falls out of the candidates. */
+    while (live.length > 1 && optionsAt(chosen.length, live).length === 1) {
+      chosen.push(optionsAt(chosen.length, live)[0]);
+      live = surviving();
+    }
+    if (live.length === 1) { submit(live[0]); return; }
+
+    var offered = optionsAt(chosen.length, live);
+    Array.prototype.forEach.call(spaces, function (space) {
+      var index = Number(space.getAttribute('data-board-position-index'));
+      space.setAttribute('data-sow-candidate', offered.indexOf(index) === -1 ? 'false' : 'true');
+      space.setAttribute('data-sow-on-route', chosen.indexOf(index) === -1 ? 'false' : 'true');
+    });
+    if (abandon) { abandon.setAttribute('data-sow-started', chosen.length ? 'true' : 'false'); }
+  }
+
+  Array.prototype.forEach.call(spaces, function (space) {
+    space.addEventListener('click', function () {
+      if (space.getAttribute('data-sow-candidate') !== 'true') { return; }
+      chosen.push(Number(space.getAttribute('data-board-position-index')));
+      render();
+    });
+  });
+
+  if (abandon) {
+    /* Purely local. Nothing has been sent, because nothing is sent until one candidate is left,
+       so giving up is forgetting the clicks rather than undoing anything. */
+    abandon.addEventListener('click', function () { chosen = []; render(); });
+  }
+
+  render();
+})();
+</script>"""
+
+
+def sow_styles(route_color: str) -> str:
+    """What the two attributes the script sets do to a space.
+
+    Every affordance is drawn by the renderer and hidden here; the script only flips an attribute
+    between true and false. No position and no colour crosses into JavaScript -- the colour of the
+    route is the active seat's own, written in by the page that knows which seat that is.
+
+    The whole space is the target rather than the artwork on it: `.board-circle` is the space's
+    filled shape, so a click anywhere on the parchment counts and nobody has to hit a label.
+    """
+    return f"""  /* Hidden by default: a space is offered only while it is one of the moves left. */
+  [data-sow-candidate="true"] {{ cursor: pointer; }}
+  [data-sow-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-sow-on-route="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
+  [data-sow-abandon] {{
+    display: none; margin-top: 8px; width: 100%; padding: 6px 10px; cursor: pointer;
+    color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
+    font: 13px/1.4 Helvetica, Arial, sans-serif;
+  }}
+  [data-sow-abandon][data-sow-started="true"] {{ display: block; }}"""
 
 
 def render_play_view_html(
@@ -352,6 +480,19 @@ def render_play_view_html(
         )
 
     active_seat = seat_of(payload["state"]["active_player"])
+    active_color = player_by_id(board_layout, payload["state"]["active_player"])["fill"]
+    candidates = payload.get("sow_candidates") or []
+    # Both are opt-in, the way the choice keys and the extra seals are: a position with nothing to
+    # decide is a page with nothing to press, and it should not be carrying the styles for
+    # affordances that can never appear on it.
+    script = (
+        _SOW_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates)).replace(
+            "__TOKEN__", json.dumps(payload.get("state_token", ""))
+        )
+        if candidates
+        else ""
+    )
+    sow_css = sow_styles(active_color) if candidates else ""
     stage = render_table_stage(
         alms_svg=alms_svg,
         piety_svg=piety_svg,
@@ -375,12 +516,14 @@ def render_play_view_html(
      the wash, and this only stops hiding it. Nothing is restyled and nothing moves. */
   .p-player[data-active-seat="true"] [data-active-player-glow="true"] {{ opacity: 1; }}
 
+{sow_css}
+
 {table_stacking_styles(scale)}
 </style>
 </head>
 <body>
 {stage}
-</body>
+{script}</body>
 </html>
 """
 
