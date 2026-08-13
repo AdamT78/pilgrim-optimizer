@@ -1,16 +1,20 @@
 """A thin local process holding one loaded scenario, so the play view can be looked at live.
 
 Standard library only. The repo declares no dependencies at all -- `pyproject.toml` has
-`dependencies = []` -- so bringing in a framework to serve three read-only routes would be the
-first one, and `http.server` is enough for a page nobody can press anything on.
+`dependencies = []` -- so bringing in a framework to serve four routes would be the first one, and
+`http.server` is enough for one local page playing one game.
 
-    GET /              the play view, rendered from the state now held
-    GET /state.json    the payload the adapter was handed, verbatim
-    GET /actions.json  the legal actions, structured, with an id each and a token for the state
+    GET  /              the play view, rendered from the state now held
+    GET  /state.json    the payload the adapter was handed, verbatim
+    GET  /actions.json  the legal actions, structured, with an id each and a token for the state
+    POST /action        apply one of them, by id, quoting the token it was read from
 
-NOTHING IS APPLIED. This PR is a walking skeleton: the engine is live, the page is drawn from it,
-and no route changes anything. `/actions.json` exists to prove the engine really is answering and
-to settle the shape before the next PR filters over it.
+SETUP SOW ONLY. `/action` will apply whatever `legal_actions` offers, but the page only knows how
+to ask for a setup sow; a normal turn is a later PR. The distinction is the page's, not this file's.
+
+ONE GAME, IN MEMORY, NO PERSISTENCE. Restarting the process loses the position. That is a real
+limitation and is left rather than papered over: saving would mean choosing a format and a place to
+put it, and a local process for looking at a board does not need to have that argued out yet.
 
 WHY THIS FILE IS NOT UNDER tools/ui_debug
 
@@ -34,6 +38,7 @@ import hashlib
 import json
 import socketserver
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -41,10 +46,11 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from pilgrim.io.event_text import format_event  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
-from pilgrim.model.actions import action_id  # noqa: E402
-from pilgrim.rules.transition import legal_actions  # noqa: E402
+from pilgrim.model.actions import SetupSowAction, action_id  # noqa: E402
+from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
 
 DEFAULT_PORT = 8765
@@ -100,8 +106,33 @@ def actions_document(state: Any, config: Any, payload: dict) -> dict:
     }
 
 
+class StaleStateToken(Exception):
+    """The submission quoted a list that is no longer the one on offer."""
+
+
+class UnknownAction(Exception):
+    """The submission named an action that is not legal in the position now held."""
+
+
+def sow_candidates(state: Any, config: Any) -> list[dict]:
+    """The setup sows on offer, each as the sequence of spaces it visits.
+
+    A candidate is its `action_id` and its PATH -- the origin followed by every step of the route.
+    Nothing else crosses: the page narrows this list by comparing paths position by position, which
+    is why it can offer legal moves without owning a rule about what makes one legal.
+
+    Only setup sows. A normal turn's action has no single path to walk and the page cannot ask for
+    one yet, so offering them would be offering something nothing can accept.
+    """
+    return [
+        {"action_id": action_id(action), "path": [action.origin, *action.route]}
+        for action in legal_actions(state, config)
+        if isinstance(action, SetupSowAction)
+    ]
+
+
 class PlayServer(ThreadingHTTPServer):
-    """Holds the one loaded position every route answers from."""
+    """Holds the one loaded position every route answers from, and the log of how it got there."""
 
     daemon_threads = True
 
@@ -110,7 +141,64 @@ class PlayServer(ThreadingHTTPServer):
         scenario = load_scenario(str(scenario_path))
         self.state = scenario.state
         self.config = scenario.config
-        self.payload = view_payload(self.state, self.config)
+        self.log_lines: list[str] = []
+        # Threaded, so two submissions can arrive at once even from one browser. Reading the legal
+        # set and replacing the state have to be one step, or the loser of the race applies a move
+        # chosen against a board the winner has already moved.
+        self._applying = threading.Lock()
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """Re-read everything the page is drawn from, after the position has changed."""
+        self.state_payload = view_payload(self.state, self.config)
+        self.token = state_token(self.state_payload)
+        self.payload = dict(
+            self.state_payload,
+            state_token=self.token,
+            sow_candidates=sow_candidates(self.state, self.config),
+            log=list(self.log_lines),
+        )
+
+    def apply(self, submitted_id: str, submitted_token: str) -> None:
+        """Apply one action, named by id and vouched for by the token it was read from.
+
+        The token is checked first and refused rather than worked around. A submission quoting a
+        stale list was decided against a board that has since moved, and re-deriving what its author
+        "must have meant" would be this process inventing a move on their behalf.
+
+        The action is then LOOKED UP in the current legal set, never rebuilt from what was sent.
+        Reconstructing one from client fields would make the client the author of moves, and the
+        first illegal one would arrive as a crash somewhere far from here instead of a refusal.
+        """
+        with self._applying:
+            self._apply_locked(submitted_id, submitted_token)
+
+    def _apply_locked(self, submitted_id: str, submitted_token: str) -> None:
+        if submitted_token != self.token:
+            raise StaleStateToken(
+                f"state token {submitted_token!r} is not the current {self.token!r}; "
+                "the position moved after that list was read"
+            )
+        chosen = next(
+            (
+                action
+                for action in legal_actions(self.state, self.config)
+                if action_id(action) == submitted_id
+            ),
+            None,
+        )
+        if chosen is None:
+            raise UnknownAction(f"no legal action with id {submitted_id!r} in this position")
+
+        result = apply_action(self.state, chosen, self.config)
+        self.state = result.state
+        # None means the event is meant not to print, so it is dropped rather than shown blank.
+        self.log_lines.extend(
+            line
+            for line in (format_event(event, self.config) for event in result.events)
+            if line is not None
+        )
+        self._refresh()
 
     def server_bind(self) -> None:
         """Bind without asking the network what this machine is called.
@@ -134,12 +222,55 @@ class PlayHandler(BaseHTTPRequestHandler):
             page = render_play_view_from_payload(self.server.payload)
             self._send(200, "text/html; charset=utf-8", page)
         elif route == "/state.json":
-            self._send(200, "application/json", json.dumps(self.server.payload, indent=1))
+            # The state as the engine describes it, without the token, the candidates or the log:
+            # those are this process's bookkeeping, and a test comparing two positions should not
+            # have to look past them to see whether anything moved.
+            self._send(200, "application/json", json.dumps(self.server.state_payload, indent=1))
         elif route == "/actions.json":
-            document = actions_document(self.server.state, self.server.config, self.server.payload)
+            document = actions_document(
+                self.server.state, self.server.config, self.server.state_payload
+            )
             self._send(200, "application/json", json.dumps(document, indent=1))
         else:
             self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
+
+    def do_POST(self) -> None:  # noqa: N802 -- BaseHTTPRequestHandler's own spelling
+        route = self.path.split("?", 1)[0]
+        if route != "/action":
+            self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, TypeError):
+            self._reject(400, "body must be JSON")
+            return
+        if not isinstance(body, dict):
+            self._reject(400, "body must be a JSON object")
+            return
+
+        try:
+            self.server.apply(str(body.get("action_id", "")), str(body.get("state_token", "")))
+        except StaleStateToken as stale:
+            # 409, not 400: the request was well formed and would have been fine a moment ago.
+            self._reject(409, str(stale))
+            return
+        except UnknownAction as unknown:
+            self._reject(422, str(unknown))
+            return
+
+        # The whole page, redrawn from the new state. The client swaps it in rather than patching
+        # the board, so nothing it does can put a piece somewhere the engine did not.
+        self._send(
+            200,
+            "text/html; charset=utf-8",
+            render_play_view_from_payload(self.server.payload),
+        )
+
+    def _reject(self, status: int, reason: str) -> None:
+        """Say what was wrong. A refusal that changed nothing should read like one."""
+        self._send(status, "application/json", json.dumps({"error": reason, "applied": False}))
 
     def _send(self, status: int, content_type: str, body: str) -> None:
         encoded = body.encode("utf-8")
@@ -163,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     server = PlayServer((args.host, args.port), args.scenario)
-    document = actions_document(server.state, server.config, server.payload)
+    document = actions_document(server.state, server.config, server.state_payload)
     print(f"serving {args.scenario} on http://{args.host}:{args.port}/")
     print(f"state token {document['state_token']}; {document['count']} legal actions")
     try:

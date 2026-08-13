@@ -1720,23 +1720,60 @@ python3 -m pilgrim.cli generate-setup --players 4 --seed 99 --output /tmp/scenar
 python3 tools/play_server.py /tmp/scenario.json          # http://127.0.0.1:8765/
 ```
 
-The server holds one loaded position and answers `/`, `/state.json` and `/actions.json`. It
-applies nothing: `/actions.json` exists to prove the engine is live and to settle the shape before
-anything filters over it. Standard library only, since the repo declares no dependencies.
+The server holds one loaded position and answers `/`, `/state.json`, `/actions.json` and
+`POST /action`, which applies a setup sow and sends the whole page back redrawn. One game, in
+memory, no persistence — restarting loses it. Standard library only, since the repo declares no
+dependencies.
 
-To review the page as a file, like every other generated view, write the payload out and render
-from it — which also keeps the file-writing path free of the engine:
+### Rebuilding the page as a file
 
 ```bash
-python3 -c "import json;from pilgrim.io.scenarios import load_scenario;from pilgrim.io.view \
-import view_payload;s=load_scenario('/tmp/scenario.json');print(json.dumps(view_payload(s.state,s.config)))" \
-  > /tmp/payload.json
-python3 tools/ui_debug/render_play_view.py /tmp/payload.json
+python3 tools/generate_play_view.py
 ```
+
+It draws `scenarios/play_view_reference_4p_001.json`, which is committed: four players so every
+seat and the four-handed piety variant are exercised, freshly dealt and still in `SETUP_SOW`
+because that is the position this page is for, and `--players 4 --seed 99` so the file matches
+what the instructions above actually put on screen. Pass `--scenario` for any other.
+
+The page comes out STATIC. The script and its stylesheet are gated on the candidate list, which
+only the server supplies, so a file with no server behind it draws no affordances it could not
+honour.
+
+This generator lives in `tools/`, not here, because it imports the engine to turn a scenario into
+a payload and nothing under `tools/ui_debug` may. That puts it out of reach of
+`generate_debug_overview.py`, so use `tools/rebuild_generated_pages.py` (below) to rebuild
+everything rather than remembering to run this one as well.
+
+`render_play_view.py` still takes a payload file directly, for a position no scenario holds:
+
+```bash
+python3 tools/ui_debug/render_play_view.py /tmp/payload.json /tmp/page.html
+```
+
+## Rebuilding the pages
+
+To rebuild every generated page:
+
+```bash
+python3 tools/rebuild_generated_pages.py
+```
+
+It names each page as it writes it and fails if anything in `generated/` was built by nothing.
+That check is the point of having one command: `generated/` is git-ignored, so the only way to show
+a page did not move is to copy it, rebuild, and diff — and that is worth exactly as much as the
+rebuild behind it is complete. A page nothing rebuilds compares identical forever, whatever changed
+underneath it. The play view was in that state until it was pointed at a committed scenario.
+
+It lives in `tools/` rather than here because it calls `tools/generate_play_view.py`, which imports
+the engine.
+
+The commands below still work and are the narrower option — one page, when that is all you want.
 
 ## Generated overview
 
-To build every generated view at once, plus an overview page linking them together:
+`generate_debug_overview.py` builds the fifteen pages on this side of the seam, plus an overview
+linking them together. It cannot build the play view, which is why the single command above exists:
 
 ```bash
 python3 tools/ui_debug/generate_debug_overview.py
@@ -1755,6 +1792,7 @@ tools/ui_debug/generated/piety_tracks.html
 tools/ui_debug/generated/piety_tracks_v2.html
 tools/ui_debug/generated/pilgrimage_sites.html
 tools/ui_debug/generated/duty_wheel.html
+tools/ui_debug/generated/seal_prototypes.html
 tools/ui_debug/generated/alms_table.html
 tools/ui_debug/generated/game_setup.html
 tools/ui_debug/generated/game_table.html
