@@ -125,7 +125,7 @@ def _payload(players, *, duty=None, tithe=None, dummy=None, **state):
         "table_player_count": len(players),
         "ship_position": 0,
         "completed_rounds": 0,
-        "merchant_position": 0,
+        "merchant_board_position": 0,
         "building_market": [],
         "building_availability": {},
         "pilgrimage_rounds": [],

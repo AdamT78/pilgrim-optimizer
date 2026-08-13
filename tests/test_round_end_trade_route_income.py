@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.merchant import advance_merchant_position, taxation_board_position
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
@@ -128,7 +129,18 @@ def test_round_end_trade_route_income_skips_when_merchant_resource_none() -> Non
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_basic_001.json"
     )
-    state_with_taxation_after_advance = scenario.state.with_merchant_position(5)
+    # The Merchant advances during a round-ending turn, so what matters is the tile it lands ON.
+    # 5 was the last step of the retired path and wrapped to taxation at index 0; the equivalent
+    # now is the tile whose clockwise neighbour is Taxation, which is a lookup on the arrangement.
+    taxation = taxation_board_position(scenario.config)
+    before_taxation = next(
+        position
+        for position in range(1, 9)
+        if advance_merchant_position(position, scenario.config) == taxation
+    )
+    state_with_taxation_after_advance = scenario.state.with_merchant_board_position(
+        before_taxation
+    )
     result = apply_action(state_with_taxation_after_advance, action, scenario.config)
 
     assert _events_of_type(result.events, EventType.MERCHANT_ADVANCE)
@@ -169,19 +181,24 @@ def test_trade_route_income_uses_merchant_position_after_two_prior_guild_moves_a
     merchant_event = _events_of_type(result.events, EventType.MERCHANT_ADVANCE)[0]
     income_events = _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)
 
+    # The Merchant stands on north_east and steps clockwise to east. The duty it leaves is still
+    # clerical, but the one it arrives at is build_roads rather than "alms": "alms" was never a
+    # duty category, only an entry in the retired path's list of names. The resource follows the
+    # tile it lands on, so income is paid in east's tithe counter, stone, instead of wheat.
     assert dict(merchant_event.details)["from_duty"] == "clerical"
-    assert dict(merchant_event.details)["to_duty"] == "alms"
-    assert dict(merchant_event.details)["current_resource"] == "wheat"
+    assert dict(merchant_event.details)["to_duty"] == "build_roads"
+    assert dict(merchant_event.details)["to_position"] == "east"
+    assert dict(merchant_event.details)["current_resource"] == "stone"
     assert len(income_events) == 2
     assert dict(income_events[0].details)["player"] == "player_one"
-    assert dict(income_events[0].details)["resource"] == "wheat"
+    assert dict(income_events[0].details)["resource"] == "stone"
     assert dict(income_events[0].details)["amount"] == 2
     assert dict(income_events[1].details)["player"] == "player_two"
-    assert dict(income_events[1].details)["resource"] == "wheat"
+    assert dict(income_events[1].details)["resource"] == "stone"
     assert dict(income_events[1].details)["amount"] == 1
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.stone == 2
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 0
-    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
+    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.stone == 1
 
     merchant_index = _event_index(result.events, EventType.MERCHANT_ADVANCE)
     income_index = _event_index(result.events, EventType.TRADE_ROUTE_INCOME)

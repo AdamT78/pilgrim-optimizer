@@ -73,12 +73,12 @@ def test_cli_round_end_trade_route_income_after_two_guild_moves_regression(capsy
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "MERCHANT_ADVANCE: clerical -> alms; current resource=wheat" in output
-    assert "TRADE_ROUTE_INCOME: player_one gained wheat +2 from 2 trade routes" in output
-    assert "TRADE_ROUTE_INCOME: player_two gained wheat +1 from 1 trade route" in output
+    assert "MERCHANT_ADVANCE: clerical -> build_roads (east); current resource=stone" in output
+    assert "TRADE_ROUTE_INCOME: player_one gained stone +2 from 2 trade routes" in output
+    assert "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route" in output
     assert output.index("MERCHANT_ADVANCE:") < output.index(
-        "TRADE_ROUTE_INCOME: player_one gained wheat +2 from 2 trade routes"
+        "TRADE_ROUTE_INCOME: player_one gained stone +2 from 2 trade routes"
     )
     assert output.index(
-        "TRADE_ROUTE_INCOME: player_two gained wheat +1 from 1 trade route"
+        "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route"
     ) < output.index("START_PLAYER_SELECTION:")

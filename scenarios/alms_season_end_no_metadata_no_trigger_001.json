@@ -10,7 +10,7 @@
     "active_player": "player_two",
     "start_player_id": "player_one",
     "phase": "sow",
-    "merchant_position": 0,
+    "merchant_board_position": 8,
     "ship_position": 8,
     "completed_rounds": 8,
     "game_over": false,

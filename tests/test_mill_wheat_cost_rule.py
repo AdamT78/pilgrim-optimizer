@@ -164,7 +164,7 @@ def test_ordination_hired_mill_blocked_by_merchant_none_or_insufficient_hire_res
 
 def test_ordination_own_active_mill_works_when_merchant_resource_none() -> None:
     scenario = load_scenario("scenarios/ordination_mill_active_two_steps_free_001.json")
-    assert current_merchant_resource(scenario.state, scenario.config.merchant) is None
+    assert current_merchant_resource(scenario.state, scenario.config) is None
     ordination_actions = [
         action
         for action in legal_actions(scenario.state, scenario.config)

@@ -171,8 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         selected_index = args.action_index
         if selected_index < 1 or selected_index > action_count:
             message = (
-                f"Invalid action index {selected_index}. "
-                f"Scenario has {action_count} legal actions."
+                f"Invalid action index {selected_index}. Scenario has {action_count} legal actions."
             )
             print(
                 message,
@@ -260,8 +259,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for index, (player_id, action) in enumerate(annotated, start=1):
                 print(
-                    f"{index}. {player_id.name.lower()}: "
-                    f"{action_summary(action, scenario.config)}"
+                    f"{index}. {player_id.name.lower()}: {action_summary(action, scenario.config)}"
                 )
             print()
             print(_solve_best_line_final_heading(search_objective))
@@ -342,11 +340,7 @@ def _format_state_summary(
 ) -> tuple[str, ...]:
     next_active_player = state.active_player
     acted_name = acted_player.name.lower()
-    next_name = (
-        "none (game over)"
-        if state.game_over
-        else next_active_player.name.lower()
-    )
+    next_name = "none (game over)" if state.game_over else next_active_player.name.lower()
     north_group_text = format_dummy_acolytes(
         state.dummy_acolytes.north_group,
         positions=config.board.positions,
@@ -378,16 +372,10 @@ def _format_state_summary(
             "  At pilgrimage site: "
             f"{str(config.ship.is_pilgrimage_site(state.ship_position)).lower()}"
         ),
-        (
-            "  At NW pilgrimage site: "
-            f"{str(config.ship.is_nw_site(state.ship_position)).lower()}"
-        ),
+        (f"  At NW pilgrimage site: {str(config.ship.is_nw_site(state.ship_position)).lower()}"),
         "Merchant:",
-        f"  Position: {current_merchant_duty(state, config.merchant)}",
-        (
-            "  Resource: "
-            f"{current_merchant_resource(state, config.merchant) or 'none'}"
-        ),
+        f"  Position: {current_merchant_duty(state, config)}",
+        (f"  Resource: {current_merchant_resource(state, config) or 'none'}"),
         "Duty tiles:",
         *_format_duty_tiles_layout(config),
         "Building market:",
@@ -471,12 +459,7 @@ def _format_player_state(
         for position_id, count in enumerate(player_vector)
     )
     return (
-        (
-            "Resources: "
-            f"stone={breakdown.stone}, "
-            f"silver={breakdown.silver}, "
-            f"wheat={breakdown.wheat}"
-        ),
+        (f"Resources: stone={breakdown.stone}, silver={breakdown.silver}, wheat={breakdown.wheat}"),
         f"Piety position: {breakdown.piety_position}",
         f"Piety track VP: {breakdown.piety_track_vp}",
         f"Alms position: {breakdown.alms_position}",
@@ -669,9 +652,13 @@ def _format_building_availability_summary(
     config: GameConfig,
 ) -> tuple[str, ...]:
     live_set = set(live_buildings(state))
-    availability_map = {building_id: live_round for building_id, live_round in state.building_availability}
+    availability_map = {
+        building_id: live_round for building_id, live_round in state.building_availability
+    }
     market_set = set(state.building_market)
-    market_live_ids = tuple(building_id for building_id in state.building_market if building_id in live_set)
+    market_live_ids = tuple(
+        building_id for building_id in state.building_market if building_id in live_set
+    )
     market_future_entries = tuple(
         (building_id, live_round)
         for building_id, live_round in future_buildings(state)
@@ -713,8 +700,7 @@ def _format_building_availability_summary(
 def _format_duty_tiles_layout(config: GameConfig) -> tuple[str, ...]:
     duty_tiles = config.duty_tiles_mapping()
     return tuple(
-        f"  {position_name}: {duty_tiles[position_name]}"
-        for position_name in DUTY_POSITIONS
+        f"  {position_name}: {duty_tiles[position_name]}" for position_name in DUTY_POSITIONS
     )
 
 
@@ -778,9 +764,7 @@ def _rewrite_generated_config_paths_for_output(
             if Path(raw_path).is_absolute()
             else (repo_root / raw_path).resolve()
         )
-        generated[field_name] = Path(
-            os.path.relpath(absolute_path, output_dir)
-        ).as_posix()
+        generated[field_name] = Path(os.path.relpath(absolute_path, output_dir)).as_posix()
 
 
 def _validate_generated_scenario_payload(
@@ -813,9 +797,7 @@ def _format_generated_setup_summary(
     if not isinstance(duty_tiles, dict):
         raise ValueError("Generated scenario missing duty_tiles object.")
     taxation_tile = next(
-        position
-        for position, category in duty_tiles.items()
-        if category == "taxation"
+        position for position, category in duty_tiles.items() if category == "taxation"
     )
     duty_layout = ", ".join(f"{position}={category}" for position, category in duty_tiles.items())
     tithe_counters = generated.get("tithe_counters")

@@ -58,6 +58,7 @@ from pilgrim.rules.merchant import (
     advance_merchant_position,
     current_merchant_duty,
     current_merchant_resource,
+    merchant_position_name,
 )
 from pilgrim.rules.ordination import (
     ORDINATION_MISSION,
@@ -4678,20 +4679,21 @@ def _resolve_round_end_phases(
 
     # 5) Merchant advances once at round end.
     if config.merchant.advance_at_round_end:
-        from_duty = current_merchant_duty(next_state, config.merchant)
+        from_duty = current_merchant_duty(next_state, config)
         next_merchant_position = advance_merchant_position(
-            next_state.merchant_position,
-            config.merchant,
-        )
-        next_state = next_state.with_merchant_position(next_merchant_position)
-        to_duty = current_merchant_duty(next_state, config.merchant)
-        current_resource = current_merchant_resource(next_state, config.merchant)
+        next_state.merchant_board_position,
+        config,
+    )
+        next_state = next_state.with_merchant_board_position(next_merchant_position)
+        to_duty = current_merchant_duty(next_state, config)
+        current_resource = current_merchant_resource(next_state, config)
         events.append(
             _merchant_advance_event(
                 actor=actor,
                 action_id=action_id,
                 from_duty=from_duty,
                 to_duty=to_duty,
+                to_position=merchant_position_name(next_merchant_position, config),
                 current_resource=current_resource,
             )
         )
@@ -4699,7 +4701,7 @@ def _resolve_round_end_phases(
     # 6) Trade-route income from Merchant's current resource.
     next_state, trade_route_income_events = resolve_trade_route_income(
         next_state,
-        merchant_config=config.merchant,
+        config=config,
         actor=actor,
         action_id=action_id,
     )
@@ -5926,10 +5928,10 @@ def _state_after_guild_merchant_advance_for_legal_generation(
             source=option.source,
         )
     next_merchant_position = advance_merchant_position(
-        state_after_hire.merchant_position,
-        config.merchant,
+        state_after_hire.merchant_board_position,
+        config,
     )
-    return state_after_hire.with_merchant_position(next_merchant_position)
+    return state_after_hire.with_merchant_board_position(next_merchant_position)
 
 
 def _wagon_yard_own_active_is_usable(
@@ -7617,12 +7619,16 @@ def _merchant_advance_event(
     action_id: str,
     from_duty: str,
     to_duty: str,
+    to_position: str,
     current_resource: str | None,
     cause: str | None = None,
 ) -> GameEvent:
+    # The duty names alone do not tell a player where to look or what a hire will now cost, so
+    # the tile it moved to and the counter standing on it travel with the event.
     details: dict[str, str] = {
         "from_duty": from_duty,
         "to_duty": to_duty,
+        "to_position": to_position,
         "current_resource": current_resource if current_resource is not None else "none",
     }
     if cause is not None:
@@ -7642,19 +7648,20 @@ def _apply_guild_merchant_advance_to_state(
     action_id: str,
     config: GameConfig,
 ) -> tuple[GameState, GameEvent]:
-    from_duty = current_merchant_duty(state, config.merchant)
+    from_duty = current_merchant_duty(state, config)
     next_merchant_position = advance_merchant_position(
-        state.merchant_position,
-        config.merchant,
+        state.merchant_board_position,
+        config,
     )
-    next_state = state.with_merchant_position(next_merchant_position)
-    to_duty = current_merchant_duty(next_state, config.merchant)
-    current_resource = current_merchant_resource(next_state, config.merchant)
+    next_state = state.with_merchant_board_position(next_merchant_position)
+    to_duty = current_merchant_duty(next_state, config)
+    current_resource = current_merchant_resource(next_state, config)
     event = _merchant_advance_event(
         actor=actor,
         action_id=action_id,
         from_duty=from_duty,
         to_duty=to_duty,
+        to_position=merchant_position_name(next_merchant_position, config),
         current_resource=current_resource,
         cause="guild",
     )

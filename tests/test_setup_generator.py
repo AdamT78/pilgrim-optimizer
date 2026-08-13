@@ -152,7 +152,14 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
         "setup_sow_completed_by": [],
     }
     assert initial_state["ship_position"] == 0
-    assert initial_state["merchant_position"] == 0
+    # The Merchant opens on the Taxation tile, so where it opens is a lookup on this seed's
+    # shuffle. It used to be the constant 0, which was index 0 of a path that ignored the deal.
+    taxation_position = next(
+        position
+        for position, category in generated["duty_tiles"].items()  # type: ignore[index]
+        if category == "taxation"
+    )
+    assert initial_state["merchant_board_position"] == 1 + DUTY_POSITIONS.index(taxation_position)
     assert initial_state["completed_rounds"] == 0
     assert initial_state["game_over"] is False
     assert initial_state["timing"]["absolute_turn"] == 0
@@ -202,7 +209,7 @@ def test_cornucopia_is_valid_counter_and_unlocks_all_step2_resource_types(tmp_pa
         "active_player": "player_one",
         "start_player_id": "player_one",
         "phase": "sow",
-        "merchant_position": 0,
+        "merchant_board_position": 1,
         "ship_position": 0,
         "completed_rounds": 0,
         "game_over": False,

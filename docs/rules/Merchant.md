@@ -1,82 +1,114 @@
-# Merchant (v0.8 + v1.9 Setup Generator Note)
+# Merchant
 
-## Implemented scope
+## The rule
 
-The sandbox now tracks Merchant position and exposes reusable Merchant resource context.
+The Merchant rides the eight Duty tiles. It starts on Taxation, advances one tile clockwise at
+each round end for the whole game, and never enters the City.
 
-Implemented items:
+What it provides is the **tithe counter on the tile it currently occupies**. Taxation carries no
+counter and so provides nothing. On the cornucopia tile the paying player chooses which resource
+to pay in.
 
-- Merchant path config loaded from `configs/merchant.json`
-- Merchant duty lookup from current position
-- Merchant resource lookup from current duty
-- Merchant advancement once per round during round-end processing
-- `MERCHANT_ADVANCE` transition event
+## Position
 
-Not implemented in this milestone:
+`GameState.merchant_board_position` is a board ring position, `1..8`. Position `0` is the City and
+is never valid; it is asserted on the state, in `pilgrim/rules/validation.py`, and on every
+Merchant helper.
 
-- building systems
-- building hiring payments
-- trade-route systems
-- trade-route income resolution
+The ring is derived from `configs/board.json`'s edges rather than written down a second time:
+every duty position has exactly one outgoing edge that is not the City, and following it walks
 
-## Merchant path
+`north -> north_east -> east -> south_east -> south -> south_west -> west -> north_west -> north`
 
-Merchant position is an index into config `path`.
+A lap is therefore eight rounds.
 
-Current sandbox path:
+### What the change costs
 
-`taxation -> produce -> clerical -> alms -> build -> clerical -> (wrap)`
+This is a balance change, not a refactor.
 
-Path wrapping is deterministic:
+The retired six-step path paid, per lap: 2 wheat, 2 silver, 1 stone and 1 nothing. The eight-tile
+ring pays 2 wheat, 2 silver, 2 stone, 1 cornucopia and 1 nothing. Per round, the odds move:
 
-`next_position = (position + 1) % len(path)`
+| | Wheat | Silver | Stone | Cornucopia | Nothing |
+|---|---|---|---|---|---|
+| Six-step path | 33% | 33% | 17% | — | 17% |
+| Eight-tile ring | 25% | 25% | 25% | 12.5% | 12.5% |
 
-## Resource lookup
+Stone stops being the scarce one, and a wild appears.
 
-Resource context is read from `resource_by_duty`.
+A 26-round game also drops from about 4.33 laps to 3.25, so the Merchant now passes any given tile
+roughly three times instead of four.
 
-Example mapping:
+## Resource
 
-- `produce -> wheat`
-- `clerical -> silver`
-- `alms -> wheat`
-- `build -> stone`
-- `taxation -> None`
+The resource is read off the POSITION, not off the duty:
 
-At `taxation`, Merchant resource is intentionally `None` (shown as `none` in CLI output).
+```python
+config.tithe_counters.resource_for_board_index(state.merchant_board_position)
+```
+
+This matters because the setup generator shuffles the duty tiles and then deals counters onto
+positions. A counter is a fact about a space, so a lookup keyed by duty would follow a tile around
+the ring and pay out the wrong resource. The generator deals seven counters — two stone, two
+wheat, two silver, one cornucopia — onto the seven non-Taxation positions.
 
 ## Advancement timing
 
-Merchant advancement is integrated into **round-end** transition flow:
+Merchant advancement is integrated into the **round-end** transition flow:
 
 1. Resolve the current full turn and emit `TURN_ADVANCE`
-2. If round does not end: no Merchant movement
-3. If round ends: run Excess/Ship/season-end steps
-4. Advance Merchant once (`MERCHANT_ADVANCE`) if game has not ended
-5. Run trade-route placeholder and start-player selection
+2. If the round does not end: no Merchant movement
+3. If the round ends: run Excess/Ship/season-end steps
+4. Advance the Merchant once (`MERCHANT_ADVANCE`) if the game has not ended
+5. Run trade-route income and start-player selection
 6. Finish round/season advancement and invariants
 
-Merchant starts at `taxation` (`merchant_position = 0`) in default setups/scenarios, including
-seeded setup files produced by `generate-setup`.
+Guild and Wagon Yard can also move the Merchant during a turn; they use the same ring.
 
-## Future hooks
+`MERCHANT_ADVANCE` details carry `from_duty`, `to_duty`, `to_position` and `current_resource`, so
+the log names the tile a player would look at and what a hire will now cost.
 
-The rules layer exposes placeholders:
+Because the Merchant opens on Taxation and only advances at round end, **hiring is impossible for
+the whole of round 1 in every game**. That was true before this rule too, but it used to be a
+consequence of `path[0]` rather than of the rule.
 
-- `building_hire_payment_resource(...)`
-- `trade_route_income_resource(...)`
+## Cornucopia
 
-Both currently return `current_merchant_resource(...)` and are intended for future systems.
+Building hire is the live consumer of the Merchant resource. When the Merchant sits on the
+cornucopia, the hiring player is meant to choose which of wheat, stone or silver to pay in, as one
+action variant per resource they can afford.
 
-## Taxation interaction
+That choice does not exist yet. Until it does, a cornucopia Merchant **blocks hiring** the way
+Taxation does, with source reason `cornucopia_choice_not_implemented`. Refusing spends nothing;
+guessing a resource would quietly spend the wrong stock.
 
-Taxation is now an implemented duty action, but Merchant resource context remains unchanged:
+Trade-route income reads the same resource. It emits `TRADE_ROUTE_INCOME_SKIPPED` on a cornucopia
+rather than growing a per-player round-end prompt, because every `trade_routes_count` is 0 until
+map tile placement exists and so there is nothing to choose about. The choice will be needed when
+trade routes arrive.
 
-- Merchant can stand on the `taxation` duty tile.
-- At `taxation`, current Merchant resource is still `None` (`none` in CLI output).
-- Future systems should continue to treat this as:
-  - no trade-route income resource when Merchant is on Taxation
-  - no building-hire payment resource when Merchant is on Taxation
+### A coverage note worth keeping
 
-Trade routes and building hire are still out of scope for the current milestone; the helper
-hooks preserve the `None` context for forward compatibility.
+The fallback tithe counters that hand-written scenarios inherit deal 2 wheat, 3 silver and 2 stone
+and **no cornucopia**, while the generator deals 2/2/2/1 with one. No fixture in the repository can
+therefore put the Merchant on a cornucopia, which is why a reachable crash in building hire sat
+under a green suite. `tests/test_merchant_cornucopia.py` reaches that state deliberately.
+
+## What this replaced
+
+`configs/merchant.json` used to define a fixed six-step path,
+`["taxation", "produce", "clerical", "alms", "build", "clerical"]`, with its own `resource_by_duty`
+map. It predated tithe counters and never learned about them: it ignored the per-game duty
+arrangement and the per-game counters, so every seed produced the same Merchant sequence on a board
+whose tiles had been shuffled. Two of its six names, `alms` and `build`, were not duty categories
+at all, and `clerical` appeared twice. Both fields are removed, and a config still carrying them is
+refused rather than ignored.
+
+The index space changed meaning, which is why the state field was renamed from `merchant_position`
+to `merchant_board_position`. The old field indexed a 6-element list where `0` meant Taxation; the
+new one indexes the board ring where `0` is the City. The two ranges overlap, so an old value of
+`1` or `2` would have loaded in silence under the new meaning. A range check cannot catch that;
+only the name can, so a scenario carrying the old field is refused.
+
+207 scenarios plus the base setup file were migrated by preserving the resource each one offered
+rather than the duty.

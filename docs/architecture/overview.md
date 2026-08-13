@@ -85,8 +85,11 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
 
 ## Merchant Context (v0.8)
 
-- `GameState` now includes `merchant_position` as deterministic turn-to-turn context.
-- Merchant path and duty-to-resource lookup are loaded from `configs/merchant.json`.
+- `GameState` includes `merchant_board_position`, a board ring position of `1..8`; `0` is the City
+  and is never valid.
+- The Merchant rides the eight duty tiles clockwise along the ring derived from `configs/board.json`
+  and provides the tithe counter on the tile it occupies. `configs/merchant.json` now carries only
+  the advancement timing.
 - Round-end transition flow advances Merchant position once per completed round.
 - Merchant context is reusable infrastructure for future systems:
   - building-hire payment resource

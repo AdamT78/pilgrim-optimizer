@@ -7,7 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.merchant import advance_merchant_position
+from pilgrim.rules.merchant import advance_merchant_position, taxation_board_position
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 
@@ -43,7 +43,11 @@ def test_own_active_guild_generates_merchant_move_variants() -> None:
 
 def test_own_active_guild_works_when_merchant_resource_is_none() -> None:
     scenario = load_scenario("scenarios/guild_active_move_merchant_001.json")
-    taxation_state = replace(scenario.state, merchant_position=0)
+    taxation_state = replace(
+        scenario.state,
+        # Taxation is a looked-up tile now, not index 0 of the retired six-step path.
+        merchant_board_position=taxation_board_position(scenario.config),
+    )
     actions = legal_actions(taxation_state, scenario.config)
     guild_actions = [
         action
@@ -122,8 +126,8 @@ def test_apply_own_active_guild_moves_merchant_exactly_one_clockwise_before_sowi
         ),
     )
     expected_merchant_position = advance_merchant_position(
-        scenario.state.merchant_position,
-        scenario.config.merchant,
+        scenario.state.merchant_board_position,
+        scenario.config,
     )
     result = apply_action(scenario.state, action, scenario.config)
 
@@ -142,7 +146,7 @@ def test_apply_own_active_guild_moves_merchant_exactly_one_clockwise_before_sowi
     assert merchant_details["cause"] == "guild"
     assert result.events.index(bonus_event) < result.events.index(merchant_event)
     assert result.events.index(merchant_event) < result.events.index(sowing_event)
-    assert result.state.merchant_position == expected_merchant_position
+    assert result.state.merchant_board_position == expected_merchant_position
     invariant_event = _events_of_type(result.events, EventType.INVARIANT_CHECK)[-1]
     assert dict(invariant_event.details)["acolytes_conserved"] is True
 
@@ -175,7 +179,7 @@ def test_hired_market_guild_pays_bank_before_merchant_move() -> None:
     assert result.events.index(hired_event) < result.events.index(bonus_event)
     assert result.events.index(bonus_event) < result.events.index(merchant_event)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
-    assert result.state.merchant_position == 2
+    assert result.state.merchant_board_position == 2
 
 
 def test_hired_opponent_guild_pays_owner_before_merchant_move() -> None:
@@ -197,7 +201,7 @@ def test_hired_opponent_guild_pays_owner_before_merchant_move() -> None:
     assert hired_details["resource"] == "silver"
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 0
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
-    assert result.state.merchant_position == 3
+    assert result.state.merchant_board_position == 3
 
 
 def test_apply_rejects_hired_guild_when_hire_payment_is_unaffordable() -> None:
@@ -291,4 +295,4 @@ def test_round_ending_turn_with_guild_moves_merchant_twice() -> None:
 
     assert result.events.index(guild_event) < result.events.index(sowing_event)
     assert result.events.index(round_advance_event) < result.events.index(round_end_event)
-    assert result.state.merchant_position == 2
+    assert result.state.merchant_board_position == 2

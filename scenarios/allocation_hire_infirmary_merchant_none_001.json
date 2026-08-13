@@ -17,7 +17,7 @@
     "north_west": "allocation"
   },
   "initial_state": {
-    "merchant_position": 0,
+    "merchant_board_position": 7,
     "timing": {
       "absolute_turn": 0,
       "round_number": 3,

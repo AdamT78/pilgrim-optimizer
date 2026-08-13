@@ -134,7 +134,7 @@ def test_cli_apply_round_end_pilgrimage_scenario_shows_alms_season_end_scoring(c
     assert "ALMS_SEASON_END:" in output
     assert "ALMS_SEASON_REWARD:" in output
     assert "ALMS_RESET:" in output
-    assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat" in output
+    assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat" in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
     assert "SEASON_ADVANCE:" not in output
     assert "INVARIANT_CHECK:" in output

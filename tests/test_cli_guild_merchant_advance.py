@@ -44,13 +44,13 @@ def test_cli_apply_own_active_guild_shows_bonus_then_merchant_advance_before_sow
     assert exit_code == 0
     assert "BUILDING_HIRED" not in output
     assert "BUILDING_BONUS: guild moved Merchant clockwise +1" in output
-    assert "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild" in output
     assert "SOWING: picked up 1 from north; route north -> north_east" in output
     assert output.index("BUILDING_BONUS: guild moved Merchant clockwise +1") < output.index(
-        "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild"
+        "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild"
     )
     assert output.index(
-        "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild"
+        "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild"
     ) < output.index("SOWING: picked up 1 from north; route north -> north_east")
 
 
@@ -77,12 +77,12 @@ def test_cli_apply_market_hired_guild_shows_hire_then_bonus_then_merchant_advanc
         in output
     )
     assert "BUILDING_BONUS: guild moved Merchant clockwise +1" in output
-    assert "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild" in output
     assert output.index(
         "BUILDING_HIRED: player_one hired Guild from market; paid wheat 1 to bank"
     ) < output.index("BUILDING_BONUS: guild moved Merchant clockwise +1")
     assert output.index("BUILDING_BONUS: guild moved Merchant clockwise +1") < output.index(
-        "MERCHANT_ADVANCE: produce -> clerical; current resource=silver; cause=guild"
+        "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild"
     )
 
 
@@ -109,7 +109,13 @@ def test_cli_apply_opponent_hired_guild_shows_owner_payment(capsys) -> None:
         in output
     )
     assert "BUILDING_BONUS: guild moved Merchant clockwise +1" in output
-    assert "MERCHANT_ADVANCE: clerical -> alms; current resource=wheat; cause=guild" in output
+    # "alms" was a name in the retired path, not a duty category. The tile clockwise of clerical
+    # is build_roads, and the resource is the tithe counter standing on it rather than a property
+    # of the duty, so the line now names the position a player would look at.
+    assert (
+        "MERCHANT_ADVANCE: clerical -> build_roads (east); current resource=stone; cause=guild"
+        in output
+    )
 
 
 def test_cli_apply_round_ending_guild_turn_shows_two_merchant_advances(capsys) -> None:
@@ -131,5 +137,5 @@ def test_cli_apply_round_ending_guild_turn_shows_two_merchant_advances(capsys) -
 
     assert exit_code == 0
     assert output.count("MERCHANT_ADVANCE:") == 2
-    assert "MERCHANT_ADVANCE: taxation -> produce; current resource=wheat; cause=guild" in output
-    assert "MERCHANT_ADVANCE: produce -> clerical; current resource=silver" in output
+    assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" in output

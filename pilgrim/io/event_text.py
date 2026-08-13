@@ -625,7 +625,11 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         from_duty = str(details.get("from_duty", "unknown"))
         to_duty = str(details.get("to_duty", "unknown"))
         current_resource = str(details.get("current_resource", "none"))
-        text = f"{event_name}: {from_duty} -> {to_duty}; current resource={current_resource}"
+        to_position = str(details.get("to_position", "unknown"))
+        text = (
+            f"{event_name}: {from_duty} -> {to_duty} ({to_position}); "
+            f"current resource={current_resource}"
+        )
         cause = details.get("cause")
         if cause is not None:
             text += f"; cause={str(cause)}"

@@ -21,7 +21,7 @@
     "south_west": "silver"
   },
   "initial_state": {
-    "merchant_position": 0,
+    "merchant_board_position": 1,
     "building_market": [],
     "players": {
       "player_one": {

@@ -16,7 +16,11 @@ from pilgrim.rules.buildings import (
     record_hired_building_this_turn,
     validate_hire_sequence_for_turn,
 )
-from pilgrim.rules.merchant import current_merchant_duty, current_merchant_resource
+from pilgrim.rules.merchant import (
+    current_merchant_duty,
+    current_merchant_resource,
+    taxation_board_position,
+)
 
 
 def test_own_active_building_source_is_free_and_usable() -> None:
@@ -45,8 +49,8 @@ def test_own_active_building_source_is_free_and_usable() -> None:
 
 def test_own_active_building_still_works_when_merchant_resource_none() -> None:
     scenario = load_scenario("scenarios/building_hire_own_active_001.json")
-    assert current_merchant_duty(scenario.state, scenario.config.merchant) == "taxation"
-    assert current_merchant_resource(scenario.state, scenario.config.merchant) is None
+    assert current_merchant_duty(scenario.state, scenario.config) == "taxation"
+    assert current_merchant_resource(scenario.state, scenario.config) is None
 
     source = building_ability_source(
         scenario.state,
@@ -146,8 +150,8 @@ def test_not_live_market_building_is_unavailable() -> None:
 
 def test_merchant_none_prevents_hiring() -> None:
     scenario = load_scenario("scenarios/building_hire_merchant_none_001.json")
-    assert current_merchant_duty(scenario.state, scenario.config.merchant) == "taxation"
-    assert current_merchant_resource(scenario.state, scenario.config.merchant) is None
+    assert current_merchant_duty(scenario.state, scenario.config) == "taxation"
+    assert current_merchant_resource(scenario.state, scenario.config) is None
 
     source = building_ability_source(
         scenario.state,
@@ -164,10 +168,13 @@ def test_merchant_none_prevents_hiring() -> None:
 
 def test_opponent_owned_hire_is_unavailable_when_merchant_on_taxation() -> None:
     scenario = load_scenario("scenarios/building_hire_opponent_owned_001.json")
-    taxation_state = scenario.state.with_merchant_position(0)
+    # Taxation is wherever this arrangement put it, not index 0 of the retired path.
+    taxation_state = scenario.state.with_merchant_board_position(
+        taxation_board_position(scenario.config)
+    )
 
-    assert current_merchant_duty(taxation_state, scenario.config.merchant) == "taxation"
-    assert current_merchant_resource(taxation_state, scenario.config.merchant) is None
+    assert current_merchant_duty(taxation_state, scenario.config) == "taxation"
+    assert current_merchant_resource(taxation_state, scenario.config) is None
 
     source = building_ability_source(
         taxation_state,

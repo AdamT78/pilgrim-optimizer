@@ -21,7 +21,7 @@
     "south_west": "silver"
   },
   "initial_state": {
-    "merchant_position": 1,
+    "merchant_board_position": 5,
     "timing": {
       "absolute_turn": 0,
       "round_number": 3,

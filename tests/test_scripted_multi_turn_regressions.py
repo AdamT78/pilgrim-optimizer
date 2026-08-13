@@ -139,7 +139,10 @@ def test_scripted_basic_two_player_round_flow_over_six_turns() -> None:
     assert scripted[0].state_before.active_player is PlayerId.PLAYER_ONE
     assert scripted[1].state_before.active_player is PlayerId.PLAYER_TWO
     assert [step.result.state.timing.round_number for step in scripted] == [1, 2, 2, 3, 3, 4]
-    assert [step.result.state.merchant_position for step in scripted] == [0, 1, 1, 2, 2, 3]
+    # The Merchant opens on Taxation, which this arrangement puts at north_west (8), and its
+    # first round-end step carries it round to north (1). The old sequence opened at 0 because
+    # Taxation was the first entry of a six-step list; the walk's shape is unchanged, not its start.
+    assert [step.result.state.merchant_board_position for step in scripted] == [8, 1, 1, 2, 2, 3]
 
     round_end_steps = 0
     for step in scripted:

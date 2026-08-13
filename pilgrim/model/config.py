@@ -74,9 +74,7 @@ class PietyConfig:
         if self.max_position < 0:
             raise ValueError("Piety max_position cannot be negative.")
         if len(self.score_by_position) != self.max_position + 1:
-            raise ValueError(
-                "Piety score_by_position length must equal max_position + 1."
-            )
+            raise ValueError("Piety score_by_position length must equal max_position + 1.")
 
     def clamp(self, position: int) -> int:
         if position < 0:
@@ -182,35 +180,15 @@ class TimingConfig:
 
 @dataclass(frozen=True, slots=True)
 class MerchantConfig:
-    """Sandbox Merchant path and duty->resource lookup."""
+    """When the Merchant moves. Where it moves and what it sells are read off the board.
 
-    path: tuple[str, ...]
-    resource_by_duty: tuple[tuple[str, str | None], ...]
+    `path` and `resource_by_duty` used to live here: a fixed six-step route with its own
+    duty->resource map, both of which predated tithe counters and ignored the per-game duty
+    arrangement. They are gone rather than left behind to be believed, because a reader finding
+    them would reasonably conclude the Merchant still walks them.
+    """
+
     advance_at_round_end: bool
-
-    def __post_init__(self) -> None:
-        if not self.path:
-            raise ValueError("Merchant path cannot be empty.")
-        if not self.resource_by_duty:
-            raise ValueError("Merchant resource_by_duty cannot be empty.")
-
-        duty_names = {name for name, _ in self.resource_by_duty}
-        valid_resources = {"stone", "silver", "wheat"}
-        for _, resource in self.resource_by_duty:
-            if resource is not None and resource not in valid_resources:
-                raise ValueError(f"Invalid Merchant resource mapping: {resource}.")
-        for duty in self.path:
-            if duty not in duty_names:
-                raise ValueError(f"Merchant path duty missing resource mapping: {duty}.")
-
-    def duty_at(self, position: int) -> str:
-        return self.path[position % len(self.path)]
-
-    def resource_for_duty(self, duty: str) -> str | None:
-        for name, resource in self.resource_by_duty:
-            if name == duty:
-                return resource
-        raise ValueError(f"Unknown Merchant duty: {duty}")
 
     def resource_at(self, position: int) -> str | None:
         return self.resource_for_duty(self.duty_at(position))
@@ -356,10 +334,7 @@ def alms_from_dict(raw: Mapping[str, Any]) -> AlmsConfig:
     if not isinstance(threshold_rewards_raw, Mapping):
         raise ValueError("Alms threshold_rewards must be an object.")
     threshold_rewards = tuple(
-        sorted(
-            (int(row), str(reward_key))
-            for row, reward_key in threshold_rewards_raw.items()
-        )
+        sorted((int(row), str(reward_key)) for row, reward_key in threshold_rewards_raw.items())
     )
 
     alms_table_scoring_raw = raw["alms_table_scoring"]
@@ -402,10 +377,7 @@ def game_config_from_dict(
     ship = ship_from_dict(ship_raw)
     buildings = buildings_from_dict(buildings_raw)
     duty_tiles_mapping = (
-        {
-            str(position): str(category)
-            for position, category in duty_tiles_raw.items()
-        }
+        {str(position): str(category) for position, category in duty_tiles_raw.items()}
         if duty_tiles_raw is not None
         else default_duty_tiles()
     )
@@ -443,28 +415,16 @@ def timing_from_dict(raw: Mapping[str, Any]) -> TimingConfig:
 
 
 def merchant_from_dict(raw: Mapping[str, Any]) -> MerchantConfig:
-    """Parse sandbox Merchant path and resource lookup config."""
-    path_raw = raw["path"]
-    if not isinstance(path_raw, list):
-        raise ValueError("Merchant path must be a list.")
-    path = tuple(str(entry) for entry in path_raw)
-
-    resource_lookup_raw = raw["resource_by_duty"]
-    if not isinstance(resource_lookup_raw, Mapping):
-        raise ValueError("Merchant resource_by_duty must be an object.")
-    resource_by_duty = tuple(
-        sorted(
-            (
-                str(duty_name),
-                str(resource_name) if resource_name is not None else None,
+    """Parse Merchant timing config, refusing the retired path fields."""
+    for retired in ("path", "resource_by_duty"):
+        if retired in raw:
+            raise ValueError(
+                f"Merchant config carries `{retired}`, which described the retired six-step "
+                "path. The Merchant now rides the eight duty tiles clockwise and provides the "
+                "tithe counter on the tile it occupies; remove the field."
             )
-            for duty_name, resource_name in resource_lookup_raw.items()
-        )
-    )
 
     return MerchantConfig(
-        path=path,
-        resource_by_duty=resource_by_duty,
         advance_at_round_end=bool(
             raw.get("advance_at_round_end", raw.get("advance_after_full_turn", True))
         ),
@@ -548,7 +508,9 @@ def tithe_counters_from_dict(
                 f"Duty position '{position_name}' missing from board positions."
             ) from exc
 
-    ordered_counters = tuple((position_name, counters[position_name]) for position_name in DUTY_POSITIONS)
+    ordered_counters = tuple(
+        (position_name, counters[position_name]) for position_name in DUTY_POSITIONS
+    )
     return TitheCountersConfig(
         counters_by_position=ordered_counters,
         board_indices_by_position=tuple(board_indices),
