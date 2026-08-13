@@ -30,7 +30,6 @@ ALMS_TABLE_HTML = PROTOTYPES_DIR / "alms_table.html"
 ALMS_TABLE_SVG = PROTOTYPES_DIR / "alms_table.svg"
 ALMS_TABLE_SOURCE = PROTOTYPE_SOURCES_DIR / "alms_table.py.txt"
 SEALS_HTML = PROTOTYPES_DIR / "seal_prototypes.html"
-SEALS_SOURCE = PROTOTYPE_SOURCES_DIR / "seal_prototypes.py.txt"
 
 # The four glyphs a seal can be struck with, and the numbers the page is drawn to.
 SEAL_GLYPHS = ("square", "shield", "S", "A")
@@ -322,10 +321,15 @@ def test_alms_table_prototype_source_is_the_generator_code() -> None:
     assert "Season end winners" in content
 
 
-def test_seal_prototype_page_and_source_exist_and_the_root_is_clear_of_them() -> None:
-    """Filed with the other baselines rather than left at the top of the repo where it was drawn."""
+def test_seal_prototype_page_exists_and_the_root_is_clear_of_it() -> None:
+    """Filed with the other baselines rather than left at the top of the repo where it was drawn.
+
+    Its generator is a module rather than a `prototype_sources` reference copy, because for this
+    one page the script is not a throwaway that has to be read for intent: it is still what writes
+    the page. `tests/test_ui_debug_seal_renderer.py` is where that end of it is covered.
+    """
     assert SEALS_HTML.is_file()
-    assert SEALS_SOURCE.is_file()
+    assert not (PROTOTYPE_SOURCES_DIR / "seal_prototypes.py.txt").exists()
     assert not (REPO_ROOT / "seal_prototypes.html").exists()
     assert not (REPO_ROOT / "build_seal_prototypes.txt").exists()
 
@@ -378,17 +382,6 @@ def test_seal_prototype_is_the_artwork_and_asks_nothing_of_the_page_it_is_on() -
         assert asked_for not in content, asked_for
     # The only address on the page is the SVG namespace, which names a dialect and fetches nothing.
     assert content.count("http") == content.count('xmlns="http://www.w3.org/2000/svg"')
-    # And it knows nothing about a renderer, since there is not one yet.
-    assert "data-component" not in content
-
-
-def test_seal_prototype_source_is_the_script_that_drew_it() -> None:
-    """Kept as `.txt` like the others: read for intent when the renderer is written, never run."""
-    content = SEALS_SOURCE.read_text(encoding="utf-8")
-
-    assert "SEAL PROTOTYPES" in content
-    assert "SEAL_R" in content
-    assert "GLYPH_BOX" in content
 
 
 def test_index_page_links_to_every_prototype() -> None:
