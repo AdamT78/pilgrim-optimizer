@@ -32,8 +32,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(REPO))
 
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
-from pilgrim.model.actions import StartPlayerSelectionAction, action_id  # noqa: E402
-from pilgrim.model.enums import TurnPhase  # noqa: E402
+from pilgrim.model.actions import action_id  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.play_server import turn_candidates  # noqa: E402
 
@@ -67,7 +66,6 @@ def measure(scenario_path: str, turns: int = 1) -> dict:
     groups = resolving = 0
     by_fields: Counter[tuple[str, ...]] = Counter()
     played = 0
-    carried = 0
     stopped = "the walk ran to the length asked for"
     for _turn in range(turns):
         candidates = turn_candidates(state, config)
@@ -83,23 +81,15 @@ def measure(scenario_path: str, turns: int = 1) -> dict:
                 resolving += 1
         settled = next((c for c in candidates if c["action_id"] is not None), None)
         if settled is None:
-            # A round boundary asks who begins the next round, and the page has no way to ask it.
-            # Counted as the ambiguity it is, then answered here so the walk can go on and measure
-            # what lies past it -- a backlog that stopped at the first round boundary would report
-            # a fifth of the game and call it the total.
+            # A round boundary used to land here: it asks who begins the next round, the page had
+            # no way to ask that, and this walked past it by answering on the table's behalf so a
+            # backlog would not stop at the first round boundary and report a fifth of the game as
+            # the total. The page asks it now, so the boundary is a settled candidate like any
+            # other and there is nothing to carry.
             #
-            # THE ANSWER IS THIS TOOL'S, NOT A RULE. The holder may name anyone; keeping it is
-            # picked so the walk follows one seating instead of wandering between them.
-            if state.phase is TurnPhase.START_PLAYER_SELECTION:
-                carried += 1
-                state = apply_action(
-                    state,
-                    StartPlayerSelectionAction(chosen_start_player=state.active_player),
-                    config,
-                ).state
-                continue
-            # Not the game ending. Every move in the position needs something the page cannot ask,
-            # so it cannot play on -- which is a far sharper statement of the backlog than a count.
+            # Not the game ending either. Every move in the position needs something the page
+            # cannot ask, so it cannot play on -- a far sharper statement of the backlog than a
+            # count.
             blocking = ", ".join(sorted({f for c in candidates for f in c["unresolved"]}))
             stopped = f"nothing in the position was playable; every move needed {blocking}"
             break
@@ -115,7 +105,6 @@ def measure(scenario_path: str, turns: int = 1) -> dict:
         "resolving": resolving,
         "ambiguous": groups - resolving,
         "fields": by_fields,
-        "carried": carried,
         "stopped": stopped,
     }
 
@@ -132,8 +121,6 @@ def report(result: dict) -> None:
             print(f"    {', '.join(fields):58} {count} group(s)")
     else:
         print("  fields remaining:  none")
-    if result["carried"]:
-        print(f"  carried past:      {result['carried']} start-player decision(s)")
     print(f"  stopped because:   {result['stopped']}")
 
 

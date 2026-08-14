@@ -19,6 +19,7 @@ from tools.ui_debug.play_view_adapter import (
     acolytes_by_position,
     dummy_acolytes_by_position,
     duty_by_position_name,
+    first_player_seat,
     player_record,
     resources_for,
     seated_player_ids,
@@ -243,6 +244,84 @@ def test_the_short_table_gets_the_board_that_is_actually_shorter() -> None:
     """The two-player piety track is a different board, not a narrower one: one row of discs."""
     assert piety_variant_for(["player_two", "player_one"]) == "2_player"
     assert piety_variant_for(["player_two", "player_three", "player_one"]) == "3_4_player"
+
+
+# ---------------------------------------------------------------------------------------------
+# The seal sits with whoever holds the marker, which is not whoever begins the round
+# ---------------------------------------------------------------------------------------------
+
+
+def _seal_in(page: str) -> dict[str, str] | None:
+    found = re.search(
+        r'<g data-first-player-seal="true" data-player="(\w+)" data-player-color="(\w+)"',
+        page,
+    )
+    return None if found is None else {"player": found.group(1), "color": found.group(2)}
+
+
+def test_the_seal_goes_to_the_marker_holder_through_the_seating_order() -> None:
+    """A player, turned into a chair the way every per-player value on this page is turned into one.
+
+    Yellow is `player_three`, who is the third id and the SECOND seat, so an adapter reaching for
+    the players array by index would put this seal one chair along -- and would look right doing it
+    at four seats, which is the whole reason this is checked by colour at three.
+    """
+    payload = _payload(
+        [_player([5] + [0] * 8) for _ in range(3)],
+        first_player_marker="player_three",
+        start_player_id="player_one",
+    )
+    assert first_player_seat(payload) == 2
+
+    seal = _seal_in(render_play_view_from_payload(payload))
+    assert seal == {"player": "player_three", "color": "yellow"}
+
+
+def test_the_seal_and_the_wash_come_apart_when_a_holder_gives_the_round_away() -> None:
+    """THE PAYOFF, as a picture. Two boards lit for two different reasons, and that is the rule.
+
+    The wash says who is acting and the seal says who holds the marker. Through every position
+    anyone had looked at they were the same board, which is exactly why the seal used to be drawn
+    off the start player and nobody noticed. A holder who names somebody else separates them, and
+    this is the frame where a screenshot shows what the marker is worth.
+    """
+    payload = _payload(
+        [_player([5] + [0] * 8) for _ in range(4)],
+        first_player_marker="player_two",
+        start_player_id="player_four",
+        active_player="player_four",
+    )
+    page = render_play_view_from_payload(payload)
+
+    assert _seal_in(page) == {"player": "player_two", "color": "red"}
+    washed = re.findall(
+        r'data-player="(\w+)" data-player-color="\w+"[^>]*data-active-seat="true"', page
+    )
+    assert washed == ["player_four"]
+
+
+def test_a_position_that_does_not_know_its_holder_is_drawn_without_a_seal() -> None:
+    """No marker, no wax. A scenario from before the engine kept one cannot be asked who has it.
+
+    Drawn on the likeliest seat it would be a guess wearing the one mark on this page that is
+    supposed to be a fact, and every one of the committed fixtures is in this case.
+    """
+    payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
+    assert "first_player_marker" not in payload["state"]
+    assert first_player_seat(payload) is None
+
+    page = render_play_view_from_payload(payload)
+    assert _seal_in(page) is None
+    assert "data-first-player-seat" not in page
+
+
+def test_a_holder_who_is_not_at_the_table_is_treated_as_no_holder() -> None:
+    """Blue holds nothing at a three-player table, and an empty chair is not given a seal."""
+    payload = _payload(
+        [_player([5] + [0] * 8) for _ in range(3)],
+        first_player_marker="player_four",
+    )
+    assert first_player_seat(payload) is None
 
 
 # ---------------------------------------------------------------------------------------------

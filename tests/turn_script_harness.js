@@ -2,10 +2,11 @@
 // the shipped JavaScript rather than a second copy of it written in Python.
 //
 // Reads a JSON job on argv: { script, resolutions, combinations, seats, panels, clicks, reset,
-// confirm }. A click is { kind: 'position'|'resolution'|'combination'|'resource', value } and a
-// resource click also carries { seat }. Prints a JSON transcript: what was offered at each point,
-// which seat was asked for a stock, what was marked as chosen, which panel was revealed, and what
-// was finally posted.
+// confirm }. A click is { kind: 'position'|'resolution'|'combination'|'resource'|'seat', value };
+// a resource click also carries { seat }, and a seat click names the player whose board is pressed.
+// Prints a JSON transcript: what was offered at each point, which seat was asked for a stock, which
+// boards were offered as an answer in themselves, what was marked as chosen, which panel was
+// revealed, and what was finally posted.
 'use strict';
 
 const fs = require('fs');
@@ -54,19 +55,24 @@ const pairs = (job.combinations || []).map((value) =>
   makeElement({ 'data-combination-key': value })
 );
 
-// One board per seat, each carrying the three stock keys the board renderer draws hidden. The
-// script is expected to reveal only the active seat's, so every seat is given the same keys and
-// the transcript reports which of them ended up offered.
+// One board per seat, each carrying the keys the board renderer draws hidden: three for the stocks
+// on it, and one for the board itself. Every seat is given the same keys, so the script has four
+// boards to choose wrongly between rather than one it cannot help but get right, and the transcript
+// reports which of them ended up offered. The two sets are asked of different numbers of seats --
+// a stock of the one that is acting, a board of every one that may be named -- so they are kept
+// apart here as well.
 const seats = (job.seats || []).map((seat) =>
   makeElement(
     {
       'data-component': 'player-board-v2',
       'data-player-seat': String(seat.seat),
+      'data-player': seat.player,
+      'data-seat-taken': seat.taken ? 'true' : 'false',
       'data-active-seat': seat.active ? 'true' : 'false',
     },
-    ['wheat', 'stone', 'silver'].map((stock) =>
-      makeElement({ 'data-resource-choice-key': stock })
-    )
+    ['wheat', 'stone', 'silver']
+      .map((stock) => makeElement({ 'data-resource-choice-key': stock }))
+      .concat([makeElement({ 'data-seat-choice-key': seat.player })])
   )
 );
 
@@ -93,6 +99,7 @@ const transcript = {
   shownPanel: [],
   askedSeats: [],
   offeredBySeat: [],
+  offeredBoards: [],
   posted: null,
   rewritten: false,
 };
@@ -146,9 +153,13 @@ function snapshot() {
   // asked is recorded separately so reaching across the table is visible rather than averaged out.
   const asked = [];
   const bySeat = {};
+  const boards = [];
   seats.forEach((seat) => {
     const name = seat.getAttribute('data-player-seat');
     if (seat.getAttribute('data-resource-choice') === 'true') asked.push(name);
+    if (seat.getAttribute('data-seat-choice') === 'true') {
+      boards.push(seat.getAttribute('data-player'));
+    }
     const stocks = seat
       .querySelectorAll('[data-resource-choice-key]')
       .filter((key) => key.getAttribute('data-turn-offered') === 'true')
@@ -157,12 +168,19 @@ function snapshot() {
     stocks.forEach((stock) => {
       if (offered.indexOf(stock) === -1) offered.push(stock);
     });
+    seat
+      .querySelectorAll('[data-seat-choice-key]')
+      .filter((key) => key.getAttribute('data-turn-offered') === 'true')
+      .forEach((key) => {
+        const player = key.getAttribute('data-seat-choice-key');
+        if (offered.indexOf(player) === -1) offered.push(player);
+      });
   });
   let shown = -1;
   panels.forEach((panel, index) => {
     if (panel.getAttribute('data-turn-shown') === 'true') shown = index;
   });
-  return { offered, chosen, shown, asked, bySeat };
+  return { offered, chosen, shown, asked, bySeat, boards };
 }
 
 function record() {
@@ -172,6 +190,7 @@ function record() {
   transcript.shownPanel.push(snap.shown);
   transcript.askedSeats.push(snap.asked);
   transcript.offeredBySeat.push(snap.bySeat);
+  transcript.offeredBoards.push(snap.boards);
 }
 
 // eslint-disable-next-line no-eval
@@ -189,11 +208,22 @@ function pressResource(click) {
     .click();
 }
 
+function pressBoard(click) {
+  const seat = seats.find(
+    (candidate) => candidate.getAttribute('data-player') === click.value
+  );
+  seat
+    .querySelectorAll('[data-seat-choice-key]')
+    .find((key) => key.getAttribute('data-seat-choice-key') === click.value)
+    .click();
+}
+
 job.clicks.forEach((click) => {
   if (click.kind === 'position') spaces[click.value].click();
   else if (click.kind === 'combination') {
     pairs.find((pair) => pair.getAttribute('data-combination-key') === click.value).click();
   } else if (click.kind === 'resource') pressResource(click);
+  else if (click.kind === 'seat') pressBoard(click);
   else keys.find((key) => key.getAttribute('data-resolution-key') === click.value).click();
   record();
 });

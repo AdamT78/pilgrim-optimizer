@@ -211,6 +211,34 @@ Then, as a separate action by that player:
 
 The holder choosing themselves is one of the ordinary options and is not special-cased.
 
+### Where the marker lives
+
+`GameState.first_player_marker` is the holder, and it is durable: set at a round end, it sits with
+that player through the whole round that follows and is not touched again until the next round end.
+In particular `apply_start_player_selection` does **not** move it. A holder who names somebody else
+keeps the marker while that other player begins the round, and that divergence is the rule -- it is
+the only position in which the two values visibly differ, and the play view draws it as the seal
+and the active-seat wash landing on different boards.
+
+The field is **optional**, and `None` means *unknown* rather than *nobody*. The holder was won at a
+round end from piety that has since moved, so it cannot be recomputed on load: the answer would be
+who would win it now, standing in for who won it then. Scenario files written before the field
+existed load with `None` and no seal is drawn. Generated games always carry it.
+
+### How the decision is put to a player
+
+The play view asks it by lighting the boards that may be named and taking whichever is pressed. The
+step it emits says only that a **seat** is the answer, which is where the answer is given, and the
+page routes on that; the field is never named to the browser. The set of lit boards is the distinct
+players among the surviving candidates -- not the row of chairs, which happens to name the same
+players today and would stop doing so the moment the rule narrowed.
+
+Two boards are lit for two different reasons in this phase, and they must not be made one. The wash
+marks the seat that is **acting**, which is the holder. The outline marks every seat that may be
+**chosen**, which is everyone including the holder. Since a generated game opens in
+`start_player_selection`, this is the first thing a player ever presses in a new game, and answering
+it moves to `setup_sow` rather than to `sow`.
+
 ### What the two events read
 
 ```

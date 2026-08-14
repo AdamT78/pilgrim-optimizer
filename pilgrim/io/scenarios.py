@@ -147,6 +147,7 @@ def _game_state_from_dict(
     start_player = _start_player_from_dict(raw)
     if start_player is None:
         start_player = PlayerId.from_string(str(raw["active_player"]))
+    first_player_marker = _first_player_marker_from_dict(raw)
     game_over = bool(raw.get("game_over", False))
     setup_sow_required, setup_sow_complete, setup_sow_completed_by = _setup_sow_state_from_dict(
         raw,
@@ -172,6 +173,7 @@ def _game_state_from_dict(
     return GameState(
         active_player=PlayerId.from_string(str(raw["active_player"])),
         start_player=start_player,
+        first_player_marker=first_player_marker,
         phase=phase,
         players=player_states,
         timing=timing,
@@ -416,6 +418,22 @@ def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
     if isinstance(start_player_raw, int):
         return PlayerId(start_player_raw)
     return _player_id_from_any(start_player_raw)
+
+
+def _first_player_marker_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
+    """Who holds the marker, or `None` for a file that does not say.
+
+    Absent is left absent. Every other optional field here has a defensible default -- a missing
+    ship position is where ships start, a missing start player is whoever is acting -- but there is
+    no such reading for this one. The holder was won at a round end on piety values the file has
+    since moved past, so anything derived on load would be who would win it NOW, written into a
+    field that means who won it THEN. Three hundred fixtures that never had a holder do not
+    acquire one by being opened.
+    """
+    marker_raw = raw.get("first_player_marker")
+    if marker_raw is None:
+        return None
+    return _player_id_from_any(marker_raw)
 
 
 def _player_id_from_any(raw_value: Any) -> PlayerId:

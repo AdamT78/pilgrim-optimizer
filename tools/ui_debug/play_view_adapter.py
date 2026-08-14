@@ -70,6 +70,28 @@ def player_ids_in_engine_order(payload: dict) -> list[str]:
     ]
 
 
+def first_player_seat(payload: dict) -> int | None:
+    """Which chair the First Player seal is struck on, or None when the position does not say.
+
+    The seal belongs to whoever HOLDS the marker, which is not whoever begins the round. They part
+    company the moment a holder names somebody else, and that is the one thing about this rule a
+    screenshot can show -- so reading `start_player_id` here would draw the seal on the wrong board
+    exactly when it finally had something to say.
+
+    Through the seating order, like every other per-player value on this page. The seal is a chair,
+    the marker is a player, and pairing them by array index is the mistake this file's point 3
+    exists to name: it looks right at four seats and is wrong at two.
+
+    None means the state does not know its holder, which is what a scenario written before the
+    engine kept one looks like. Nothing is drawn, because a marker put on the likeliest seat is a
+    guess with a seal on it.
+    """
+    holder = payload["state"].get("first_player_marker")
+    if holder is None or holder not in seated_player_ids(payload):
+        return None
+    return SEATED_PLAYERS.index(holder) + 1
+
+
 def player_record(payload: dict, player_id: str) -> dict | None:
     """One seat's engine record, or None when that seat is empty at this player count."""
     order = player_ids_in_engine_order(payload)
