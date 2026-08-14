@@ -78,6 +78,7 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     player_by_id,
     render_player_board_v2_svg,
     resource_choice_styles,
+    seat_choice_styles,
 )
 from tools.ui_debug.render_table_layout import (  # noqa: E402
     SEATED_PLAYERS,
@@ -474,6 +475,7 @@ _TURN_SCRIPT = """<script>
   function show(offered, settled) {
     var positions = offeredByKind(offered, 'position');
     var stocks = offeredByKind(offered, 'resource');
+    var boards = offeredByKind(offered, 'seat');
     Array.prototype.forEach.call(spaces, function (space) {
       var index = Number(space.getAttribute('data-board-position-index'));
       space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
@@ -490,6 +492,18 @@ _TURN_SCRIPT = """<script>
       else { seat.removeAttribute('data-resource-choice'); }
       mark(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key',
            asking ? stocks : []);
+    });
+    /* And the other set, which is NOT the same set and must not be folded into the one above. A
+       stock is asked of the one seat that is acting; a board is asked of every seat the answer may
+       name, which is most of them and usually includes seats that are not acting at all. The seat
+       that IS acting is in this set like any other, and nothing here checks for it. */
+    Array.prototype.forEach.call(seats, function (seat) {
+      var named = seat.getAttribute('data-player');
+      var offering = boards.indexOf(named) !== -1;
+      if (offering) { seat.setAttribute('data-seat-choice', 'true'); }
+      else { seat.removeAttribute('data-seat-choice'); }
+      mark(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key',
+           offering ? boards : []);
     });
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
@@ -521,7 +535,7 @@ _TURN_SCRIPT = """<script>
     });
   });
 
-  /* Three kinds of key, answered the same way: press one that is offered and it becomes the next
+  /* Four kinds of key, answered the same way: press one that is offered and it becomes the next
      answer. What the key stands for is the attribute it carries, and this does not read it. */
   function answers(elements, attribute) {
     Array.prototype.forEach.call(elements, function (key) {
@@ -537,6 +551,7 @@ _TURN_SCRIPT = """<script>
   answers(pairs, 'data-combination-key');
   Array.prototype.forEach.call(seats, function (seat) {
     answers(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key');
+    answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });
 
   Array.prototype.forEach.call(panels, function (panel) {
@@ -595,6 +610,15 @@ def turn_styles(route_color: str) -> str:
      key it cannot press. Visibility only: the pill, the keyline and where it sits are the
      renderer's, as they are for the seals. */
   [data-resource-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
+
+{seat_choice_styles()}
+  /* Same shape of rule for the board-sized key, and the same reason: every chair carries one and
+     a chair the choice does not include has its taken back out. Unlike the stock keys, several are
+     shown at once -- the question names a player and most of the players it may name are not the
+     one acting, so the mark has to say "one of these" and not "these are all active". It is the
+     outline an offered space on the wheel wears, which is already what this page's "you may point
+     at this" looks like, and it is nothing like the wash that means whose turn it is. */
+  [data-seat-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
 
   /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
   .turn-panel {{ display: none; }}
@@ -675,10 +699,14 @@ def render_play_view_html(
         # The three stock keys, drawn hidden on every seat's board because which seat will be asked
         # is not known until a turn is part-built. Only the asking seat's are ever revealed, and
         # `resource_choice_styles` is what reveals them.
+        #
+        # And the one key that is the board itself, for the question that names a player. Both are
+        # drawn on every chair and neither decides anything by being there.
         board = render_player_board_v2_svg(
             _board_layout_for(payload, board_layout, player_id),
             player,
             choice_keys=bool(candidates),
+            seat_key=bool(candidates),
         )
         active = taken and player_id == payload["state"]["active_player"]
         panels.append(

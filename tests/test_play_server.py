@@ -27,8 +27,13 @@ import pytest
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
-from pilgrim.model.actions import SetupSowAction, action_id, action_summary
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES
+from pilgrim.model.actions import (
+    SetupSowAction,
+    StartPlayerSelectionAction,
+    action_id,
+    action_summary,
+)
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId
 from pilgrim.rules.transition import apply_action, legal_actions
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug.render_play_view import render_play_view_from_payload
@@ -287,15 +292,16 @@ def _played_until_the_page_must_refuse(server, limit: int = 40):
 
 
 def _past_the_start_player_decision(server, choice: int = 0):
-    """Answer whoever holds the First Player marker, which the page cannot yet put to anyone.
+    """Answer whoever holds the First Player marker, so a test can get on to what it is about.
 
-    Applied by id off `legal_actions` rather than through a candidate, because the page refuses
-    this decision -- it has no affordance for choosing a player -- and a test that reached for a
-    candidate's action id here would be asserting the refusal away instead of working around it.
+    Through a candidate now, like every other answer here. It used to go round the page by id off
+    `legal_actions`, because the page had no way to ask a table who should begin; the point of that
+    was to work around the refusal rather than assert it away, and there is no longer one to work
+    around.
     """
     while server.payload["state"]["phase"] == "start_player_selection":
-        chosen = legal_actions(server.state, server.config)[choice]
-        server.apply(action_id(chosen), server.payload["state_token"])
+        candidate = server.payload["turn_candidates"][choice]
+        server.apply(candidate["action_id"], server.payload["state_token"])
     return server
 
 
@@ -371,8 +377,16 @@ def _run_script(
                 "combinations": _key_values(candidates, "combination"),
                 # Every seat, with the page's own word for which one is on, so the script has four
                 # boards to choose wrongly between rather than one it cannot help but get right.
+                # Always four, however many are playing, because the page always draws four and
+                # hides the empty ones. A stub with only the occupied chairs in it would take the
+                # empty ones out of reach of anything that wrongly lit them.
                 "seats": [
-                    {"seat": seat, "active": player_id == server.payload["state"]["active_player"]}
+                    {
+                        "seat": seat,
+                        "player": player_id,
+                        "taken": player_id in _seated(server),
+                        "active": player_id == server.payload["state"]["active_player"],
+                    }
                     for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
                 ],
                 "panels": [candidate["action_id"] for candidate in candidates],
@@ -387,6 +401,12 @@ def _run_script(
         ["node", str(HARNESS), str(job)], capture_output=True, text=True, check=True
     )
     return json.loads(finished.stdout)
+
+
+def _seated(server) -> set[str]:
+    """The engine's player ids that have a chair, which at two players is not the first two."""
+    count = len(server.payload["state"]["players"])
+    return {f"player_{word}" for word in ("one", "two", "three", "four")[:count]}
 
 
 def _key_values(candidates: list[dict], kind: str) -> list[str]:
@@ -413,6 +433,11 @@ def _pay(combination: str):
     return {"kind": "combination", "value": combination}
 
 
+def _name(player_id: str):
+    """Press a whole board, which is how a player is named."""
+    return {"kind": "seat", "value": player_id}
+
+
 def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
     if step["kind"] == "position":
@@ -421,6 +446,8 @@ def _click_for(server, step: dict) -> dict:
         return _take(step["value"], _active_seat(server))
     if step["kind"] == "combination":
         return _pay(step["value"])
+    if step["kind"] == "seat":
+        return _name(step["value"])
     return _do(step["value"])
 
 
@@ -918,6 +945,140 @@ def test_only_the_seat_being_asked_has_keys_on_its_board(tmp_path: Path) -> None
 
 
 # ---------------------------------------------------------------------------------------------
+# Naming a player, which is answered by pressing a whole board
+# ---------------------------------------------------------------------------------------------
+
+
+def _opening(tmp_path: Path, players: int = 4):
+    """A generated game at the moment it opens, which is this decision and nothing else."""
+    from pilgrim.cli import main as cli_main
+
+    path = tmp_path / "opening.json"
+    cli_main(["generate-setup", "--players", str(players), "--seed", "99", "--output", str(path)])
+    server = PlayServer(("127.0.0.1", 0), path)
+    assert server.payload["state"]["phase"] == "start_player_selection"
+    return server
+
+
+def _players_the_engine_would_accept(server) -> list[str]:
+    """Read off the actions themselves rather than off `decision_steps`.
+
+    Comparing the page against the same function that fed it would only show it copied faithfully.
+    """
+    return sorted(
+        {
+            action.chosen_start_player.name.lower()
+            for action in legal_actions(server.state, server.config)
+            if isinstance(action, StartPlayerSelectionAction)
+        }
+    )
+
+
+@needs_node
+@pytest.mark.parametrize("players", [2, 3, 4])
+def test_the_boards_offered_are_the_players_the_engine_would_accept(
+    tmp_path: Path,
+    players: int,
+) -> None:
+    """The choosable set falls out of the surviving candidates, as every other set here does.
+
+    Not the row of chairs. The page draws four of those whatever the count and hides the empty
+    ones, so a script reaching for "every board" lights seats nobody is sitting in -- and at four
+    players that reads identically to the right answer, which is why this is run short as well.
+    Two players is the sharpest: the pair on the table are the two ENDS of the row.
+
+    Checked against the engine's own actions, read off the field they carry rather than off the
+    steps the page was handed, since comparing the page with what fed it shows only that it copied.
+    """
+    server = _opening(tmp_path, players)
+    transcript = _run_script(server, [], tmp_path)
+
+    accepted = _players_the_engine_would_accept(server)
+    assert len(accepted) == players
+    assert sorted(transcript["offeredBoards"][0]) == accepted
+    assert transcript["shownPanel"][0] == -1, "a board was committed before anyone pressed one"
+
+
+@needs_node
+def test_the_first_thing_a_new_game_asks_is_which_board_begins(tmp_path: Path) -> None:
+    """A game opens on this and reaches the sows through it, rather than the other way round."""
+    server = _opening(tmp_path)
+    assert {step["kind"] for c in server.payload["turn_candidates"] for step in c["steps"]} == {
+        "seat"
+    }
+
+    transcript = _run_script(server, [_name("player_three")], tmp_path, confirm=True)
+    assert transcript["posted"]["action_id"] == "start_player_selection:player_three"
+
+    server.apply(transcript["posted"]["action_id"], server.payload["state_token"])
+    assert server.payload["state"]["phase"] == "setup_sow"
+    assert server.payload["state"]["start_player_id"] == "player_three"
+
+
+@needs_node
+def test_the_holder_can_name_themselves_by_pressing_their_own_board(tmp_path: Path) -> None:
+    """Their own board is one of the ones lit, and pressing it is not a different path."""
+    server = _opening(tmp_path)
+    holder = server.payload["state"]["active_player"]
+
+    transcript = _run_script(server, [_name(holder)], tmp_path, confirm=True)
+
+    assert holder in transcript["offeredBoards"][0]
+    assert transcript["posted"]["action_id"] == f"start_player_selection:{holder}"
+    server.apply(transcript["posted"]["action_id"], server.payload["state_token"])
+    assert server.payload["state"]["start_player_id"] == holder
+
+
+@needs_node
+def test_most_of_the_lit_boards_belong_to_players_who_are_not_acting(tmp_path: Path) -> None:
+    """Which is what makes this a different mark from the one that says whose turn it is.
+
+    Every previous question on this page lit the acting seat's own board, so "lit" and "acting"
+    were never told apart. Here three of the four lit boards belong to players who are not acting
+    at all, and if the page said this the way it says whose turn it is, it would be claiming four
+    active players. The wash stays where it was and the boards carry a second, separate mark.
+    """
+    server = _opening(tmp_path)
+    acting = server.payload["state"]["active_player"]
+    transcript = _run_script(server, [], tmp_path)
+
+    lit = transcript["offeredBoards"][0]
+    assert len(lit) == 4
+    assert acting in lit
+    assert [player for player in lit if player != acting] != []
+    # The stock question, which IS asked of one seat only, is not being asked here at all: the two
+    # sets are kept apart rather than one being made to stand in for the other.
+    assert transcript["askedSeats"][0] == []
+
+
+def test_the_wash_and_the_seal_end_up_on_different_boards(tmp_path: Path) -> None:
+    """THE PAYOFF, played rather than posed. Two boards lit, for two reasons, in a real position.
+
+    The holder presses somebody else's board. From the next frame the marker is still theirs and
+    the round is not, so the seal and the wash are on different seats -- the first position in this
+    whole game where those two ever disagree, and the one thing a screenshot can show about what
+    the First Player marker is for.
+    """
+    server = _opening(tmp_path)
+    holder = server.payload["state"]["active_player"]
+    given_to = next(
+        player for player in _players_the_engine_would_accept(server) if player != holder
+    )
+
+    server.apply(f"start_player_selection:{given_to}", server.payload["state_token"])
+
+    assert server.payload["state"]["first_player_marker"] == holder
+    assert server.payload["state"]["active_player"] == given_to
+
+    page = render_play_view_from_payload(server.payload)
+    sealed = re.search(r'<g data-first-player-seal="true" data-player="(\w+)"', page)
+    washed = re.findall(r'data-player="(\w+)"[^>]*data-active-seat="true"', page)
+    assert sealed is not None and sealed.group(1) == holder
+    assert washed == [given_to]
+    assert sealed.group(1) != washed[0]
+
+
+# ---------------------------------------------------------------------------------------------
 # Two deliberate bugs, and the checks that catch them
 # ---------------------------------------------------------------------------------------------
 
@@ -945,6 +1106,35 @@ def test_asking_every_seat_for_the_stock_is_caught(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="the wrong seat's board was asked"):
         _only_the_active_seat_is_asked(every_seat, seat)
+
+
+@needs_node
+def test_lighting_the_chairs_instead_of_the_answers_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION, on the engine rather than the page, because that is where the two readings part.
+
+    "Every player the engine would accept" and "every occupied chair" name the same four names in
+    every position this game can currently reach, so no board and no player count tells them apart:
+    a page that lit the chairs would pass every test above. What tells them apart is changing the
+    engine's answer and seeing whether the page changes with it.
+
+    So the choosable set is narrowed to two, which is a rule this game does not have and does not
+    need to have -- what is being checked is only that the lit boards came FROM there. A page
+    reading the row of chairs goes on lighting four.
+    """
+    from pilgrim.rules import transition
+
+    all_four = _players_the_engine_would_accept(_opening(tmp_path))
+    assert len(all_four) == 4
+
+    only_two = (PlayerId.PLAYER_ONE, PlayerId.PLAYER_THREE)
+    monkeypatch.setattr(transition, "choosable_start_players", lambda state: only_two)
+    narrowed = _opening(tmp_path)
+
+    accepted = _players_the_engine_would_accept(narrowed)
+    assert accepted == ["player_one", "player_three"]
+
+    transcript = _run_script(narrowed, [], tmp_path)
+    assert sorted(transcript["offeredBoards"][0]) == accepted
 
 
 def test_setting_the_two_alms_amounts_one_at_a_time_is_caught(monkeypatch) -> None:
@@ -1101,7 +1291,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # next field needs the script taught about it rather than merely published to it. The whole
     # page is searched, candidates and all, because a field name reaching the browser as data is a
     # field name the browser can start to depend on.
-    for field in ("tithe_resource", "taxation_step1_resource", *ALMS_PAIR):
+    for field in ("tithe_resource", "taxation_step1_resource", "chosen_start_player", *ALMS_PAIR):
         assert field not in page, f"the page was told about the field {field!r}"
 
 

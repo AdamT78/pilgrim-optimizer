@@ -195,6 +195,20 @@ RESOURCE_CHOICE_FILL = "#F3EAD2"
 RESOURCE_CHOICE_STROKE = "#B8952F"
 RESOURCE_CHOICE_STROKE_WIDTH = 1.6
 
+# The one key a page shows when the whole BOARD is the answer -- naming a start player is the
+# question that asks it. An outline round the panel and nothing inside it, in the same parchment
+# the duty wheel outlines an offered space with, because that is already what this page's "you may
+# point at this" looks like.
+#
+# Deliberately not the seat's own colour and deliberately not a wash. A wash of a board's own
+# colour already means something here: it is how the page says whose turn it is, and it sits on one
+# board at a time. This mark sits on SEVERAL boards at once and means the opposite kind of thing --
+# pick one of these, most of which are not acting. Two lit boards in the same language would read
+# as two active players.
+SEAT_CHOICE_STROKE = "#F2EEDF"
+SEAT_CHOICE_STROKE_WIDTH = 6.0
+SEAT_CHOICE_INSET = SEAT_CHOICE_STROKE_WIDTH / 2
+
 # The unit this board's geometry is written in, and the size its cubes were drawn at before they
 # were matched to the duty wheel's. The banner type is still a multiple of it, so it stays where it
 # is: resizing the cubes was never a reason to reset the type. The building slots were multiples of
@@ -330,8 +344,8 @@ def resource_block(panel_width: float) -> dict:
     left = right - RESOURCE_READOUT_COUNT * pitch
     top = CORNER_TAG_SIZE + RESOURCE_DIVIDER_OVERHANG
     # Digits sit on their baseline, so the bottom of the amounts is the bottom of the block.
-    baseline = top + icon_band + RESOURCE_VALUE_GAP + RESOURCE_COUNT_CAP_RATIO * (
-        RESOURCE_COUNT_FONT_SIZE
+    baseline = (
+        top + icon_band + RESOURCE_VALUE_GAP + RESOURCE_COUNT_CAP_RATIO * (RESOURCE_COUNT_FONT_SIZE)
     )
 
     return {
@@ -474,6 +488,44 @@ def _render_active_glow(geometry: dict, player: dict) -> str:
         f'<rect data-active-player-glow="true" x="0" y="0"'
         f' width="{geometry["panel_width"]:.0f}" height="{height:.0f}"'
         f' rx="{PANEL_CORNER_RADIUS:g}" fill="url(#{gradient_id})" opacity="0"/>'
+    )
+
+
+def _render_seat_choice_key(geometry: dict, player: dict) -> str:
+    """One key covering the whole board, drawn hidden, for a page that has to ask WHICH SEAT.
+
+    The whole panel because the whole panel is the answer: the question is which player, and a
+    player is their board. There is nothing smaller to aim at and inventing one -- a corner, a
+    banner -- would be putting a target somewhere the rule never pointed.
+
+    Struck here rather than in the page's script for the same reason the stock keys and the first
+    player seal are: the script reveals and hides, and never assigns a fill. The key carries the id
+    of the player it stands for, so a page can tell which board was pressed without knowing where
+    any of them sit -- and without turning a player into a chair number, which is the translation
+    that has gone wrong here before.
+    """
+    inset = SEAT_CHOICE_INSET
+    return (
+        f'<rect data-seat-choice-key="{escape(str(player["id"]))}"'
+        f' x="{inset:g}" y="{inset:g}"'
+        f' width="{geometry["panel_width"] - 2 * inset:.0f}"'
+        f' height="{geometry["panel_height"] - 2 * inset:.0f}"'
+        f' rx="{PANEL_CORNER_RADIUS:g}" fill="none" stroke="{SEAT_CHOICE_STROKE}"'
+        f' stroke-width="{SEAT_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
+    )
+
+
+def seat_choice_styles() -> str:
+    """What one attribute on a board does to it, for any page that shows the seat key.
+
+    The key is drawn hidden and this is the only thing that shows it, so a page asks by setting
+    `data-seat-choice="true"` on the board and takes it off again when the choice is answered.
+    Reveal and a cursor -- no colour is named here or anywhere the script can reach.
+    """
+    return (
+        '  [data-seat-choice="true"] [data-seat-choice-key] {\n'
+        "    visibility: visible; cursor: pointer;\n"
+        "  }\n"
     )
 
 
@@ -804,6 +856,7 @@ def render_player_board_v2_svg(
     board_state: dict | None = None,
     interactive: bool = False,
     choice_keys: bool = False,
+    seat_key: bool = False,
 ) -> str:
     """One player's board, holding `board_state` (the starting board when none is given).
 
@@ -814,6 +867,11 @@ def render_player_board_v2_svg(
     Opt in, because a page that will never ask should not carry three rects a board it has no way
     of ever showing. Pair it with `resource_choice_styles()`: without those, nothing can reveal
     them and the keys are exactly the dead markup this flag exists to avoid.
+
+    `seat_key` adds the one hidden key a page needs to ask for this board ITSELF, which is a
+    different question from anything on it. Separate from `choice_keys` rather than folded in with
+    them: the stock keys are asked of one seat and this is asked of several at once, and the pages
+    that carry one have no use for the other. Pair it with `seat_choice_styles()`.
     """
     palette = layout["palette"]
     roles = layout["worker_roles"]
@@ -861,6 +919,9 @@ def render_player_board_v2_svg(
     ):
         parts.append(_render_building_slot(cx, cy, palette, number if interactive else 0))
     parts.append(_render_corner_tag(geometry, player))
+    # Last, so the outline lies over everything it encloses rather than under the panel's own edge.
+    if seat_key:
+        parts.append(_render_seat_choice_key(geometry, player))
 
     return (
         '<svg xmlns="http://www.w3.org/2000/svg"'

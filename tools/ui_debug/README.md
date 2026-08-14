@@ -1638,6 +1638,25 @@ at rest; `game_setup.html` does not, because there is no turn on that page and s
 ever ask. Three rects a board that no stylesheet can reveal and no script would want are not hidden
 markup but dead markup, indistinguishable from a mistake.
 
+### The seat key, which is a different question and a different set
+
+`render_player_board_v2_svg(..., seat_key=True)` draws one more hidden rect, and it covers the whole
+panel: the question it answers is *which player*, and a player is their board. `seat_choice_styles()`
+reveals it when the board carries `data-seat-choice="true"`. Naming a start player is what asks it.
+
+Kept separate from `choice_keys` rather than folded in, because the two are asked of different
+numbers of seats. A stock is asked of the one seat that is acting, and the play view marks the other
+three unoffered so nobody reaches across the table. A board is asked of **every** seat the answer may
+name, which usually includes several who are not acting at all — so the mark cannot be the wash that
+says whose turn it is. It is the parchment outline an offered space on the duty wheel wears, which is
+already this page's way of saying *you may point at this*, and it reads as "pick one of these" rather
+than as four active players. The wash stays exactly where it was.
+
+The lit set comes from the distinct values among the surviving candidates, like every other set here,
+and never from the row of chairs. Those name the same players in every position this game can reach,
+so `test_lighting_the_chairs_instead_of_the_answers_is_caught` narrows the engine's own answer and
+checks that the page narrows with it.
+
 Generate the output page with:
 
 ```bash

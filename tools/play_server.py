@@ -157,7 +157,17 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     that could come to depend on it, which is how the next one ends up being a special case.
     """
     if isinstance(action, StartPlayerSelectionAction):
-        return []
+        # Answered by pointing at a player's board, so it is a `seat` the way a duty is a
+        # `position` -- the kind says where the answer is given and nothing about what it means.
+        # The value is the player, because that is what the engine is asking for and what the
+        # boards are already stamped with; which chair that player sits in is the page's business
+        # and is settled by the seating order there, not translated into a number here.
+        return [
+            (
+                {"kind": "seat", "value": action.chosen_start_player.name.lower()},
+                ("chosen_start_player",),
+            )
+        ]
     presented: list[tuple[dict, tuple[str, ...]]] = []
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
@@ -218,19 +228,17 @@ def decision_steps(action: Any) -> list[dict]:
 
     Each step says what KIND of thing it is, because they are not answered in the same place: a
     position is a space on the board, a resolution is beside the board, a stock is on the asking
-    seat's own board, and a combination is a set of amounts that only go together one way. The page
-    routes on the kind and never on what any particular step means.
+    seat's own board, a seat is a whole board, and a combination is a set of amounts that only go
+    together one way. The page routes on the kind and never on what any particular step means.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
     """
-    # No step at all for a start-player selection: this page has no way to ask a table who should
-    # begin the next round. Left empty rather than approximated, so all of them land in one group
-    # differing in the one field they carry, and the page refuses that field by name -- the same
-    # refusal a full turn gets for anything nobody has built an affordance for, which is what
-    # this is. Building the affordance is the next piece of work, not a guess to make here.
+    # A start-player selection is one question and nothing before it. There is no origin to lift
+    # from and no duty to resolve: whoever holds the marker names a player, and that is the whole
+    # of the action.
     if isinstance(action, StartPlayerSelectionAction):
-        return []
+        return _presented_steps(action)
     steps = [{"kind": "position", "value": action.origin}]
     steps += [{"kind": "position", "value": position} for position in action.route]
     if isinstance(action, SetupSowAction):
