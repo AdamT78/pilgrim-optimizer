@@ -28,15 +28,21 @@ from tools.ui_debug.play_view_adapter import (
     tithe_by_position_name,
 )
 from tools.ui_debug.render_buildings import load_building_catalog
+from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_duty_wheel import load_duty_wheel_layout
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites
 from tools.ui_debug.render_play_view import (
+    _board_state_for,
     duty_board_state_for,
     duty_layout_for,
     map_placements_for,
     piety_variant_for,
     render_play_view_from_payload,
     seat_of,
+)
+from tools.ui_debug.render_player_boards_v2 import (
+    default_player_board_v2_state,
+    load_player_boards_v2_layout,
 )
 
 UI_DEBUG = Path(__file__).resolve().parents[1] / "tools" / "ui_debug"
@@ -54,7 +60,26 @@ CANONICAL = (
 )
 
 
-def _player(mancala, *, wheat=1, stone=1, silver=1, alms=0, piety=0):
+def _player(
+    mancala,
+    *,
+    wheat=1,
+    stone=1,
+    silver=1,
+    alms=0,
+    piety=0,
+    village=3,
+    abbey=2,
+    roles=None,
+    active=(),
+    donated=(),
+):
+    """One seat's engine record.
+
+    The village and abbey defaults are deliberately NOT the layout's eight and three. A fixture
+    that happened to match the sample would let a board drawing the sample pass every check on it,
+    which is the whole failure mode these tests exist to catch.
+    """
     return {
         "victory_points": 0,
         "piety": piety,
@@ -63,8 +88,8 @@ def _player(mancala, *, wheat=1, stone=1, silver=1, alms=0, piety=0):
         "resources": {"stone": stone, "silver": silver, "wheat": wheat},
         "workforce": {
             "mancala": list(mancala),
-            "village": 3,
-            "abbey": 2,
+            "village": village,
+            "abbey": abbey,
             "committed": {
                 "roads": 0,
                 "shrines": 0,
@@ -73,17 +98,20 @@ def _player(mancala, *, wheat=1, stone=1, silver=1, alms=0, piety=0):
                 "alms_table": 0,
             },
         },
-        "special_activities": {
-            "fields": 0,
-            "road_engineer": 0,
-            "stone_mason": 0,
-            "alms_house": 0,
-            "engraver": 0,
-            "vestry": 0,
-        },
+        "special_activities": dict(
+            {
+                "fields": 0,
+                "road_engineer": 0,
+                "stone_mason": 0,
+                "alms_house": 0,
+                "engraver": 0,
+                "vestry": 0,
+            },
+            **(roles or {}),
+        ),
         "player_board_slots": {
-            "active_buildings": [],
-            "donated_buildings": [],
+            "active_buildings": list(active),
+            "donated_buildings": list(donated),
             "cardinal_favor_tiles": 0,
         },
     }
@@ -813,3 +841,218 @@ def test_the_merchant_token_is_visible_on_taxation_which_has_no_capsule(tmp_path
     assert label is not None
     assert float(token.group(2)) > float(label.group(2)), "token should sit below the label"
     assert float(token.group(3)) > 0
+
+
+# ---------------------------------------------------------------------------------------------
+# The player board, which used to draw the layout's sample whatever the state said
+# ---------------------------------------------------------------------------------------------
+
+
+SAMPLE_VILLAGE = 8
+SAMPLE_ABBEY = 3
+SAMPLE_ROLES = {"stone_mason": 1, "vestry": 2}
+
+
+def _board_state(payload: dict, player_id: str) -> dict:
+    return _board_state_for(
+        payload,
+        load_player_boards_v2_layout(),
+        player_id,
+        load_building_catalog(),
+        load_donated_building_tiles(),
+    )
+
+
+def _panel(page: str, player_id: str) -> str:
+    """One seat's panel, cut out of the page so nothing on the map can be mistaken for it."""
+    parts = re.split(r'<div class="panel p-player"', page)[1:]
+    return next(part for part in parts if f'data-player="{player_id}"' in part)
+
+
+def _cubes_on(page: str, player_id: str) -> int:
+    """How many cubes are actually inked on one seat's board.
+
+    Both grids draw all eight slots whatever the count and hide the spare ones, so what is on
+    screen is the ones left at full opacity. Counted rather than located: where a cube sits is the
+    renderer's business and this is only asking how many a seat is shown to have.
+    """
+    return len(re.findall(r"<rect[^>]*opacity=\"1\"", _panel(page, player_id)))
+
+
+def _slots_on(page: str, player_id: str) -> list[tuple[str, str]]:
+    """What is standing in this seat's building slots, as (state, building id)."""
+    return [
+        (state, building)
+        for _number, state, building in re.findall(
+            r'data-player-board-slot="(\d+)" data-building-slot-state="(\w+)"'
+            r' data-building-id="([a-z_]*)"',
+            _panel(page, player_id),
+        )
+    ]
+
+
+def test_the_board_shows_the_seats_own_acolytes_and_not_the_layouts_sample() -> None:
+    """The values are read off the seat, and the fixture is built so the sample cannot pass.
+
+    Village and abbey both differ from the eight and three the layout draws, and in opposite
+    directions, so a board that had simply swapped them would be caught too.
+    """
+    payload = _payload([_player([5] + [0] * 8, village=2, abbey=6) for _ in range(4)])
+    state = _board_state(payload, "player_one")
+
+    assert (state["village_serfs"], state["abbey_acolytes"]) == (2, 6)
+    assert state["village_serfs"] != SAMPLE_VILLAGE
+    assert state["abbey_acolytes"] != SAMPLE_ABBEY
+    assert _cubes_on(render_play_view_from_payload(payload), "player_one") == 8
+
+
+def test_the_village_and_the_abbey_are_two_values_and_not_one() -> None:
+    """Swapping them has to change the drawing, or only their total was ever wired.
+
+    Both grids hold eight, so a page that added them up and drew the total would put the same
+    number of cubes on screen either way round and every count above would still pass.
+    """
+    few_in_the_village = _payload([_player([5] + [0] * 8, village=2, abbey=6) for _ in range(4)])
+    many_in_the_village = _payload([_player([5] + [0] * 8, village=6, abbey=2) for _ in range(4)])
+
+    assert _panel(render_play_view_from_payload(few_in_the_village), "player_one") != _panel(
+        render_play_view_from_payload(many_in_the_village), "player_one"
+    )
+
+
+def test_the_role_circles_follow_the_special_activities() -> None:
+    """Nobody holds a role at the opening, and the layout draws three cubes standing on two.
+
+    So this is the one wired value that was wrong on the very first frame rather than after a few
+    turns: the sample has a Stone Mason and two Vestry, and a fresh game has neither.
+    """
+    empty = _payload([_player([5] + [0] * 8) for _ in range(4)])
+    assert set(_board_state(empty, "player_one")["roles"].values()) == {0}
+
+    staffed = _payload(
+        [_player([5] + [0] * 8, roles={"fields": 2, "engraver": 1}) for _ in range(4)]
+    )
+    roles = _board_state(staffed, "player_one")["roles"]
+    assert roles["fields"] == 2
+    assert roles["engraver"] == 1
+    assert roles["stone_mason"] == 0, "the sample's Stone Mason survived into a real board"
+    assert roles["vestry"] == 0, "the sample's Vestry survived into a real board"
+    # And they reach the drawing: three more cubes on the board than a seat holding no role.
+    assert (
+        _cubes_on(render_play_view_from_payload(staffed), "player_one")
+        == _cubes_on(render_play_view_from_payload(empty), "player_one") + 3
+    )
+
+
+def test_a_building_a_seat_has_built_stands_in_a_slot_on_that_seats_board_alone() -> None:
+    """THE SYMPTOM. A constructed building used to leave the market and land nowhere."""
+    payload = _payload(
+        [
+            _player([5] + [0] * 8, active=["chapter_house"]),
+            _player([5] + [0] * 8),
+            _player([5] + [0] * 8),
+            _player([5] + [0] * 8),
+        ]
+    )
+    page = render_play_view_from_payload(payload)
+
+    assert _slots_on(page, "player_one") == [("bought", "chapter_house")]
+    for empty_handed in ("player_two", "player_three", "player_four"):
+        assert _slots_on(page, empty_handed) == [], "a building landed on the wrong board"
+
+
+def test_a_donated_building_is_drawn_on_its_donated_side() -> None:
+    """Donated buildings have a home -- the same six slots -- and a face of their own.
+
+    The star and the number, which is what a donated tile is; drawing it in the building's own
+    colours and label would say it was still working for the seat that gave it away.
+    """
+    payload = _payload(
+        [
+            _player([5] + [0] * 8, active=["chapter_house"], donated=["mint"]),
+            *[_player([5] + [0] * 8) for _ in range(3)],
+        ]
+    )
+    page = render_play_view_from_payload(payload)
+
+    assert _slots_on(page, "player_one") == [("bought", "chapter_house"), ("donated", "mint")]
+    panel = _panel(page, "player_one")
+    assert ">Chapter<" in panel and ">House<" in panel, "the bought building lost its name"
+    assert ">Mint<" not in panel, "the donated building was drawn as if it were still in use"
+    # What a donated tile is instead: a star with its victory points written in it.
+    assert 'data-donated="true"' in panel
+
+
+def test_a_seat_that_is_not_at_the_table_is_drawn_from_the_sample_and_hidden() -> None:
+    """An empty chair has no record to read, and must not be made to look like one."""
+    payload = _payload([_player([5] + [0] * 8, village=2) for _ in range(2)])
+    state = _board_state(payload, "player_four")
+
+    assert state == default_player_board_v2_state(load_player_boards_v2_layout())
+    assert 'data-player="player_four" data-player-color' in render_play_view_from_payload(payload)
+    assert 'data-seat-taken="false"' in _panel(
+        render_play_view_from_payload(payload), "player_four"
+    )
+
+
+# ---------------------------------------------------------------------------------------------
+# Two deliberate bugs in the board wiring
+# ---------------------------------------------------------------------------------------------
+
+
+def test_falling_back_to_the_sample_for_one_value_is_caught(monkeypatch) -> None:
+    """MUTATION. Put the layout's abbey count back and the board must stop matching the seat.
+
+    The likeliest way this regresses is not a rewrite but a merge: one key dropped out of the dict
+    and the sample underneath it fills the gap silently, because that is exactly what the sample is
+    for. It leaves five values right and one lying, which is the hardest version to spot.
+    """
+    from tools.ui_debug import render_play_view
+
+    truthful = render_play_view._board_state_for
+
+    def abbey_from_the_sample(payload, board_layout, player_id, catalog, donated_data):
+        state = truthful(payload, board_layout, player_id, catalog, donated_data)
+        return dict(state, abbey_acolytes=SAMPLE_ABBEY)
+
+    payload = _payload([_player([5] + [0] * 8, village=2, abbey=6) for _ in range(4)])
+    before = _cubes_on(render_play_view_from_payload(payload), "player_one")
+
+    monkeypatch.setattr(render_play_view, "_board_state_for", abbey_from_the_sample)
+    after = _cubes_on(render_play_view_from_payload(payload), "player_one")
+
+    assert after != before, "the sample and the seat agreed, so this fixture proves nothing"
+    assert after == 2 + SAMPLE_ABBEY
+
+
+def test_drawing_a_seats_board_from_its_neighbour_is_caught(monkeypatch) -> None:
+    """MUTATION, and the one that matters. Four boards drawn from the wrong players look fine.
+
+    Nothing is missing, nothing is the sample, every number is a real number off a real seat -- and
+    the whole row is a lie. It is the same mistake the seating order has caused three times, and
+    the only defence is that the seats hold values that cannot be mistaken for each other, which is
+    what the fixture below arranges.
+    """
+    from tools.ui_debug import render_play_view
+
+    truthful = render_play_view._board_state_for
+    order = ["player_one", "player_two", "player_three", "player_four"]
+
+    def one_seat_over(payload, board_layout, player_id, catalog, donated_data):
+        neighbour = order[(order.index(player_id) + 1) % len(order)]
+        return truthful(payload, board_layout, neighbour, catalog, donated_data)
+
+    # Four seats, four different numbers of cubes, so no two boards can be swapped unnoticed.
+    payload = _payload([_player([5] + [0] * 8, village=seat, abbey=1) for seat in (1, 2, 3, 4)])
+    page = render_play_view_from_payload(payload)
+    honest = {player_id: _cubes_on(page, player_id) for player_id in order}
+    assert len(set(honest.values())) == len(order), "the seats were not told apart by the fixture"
+
+    monkeypatch.setattr(render_play_view, "_board_state_for", one_seat_over)
+    shifted_page = render_play_view_from_payload(payload)
+    shifted = {player_id: _cubes_on(shifted_page, player_id) for player_id in order}
+
+    assert shifted != honest
+    for player_id in order:
+        neighbour = order[(order.index(player_id) + 1) % len(order)]
+        assert shifted[player_id] == honest[neighbour]

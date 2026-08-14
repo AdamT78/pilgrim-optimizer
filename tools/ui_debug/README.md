@@ -1638,6 +1638,26 @@ at rest; `game_setup.html` does not, because there is no turn on that page and s
 ever ask. Three rects a board that no stylesheet can reveal and no script would want are not hidden
 markup but dead markup, indistinguishable from a mistake.
 
+### Combinations stated as a run of names, and why they are counted before they are shown
+
+The alms pair arrives as two named amounts. The Taxation bonus arrives as a *run*: one stock name
+per unit taken, so `("stone", "stone")` is two stone. `COUNTED_COMBINATION_STEPS` in `play_server`
+counts a run into amounts and then offers it exactly like the alms pair, because it is the same
+kind of question wearing a different spelling.
+
+Counting is not tidying. The engine writes these runs canonically — stone before silver before
+wheat — so a page that filtered them name by name would turn that spelling into a rule: press
+silver first and stone goes out, though stone-and-silver is perfectly legal. The mix is one answer
+and is asked for once. Counting is also what makes the label sayable; there is no way to get "take
+two stone" out of a run of names without counting them, and the alternative is a button reading
+"take stone, stone", which is the tuple with the brackets taken off.
+
+The mixes on offer are never a written-down list. They are
+`combinations_with_replacement(unlocked stocks, duty value)`, and both of those move — a Scriptorium
+or a Customs House changes which stocks are unlocked, and the duty value sets the run's length. Over
+one walk this board reaches six different mix sets, of which the six pairs of three stocks is only
+one; most Taxation groups offer exactly one mix and are never asked about.
+
 ### The building keys, which are on the map because that is where a building is
 
 `render_setup_map_svg(..., choice_keys=True)` draws one hidden hex per building standing on the
@@ -1659,11 +1679,16 @@ have one possible value.
 
 **What a construct changes on screen, in full.** The constructing seat's stone count drops on its
 board, the building vanishes from the round track — the track is drawn from `building_market`, so
-its hex loses its colour and its name — and the log gains a `BUILDING_CONSTRUCTED` line. What does
-*not* happen is the building arriving anywhere: the play view passes no `board_state` to the board
-renderer, so all six building slots on every seat are drawn empty whatever `active_buildings` holds.
-You can watch a building leave the market and not watch it land. That is a gap in the boards, not in
-the turn.
+its hex loses its colour and its name — it appears in a slot on that seat's board and on no other,
+and the log gains a `BUILDING_CONSTRUCTED` line.
+
+The slot is filled through `board_state["slots"]`, which carries content already drawn around the
+origin for `_render_building_slot` to move onto the slot it belongs in. That split is deliberate:
+the board renderer goes on knowing *where* a slot is and not knowing what a building looks like, so
+the drawing itself is `generate_game_setup`'s `render_board_slot_building` and
+`render_board_slot_donated` unchanged — the same content the composed table points its slots at,
+called directly rather than through a `defs` and a script, because the play view knows at render
+time what a seat has built and has no script to point anything anywhere.
 
 ### The seat key, which is a different question and a different set
 

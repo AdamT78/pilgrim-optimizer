@@ -265,6 +265,10 @@ def default_player_board_v2_state(layout: dict) -> dict:
         "village_serfs": int(banner_by_id(layout, "village")["visible_workers"]),
         "abbey_acolytes": int(banner_by_id(layout, "abbey")["visible_workers"]),
         "roles": roles,
+        # No slot holds anything in the sample. A page that knows what its seats have built says
+        # so; a page that does not gets six empty slots, which is the truthful drawing of a board
+        # nobody has told it about.
+        "slots": (),
     }
 
 
@@ -802,10 +806,17 @@ def _render_role_acolytes(
     )
 
 
-def _render_building_slot(cx: float, cy: float, palette: dict, number: int = 0) -> str:
-    """One of the six bottom slots, empty.
+def _render_building_slot(
+    cx: float,
+    cy: float,
+    palette: dict,
+    number: int,
+    tagged: bool = False,
+    holding: dict | None = None,
+) -> str:
+    """One of the six bottom slots, empty unless it is holding something.
 
-    A numbered slot is the interactive form. It splits into the three layers a filled slot needs:
+    A tagged slot is the interactive form. It splits into the three layers a filled slot needs:
     the slot's own fill, the `use` that takes whatever building content a page points it at, and
     the dashed outline drawn last. Content goes inside the slot rather than on top of it, so the
     dashed border stays the only boundary a slot ever has, whether it holds a building or not.
@@ -813,13 +824,30 @@ def _render_building_slot(cx: float, cy: float, palette: dict, number: int = 0) 
     The `use` carries the slot's centre and nothing else -- no scale, no nudge -- so content drawn
     around the origin at this same hex size lands exactly on the dashes. The centre is written to
     the same two decimals the path is, so the two cannot part company in the rounding.
+
+    `holding` is the other way of filling a slot, for a page that knows at render time what stands
+    in it and has no script to point a `use` anywhere. The content arrives already drawn, around
+    the origin, and is moved onto the slot centre here -- so this function keeps knowing WHERE a
+    slot is and goes on not knowing what a building looks like, which is the split that lets the
+    same drawing serve a page that fills its slots from a script and a page that never has one.
     """
     path = hex_path_data(cx, cy)
     dashes = (
         f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
         f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/>'
     )
-    if not number:
+    if holding is not None:
+        return (
+            f'<g data-player-board-slot="{number}"'
+            f' data-building-slot-state="{escape(str(holding["state"]))}"'
+            f' data-building-id="{escape(str(holding["id"]))}"'
+            f' data-donated="{"true" if holding["state"] == "donated" else "false"}">'
+            f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
+            f'<g transform="translate({cx:.2f},{cy:.2f})">{holding["content"]}</g>'
+            f'<path data-slot-outline="true" d="{path}" fill="none"{dashes}'
+            "</g>"
+        )
+    if not tagged:
         return f'<path d="{path}" fill="{palette["slot_fill"]}"{dashes}'
     return (
         f'<g data-player-board-slot="{number}" data-building-slot-state="empty"'
@@ -858,7 +886,11 @@ def render_player_board_v2_svg(
     choice_keys: bool = False,
     seat_key: bool = False,
 ) -> str:
-    """One player's board, holding `board_state` (the starting board when none is given).
+    """One player's board, holding `board_state` (the layout's sample when none is given).
+
+    The sample is a plausible position, not an empty one -- eight serfs, three acolytes and cubes
+    standing on two roles -- so a page that draws a real seat and passes nothing here does not look
+    unfinished, it looks wrong, which is harder to notice. Pass what the seat actually has.
 
     `interactive` tags the cubes and draws every slot they can occupy, hidden where the state does
     not need them, so a page can move a cube by flipping opacity.
@@ -914,10 +946,12 @@ def render_player_board_v2_svg(
         if count or interactive:
             parts.append(_render_role_acolytes(cx, role_cy, count, player, role["id"], interactive))
 
+    held = list(state.get("slots", ()))
     for number, (cx, cy) in enumerate(
         zip(geometry["building_x"], geometry["building_y"], strict=True), start=1
     ):
-        parts.append(_render_building_slot(cx, cy, palette, number if interactive else 0))
+        holding = held[number - 1] if number <= len(held) else None
+        parts.append(_render_building_slot(cx, cy, palette, number, interactive, holding))
     parts.append(_render_corner_tag(geometry, player))
     # Last, so the outline lies over everything it encloses rather than under the panel's own edge.
     if seat_key:
