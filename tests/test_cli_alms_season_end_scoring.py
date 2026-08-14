@@ -21,7 +21,10 @@ def test_cli_verbose_unique_leader_shows_season_end_reward_and_reset(capsys) -> 
     assert "ALMS_SEASON_REWARD: player_one moved 1 acolyte abbey -> alms_table" in output
     assert "ALMS_RESET: all players reset to row 0" in output
     assert "MERCHANT_ADVANCE:" in output
-    assert "START_PLAYER_MARKER:" in output
+    # The round end now finishes by ASKING rather than by deciding: it stops on the first
+    # player owed a Confession Box question, and the marker is awarded by whoever answers
+    # last. So this is the pipeline's last line, and the order it is in is the claim.
+    assert "CONFESSION_BOX_PHASE:" in output
 
 
 def test_cli_verbose_forfeit_case_is_clear(capsys) -> None:

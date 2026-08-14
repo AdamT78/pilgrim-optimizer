@@ -15,6 +15,7 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     SetupSowAction,
+    StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_id,
     action_summary,
@@ -138,8 +139,7 @@ def action_has_route_modifier(action: FullTurnAction) -> bool:
 
 def action_has_kogge(action: FullTurnAction) -> bool:
     return (
-        action.sow_route_building_id == "kogge"
-        or action.sow_route_secondary_building_id == "kogge"
+        action.sow_route_building_id == "kogge" or action.sow_route_secondary_building_id == "kogge"
     )
 
 
@@ -280,12 +280,19 @@ def _run_trace_rows(
         # routes, duties, what to do with them -- and a position whose only question is who begins
         # has none of that. Its branching is one per seat, and is not what this audit looks at.
         # The holder keeps it, so the trace walks a fixed seating rather than a wandering one.
-        while current_state.phase is TurnPhase.START_PLAYER_SELECTION:
-            current_state = apply_action(
-                current_state,
-                StartPlayerSelectionAction(chosen_start_player=current_state.active_player),
-                config,
-            ).state
+        # The Confession Box questions are stepped over on the same grounds and with the answer
+        # that changes nothing. A seat deciding whether to buy two piety for the marker is not
+        # branching a turn either, and declining leaves the walk where it was.
+        while current_state.phase in (
+            TurnPhase.START_PLAYER_CONFESSION,
+            TurnPhase.START_PLAYER_SELECTION,
+        ):
+            answer: GameAction = (
+                StartPlayerConfessionBoxAction(use=False)
+                if current_state.phase is TurnPhase.START_PLAYER_CONFESSION
+                else StartPlayerSelectionAction(chosen_start_player=current_state.active_player)
+            )
+            current_state = apply_action(current_state, answer, config).state
         actions = legal_actions(current_state, config)
         if not actions:
             break
@@ -328,15 +335,15 @@ def _run_trace_rows(
                 sum(picked_up_counts) / len(picked_up_counts) if picked_up_counts else 0.0
             ),
             max_route_length=max(route_lengths) if route_lengths else 0,
-            avg_route_length=(
-                sum(route_lengths) / len(route_lengths) if route_lengths else 0.0
-            ),
+            avg_route_length=(sum(route_lengths) / len(route_lengths) if route_lengths else 0.0),
             actions_with_hired_building=_count_matching(full_turn_actions, action_has_hire),
             actions_with_two_or_more_hired_buildings=_count_matching(
                 full_turn_actions,
                 lambda action: action_hired_building_count(action) >= 2,
             ),
-            actions_with_route_modifier=_count_matching(full_turn_actions, action_has_route_modifier),
+            actions_with_route_modifier=_count_matching(
+                full_turn_actions, action_has_route_modifier
+            ),
             actions_with_kogge=_count_matching(full_turn_actions, action_has_kogge),
             actions_with_cloisters=_count_matching(full_turn_actions, action_has_cloisters),
             actions_with_kogge_cloisters_combined=_count_matching(
@@ -347,7 +354,9 @@ def _run_trace_rows(
                 full_turn_actions,
                 action_has_start_turn_modifier,
             ),
-            actions_with_end_turn_modifier=_count_matching(full_turn_actions, action_has_end_turn_modifier),
+            actions_with_end_turn_modifier=_count_matching(
+                full_turn_actions, action_has_end_turn_modifier
+            ),
             actions_with_grain_store_conversion=_count_matching(
                 full_turn_actions,
                 action_has_grain_store_conversion,
@@ -488,10 +497,7 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
             "- max picked-up acolytes: "
             f"{max_pickup.max_picked_up_acolytes} at step {max_pickup.step}"
         ),
-        (
-            "- likely driver at max-branching step "
-            f"{max_legal.step}: {likely_driver}"
-        ),
+        (f"- likely driver at max-branching step {max_legal.step}: {likely_driver}"),
     ]
 
 
@@ -534,9 +540,7 @@ def _select_preferred_safe_action(
 ) -> GameAction:
     full_turn_actions = [action for action in actions if isinstance(action, FullTurnAction)]
     tithe_actions = [
-        action
-        for action in full_turn_actions
-        if action.resolution is TurnResolutionType.TITHE
+        action for action in full_turn_actions if action.resolution is TurnResolutionType.TITHE
     ]
     if tithe_actions:
         return min(tithe_actions, key=action_id)
@@ -546,11 +550,7 @@ def _select_preferred_safe_action(
         TurnResolutionType.PRODUCE_STONE,
         TurnResolutionType.ALLOCATION,
     ):
-        by_resolution = [
-            action
-            for action in full_turn_actions
-            if action.resolution is resolution
-        ]
+        by_resolution = [action for action in full_turn_actions if action.resolution is resolution]
         if by_resolution:
             return min(by_resolution, key=action_id)
 
@@ -580,9 +580,7 @@ def _select_grain_store_action(
     full_turn_actions = [action for action in actions if isinstance(action, FullTurnAction)]
     if step == 1:
         conversion_actions = [
-            action
-            for action in full_turn_actions
-            if action_has_grain_store_conversion(action)
+            action for action in full_turn_actions if action_has_grain_store_conversion(action)
         ]
         if conversion_actions:
             return min(conversion_actions, key=action_id)
@@ -622,9 +620,7 @@ def _load_generated_setup(root: Path, *, player_count: int, seed: int) -> Loaded
         "setup_sow_complete": True,
         "setup_sow_completed_by": [],
     }
-    output_path = (
-        Path("/tmp") / f"pilgrim_multi_turn_branching_{player_count}p_seed_{seed}.json"
-    )
+    output_path = Path("/tmp") / f"pilgrim_multi_turn_branching_{player_count}p_seed_{seed}.json"
     output_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
     return load_scenario(output_path)
 

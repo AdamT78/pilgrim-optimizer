@@ -42,10 +42,7 @@ def test_cli_apply_invalid_action_index_returns_clear_error(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert (
-        f"Invalid action index 99. Scenario has {action_count} legal actions."
-        in captured.err
-    )
+    assert f"Invalid action index 99. Scenario has {action_count} legal actions." in captured.err
 
 
 def test_cli_apply_zero_index_is_invalid_for_one_based_indexing(capsys) -> None:
@@ -62,10 +59,7 @@ def test_cli_apply_zero_index_is_invalid_for_one_based_indexing(capsys) -> None:
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert (
-        f"Invalid action index 0. Scenario has {action_count} legal actions."
-        in captured.err
-    )
+    assert f"Invalid action index 0. Scenario has {action_count} legal actions." in captured.err
 
 
 def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
@@ -141,7 +135,9 @@ def test_cli_apply_round_end_pilgrimage_scenario_shows_alms_season_end_scoring(c
     assert "passed for all players" in output
     assert "player_one=2" in output
     assert "player_two=2" in output
-    assert "Next active player: player_two" in output
+    # The table is handed to player_one, not on to the next seat: the round ended, and the first
+    # player owed a Confession Box question is asked before anybody plays again.
+    assert "Next active player: player_one" in output
     assert "Resource: wheat" in output
 
 
@@ -204,7 +200,10 @@ def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) ->
     assert "SHIP_ADVANCE:" in output
     assert "ROUND_ADVANCE:" in output
     assert "MERCHANT_ADVANCE:" in output
-    assert "START_PLAYER_MARKER:" in output
+    # The round end now finishes by ASKING rather than by deciding: it stops on the first
+    # player owed a Confession Box question, and the marker is awarded by whoever answers
+    # last. So this is the pipeline's last line, and the order it is in is the claim.
+    assert "CONFESSION_BOX_PHASE:" in output
 
 
 def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> None:
@@ -248,8 +247,7 @@ def test_cli_apply_allocation_with_occupied_special_activities_counts_them_in_to
     assert exit_code == 0
     assert "Special Activities: 6" in output
     assert (
-        "Special Activities: "
-        "fields, road_engineer, stone_mason, alms_house, engraver, vestry"
+        "Special Activities: fields, road_engineer, stone_mason, alms_house, engraver, vestry"
     ) in output
     assert "grain, road_engineer" not in output
     assert "Total: 16" in output
@@ -272,9 +270,7 @@ def test_cli_apply_allocation_multi_move_reports_allocation_move_sequence(capsys
     assert "action: allocation | moves:" in output
     assert "target: city" not in output
     first_index = output.index("ALLOCATION: player_one moved 1 acolyte abbey -> fields")
-    second_index = output.index(
-        "ALLOCATION: player_one moved 1 acolyte abbey -> road_engineer"
-    )
+    second_index = output.index("ALLOCATION: player_one moved 1 acolyte abbey -> road_engineer")
     assert second_index > first_index
 
 
@@ -374,7 +370,9 @@ def test_cli_apply_well_and_fields_bonus_events_both_visible(capsys) -> None:
     assert "effective duty value 4" not in output
 
 
-def test_cli_apply_clerical_devotion_vestry_and_chapel_uses_bonus_events_not_effective_dv(capsys) -> None:
+def test_cli_apply_clerical_devotion_vestry_and_chapel_uses_bonus_events_not_effective_dv(
+    capsys,
+) -> None:
     exit_code = main(
         [
             "apply",

@@ -669,6 +669,19 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"{base_piety} + {temporary_bonus} = {effective_piety} for start-player selection"
         )
 
+    if event.event_type is EventType.CONFESSION_BOX_DECLINED:
+        player = str(details.get("player", actor_name))
+        return f"{event_name}: {player} declined the Confession Box"
+
+    if event.event_type is EventType.CONFESSION_BOX_PHASE:
+        first_player = str(details.get("first_player", "unknown"))
+        turn_order = str(details.get("turn_order", ""))
+        order_text = ", ".join(turn_order.split(",")) if turn_order else "none"
+        return (
+            f"{event_name}: Confession Boxes are decided before the marker, in turn order "
+            f"{order_text}; waiting on {first_player}"
+        )
+
     if event.event_type is EventType.TRADE_ROUTE_INCOME_SKIPPED:
         return f"{event_name}: trade routes not implemented"
 

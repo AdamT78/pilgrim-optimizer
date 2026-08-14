@@ -26,7 +26,8 @@ Implemented now:
 - Legacy game-end trigger when Ship returns to NW pilgrimage site after 26 completed rounds
 - Merchant movement once per round (not once per turn)
 - Trade-route income after round-end Merchant movement
-- Confession Box temporary piety choices at start-player-selection time
+- Confession Box temporary piety, decided by each player for themselves in its own phase, before
+  the marker is awarded
 - First Player marker awarded on highest effective piety, ties walking clockwise from the
   current `start_player`
 - Start-player selection as a real decision by the marker holder, in its own phase
@@ -35,8 +36,6 @@ Deferred:
 
 - Dummy-acolyte automatic season-end movement in transition pipeline
 - Spatial board geometry and map-space calculations
-- Confession Box directives are still an ordered tuple carried on the round-ending action, so
-  one player's action encodes other players' decisions. Known modelling problem, unchanged here.
 
 ## Round-end event order
 
@@ -57,15 +56,22 @@ For round-ending turns, event order is:
 8. `GAME_END` (fourth pilgrimage-site season end, or deferred NW full-loop fallback after the Alms block; if emitted, pipeline stops)
 9. `MERCHANT_ADVANCE` (only if game not over)
 10. `TRADE_ROUTE_INCOME` (one event per gaining player; emitted only when Merchant resource exists and trade route count is positive)
-11. `BUILDING_HIRED` (only when Confession Box is hired during start-player phase)
-12. `CONFESSION_BOX_BONUS` (one per Confession Box user/hirer in start-player turn order)
-13. `START_PLAYER_TIE_BREAK` (only when highest effective-piety tie occurs)
-14. `START_PLAYER_MARKER` (only if game not over)
-15. `TURN_ADVANCE` (from acting player to the marker holder, who acts next; skipped when game over)
-16. `INVARIANT_CHECK`
+11. `CONFESSION_BOX_PHASE` (only when at least one player can reach a Confession Box)
+12. `START_PLAYER_TIE_BREAK` (only when the marker is awarded here, and only on a tie)
+13. `START_PLAYER_MARKER` (only when the marker is awarded here)
+14. `TURN_ADVANCE` (to whoever acts next; skipped when game over)
+15. `INVARIANT_CHECK`
 
-The round-ending turn stops here, in phase `start_player_selection`, with `active_player` set to
-the marker holder. `START_PLAYER_SELECTION` is emitted separately, by that player's own action.
+The round-ending turn stops at whichever of the boxes or the marker comes first.
+
+If anybody can reach a Confession Box it stops in phase `start_player_confession`, with
+`active_player` set to the first player owed a question, and steps 12 to 13 do not happen on this
+action at all: each answer is its own action, emitting `BUILDING_HIRED` and `CONFESSION_BOX_BONUS`
+for a use or `CONFESSION_BOX_DECLINED` for a refusal, and the last of them awards the marker.
+
+If nobody can, the phase does not happen and the marker is awarded here, as it always was. Either
+way the turn ends in phase `start_player_selection` sooner or later, with `active_player` set to
+the marker holder, and `START_PLAYER_SELECTION` is emitted separately by that player's own action.
 
 Guild interaction (v5.3):
 
@@ -99,24 +105,31 @@ Trade-route income phase interaction:
 
 ## Start-player Confession Box
 
-At the beginning of start-player selection:
+A phase of its own, `start_player_confession`, run after the round-end pipeline and before the
+marker is awarded. It is `N` individual decisions, each made by the player it belongs to, in the
+same shape as the setup sow.
 
-- players are evaluated in start-player turn order from current `start_player`
-- each player may decline or use/hire Confession Box if available by source priority
-  (`own_active`, then `opponent_active_hire`, then `live_market_hire`)
-- hired uses pay current Merchant resource (`1`) to bank/owner before bonus event
-- each use grants temporary `+2` effective piety for this start-player decision only
+- **turn order** means clockwise from the `start_player` the round was PLAYED from, which is the
+  order that round was played in. It cannot mean clockwise from whoever begins the round to come:
+  that is decided after the marker, by a player these boxes are still choosing.
+- **who is asked** is only the players with something to decide -- an active Confession Box of
+  their own, or an affordable hire (`opponent_active_hire`, then `live_market_hire`). A player
+  with no option is skipped rather than shown one answer, and if nobody has one the phase does not
+  happen at all.
+- **affordability is re-read at each question**, because an earlier hire in the same phase can
+  take the last of the resource off a later player.
+- **hired uses pay** the current Merchant resource (`1`) to bank or owner at the moment of the
+  answer, not banked until the marker.
+- **each use grants** temporary `+2` effective piety, for this marker award and nothing else.
 
-Branch-pruning policy for legal action generation:
+There is no pruning, and there cannot be. The old rule kept only the combinations that changed who
+receives the marker, which was computable only because one action carried every player's answer at
+once. A player deciding for themselves cannot be measured against an outcome that turns on players
+who have not decided yet.
 
-- no-use Confession Box variant is always retained
-- Confession Box use/hire variants are generated only when the temporary `+2` bonuses
-  change **who receives the First Player marker**
-
-A Confession Box cannot change who is chosen as next `start_player`: the marker holder chooses
-freely and may name anyone, so every variant leads to the same set of possible start players and
-differs only in who picks between them. Comparing the chosen start player would therefore find
-every variant identical and prune all of them.
+A Confession Box cannot change who is chosen as next `start_player` either way: the marker holder
+chooses freely and may name anyone, so every combination leads to the same set of possible start
+players and differs only in who picks between them.
 
 Temporary piety notes:
 
@@ -191,7 +204,7 @@ allowed to disagree.
 
 At round end (if game not over):
 
-1. resolve any selected Confession Box uses/hires in start-player turn order
+1. ask each player who can reach a Confession Box, in turn order, and stop for each answer
 2. compute effective piety = real piety + temporary Confession Box bonus (`+2` when used/hired)
 3. find highest effective piety among real players
 4. if unique highest effective piety: that player receives the First Player marker

@@ -8,7 +8,8 @@ from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import StartPlayerSelectionAction, action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
+from tests.round_end_helpers import apply_declining_confession
 
 _PLAYER_NAME = re.compile(r"player_(?:one|two|three|four)")
 
@@ -19,7 +20,7 @@ def _round_ended(scenario, *, start_player: PlayerId | None = None):
     if start_player is not None:
         state = state.with_start_player(start_player)
     action = legal_actions(state, scenario.config)[0]
-    return apply_action(state, action, scenario.config)
+    return apply_declining_confession(state, action, scenario.config)
 
 
 def _details(events, event_type):
@@ -74,7 +75,7 @@ def test_whoever_the_holder_names_is_who_begins_the_next_round(chosen: PlayerId)
 
     action = StartPlayerSelectionAction(chosen_start_player=chosen)
     assert action in legal_actions(waiting, scenario.config)
-    result = apply_action(waiting, action, scenario.config)
+    result = apply_declining_confession(waiting, action, scenario.config)
 
     assert result.state.start_player is chosen
     assert result.state.active_player is chosen
@@ -104,7 +105,7 @@ def test_a_holder_naming_someone_else_gives_up_the_next_round_to_them() -> None:
     other = min(piety, key=lambda player: piety[player])
     assert waiting.active_player is holder
 
-    result = apply_action(
+    result = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=other),
         scenario.config,
@@ -150,7 +151,7 @@ def test_the_marker_is_not_the_start_player_and_the_state_keeps_both() -> None:
     assert waiting.active_player is PlayerId.PLAYER_TWO
     assert waiting.start_player is PlayerId.PLAYER_ONE
 
-    result = apply_action(
+    result = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=PlayerId.PLAYER_ONE),
         scenario.config,
@@ -160,7 +161,7 @@ def test_the_marker_is_not_the_start_player_and_the_state_keeps_both() -> None:
 
 def _selection_message(scenario, chosen: PlayerId) -> str:
     waiting = _round_ended(scenario, start_player=PlayerId.PLAYER_TWO).state
-    result = apply_action(
+    result = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=chosen),
         scenario.config,
@@ -216,7 +217,7 @@ def test_choosing_a_start_player_is_refused_when_nobody_is_being_waited_on() -> 
 
     assert legal_actions(scenario.state, scenario.config)
     with pytest.raises(Exception, match="marker holder is being waited on"):
-        apply_action(
+        apply_declining_confession(
             scenario.state,
             StartPlayerSelectionAction(chosen_start_player=PlayerId.PLAYER_ONE),
             scenario.config,

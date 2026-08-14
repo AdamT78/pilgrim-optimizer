@@ -20,6 +20,7 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import (
     GameAction,
     SetupSowAction,
+    StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_summary,
 )
@@ -247,6 +248,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 search_objective,
                 is_setup_sow=True,
             )
+        elif isinstance(result.best_action, StartPlayerConfessionBoxAction):
+            best_action_heading = "Best Confession Box decision:"
+            events_heading = "Events for best Confession Box decision:"
+            state_heading = "State after best Confession Box decision:"
         elif isinstance(result.best_action, StartPlayerSelectionAction):
             best_action_heading = "Best start player choice:"
             events_heading = "Events for best start player choice:"

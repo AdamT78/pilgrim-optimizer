@@ -21,7 +21,7 @@ def test_cli_round_end_verbose_shows_excess_then_merchant_then_start_player(caps
     assert "EXCESS_RESOURCE_CAP: player_two wheat 10 -> 6" in output
 
     merchant_index = output.index("MERCHANT_ADVANCE:")
-    start_player_index = output.index("START_PLAYER_MARKER:")
+    start_player_index = output.index("CONFESSION_BOX_PHASE:")
     turn_advance_index = output.index("TURN_ADVANCE:")
     assert merchant_index < start_player_index < turn_advance_index
     assert "ALMS_SEASON_END:" not in output

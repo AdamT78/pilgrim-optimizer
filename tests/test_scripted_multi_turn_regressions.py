@@ -7,6 +7,7 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
+    StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_id,
 )
@@ -16,7 +17,6 @@ from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
 from pilgrim.rules.buildings import future_buildings, is_building_live, live_buildings
 from pilgrim.rules.transition import TransitionResult, apply_action, legal_actions
-
 
 Selector = Callable[[GameState, tuple[GameAction, ...]], GameAction]
 
@@ -109,6 +109,16 @@ def apply_scripted_turns(
             )
 
         result = apply_action(state, selected_action, config)
+        # The Confession Box questions belong to the turn that ended the round rather than to the
+        # turn after it. Declined here -- the answer that changes nothing -- and folded into this
+        # step's events, so a script that never mentions the boxes still sees the round end it
+        # always saw, marker and all, in the step that caused it.
+        while result.state.phase is TurnPhase.START_PLAYER_CONFESSION:
+            answered = apply_action(result.state, StartPlayerConfessionBoxAction(use=False), config)
+            result = TransitionResult(
+                state=answered.state,
+                events=(*result.events, *answered.events),
+            )
         steps.append(
             ScriptedStep(
                 step=step_index,
@@ -126,7 +136,9 @@ def event_types(events: tuple[GameEvent, ...]) -> tuple[EventType, ...]:
     return tuple(event.event_type for event in events)
 
 
-def assert_event_order(events: tuple[GameEvent, ...], expected_order: tuple[EventType, ...]) -> None:
+def assert_event_order(
+    events: tuple[GameEvent, ...], expected_order: tuple[EventType, ...]
+) -> None:
     search_from = 0
     for expected_event in expected_order:
         for index in range(search_from, len(events)):
@@ -256,8 +268,11 @@ def test_scripted_season_end_sequence_runs_in_expected_order_after_two_turns() -
             EventType.ALMS_SEASON_REWARD,
             EventType.ALMS_RESET,
             EventType.MERCHANT_ADVANCE,
-            EventType.START_PLAYER_MARKER,
+            # The turn advances to the first player owed a Confession Box question, and the marker
+            # is awarded by whoever answers last -- so the marker now falls on the far side of the
+            # advance rather than before it.
             EventType.TURN_ADVANCE,
+            EventType.START_PLAYER_MARKER,
         ),
     )
 

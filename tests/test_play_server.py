@@ -20,6 +20,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,7 @@ from pilgrim.model.actions import (
 )
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId
 from pilgrim.rules.transition import apply_action, legal_actions
+from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug.render_play_view import render_play_view_from_payload
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
@@ -275,15 +277,38 @@ def _served(tmp_path: Path, players: int = 4, seed: int = 99):
     return _past_the_start_player_decision(PlayServer(("127.0.0.1", 0), path))
 
 
+UNPRESENTED = "tithe_resource"
+
+
+@contextmanager
+def _one_field_gone_unasked(monkeypatch):
+    """Take one presented field back off the page, so a turn becomes genuinely unanswerable.
+
+    This used to hunt for a position the page could not finish, and there were plenty. There are
+    none left: every field a turn carries now has a way to be chosen, which is the milestone and
+    is exactly why the refusal can no longer be reached by playing.
+
+    So it is manufactured, and it must be. The refusal is what stands between a player and a page
+    that picks for them, and a mechanism with no test is a mechanism that stops working quietly.
+    Un-presenting a field is precisely the condition it was built for -- it is the state every one
+    of these fields was in before somebody built its affordance -- rather than an invented one.
+    """
+    monkeypatch.setattr(
+        play_server,
+        "RESOURCE_CHOICE_FIELDS",
+        tuple(name for name in play_server.RESOURCE_CHOICE_FIELDS if name != UNPRESENTED),
+    )
+    yield
+
+
 def _played_until_the_page_must_refuse(server, limit: int = 40):
     """Play on, a settled turn at a time, until the page meets a turn it cannot finish.
 
-    Not a pinned seed and turn number. Which fields are still unpresented changes every time one
-    of them gets an affordance, so a position hard-coded as ambiguous would go stale silently and
-    take the refusal out of the suite with it. This looks for one instead, and says so if the game
-    runs out without ever needing to refuse anything.
+    Not a pinned seed and turn number: which turns are ambiguous depends on what is unpresented,
+    and that changes. This looks for one, under the field removed by `_one_field_gone_unasked`.
     """
     for _turn in range(limit):
+        server._refresh()
         if any(candidate["unresolved"] for candidate in server.payload["turn_candidates"]):
             return server
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"])
@@ -493,6 +518,11 @@ def _engine_steps(action) -> list[dict]:
     steps.append({"kind": "position", "value": action.selected_duty})
     steps.append({"kind": "resolution", "value": action.resolution.value})
     for name in ("tithe_resource", "taxation_step1_resource"):
+        # Read through the constant so that a test which takes a field off the page takes it off
+        # this side too. Everywhere else the two are the same tuple, and this mirror is still built
+        # by hand from the action rather than from `decision_steps`.
+        if name not in play_server.RESOURCE_CHOICE_FIELDS:
+            continue
         if getattr(action, name) is not None:
             steps.append({"kind": "resource", "value": getattr(action, name)})
     if action.construct_building_id is not None:
@@ -1687,6 +1717,7 @@ def test_setting_the_two_alms_amounts_one_at_a_time_is_caught(monkeypatch) -> No
 
 def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Answering everything the page asks can still leave several actions standing.
 
@@ -1695,9 +1726,10 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     would be the page quietly making a decision the rules give to the player. The named fields are
     the backlog, worked out from the position rather than remembered.
     """
-    server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
-    open_ended = [c for c in server.payload["turn_candidates"] if c["unresolved"]]
-    assert open_ended, "no ambiguous turn on this board, so nothing was exercised"
+    with _one_field_gone_unasked(monkeypatch):
+        server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
+        open_ended = [c for c in server.payload["turn_candidates"] if c["unresolved"]]
+        assert open_ended, "no ambiguous turn on this board, so nothing was exercised"
 
     for candidate in open_ended:
         assert candidate["action_id"] is None, "an undecided turn was given something to submit"
@@ -1718,20 +1750,25 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
         assert len({getattr(member, name) for member in members}) > 1
     # A field the page does present cannot come back as unresolved: answering it is what put this
     # candidate in its own group, so the refusal is always about something genuinely unbuilt.
-    presented = {"tithe_resource", "taxation_step1_resource", *ALMS_PAIR}
+    presented = {"taxation_step1_resource", *ALMS_PAIR}
     assert presented.isdisjoint(candidate["unresolved"])
+    # And the field taken off the page is the one that came back, which is the refusal doing its
+    # job rather than naming whatever happened to be handy.
+    assert UNPRESENTED in candidate["unresolved"]
 
 
 @needs_node
-def test_an_undecided_turn_offers_no_way_to_commit_it(tmp_path: Path) -> None:
+def test_an_undecided_turn_offers_no_way_to_commit_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The refusal has to be structural: there is no button on that panel to press."""
-    server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
-    candidates = server.payload["turn_candidates"]
-    index = next(i for i, c in enumerate(candidates) if c["unresolved"])
-    target = [step["value"] for step in candidates[index]["steps"]]
-    clicks = _clicks_to(server, _engine_decisions(server), target)
-
-    transcript = _run_script(server, clicks, tmp_path, confirm=True)
+    with _one_field_gone_unasked(monkeypatch):
+        server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
+        candidates = server.payload["turn_candidates"]
+        index = next(i for i, c in enumerate(candidates) if c["unresolved"])
+        target = [step["value"] for step in candidates[index]["steps"]]
+        clicks = _clicks_to(server, _engine_decisions(server), target)
+        transcript = _run_script(server, clicks, tmp_path, confirm=True)
     assert transcript["shownPanel"][-1] == index, "the undecided turn's panel was not the one shown"
     assert transcript["confirmable"] is False, "an undecided turn had a commit button"
     assert transcript["posted"] is None
@@ -1898,3 +1935,73 @@ def test_a_page_nothing_rebuilds_is_reported_rather_than_passed_over(tmp_path: P
     assert main(["--output-dir", str(tmp_path)]) == 1
     fossil.unlink()
     assert main(["--output-dir", str(tmp_path)]) == 0
+
+
+# ---------------------------------------------------------------------------------------------
+# The Confession Box, which each player answers for themselves
+# ---------------------------------------------------------------------------------------------
+
+
+def _played_until_a_box_is_offered(server, limit: int = 80):
+    """Play settled turns until a round end stops to ask somebody about a Confession Box."""
+    for _turn in range(limit):
+        if server.payload["state"]["phase"] == "start_player_confession":
+            return server
+        settled = next((c for c in server.payload["turn_candidates"] if c["action_id"]), None)
+        if settled is None:
+            break
+        server.apply(settled["action_id"], server.payload["state_token"])
+    raise AssertionError(f"no round end in {limit} moves asked about a box")
+
+
+def test_a_confession_box_is_asked_of_one_player_and_answered_from_the_page(
+    tmp_path: Path,
+) -> None:
+    """One player, one question, both answers offered, and the answer taken is the one applied."""
+    server = _played_until_a_box_is_offered(_played_through_setup(_served(tmp_path)))
+    asked = server.payload["state"]["active_player"]
+    candidates = server.payload["turn_candidates"]
+
+    assert len(candidates) == 2, "a box decision must be a real choice, not a formality"
+    assert all(len(c["steps"]) == 1 for c in candidates), "one question, so one step"
+    assert all(c["steps"][0]["kind"] == "combination" for c in candidates)
+    assert not any(c["unresolved"] for c in candidates)
+
+    using = next(c for c in candidates if c["steps"][0]["value"] != "decline")
+    server.apply(using["action_id"], server.payload["state_token"])
+
+    assert server.payload["state"]["phase"] != "start_player_confession" or (
+        server.payload["state"]["active_player"] != asked
+    ), "the same player was asked twice"
+
+
+def test_a_box_offer_reads_as_a_sentence_and_names_where_it_comes_from(tmp_path: Path) -> None:
+    """The three sources cost different things and are owed to different people, so all are named."""
+    server = _played_until_a_box_is_offered(_played_through_setup(_served(tmp_path)))
+    labels = [c["steps"][0]["label"] for c in server.payload["turn_candidates"]]
+
+    assert "decline the Confession Box" in labels
+    using = next(label for label in labels if label != "decline the Confession Box")
+    assert using.startswith(("use your own", "hire the Confession Box from"))
+    for label in labels:
+        # The values behind these are `own_active`, `market` and `player_one`, and none of them
+        # is English. A label carrying an underscore is one that let a value through.
+        assert "_" not in label, f"a value leaked into what a player reads: {label}"
+
+
+def test_the_boxes_are_answered_one_seat_at_a_time_and_the_marker_waits(tmp_path: Path) -> None:
+    """The page never puts two players' questions up at once, and the round does not move on."""
+    server = _played_until_a_box_is_offered(_played_through_setup(_served(tmp_path)))
+    asked: list[str] = []
+    while server.payload["state"]["phase"] == "start_player_confession":
+        asked.append(server.payload["state"]["active_player"])
+        assert len(server.payload["turn_candidates"]) == 2
+        declining = next(
+            c for c in server.payload["turn_candidates"] if c["steps"][0]["value"] == "decline"
+        )
+        server.apply(declining["action_id"], server.payload["state_token"])
+
+    assert len(asked) == len(set(asked)), "a seat was asked twice"
+    assert server.payload["state"]["phase"] == "start_player_selection", (
+        "the marker was not awarded once the last seat had answered"
+    )

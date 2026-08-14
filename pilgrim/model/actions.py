@@ -13,11 +13,21 @@ _ALLOCATION_SOURCE_PREFIX = "abbey"
 
 
 @dataclass(frozen=True, slots=True)
-class StartPlayerConfessionBoxUse:
-    """One start-player-phase Confession Box use/hire selection."""
+class StartPlayerConfessionBoxAction:
+    """One player's own answer to whether they will spend on the Confession Box.
 
-    player: PlayerId
-    source: str
+    The player is not named on it. Whoever is being waited on is `state.active_player`, exactly as
+    with a setup sow, so a submission cannot claim to be answering for somebody else -- which is
+    the failure the tuple this replaced invited, since it let one player's turn carry every other
+    player's decision.
+
+    `source` is where the box is reached from -- `own_active`, `market`, or an opponent's player
+    id -- and is set only when using. Declining names no source because there is nothing to name.
+    """
+
+    use: bool
+    source: str | None = None
+    action_type: ActionType = field(default=ActionType.START_PLAYER_CONFESSION, init=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +86,6 @@ class FullTurnAction:
     merchant_advance_building_source: str | None = None
     workforce_move_building_id: str | None = None
     workforce_move_building_source: str | None = None
-    start_player_confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...] = ()
     hired_building_id: str | None = None
     hired_building_source: str | None = None
     # Only set when the Merchant stands on the cornucopia, where the hire cost is a wildcard and
@@ -136,11 +145,16 @@ class AllocationMove:
             and self.destination not in SPECIAL_ACTIVITY_IDS
         ):
             raise ValueError(f"Unknown allocation move destination: {self.destination}")
-        if self.source == _ALLOCATION_SOURCE_PREFIX and self.destination == _ALLOCATION_SOURCE_PREFIX:
+        if (
+            self.source == _ALLOCATION_SOURCE_PREFIX
+            and self.destination == _ALLOCATION_SOURCE_PREFIX
+        ):
             raise ValueError("Allocation move abbey -> abbey is not legal.")
 
 
-GameAction = FullTurnAction | SetupSowAction | StartPlayerSelectionAction
+GameAction = (
+    FullTurnAction | SetupSowAction | StartPlayerConfessionBoxAction | StartPlayerSelectionAction
+)
 
 
 def action_id(action: GameAction) -> str:
@@ -148,6 +162,11 @@ def action_id(action: GameAction) -> str:
     if isinstance(action, SetupSowAction):
         route = "->".join(str(position) for position in action.route)
         return f"setup_sow:sow:{action.origin}:{route}"
+
+    if isinstance(action, StartPlayerConfessionBoxAction):
+        if not action.use:
+            return "start_player_confession:decline"
+        return f"start_player_confession:use:{action.source}"
 
     if isinstance(action, StartPlayerSelectionAction):
         return f"start_player_selection:{action.chosen_start_player.name.lower()}"
@@ -176,9 +195,7 @@ def action_id(action: GameAction) -> str:
     if action.resolution is TurnResolutionType.TAXATION:
         step_1 = action.taxation_step1_resource or "none"
         step_2 = (
-            ",".join(action.taxation_step2_resources)
-            if action.taxation_step2_resources
-            else "none"
+            ",".join(action.taxation_step2_resources) if action.taxation_step2_resources else "none"
         )
         taxation_suffix = f":take:{step_1}:bonus:{step_2}"
     allocation_suffix = ""
@@ -326,12 +343,6 @@ def action_id(action: GameAction) -> str:
             f":workforce_move_building:{action.workforce_move_building_id or 'none'}"
             f":from:{action.workforce_move_building_source or 'unknown'}"
         )
-    if action.start_player_confession_box_uses:
-        confession_box_suffix = ":start_player_confession_box:" + ",".join(
-            f"{use.player.name.lower()}@{use.source}" for use in action.start_player_confession_box_uses
-        )
-    else:
-        confession_box_suffix = ""
     hire_suffix = ""
     if action.hired_building_id is not None or action.hired_building_source is not None:
         hire_suffix = (
@@ -356,7 +367,7 @@ def action_id(action: GameAction) -> str:
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{conversion_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
-        f"{merchant_advance_suffix}{workforce_move_suffix}{confession_box_suffix}{hire_suffix}"
+        f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
         f"{tithe_suffix}"
     )
 
@@ -377,6 +388,15 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     positions = config.board.positions
     if isinstance(action, SetupSowAction):
         return f"Setup sow: sow {readable_route(action.origin, action.route, positions=positions)}"
+
+    if isinstance(action, StartPlayerConfessionBoxAction):
+        if not action.use:
+            return "Confession Box: decline"
+        if action.source == "own_active":
+            return "Confession Box: use own active Confession Box"
+        if action.source == "market":
+            return "Confession Box: hire from market"
+        return f"Confession Box: hire from {action.source}"
 
     if isinstance(action, StartPlayerSelectionAction):
         return (
@@ -412,8 +432,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         )
     elif cloisters_source is not None and action.sow_route_omitted_location is not None:
         route_summary += (
-            f" | skip {position_name(action.sow_route_omitted_location, positions)} "
-            "with cloisters"
+            f" | skip {position_name(action.sow_route_omitted_location, positions)} with cloisters"
         )
     if (
         action.free_hire_enabler_building_id == "wagon_yard"
@@ -433,13 +452,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         amount = action.building_conversion_amount
         if action.building_conversion_direction == "sell_wheat":
             route_summary += (
-                " | use building: grain_store "
-                f"to sell {amount} wheat for {amount} silver"
+                f" | use building: grain_store to sell {amount} wheat for {amount} silver"
             )
         elif action.building_conversion_direction == "buy_wheat":
             route_summary += (
-                " | use building: grain_store "
-                f"to buy {amount} wheat for {amount} silver"
+                f" | use building: grain_store to buy {amount} wheat for {amount} silver"
             )
     if (
         action.building_conversion_id == "indulgences"
@@ -449,13 +466,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         amount = action.building_conversion_amount
         if action.building_conversion_direction == "sell_piety":
             route_summary += (
-                " | use building: indulgences "
-                f"to sell {amount} piety for {amount} silver"
+                f" | use building: indulgences to sell {amount} piety for {amount} silver"
             )
         elif action.building_conversion_direction == "buy_piety":
             route_summary += (
-                " | use building: indulgences "
-                f"to buy {amount} piety for {amount} silver"
+                f" | use building: indulgences to buy {amount} piety for {amount} silver"
             )
     if (
         action.building_conversion_id == "stone_yard"
@@ -465,13 +480,11 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         amount = action.building_conversion_amount
         if action.building_conversion_direction == "sell_stone":
             route_summary += (
-                " | use building: stone_yard "
-                f"to sell {amount} stone for {amount} silver"
+                f" | use building: stone_yard to sell {amount} stone for {amount} silver"
             )
         elif action.building_conversion_direction == "buy_stone":
             route_summary += (
-                " | use building: stone_yard "
-                f"to buy {amount} stone for {amount} silver"
+                f" | use building: stone_yard to buy {amount} stone for {amount} silver"
             )
     if (
         action.building_conversion_id == "brewery"
@@ -482,21 +495,16 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             route_summary += " | use building: brewery to sell 1 wheat for 2 silver"
     if action.effective_acolyte_building_id == "scriptorium":
         route_summary += (
-            " | use building: scriptorium "
-            "for +1 effective acolyte on occupied Duty tiles"
+            " | use building: scriptorium for +1 effective acolyte on occupied Duty tiles"
         )
     if action.taxation_majority_building_id == "customs_house":
         route_summary += (
-            " | use building: customs_house "
-            "for Taxation majority on occupied Duty tiles"
+            " | use building: customs_house for Taxation majority on occupied Duty tiles"
         )
     if action.merchant_advance_building_id == "guild":
         route_summary += " | use building: guild to move merchant +1"
     if action.workforce_move_building_id == "pulpit":
-        route_summary += (
-            " | use building: pulpit "
-            "to move 1 serf village -> abbey for free"
-        )
+        route_summary += " | use building: pulpit to move 1 serf village -> abbey for free"
     if (
         action.bank_payment_building_id == "bank"
         and action.bank_payment_replaced_resource is not None
@@ -517,10 +525,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if action.resolution is TurnResolutionType.TITHE and action.tithe_resource is not None:
         summary += f" | gain {action.tithe_resource}"
     if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
-        summary += (
-            f" | pay silver={action.alms_payment_silver}, "
-            f"wheat={action.alms_payment_wheat}"
-        )
+        summary += f" | pay silver={action.alms_payment_silver}, wheat={action.alms_payment_wheat}"
         if action.alms_house_extra_silver or action.alms_house_extra_wheat:
             summary += (
                 " | alms_house extra "
@@ -553,37 +558,23 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += f" | deferred plan: {action.construct_plan or 'none'}"
     if has_combined_kogge_cloisters:
         if kogge_source != "own_active":
-            summary += (
-                " | hire building: kogge "
-                f"from {kogge_source}"
-            )
+            summary += f" | hire building: kogge from {kogge_source}"
         if cloisters_source != "own_active":
-            summary += (
-                " | hire building: cloisters "
-                f"from {cloisters_source}"
-            )
+            summary += f" | hire building: cloisters from {cloisters_source}"
     else:
         if kogge_source is not None:
             if kogge_source == "own_active":
                 summary += " | use building: kogge"
             else:
-                summary += (
-                    " | hire building: kogge "
-                    f"from {kogge_source}"
-                )
+                summary += f" | hire building: kogge from {kogge_source}"
         if cloisters_source is not None and cloisters_source != "own_active":
-            summary += (
-                " | hire building: cloisters "
-                f"from {cloisters_source}"
-            )
+            summary += f" | hire building: cloisters from {cloisters_source}"
     if action.hired_building_id and action.hired_building_source:
         summary += (
-            f" | hire building: {action.hired_building_id} "
-            f"from {action.hired_building_source}"
+            f" | hire building: {action.hired_building_id} from {action.hired_building_source}"
         )
     if (
-        action.building_conversion_id
-        in ("grain_store", "indulgences", "stone_yard", "brewery")
+        action.building_conversion_id in ("grain_store", "indulgences", "stone_yard", "brewery")
         and action.building_conversion_source is not None
         and action.building_conversion_source != "own_active"
     ):
@@ -596,63 +587,33 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         and action.effective_acolyte_building_source is not None
         and action.effective_acolyte_building_source != "own_active"
     ):
-        summary += (
-            " | hire building: scriptorium "
-            f"from {action.effective_acolyte_building_source}"
-        )
+        summary += f" | hire building: scriptorium from {action.effective_acolyte_building_source}"
     if (
         action.taxation_majority_building_id == "customs_house"
         and action.taxation_majority_building_source is not None
         and action.taxation_majority_building_source != "own_active"
     ):
         summary += (
-            " | hire building: customs_house "
-            f"from {action.taxation_majority_building_source}"
+            f" | hire building: customs_house from {action.taxation_majority_building_source}"
         )
     if (
         action.merchant_advance_building_id == "guild"
         and action.merchant_advance_building_source is not None
         and action.merchant_advance_building_source != "own_active"
     ):
-        summary += (
-            " | hire building: guild "
-            f"from {action.merchant_advance_building_source}"
-        )
+        summary += f" | hire building: guild from {action.merchant_advance_building_source}"
     if (
         action.workforce_move_building_id == "pulpit"
         and action.workforce_move_building_source is not None
         and action.workforce_move_building_source != "own_active"
     ):
-        summary += (
-            " | hire building: pulpit "
-            f"from {action.workforce_move_building_source}"
-        )
+        summary += f" | hire building: pulpit from {action.workforce_move_building_source}"
     if (
         action.bank_payment_building_id == "bank"
         and action.bank_payment_building_source is not None
         and action.bank_payment_building_source != "own_active"
     ):
-        summary += (
-            " | hire building: bank "
-            f"from {action.bank_payment_building_source}"
-        )
-    if action.start_player_confession_box_uses:
-        confession_parts: list[str] = []
-        for use in action.start_player_confession_box_uses:
-            player_label = use.player.name.lower()
-            if use.source == "own_active":
-                confession_parts.append(
-                    f"{player_label} uses own active Confession Box"
-                )
-            elif use.source == "market":
-                confession_parts.append(
-                    f"{player_label} hires Confession Box from market"
-                )
-            else:
-                confession_parts.append(
-                    f"{player_label} hires Confession Box from {use.source}"
-                )
-        summary += " | start-player Confession Box: " + "; ".join(confession_parts)
+        summary += f" | hire building: bank from {action.bank_payment_building_source}"
     if action.hired_building_id == "mill":
         required_wheat = 0
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
@@ -685,11 +646,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     ):
         from_name = position_name(action.end_turn_relocation_from, positions)
         to_value = action.end_turn_relocation_to
-        to_name = (
-            to_value
-            if isinstance(to_value, str)
-            else position_name(to_value, positions)
-        )
+        to_name = to_value if isinstance(to_value, str) else position_name(to_value, positions)
         summary += f" | end: {action.end_turn_building_id} {from_name} -> {to_name}"
         if action.end_turn_building_source != "own_active":
             summary += (

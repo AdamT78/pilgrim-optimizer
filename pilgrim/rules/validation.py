@@ -222,6 +222,45 @@ def ensure_valid_special_activities_state(state: GameState) -> None:
             )
 
 
+def ensure_valid_start_player_confession_state(state: GameState) -> None:
+    """The Confession Box cursor has to agree with the phase, both ways round.
+
+    Both directions matter and only one of them is obvious. A state in the phase with nobody left
+    pending is a table waiting on nobody. A state NOT in the phase but still carrying a tally is
+    worse and quieter: those two piety were bought for an award that has already happened, and
+    left lying about they would be counted again at the next one.
+    """
+    pending = state.start_player_confession_pending
+    used = state.start_player_confession_used
+    for label, players in (("pending", pending), ("used", used)):
+        if len(set(players)) != len(players):
+            raise TransitionValidationError(
+                f"start_player_confession_{label} cannot contain duplicates."
+            )
+        for player_id in players:
+            if int(player_id) >= state.player_count:
+                raise TransitionValidationError(
+                    f"start_player_confession_{label} contains unknown player id for this state."
+                )
+    if set(pending) & set(used):
+        raise TransitionValidationError(
+            "A player cannot be waiting to answer and already counted as having used a box."
+        )
+    if state.phase is TurnPhase.START_PLAYER_CONFESSION:
+        if not pending:
+            raise TransitionValidationError(
+                "phase=start_player_confession requires at least one player still to answer."
+            )
+        if state.active_player != pending[0]:
+            raise TransitionValidationError(
+                "active_player must be the next player owed a Confession Box decision."
+            )
+    elif pending or used:
+        raise TransitionValidationError(
+            "A Confession Box cursor or tally requires phase=start_player_confession."
+        )
+
+
 def ensure_valid_setup_state(state: GameState) -> None:
     completed_by = state.setup_sow_completed_by
     if len(set(completed_by)) != len(completed_by):

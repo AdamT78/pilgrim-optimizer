@@ -64,6 +64,10 @@ class TurnPhase(Enum):
     """Top-level turn phase for the Mancala sandbox."""
 
     SETUP_SOW = "setup_sow"
+    # Each player who can reach a Confession Box says, in turn order, whether they will spend on
+    # two piety they do not keep. Like setup sow this is N decisions rather than one: the box is
+    # each owner's to spend, and it is asked BEFORE the marker because what it buys is the marker.
+    START_PLAYER_CONFESSION = "start_player_confession"
     # One player acts outside the run of normal turns: whoever holds the First Player marker says
     # who begins the next round. A phase rather than a step inside a turn, because the player who
     # answers is not the player whose turn just ended and may not be either of them.
@@ -140,6 +144,7 @@ class ActionType(Enum):
     """Action categories used for stable action IDs and logging."""
 
     SETUP_SOW = "setup_sow"
+    START_PLAYER_CONFESSION = "start_player_confession"
     START_PLAYER_SELECTION = "start_player_selection"
     FULL_TURN = "full_turn"
     SOW = "sow"
@@ -179,7 +184,11 @@ class EventType(Enum):
     SPECIAL_ACTIVITY_BONUS = "special_activity_bonus"
     DUMMY_ACOLYTE_MOVE = "dummy_acolyte_move"
     MERCHANT_ADVANCE = "merchant_advance"
+    CONFESSION_BOX_PHASE = "confession_box_phase"
     CONFESSION_BOX_BONUS = "confession_box_bonus"
+    # Said by a player who was asked and said no. Worth an event of its own: without it a player
+    # who declined and a player who was never asked read the same in the log, and those differ.
+    CONFESSION_BOX_DECLINED = "confession_box_declined"
     EXCESS_RESOURCE_CAP = "excess_resource_cap"
     EXCESS_CHECK = "excess_check"
     EXCESS_DISCARD = "excess_discard"

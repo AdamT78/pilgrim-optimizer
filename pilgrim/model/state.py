@@ -77,6 +77,16 @@ class GameState:
     setup_sow_required: bool = False
     setup_sow_complete: bool = True
     setup_sow_completed_by: tuple[PlayerId, ...] = ()
+    # The Confession Box round-end phase, which is a cursor and a tally, the same two things setup
+    # sow keeps. `pending` is who has NOT yet been asked, in the order they will be, so the head of
+    # it is whoever the table is waiting on; empty means the phase is over or never started.
+    # `used` is who bought the two piety and has already paid for it.
+    #
+    # Both are cleared when the marker is awarded. They describe one round end and nothing else --
+    # the piety they stand for is spent the instant it is counted, so carrying either into the next
+    # round would lend a bonus to a decision it was never bought for.
+    start_player_confession_pending: tuple[PlayerId, ...] = ()
+    start_player_confession_used: tuple[PlayerId, ...] = ()
     building_market: tuple[str, ...] = ()
     building_availability: tuple[tuple[str, int], ...] = ()
     pilgrimage_rounds: tuple[int, ...] = ()
@@ -226,6 +236,18 @@ class GameState:
 
     def with_dummy_acolytes(self, dummy_acolytes: DummyAcolyteGroups) -> GameState:
         return replace(self, dummy_acolytes=dummy_acolytes)
+
+    def with_start_player_confession_progress(
+        self,
+        *,
+        pending: tuple[PlayerId, ...],
+        used: tuple[PlayerId, ...],
+    ) -> GameState:
+        return replace(
+            self,
+            start_player_confession_pending=pending,
+            start_player_confession_used=used,
+        )
 
     def with_setup_sow_progress(
         self,

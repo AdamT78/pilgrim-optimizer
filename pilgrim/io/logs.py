@@ -55,6 +55,14 @@ def state_to_record(state: GameState) -> dict[str, Any]:
             "season_number": state.timing.season_number,
             "turn_in_round": state.timing.turn_in_round,
         },
+        # Written unconditionally, and empty on almost every state, because "no Confession Box
+        # phase is under way" is a fact a reader needs rather than an absence it has to infer.
+        "start_player_confession": {
+            "pending": [
+                player_id.name.lower() for player_id in state.start_player_confession_pending
+            ],
+            "used": [player_id.name.lower() for player_id in state.start_player_confession_used],
+        },
         "setup": {
             "setup_sow_required": state.setup_sow_required,
             "setup_sow_complete": state.setup_sow_complete,

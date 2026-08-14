@@ -39,6 +39,7 @@ from tools.ui_debug.render_play_view import (
     piety_variant_for,
     render_play_view_from_payload,
     seat_of,
+    ship_hex_for,
 )
 from tools.ui_debug.render_player_boards_v2 import (
     default_player_board_v2_state,
@@ -1056,3 +1057,65 @@ def test_drawing_a_seats_board_from_its_neighbour_is_caught(monkeypatch) -> None
     for player_id in order:
         neighbour = order[(order.index(player_id) + 1) % len(order)]
         assert shifted[player_id] == honest[neighbour]
+
+
+# ---------------------------------------------------------------------------------------------
+# The ship, which used to stand on round 1 whatever the state said
+# ---------------------------------------------------------------------------------------------
+
+
+def _ship_center(page: str) -> tuple[float, float]:
+    """Where the ship marker was translated to, off the page rather than off the layout."""
+    marker = re.search(r'<g id="ship-marker" transform="translate\((-?[\d.]+),(-?[\d.]+)\)"', page)
+    assert marker is not None, "no ship was drawn"
+    return float(marker.group(1)), float(marker.group(2))
+
+
+def test_the_ship_stands_where_the_state_says_and_not_on_round_one(tmp_path: Path) -> None:
+    """Proven MID-GAME, because at round 1 the sample is right and proves nothing.
+
+    `ship_position` counts from the slot round 1 sits on, so position 0 and "the first hex" are
+    the same hex, and a page that never read the state passed every check anyone could write on a
+    fresh board. Three positions here, all of them past that.
+    """
+    payload = _generated_payload(tmp_path, 4)
+    opening = _ship_center(render_play_view_from_payload(payload))
+
+    seen = {}
+    for position in (0, 4, 11):
+        payload["state"]["ship_position"] = position
+        seen[position] = _ship_center(render_play_view_from_payload(payload))
+
+    assert seen[0] == opening, "position 0 is the opening hex and should not have moved"
+    assert len(set(seen.values())) == 3, "the ship stood in the same place at three positions"
+
+
+def test_the_ship_walks_the_same_ring_the_track_is_laid_along(tmp_path: Path) -> None:
+    """Its hex at position N is the hex the track gives round N+1, which is what makes it a ring."""
+    payload = _generated_payload(tmp_path, 4)
+    placements = {
+        placement["round"]: placement["hex"]
+        for placement in map_placements_for(
+            payload, load_building_catalog(), load_pilgrimage_sites()
+        )
+    }
+
+    for position, round_number in ((0, 1), (5, 6), (9, 10)):
+        payload["state"]["ship_position"] = position
+        assert ship_hex_for(payload) == placements[round_number]
+
+
+def test_taking_the_ship_back_to_round_one_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION. Draw it on the first slot again and a mid-game page must notice.
+
+    This is what the page did until now, and it is invisible on the board the page is generated
+    from -- which is why the check above is written against a position the opening cannot reach.
+    """
+    from tools.ui_debug import render_play_view
+
+    payload = _generated_payload(tmp_path, 4)
+    payload["state"]["ship_position"] = 7
+    wired = _ship_center(render_play_view_from_payload(payload))
+
+    monkeypatch.setattr(render_play_view, "ship_hex_for", lambda payload: "J3")
+    assert _ship_center(render_play_view_from_payload(payload)) != wired

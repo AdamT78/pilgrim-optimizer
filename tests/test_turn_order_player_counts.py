@@ -12,8 +12,9 @@ from pilgrim.model.actions import FullTurnAction, GameAction, SetupSowAction, ac
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
-from pilgrim.rules.transition import TransitionResult, apply_action, legal_actions
+from pilgrim.rules.transition import TransitionResult, legal_actions
 from pilgrim.setup.generator import generate_setup_scenario
+from tests.round_end_helpers import apply_declining_confession
 
 _CONFIG_PATH_FIELDS: tuple[str, ...] = (
     "board_file",
@@ -341,7 +342,7 @@ def _apply_with_selector(
 ) -> TransitionResult:
     actions = legal_actions(state, config)
     action = selector(actions)
-    return apply_action(state, action, config)
+    return apply_declining_confession(state, action, config)
 
 
 def _select_tithe_action(actions: tuple[GameAction, ...]) -> GameAction:

@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
+from pilgrim.model.actions import StartPlayerConfessionBoxAction
 from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.rules.scoring import (
@@ -25,19 +26,21 @@ def test_acolytes_score_only_abbey_city_and_duty_tiles() -> None:
 
 def test_piety_score_uses_real_track_value_not_temporary_confession_bonus() -> None:
     scenario = load_scenario("scenarios/confession_box_owned_temp_piety_above_12_001.json")
-    round_ending_tithe_actions = [
+    tithe = next(
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.resolution is TurnResolutionType.TITHE
-    ]
-    confession_box_action = next(
-        action
-        for action in round_ending_tithe_actions
-        if action.start_player_confession_box_uses
     )
-
-    result = apply_action(scenario.state, confession_box_action, scenario.config)
-    breakdown = score_breakdown(result.state, PlayerId.PLAYER_ONE, scenario.config)
+    # Played through the box rather than past it: the round end stops to ask, and it is the answer
+    # -- player_one using their own -- that this test needs to have happened.
+    asked = apply_action(scenario.state, tithe, scenario.config)
+    used = apply_action(
+        asked.state,
+        StartPlayerConfessionBoxAction(use=True, source="own_active"),
+        scenario.config,
+    )
+    breakdown = score_breakdown(used.state, PlayerId.PLAYER_ONE, scenario.config)
+    result = used
 
     assert result.state.player_state(PlayerId.PLAYER_ONE).piety == 12
     assert breakdown.piety_vp == 9

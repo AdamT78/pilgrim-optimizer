@@ -18,19 +18,18 @@ obviously is not, so the split is written down rather than left to a screenshot:
                             wheat/stone/silver, each seat's Alms row, who holds the first player
                             seal, the acolytes inside each player board -- village, abbey and the
                             six role circles -- the buildings standing in each seat's slots and
-                            which of them were donated, and every line of the log
-  still the layout's sample the piety discs, and which map hex round 1 starts on
-  in the state, with        the ship's position: the ship is drawn, on the hex the sample rotation
-  nowhere drawn wired to it puts round 1 on, and the state's own position is not read
+                            which of them were donated, how far around the ring the ship has come,
+                            and every line of the log
+  still the layout's sample the piety discs, and which map hex round 1 starts on -- which is also
+                            what pins the ring the ship is counted around
   in the state, with        committed acolytes, which stand on roads, shrines, market ports and
   nowhere to draw it        pilgrimage sites -- none of which this page draws at all; cardinal
                             favour tiles, which have no area on the player board; victory points,
                             which have no readout anywhere; and trade routes, which come from map
                             tile placement and are deferred
 
-The middle two rows are the ones to read carefully. A thing with a home and no wiring is a line of
-code away and looks broken until someone writes it. A thing with nowhere to draw it needs a place
-on the board decided first, and no amount of wiring will produce one.
+The last row is the one to read carefully: those need a place on the board decided first, and no
+amount of wiring will produce one.
 
 Run from the repo root to write it out:
 
@@ -258,6 +257,22 @@ def map_placements_for(payload: dict, catalog: dict, site_data: dict | list) -> 
             }
         )
     return placements
+
+
+def ship_hex_for(payload: dict) -> str:
+    """The hex the ship stands on, from the position the state keeps rather than from the round 1.
+
+    `ship_position` is an index into the same ring the track is laid along, counted from the slot
+    round 1 sits on, so it needs no arithmetic beyond looking it up: the engine's path and the
+    map's are both twenty-six steps and step 0 is the same step.
+
+    WHICH hex that index lands on is still the sample -- the rotation comes from the start roll,
+    which the engine does not carry -- so what is real here is how far around the ring the ship has
+    come, and what is not is where the ring is pinned. Those are different claims and only the
+    first was ever missing.
+    """
+    path = rotated_edge_path(start_hex_for_roll(DEFAULT_START_ROLL))
+    return path[int(payload["state"]["ship_position"]) % len(path)]
 
 
 def _slot_label(slot: dict, building: dict | None) -> str:
@@ -724,6 +739,7 @@ def render_play_view_html(
             map_layout,
             map_placements_for(payload, catalog, site_data),
             choice_keys=bool(candidates),
+            ship_hex=ship_hex_for(payload),
         ),
         scale.crop["map"],
     )
