@@ -32,6 +32,7 @@ from pilgrim.model.enums import CANONICAL_POSITION_NAMES
 from pilgrim.rules.transition import legal_actions
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug.render_play_view import render_play_view_from_payload
+from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 
@@ -241,6 +242,22 @@ def _served(tmp_path: Path, players: int = 4, seed: int = 99):
     return PlayServer(("127.0.0.1", 0), path)
 
 
+def _played_until_the_page_must_refuse(server, limit: int = 40):
+    """Play on, a settled turn at a time, until the page meets a turn it cannot finish.
+
+    Not a pinned seed and turn number. Which fields are still unpresented changes every time one
+    of them gets an affordance, so a position hard-coded as ambiguous would go stale silently and
+    take the refusal out of the suite with it. This looks for one instead, and says so if the game
+    runs out without ever needing to refuse anything.
+    """
+    for _turn in range(limit):
+        if any(candidate["unresolved"] for candidate in server.payload["turn_candidates"]):
+            return server
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"])
+        server.apply(settled["action_id"], server.payload["state_token"])
+    raise AssertionError(f"no turn in {limit} needed refusing, so the refusal went unexercised")
+
+
 def _played_through_setup(server):
     """Take the four setup sows so the position is one where a normal turn is legal."""
     while server.payload["state"]["phase"] == "setup_sow":
@@ -280,26 +297,42 @@ def _get_json(base: str, route: str):
         return json.loads(response.read())
 
 
-def _run_script(server, clicks, tmp_path: Path, *, reset: bool = False, confirm: bool = False):
-    """Execute the page's own turn script against a stub board, and report what it did."""
+def _run_script(
+    server,
+    clicks,
+    tmp_path: Path,
+    *,
+    reset: bool = False,
+    confirm: bool = False,
+    mutate=None,
+):
+    """Execute the page's own turn script against a stub board, and report what it did.
+
+    `mutate` rewrites the script before it runs, which is how a deliberate bug is put into the
+    shipped code to check that something catches it.
+    """
     page = render_play_view_from_payload(server.payload)
     script = re.search(r"<script>\n(.*?)\n</script>", page, re.S)
     assert script is not None, "the page carried no turn script"
+    source = script.group(1)
+    if mutate is not None:
+        source = mutate(source)
+        assert source != script.group(1), "the mutation matched nothing, so nothing was mutated"
 
     candidates = server.payload["turn_candidates"]
     job = tmp_path / "job.json"
     job.write_text(
         json.dumps(
             {
-                "script": script.group(1),
-                "resolutions": sorted(
-                    {
-                        step["value"]
-                        for candidate in candidates
-                        for step in candidate["steps"]
-                        if step["kind"] == "resolution"
-                    }
-                ),
+                "script": source,
+                "resolutions": _key_values(candidates, "resolution"),
+                "combinations": _key_values(candidates, "combination"),
+                # Every seat, with the page's own word for which one is on, so the script has four
+                # boards to choose wrongly between rather than one it cannot help but get right.
+                "seats": [
+                    {"seat": seat, "active": player_id == server.payload["state"]["active_player"]}
+                    for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
+                ],
                 "panels": [candidate["action_id"] for candidate in candidates],
                 "clicks": clicks,
                 "reset": reset,
@@ -314,6 +347,13 @@ def _run_script(server, clicks, tmp_path: Path, *, reset: bool = False, confirm:
     return json.loads(finished.stdout)
 
 
+def _key_values(candidates: list[dict], kind: str) -> list[str]:
+    """Every distinct value of one kind of step, which is one key each on the page."""
+    return sorted(
+        {step["value"] for c in candidates for step in c["steps"] if step["kind"] == kind}
+    )
+
+
 def _at(value):
     return {"kind": "position", "value": value}
 
@@ -322,38 +362,92 @@ def _do(name):
     return {"kind": "resolution", "value": name}
 
 
+def _take(stock: str, seat: int):
+    """Press a stock key on one seat's board -- named, so a test can press the wrong one."""
+    return {"kind": "resource", "value": stock, "seat": seat}
+
+
+def _pay(combination: str):
+    return {"kind": "combination", "value": combination}
+
+
+def _click_for(server, step: dict) -> dict:
+    """The click that answers one step, chosen by the step's kind and never by what it is about."""
+    if step["kind"] == "position":
+        return _at(step["value"])
+    if step["kind"] == "resource":
+        return _take(step["value"], _active_seat(server))
+    if step["kind"] == "combination":
+        return _pay(step["value"])
+    return _do(step["value"])
+
+
+def _active_seat(server) -> int:
+    return SEATED_PLAYERS.index(server.payload["state"]["active_player"]) + 1
+
+
 # ---------------------------------------------------------------------------------------------
 # What the engine says may come next
 # ---------------------------------------------------------------------------------------------
 
 
-def _engine_decisions(server) -> list[list]:
-    """Every legal move as the sequence of decisions that reaches it, derived here from scratch.
+ALMS_PAIR = ("alms_payment_silver", "alms_payment_wheat")
 
-    Deliberately not `turn_candidates`: comparing the page against the same function that fed it
-    would only show the page copied it faithfully. This walks `legal_actions` itself, so what the
-    offers are checked against is the engine's own answer about what is legal.
+
+def _engine_steps(action) -> list[dict]:
+    """One legal action as the sequence of decisions that reaches it, spelled out here by hand.
+
+    Deliberately not `decision_steps`: comparing the page against the same function that fed it
+    would only show the page copied it faithfully. Every field is read off the action itself, so
+    what the offers are checked against is the engine's own answer about what is legal.
     """
-    decisions = []
+    steps = [{"kind": "position", "value": position} for position in (action.origin, *action.route)]
+    if isinstance(action, SetupSowAction):
+        return steps
+    steps.append({"kind": "position", "value": action.selected_duty})
+    steps.append({"kind": "resolution", "value": action.resolution.value})
+    for name in ("tithe_resource", "taxation_step1_resource"):
+        if getattr(action, name) is not None:
+            steps.append({"kind": "resource", "value": getattr(action, name)})
+    if action.resolution.value == "give_alms_paid":
+        silver, wheat = (getattr(action, name) for name in ALMS_PAIR)
+        steps.append({"kind": "combination", "value": f"silver={silver},wheat={wheat}"})
+    return steps
+
+
+def _engine_decisions(server) -> list[list[dict]]:
+    """Every legal move as its sequence of decisions, with no two the same."""
+    decisions: list[list[dict]] = []
     for action in legal_actions(server.state, server.config):
-        steps = [action.origin, *action.route]
-        if not isinstance(action, SetupSowAction):
-            steps += [action.selected_duty, action.resolution.value]
+        steps = _engine_steps(action)
         if steps not in decisions:
             decisions.append(steps)
     return decisions
 
 
-def _next_values(decisions: list[list], prefix: list) -> list:
-    live = [steps for steps in decisions if steps[: len(prefix)] == prefix]
-    seen = []
+def _values(steps: list[dict]) -> list:
+    return [step["value"] for step in steps]
+
+
+def _values_except(steps: list[dict], kind: str) -> list:
+    """Everything a move decides apart from one kind of question, for finding its siblings."""
+    return [step["value"] for step in steps if step["kind"] != kind]
+
+
+def _next_steps(decisions: list[list[dict]], prefix: list) -> list[dict]:
+    live = [steps for steps in decisions if _values(steps)[: len(prefix)] == prefix]
+    seen: list[dict] = []
     for steps in live:
-        if len(steps) > len(prefix) and steps[len(prefix)] not in seen:
+        if len(steps) > len(prefix) and steps[len(prefix)]["value"] not in _values(seen):
             seen.append(steps[len(prefix)])
     return seen
 
 
-def _forced_prefix(decisions: list[list], prefix: list) -> list:
+def _next_values(decisions: list[list[dict]], prefix: list) -> list:
+    return _values(_next_steps(decisions, prefix))
+
+
+def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
     """Advance past every step the survivors agree on, as the page does."""
     prefix = list(prefix)
     while len(_next_values(decisions, prefix)) == 1:
@@ -361,11 +455,14 @@ def _forced_prefix(decisions: list[list], prefix: list) -> list:
     return prefix
 
 
-def _clicks_to(decisions: list[list], target: list) -> list[dict]:
+def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
     """The clicks that reach one particular move, skipping every step the page takes by itself.
 
     Handing over all of a move's steps would not work and should not: the page advances past the
     forced ones on its own, so a caller supplying them too would answer the wrong questions.
+
+    Which affordance each click uses comes from the engine's own step kind, so a test never has to
+    know that a tithe's stock is pressed on a board and an alms payment beside it.
     """
     clicks: list[dict] = []
     prefix: list = []
@@ -373,9 +470,10 @@ def _clicks_to(decisions: list[list], target: list) -> list[dict]:
         prefix = _forced_prefix(decisions, prefix)
         if len(prefix) >= len(target):
             return clicks
-        step = target[len(prefix)]
-        prefix.append(step)
-        clicks.append(_do(step) if isinstance(step, str) else _at(step))
+        value = target[len(prefix)]
+        step = next(s for s in _next_steps(decisions, prefix) if s["value"] == value)
+        prefix.append(value)
+        clicks.append(_click_for(server, step))
 
 
 @needs_node
@@ -402,8 +500,9 @@ def test_what_is_offered_is_what_the_engine_says_may_come_next(phase, tmp_path: 
             break
         transcript = _run_script(server, list(clicks), tmp_path)
         assert sorted(map(str, transcript["offered"][-1])) == sorted(map(str, expected))
+        step = next(s for s in _next_steps(decisions, prefix) if s["value"] == expected[0])
         prefix.append(expected[0])
-        clicks.append(_do(expected[0]) if isinstance(expected[0], str) else _at(expected[0]))
+        clicks.append(_click_for(server, step))
     assert clicks, "the position asked nothing, so nothing was checked"
 
 
@@ -507,7 +606,7 @@ def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: 
     candidates = server.payload["turn_candidates"]
     index = next(i for i, c in enumerate(candidates) if c["action_id"])
     candidate = candidates[index]
-    clicks = _clicks_to(decisions, [step["value"] for step in candidate["steps"]])
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
 
     answered = _run_script(server, clicks, tmp_path)
     assert answered["shownPanel"][-1] == index, "the decided turn was not the one shown"
@@ -540,6 +639,303 @@ def test_resetting_a_half_built_turn_sends_nothing_and_moves_nothing(tmp_path: P
 
 
 # ---------------------------------------------------------------------------------------------
+# The questions a resolution goes on to ask
+# ---------------------------------------------------------------------------------------------
+
+
+def _reference_server():
+    """The committed reference board, played through setup to the first normal turn.
+
+    The reference board rather than a generated one because it is the position the play view is
+    drawn for, and it happens to reach a Cornucopia, the Taxation tile and a paid alms in the same
+    turn -- which is all three of the questions this PR gives the page a way to ask.
+    """
+    return _played_through_setup(PlayServer(("127.0.0.1", 0), REFERENCE))
+
+
+def _stocks(server, player_id: str) -> dict:
+    """One seat's three stocks, off the payload the page is drawn from."""
+    from tools.ui_debug.play_view_adapter import player_record
+
+    return dict(player_record(server.payload, player_id)["resources"])
+
+
+def _asked(server, resolution: str, kind: str) -> list[dict]:
+    """Candidates for one resolution that go on to ask a further question of the given kind."""
+    return [
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if {"kind": "resolution", "value": resolution} in candidate["steps"]
+        and any(step["kind"] == kind for step in candidate["steps"])
+    ]
+
+
+def _siblings(candidates: list[dict], candidate: dict, kind: str) -> list[dict]:
+    """The candidates alike in everything but their answer to one kind of question."""
+    wanted = _values_except(candidate["steps"], kind)
+    return [other for other in candidates if _values_except(other["steps"], kind) == wanted]
+
+
+def _answer(candidate: dict, kind: str):
+    return next(step["value"] for step in candidate["steps"] if step["kind"] == kind)
+
+
+def _played_from_the_page(server, candidate: dict, tmp_path: Path):
+    """Walk the page to one candidate, agree to it, and apply exactly what it sent."""
+    decisions = _engine_decisions(server)
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+    transcript = _run_script(server, clicks, tmp_path, confirm=True)
+    assert transcript["posted"] is not None, "the page found nothing to submit"
+    assert transcript["posted"]["action_id"] == candidate["action_id"]
+    server.apply(transcript["posted"]["action_id"], transcript["posted"]["state_token"])
+    return transcript
+
+
+@needs_node
+def test_a_cornucopia_tithe_is_playable_and_only_the_stock_that_was_picked_moves(
+    tmp_path: Path,
+) -> None:
+    """The payoff for the stock keys: the seat picks, and what it picked is what it gets.
+
+    A Cornucopia is the one counter that does not say what it pays, so all three stocks are on
+    offer. The two that were not picked are checked FIRST, because a page that moved the right
+    stock and something else besides would still pass a check that only looked at the right one.
+    """
+    server = _reference_server()
+    asked = _asked(server, "tithe", "resource")
+    assert asked, "no tithe on this board asked which stock, so nothing was exercised"
+
+    candidate = asked[0]
+    offered = _siblings(asked, candidate, "resource")
+    assert len(offered) > 1, "a stock was 'chosen' from a single option"
+    picked = _answer(candidate, "resource")
+    seat = server.payload["state"]["active_player"]
+    before = _stocks(server, seat)
+
+    _played_from_the_page(server, candidate, tmp_path)
+    after = _stocks(server, seat)
+
+    untouched = [stock for stock in before if stock != picked]
+    assert [after[stock] for stock in untouched] == [before[stock] for stock in untouched]
+    assert after[picked] == before[picked] + 1
+
+
+@needs_node
+def test_a_taxation_turn_is_playable_and_takes_the_stock_that_was_pressed(
+    tmp_path: Path,
+) -> None:
+    """Played once per stock from the same board, and the stock pressed is the one that grows.
+
+    Comparing the runs against each other rather than against a written-down expectation: taxation
+    can pay a second time from its majority tiles, so what a turn is worth is the engine's business
+    and only the DIFFERENCE the choice makes is this page's.
+    """
+    grown: dict[str, dict] = {}
+    for index in range(3):
+        server = _reference_server()
+        asked = _asked(server, "taxation", "resource")
+        assert asked, "no taxation turn on this board, so nothing was exercised"
+        offered = _siblings(asked, asked[0], "resource")
+        assert len(offered) == 3, "the Taxation tile did not offer all three stocks"
+        candidate = offered[index]
+        picked = _answer(candidate, "resource")
+        seat = server.payload["state"]["active_player"]
+        before = _stocks(server, seat)
+
+        _played_from_the_page(server, candidate, tmp_path)
+        after = _stocks(server, seat)
+        grown[picked] = {stock: after[stock] - before[stock] for stock in before}
+
+    for picked, deltas in grown.items():
+        assert deltas[picked] > 0, f"pressing {picked} did not take any {picked}"
+        for other, others in grown.items():
+            if other != picked:
+                assert deltas[picked] > others[picked], "the stock taken did not follow the press"
+
+
+def _pair(value: str) -> tuple[int, ...]:
+    """A combination key read back as the amounts it stands for."""
+    return tuple(int(part.split("=")[1]) for part in value.split(","))
+
+
+def _alms_group(server) -> list[dict]:
+    """One set of alms candidates alike in everything but what they pay, with a real choice in it.
+
+    Not simply the first: where only one split is legal there is nothing to ask, and the page is
+    right to take it rather than offer it. A group with something to decide is what exercises this.
+    """
+    asked = _asked(server, "give_alms_paid", "combination")
+    assert asked, "no paid alms on this board, so nothing was exercised"
+    for candidate in asked:
+        siblings = _siblings(asked, candidate, "combination")
+        if len(siblings) > 1:
+            return siblings
+    raise AssertionError("every alms on this board had only one legal split, so none was offered")
+
+
+def _offered_pairs(server) -> tuple[set, set]:
+    """What the page offers to pay, and what the engine says may be paid, in the same shape.
+
+    The engine's side is derived from `legal_actions` rather than written down, so the check is
+    against the rules as they are today and not against a list somebody kept up to date.
+    """
+    siblings = _alms_group(server)
+    wanted = _values_except(siblings[0]["steps"], "combination")
+
+    offered = {_pair(_answer(candidate, "combination")) for candidate in siblings}
+    legal = {
+        tuple(getattr(action, name) for name in ALMS_PAIR)
+        for action in legal_actions(server.state, server.config)
+        if _values_except(_engine_steps(action), "combination") == wanted
+    }
+    return offered, legal
+
+
+def _the_payments_offered_are_the_legal_pairs(server) -> set:
+    offered, legal = _offered_pairs(server)
+    assert offered == legal, "the payments offered are not the pairs the engine allows"
+    assert len(offered) > 1, "a payment was 'chosen' from a single option"
+    return offered
+
+
+@needs_node
+def test_the_alms_payments_offered_are_the_legal_pairs_and_the_one_pressed_is_paid(
+    tmp_path: Path,
+) -> None:
+    """A payment is a pair, so pairs are what is offered -- never one number and then the other.
+
+    Setting the amounts one at a time would walk through splits the engine never offered, and
+    deciding which second amount goes with a given first is the engine's rule. Offering the whole
+    combinations means the page never has to know.
+    """
+    server = _reference_server()
+    _the_payments_offered_are_the_legal_pairs(server)
+
+    candidate = _alms_group(server)[0]
+    silver, wheat = _pair(_answer(candidate, "combination"))
+    seat = server.payload["state"]["active_player"]
+    before = _stocks(server, seat)
+
+    _played_from_the_page(server, candidate, tmp_path)
+    after = _stocks(server, seat)
+
+    assert after["silver"] == before["silver"] - silver
+    assert after["wheat"] == before["wheat"] - wheat
+
+
+def _clicks_before_the_stock(server, candidate: dict) -> list[dict]:
+    """The clicks that get as far as being asked which stock, and stop there."""
+    decisions = _engine_decisions(server)
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+    kinds = [click["kind"] for click in clicks]
+    assert "resource" in kinds, "this candidate never asked for a stock"
+    return clicks[: kinds.index("resource")]
+
+
+def _only_the_active_seat_is_asked(transcript: dict, seat: int) -> None:
+    """The stock being picked is this seat's, and nobody may reach across the table for it."""
+    assert transcript["askedSeats"][-1] == [str(seat)], "the wrong seat's board was asked"
+    assert list(transcript["offeredBySeat"][-1]) == [str(seat)], "another seat had a key to press"
+    assert transcript["offeredBySeat"][-1][str(seat)], "the seat being asked had no key"
+
+
+@needs_node
+def test_a_counter_that_pays_one_thing_is_never_put_as_a_choice(tmp_path: Path) -> None:
+    """Most tithe counters name their stock, so there is nothing to ask and no board lights.
+
+    The same rule the route steps have always followed, now that a stock is a step too: a question
+    with one answer is taken rather than asked. Worth its own check because this is the kind where
+    not asking is the common case and asking is the exception.
+    """
+    server = _reference_server()
+    asked = _asked(server, "tithe", "resource")
+    forced = [c for c in asked if len(_siblings(asked, c, "resource")) == 1]
+    assert forced, "every tithe on this board was a Cornucopia, so nothing was exercised"
+
+    candidate = forced[0]
+    decisions = _engine_decisions(server)
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+
+    assert all(click["kind"] != "resource" for click in clicks), "a settled stock was pressed"
+    transcript = _run_script(server, clicks, tmp_path, confirm=True)
+    assert transcript["askedSeats"] == [[]] * len(transcript["askedSeats"]), "a board was asked"
+    assert transcript["posted"]["action_id"] == candidate["action_id"]
+
+
+@needs_node
+def test_only_the_seat_being_asked_has_keys_on_its_board(tmp_path: Path) -> None:
+    """Four boards carry the keys, drawn hidden. One of them is ever asked."""
+    server = _reference_server()
+    candidate = _asked(server, "tithe", "resource")[0]
+    seat = SEATED_PLAYERS.index(server.payload["state"]["active_player"]) + 1
+
+    transcript = _run_script(server, _clicks_before_the_stock(server, candidate), tmp_path)
+
+    assert transcript["askedSeats"][0] == [], "a board was asked before anything had been decided"
+    _only_the_active_seat_is_asked(transcript, seat)
+
+
+# ---------------------------------------------------------------------------------------------
+# Two deliberate bugs, and the checks that catch them
+# ---------------------------------------------------------------------------------------------
+
+
+@needs_node
+def test_asking_every_seat_for_the_stock_is_caught(tmp_path: Path) -> None:
+    """MUTATION. Let any board answer, and the seat check has to notice.
+
+    The bug is a plausible one: the script already has all four boards in hand, and dropping the
+    comparison that picks out the active one leaves a page where any seat can spend another's
+    turn choosing what another seat gets.
+    """
+    server = _reference_server()
+    candidate = _asked(server, "tithe", "resource")[0]
+    seat = SEATED_PLAYERS.index(server.payload["state"]["active_player"]) + 1
+
+    every_seat = _run_script(
+        server,
+        _clicks_before_the_stock(server, candidate),
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "seat.getAttribute('data-active-seat') === 'true'", "seat !== null"
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="the wrong seat's board was asked"):
+        _only_the_active_seat_is_asked(every_seat, seat)
+
+
+def test_setting_the_two_alms_amounts_one_at_a_time_is_caught(monkeypatch) -> None:
+    """MUTATION. Offer the amounts separately, and the pairs check has to notice.
+
+    The bug is the tempting one: two fields, so two questions. It reads as a smaller change than
+    a whole new kind of step, and it quietly hands the page a rule to enforce -- which second
+    amount may follow a given first -- along with every pairing the engine never offered.
+    """
+    from tools import play_server
+
+    def independently(action):
+        """Each amount its own question, as if they did not have to go together.
+
+        Everything else is left alone -- same kind of step, same encoding, still answered beside
+        the confirm summary. Only the going-together is taken out, so what catches it is the check
+        against the engine's pairs rather than the shape of the page changing under it.
+        """
+        return [
+            ({"kind": "combination", "value": f"{noun}={getattr(action, name)}"}, (name,))
+            for resolution, fields in play_server.COMBINATION_STEPS
+            if action.resolution.value == resolution
+            for name, noun in fields
+        ]
+
+    monkeypatch.setattr(play_server, "_presented", independently)
+    server = _reference_server()
+
+    with pytest.raises(AssertionError, match="not the pairs the engine allows"):
+        _the_payments_offered_are_the_legal_pairs(server)
+
+
+# ---------------------------------------------------------------------------------------------
 # What the page will not do
 # ---------------------------------------------------------------------------------------------
 
@@ -549,12 +945,12 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
 ) -> None:
     """Answering everything the page asks can still leave several actions standing.
 
-    `FullTurnAction` carries some forty optional fields and four of them are presented. When the
+    `FullTurnAction` carries some forty optional fields and this page presents a handful. When the
     rest disagree, the honest answer is to say which -- picking one, or the first, or the simplest,
     would be the page quietly making a decision the rules give to the player. The named fields are
     the backlog, worked out from the position rather than remembered.
     """
-    server = _played_through_setup(_served(tmp_path))
+    server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
     open_ended = [c for c in server.payload["turn_candidates"] if c["unresolved"]]
     assert open_ended, "no ambiguous turn on this board, so nothing was exercised"
 
@@ -570,21 +966,25 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     members = [
         action
         for action in legal_actions(server.state, server.config)
-        if [action.origin, *action.route, action.selected_duty, action.resolution.value] == wanted
+        if _values(_engine_steps(action)) == wanted
     ]
     assert len(members) == candidate["variants"]
     for name in candidate["unresolved"]:
         assert len({getattr(member, name) for member in members}) > 1
+    # A field the page does present cannot come back as unresolved: answering it is what put this
+    # candidate in its own group, so the refusal is always about something genuinely unbuilt.
+    presented = {"tithe_resource", "taxation_step1_resource", *ALMS_PAIR}
+    assert presented.isdisjoint(candidate["unresolved"])
 
 
 @needs_node
 def test_an_undecided_turn_offers_no_way_to_commit_it(tmp_path: Path) -> None:
     """The refusal has to be structural: there is no button on that panel to press."""
-    server = _played_through_setup(_served(tmp_path))
+    server = _played_until_the_page_must_refuse(_played_through_setup(_served(tmp_path)))
     candidates = server.payload["turn_candidates"]
     index = next(i for i, c in enumerate(candidates) if c["unresolved"])
     target = [step["value"] for step in candidates[index]["steps"]]
-    clicks = _clicks_to(_engine_decisions(server), target)
+    clicks = _clicks_to(server, _engine_decisions(server), target)
 
     transcript = _run_script(server, clicks, tmp_path, confirm=True)
     assert transcript["shownPanel"][-1] == index, "the undecided turn's panel was not the one shown"
@@ -654,6 +1054,13 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # It may say only these things about the board and the panel.
     assert "setAttribute('data-play-offered'" in code
     assert "setAttribute('data-turn-shown'" in code
+    # And it may not know what any step is ABOUT. A step says how it is answered and the script
+    # routes on that; the day it can tell a tithe's stock from a taxation's by name is the day the
+    # next field needs the script taught about it rather than merely published to it. The whole
+    # page is searched, candidates and all, because a field name reaching the browser as data is a
+    # field name the browser can start to depend on.
+    for field in ("tithe_resource", "taxation_step1_resource", *ALMS_PAIR):
+        assert field not in page, f"the page was told about the field {field!r}"
 
 
 # ---------------------------------------------------------------------------------------------
