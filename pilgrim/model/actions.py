@@ -104,6 +104,22 @@ class SetupSowAction:
 
 
 @dataclass(frozen=True, slots=True)
+class StartPlayerSelectionAction:
+    """Who begins the next round, said by whoever holds the First Player marker.
+
+    One field, because one thing is being decided. The player saying it is not carried here: it is
+    the active player, the way it is for every other action, and holding it twice would let a
+    submission name a chooser the state does not agree with.
+
+    The marker holder may name themselves. That is not a special case and is not written down as
+    one anywhere -- they are simply one of the players who may be chosen.
+    """
+
+    chosen_start_player: PlayerId
+    action_type: ActionType = field(default=ActionType.START_PLAYER_SELECTION, init=False)
+
+
+@dataclass(frozen=True, slots=True)
 class AllocationMove:
     """One allocation sub-move between Abbey and special-activity slots."""
 
@@ -124,7 +140,7 @@ class AllocationMove:
             raise ValueError("Allocation move abbey -> abbey is not legal.")
 
 
-GameAction = FullTurnAction | SetupSowAction
+GameAction = FullTurnAction | SetupSowAction | StartPlayerSelectionAction
 
 
 def action_id(action: GameAction) -> str:
@@ -132,6 +148,9 @@ def action_id(action: GameAction) -> str:
     if isinstance(action, SetupSowAction):
         route = "->".join(str(position) for position in action.route)
         return f"setup_sow:sow:{action.origin}:{route}"
+
+    if isinstance(action, StartPlayerSelectionAction):
+        return f"start_player_selection:{action.chosen_start_player.name.lower()}"
 
     # Full-turn actions only below.
     route = "->".join(str(position) for position in action.route)
@@ -358,6 +377,12 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     positions = config.board.positions
     if isinstance(action, SetupSowAction):
         return f"Setup sow: sow {readable_route(action.origin, action.route, positions=positions)}"
+
+    if isinstance(action, StartPlayerSelectionAction):
+        return (
+            "Start player selection: "
+            f"{action.chosen_start_player.name.lower()} begins the next round"
+        )
 
     # Full-turn actions only below.
     selected_duty = position_name(action.selected_duty, positions)

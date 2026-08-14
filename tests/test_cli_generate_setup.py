@@ -125,7 +125,8 @@ def test_cli_generate_setup_generated_2p_scenario_can_solve_depth_one(
     assert solve_exit == 0
     assert "Solve result for scenario" in solve_output
     assert "Root player: player_one" in solve_output
-    assert "Setup sow: sow city ->" in solve_output
+    # The first thing to solve for on a generated game is who begins it, not where to sow.
+    assert "Start player selection: " in solve_output
 
 
 def test_cli_generate_setup_rejects_invalid_player_count(capsys, tmp_path: Path) -> None:

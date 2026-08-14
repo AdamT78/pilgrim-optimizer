@@ -40,14 +40,17 @@ def test_two_player_round_ends_after_two_turns() -> None:
     assert first.state.active_player is PlayerId.PLAYER_TWO
     assert EventType.ROUND_ADVANCE not in first_event_types
     assert EventType.MERCHANT_ADVANCE not in first_event_types
-    assert EventType.START_PLAYER_SELECTION not in first_event_types
+    assert EventType.START_PLAYER_MARKER not in first_event_types
 
     assert second.state.timing.round_number == scenario.state.timing.round_number + 1
     assert second.state.timing.turn_in_round == 0
     assert EventType.ROUND_ADVANCE in second_event_types
     assert EventType.MERCHANT_ADVANCE in second_event_types
-    assert EventType.START_PLAYER_SELECTION in second_event_types
-    assert second.state.active_player is second.state.start_player
+    assert EventType.START_PLAYER_MARKER in second_event_types
+    # Stopped on the marker holder, waiting to be told who begins. The start player is
+    # still the seat this round was played from, because nobody has chosen one yet.
+    assert second.state.phase is TurnPhase.START_PLAYER_SELECTION
+    assert second.state.start_player is scenario.state.start_player
 
 
 def test_three_player_round_ends_after_three_turns(tmp_path: Path) -> None:
@@ -67,10 +70,13 @@ def test_three_player_round_ends_after_three_turns(tmp_path: Path) -> None:
     third_events = _event_types(third.events)
     assert EventType.ROUND_ADVANCE in third_events
     assert EventType.MERCHANT_ADVANCE in third_events
-    assert EventType.START_PLAYER_SELECTION in third_events
+    assert EventType.START_PLAYER_MARKER in third_events
     assert third.state.timing.round_number == scenario.state.timing.round_number + 1
     assert third.state.timing.turn_in_round == 0
-    assert third.state.active_player is third.state.start_player
+    # Stopped on the marker holder, waiting to be told who begins. The start player is
+    # still the seat this round was played from, because nobody has chosen one yet.
+    assert third.state.phase is TurnPhase.START_PLAYER_SELECTION
+    assert third.state.start_player is scenario.state.start_player
 
 
 def test_four_player_round_ends_after_four_turns(tmp_path: Path) -> None:
@@ -91,10 +97,13 @@ def test_four_player_round_ends_after_four_turns(tmp_path: Path) -> None:
     fourth_events = _event_types(fourth.events)
     assert EventType.ROUND_ADVANCE in fourth_events
     assert EventType.MERCHANT_ADVANCE in fourth_events
-    assert EventType.START_PLAYER_SELECTION in fourth_events
+    assert EventType.START_PLAYER_MARKER in fourth_events
     assert fourth.state.timing.round_number == scenario.state.timing.round_number + 1
     assert fourth.state.timing.turn_in_round == 0
-    assert fourth.state.active_player is fourth.state.start_player
+    # Stopped on the marker holder, waiting to be told who begins. The start player is
+    # still the seat this round was played from, because nobody has chosen one yet.
+    assert fourth.state.phase is TurnPhase.START_PLAYER_SELECTION
+    assert fourth.state.start_player is scenario.state.start_player
 
 
 def test_three_player_start_player_tie_break_is_clockwise_from_current_marker(
@@ -120,7 +129,7 @@ def test_three_player_start_player_tie_break_is_clockwise_from_current_marker(
     tie_break_details = dict(tie_break_event.details)
 
     assert tie_break_details["deciding_player"] == "player_three"
-    assert result.state.start_player is PlayerId.PLAYER_THREE
+    assert result.state.active_player is PlayerId.PLAYER_THREE
     assert result.state.active_player is PlayerId.PLAYER_THREE
 
 
@@ -148,7 +157,7 @@ def test_four_player_start_player_tie_break_is_clockwise_from_current_marker(
     tie_break_details = dict(tie_break_event.details)
 
     assert tie_break_details["deciding_player"] == "player_four"
-    assert result.state.start_player is PlayerId.PLAYER_FOUR
+    assert result.state.active_player is PlayerId.PLAYER_FOUR
     assert result.state.active_player is PlayerId.PLAYER_FOUR
 
 
@@ -244,8 +253,14 @@ def test_setup_sow_for_three_and_four_players_does_not_trigger_round_end(
     if scenario_path is not None:
         scenario = load_scenario(scenario_path)
     else:
-        scenario = _load_generated_setup(tmp_path, player_count=player_count, seed=seed, normal_sow=False)
+        scenario = _load_generated_setup(
+            tmp_path, player_count=player_count, seed=seed, normal_sow=False
+        )
     state = scenario.state
+    if state.phase is TurnPhase.START_PLAYER_SELECTION:
+        # A generated game opens by asking who begins. Answered here rather than avoided, because
+        # this test is about the sows that follow and the order they run in.
+        state = _apply_with_selector(state, scenario.config, lambda actions: actions[0]).state
     assert state.phase is TurnPhase.SETUP_SOW
 
     for step_index in range(player_count):
@@ -253,7 +268,7 @@ def test_setup_sow_for_three_and_four_players_does_not_trigger_round_end(
         events = _event_types(result.events)
         assert EventType.ROUND_ADVANCE not in events
         assert EventType.MERCHANT_ADVANCE not in events
-        assert EventType.START_PLAYER_SELECTION not in events
+        assert EventType.START_PLAYER_MARKER not in events
         if step_index < player_count - 1:
             assert result.state.phase is TurnPhase.SETUP_SOW
         state = result.state
@@ -270,7 +285,9 @@ def test_generated_setup_round_length_matches_real_players(
     player_count: int,
     seed: int,
 ) -> None:
-    scenario = _load_generated_setup(tmp_path, player_count=player_count, seed=seed, normal_sow=True)
+    scenario = _load_generated_setup(
+        tmp_path, player_count=player_count, seed=seed, normal_sow=True
+    )
     start_round = scenario.state.timing.round_number
     state = scenario.state
 
@@ -305,6 +322,12 @@ def _load_generated_setup(
             "setup_sow_complete": True,
             "setup_sow_completed_by": [],
         }
+        # Fast-forwarding the opening also means fast-forwarding the choice it opens on, so the
+        # round has to begin where that choice would have left it: on the start player. A generated
+        # game hands `active_player` to the MARKER HOLDER, who is red rather than the start player,
+        # and carrying that through would open the round one seat along from the seat it counts
+        # turn order out from.
+        initial_state["active_player"] = initial_state["start_player_id"]
 
     scenario_path = tmp_path / f"generated_{player_count}p_seed_{seed}.json"
     scenario_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
@@ -325,8 +348,7 @@ def _select_tithe_action(actions: tuple[GameAction, ...]) -> GameAction:
     return _find_action(
         actions,
         lambda action: (
-            isinstance(action, FullTurnAction)
-            and action.resolution is TurnResolutionType.TITHE
+            isinstance(action, FullTurnAction) and action.resolution is TurnResolutionType.TITHE
         ),
         "tithe action",
     )

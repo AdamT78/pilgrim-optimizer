@@ -52,7 +52,7 @@ def test_round_end_trade_route_income_basic_gain_and_order() -> None:
 
     merchant_index = _event_index(result.events, EventType.MERCHANT_ADVANCE)
     income_index = _event_index(result.events, EventType.TRADE_ROUTE_INCOME)
-    start_player_index = _event_index(result.events, EventType.START_PLAYER_SELECTION)
+    start_player_index = _event_index(result.events, EventType.START_PLAYER_MARKER)
     assert merchant_index < income_index < start_player_index
 
 
@@ -202,5 +202,5 @@ def test_trade_route_income_uses_merchant_position_after_two_prior_guild_moves_a
 
     merchant_index = _event_index(result.events, EventType.MERCHANT_ADVANCE)
     income_index = _event_index(result.events, EventType.TRADE_ROUTE_INCOME)
-    start_player_index = _event_index(result.events, EventType.START_PLAYER_SELECTION)
+    start_player_index = _event_index(result.events, EventType.START_PLAYER_MARKER)
     assert merchant_index < income_index < start_player_index

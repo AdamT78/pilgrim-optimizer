@@ -25,7 +25,7 @@ def test_unique_leader_reward_and_reset_continue_for_non_final_season() -> None:
     assert EventType.ALMS_SEASON_REWARD in event_types
     assert EventType.ALMS_RESET in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
+    assert EventType.START_PLAYER_MARKER in event_types
     assert EventType.TURN_ADVANCE in event_types
     assert EventType.GAME_END not in event_types
 
@@ -98,7 +98,7 @@ def test_no_trigger_without_pilgrimage_round_metadata() -> None:
     assert EventType.ALMS_SEASON_REWARD not in event_types
     assert EventType.ALMS_RESET not in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
+    assert EventType.START_PLAYER_MARKER in event_types
 
 
 def test_fourth_season_scores_then_ends_game_without_continuation_steps() -> None:
@@ -112,7 +112,7 @@ def test_fourth_season_scores_then_ends_game_without_continuation_steps() -> Non
     assert EventType.ALMS_RESET in event_types
     assert EventType.GAME_END in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
-    assert EventType.START_PLAYER_SELECTION not in event_types
+    assert EventType.START_PLAYER_MARKER not in event_types
     assert EventType.TURN_ADVANCE not in event_types
     assert result.state.game_over is True
     assert result.state.timing.season_number == 4
@@ -126,7 +126,7 @@ def test_event_order_for_non_final_and_final_season_end_paths() -> None:
     ) < _event_index(normal_result.events, EventType.ALMS_SEASON_REWARD) < _event_index(
         normal_result.events, EventType.ALMS_RESET
     ) < _event_index(normal_result.events, EventType.MERCHANT_ADVANCE) < _event_index(
-        normal_result.events, EventType.START_PLAYER_SELECTION
+        normal_result.events, EventType.START_PLAYER_MARKER
     ) < _event_index(normal_result.events, EventType.TURN_ADVANCE)
 
     final = load_scenario("scenarios/alms_season_end_fourth_season_game_end_001.json")

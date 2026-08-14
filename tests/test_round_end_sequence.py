@@ -16,7 +16,7 @@ def test_non_round_ending_turn_does_not_run_round_end_phases() -> None:
     assert result.state.timing.round_number == scenario.state.timing.round_number
     assert result.state.merchant_board_position == scenario.state.merchant_board_position
     assert EventType.MERCHANT_ADVANCE not in event_types
-    assert EventType.START_PLAYER_SELECTION not in event_types
+    assert EventType.START_PLAYER_MARKER not in event_types
     assert EventType.EXCESS_RESOURCE_CAP not in event_types
     assert EventType.ROUND_ADVANCE not in event_types
     assert EventType.ALMS_SEASON_END not in event_types
@@ -31,7 +31,7 @@ def test_round_ending_turn_runs_expected_sequence_and_state_updates() -> None:
     excess_index = _event_index(result.events, EventType.EXCESS_RESOURCE_CAP)
     round_advance_index = _event_index(result.events, EventType.ROUND_ADVANCE)
     merchant_index = _event_index(result.events, EventType.MERCHANT_ADVANCE)
-    start_player_index = _event_index(result.events, EventType.START_PLAYER_SELECTION)
+    start_player_index = _event_index(result.events, EventType.START_PLAYER_MARKER)
     turn_advance_index = _event_index(result.events, EventType.TURN_ADVANCE)
     invariant_index = _event_index(result.events, EventType.INVARIANT_CHECK)
 
@@ -142,7 +142,7 @@ def test_no_season_end_when_round_has_no_pilgrimage_metadata() -> None:
     assert EventType.ALMS_SEASON_REWARD not in event_types
     assert EventType.ALMS_RESET not in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
+    assert EventType.START_PLAYER_MARKER in event_types
 
 
 def test_setup_sow_turn_does_not_trigger_round_end_phases() -> None:
@@ -153,7 +153,7 @@ def test_setup_sow_turn_does_not_trigger_round_end_phases() -> None:
 
     assert EventType.EXCESS_RESOURCE_CAP not in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
-    assert EventType.START_PLAYER_SELECTION not in event_types
+    assert EventType.START_PLAYER_MARKER not in event_types
     assert EventType.ROUND_ADVANCE not in event_types
 
 

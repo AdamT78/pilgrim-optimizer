@@ -29,7 +29,7 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
 from pilgrim.model.actions import SetupSowAction, action_id, action_summary
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES
-from pilgrim.rules.transition import legal_actions
+from pilgrim.rules.transition import apply_action, legal_actions
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug.render_play_view import render_play_view_from_payload
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
@@ -161,7 +161,14 @@ def test_the_token_names_the_position_the_list_came_from(scenario) -> None:
     assert state_token(moved) != state_token(payload)
 
 
-def test_a_fresh_scenario_offers_setup_sows_and_nothing_else(tmp_path: Path) -> None:
+def test_a_fresh_scenario_opens_on_the_start_player_decision_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """A game now opens by asking who begins, before anybody sows anything.
+
+    It used to open on the setup sows, because who began was written into the generator. The sows
+    are still the next thing, and are reached by answering this.
+    """
     from pilgrim.cli import main as cli_main
 
     path = tmp_path / "fresh.json"
@@ -170,8 +177,23 @@ def test_a_fresh_scenario_offers_setup_sows_and_nothing_else(tmp_path: Path) -> 
     payload = view_payload(scenario.state, scenario.config)
     document = actions_document(scenario.state, scenario.config, payload)
     assert document["count"] > 0
+    assert {entry["action_type"] for entry in document["actions"]} == {"StartPlayerSelectionAction"}
+    assert all(
+        entry["action_id"].startswith("start_player_selection:") for entry in document["actions"]
+    )
+
+    chosen = document["actions"][1]["action_id"]
+    begun = apply_action(
+        scenario.state,
+        next(
+            action
+            for action in legal_actions(scenario.state, scenario.config)
+            if action_id(action) == chosen
+        ),
+        scenario.config,
+    ).state
+    document = actions_document(begun, scenario.config, view_payload(begun, scenario.config))
     assert {entry["action_type"] for entry in document["actions"]} == {"SetupSowAction"}
-    assert all(entry["action_id"].startswith("setup_sow:") for entry in document["actions"])
 
 
 def test_the_read_routes_answer_and_none_of_them_change_anything(tmp_path: Path) -> None:
@@ -233,13 +255,19 @@ REFERENCE = Path(__file__).resolve().parents[1] / "scenarios" / "play_view_refer
 
 
 def _served(tmp_path: Path, players: int = 4, seed: int = 99):
+    """A server on a fresh game, already past the decision that opens one.
+
+    A generated game opens by asking who begins, and these tests are about the setup sows and the
+    turns that follow it. That opening is the subject of its own test, which is where it is asserted
+    rather than being incidentally rehearsed by every test that needs a board.
+    """
     from pilgrim.cli import main as cli_main
 
     path = tmp_path / "scenario.json"
     cli_main(
         ["generate-setup", "--players", str(players), "--seed", str(seed), "--output", str(path)]
     )
-    return PlayServer(("127.0.0.1", 0), path)
+    return _past_the_start_player_decision(PlayServer(("127.0.0.1", 0), path))
 
 
 def _played_until_the_page_must_refuse(server, limit: int = 40):
@@ -258,8 +286,22 @@ def _played_until_the_page_must_refuse(server, limit: int = 40):
     raise AssertionError(f"no turn in {limit} needed refusing, so the refusal went unexercised")
 
 
+def _past_the_start_player_decision(server, choice: int = 0):
+    """Answer whoever holds the First Player marker, which the page cannot yet put to anyone.
+
+    Applied by id off `legal_actions` rather than through a candidate, because the page refuses
+    this decision -- it has no affordance for choosing a player -- and a test that reached for a
+    candidate's action id here would be asserting the refusal away instead of working around it.
+    """
+    while server.payload["state"]["phase"] == "start_player_selection":
+        chosen = legal_actions(server.state, server.config)[choice]
+        server.apply(action_id(chosen), server.payload["state_token"])
+    return server
+
+
 def _played_through_setup(server):
     """Take the four setup sows so the position is one where a normal turn is legal."""
+    _past_the_start_player_decision(server)
     while server.payload["state"]["phase"] == "setup_sow":
         server.apply(
             server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"]

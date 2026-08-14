@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from pilgrim.model.actions import StartPlayerConfessionBoxUse
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import EventType, PlayerId
+from pilgrim.model.enums import EventType, PlayerId, TurnPhase
 from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState
@@ -21,7 +21,6 @@ from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, trade_route_income_resour
 from pilgrim.rules.validation import TransitionValidationError
 
 EXCESS_RESOURCE_CAP = 6
-START_PLAYER_POLICY = "highest_piety_selects_self"
 _BUILDING_CONFESSION_BOX = "confession_box"
 _CONFESSION_BOX_TEMPORARY_PIETY_BONUS = 2
 
@@ -147,7 +146,7 @@ def resolve_trade_route_income(
     return next_state, tuple(events)
 
 
-def select_next_start_player(
+def award_first_player_marker(
     state: GameState,
     *,
     config: GameConfig,
@@ -155,10 +154,14 @@ def select_next_start_player(
     action_id: str,
     confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...] = (),
 ) -> tuple[GameState, tuple[GameEvent, ...], PlayerId]:
-    """
-    Deterministically select next start player.
+    """Give the First Player marker to the highest effective piety, and say who has it.
 
-    Placeholder policy: highest piety selector selects themselves.
+    This decides who DECIDES, and stops there. Who actually begins the next round is that player's
+    to say, and they may say anyone, so nothing here may write `start_player`: doing so is what the
+    placeholder did, and it is why the marker used to mean nothing.
+
+    Ties walk clockwise from the CURRENT start player, which is why this runs before anything sets
+    a new one -- the seat the walk starts from is the one the round was played from.
     """
     players = _real_players(state)
     ordered_players = _start_player_order(state)
@@ -268,27 +271,78 @@ def select_next_start_player(
             )
         )
 
-    selected_start_player = deciding_player
+    # The marker holder is the player who acts next, and `active_player` is how this state says
+    # whose turn it is to act. `start_player` is deliberately left alone: it still names the seat
+    # the round just played from, which is what the next tie-break will walk from, and it is not
+    # replaced until somebody chooses.
     next_state = replace(
         next_state,
-        start_player=selected_start_player,
-        active_player=selected_start_player,
+        phase=TurnPhase.START_PLAYER_SELECTION,
+        active_player=deciding_player,
     )
     events.append(
+        GameEvent(
+            event_type=EventType.START_PLAYER_MARKER,
+            actor=actor,
+            action_id=action_id,
+            details=make_event_details(
+                highest_effective_piety=highest_effective_piety,
+                deciding_player=deciding_player.name.lower(),
+                current_start_player=state.start_player.name.lower(),
+            ),
+        )
+    )
+    return next_state, tuple(events), deciding_player
+
+
+def choosable_start_players(state: GameState) -> tuple[PlayerId, ...]:
+    """Everyone the marker holder may name, which is everyone.
+
+    Including the holder. That is not an extra option bolted on beside the others -- it falls out
+    of "may be anyone", and writing it as a case would be inventing a rule to then have to keep.
+    """
+    return _real_players(state)
+
+
+def apply_start_player_selection(
+    state: GameState,
+    *,
+    chosen_start_player: PlayerId,
+    actor: PlayerId,
+    action_id: str,
+    next_phase: TurnPhase,
+) -> tuple[GameState, tuple[GameEvent, ...]]:
+    """Set who begins, and hand the table to them.
+
+    Two writes, both meant: `start_player` is the seat the next round is played from and the seat a
+    future tie-break walks from, and `active_player` is who moves now. They agree here because the
+    round is about to start with the player who was chosen, and they are still not the same fact.
+    """
+    if chosen_start_player not in choosable_start_players(state):
+        raise TransitionValidationError(
+            f"Chosen start player is not a real player: {chosen_start_player!r}."
+        )
+    next_state = replace(
+        state,
+        start_player=chosen_start_player,
+        active_player=chosen_start_player,
+        phase=next_phase,
+    )
+    return next_state, (
         GameEvent(
             event_type=EventType.START_PLAYER_SELECTION,
             actor=actor,
             action_id=action_id,
+            # Two names and no flag saying whether they match. A `chose_self` boolean beside them
+            # is the same fact a third time, and its only reader was a shorter wording for the
+            # self-selection case -- the wording that made a self-selection and a dropped name
+            # indistinguishable. Anyone who needs the answer compares the two names.
             details=make_event_details(
-                policy=START_PLAYER_POLICY,
-                highest_piety=highest_effective_piety,
-                highest_effective_piety=highest_effective_piety,
-                deciding_player=deciding_player.name.lower(),
-                selected_start_player=selected_start_player.name.lower(),
+                deciding_player=actor.name.lower(),
+                selected_start_player=chosen_start_player.name.lower(),
             ),
-        )
+        ),
     )
-    return next_state, tuple(events), selected_start_player
 
 
 def _resource_cap_updates(resources: Resources) -> dict[str, tuple[int, int]]:

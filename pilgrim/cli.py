@@ -17,7 +17,12 @@ from pilgrim.evaluation import (
 )
 from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import GameAction, SetupSowAction, action_summary
+from pilgrim.model.actions import (
+    GameAction,
+    SetupSowAction,
+    StartPlayerSelectionAction,
+    action_summary,
+)
 from pilgrim.model.config import GameConfig
 from pilgrim.model.dummy import format_dummy_acolytes
 from pilgrim.model.duties import DUTY_POSITIONS
@@ -242,6 +247,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 search_objective,
                 is_setup_sow=True,
             )
+        elif isinstance(result.best_action, StartPlayerSelectionAction):
+            best_action_heading = "Best start player choice:"
+            events_heading = "Events for best start player choice:"
+            state_heading = "State after best start player choice:"
 
         print(best_action_heading)
         if result.best_action is None:

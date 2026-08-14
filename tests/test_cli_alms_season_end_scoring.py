@@ -21,7 +21,7 @@ def test_cli_verbose_unique_leader_shows_season_end_reward_and_reset(capsys) -> 
     assert "ALMS_SEASON_REWARD: player_one moved 1 acolyte abbey -> alms_table" in output
     assert "ALMS_RESET: all players reset to row 0" in output
     assert "MERCHANT_ADVANCE:" in output
-    assert "START_PLAYER_SELECTION:" in output
+    assert "START_PLAYER_MARKER:" in output
 
 
 def test_cli_verbose_forfeit_case_is_clear(capsys) -> None:
@@ -65,5 +65,5 @@ def test_cli_verbose_fourth_season_game_end_skips_continuation_steps(capsys) -> 
     assert "Season: 4" in output
     assert "Game over: true" in output
     assert "MERCHANT_ADVANCE:" not in output
-    assert "START_PLAYER_SELECTION:" not in output
+    assert "START_PLAYER_MARKER:" not in output
     assert "TURN_ADVANCE:" not in output

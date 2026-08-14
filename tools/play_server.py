@@ -50,8 +50,8 @@ from pilgrim.io.event_text import format_event  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
-    FullTurnAction,
     SetupSowAction,
+    StartPlayerSelectionAction,
     action_id,
     action_summary,
 )
@@ -156,6 +156,8 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     the refusal knows what has been asked -- and a page holding the name of a field would be a page
     that could come to depend on it, which is how the next one ends up being a special case.
     """
+    if isinstance(action, StartPlayerSelectionAction):
+        return []
     presented: list[tuple[dict, tuple[str, ...]]] = []
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
@@ -193,11 +195,18 @@ def _covered_fields(action: Any) -> set[str]:
     return {name for _step, fields in _presented(action) for name in fields}
 
 
-RESIDUE_FIELDS = tuple(
-    field.name
-    for field in dataclasses.fields(FullTurnAction)
-    if field.name not in DECIDED_FIELDS and field.name != "action_type"
-)
+def _residue_fields(action: Any) -> tuple[str, ...]:
+    """Everything an action carries that the page does not ask about by name.
+
+    Read off the action in hand rather than off one type, because there is more than one kind of
+    action now: a start-player selection carries one field and a full turn some forty, and the page
+    presents a handful of the second and none of the first.
+    """
+    return tuple(
+        field.name
+        for field in dataclasses.fields(action)
+        if field.name not in DECIDED_FIELDS and field.name != "action_type"
+    )
 
 
 def decision_steps(action: Any) -> list[dict]:
@@ -215,6 +224,13 @@ def decision_steps(action: Any) -> list[dict]:
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
     """
+    # No step at all for a start-player selection: this page has no way to ask a table who should
+    # begin the next round. Left empty rather than approximated, so all of them land in one group
+    # differing in the one field they carry, and the page refuses that field by name -- the same
+    # refusal a full turn gets for anything nobody has built an affordance for, which is what
+    # this is. Building the affordance is the next piece of work, not a guess to make here.
+    if isinstance(action, StartPlayerSelectionAction):
+        return []
     steps = [{"kind": "position", "value": action.origin}]
     steps += [{"kind": "position", "value": position} for position in action.route]
     if isinstance(action, SetupSowAction):
@@ -242,7 +258,7 @@ def _unresolved_fields(members: list[Any]) -> list[str]:
     covered = _covered_fields(members[0])
     return [
         name
-        for name in RESIDUE_FIELDS
+        for name in _residue_fields(members[0])
         if name not in covered and len({getattr(member, name) for member in members}) > 1
     ]
 

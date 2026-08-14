@@ -27,14 +27,16 @@ Implemented now:
 - Merchant movement once per round (not once per turn)
 - Trade-route income after round-end Merchant movement
 - Confession Box temporary piety choices at start-player-selection time
-- Deterministic start-player selection placeholder policy (`highest_piety_selects_self`)
-  using effective piety when Confession Box bonuses are present
+- First Player marker awarded on highest effective piety, ties walking clockwise from the
+  current `start_player`
+- Start-player selection as a real decision by the marker holder, in its own phase
 
 Deferred:
 
 - Dummy-acolyte automatic season-end movement in transition pipeline
-- Player choice for who the deciding player selects as next start player
 - Spatial board geometry and map-space calculations
+- Confession Box directives are still an ordered tuple carried on the round-ending action, so
+  one player's action encodes other players' decisions. Known modelling problem, unchanged here.
 
 ## Round-end event order
 
@@ -58,9 +60,12 @@ For round-ending turns, event order is:
 11. `BUILDING_HIRED` (only when Confession Box is hired during start-player phase)
 12. `CONFESSION_BOX_BONUS` (one per Confession Box user/hirer in start-player turn order)
 13. `START_PLAYER_TIE_BREAK` (only when highest effective-piety tie occurs)
-14. `START_PLAYER_SELECTION` (only if game not over)
-15. `TURN_ADVANCE` (from acting player to selected next active player; skipped when game over)
+14. `START_PLAYER_MARKER` (only if game not over)
+15. `TURN_ADVANCE` (from acting player to the marker holder, who acts next; skipped when game over)
 16. `INVARIANT_CHECK`
+
+The round-ending turn stops here, in phase `start_player_selection`, with `active_player` set to
+the marker holder. `START_PLAYER_SELECTION` is emitted separately, by that player's own action.
 
 Guild interaction (v5.3):
 
@@ -106,8 +111,12 @@ Branch-pruning policy for legal action generation:
 
 - no-use Confession Box variant is always retained
 - Confession Box use/hire variants are generated only when the temporary `+2` bonuses
-  can change the resolved next `start_player` under the current deterministic
-  "deciding player selects self" policy
+  change **who receives the First Player marker**
+
+A Confession Box cannot change who is chosen as next `start_player`: the marker holder chooses
+freely and may name anyone, so every variant leads to the same set of possible start players and
+differs only in who picks between them. Comparing the chosen start player would therefore find
+every variant identical and prune all of them.
 
 Temporary piety notes:
 
@@ -175,19 +184,78 @@ Legacy NW return game end remains:
 - if that NW full-loop return coincides with a metadata pilgrimage round, season-end Alms
   scoring/reset resolves first, then game ends before Merchant/start-player continuation steps.
 
-## Start player placeholder policy
+## First Player marker and start-player selection
+
+Two values, not one. The marker holder and the start player are separate pieces of state and are
+allowed to disagree.
 
 At round end (if game not over):
 
 1. resolve any selected Confession Box uses/hires in start-player turn order
 2. compute effective piety = real piety + temporary Confession Box bonus (`+2` when used/hired)
 3. find highest effective piety among real players
-4. if unique highest effective piety: that player is deciding player
-5. if tie: choose deciding player clockwise away from current `start_player`
-6. placeholder policy: deciding player selects themselves as next start player
-7. set both `start_player` and next `active_player` to that selected player
+4. if unique highest effective piety: that player receives the First Player marker
+5. if tie: the marker walks clockwise from the current `start_player`
+6. emit `START_PLAYER_MARKER`, set `phase` to `start_player_selection` and `active_player` to the
+   marker holder, and **stop**. `start_player` is not touched: it still names the seat this round
+   was played from, which is what the next tie-break walks from.
 
-This is deterministic scaffolding until full player choice is modelled.
+The round-end pipeline pauses here. Nothing is skipped by pausing, because awarding the marker is
+the last of the round-end steps.
+
+Then, as a separate action by that player:
+
+7. `legal_actions` offers one `StartPlayerSelectionAction` per real player, including the holder
+8. applying it sets `start_player` and `active_player` to the chosen player, emits
+   `START_PLAYER_SELECTION`, and moves to `sow`
+
+The holder choosing themselves is one of the ordinary options and is not special-cased.
+
+### What the two events read
+
+```
+START_PLAYER_MARKER: player_one takes the First Player marker on effective piety 4 and must
+choose who begins the next round
+START_PLAYER_SELECTION: player_one chose player_two to begin the next round
+START_PLAYER_SELECTION: player_one chose player_one to begin the next round
+```
+
+`START_PLAYER_SELECTION` names **both** players every time, including when they are the same
+player twice. It is the only line where the decider and the player they chose are visibly two
+things, so it is the line that must never drop one. Shortened for the self-selection -- "player_one
+chose to begin the next round" -- it reads exactly like a line that meant to name somebody and lost
+them, and a reader would have to infer from an absent name which had happened. The event details
+carry the two names and no `chose_self` flag: the flag said the same thing a third time, and its
+only reader was the shorter wording.
+
+### Opening a game
+
+The same decision opens a game. Nobody has any piety yet, so no seat has earned the marker: it
+starts on the **first player board, which is red**, and red is `player_two`. Generated scenarios
+open in phase `start_player_selection` with `active_player` set to that seat, and it says who
+begins. Because setup sow is sown in start-player order, this must be answered before any sowing:
+applying the selection there moves to `setup_sow` rather than to `sow`.
+
+The opening seat is **stated, not walked**. A tie-break walks clockwise from the current
+`start_player`, and at game open there is no current start player -- the `start_player_id` a
+generated file carries is a seed that the opening choice overwrites before any round ends, so
+walking from it would derive who chooses from a value nobody chose. The two answers do agree today,
+and `tests/test_opening_marker_seat.py` holds them to it.
+
+Seat order is not player-id order, and this is a place it has bitten. `SEATED_PLAYERS` is
+`(player_two, player_three, player_four, player_one)`: `player_one` is WHITE, at the far end of the
+row. Reading "the first player board" as "the first player id" puts the marker on white, which is
+what the code did until it was checked by colour. Assertions about this seat go through the board
+colour, because a by-id assertion passes under both readings.
+
+### Saved scenarios
+
+No saved scenario can be mid-round-end under the old model, because that state was not
+representable: the whole round end ran inside one `apply_action` and returned a position ready for
+the next round. So there is nothing to migrate. Existing scenario files load unchanged, including
+files that open in `setup_sow` with a `start_player_id` already set -- that is a legitimate saved
+position in which the opening decision has already been made. A file naming a phase the code does
+not know is rejected by `TurnPhase.from_string`, as before.
 
 ## Official score sheet
 

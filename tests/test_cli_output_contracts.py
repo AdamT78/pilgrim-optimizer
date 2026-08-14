@@ -549,7 +549,7 @@ def test_cli_give_alms_and_season_end_contracts_are_clear(capsys) -> None:
             "ALMS_SEASON_REWARD:",
             "ALMS_RESET:",
             "MERCHANT_ADVANCE:",
-            "START_PLAYER_SELECTION:",
+            "START_PLAYER_MARKER:",
         ],
     )
 
@@ -567,7 +567,7 @@ def test_cli_round_end_trade_route_income_contract_orders_after_merchant(capsys)
         [
             "MERCHANT_ADVANCE:",
             "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route",
-            "START_PLAYER_SELECTION:",
+            "START_PLAYER_MARKER:",
             "TURN_ADVANCE:",
         ],
     )
@@ -592,7 +592,8 @@ def test_cli_confession_box_start_player_contract_hire_bonus_and_selection_order
         [
             "BUILDING_HIRED: player_two hired Confession Box from market; paid wheat 1 to bank",
             "CONFESSION_BOX_BONUS: player_two used Confession Box from market; temporary piety 9 + 2 = 11 for start-player selection",
-            "START_PLAYER_SELECTION: player_two selected player_two as next start player",
+            "START_PLAYER_MARKER: player_two takes the First Player marker on effective "
+            "piety 11 and must choose who begins the next round",
         ],
     )
 

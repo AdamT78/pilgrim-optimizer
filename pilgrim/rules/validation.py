@@ -250,14 +250,25 @@ def ensure_valid_setup_state(state: GameState) -> None:
             raise TransitionValidationError("setup_sow_complete=true cannot keep phase=setup_sow.")
         return
 
-    if state.phase is not TurnPhase.SETUP_SOW:
-        raise TransitionValidationError("Incomplete setup sow must use phase=setup_sow.")
-    if state.active_player in completed_set:
+    if state.phase is TurnPhase.START_PLAYER_SELECTION:
+        # The one other phase an unfinished setup sow may sit in, and only at the very start: the
+        # table is deciding who begins, and setup sow is sown in that order, so it cannot have
+        # started yet. The active player here is the marker holder, who is not sowing and need not
+        # be one of the players who still owe a sow.
+        if completed_set:
+            raise TransitionValidationError(
+                "Start-player selection cannot interrupt a setup sow that has already begun."
+            )
+    elif state.phase is not TurnPhase.SETUP_SOW:
+        raise TransitionValidationError(
+            "Incomplete setup sow must use phase=setup_sow or start_player_selection."
+        )
+    elif state.active_player in completed_set:
         raise TransitionValidationError(
             "active_player cannot already be in setup_sow_completed_by."
         )
     remaining_players = [player for player in all_players if player not in completed_set]
-    if state.active_player not in remaining_players:
+    if state.phase is TurnPhase.SETUP_SOW and state.active_player not in remaining_players:
         raise TransitionValidationError(
             "active_player must be one of the players who still need setup sow."
         )

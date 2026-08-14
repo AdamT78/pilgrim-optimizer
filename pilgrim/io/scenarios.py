@@ -345,6 +345,12 @@ def _phase_from_dict(
 ) -> TurnPhase:
     phase_text = str(initial_state_raw.get("phase", TurnPhase.SOW.value))
     phase = TurnPhase.from_string(phase_text)
+    # A file waiting on the First Player marker is taken at its word. The repair below exists for
+    # files that leave the phase off or contradict their own setup flags, and a game that opens on
+    # the start-player decision has an unfinished setup sow by definition -- so without this it
+    # would be repaired into the phase after the one it is actually in.
+    if phase is TurnPhase.START_PLAYER_SELECTION:
+        return phase
     if setup_sow_required and not setup_sow_complete:
         return TurnPhase.SETUP_SOW
     if setup_sow_required and setup_sow_complete and phase is TurnPhase.SETUP_SOW:
