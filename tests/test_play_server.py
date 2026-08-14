@@ -500,6 +500,10 @@ def _engine_steps(action) -> list[dict]:
     if action.resolution.value == "give_alms_paid":
         silver, wheat = (getattr(action, name) for name in ALMS_PAIR)
         steps.append({"kind": "combination", "value": f"silver={silver},wheat={wheat}"})
+    if action.resolution.value == "taxation":
+        taken = tuple(action.taxation_step2_resources or ())
+        counted = ",".join(f"{noun}={taken.count(noun)}" for noun in ("stone", "silver", "wheat"))
+        steps.append({"kind": "combination", "value": counted})
     return steps
 
 
@@ -609,19 +613,24 @@ def test_a_step_the_survivors_agree_on_is_never_put_as_a_question(phase, tmp_pat
         assert len(offered) != 1, f"a single option was presented as a choice: {offered}"
 
 
-def test_the_two_phases_run_to_different_lengths_and_take_the_same_walk(tmp_path: Path) -> None:
-    """Nothing may assume how many decisions a move takes, so the two phases must not agree.
+def test_a_move_runs_to_no_fixed_number_of_decisions(tmp_path: Path) -> None:
+    """Nothing may assume how many decisions a move takes, and the same script walks any of them.
 
-    A setup sow decides six things here and a normal turn four, and the same script walks either.
-    A route is as long as the number of acolytes lifted; the day that varies within one position
-    too, this still holds, because no number is written down anywhere to have to be updated.
+    This used to say the two phases never run the same length, which stopped being true the moment
+    Taxation gained its bonus step: a taxation turn now decides six things, exactly as a setup sow
+    does. The guarantee was never really about the phases differing, though -- it is that no number
+    is written down anywhere to be assumed, and a single turn position now reaching several lengths
+    at once says that better than two phases that happened not to collide.
+
+    A route is as long as the number of acolytes lifted, so lengths vary by origin as well.
     """
     server = _served(tmp_path)
     setup_lengths = {len(steps) for steps in _engine_decisions(server)}
     _played_through_setup(server)
     turn_lengths = {len(steps) for steps in _engine_decisions(server)}
 
-    assert setup_lengths.isdisjoint(turn_lengths), "the two phases happen to run the same length"
+    assert len(turn_lengths) > 1, "every turn here ran to one length, so nothing varies"
+    assert len(setup_lengths | turn_lengths) > len(setup_lengths)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -964,6 +973,170 @@ def test_only_the_seat_being_asked_has_keys_on_its_board(tmp_path: Path) -> None
 
 
 # ---------------------------------------------------------------------------------------------
+# The Taxation bonus, which is a whole mix of stocks and is offered whole
+# ---------------------------------------------------------------------------------------------
+
+
+def _counts(value: str) -> dict[str, int]:
+    """A combination step's value read back as amounts, which is what it encodes."""
+    return {noun: int(amount) for noun, amount in (part.split("=") for part in value.split(","))}
+
+
+def _mix_groups(server) -> dict[tuple, set[str]]:
+    """Every prefix reaching a Taxation bonus, and the mixes it goes on to offer.
+
+    Keyed on everything decided EXCEPT the mix, so what comes back is the choice rather than the
+    candidates carrying it. Only prefixes offering more than one are kept: a single mix is not a
+    choice, and that it is never asked about is a separate test.
+    """
+    groups: dict[tuple, set[str]] = {}
+    for candidate in server.payload["turn_candidates"]:
+        if {"kind": "resolution", "value": "taxation"} not in candidate["steps"]:
+            continue
+        mix = [step["value"] for step in candidate["steps"] if step["kind"] == "combination"]
+        if not mix:
+            continue
+        groups.setdefault(tuple(_values_except(candidate["steps"], "combination")), set()).add(
+            mix[0]
+        )
+    return {prefix: seen for prefix, seen in groups.items() if len(seen) > 1}
+
+
+def _played_until_a_bonus_offers_a_choice(server, limit: int = 30):
+    """Play on until a Taxation turn offers more than one mix, so the test has its question."""
+    for _turn in range(limit):
+        if _mix_groups(server):
+            return server
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+    raise AssertionError("no Taxation bonus ever offered a choice, so nothing was tested")
+
+
+def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
+    """Read off the actions themselves, not off the steps the page was handed."""
+    allowed = set()
+    for action in legal_actions(server.state, server.config):
+        steps = _engine_steps(action)
+        if getattr(action, "resolution", None) is None or action.resolution.value != "taxation":
+            continue
+        if tuple(_values_except(steps, "combination")) != prefix:
+            continue
+        allowed.add(next(s["value"] for s in steps if s["kind"] == "combination"))
+    return allowed
+
+
+@needs_node
+@pytest.mark.parametrize("index", [0, 1, 2, 3])
+def test_a_taxation_bonus_takes_the_mix_that_was_named_and_leaves_the_rest(
+    index: int,
+    tmp_path: Path,
+) -> None:
+    """Played once per mix, and what is checked FIRST is the stock the mix does not name.
+
+    A bonus that took everything, or that ignored the answer and took some default, would move the
+    two stocks the mix names correctly often enough to look right. The stock left alone is what
+    tells those apart, so it is asserted before the ones that grow. Parametrised over four of the
+    six mixes -- including both a doubled stock and two different ones -- so no single mix can pass
+    by being whatever the engine would have done anyway.
+    """
+    server = _played_until_a_bonus_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_mix_groups(server).items())[0]
+    assert len(offered) > index, "this board offered fewer mixes than the test asks for"
+
+    wanted = sorted(offered)[index]
+    candidate = next(
+        c
+        for c in server.payload["turn_candidates"]
+        if tuple(_values_except(c["steps"], "combination")) == prefix
+        and _answer(c, "combination") == wanted
+    )
+    bonus = _counts(wanted)
+    # Step one takes its own stock, and it is not the thing under test -- so it is added to the
+    # bonus rather than assumed to be zero, and the totals below are what the whole turn is worth.
+    taken = dict(bonus)
+    step_one = _answer(candidate, "resource")
+    taken[step_one] = taken.get(step_one, 0) + 1
+
+    seat = server.payload["state"]["active_player"]
+    before = _stocks(server, seat)
+    _played_from_the_page(server, candidate, tmp_path)
+    after = _stocks(server, seat)
+
+    untouched = [stock for stock in before if not taken.get(stock)]
+    for stock in untouched:
+        assert after[stock] == before[stock], f"{stock} moved and this mix does not name it"
+    for stock, amount in taken.items():
+        if amount:
+            assert after[stock] - before[stock] == amount, f"{stock} did not move by {amount}"
+
+
+@needs_node
+def test_the_mixes_offered_are_the_ones_the_engine_allows(tmp_path: Path) -> None:
+    """Derived from the survivors, never from a written-down list.
+
+    This one is falsifiable on the board as it stands, which the seat and building choices were
+    not. The mixes are `combinations_with_replacement(unlocked stocks, duty value)`, and both of
+    those move: over the walk this board reaches six DIFFERENT mix sets, and only one of them is
+    the six pairs of three stocks. Most Taxation groups offer exactly one mix. So a page that had
+    the six written down would offer six where the engine allows one, and `_mixes_the_engine_allows`
+    would catch it without anything being perturbed.
+    """
+    server = _played_until_a_bonus_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_mix_groups(server).items())[0]
+    assert offered == _mixes_the_engine_allows(server, prefix)
+
+    decisions = _engine_decisions(server)
+    transcript = _run_script(server, _clicks_to(server, decisions, list(prefix)), tmp_path)
+    assert sorted(value for value in transcript["offered"][-1] if "=" in value) == sorted(offered)
+
+
+@needs_node
+def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -> None:
+    """Most Taxation turns here have a single legal mix, and none of them may ask about it.
+
+    Including the empty one. A seat holding no majority anywhere takes no bonus at all, which is
+    still a mix -- "take nothing" -- and is still not a choice.
+    """
+    server = _reference_server()
+    while not any(
+        {"kind": "resolution", "value": "taxation"} in candidate["steps"]
+        and any(step["kind"] == "combination" for step in candidate["steps"])
+        for candidate in server.payload["turn_candidates"]
+    ):
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+
+    assert _mix_groups(server) == {}, "this position had a choice of mix, so it tests nothing"
+    candidate = next(
+        c
+        for c in server.payload["turn_candidates"]
+        if {"kind": "resolution", "value": "taxation"} in c["steps"]
+        and any(step["kind"] == "combination" for step in c["steps"])
+    )
+    forced = _answer(candidate, "combination")
+
+    decisions = _engine_decisions(server)
+    prefix = _values_except(candidate["steps"], "combination")
+    transcript = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path, confirm=True)
+
+    assert forced not in transcript["offered"][-1], "the only legal mix was still asked for"
+    assert transcript["posted"]["action_id"] == candidate["action_id"]
+
+
+def test_a_mix_is_offered_in_english_and_never_as_a_tuple() -> None:
+    """The label is what a player reads, so it has to be a sentence rather than a spelling.
+
+    The engine states a mix as a run of names -- ("stone", "stone") is two stone -- and printing
+    that at somebody would be showing them the data structure. One of something loses its number
+    too, because "take stone and silver" is how it would be said out loud.
+    """
+    server = _played_until_a_bonus_offers_a_choice(_reference_server())
+    labels = _the_mixes_read_as_english(server)
+    assert "take two stone" in labels
+    assert "take stone and silver" in labels
+
+
+# ---------------------------------------------------------------------------------------------
 # Constructing, which is answered by pressing a building where it stands on the round track
 # ---------------------------------------------------------------------------------------------
 
@@ -1272,6 +1445,105 @@ def test_asking_every_seat_for_the_stock_is_caught(tmp_path: Path) -> None:
         _only_the_active_seat_is_asked(every_seat, seat)
 
 
+def test_offering_the_mix_one_stock_at_a_time_is_caught(monkeypatch) -> None:
+    """MUTATION. Filter the run name by name, and the canonical order becomes a fake rule.
+
+    The tempting bug, and it looks like it should work: the pills already answer "which stock", the
+    route is a tuple the filter walks element by element, so two clicks. What it misses is that the
+    engine writes these runs canonically -- stone before silver before wheat -- so a player who
+    presses silver first can no longer reach stone-and-silver, though it is one of the six. The
+    spelling would become a constraint nobody wrote.
+
+    Checked by walking to exactly that dead end and asking the engine whether the mix it excludes
+    is legal. It is, which is the bug.
+    """
+    from tools import play_server
+
+    whole = play_server._presented
+
+    def one_at_a_time(action):
+        """Each name in the run its own question, in the order the engine happens to write them."""
+        steps = [(step, fields) for step, fields in whole(action) if step["kind"] != "combination"]
+        for resolution, _verb, name in play_server.COUNTED_COMBINATION_STEPS:
+            if action.resolution.value != resolution:
+                continue
+            for taken in tuple(getattr(action, name, ()) or ()):
+                steps.append(({"kind": "resource", "value": taken}, (name,)))
+        return steps
+
+    server = _played_until_a_bonus_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_mix_groups(server).items())[0]
+    both = next(
+        mix for mix in offered if _counts(mix)["stone"] == 1 and _counts(mix)["silver"] == 1
+    )
+    assert both in _mixes_the_engine_allows(server, prefix), "stone and silver is not legal here"
+
+    monkeypatch.setattr(play_server, "_presented", one_at_a_time)
+    server._refresh()
+
+    # Every split turn that starts its bonus by taking silver, and what it may take second.
+    after_silver = {
+        tuple(step["value"] for step in candidate["steps"])[len(prefix) + 1]
+        for candidate in server.payload["turn_candidates"]
+        if tuple(step["value"] for step in candidate["steps"])[: len(prefix)] == prefix
+        and tuple(step["value"] for step in candidate["steps"])[len(prefix)] == "silver"
+        and len(candidate["steps"]) > len(prefix) + 1
+    }
+    assert "stone" not in after_silver, (
+        "pressing silver first still reached stone, so the split proves nothing"
+    )
+
+
+def _the_mixes_read_as_english(server) -> set[str]:
+    """Every mix label on offer, checked for being a sentence rather than a spelling."""
+    labels = {
+        step["label"]
+        for candidate in server.payload["turn_candidates"]
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and step["label"].startswith("take")
+    }
+    assert labels, "no mix carried a label"
+    for label in labels:
+        assert not any(mark in label for mark in "()'\"=,"), f"{label!r} shows its spelling"
+        assert "1 " not in label, f"{label!r} counts to one out loud"
+    return labels
+
+
+def test_naming_the_mix_by_its_spelling_instead_of_its_amounts_is_caught(monkeypatch) -> None:
+    """MUTATION. Join the names instead of counting them, and the label becomes the data structure.
+
+    ("stone", "silver") and ("silver", "stone") are the same bonus and the engine only ever writes
+    the first, so joining looks safe enough. What it costs is the sentence: there is no way to say
+    "take two stone" from a run of names without counting them first, so the button ends up reading
+    "take stone, stone" -- which is the tuple, printed at a player, with the brackets taken off.
+    """
+    from tools import play_server
+
+    whole = play_server._presented
+
+    def as_written(action):
+        steps = []
+        for step, fields in whole(action):
+            if step["kind"] == "combination" and step["label"].startswith("take"):
+                taken = tuple(action.taxation_step2_resources or ())
+                step = {
+                    "kind": "combination",
+                    "value": ",".join(taken),
+                    "label": f"take {', '.join(taken)}" if taken else "take nothing",
+                }
+            steps.append((step, fields))
+        return steps
+
+    server = _played_until_a_bonus_offers_a_choice(_reference_server())
+    _the_mixes_read_as_english(server)
+
+    monkeypatch.setattr(play_server, "_presented", as_written)
+    server._refresh()
+
+    with pytest.raises(AssertionError, match="shows its spelling"):
+        _the_mixes_read_as_english(server)
+
+
 @needs_node
 def test_lighting_the_whole_round_track_is_caught(tmp_path: Path) -> None:
     """MUTATION. Light every building while one is being asked for, and the offered set must notice.
@@ -1396,7 +1668,7 @@ def test_setting_the_two_alms_amounts_one_at_a_time_is_caught(monkeypatch) -> No
         """
         return [
             ({"kind": "combination", "value": f"{noun}={getattr(action, name)}"}, (name,))
-            for resolution, fields in play_server.COMBINATION_STEPS
+            for resolution, _verb, fields in play_server.COMBINATION_STEPS
             if action.resolution.value == resolution
             for name, noun in fields
         ]

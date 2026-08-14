@@ -139,15 +139,69 @@ BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
 #
 # Keyed off the resolution rather than off the values, the way `action_id` and `action_summary`
 # already are, because zero is a legal amount and so cannot stand for "this action never asks".
-COMBINATION_STEPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
-    ("give_alms_paid", (("alms_payment_silver", "silver"), ("alms_payment_wheat", "wheat"))),
+#
+# The verb travels with the row because these are not the same event: a paid alms hands stocks over
+# and a Taxation bonus collects them, and a button reading "pay stone and silver" for the one that
+# gives you both would be worse than no words at all.
+COMBINATION_STEPS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "give_alms_paid",
+        "pay",
+        (("alms_payment_silver", "silver"), ("alms_payment_wheat", "wheat")),
+    ),
 )
 
+# Combinations the engine states as a RUN OF NAMES rather than as a set of amounts: one name per
+# unit, so ("stone", "stone") is two stone. Counted into amounts here and then offered exactly like
+# the alms pair, because they are the same kind of question -- several stocks that are only legal
+# together -- wearing a different spelling.
+#
+# Offered WHOLE, and this is the part that matters. The engine writes these runs canonically, in
+# the order below, so ("silver", "stone") is spelled stone-first. Filtering them name by name would
+# turn that spelling into a rule the player has to obey: press silver first and stone would go out,
+# though a stone-and-silver bonus is perfectly legal. The mix is one answer and is asked for once.
+COUNTED_COMBINATION_STEPS: tuple[tuple[str, str, str], ...] = (
+    ("taxation", "take", "taxation_step2_resources"),
+)
 
-def _amounts_in_words(amounts: list[tuple[str, int]]) -> str:
-    """A combination said in words, because two numbers are not a thing to read off a button."""
-    spoken = [f"{amount} {noun}" for noun, amount in amounts if amount]
-    return f"pay {' and '.join(spoken)}" if spoken else "pay nothing"
+# The order amounts are spoken and encoded in. A display order only -- what may be taken is the
+# engine's business, and every mix it offers is offered whichever way round this reads.
+COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
+
+_NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
+
+
+def _amounts_in_words(verb: str, amounts: list[tuple[str, int]]) -> str:
+    """A combination said in words, because a row of numbers is not a thing to read off a button.
+
+    One of something is said without the number: "take stone and silver" rather than "take 1 stone
+    and 1 silver", which is how anyone would say it out loud and is the whole reason for spelling
+    these out at all. Beyond the small words it falls back to digits rather than growing a table of
+    English numerals no mix on this board reaches.
+    """
+    spoken = []
+    for noun, amount in amounts:
+        if not amount:
+            continue
+        if amount == 1:
+            spoken.append(noun)
+        elif amount < len(_NUMBER_WORDS):
+            spoken.append(f"{_NUMBER_WORDS[amount]} {noun}")
+        else:
+            spoken.append(f"{amount} {noun}")
+    return f"{verb} {' and '.join(spoken)}" if spoken else f"{verb} nothing"
+
+
+def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
+    """One whole combination as a step: a scalar to match it by and a sentence to read."""
+    return {
+        "kind": "combination",
+        # A step value is matched with `===` in the page, so it has to be one scalar. Spelled out
+        # rather than hashed, so a transcript of a turn stays readable. Every noun is written even
+        # at zero, so two mixes cannot collide by one of them leaving a stock out.
+        "value": ",".join(f"{noun}={amount}" for noun, amount in amounts),
+        "label": _amounts_in_words(verb, amounts),
+    }
 
 
 def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
@@ -182,22 +236,17 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
         value = getattr(action, name, None)
         if value is not None:
             presented.append(({"kind": "building", "value": value}, (name,)))
-    for resolution, fields in COMBINATION_STEPS:
+    for resolution, verb, fields in COMBINATION_STEPS:
         if action.resolution.value != resolution:
             continue
         amounts = [(noun, getattr(action, name)) for name, noun in fields]
-        presented.append(
-            (
-                {
-                    "kind": "combination",
-                    # A step value is matched with `===` in the page, so it has to be one scalar.
-                    # Spelled out rather than hashed, so a transcript of a turn stays readable.
-                    "value": ",".join(f"{noun}={amount}" for noun, amount in amounts),
-                    "label": _amounts_in_words(amounts),
-                },
-                tuple(name for name, _noun in fields),
-            )
-        )
+        presented.append((_combination_step(verb, amounts), tuple(name for name, _noun in fields)))
+    for resolution, verb, name in COUNTED_COMBINATION_STEPS:
+        if action.resolution.value != resolution:
+            continue
+        taken = tuple(getattr(action, name, ()) or ())
+        amounts = [(noun, taken.count(noun)) for noun in COMBINATION_STOCKS]
+        presented.append((_combination_step(verb, amounts), (name,)))
     return presented
 
 

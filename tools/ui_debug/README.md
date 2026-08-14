@@ -1638,6 +1638,26 @@ at rest; `game_setup.html` does not, because there is no turn on that page and s
 ever ask. Three rects a board that no stylesheet can reveal and no script would want are not hidden
 markup but dead markup, indistinguishable from a mistake.
 
+### Combinations stated as a run of names, and why they are counted before they are shown
+
+The alms pair arrives as two named amounts. The Taxation bonus arrives as a *run*: one stock name
+per unit taken, so `("stone", "stone")` is two stone. `COUNTED_COMBINATION_STEPS` in `play_server`
+counts a run into amounts and then offers it exactly like the alms pair, because it is the same
+kind of question wearing a different spelling.
+
+Counting is not tidying. The engine writes these runs canonically — stone before silver before
+wheat — so a page that filtered them name by name would turn that spelling into a rule: press
+silver first and stone goes out, though stone-and-silver is perfectly legal. The mix is one answer
+and is asked for once. Counting is also what makes the label sayable; there is no way to get "take
+two stone" out of a run of names without counting them, and the alternative is a button reading
+"take stone, stone", which is the tuple with the brackets taken off.
+
+The mixes on offer are never a written-down list. They are
+`combinations_with_replacement(unlocked stocks, duty value)`, and both of those move — a Scriptorium
+or a Customs House changes which stocks are unlocked, and the duty value sets the run's length. Over
+one walk this board reaches six different mix sets, of which the six pairs of three stocks is only
+one; most Taxation groups offer exactly one mix and are never asked about.
+
 ### The building keys, which are on the map because that is where a building is
 
 `render_setup_map_svg(..., choice_keys=True)` draws one hidden hex per building standing on the
