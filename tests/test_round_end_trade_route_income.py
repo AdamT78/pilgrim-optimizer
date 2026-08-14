@@ -5,7 +5,8 @@ from dataclasses import replace
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.merchant import advance_merchant_position, taxation_board_position
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
+from tests.round_end_helpers import apply_declining_confession
 
 
 def _events_of_type(events, event_type: EventType):
@@ -39,7 +40,7 @@ def test_round_end_trade_route_income_basic_gain_and_order() -> None:
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_basic_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
 
     income_events = _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)
     assert len(income_events) == 1
@@ -60,7 +61,7 @@ def test_round_end_trade_route_income_multiple_routes_gains_scaled_amount() -> N
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_multiple_routes_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     income_details = dict(_events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)[0].details)
 
     assert income_details["amount"] == 3
@@ -73,7 +74,7 @@ def test_round_end_trade_route_income_multiple_players_emits_in_player_order() -
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_multiple_players_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     income_events = _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)
 
     assert len(income_events) == 2
@@ -95,17 +96,15 @@ def test_round_end_trade_route_income_zero_routes_emits_no_income_event() -> Non
     )
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
     player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
-    zero_routes_state = (
-        scenario.state.with_player_state(
-            PlayerId.PLAYER_ONE,
-            replace(player_one, trade_routes_count=0),
-        ).with_player_state(
-            PlayerId.PLAYER_TWO,
-            replace(player_two, trade_routes_count=0),
-        )
+    zero_routes_state = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(player_one, trade_routes_count=0),
+    ).with_player_state(
+        PlayerId.PLAYER_TWO,
+        replace(player_two, trade_routes_count=0),
     )
 
-    result = apply_action(zero_routes_state, action, scenario.config)
+    result = apply_declining_confession(zero_routes_state, action, scenario.config)
     assert _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME) == []
 
 
@@ -113,7 +112,7 @@ def test_round_end_trade_route_income_resource_cap_applies_before_income() -> No
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_resource_cap_order_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     cap_event = _events_of_type(result.events, EventType.EXCESS_RESOURCE_CAP)[0]
     income_event = _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)[0]
 
@@ -138,10 +137,8 @@ def test_round_end_trade_route_income_skips_when_merchant_resource_none() -> Non
         for position in range(1, 9)
         if advance_merchant_position(position, scenario.config) == taxation
     )
-    state_with_taxation_after_advance = scenario.state.with_merchant_board_position(
-        before_taxation
-    )
-    result = apply_action(state_with_taxation_after_advance, action, scenario.config)
+    state_with_taxation_after_advance = scenario.state.with_merchant_board_position(before_taxation)
+    result = apply_declining_confession(state_with_taxation_after_advance, action, scenario.config)
 
     assert _events_of_type(result.events, EventType.MERCHANT_ADVANCE)
     assert _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME) == []
@@ -153,16 +150,14 @@ def test_round_end_trade_route_income_not_emitted_when_game_end_stops_pipeline()
     action = legal_actions(scenario.state, scenario.config)[0]
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
     player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
-    state_with_routes = (
-        scenario.state.with_player_state(
-            PlayerId.PLAYER_ONE,
-            replace(player_one, trade_routes_count=3),
-        ).with_player_state(
-            PlayerId.PLAYER_TWO,
-            replace(player_two, trade_routes_count=2),
-        )
+    state_with_routes = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(player_one, trade_routes_count=3),
+    ).with_player_state(
+        PlayerId.PLAYER_TWO,
+        replace(player_two, trade_routes_count=2),
     )
-    result = apply_action(state_with_routes, action, scenario.config)
+    result = apply_declining_confession(state_with_routes, action, scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert result.state.game_over is True
@@ -171,13 +166,15 @@ def test_round_end_trade_route_income_not_emitted_when_game_end_stops_pipeline()
     assert EventType.TRADE_ROUTE_INCOME not in event_types
 
 
-def test_trade_route_income_uses_merchant_position_after_two_prior_guild_moves_and_round_end_advance() -> None:
+def test_trade_route_income_uses_merchant_position_after_two_prior_guild_moves_and_round_end_advance() -> (
+    None
+):
     # This scenario starts after both players have already used Guild this round.
     # The test verifies round-end Merchant advance and trade-route income from that resulting state.
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_after_two_guild_moves_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     merchant_event = _events_of_type(result.events, EventType.MERCHANT_ADVANCE)[0]
     income_events = _events_of_type(result.events, EventType.TRADE_ROUTE_INCOME)
 

@@ -10,8 +10,8 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     SetupSowAction,
+    StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
-    StartPlayerConfessionBoxUse,
     action_id,
     readable_route,
 )
@@ -32,8 +32,8 @@ from pilgrim.rules.buildings import (
     BuildingHireTurnContext,
     apply_building_hire_payment,
     building_ability_source,
-    can_hire_building_this_turn,
     building_live_round,
+    can_hire_building_this_turn,
     construct_building_from_market,
     donate_active_building,
     has_available_player_board_slot,
@@ -43,8 +43,8 @@ from pilgrim.rules.buildings import (
     player_has_active_chapter_house,
     record_hired_building_this_turn,
     used_player_board_slots,
-    validate_hire_sequence_for_turn,
     validate_building_state,
+    validate_hire_sequence_for_turn,
 )
 from pilgrim.rules.duties import (
     action_options_for_duty_category,
@@ -72,20 +72,32 @@ from pilgrim.rules.ordination import (
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
+    apply_start_player_confession_box,
     apply_start_player_selection,
     award_first_player_marker,
+    begin_start_player_confession,
     choosable_start_players,
+    confession_box_source_for,
     resolve_trade_route_income,
+    start_player_confession_order,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.sow_routes import (
     cloisters_route_variants,
     combined_kogge_cloisters_route_variants,
-    is_legal_route_with_cloisters_skip as _is_legal_route_with_cloisters_skip,
-    is_legal_route_with_kogge_and_cloisters_skip as _is_legal_route_with_kogge_and_cloisters_skip,
     kogge_city_start_routes,
     normal_sow_routes,
+)
+from pilgrim.rules.sow_routes import (
+    is_legal_route_with_cloisters_skip as _is_legal_route_with_cloisters_skip,
+)
+from pilgrim.rules.sow_routes import (
+    is_legal_route_with_kogge_and_cloisters_skip as _is_legal_route_with_kogge_and_cloisters_skip,
+)
+from pilgrim.rules.sow_routes import (
     route_requires_kogge as _route_requires_kogge_for_origin_route,
+)
+from pilgrim.rules.sow_routes import (
     sow_vector_with_optional_city_kogge as _sow_vector_with_optional_city_kogge,
 )
 from pilgrim.rules.special_activities import (
@@ -105,7 +117,6 @@ from pilgrim.rules.special_activities import (
 )
 from pilgrim.rules.timing import (
     advance_timing,
-    is_round_end_for_state,
     resolve_round_end,
     resolve_season_end,
 )
@@ -124,8 +135,9 @@ from pilgrim.rules.validation import (
     ensure_route_length_matches,
     ensure_selected_duty_has_acolyte,
     ensure_valid_dummy_state,
-    ensure_valid_special_activities_state,
     ensure_valid_setup_state,
+    ensure_valid_special_activities_state,
+    ensure_valid_start_player_confession_state,
     ensure_valid_timing,
 )
 
@@ -409,6 +421,8 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
         return ()
     if state.phase is TurnPhase.SETUP_SOW:
         return _legal_setup_sow_actions(state, config)
+    if state.phase is TurnPhase.START_PLAYER_CONFESSION:
+        return _legal_start_player_confession_actions(state, config)
     if state.phase is TurnPhase.START_PLAYER_SELECTION:
         return _legal_start_player_selection_actions(state)
     if state.phase is not TurnPhase.SOW:
@@ -420,11 +434,36 @@ def apply_action(state: GameState, action: GameAction, config: GameConfig) -> Tr
     """Apply one full-turn action with invariant checks."""
     if isinstance(action, SetupSowAction):
         return _apply_setup_sow_action(state, action, config)
+    if isinstance(action, StartPlayerConfessionBoxAction):
+        return _apply_start_player_confession_action(state, action, config)
     if isinstance(action, StartPlayerSelectionAction):
         return _apply_start_player_selection_action(state, action, config)
     if isinstance(action, FullTurnAction):
         return _apply_full_turn_action(state, action, config)
     raise TypeError(f"Unsupported action type: {type(action)!r}")
+
+
+def _legal_start_player_confession_actions(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[GameAction, ...]:
+    """Two actions for the player being waited on: spend on the box, or do not.
+
+    Always exactly two, never one. A player who could only decline is not asked at all -- the phase
+    walks past them -- so reaching this function at all means there is a real box within reach and
+    a real choice about it. Returning a lone decline would present a question with one answer.
+    """
+    player = state.active_player
+    source = confession_box_source_for(state, config, player=player)
+    if source is None:
+        return ()
+    return (
+        StartPlayerConfessionBoxAction(use=False),
+        StartPlayerConfessionBoxAction(
+            use=True,
+            source=_confession_box_source_label_for_ability_source(source),
+        ),
+    )
 
 
 def _legal_start_player_selection_actions(state: GameState) -> tuple[GameAction, ...]:
@@ -450,6 +489,39 @@ def _phase_after_start_player_selection(state: GameState) -> TurnPhase:
     return TurnPhase.SOW
 
 
+def _apply_start_player_confession_action(
+    state: GameState,
+    action: StartPlayerConfessionBoxAction,
+    config: GameConfig,
+) -> TransitionResult:
+    if state.phase is not TurnPhase.START_PLAYER_CONFESSION:
+        raise TransitionValidationError(
+            "Confession Box decisions are only legal while a player is being waited on; "
+            f"phase is {state.phase.value}."
+        )
+    transition_action_id = action_id(action)
+    next_state, events, someone_still_to_answer = apply_start_player_confession_box(
+        state,
+        config=config,
+        use=action.use,
+        source_label=action.source,
+        actor=state.active_player,
+        action_id=transition_action_id,
+    )
+    if not someone_still_to_answer:
+        next_state, marker_events, _ = award_first_player_marker(
+            next_state,
+            config=config,
+            actor=state.active_player,
+            action_id=transition_action_id,
+        )
+        events = (*events, *marker_events)
+    ensure_valid_timing(next_state)
+    ensure_valid_setup_state(next_state)
+    ensure_valid_start_player_confession_state(next_state)
+    return TransitionResult(state=next_state, events=tuple(events))
+
+
 def _apply_start_player_selection_action(
     state: GameState,
     action: StartPlayerSelectionAction,
@@ -472,6 +544,7 @@ def _apply_start_player_selection_action(
     # what the setup and timing checks are about.
     ensure_valid_timing(next_state)
     ensure_valid_setup_state(next_state)
+    ensure_valid_start_player_confession_state(next_state)
     return TransitionResult(state=next_state, events=tuple(events))
 
 
@@ -545,26 +618,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             ):
                 if library_action not in actions:
                     actions.append(library_action)
-    if not is_round_end_for_state(state, config.timing):
-        return tuple(actions)
-
-    if not _confession_box_is_selected_in_state(state):
-        return tuple(actions)
-
-    expanded_actions: list[GameAction] = []
-    for candidate in actions:
-        if not isinstance(candidate, FullTurnAction):
-            if candidate not in expanded_actions:
-                expanded_actions.append(candidate)
-            continue
-        for variant in _start_player_confession_box_variants_for_action(
-            state=state,
-            config=config,
-            action=candidate,
-        ):
-            if variant not in expanded_actions:
-                expanded_actions.append(variant)
-    return tuple(expanded_actions)
+    return tuple(actions)
 
 
 def _legal_full_turn_actions_for_state(
@@ -763,11 +817,14 @@ def _legal_full_turn_actions_for_state(
                                         alms_house_extra_wheat=extra_wheat,
                                     )
 
-                                    if _can_afford_resolution_costs(
-                                        player_state,
-                                        required_silver=required_silver,
-                                        required_wheat=required_wheat,
-                                    ) and base_action not in actions:
+                                    if (
+                                        _can_afford_resolution_costs(
+                                            player_state,
+                                            required_silver=required_silver,
+                                            required_wheat=required_wheat,
+                                        )
+                                        and base_action not in actions
+                                    ):
                                         actions.append(base_action)
 
                                     if required_wheat <= 0:
@@ -778,11 +835,14 @@ def _legal_full_turn_actions_for_state(
                                         mill_source.source_type == "own_active"
                                         and mill_source.usable
                                     ):
-                                        if _can_afford_resolution_costs(
-                                            player_state,
-                                            required_silver=required_silver,
-                                            required_wheat=mill_wheat_spent,
-                                        ) and base_action not in actions:
+                                        if (
+                                            _can_afford_resolution_costs(
+                                                player_state,
+                                                required_silver=required_silver,
+                                                required_wheat=mill_wheat_spent,
+                                            )
+                                            and base_action not in actions
+                                        ):
                                             actions.append(base_action)
                                     elif _is_hired_source(mill_source) and mill_source.usable:
                                         for hire_option in _legal_hire_payment_options(
@@ -948,7 +1008,9 @@ def _legal_full_turn_actions_for_state(
                                 )
                                 actions.append(construct_action)
                             for building_id in construct_candidate_ids:
-                                stone_cost = config.buildings.definition_by_id(building_id).stone_cost
+                                stone_cost = config.buildings.definition_by_id(
+                                    building_id
+                                ).stone_cost
                                 construct_action = FullTurnAction(
                                     origin=origin,
                                     route=route,
@@ -1359,10 +1421,7 @@ def _legal_full_turn_actions_for_state(
                                 tithe_resource=tithe_resource,
                             )
                         )
-                    if (
-                        route_option.building_id is not None
-                        or conversion_option is not None
-                    ):
+                    if route_option.building_id is not None or conversion_option is not None:
                         for index in range(actions_before_duty, len(actions)):
                             action = actions[index]
                             if not isinstance(action, FullTurnAction):
@@ -1466,12 +1525,8 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 wagon_yard_option.state,
                 config,
-                allow_guild_modifier=(
-                    wagon_yard_option.target_building_id == _BUILDING_GUILD
-                ),
-                allow_pulpit_modifier=(
-                    wagon_yard_option.target_building_id == _BUILDING_PULPIT
-                ),
+                allow_guild_modifier=(wagon_yard_option.target_building_id == _BUILDING_GUILD),
+                allow_pulpit_modifier=(wagon_yard_option.target_building_id == _BUILDING_PULPIT),
                 allow_scriptorium_modifier=(
                     wagon_yard_option.target_building_id == _BUILDING_SCRIPTORIUM
                 ),
@@ -1479,9 +1534,7 @@ def _legal_full_turn_actions_for_state(
                     wagon_yard_option.target_building_id == _BUILDING_CUSTOMS_HOUSE
                 ),
                 allow_wagon_yard_modifier=False,
-                allow_bank_modifier=(
-                    wagon_yard_option.target_building_id == _BUILDING_BANK
-                ),
+                allow_bank_modifier=(wagon_yard_option.target_building_id == _BUILDING_BANK),
                 uses_scriptorium_effective_counts=False,
                 uses_customs_house_taxation_override=False,
             ):
@@ -1537,155 +1590,6 @@ def _legal_full_turn_actions_for_state(
     return tuple(actions)
 
 
-def _confession_box_is_selected_in_state(state: GameState) -> bool:
-    if _BUILDING_CONFESSION_BOX in state.building_market:
-        return True
-    for player_id in (PlayerId(index) for index in range(state.player_count)):
-        slots = state.player_state(player_id).player_board_slots
-        if _BUILDING_CONFESSION_BOX in slots.active_buildings:
-            return True
-        if _BUILDING_CONFESSION_BOX in slots.donated_buildings:
-            return True
-    return False
-
-
-def _start_player_confession_box_variants_for_action(
-    *,
-    state: GameState,
-    config: GameConfig,
-    action: FullTurnAction,
-) -> tuple[FullTurnAction, ...]:
-    """Confession Box variants worth offering, which is the ones that change WHO DECIDES.
-
-    A Confession Box lends two piety for the purposes of the marker, so what it can buy is the
-    marker itself. It cannot buy a particular start player: the holder chooses freely and may
-    choose anyone, so every combination leads to the same set of possible next start players and
-    they differ only in who gets to pick between them.
-
-    That is what the predicate compares. It used to compare the next start player, which was the
-    same number only because the placeholder made the holder start; against a real choice it would
-    have found every variant identical and pruned all of them, silently.
-
-    KNOWN SHAPE PROBLEM, LEFT ALONE DELIBERATELY. The uses are an ordered tuple hanging off the
-    round-ending turn, so one player's action carries other players' decisions. That is wrong and
-    is not fixed here; only the predicate is.
-    """
-    base_action = _with_start_player_confession_box_uses(action, ())
-    preview_result = _apply_full_turn_action(state, base_action, config)
-    if preview_result.state.game_over:
-        return (base_action,)
-    # The marker is what these variants are about, so the question is whether the turn awards one.
-    # Keyed off the marker rather than the selection, because the selection is now a later action
-    # by a different player and no longer happens on this turn at all.
-    if not any(
-        event.event_type is EventType.START_PLAYER_MARKER for event in preview_result.events
-    ):
-        return (base_action,)
-
-    ordered_players = _start_player_turn_order(
-        start_player=state.start_player,
-        player_count=state.player_count,
-    )
-    use_combinations = _legal_start_player_confession_box_use_combinations(
-        state=preview_result.state,
-        config=config,
-        ordered_players=ordered_players,
-    )
-    state_before_marker = replace(
-        preview_result.state,
-        start_player=state.start_player,
-        active_player=state.start_player,
-    )
-    baseline_decider = _resolved_marker_holder_for_confession_uses(
-        state=state_before_marker,
-        uses=(),
-    )
-    kept_use_combinations: list[tuple[StartPlayerConfessionBoxUse, ...]] = [()]
-    for use_combination in use_combinations:
-        if not use_combination:
-            continue
-        candidate_decider = _resolved_marker_holder_for_confession_uses(
-            state=state_before_marker,
-            uses=use_combination,
-        )
-        if candidate_decider != baseline_decider:
-            kept_use_combinations.append(use_combination)
-    return tuple(
-        _with_start_player_confession_box_uses(base_action, use_combination)
-        for use_combination in kept_use_combinations
-    )
-
-
-def _start_player_turn_order(
-    *,
-    start_player: PlayerId,
-    player_count: int,
-) -> tuple[PlayerId, ...]:
-    return tuple(
-        PlayerId((int(start_player) + offset) % player_count)
-        for offset in range(player_count)
-    )
-
-
-def _legal_start_player_confession_box_use_combinations(
-    *,
-    state: GameState,
-    config: GameConfig,
-    ordered_players: tuple[PlayerId, ...],
-) -> tuple[tuple[StartPlayerConfessionBoxUse, ...], ...]:
-    combinations: list[tuple[StartPlayerConfessionBoxUse, ...]] = []
-
-    def _recurse(
-        index: int,
-        state_after_payments: GameState,
-        selected: tuple[StartPlayerConfessionBoxUse, ...],
-    ) -> None:
-        if index >= len(ordered_players):
-            combinations.append(selected)
-            return
-        player_id = ordered_players[index]
-        _recurse(index + 1, state_after_payments, selected)
-        source = building_ability_source(
-            state_after_payments,
-            config,
-            acting_player=player_id,
-            building_key=_BUILDING_CONFESSION_BOX,
-        )
-        if not source.usable:
-            return
-        if not _confession_box_source_is_live_for_start_player_phase(
-            state_after_payments,
-            source,
-        ):
-            return
-        source_label = _confession_box_source_label_for_ability_source(source)
-        use = StartPlayerConfessionBoxUse(player=player_id, source=source_label)
-        if source.source_type == "own_active":
-            _recurse(index + 1, state_after_payments, (*selected, use))
-            return
-        if source.source_type not in ("live_market_hire", "opponent_active_hire"):
-            return
-        try:
-            paid_state, _payment = apply_building_hire_payment(
-                state_after_payments,
-                acting_player=player_id,
-                source=source,
-            )
-        except ValueError:
-            return
-        _recurse(index + 1, paid_state, (*selected, use))
-
-    _recurse(0, state, ())
-    return tuple(combinations)
-
-
-def _with_start_player_confession_box_uses(
-    action: FullTurnAction,
-    uses: tuple[StartPlayerConfessionBoxUse, ...],
-) -> FullTurnAction:
-    return replace(action, start_player_confession_box_uses=uses)
-
-
 def _confession_box_source_label_for_ability_source(source: BuildingAbilitySource) -> str:
     if source.source_type == "own_active":
         return "own_active"
@@ -1712,60 +1616,6 @@ def _confession_box_source_is_live_for_start_player_phase(
     if live_round is None:
         return True
     return is_building_live(state, _BUILDING_CONFESSION_BOX)
-
-
-def _resolved_marker_holder_for_confession_uses(
-    *,
-    state: GameState,
-    uses: tuple[StartPlayerConfessionBoxUse, ...],
-) -> PlayerId:
-    """Who would end up with the marker if these Confession Boxes were used.
-
-    The same arithmetic `award_first_player_marker` does, run without paying for anything, because
-    enumeration needs the answer before it decides whether the variant is worth offering.
-    """
-    temporary_bonus_players = {use.player for use in uses}
-    players = tuple(PlayerId(index) for index in range(state.player_count))
-    highest_effective_piety = max(
-        state.player_state(player_id).piety
-        + (
-            _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
-            if player_id in temporary_bonus_players
-            else 0
-        )
-        for player_id in players
-    )
-    tied_players = tuple(
-        player_id
-        for player_id in players
-        if state.player_state(player_id).piety
-        + (
-            _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
-            if player_id in temporary_bonus_players
-            else 0
-        )
-        == highest_effective_piety
-    )
-    if len(tied_players) == 1:
-        return tied_players[0]
-    return _clockwise_start_player_tie_break(
-        tied_players=tied_players,
-        current_start=state.start_player,
-        player_count=state.player_count,
-    )
-
-
-def _clockwise_start_player_tie_break(
-    *,
-    tied_players: tuple[PlayerId, ...],
-    current_start: PlayerId,
-    player_count: int,
-) -> PlayerId:
-    for offset in range(1, player_count + 1):
-        candidate = PlayerId((int(current_start) + offset) % player_count)
-        if candidate in tied_players:
-            return candidate
-    raise TransitionValidationError("No tied player found during Confession Box pruning.")
 
 
 def _apply_setup_sow_action(
@@ -1873,6 +1723,7 @@ def _apply_setup_sow_action(
     ensure_valid_dummy_state(next_state)
     ensure_valid_special_activities_state(next_state)
     ensure_valid_setup_state(next_state)
+    ensure_valid_start_player_confession_state(next_state)
     ensure_acolyte_conservation(state, next_state)
     ensure_dummy_acolyte_conservation(state, next_state)
     events.append(
@@ -1903,12 +1754,6 @@ def _apply_full_turn_action(
     if state.game_over:
         raise TransitionValidationError("Cannot apply action: game is already over.")
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Full turn action")
-    if action.start_player_confession_box_uses and not is_round_end_for_state(
-        state, config.timing
-    ):
-        raise TransitionValidationError(
-            "Confession Box start-player directives are only valid on round-ending actions."
-        )
 
     player = state.active_player
     turn_start_resources = state.player_state(player).resources
@@ -2110,11 +1955,7 @@ def _apply_full_turn_action(
                             "silver": conversion_delta[1],
                             "wheat": conversion_delta[2],
                         }
-                        | (
-                            {"piety": conversion_delta[3]}
-                            if conversion_delta[3] != 0
-                            else {}
-                        )
+                        | ({"piety": conversion_delta[3]} if conversion_delta[3] != 0 else {})
                     )
                 ),
             )
@@ -2330,9 +2171,7 @@ def _apply_full_turn_action(
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
-            cloisters_with_kogge=(
-                kogge_source is not None and cloisters_route is not None
-            ),
+            cloisters_with_kogge=(kogge_source is not None and cloisters_route is not None),
         )
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
@@ -2480,14 +2319,11 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
 
-        if (
-            action.resolution is not TurnResolutionType.GIVE_ALMS_PAID
-            and (
-                action.alms_payment_silver != 0
-                or action.alms_payment_wheat != 0
-                or action.alms_house_extra_silver != 0
-                or action.alms_house_extra_wheat != 0
-            )
+        if action.resolution is not TurnResolutionType.GIVE_ALMS_PAID and (
+            action.alms_payment_silver != 0
+            or action.alms_payment_wheat != 0
+            or action.alms_house_extra_silver != 0
+            or action.alms_house_extra_wheat != 0
         ):
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
@@ -2500,15 +2336,9 @@ def _apply_full_turn_action(
                 "Only give_alms_donate_building actions may include donate_building_id."
             )
         if action.resolution is not TurnResolutionType.ORDINATION and action.ordination_steps:
-            raise TransitionValidationError(
-                "Only ordination actions may include ordination_steps."
-            )
-        if (
-            action.resolution is not TurnResolutionType.TAXATION
-            and (
-                action.taxation_step1_resource is not None
-                or action.taxation_step2_resources
-            )
+            raise TransitionValidationError("Only ordination actions may include ordination_steps.")
+        if action.resolution is not TurnResolutionType.TAXATION and (
+            action.taxation_step1_resource is not None or action.taxation_step2_resources
         ):
             raise TransitionValidationError(
                 "Only taxation actions may include taxation_step1_resource/taxation_step2_resources."
@@ -2540,9 +2370,7 @@ def _apply_full_turn_action(
         has_route_building_id = action.sow_route_building_id is not None
         has_route_building_source = action.sow_route_building_source is not None
         has_secondary_route_building_id = action.sow_route_secondary_building_id is not None
-        has_secondary_route_building_source = (
-            action.sow_route_secondary_building_source is not None
-        )
+        has_secondary_route_building_source = action.sow_route_secondary_building_source is not None
         if has_route_building_id != has_route_building_source:
             raise TransitionValidationError(
                 "sow_route_building_id and sow_route_building_source must be set together."
@@ -2555,10 +2383,9 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Secondary sow-route fields require primary sow-route building fields."
             )
-        if (
-            action.sow_route_building_id is not None
-            and action.sow_route_building_id
-            not in (_ROUTE_BUILDING_KOGGE, _ROUTE_BUILDING_CLOISTERS)
+        if action.sow_route_building_id is not None and action.sow_route_building_id not in (
+            _ROUTE_BUILDING_KOGGE,
+            _ROUTE_BUILDING_CLOISTERS,
         ):
             raise TransitionValidationError(
                 "Only Kogge and Cloisters are supported for sow_route_building fields."
@@ -2590,12 +2417,9 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Cloisters sow-route actions must set sow_route_omitted_location."
             )
-        if (
-            action.sow_route_secondary_building_id is not None
-            and not (
-                action.sow_route_building_id == _ROUTE_BUILDING_KOGGE
-                and action.sow_route_secondary_building_id == _ROUTE_BUILDING_CLOISTERS
-            )
+        if action.sow_route_secondary_building_id is not None and not (
+            action.sow_route_building_id == _ROUTE_BUILDING_KOGGE
+            and action.sow_route_secondary_building_id == _ROUTE_BUILDING_CLOISTERS
         ):
             raise TransitionValidationError(
                 "Combined sow-route actions must use primary Kogge and secondary Cloisters fields."
@@ -2605,9 +2429,7 @@ def _apply_full_turn_action(
             and action.sow_route_omitted_location is not None
             and action.sow_route_secondary_building_id != _ROUTE_BUILDING_CLOISTERS
         ):
-            raise TransitionValidationError(
-                "Kogge actions may not set sow_route_omitted_location."
-            )
+            raise TransitionValidationError("Kogge actions may not set sow_route_omitted_location.")
         conversion_fields = (
             action.building_conversion_id,
             action.building_conversion_source,
@@ -2616,9 +2438,7 @@ def _apply_full_turn_action(
         )
         conversion_field_count = sum(field is not None for field in conversion_fields)
         if conversion_field_count not in (0, len(conversion_fields)):
-            raise TransitionValidationError(
-                "building_conversion fields must be set together."
-            )
+            raise TransitionValidationError("building_conversion fields must be set together.")
         if conversion_field_count == len(conversion_fields):
             conversion_building_id = action.building_conversion_id
             if conversion_building_id not in (
@@ -2670,16 +2490,10 @@ def _apply_full_turn_action(
                         "Indulgences conversion amount must be at least 1."
                     )
                 if conversion_building_id == _BUILDING_BREWERY:
-                    raise TransitionValidationError(
-                        "Brewery conversion amount must be exactly 1."
-                    )
-                raise TransitionValidationError(
-                    "Stone Yard conversion amount must be at least 1."
-                )
+                    raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
+                raise TransitionValidationError("Stone Yard conversion amount must be at least 1.")
             if conversion_building_id == _BUILDING_BREWERY and amount != 1:
-                raise TransitionValidationError(
-                    "Brewery conversion amount must be exactly 1."
-                )
+                raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
         bank_payment_fields = (
             action.bank_payment_building_id,
             action.bank_payment_building_source,
@@ -2700,8 +2514,7 @@ def _apply_full_turn_action(
             if action.bank_payment_replaced_resource not in _BANK_REPLACED_RESOURCES:
                 replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
                 raise TransitionValidationError(
-                    "Bank replaced resource must be one of: "
-                    f"{replaced_text}."
+                    f"Bank replaced resource must be one of: {replaced_text}."
                 )
             amount = action.bank_payment_silver_amount
             if amount is None or amount <= 0:
@@ -2732,16 +2545,12 @@ def _apply_full_turn_action(
             action.merchant_advance_building_id,
             action.merchant_advance_building_source,
         )
-        merchant_advance_field_count = sum(
-            field is not None for field in merchant_advance_fields
-        )
+        merchant_advance_field_count = sum(field is not None for field in merchant_advance_fields)
         if merchant_advance_field_count not in (0, len(merchant_advance_fields)):
             raise TransitionValidationError(
                 "merchant_advance_building_id and merchant_advance_building_source must be set together."
             )
-        has_guild_merchant_modifier = merchant_advance_field_count == len(
-            merchant_advance_fields
-        )
+        has_guild_merchant_modifier = merchant_advance_field_count == len(merchant_advance_fields)
         if has_guild_merchant_modifier:
             if action.merchant_advance_building_id != _BUILDING_GUILD:
                 raise TransitionValidationError(
@@ -2767,9 +2576,7 @@ def _apply_full_turn_action(
             action.effective_acolyte_building_id,
             action.effective_acolyte_building_source,
         )
-        effective_acolyte_field_count = sum(
-            field is not None for field in effective_acolyte_fields
-        )
+        effective_acolyte_field_count = sum(field is not None for field in effective_acolyte_fields)
         if effective_acolyte_field_count not in (0, len(effective_acolyte_fields)):
             raise TransitionValidationError(
                 "effective_acolyte_building_id and effective_acolyte_building_source must be set together."
@@ -2806,9 +2613,7 @@ def _apply_full_turn_action(
             action.taxation_majority_building_id,
             action.taxation_majority_building_source,
         )
-        taxation_majority_field_count = sum(
-            field is not None for field in taxation_majority_fields
-        )
+        taxation_majority_field_count = sum(field is not None for field in taxation_majority_fields)
         if taxation_majority_field_count not in (0, len(taxation_majority_fields)):
             raise TransitionValidationError(
                 "taxation_majority_building_id and taxation_majority_building_source must be set together."
@@ -2920,16 +2725,12 @@ def _apply_full_turn_action(
             action.workforce_move_building_id,
             action.workforce_move_building_source,
         )
-        workforce_move_field_count = sum(
-            field is not None for field in workforce_move_fields
-        )
+        workforce_move_field_count = sum(field is not None for field in workforce_move_fields)
         if workforce_move_field_count not in (0, len(workforce_move_fields)):
             raise TransitionValidationError(
                 "workforce_move_building_id and workforce_move_building_source must be set together."
             )
-        has_pulpit_workforce_modifier = workforce_move_field_count == len(
-            workforce_move_fields
-        )
+        has_pulpit_workforce_modifier = workforce_move_field_count == len(workforce_move_fields)
         if has_pulpit_workforce_modifier:
             if action.workforce_move_building_id != _BUILDING_PULPIT:
                 raise TransitionValidationError(
@@ -3022,9 +2823,7 @@ def _apply_full_turn_action(
                 )
             allowed_hire_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution)
             if allowed_hire_buildings is None:
-                raise TransitionValidationError(
-                    "This action cannot include hired building fields."
-                )
+                raise TransitionValidationError("This action cannot include hired building fields.")
             if action.hired_building_id not in allowed_hire_buildings:
                 expected_buildings = ", ".join(sorted(allowed_hire_buildings))
                 raise TransitionValidationError(
@@ -3066,9 +2865,7 @@ def _apply_full_turn_action(
             and action.effective_acolyte_building_source is not None
             and action.effective_acolyte_building_source != "own_active"
         ):
-            if not can_hire_building_this_turn(
-                hire_context, building_key=_BUILDING_SCRIPTORIUM
-            ):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_SCRIPTORIUM):
                 raise TransitionValidationError(
                     "Same building cannot be hired more than once in one turn."
                 )
@@ -3084,9 +2881,7 @@ def _apply_full_turn_action(
             and action.taxation_majority_building_source is not None
             and action.taxation_majority_building_source != "own_active"
         ):
-            if not can_hire_building_this_turn(
-                hire_context, building_key=_BUILDING_CUSTOMS_HOUSE
-            ):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_CUSTOMS_HOUSE):
                 raise TransitionValidationError(
                     "Same building cannot be hired more than once in one turn."
                 )
@@ -3130,7 +2925,10 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
         route_hire_entries: list[tuple[str, str]] = []
-        if action.sow_route_building_id is not None and action.sow_route_building_source is not None:
+        if (
+            action.sow_route_building_id is not None
+            and action.sow_route_building_source is not None
+        ):
             route_hire_entries.append(
                 (
                     action.sow_route_building_id,
@@ -3162,7 +2960,8 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
         if (
-            action.building_conversion_id in (
+            action.building_conversion_id
+            in (
                 _BUILDING_GRAIN_STORE,
                 _BUILDING_INDULGENCES,
                 _BUILDING_STONE_YARD,
@@ -3528,8 +3327,7 @@ def _apply_full_turn_action(
                 details=make_event_details(
                     duty_category="construct",
                     scaffold=(
-                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; "
-                        f"requested plan: {action.construct_plan}"
+                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; requested plan: {action.construct_plan}"
                     ),
                 ),
             )
@@ -3755,8 +3553,7 @@ def _apply_full_turn_action(
                 details=make_event_details(
                     duty_category="construct",
                     scaffold=(
-                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; "
-                        f"requested plan: {action.construct_plan}"
+                        f"{_CONSTRUCT_ROAD_SCAFFOLD_TEXT}; requested plan: {action.construct_plan}"
                     ),
                 ),
             )
@@ -3943,7 +3740,9 @@ def _apply_full_turn_action(
                     )
                 new_player_state = replace(new_player_state, resources=new_resources)
 
-            state_after_resolution = state_for_ordination.with_player_state(player, new_player_state)
+            state_after_resolution = state_for_ordination.with_player_state(
+                player, new_player_state
+            )
             resource_delta = _resource_delta_between(
                 resolution_resource_delta_baseline,
                 new_player_state.resources,
@@ -3997,12 +3796,10 @@ def _apply_full_turn_action(
                 silver=silver_delta,
                 wheat=wheat_delta,
             )
-            if (
-                new_resources.stone < 0
-                or new_resources.silver < 0
-                or new_resources.wheat < 0
-            ):
-                raise TransitionValidationError("Taxation resource update cannot overdraw resources.")
+            if new_resources.stone < 0 or new_resources.silver < 0 or new_resources.wheat < 0:
+                raise TransitionValidationError(
+                    "Taxation resource update cannot overdraw resources."
+                )
             new_player_state = replace(new_player_state, resources=new_resources)
 
             special_bonus_events.append(
@@ -4165,7 +3962,9 @@ def _apply_full_turn_action(
                     )
                 new_player_state = replace(new_player_state, resources=new_resources)
 
-            state_after_resolution = state_for_allocation.with_player_state(player, new_player_state)
+            state_after_resolution = state_for_allocation.with_player_state(
+                player, new_player_state
+            )
             resource_delta = _resource_delta_between(
                 resolution_resource_delta_baseline,
                 new_player_state.resources,
@@ -4217,9 +4016,7 @@ def _apply_full_turn_action(
                             )
                         )
                 else:
-                    stone_bonus = produce_stone_mason_bonus(
-                        state_after_sow.player_state(player)
-                    )
+                    stone_bonus = produce_stone_mason_bonus(state_after_sow.player_state(player))
                     produce_resource_bonus += stone_bonus
                     if stone_bonus:
                         special_bonus_events.append(
@@ -4690,6 +4487,7 @@ def _apply_full_turn_action(
     ensure_valid_dummy_state(next_state)
     ensure_valid_special_activities_state(next_state)
     ensure_valid_setup_state(next_state)
+    ensure_valid_start_player_confession_state(next_state)
     ensure_acolyte_conservation(state, next_state)
     ensure_dummy_acolyte_conservation(state, next_state)
     events.append(
@@ -4764,7 +4562,6 @@ def _resolve_round_end_phases(
     # Legacy full-loop game end still applies, but if the next round is a configured
     # pilgrimage round then that season-end block must resolve before GAME_END.
     if full_loop_nw_return and projected_pilgrimage_site_index is None:
-        _ensure_no_start_player_confession_box_uses_before_game_end(action)
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -4772,9 +4569,7 @@ def _resolve_round_end_phases(
                 actor=actor,
                 action_id=action_id,
                 details=make_event_details(
-                    reason=(
-                        "ship returned to NW Pilgrimage Site after full 26-round loop"
-                    )
+                    reason=("ship returned to NW Pilgrimage Site after full 26-round loop")
                 ),
             )
         )
@@ -4809,7 +4604,6 @@ def _resolve_round_end_phases(
         events.extend(alms_result.events)
         next_state = resolve_season_end(next_state, config.timing)
         if _is_final_season_site(next_state, season_site_index=season_site_index):
-            _ensure_no_start_player_confession_box_uses_before_game_end(action)
             next_state = next_state.with_game_over(True)
             events.append(
                 GameEvent(
@@ -4817,16 +4611,13 @@ def _resolve_round_end_phases(
                     actor=actor,
                     action_id=action_id,
                     details=make_event_details(
-                        reason=(
-                            "fourth season ended after pilgrimage site 4"
-                        )
+                        reason=("fourth season ended after pilgrimage site 4")
                     ),
                 )
             )
             return next_state, tuple(events)
 
     if full_loop_nw_return:
-        _ensure_no_start_player_confession_box_uses_before_game_end(action)
         next_state = next_state.with_game_over(True)
         events.append(
             GameEvent(
@@ -4834,9 +4625,7 @@ def _resolve_round_end_phases(
                 actor=actor,
                 action_id=action_id,
                 details=make_event_details(
-                    reason=(
-                        "ship returned to NW Pilgrimage Site after full 26-round loop"
-                    )
+                    reason=("ship returned to NW Pilgrimage Site after full 26-round loop")
                 ),
             )
         )
@@ -4846,9 +4635,9 @@ def _resolve_round_end_phases(
     if config.merchant.advance_at_round_end:
         from_duty = current_merchant_duty(next_state, config)
         next_merchant_position = advance_merchant_position(
-        next_state.merchant_board_position,
-        config,
-    )
+            next_state.merchant_board_position,
+            config,
+        )
         next_state = next_state.with_merchant_board_position(next_merchant_position)
         to_duty = current_merchant_duty(next_state, config)
         current_resource = current_merchant_resource(next_state, config)
@@ -4872,18 +4661,38 @@ def _resolve_round_end_phases(
     )
     events.extend(trade_route_income_events)
 
-    # 7) The First Player marker goes to the highest effective piety, and the round STOPS there.
+    # 7) The Confession Boxes, if anyone has one, and then the marker. The round STOPS at whichever
+    # of those comes first, and everything above it has already run.
     #
-    # This is the last of the seven steps, so pausing costs nothing: there is no eighth step left
-    # waiting behind the decision. The state returned is not ready for the next round and is not
-    # meant to be -- it is a table waiting on one named player, the same way it waits during setup
-    # sow, and `legal_actions` will offer that player their choice and nothing else.
+    # Nothing here needs to be resumable, which is why this pauses cheaply: steps 1 to 6 finish
+    # before the first question is asked, so no half-run pipeline is ever left standing. What IS
+    # carried across the pauses is the cursor -- who has yet to answer, and who has bought the two
+    # piety -- and that lives on the state beside the setup-sow cursor it is modelled on.
+    #
+    # The boxes come before the marker because what they buy is the marker. Awarding it first and
+    # asking afterwards would be asking players to pay for a decision already made.
+    confessing_state = begin_start_player_confession(next_state, config=config)
+    if confessing_state is not None:
+        events.append(
+            GameEvent(
+                event_type=EventType.CONFESSION_BOX_PHASE,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(
+                    first_player=confessing_state.active_player.name.lower(),
+                    turn_order=",".join(
+                        player.name.lower() for player in start_player_confession_order(next_state)
+                    ),
+                ),
+            )
+        )
+        return confessing_state, tuple(events)
+
     next_state, marker_events, _ = award_first_player_marker(
         next_state,
         config=config,
         actor=actor,
         action_id=action_id,
-        confession_box_uses=action.start_player_confession_box_uses,
     )
     events.extend(marker_events)
     return next_state, tuple(events)
@@ -4891,16 +4700,6 @@ def _resolve_round_end_phases(
 
 def _pilgrimage_site_index_for_round(state: GameState) -> int | None:
     return _pilgrimage_site_index_for_round_number(state, state.timing.round_number)
-
-
-def _ensure_no_start_player_confession_box_uses_before_game_end(
-    action: FullTurnAction,
-) -> None:
-    if not action.start_player_confession_box_uses:
-        return
-    raise TransitionValidationError(
-        "Confession Box start-player directives are invalid when game ends before start-player selection."
-    )
 
 
 def _pilgrimage_site_index_for_round_number(state: GameState, round_number: int) -> int | None:
@@ -4978,9 +4777,7 @@ def _legal_dormitory_relocation_options(
         acting_player=state.active_player,
         building_key="dormitory",
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     city_position = config.board.index_for_name("city")
@@ -5028,9 +4825,7 @@ def _legal_inquisition_relocation_options(
         acting_player=state.active_player,
         building_key="inquisition",
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     city_position = config.board.index_for_name("city")
@@ -5205,9 +5000,7 @@ def _city_acolytes_after_action_for_end_turn(
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
-            cloisters_with_kogge=(
-                kogge_source is not None and cloisters_route is not None
-            ),
+            cloisters_with_kogge=(kogge_source is not None and cloisters_route is not None),
         )
     except ValueError:
         return 0
@@ -5231,9 +5024,7 @@ def _with_end_turn_library_relocation_fields(
     to_target: int | str,
 ) -> FullTurnAction:
     source_label = (
-        "own_active"
-        if source.source_type == "own_active"
-        else _hired_building_source_label(source)
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
     )
     return replace(
         action,
@@ -5292,8 +5083,10 @@ def _legal_sow_routes_for_origin(
         acting_player=state.active_player,
         building_key="kogge",
     )
-    if origin == config.board.index_for_name("city") and kogge_source.usable and (
-        kogge_source.source_type == "own_active" or _is_hired_source(kogge_source)
+    if (
+        origin == config.board.index_for_name("city")
+        and kogge_source.usable
+        and (kogge_source.source_type == "own_active" or _is_hired_source(kogge_source))
     ):
         routes.extend(
             _SowRouteOption(
@@ -5354,9 +5147,7 @@ def _legal_cloisters_route_options(
         acting_player=state.active_player,
         building_key=_ROUTE_BUILDING_CLOISTERS,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     return tuple(
@@ -5555,9 +5346,7 @@ def _legal_grain_store_conversion_options(
         acting_player=state.active_player,
         building_key=_BUILDING_GRAIN_STORE,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5603,6 +5392,7 @@ def _legal_grain_store_conversion_options(
 
     return tuple(options)
 
+
 def _legal_indulgences_conversion_options(
     state: GameState,
     config: GameConfig,
@@ -5613,9 +5403,7 @@ def _legal_indulgences_conversion_options(
         acting_player=state.active_player,
         building_key=_BUILDING_INDULGENCES,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5666,6 +5454,7 @@ def _legal_indulgences_conversion_options(
 
     return tuple(options)
 
+
 def _legal_stone_yard_conversion_options(
     state: GameState,
     config: GameConfig,
@@ -5676,9 +5465,7 @@ def _legal_stone_yard_conversion_options(
         acting_player=state.active_player,
         building_key=_BUILDING_STONE_YARD,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5724,6 +5511,7 @@ def _legal_stone_yard_conversion_options(
 
     return tuple(options)
 
+
 def _legal_brewery_conversion_options(
     state: GameState,
     config: GameConfig,
@@ -5734,9 +5522,7 @@ def _legal_brewery_conversion_options(
         acting_player=state.active_player,
         building_key=_BUILDING_BREWERY,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5967,9 +5753,7 @@ def _legal_bank_payment_options_for_action(
         acting_player=state.active_player,
         building_key=_BUILDING_BANK,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     substitutions: list[_BankPaymentOption] = []
@@ -6030,9 +5814,7 @@ def _legal_guild_merchant_advance_options(
         acting_player=state.active_player,
         building_key=_BUILDING_GUILD,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
     return tuple(
         _GuildMerchantAdvanceOption(
@@ -6053,9 +5835,7 @@ def _legal_scriptorium_effective_acolyte_options(
         acting_player=state.active_player,
         building_key=_BUILDING_SCRIPTORIUM,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     return tuple(
@@ -6078,9 +5858,7 @@ def _legal_customs_house_taxation_options(
         acting_player=state.active_player,
         building_key=_BUILDING_CUSTOMS_HOUSE,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     return tuple(
@@ -6134,9 +5912,7 @@ def _legal_pulpit_workforce_move_options(
         acting_player=state.active_player,
         building_key=_BUILDING_PULPIT,
     )
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
 
     options: list[_PulpitWorkforceMoveOption] = []
@@ -6196,9 +5972,8 @@ def _wagon_yard_own_active_is_usable(
     )
     if source.source_type != "own_active" or not source.usable:
         return False
-    if (
-        building_live_round(state, _BUILDING_WAGON_YARD) is not None
-        and not is_building_live(state, _BUILDING_WAGON_YARD)
+    if building_live_round(state, _BUILDING_WAGON_YARD) is not None and not is_building_live(
+        state, _BUILDING_WAGON_YARD
     ):
         return False
     return True
@@ -6228,19 +6003,15 @@ def _wagon_yard_target_sources_for_building(
         return ()
 
     sources: list[str] = []
-    if (
-        target_building_id in state.building_market
-        and is_building_live(state, target_building_id)
-    ):
+    if target_building_id in state.building_market and is_building_live(state, target_building_id):
         sources.append("market")
 
     for opponent in _opponents(state, state.active_player):
         opponent_slots = state.player_state(opponent).player_board_slots
         if target_building_id not in opponent_slots.active_buildings:
             continue
-        if (
-            building_live_round(state, target_building_id) is not None
-            and not is_building_live(state, target_building_id)
+        if building_live_round(state, target_building_id) is not None and not is_building_live(
+            state, target_building_id
         ):
             continue
         sources.append(_player_label(opponent))
@@ -6488,7 +6259,10 @@ def _wagon_yard_action_is_supported_composition(
 ) -> bool:
     if action.start_turn_building_id is not None or action.end_turn_building_id is not None:
         return False
-    if action.sow_route_building_id is not None or action.sow_route_secondary_building_id is not None:
+    if (
+        action.sow_route_building_id is not None
+        or action.sow_route_secondary_building_id is not None
+    ):
         return False
     if action.hired_building_id is not None or action.hired_building_source is not None:
         return False
@@ -6497,9 +6271,15 @@ def _wagon_yard_action_is_supported_composition(
         return False
     if target_building_id != _BUILDING_PULPIT and action.workforce_move_building_id is not None:
         return False
-    if target_building_id != _BUILDING_SCRIPTORIUM and action.effective_acolyte_building_id is not None:
+    if (
+        target_building_id != _BUILDING_SCRIPTORIUM
+        and action.effective_acolyte_building_id is not None
+    ):
         return False
-    if target_building_id != _BUILDING_CUSTOMS_HOUSE and action.taxation_majority_building_id is not None:
+    if (
+        target_building_id != _BUILDING_CUSTOMS_HOUSE
+        and action.taxation_majority_building_id is not None
+    ):
         return False
     if target_building_id != _BUILDING_BANK and action.bank_payment_building_id is not None:
         return False
@@ -6852,9 +6632,7 @@ def _resolved_end_turn_relocation_for_action(
     assert to_target is not None
 
     if building_id != "library":
-        raise TransitionValidationError(
-            "Only Library is supported for end-turn relocation fields."
-        )
+        raise TransitionValidationError("Only Library is supported for end-turn relocation fields.")
 
     source = building_ability_source(
         state,
@@ -6888,12 +6666,7 @@ def _resolved_end_turn_relocation_for_action(
     to_pool: str
     to_position: int | None
     if isinstance(to_target, str):
-        normalized_target = (
-            to_target.strip()
-            .lower()
-            .replace("-", "_")
-            .replace(" ", "_")
-        )
+        normalized_target = to_target.strip().lower().replace("-", "_").replace(" ", "_")
         if normalized_target != _LIBRARY_ABBEY_TARGET:
             raise TransitionValidationError(
                 "Library relocation target must be Abbey or a non-city Duty tile."
@@ -7196,15 +6969,10 @@ def _resolved_bank_payment_for_action(
     assert silver_amount is not None
 
     if building_id != _BUILDING_BANK:
-        raise TransitionValidationError(
-            "Only Bank is supported for bank_payment_building fields."
-        )
+        raise TransitionValidationError("Only Bank is supported for bank_payment_building fields.")
     if replaced_resource not in _BANK_REPLACED_RESOURCES:
         replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
-        raise TransitionValidationError(
-            "Bank replaced resource must be one of: "
-            f"{replaced_text}."
-        )
+        raise TransitionValidationError(f"Bank replaced resource must be one of: {replaced_text}.")
     if silver_amount <= 0:
         raise TransitionValidationError("Bank silver substitution amount must be at least 1.")
     if action.resolution not in (
@@ -7316,8 +7084,7 @@ def _resolved_wagon_yard_free_hire_for_action(
         )
 
     target_was_temporary_added = (
-        target_building_id
-        not in state.player_state(player).player_board_slots.active_buildings
+        target_building_id not in state.player_state(player).player_board_slots.active_buildings
     )
     return _ResolvedWagonYardFreeHire(
         enabler_building_id=_BUILDING_WAGON_YARD,
@@ -7401,9 +7168,7 @@ def _resolved_grain_store_conversion_for_action(
     if field_count == 0:
         return None
     if field_count != len(fields):
-        raise TransitionValidationError(
-            "building_conversion fields must be set together."
-        )
+        raise TransitionValidationError("building_conversion fields must be set together.")
 
     building_id = action.building_conversion_id
     source_label = action.building_conversion_source
@@ -7452,18 +7217,12 @@ def _resolved_grain_store_conversion_for_action(
         raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
     if amount <= 0:
         if building_id == _BUILDING_GRAIN_STORE:
-            raise TransitionValidationError(
-                "Grain Store conversion amount must be at least 1."
-            )
+            raise TransitionValidationError("Grain Store conversion amount must be at least 1.")
         if building_id == _BUILDING_INDULGENCES:
-            raise TransitionValidationError(
-                "Indulgences conversion amount must be at least 1."
-            )
+            raise TransitionValidationError("Indulgences conversion amount must be at least 1.")
         if building_id == _BUILDING_BREWERY:
             raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
-        raise TransitionValidationError(
-            "Stone Yard conversion amount must be at least 1."
-        )
+        raise TransitionValidationError("Stone Yard conversion amount must be at least 1.")
 
     source = building_ability_source(
         state,
@@ -7516,14 +7275,10 @@ def _resolved_cloisters_route_for_action(
         building_id=_ROUTE_BUILDING_CLOISTERS,
     )
     if source_label is None:
-        raise TransitionValidationError(
-            "Cloisters actions must set sow_route_building_source."
-        )
+        raise TransitionValidationError("Cloisters actions must set sow_route_building_source.")
     omitted_location = action.sow_route_omitted_location
     if omitted_location is None:
-        raise TransitionValidationError(
-            "Cloisters actions must set sow_route_omitted_location."
-        )
+        raise TransitionValidationError("Cloisters actions must set sow_route_omitted_location.")
 
     source = building_ability_source(
         state,
@@ -7532,15 +7287,11 @@ def _resolved_cloisters_route_for_action(
         building_key=_ROUTE_BUILDING_CLOISTERS,
     )
     source = _hire_source_for_action(source, action)
-    if not source.usable or (
-        source.source_type != "own_active" and not _is_hired_source(source)
-    ):
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         raise TransitionValidationError("Cloisters is unavailable in current state.")
 
     expected_source_label = (
-        "own_active"
-        if source.source_type == "own_active"
-        else _hired_building_source_label(source)
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
     )
     if source_label != expected_source_label:
         raise TransitionValidationError(
@@ -7613,9 +7364,7 @@ def _resolved_kogge_source_for_action(
     )
     source = _hire_source_for_action(source, action)
     expected_source_label = (
-        "own_active"
-        if source.source_type == "own_active"
-        else _hired_building_source_label(source)
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
     )
     if source.source_type == "own_active" and source.usable:
         if action_has_kogge_fields:
@@ -7693,9 +7442,7 @@ def _resolved_simple_bonus_source_for_action(
         return source
 
     if action_has_hire_fields:
-        raise TransitionValidationError(
-            f"{building_key} is not hire-usable in current state."
-        )
+        raise TransitionValidationError(f"{building_key} is not hire-usable in current state.")
     return None
 
 
@@ -7947,9 +7694,7 @@ def _apply_pulpit_workforce_move_to_state(
     player_state = state.player_state(actor)
     workforce = player_state.workforce
     if workforce.village < 1:
-        raise ValueError(
-            "Pulpit free move requires at least 1 serf in Village after hire payment."
-        )
+        raise ValueError("Pulpit free move requires at least 1 serf in Village after hire payment.")
     moved_workforce = replace(
         workforce,
         village=workforce.village - 1,
@@ -8167,9 +7912,7 @@ def _apply_grain_store_conversion_to_state(
         if conversion.direction != _BREWERY_SELL_WHEAT_FOR_SILVER:
             raise ValueError("Brewery conversion direction must be sell_wheat_for_silver.")
         if resources.wheat < 1:
-            raise ValueError(
-                "Brewery conversion requires at least 1 wheat after hire payment."
-            )
+            raise ValueError("Brewery conversion requires at least 1 wheat after hire payment.")
         next_player_state = replace(
             player_state,
             resources=resources.add(wheat=-1, silver=2),
@@ -8590,8 +8333,7 @@ def _competing_counts(
     duty_position: int,
 ) -> tuple[int, ...]:
     opponent_counts = [
-        state.player_vector(opponent_id)[duty_position]
-        for opponent_id in _opponents(state, player)
+        state.player_vector(opponent_id)[duty_position] for opponent_id in _opponents(state, player)
     ]
     opponent_counts.append(state.dummy_at_position(duty_position))
     return tuple(opponent_counts)
@@ -8754,7 +8496,9 @@ def _taxation_bonus_resource_types(
             unlocked_resources.update(_TAXATION_RESOURCE_TYPES)
         elif resource in _TAXATION_RESOURCE_TYPES:
             unlocked_resources.add(resource)
-    return tuple(resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources)
+    return tuple(
+        resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources
+    )
 
 
 def _taxation_bonus_resource_choices(
@@ -8767,8 +8511,7 @@ def _taxation_bonus_resource_choices(
     if not bonus_resource_types:
         return ((),)
     return tuple(
-        tuple(choice)
-        for choice in combinations_with_replacement(bonus_resource_types, duty_value)
+        tuple(choice) for choice in combinations_with_replacement(bonus_resource_types, duty_value)
     )
 
 

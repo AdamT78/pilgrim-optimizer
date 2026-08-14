@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from pilgrim.model.actions import StartPlayerConfessionBoxUse
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase
 from pilgrim.model.events import GameEvent, make_event_details
@@ -146,62 +145,136 @@ def resolve_trade_route_income(
     return next_state, tuple(events)
 
 
-def award_first_player_marker(
+def start_player_confession_order(state: GameState) -> tuple[PlayerId, ...]:
+    """Turn order for the Confession Box phase: clockwise from the round's OWN start player.
+
+    "Turn order" has two readings once a round end is underway, and they name different seats. The
+    one meant here is the order the round that just finished was PLAYED in -- clockwise from
+    `state.start_player`, which at this moment still names the seat that round began from, because
+    nothing has chosen a new one yet and nothing may until the marker is awarded.
+
+    The other reading -- clockwise from whoever begins the round to come -- is not available and
+    could not be: the boxes are asked BEFORE the marker, and who begins next is decided after it by
+    a player the boxes are still choosing. Ordering by it would need the answer to the question the
+    phase exists to ask.
+    """
+    return tuple(
+        PlayerId((int(state.start_player) + offset) % state.player_count)
+        for offset in range(state.player_count)
+    )
+
+
+def confession_box_source_for(
+    state: GameState,
+    config: GameConfig,
+    *,
+    player: PlayerId,
+) -> BuildingAbilitySource | None:
+    """How this player could reach a Confession Box right now, or None if they cannot.
+
+    None is the answer that keeps a player out of the phase entirely. It covers all of: the box is
+    not in this game, it is donated, nobody has it live yet, and -- the one that changes as the
+    phase runs -- they cannot afford the hire, because an earlier player in the same phase may have
+    just spent the resource on hiring it themselves.
+    """
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_CONFESSION_BOX,
+    )
+    if not source.usable:
+        return None
+    if not _confession_box_source_is_live_for_start_player_phase(state, source):
+        return None
+    if source.source_type == "own_active":
+        return source
+    try:
+        apply_building_hire_payment(state, acting_player=player, source=source)
+    except ValueError:
+        return None
+    return source
+
+
+def begin_start_player_confession(
     state: GameState,
     *,
     config: GameConfig,
-    actor: PlayerId,
-    action_id: str,
-    confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...] = (),
-) -> tuple[GameState, tuple[GameEvent, ...], PlayerId]:
-    """Give the First Player marker to the highest effective piety, and say who has it.
+) -> GameState | None:
+    """Hand the table to the first player with a box to decide about, or say there is nobody.
 
-    This decides who DECIDES, and stops there. Who actually begins the next round is that player's
-    to say, and they may say anyone, so nothing here may write `start_player`: doing so is what the
-    placeholder did, and it is why the marker used to mean nothing.
-
-    Ties walk clockwise from the CURRENT start player, which is why this runs before anything sets
-    a new one -- the seat the walk starts from is the one the round was played from.
+    None means the phase does not happen: not one player at the table can reach a Confession Box,
+    so there is nothing to ask and nothing an answer could change. The caller awards the marker
+    directly, which is what every round did before this phase existed.
     """
-    players = _real_players(state)
-    ordered_players = _start_player_order(state)
-    use_by_player = _confession_box_use_by_player(
-        state,
-        confession_box_uses=confession_box_uses,
+    pending = start_player_confession_order(state)
+    return _advance_start_player_confession(
+        state.with_start_player_confession_progress(pending=pending, used=()),
+        config=config,
     )
 
-    next_state = state
-    events: list[GameEvent] = []
-    temporary_bonus_by_player: dict[PlayerId, int] = {player_id: 0 for player_id in players}
-    for player_id in ordered_players:
-        directive = use_by_player.get(player_id)
-        if directive is None:
+
+def _advance_start_player_confession(
+    state: GameState,
+    *,
+    config: GameConfig,
+) -> GameState | None:
+    """Walk the pending list to the next player who actually has something to decide.
+
+    Players with no reachable box are skipped rather than asked and shown one option, and they are
+    skipped HERE rather than when the phase begins, because affordability moves during the phase:
+    a hire paid by an earlier player can take the last coin off a later one, and asking somebody
+    to choose between declining and declining is not a decision.
+    """
+    pending = state.start_player_confession_pending
+    for index, player in enumerate(pending):
+        if confession_box_source_for(state, config, player=player) is None:
             continue
-        source = building_ability_source(
-            next_state,
-            config,
-            acting_player=player_id,
-            building_key=_BUILDING_CONFESSION_BOX,
+        return replace(
+            state,
+            phase=TurnPhase.START_PLAYER_CONFESSION,
+            active_player=player,
+            start_player_confession_pending=pending[index:],
         )
-        if not source.usable:
-            raise TransitionValidationError(
-                f"Confession Box is unavailable for {player_id.name.lower()} in current state."
-            )
-        if not _confession_box_source_is_live_for_start_player_phase(next_state, source):
-            raise TransitionValidationError(
-                f"Confession Box is not live for {player_id.name.lower()} in current state."
-            )
+    return None
+
+
+def apply_start_player_confession_box(
+    state: GameState,
+    *,
+    config: GameConfig,
+    use: bool,
+    source_label: str | None,
+    actor: PlayerId,
+    action_id: str,
+) -> tuple[GameState, tuple[GameEvent, ...], bool]:
+    """One player's answer, applied. The third value says whether anybody is still to be asked.
+
+    A use is PAID FOR HERE rather than banked until the marker is counted. The player has decided
+    and the resource has left them, and holding the payment back would let a later player in the
+    same phase see money that is already spent -- which is exactly the affordability the skip above
+    depends on being current.
+    """
+    source = confession_box_source_for(state, config, player=actor)
+    if source is None:
+        raise TransitionValidationError(
+            f"Confession Box is unavailable for {actor.name.lower()} in current state."
+        )
+
+    events: list[GameEvent] = []
+    next_state = state
+    if use:
         expected_source = _confession_box_source_label_for_ability_source(source)
-        if directive.source != expected_source:
+        if source_label != expected_source:
             raise TransitionValidationError(
                 "Confession Box source selection is invalid for "
-                f"{player_id.name.lower()}: expected {expected_source}, got {directive.source}."
+                f"{actor.name.lower()}: expected {expected_source}, got {source_label}."
             )
         if source.source_type != "own_active":
             try:
                 next_state, hire_payment = apply_building_hire_payment(
                     next_state,
-                    acting_player=player_id,
+                    acting_player=actor,
                     source=source,
                 )
             except ValueError as exc:
@@ -214,48 +287,89 @@ def award_first_player_marker(
                     details=make_event_details(
                         building_id=_BUILDING_CONFESSION_BOX,
                         building_name=config.buildings.name_for_id(_BUILDING_CONFESSION_BOX),
-                        source=directive.source,
+                        source=expected_source,
                         payee=hire_payment.payee,
                         resource=hire_payment.resource or "none",
                         amount=hire_payment.amount,
                     ),
                 )
             )
-        base_piety = next_state.player_state(player_id).piety
-        effective_piety = base_piety + _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
-        temporary_bonus_by_player[player_id] = _CONFESSION_BOX_TEMPORARY_PIETY_BONUS
+        base_piety = next_state.player_state(actor).piety
         events.append(
             GameEvent(
                 event_type=EventType.CONFESSION_BOX_BONUS,
                 actor=actor,
                 action_id=action_id,
                 details=make_event_details(
-                    player=player_id.name.lower(),
-                    source=directive.source,
+                    player=actor.name.lower(),
+                    source=expected_source,
                     base_piety=base_piety,
                     temporary_bonus=_CONFESSION_BOX_TEMPORARY_PIETY_BONUS,
-                    effective_piety=effective_piety,
+                    effective_piety=base_piety + _CONFESSION_BOX_TEMPORARY_PIETY_BONUS,
                 ),
             )
         )
+        used = (*next_state.start_player_confession_used, actor)
+    else:
+        if source_label is not None:
+            raise TransitionValidationError("Declining the Confession Box cannot name a source.")
+        events.append(
+            GameEvent(
+                event_type=EventType.CONFESSION_BOX_DECLINED,
+                actor=actor,
+                action_id=action_id,
+                details=make_event_details(player=actor.name.lower()),
+            )
+        )
+        used = next_state.start_player_confession_used
 
-    highest_effective_piety = max(
-        next_state.player_state(player).piety + temporary_bonus_by_player[player]
-        for player in players
+    next_state = next_state.with_start_player_confession_progress(
+        pending=next_state.start_player_confession_pending[1:],
+        used=used,
     )
-    tied = tuple(
-        player
-        for player in players
-        if next_state.player_state(player).piety + temporary_bonus_by_player[player]
-        == highest_effective_piety
-    )
+    advanced = _advance_start_player_confession(next_state, config=config)
+    if advanced is None:
+        return next_state, tuple(events), False
+    return advanced, tuple(events), True
+
+
+def award_first_player_marker(
+    state: GameState,
+    *,
+    config: GameConfig,
+    actor: PlayerId,
+    action_id: str,
+) -> tuple[GameState, tuple[GameEvent, ...], PlayerId]:
+    """Give the First Player marker to the highest effective piety, and say who has it.
+
+    This decides who DECIDES, and stops there. Who actually begins the next round is that player's
+    to say, and they may say anyone, so nothing here may write `start_player`: doing so is what the
+    placeholder did, and it is why the marker used to mean nothing.
+
+    Effective piety is real piety plus two for each seat in `start_player_confession_used`, and
+    those two are added HERE and stored nowhere. Real piety is not touched, at this round end or
+    any later one -- the bonus exists for the length of this comparison and then is gone.
+
+    Ties walk clockwise from the CURRENT start player, which is why this runs before anything sets
+    a new one -- the seat the walk starts from is the one the round was played from.
+    """
+    players = _real_players(state)
+    bonus_players = set(state.start_player_confession_used)
+    events: list[GameEvent] = []
+
+    def effective_piety(player_id: PlayerId) -> int:
+        bonus = _CONFESSION_BOX_TEMPORARY_PIETY_BONUS if player_id in bonus_players else 0
+        return state.player_state(player_id).piety + bonus
+
+    highest_effective_piety = max(effective_piety(player) for player in players)
+    tied = tuple(player for player in players if effective_piety(player) == highest_effective_piety)
     if len(tied) == 1:
         deciding_player = tied[0]
     else:
         deciding_player = _clockwise_tie_break(
             tied_players=tied,
-            current_start=next_state.start_player,
-            player_count=next_state.player_count,
+            current_start=state.start_player,
+            player_count=state.player_count,
         )
         events.append(
             GameEvent(
@@ -264,7 +378,7 @@ def award_first_player_marker(
                 action_id=action_id,
                 details=make_event_details(
                     tied_players=",".join(player.name.lower() for player in tied),
-                    current_start_player=next_state.start_player.name.lower(),
+                    current_start_player=state.start_player.name.lower(),
                     deciding_player=deciding_player.name.lower(),
                     highest_effective_piety=highest_effective_piety,
                 ),
@@ -279,11 +393,16 @@ def award_first_player_marker(
     # `start_player` is deliberately left alone: it still names the seat the round just played
     # from, which is what the next tie-break will walk from, and it is not replaced until somebody
     # chooses.
+    #
+    # The Confession Box tallies are cleared in the same breath they are last read. They were about
+    # this award and no other, and the next round end builds its own.
     next_state = replace(
-        next_state,
+        state,
         phase=TurnPhase.START_PLAYER_SELECTION,
         active_player=deciding_player,
         first_player_marker=deciding_player,
+        start_player_confession_pending=(),
+        start_player_confession_used=(),
     )
     events.append(
         GameEvent(
@@ -366,59 +485,6 @@ def _resource_cap_updates(resources: Resources) -> dict[str, tuple[int, int]]:
 
 def _real_players(state: GameState) -> tuple[PlayerId, ...]:
     return tuple(PlayerId(index) for index in range(state.player_count))
-
-
-def _start_player_order(state: GameState) -> tuple[PlayerId, ...]:
-    return tuple(
-        PlayerId((int(state.start_player) + offset) % state.player_count)
-        for offset in range(state.player_count)
-    )
-
-
-def _confession_box_use_by_player(
-    state: GameState,
-    *,
-    confession_box_uses: tuple[StartPlayerConfessionBoxUse, ...],
-) -> dict[PlayerId, StartPlayerConfessionBoxUse]:
-    order = _start_player_order(state)
-    order_index = {player_id: index for index, player_id in enumerate(order)}
-    use_by_player: dict[PlayerId, StartPlayerConfessionBoxUse] = {}
-    max_seen_order = -1
-    for directive in confession_box_uses:
-        player_id = directive.player
-        if player_id not in order_index:
-            raise TransitionValidationError(
-                f"Confession Box directive references non-real player: {player_id!r}."
-            )
-        if player_id in use_by_player:
-            raise TransitionValidationError(
-                f"Confession Box directive duplicates player {player_id.name.lower()}."
-            )
-        player_order_index = order_index[player_id]
-        if player_order_index <= max_seen_order:
-            raise TransitionValidationError(
-                "Confession Box directives must be listed in start-player turn order."
-            )
-        max_seen_order = player_order_index
-        if directive.source in {"own_active", "market"}:
-            use_by_player[player_id] = directive
-            continue
-        try:
-            source_player = PlayerId.from_string(directive.source)
-        except ValueError as exc:
-            raise TransitionValidationError(
-                f"Confession Box source must be own_active, market, or opponent player id; got {directive.source}."
-            ) from exc
-        if source_player == player_id:
-            raise TransitionValidationError(
-                "Confession Box source cannot reference the same player as opponent source."
-            )
-        if source_player not in order_index:
-            raise TransitionValidationError(
-                f"Confession Box source references non-real opponent: {directive.source}."
-            )
-        use_by_player[player_id] = directive
-    return use_by_player
 
 
 def _confession_box_source_label_for_ability_source(source: BuildingAbilitySource) -> str:

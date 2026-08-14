@@ -21,8 +21,9 @@ from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, StartPlayerSelectionAction
 from pilgrim.model.enums import PlayerId, TurnPhase
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
 from pilgrim.setup.generator import generate_setup_scenario
+from tests.round_end_helpers import apply_declining_confession
 
 _CONFIG_PATH_FIELDS: tuple[str, ...] = (
     "board_file",
@@ -39,14 +40,16 @@ _CONFIG_PATH_FIELDS: tuple[str, ...] = (
 def _waiting_on_the_holder(scenario, *, start_player: PlayerId):
     """Play the turn that closes the round, stopping where the holder is asked to choose."""
     state = scenario.state.with_start_player(start_player)
-    return apply_action(state, legal_actions(state, scenario.config)[0], scenario.config).state
+    return apply_declining_confession(
+        state, legal_actions(state, scenario.config)[0], scenario.config
+    ).state
 
 
 def _one_turn(state, config):
     action = next(
         action for action in legal_actions(state, config) if isinstance(action, FullTurnAction)
     )
-    return apply_action(state, action, config).state
+    return apply_declining_confession(state, action, config).state
 
 
 def _generated(tmp_path: Path, player_count: int):
@@ -73,7 +76,7 @@ def test_a_holder_who_gives_the_round_away_keeps_the_marker() -> None:
     holder = waiting.active_player
     assert waiting.first_player_marker is holder
 
-    given_away = apply_action(
+    given_away = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=PlayerId.PLAYER_TWO),
         scenario.config,
@@ -91,7 +94,7 @@ def test_a_holder_who_keeps_the_round_is_not_a_different_code_path() -> None:
     waiting = _waiting_on_the_holder(scenario, start_player=PlayerId.PLAYER_TWO)
     holder = waiting.active_player
 
-    kept = apply_action(
+    kept = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=holder),
         scenario.config,
@@ -112,7 +115,7 @@ def test_the_marker_sits_still_through_the_round_and_moves_only_at_the_end_of_it
     waiting = _waiting_on_the_holder(scenario, start_player=PlayerId.PLAYER_TWO)
     holder = waiting.active_player
 
-    state = apply_action(
+    state = apply_declining_confession(
         waiting,
         StartPlayerSelectionAction(chosen_start_player=PlayerId.PLAYER_TWO),
         scenario.config,

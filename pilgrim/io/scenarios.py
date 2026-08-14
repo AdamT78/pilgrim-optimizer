@@ -149,6 +149,7 @@ def _game_state_from_dict(
         start_player = PlayerId.from_string(str(raw["active_player"]))
     first_player_marker = _first_player_marker_from_dict(raw)
     game_over = bool(raw.get("game_over", False))
+    confession_pending, confession_used = _start_player_confession_from_dict(raw)
     setup_sow_required, setup_sow_complete, setup_sow_completed_by = _setup_sow_state_from_dict(
         raw,
         scenario_raw=scenario_raw,
@@ -186,6 +187,8 @@ def _game_state_from_dict(
         setup_sow_required=setup_sow_required,
         setup_sow_complete=setup_sow_complete,
         setup_sow_completed_by=setup_sow_completed_by,
+        start_player_confession_pending=confession_pending,
+        start_player_confession_used=confession_used,
         building_market=building_market,
         building_availability=building_availability,
         pilgrimage_rounds=pilgrimage_rounds,
@@ -312,6 +315,30 @@ def _root_player_from_dict(raw: Mapping[str, Any], *, default_player: PlayerId) 
     return PlayerId(int(root_player_raw))
 
 
+def _start_player_confession_from_dict(
+    initial_state_raw: Mapping[str, Any],
+) -> tuple[tuple[PlayerId, ...], tuple[PlayerId, ...]]:
+    """The Confession Box cursor, which almost every file leaves out and rightly so.
+
+    Absent means no phase is under way, which is the truth for any state not caught mid-round-end,
+    and there is nothing to derive: a file that does not say who has already answered has not
+    stopped in the middle of asking.
+    """
+    raw = initial_state_raw.get("start_player_confession")
+    if raw is None:
+        return (), ()
+    if not isinstance(raw, Mapping):
+        raise ValueError("initial_state.start_player_confession must be an object when provided.")
+    pending_raw = raw.get("pending", [])
+    used_raw = raw.get("used", [])
+    if not isinstance(pending_raw, list) or not isinstance(used_raw, list):
+        raise ValueError("initial_state.start_player_confession pending/used must be lists.")
+    return (
+        tuple(_player_id_from_any(value) for value in pending_raw),
+        tuple(_player_id_from_any(value) for value in used_raw),
+    )
+
+
 def _setup_sow_state_from_dict(
     initial_state_raw: Mapping[str, Any],
     *,
@@ -351,7 +378,7 @@ def _phase_from_dict(
     # files that leave the phase off or contradict their own setup flags, and a game that opens on
     # the start-player decision has an unfinished setup sow by definition -- so without this it
     # would be repaired into the phase after the one it is actually in.
-    if phase is TurnPhase.START_PLAYER_SELECTION:
+    if phase in (TurnPhase.START_PLAYER_SELECTION, TurnPhase.START_PLAYER_CONFESSION):
         return phase
     if setup_sow_required and not setup_sow_complete:
         return TurnPhase.SETUP_SOW

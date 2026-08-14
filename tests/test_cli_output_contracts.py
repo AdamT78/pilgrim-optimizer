@@ -6,10 +6,9 @@ import pytest
 
 from pilgrim.cli import main
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction, StartPlayerConfessionBoxUse
-from pilgrim.model.enums import PlayerId, TurnResolutionType
+from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.enums import TurnResolutionType
 from pilgrim.rules.transition import legal_actions
-
 
 ActionPredicate = Callable[[FullTurnAction], bool]
 
@@ -81,8 +80,7 @@ def test_cli_scriptorium_legal_actions_contract_prunes_no_op_variants_output(cap
         for line in output.splitlines()
     )
     assert any(
-        "| action: give_alms_donate_building" in line
-        and "use building: scriptorium" not in line
+        "| action: give_alms_donate_building" in line and "use building: scriptorium" not in line
         for line in output.splitlines()
     )
 
@@ -107,7 +105,10 @@ def test_cli_scriptorium_apply_contract_taxation_majority_bonus_is_virtual_only(
         "DUTY_RESOLUTION: selected north (taxation); relation majority; duty value 2; "
         "silver cost 0; action taxation"
     ) in output
-    assert "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles" in output
+    assert (
+        "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles"
+        in output
+    )
     assert "INVARIANT_CHECK: passed" in output
     assert "WORKFORCE_MOVE:" not in output
     assert "for free with Pulpit" not in output
@@ -123,7 +124,9 @@ def test_cli_scriptorium_apply_contract_taxation_majority_bonus_is_virtual_only(
     )
 
 
-def test_cli_customs_house_legal_actions_contract_prunes_non_taxation_variants_output(capsys) -> None:
+def test_cli_customs_house_legal_actions_contract_prunes_non_taxation_variants_output(
+    capsys,
+) -> None:
     scenario_path = "scenarios/customs_house_active_taxation_majority_001.json"
     output = _run_cli(["legal-actions", scenario_path], capsys)
     customs_house_lines = _matching_lines(
@@ -161,7 +164,10 @@ def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order(capsys) 
         "DUTY_RESOLUTION: selected north (taxation); relation majority; duty value 2; "
         "silver cost 0; action taxation"
     ) in output
-    assert "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles" in output
+    assert (
+        "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles"
+        in output
+    )
     assert "INVARIANT_CHECK: passed" in output
     _assert_in_order(
         output,
@@ -293,7 +299,10 @@ def test_cli_guild_round_end_contract_shows_two_merchant_movements(capsys) -> No
     assert len(merchant_lines) == 2
     assert any("cause=guild" in line for line in merchant_lines)
     assert any("cause=guild" not in line for line in merchant_lines)
-    assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild" in output
+    assert (
+        "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild"
+        in output
+    )
     assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" in output
 
 
@@ -509,12 +518,12 @@ def test_cli_taxation_contract_base_bonus_path_is_clear(capsys) -> None:
         capsys=capsys,
     )
 
+    assert "DUTY_RESOLUTION: selected north (taxation); relation majority; duty value 2" in output
+    assert "TAXATION: player_one took step 1 resource stone" in output
     assert (
-        "DUTY_RESOLUTION: selected north (taxation); relation majority; duty value 2"
+        "TAXATION: player_one took bonus resources stone, stone from other majority duty tiles"
         in output
     )
-    assert "TAXATION: player_one took step 1 resource stone" in output
-    assert "TAXATION: player_one took bonus resources stone, stone from other majority duty tiles" in output
     assert "INVARIANT_CHECK: passed" in output
 
 
@@ -549,7 +558,7 @@ def test_cli_give_alms_and_season_end_contracts_are_clear(capsys) -> None:
             "ALMS_SEASON_REWARD:",
             "ALMS_RESET:",
             "MERCHANT_ADVANCE:",
-            "START_PLAYER_MARKER:",
+            "CONFESSION_BOX_PHASE:",
         ],
     )
 
@@ -567,35 +576,35 @@ def test_cli_round_end_trade_route_income_contract_orders_after_merchant(capsys)
         [
             "MERCHANT_ADVANCE:",
             "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route",
-            "START_PLAYER_MARKER:",
+            "CONFESSION_BOX_PHASE:",
             "TURN_ADVANCE:",
         ],
     )
 
 
-def test_cli_confession_box_start_player_contract_hire_bonus_and_selection_order(capsys) -> None:
+def test_cli_confession_box_start_player_contract_names_who_is_being_waited_on(capsys) -> None:
+    """The round-ending turn's contract changed shape: it now ends by asking rather than deciding.
+
+    The hire and the bonus have not gone anywhere -- they are printed by the action that ANSWERS,
+    which is a different player's, so a single apply cannot show both ends of it any more. That
+    pairing is covered where it now lives, in the Confession Box CLI tests.
+    """
     output, _index = _apply_verbose_output(
         "scenarios/confession_box_hire_market_start_player_001.json",
-        predicate=lambda action: action.start_player_confession_box_uses
-        == (
-            StartPlayerConfessionBoxUse(
-                player=PlayerId.PLAYER_TWO,
-                source="market",
-            ),
-        ),
+        predicate=lambda action: action.resolution is TurnResolutionType.TITHE,
         capsys=capsys,
     )
 
-    assert "CONFESSION_BOX_BONUS:" in output
+    assert "CONFESSION_BOX_PHASE:" in output
     _assert_in_order(
         output,
         [
-            "BUILDING_HIRED: player_two hired Confession Box from market; paid wheat 1 to bank",
-            "CONFESSION_BOX_BONUS: player_two used Confession Box from market; temporary piety 9 + 2 = 11 for start-player selection",
-            "START_PLAYER_MARKER: player_two takes the First Player marker on effective "
-            "piety 11 and must choose who begins the next round",
+            "MERCHANT_ADVANCE:",
+            "CONFESSION_BOX_PHASE:",
+            "TURN_ADVANCE:",
         ],
     )
+    assert "START_PLAYER_MARKER:" not in output
 
 
 def test_cli_building_availability_contract_shows_owned_live_scriptorium(capsys) -> None:

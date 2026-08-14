@@ -3,12 +3,13 @@ from __future__ import annotations
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.alms import score_alms_table
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
+from tests.round_end_helpers import apply_declining_confession
 
 
 def test_unique_leader_reward_and_reset_continue_for_non_final_season() -> None:
     scenario = load_scenario("scenarios/alms_season_end_unique_leader_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
 
     player_one = result.state.player_state(PlayerId.PLAYER_ONE)
     player_two = result.state.player_state(PlayerId.PLAYER_TWO)
@@ -39,7 +40,7 @@ def test_unique_leader_reward_and_reset_continue_for_non_final_season() -> None:
 
 def test_no_abbey_forfeits_reward_but_still_resets_markers() -> None:
     scenario = load_scenario("scenarios/alms_season_end_no_abbey_forfeit_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
 
     player_one = result.state.player_state(PlayerId.PLAYER_ONE)
     assert player_one.workforce.committed.alms_table == 0
@@ -67,7 +68,7 @@ def test_alms_table_vp_scoring_lookup_matches_rule_table() -> None:
 
 def test_tie_break_by_higher_piety() -> None:
     scenario = load_scenario("scenarios/alms_season_end_tie_piety_break_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
 
     season_end_event = next(
         event for event in result.events if event.event_type is EventType.ALMS_SEASON_END
@@ -79,7 +80,7 @@ def test_tie_break_by_higher_piety() -> None:
 
 def test_tie_break_by_turn_order_from_current_start_player() -> None:
     scenario = load_scenario("scenarios/alms_season_end_tie_turn_order_break_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
 
     season_end_event = next(
         event for event in result.events if event.event_type is EventType.ALMS_SEASON_END
@@ -91,7 +92,7 @@ def test_tie_break_by_turn_order_from_current_start_player() -> None:
 
 def test_no_trigger_without_pilgrimage_round_metadata() -> None:
     scenario = load_scenario("scenarios/alms_season_end_no_metadata_no_trigger_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert EventType.ALMS_SEASON_END not in event_types
@@ -103,7 +104,7 @@ def test_no_trigger_without_pilgrimage_round_metadata() -> None:
 
 def test_fourth_season_scores_then_ends_game_without_continuation_steps() -> None:
     scenario = load_scenario("scenarios/alms_season_end_fourth_season_game_end_001.json")
-    result = apply_action(scenario.state, _tithe_action(scenario), scenario.config)
+    result = apply_declining_confession(scenario.state, _tithe_action(scenario), scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert EventType.ROUND_ADVANCE in event_types
@@ -120,22 +121,26 @@ def test_fourth_season_scores_then_ends_game_without_continuation_steps() -> Non
 
 def test_event_order_for_non_final_and_final_season_end_paths() -> None:
     normal = load_scenario("scenarios/alms_season_end_unique_leader_001.json")
-    normal_result = apply_action(normal.state, _tithe_action(normal), normal.config)
-    assert _event_index(normal_result.events, EventType.ROUND_ADVANCE) < _event_index(
-        normal_result.events, EventType.ALMS_SEASON_END
-    ) < _event_index(normal_result.events, EventType.ALMS_SEASON_REWARD) < _event_index(
-        normal_result.events, EventType.ALMS_RESET
-    ) < _event_index(normal_result.events, EventType.MERCHANT_ADVANCE) < _event_index(
-        normal_result.events, EventType.START_PLAYER_MARKER
-    ) < _event_index(normal_result.events, EventType.TURN_ADVANCE)
+    normal_result = apply_declining_confession(normal.state, _tithe_action(normal), normal.config)
+    assert (
+        _event_index(normal_result.events, EventType.ROUND_ADVANCE)
+        < _event_index(normal_result.events, EventType.ALMS_SEASON_END)
+        < _event_index(normal_result.events, EventType.ALMS_SEASON_REWARD)
+        < _event_index(normal_result.events, EventType.ALMS_RESET)
+        < _event_index(normal_result.events, EventType.MERCHANT_ADVANCE)
+        < _event_index(normal_result.events, EventType.TURN_ADVANCE)
+        < _event_index(normal_result.events, EventType.START_PLAYER_MARKER)
+    )
 
     final = load_scenario("scenarios/alms_season_end_fourth_season_game_end_001.json")
-    final_result = apply_action(final.state, _tithe_action(final), final.config)
-    assert _event_index(final_result.events, EventType.ROUND_ADVANCE) < _event_index(
-        final_result.events, EventType.ALMS_SEASON_END
-    ) < _event_index(final_result.events, EventType.ALMS_SEASON_REWARD) < _event_index(
-        final_result.events, EventType.ALMS_RESET
-    ) < _event_index(final_result.events, EventType.GAME_END)
+    final_result = apply_declining_confession(final.state, _tithe_action(final), final.config)
+    assert (
+        _event_index(final_result.events, EventType.ROUND_ADVANCE)
+        < _event_index(final_result.events, EventType.ALMS_SEASON_END)
+        < _event_index(final_result.events, EventType.ALMS_SEASON_REWARD)
+        < _event_index(final_result.events, EventType.ALMS_RESET)
+        < _event_index(final_result.events, EventType.GAME_END)
+    )
 
 
 def _tithe_action(scenario):

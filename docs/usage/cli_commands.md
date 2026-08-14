@@ -377,13 +377,19 @@ Trade-route income notes:
 
 Confession Box start-player notes:
 
-- legal-actions summaries append ordered round-end directives such as:
-  - `start-player Confession Box: player_one uses own active Confession Box`
-  - `start-player Confession Box: player_two hires Confession Box from market`
-- bonus is temporary (`+2` effective piety) for start-player determination only
-- real piety position/VP values shown in state summaries remain unchanged
-- legal-actions output intentionally prunes Confession Box variants that cannot change the
-  resolved next `start_player` under current deterministic self-selection policy
+- a round end stops on `CONFESSION_BOX_PHASE` when any player can reach a Confession Box, naming
+  the turn order and who is being waited on
+- each player answers with their own action, summarised as one sentence and never as a list:
+  - `Confession Box: use own active Confession Box`
+  - `Confession Box: hire from market`
+  - `Confession Box: hire from player_one`
+  - `Confession Box: decline`
+- a use prints `BUILDING_HIRED` (hires only) then `CONFESSION_BOX_BONUS`; a refusal prints
+  `CONFESSION_BOX_DECLINED`, so a player who declined does not read the same as one never asked
+- the last answer awards the marker, so `START_PLAYER_MARKER` appears on that action rather than
+  on the round-ending turn
+- legal-actions output is not pruned here: a player deciding for themselves cannot be measured
+  against an outcome that turns on players who have not decided yet
 
 ## Building Catalogue and Slots (v1.1)
 

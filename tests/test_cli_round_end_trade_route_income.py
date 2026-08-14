@@ -33,9 +33,12 @@ def test_cli_round_end_trade_route_income_basic_order_and_wording(capsys) -> Non
     assert exit_code == 0
     assert "MERCHANT_ADVANCE:" in output
     assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" in output
-    assert "START_PLAYER_MARKER:" in output
+    # The round end now finishes by ASKING rather than by deciding: it stops on the first
+    # player owed a Confession Box question, and the marker is awarded by whoever answers
+    # last. So this is the pipeline's last line, and the order it is in is the claim.
+    assert "CONFESSION_BOX_PHASE:" in output
     assert output.index("MERCHANT_ADVANCE:") < output.index("TRADE_ROUTE_INCOME:")
-    assert output.index("TRADE_ROUTE_INCOME:") < output.index("START_PLAYER_MARKER:")
+    assert output.index("TRADE_ROUTE_INCOME:") < output.index("CONFESSION_BOX_PHASE:")
 
 
 def test_cli_round_end_trade_route_income_plural_wording(capsys) -> None:
@@ -81,4 +84,4 @@ def test_cli_round_end_trade_route_income_after_two_guild_moves_regression(capsy
     )
     assert output.index(
         "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route"
-    ) < output.index("START_PLAYER_MARKER:")
+    ) < output.index("CONFESSION_BOX_PHASE:")

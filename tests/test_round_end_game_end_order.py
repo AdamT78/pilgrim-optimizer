@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, TurnResolutionType
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
+from tests.round_end_helpers import apply_declining_confession
 
 
 def _round_ending_tithe_action(path: str):
@@ -26,7 +27,7 @@ def test_final_nw_pilgrimage_resolves_alms_before_game_end() -> None:
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_final_pilgrimage_alms_before_game_end_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert result.state.game_over is True
@@ -40,15 +41,22 @@ def test_final_nw_pilgrimage_resolves_alms_before_game_end() -> None:
     assert EventType.TRADE_ROUTE_INCOME not in event_types
     assert EventType.START_PLAYER_MARKER not in event_types
 
-    assert _event_index(result.events, EventType.SHIP_ADVANCE) < _event_index(
-        result.events,
-        EventType.ROUND_ADVANCE,
-    ) < _event_index(result.events, EventType.ALMS_SEASON_END) < _event_index(
-        result.events,
-        EventType.ALMS_SEASON_REWARD,
-    ) < _event_index(result.events, EventType.ALMS_RESET) < _event_index(
-        result.events,
-        EventType.GAME_END,
+    assert (
+        _event_index(result.events, EventType.SHIP_ADVANCE)
+        < _event_index(
+            result.events,
+            EventType.ROUND_ADVANCE,
+        )
+        < _event_index(result.events, EventType.ALMS_SEASON_END)
+        < _event_index(
+            result.events,
+            EventType.ALMS_SEASON_REWARD,
+        )
+        < _event_index(result.events, EventType.ALMS_RESET)
+        < _event_index(
+            result.events,
+            EventType.GAME_END,
+        )
     )
 
 
@@ -56,7 +64,7 @@ def test_non_final_pilgrimage_continues_to_merchant_trade_route_and_start_player
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_non_final_pilgrimage_continues_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert EventType.GAME_END not in event_types
@@ -67,18 +75,27 @@ def test_non_final_pilgrimage_continues_to_merchant_trade_route_and_start_player
     assert EventType.TRADE_ROUTE_INCOME in event_types
     assert EventType.START_PLAYER_MARKER in event_types
 
-    assert _event_index(result.events, EventType.SHIP_ADVANCE) < _event_index(
-        result.events,
-        EventType.ROUND_ADVANCE,
-    ) < _event_index(result.events, EventType.ALMS_SEASON_END) < _event_index(
-        result.events,
-        EventType.ALMS_SEASON_REWARD,
-    ) < _event_index(result.events, EventType.ALMS_RESET) < _event_index(
-        result.events,
-        EventType.MERCHANT_ADVANCE,
-    ) < _event_index(result.events, EventType.TRADE_ROUTE_INCOME) < _event_index(
-        result.events,
-        EventType.START_PLAYER_MARKER,
+    assert (
+        _event_index(result.events, EventType.SHIP_ADVANCE)
+        < _event_index(
+            result.events,
+            EventType.ROUND_ADVANCE,
+        )
+        < _event_index(result.events, EventType.ALMS_SEASON_END)
+        < _event_index(
+            result.events,
+            EventType.ALMS_SEASON_REWARD,
+        )
+        < _event_index(result.events, EventType.ALMS_RESET)
+        < _event_index(
+            result.events,
+            EventType.MERCHANT_ADVANCE,
+        )
+        < _event_index(result.events, EventType.TRADE_ROUTE_INCOME)
+        < _event_index(
+            result.events,
+            EventType.START_PLAYER_MARKER,
+        )
     )
 
 
@@ -86,15 +103,21 @@ def test_non_pilgrimage_round_end_order_is_unchanged() -> None:
     scenario, action = _round_ending_tithe_action(
         "scenarios/round_end_trade_route_income_basic_001.json"
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
 
     assert EventType.ALMS_SEASON_END not in event_types
     assert EventType.GAME_END not in event_types
-    assert _event_index(result.events, EventType.SHIP_ADVANCE) < _event_index(
-        result.events,
-        EventType.ROUND_ADVANCE,
-    ) < _event_index(result.events, EventType.MERCHANT_ADVANCE) < _event_index(
-        result.events,
-        EventType.TRADE_ROUTE_INCOME,
-    ) < _event_index(result.events, EventType.START_PLAYER_MARKER)
+    assert (
+        _event_index(result.events, EventType.SHIP_ADVANCE)
+        < _event_index(
+            result.events,
+            EventType.ROUND_ADVANCE,
+        )
+        < _event_index(result.events, EventType.MERCHANT_ADVANCE)
+        < _event_index(
+            result.events,
+            EventType.TRADE_ROUTE_INCOME,
+        )
+        < _event_index(result.events, EventType.START_PLAYER_MARKER)
+    )

@@ -1,14 +1,15 @@
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import EventType, PlayerId
 from pilgrim.rules.timing import advance_timing, is_round_end
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import legal_actions
 from pilgrim.rules.validation import validate_state_invariants
+from tests.round_end_helpers import apply_declining_confession
 
 
 def _event_types(path: str) -> tuple[set[EventType], object]:
     scenario = load_scenario(path)
     action = legal_actions(scenario.state, scenario.config)[0]
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     return {event.event_type for event in result.events}, result
 
 
@@ -37,7 +38,7 @@ def test_advance_timing_round_end_emits_round_end_without_round_advance() -> Non
 def test_non_round_ending_turn_does_not_advance_merchant_or_ship() -> None:
     scenario = load_scenario("scenarios/alms_sandbox_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.TURN_ADVANCE in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
@@ -65,7 +66,7 @@ def test_round_end_emits_excess_ship_merchant_start_player_and_round_advance() -
 def test_round_end_excess_caps_stone_and_wheat_only() -> None:
     scenario = load_scenario("scenarios/round_end_excess_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     player_one = result.state.player_state(PlayerId.PLAYER_ONE)
     player_two = result.state.player_state(PlayerId.PLAYER_TWO)
     assert player_one.resources.stone == 6
@@ -90,7 +91,7 @@ def test_season_end_scoring_uses_incremented_round_with_metadata() -> None:
 def test_game_end_triggers_on_final_nw_return_and_blocks_future_actions() -> None:
     scenario = load_scenario("scenarios/game_end_nw_site_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.SHIP_ADVANCE in event_types
     assert EventType.ALMS_SEASON_END not in event_types
@@ -109,7 +110,7 @@ def test_game_end_triggers_on_final_nw_return_and_blocks_future_actions() -> Non
 def test_start_player_tie_break_chooses_clockwise_away_from_current_holder() -> None:
     scenario = load_scenario("scenarios/start_player_selection_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_declining_confession(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.START_PLAYER_TIE_BREAK in event_types
     assert EventType.START_PLAYER_MARKER in event_types

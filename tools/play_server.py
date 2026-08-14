@@ -51,6 +51,7 @@ from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
     SetupSowAction,
+    StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_id,
     action_summary,
@@ -204,6 +205,30 @@ def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
     }
 
 
+def _confession_in_words(action: Any) -> str:
+    """The one sentence a player reads to make this choice, source and all.
+
+    The source is spelled out rather than left to be inferred from the board, because the three of
+    them cost different things and are owed to different people: your own is free, the market's is
+    paid to the bank, and another player's is paid to that player.
+    """
+    if not action.use:
+        return "decline the Confession Box"
+    if action.source == "own_active":
+        return "use your own Confession Box"
+    if action.source == "market":
+        return "hire the Confession Box from the market"
+    return f"hire the Confession Box from {_SEAT_WORDS.get(action.source, action.source)}"
+
+
+_SEAT_WORDS = {
+    "player_one": "player one",
+    "player_two": "player two",
+    "player_three": "player three",
+    "player_four": "player four",
+}
+
+
 def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     """Each further question this page can put about one action, with the fields it answers.
 
@@ -215,6 +240,26 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     the refusal knows what has been asked -- and a page holding the name of a field would be a page
     that could come to depend on it, which is how the next one ends up being a special case.
     """
+    if isinstance(action, StartPlayerConfessionBoxAction):
+        # A `combination` and not a kind of its own, because the shape is the one the alms pair and
+        # the taxation mix already have: several fields that only go together one way, offered whole
+        # as a labelled option. Splitting `use` from `source` would put a question to a player who
+        # declined about where they were not going to hire it from.
+        #
+        # The turn panel, deliberately. The three places a box can be reached from -- your own
+        # board, the market on the map, another player's board -- are three different surfaces, so
+        # no one of them can hold the choice; putting it on the map would light the market copy and
+        # quietly hide that using your own is even an option.
+        return [
+            (
+                {
+                    "kind": "combination",
+                    "value": "decline" if not action.use else f"use:{action.source}",
+                    "label": _confession_in_words(action),
+                },
+                ("use", "source"),
+            )
+        ]
     if isinstance(action, StartPlayerSelectionAction):
         # Answered by pointing at a player's board, so it is a `seat` the way a duty is a
         # `position` -- the kind says where the answer is given and nothing about what it means.
@@ -296,7 +341,7 @@ def decision_steps(action: Any) -> list[dict]:
     # A start-player selection is one question and nothing before it. There is no origin to lift
     # from and no duty to resolve: whoever holds the marker names a player, and that is the whole
     # of the action.
-    if isinstance(action, StartPlayerSelectionAction):
+    if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
         return _presented_steps(action)
     steps = [{"kind": "position", "value": action.origin}]
     steps += [{"kind": "position", "value": position} for position in action.route]
