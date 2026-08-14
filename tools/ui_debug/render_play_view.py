@@ -16,11 +16,21 @@ obviously is not, so the split is written down rather than left to a screenshot:
                             neutral acolytes, which seats are occupied, the buildings and
                             pilgrimage sites on the rounds they are live on, each seat's
                             wheat/stone/silver, each seat's Alms row, who holds the first player
-                            seal, and every line of the log
-  still the layout's sample the piety discs, the acolytes inside each player board (village, abbey
-                            and roles), and which map hex round 1 starts on
-  in the state, drawn here  special activities, committed acolytes, donated buildings, cardinal
-  by nothing                favour tiles, victory points, ship position, and trade routes
+                            seal, the acolytes inside each player board -- village, abbey and the
+                            six role circles -- the buildings standing in each seat's slots and
+                            which of them were donated, and every line of the log
+  still the layout's sample the piety discs, and which map hex round 1 starts on
+  in the state, with        the ship's position: the ship is drawn, on the hex the sample rotation
+  nowhere drawn wired to it puts round 1 on, and the state's own position is not read
+  in the state, with        committed acolytes, which stand on roads, shrines, market ports and
+  nowhere to draw it        pilgrimage sites -- none of which this page draws at all; cardinal
+                            favour tiles, which have no area on the player board; victory points,
+                            which have no readout anywhere; and trade routes, which come from map
+                            tile placement and are deferred
+
+The middle two rows are the ones to read carefully. A thing with a home and no wiring is a line of
+code away and looks broken until someone writes it. A thing with nowhere to draw it needs a place
+on the board decided first, and no amount of wiring will produce one.
 
 Run from the repo root to write it out:
 
@@ -40,6 +50,8 @@ if __package__ in (None, ""):
 from tools.ui_debug.generate_game_setup import (  # noqa: E402  # noqa: E402
     DEFAULT_START_ROLL,
     building_choice_styles,
+    render_board_slot_building,
+    render_board_slot_donated,
     render_setup_map_svg,
     rotated_edge_path,
     site_by_index,
@@ -51,6 +63,7 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     duty_by_position_name,
     first_player_seat,
     merchant_position_name,
+    player_record,
     resources_for,
     seated_player_ids,
     state_header,
@@ -63,6 +76,10 @@ from tools.ui_debug.render_alms_table import (  # noqa: E402
     render_alms_table_svg,
 )
 from tools.ui_debug.render_buildings import load_building_catalog  # noqa: E402
+from tools.ui_debug.render_donated_buildings import (  # noqa: E402
+    load_donated_building_tiles,
+    tiles_of,
+)
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     load_duty_wheel_layout,
     render_duty_wheel_svg,
@@ -75,6 +92,8 @@ from tools.ui_debug.render_piety_track_v2 import (  # noqa: E402
 )
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites  # noqa: E402
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
+    BUILDING_SLOT_HEX_SIZE,
+    default_player_board_v2_state,
     load_player_boards_v2_layout,
     player_by_id,
     render_player_board_v2_svg,
@@ -652,6 +671,7 @@ def render_play_view_html(
     piety_config: dict,
     catalog: dict,
     site_data: dict | list,
+    donated_data: dict | list,
     board_layout: dict,
     duty_wheel_layout: dict,
     alms_layout: dict,
@@ -724,6 +744,7 @@ def render_play_view_html(
         board = render_player_board_v2_svg(
             _board_layout_for(payload, board_layout, player_id),
             player,
+            board_state=_board_state_for(payload, board_layout, player_id, catalog, donated_data),
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
         )
@@ -807,6 +828,80 @@ def _board_layout_for(payload: dict, board_layout: dict, player_id: str) -> dict
     return seat_layout
 
 
+def _board_state_for(
+    payload: dict,
+    board_layout: dict,
+    player_id: str,
+    catalog: dict,
+    donated_data: dict | list,
+) -> dict:
+    """What is actually on this seat's board, rather than what the layout's sample has on it.
+
+    The sample is eight serfs in the Village, three acolytes in the Abbey and cubes standing on the
+    Stone Mason and the Vestry. At the opening the first two of those happen to be right and the
+    third is already wrong -- nobody holds a role on turn one -- and every one of them is wrong the
+    moment anybody plays. Drawing it anyway is not a gap in the page, it is the page saying
+    something untrue about a seat, which is harder to notice and worse to trust.
+
+    An empty seat still gets a board and gets the sample, because the sample is what its geometry
+    is drawn from; the panel around it is hidden, so nothing untrue is on screen.
+    """
+    record = player_record(payload, player_id)
+    if record is None:
+        return default_player_board_v2_state(board_layout)
+    return {
+        "village_serfs": int(record["workforce"]["village"]),
+        "abbey_acolytes": int(record["workforce"]["abbey"]),
+        # Every role the board draws, so a role at zero is written down as zero rather than left
+        # out and defaulted. `special_activities` and `worker_roles` are the same six by the same
+        # names, and a role the engine stopped reporting should empty its circle, not keep it.
+        "roles": {
+            role["id"]: int(record["special_activities"].get(role["id"], 0))
+            for role in board_layout["worker_roles"]
+        },
+        "slots": _slot_contents(record, catalog, donated_data),
+    }
+
+
+def _slot_contents(record: dict, catalog: dict, donated_data: dict | list) -> tuple[dict, ...]:
+    """This seat's buildings, drawn ready to be dropped into the slots that hold them.
+
+    Bought first and then donated, which is the order the engine keeps them in and the only order
+    available: the state records two lists and not which of the six slots anything went into, so
+    a building's slot is where this page put it rather than something being read back. Nothing
+    here depends on which slot that is.
+
+    The drawing is `generate_game_setup`'s, unchanged -- the same content the composed table points
+    its slots at, called directly instead of through a `defs` and a script, because this page knows
+    at render time what a seat has built and has no script to point anything anywhere.
+    """
+    by_id = {building["id"]: building for building in catalog["buildings"]}
+    by_level = {int(tile["level"]): tile for tile in tiles_of(donated_data)}
+    slots: list[dict] = []
+    for building_id in record["player_board_slots"]["active_buildings"]:
+        building = by_id.get(building_id)
+        if building is not None:
+            slots.append(
+                {
+                    "id": building_id,
+                    "state": "bought",
+                    "content": render_board_slot_building(building, BUILDING_SLOT_HEX_SIZE),
+                }
+            )
+    for building_id in record["player_board_slots"]["donated_buildings"]:
+        building = by_id.get(building_id)
+        tile = by_level.get(int(building["level"])) if building is not None else None
+        if tile is not None:
+            slots.append(
+                {
+                    "id": building_id,
+                    "state": "donated",
+                    "content": render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE),
+                }
+            )
+    return tuple(slots)
+
+
 def render_play_view_from_payload(payload: dict) -> str:
     """The page, from the payload alone, with every layout loaded from its own file."""
     return render_play_view_html(
@@ -816,6 +911,7 @@ def render_play_view_from_payload(payload: dict) -> str:
         load_piety_config(),
         load_building_catalog(),
         load_pilgrimage_sites(),
+        load_donated_building_tiles(),
         load_player_boards_v2_layout(),
         load_duty_wheel_layout(),
         load_alms_table_layout(),

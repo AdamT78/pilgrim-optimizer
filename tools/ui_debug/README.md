@@ -1679,11 +1679,16 @@ have one possible value.
 
 **What a construct changes on screen, in full.** The constructing seat's stone count drops on its
 board, the building vanishes from the round track — the track is drawn from `building_market`, so
-its hex loses its colour and its name — and the log gains a `BUILDING_CONSTRUCTED` line. What does
-*not* happen is the building arriving anywhere: the play view passes no `board_state` to the board
-renderer, so all six building slots on every seat are drawn empty whatever `active_buildings` holds.
-You can watch a building leave the market and not watch it land. That is a gap in the boards, not in
-the turn.
+its hex loses its colour and its name — it appears in a slot on that seat's board and on no other,
+and the log gains a `BUILDING_CONSTRUCTED` line.
+
+The slot is filled through `board_state["slots"]`, which carries content already drawn around the
+origin for `_render_building_slot` to move onto the slot it belongs in. That split is deliberate:
+the board renderer goes on knowing *where* a slot is and not knowing what a building looks like, so
+the drawing itself is `generate_game_setup`'s `render_board_slot_building` and
+`render_board_slot_donated` unchanged — the same content the composed table points its slots at,
+called directly rather than through a `defs` and a script, because the play view knows at render
+time what a seat has built and has no script to point anything anywhere.
 
 ### The seat key, which is a different question and a different set
 
