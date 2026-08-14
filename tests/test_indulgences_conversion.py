@@ -185,7 +185,9 @@ def test_apply_own_active_sell_two_piety_emits_bonus_then_delta_before_sowing() 
     assert delta_details["piety"] == -2
     assert result.events.index(bonus_event) < result.events.index(delta_event)
     assert result.events.index(delta_event) < result.events.index(sowing_event)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
+    # Every conversion here is reached through a tithe on north_east, which carries a silver
+    # counter, so a silver arrives on top of the conversion's own.
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
     assert result.state.player_state(PlayerId.PLAYER_ONE).piety == 1
     invariant_event = _events_of_type(result.events, EventType.INVARIANT_CHECK)[-1]
     assert dict(invariant_event.details)["acolytes_conserved"] is True
@@ -209,7 +211,7 @@ def test_apply_own_active_buy_one_piety_converts_resources() -> None:
     assert delta_details["silver"] == -1
     assert delta_details["wheat"] == 0
     assert delta_details["piety"] == 1
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 1
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
     assert result.state.player_state(PlayerId.PLAYER_ONE).piety == 1
 
 
@@ -242,7 +244,7 @@ def test_hired_market_indulgences_pays_bank_before_conversion() -> None:
     assert result.events.index(hired_event) < result.events.index(bonus_event)
     assert result.events.index(bonus_event) < result.events.index(delta_event)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
     assert result.state.player_state(PlayerId.PLAYER_ONE).piety == 0
 
 
@@ -264,7 +266,7 @@ def test_hired_opponent_indulgences_pays_owner_before_conversion() -> None:
 
     assert hired_details["source"] == "player_two"
     assert hired_details["payee"] == "player_two"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 1
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
     assert result.state.player_state(PlayerId.PLAYER_ONE).piety == 2
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
 

@@ -212,7 +212,8 @@ def test_hired_opponent_pulpit_pays_owner_before_free_move() -> None:
     assert hired_details["source"] == "player_two"
     assert hired_details["payee"] == "player_two"
     assert hired_details["resource"] == "silver"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 0
+    # The hire's silver goes to player two and the tithe's silver counter replaces it.
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 1
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
 
 

@@ -12,7 +12,14 @@ from pilgrim.model.special_activities import SpecialActivities
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
-def test_taxation_legal_actions_include_step1_choices_and_tithe() -> None:
+def test_taxation_offers_its_step1_choices_and_no_tithe_at_all() -> None:
+    """Taxation carries no tithe counter, so there is nothing there to tithe.
+
+    This used to assert the opposite -- that a tithe was among the actions -- from the days when a
+    tithe paid nothing and so cost nothing to offer everywhere. Now that it pays the counter it is
+    only legal where a counter exists, and Taxation is the one tile that has none. Every duty this
+    scenario can reach is the Taxation tile, so the absence is total rather than incidental.
+    """
     scenario = load_scenario("scenarios/taxation_no_other_majority_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     taxation_actions = [
@@ -27,7 +34,9 @@ def test_taxation_legal_actions_include_step1_choices_and_tithe() -> None:
         "wheat",
     }
     assert all(action.taxation_step2_resources == () for action in taxation_actions)
-    assert any(action.resolution is TurnResolutionType.TITHE for action in actions)
+    taxation_position = scenario.config.duty_tiles.board_index_for_category("taxation")
+    assert {action.selected_duty for action in actions} == {taxation_position}
+    assert not [action for action in actions if action.resolution is TurnResolutionType.TITHE]
 
 
 def test_taxation_majority_bonus_allows_repeated_or_mixed_step2_resources() -> None:

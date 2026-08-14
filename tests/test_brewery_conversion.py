@@ -164,7 +164,9 @@ def test_apply_own_active_brewery_sell_one_emits_bonus_then_delta_before_sowing(
     assert delta_details["wheat"] == -1
     assert result.events.index(bonus_event) < result.events.index(delta_event)
     assert result.events.index(delta_event) < result.events.index(sowing_event)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
+    # Two silver from the conversion and a third from the tithe this conversion rides on. Tithe was
+    # the inert resolution to hang a building test off until it started paying its counter out.
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
     invariant_event = _events_of_type(result.events, EventType.INVARIANT_CHECK)[-1]
     assert dict(invariant_event.details)["acolytes_conserved"] is True
@@ -199,7 +201,7 @@ def test_hired_market_brewery_pays_bank_before_conversion() -> None:
     assert result.events.index(hired_event) < result.events.index(bonus_event)
     assert result.events.index(bonus_event) < result.events.index(delta_event)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
 
 
 def test_hired_opponent_brewery_pays_owner_before_conversion() -> None:
@@ -220,7 +222,7 @@ def test_hired_opponent_brewery_pays_owner_before_conversion() -> None:
 
     assert hired_details["source"] == "player_two"
     assert hired_details["payee"] == "player_two"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 2
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
 

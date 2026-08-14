@@ -114,6 +114,7 @@ def test_full_turn_tithe_does_not_recall() -> None:
         route=(1,),
         selected_duty=1,
         resolution=TurnResolutionType.TITHE,
+        tithe_resource="wheat",
     )
     result = apply_action(state, action, scenario.config)
     assert result.state.player_vector(PlayerId.PLAYER_ONE)[0] == 0

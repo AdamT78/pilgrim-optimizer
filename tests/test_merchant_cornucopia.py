@@ -5,9 +5,15 @@ WHY THIS FILE EXISTS AS ITS OWN THING
 Hiring a building crashed on a cornucopia -- `_resource_amount` raises on it -- and the whole
 suite passed over that crash. It passed because the fallback tithe counters that hand-written
 scenarios inherit deal 2 wheat, 3 silver and 2 stone and NO cornucopia, so no scenario in the
-repository can put the Merchant on one. The generator deals a cornucopia on every seed; the
-fixtures cannot. That gap is not a tidiness problem, it is the reason a reachable crash was
-invisible, and these tests exist to reach the state the fixtures cannot.
+repository could put the Merchant on one. The generator deals a cornucopia on every seed; the
+fixtures could not. That gap is not a tidiness problem, it is the reason a reachable crash was
+invisible, and these tests exist to reach the state the fixtures could not.
+
+A test used to stand here pinning that blind spot, and its own docstring said to delete it rather
+than widen it once a fixture dealt a cornucopia the Merchant can reach. Tithing the counter needed
+exactly such a fixture, so `scenarios/tithe_counter_choice_001.json` now deals one and starts the
+Merchant on it. The pin has been deleted as instructed and the coverage taken from the fixture, in
+`test_a_committed_fixture_now_puts_the_merchant_on_a_cornucopia` below.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import pytest
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_id
+from pilgrim.model.enums import TurnResolutionType
 from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.merchant import current_merchant_resource
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -46,16 +53,6 @@ def _with_stock(state, *, stone: int, silver: int, wheat: int):
     player_state = state.player_state(player)
     resources = replace(player_state.resources, stone=stone, silver=silver, wheat=wheat)
     return state.with_player_state(player, replace(player_state, resources=resources))
-
-
-def test_no_scenario_in_the_repository_can_put_the_merchant_on_a_cornucopia() -> None:
-    """Pins the blind spot itself, so it fails if someone assumes fixtures cover this.
-
-    If a fixture ever does deal a cornucopia the Merchant can reach, this test should be deleted
-    and the coverage it stands in for taken from the fixture instead.
-    """
-    scenario = load_scenario(HIRE_SCENARIO)
-    assert "cornucopia" not in set(scenario.config.tithe_counters.mapping().values())
 
 
 def test_a_merchant_on_the_cornucopia_offers_the_wildcard_rather_than_a_resource() -> None:
@@ -137,14 +134,28 @@ def test_a_single_affordable_resource_costs_nothing_in_extra_actions() -> None:
 
     A cornucopia the payer can only cover in wheat must generate what a plain wheat counter would,
     give or take the record of which resource was chosen.
+
+    Tithes are held out of the comparison because they are not subject to the claim. The helper
+    moves the counter on the tile the MERCHANT stands on, and that tile is also a duty tile a
+    player can sow to and tithe on, so a cornucopia there is two wildcards at once: what a hire is
+    paid in and what a tithe gains. Only the first is prunable. The second has no affordability to
+    prune against and always generates all three, which is a real difference in the action list and
+    not the redundancy this test is about.
     """
     scenario = load_scenario(HIRE_SCENARIO)
     state = _with_stock(scenario.state, stone=0, silver=0, wheat=5)
     _unused, cornucopia_config = _with_cornucopia_under_the_merchant(scenario)
     wheat_config = _with_counter_under_the_merchant(scenario, "wheat")
 
-    wildcard_ids = {action_id(a) for a in legal_actions(state, cornucopia_config)}
-    plain_ids = {action_id(a) for a in legal_actions(state, wheat_config)}
+    def hire_ids(config) -> set[str]:
+        return {
+            action_id(action)
+            for action in legal_actions(state, config)
+            if action.resolution is not TurnResolutionType.TITHE
+        }
+
+    wildcard_ids = hire_ids(cornucopia_config)
+    plain_ids = hire_ids(wheat_config)
     assert {a.replace(":paid_in:wheat", "") for a in wildcard_ids} == plain_ids
 
 
@@ -238,6 +249,17 @@ def test_paying_a_cornucopia_hire_spends_the_resource_the_action_named() -> None
                 )
                 compared += 1
     assert compared, "no cornucopia hire offered more than one resource to compare"
+
+
+def test_a_committed_fixture_now_puts_the_merchant_on_a_cornucopia() -> None:
+    """What the deleted blind-spot pin was standing in for, taken from the fixture instead.
+
+    The fixture exists for tithing a cornucopia counter, and the Merchant happens to start on that
+    same tile, so the state the hand-written fixtures could not reach is now one `load_scenario`
+    away rather than something this file has to synthesise.
+    """
+    scenario = load_scenario("scenarios/tithe_counter_choice_001.json")
+    assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
 
 
 def test_a_generated_scenario_deals_a_cornucopia_the_merchant_will_reach() -> None:

@@ -13,7 +13,7 @@
 
 - Mancala sandbox with 9 positions (city + 8 duties).
 - Directed movement graph and legal route generation.
-- Sowing, duty resolution, and tithe placeholder action.
+- Sowing, duty resolution, and the tithe action, which gains the selected tile's tithe counter.
 - Duty strength (majority/parity/minority), value, and minority silver cost.
 - Deterministic transition pipeline with invariant validation and game events.
 - Depth-limited exact search placeholder built on `legal_actions()` + `apply_action()`.

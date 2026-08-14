@@ -83,6 +83,14 @@ class FullTurnAction:
     # the payer picks which stock it comes out of. Every other hire has one possible resource, so
     # naming it on the action would say nothing the action does not already imply.
     hire_payment_resource: str | None = None
+    # What a TITHE gains. Set on EVERY tithe, including the tiles carrying a plain counter where
+    # only one resource was ever possible, because the point is that apply pays what the action
+    # says rather than looking the tile up again. A wildcard read twice is read differently the
+    # second time, which is exactly how the Merchant hire choice was lost once already.
+    #
+    # Not `hire_payment_resource`. That is a payment for a building and this is a gain from a
+    # tile; they are two decisions that happen to have the same three answers.
+    tithe_resource: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
 
 
@@ -315,6 +323,12 @@ def action_id(action: GameAction) -> str:
     # it could be paid stays exactly what it was before the cornucopia had a say.
     if action.hire_payment_resource is not None:
         hire_suffix += f":paid_in:{action.hire_payment_resource}"
+    # Every tithe now names what it takes, so every tithe id changes. That is not churn to be
+    # minimised: two tithes on the same tile that gain different resources are different moves,
+    # and an id that could not tell them apart would be the one thing wrong with it.
+    tithe_suffix = ""
+    if action.tithe_resource is not None:
+        tithe_suffix = f":gain:{action.tithe_resource}"
     return (
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
@@ -324,6 +338,7 @@ def action_id(action: GameAction) -> str:
         f"{sow_route_suffix}{conversion_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
         f"{merchant_advance_suffix}{workforce_move_suffix}{confession_box_suffix}{hire_suffix}"
+        f"{tithe_suffix}"
     )
 
 
@@ -472,6 +487,10 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         f"{route_summary} | "
         f"selected duty: {selected_duty} ({duty_category}) | action: {action.resolution.value}"
     )
+    # A tithe reads as a bare "action: tithe" otherwise, which is the one thing about it a player
+    # needs told: on a cornucopia three of them differ in nothing else.
+    if action.resolution is TurnResolutionType.TITHE and action.tithe_resource is not None:
+        summary += f" | gain {action.tithe_resource}"
     if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
         summary += (
             f" | pay silver={action.alms_payment_silver}, "
