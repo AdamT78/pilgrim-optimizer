@@ -169,6 +169,30 @@ COUNTED_COMBINATION_STEPS: tuple[tuple[str, str, str], ...] = (
 # engine's business, and every mix it offers is offered whichever way round this reads.
 COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 
+# WHAT EACH QUESTION IS ASKING, IN WORDS. One per construction site below, and each is written
+# beside the step it belongs to.
+#
+# Here rather than in the page because what a question ASKS is a fact about the action. The page
+# knows a step is answered by pointing at a space; it does not know, and must not have to be told,
+# that this particular space is where acolytes are lifted from. That is why three of these are the
+# same KIND -- a position -- and say three different things.
+#
+# The panel used to fall silent exactly when the question moved onto the board. A setup sow settles
+# its origin by auto-advance, leaving a board with two faintly ringed spaces and no words anywhere
+# saying that pointing at one is what is wanted. A player who does not already know the rules has
+# nothing to go on.
+#
+# Sentences, not fragments, and no sentence is composed in JavaScript. The page reveals one of
+# these whole, the way it reveals a summary or a key.
+ORIGIN_PROMPT = "Point at the space to lift acolytes from."
+ROUTE_PROMPT = "Point at the next space on the route."
+DUTY_PROMPT = "Point at the duty to select."
+RESOLUTION_PROMPT = "Choose what to do with that duty."
+RESOURCE_PROMPT = "Choose a resource on your own board."
+BUILDING_PROMPT = "Choose a building on the round track."
+COMBINATION_PROMPT = "Choose one of these."
+SEAT_PROMPT = "Point at the board of the player who begins the next round."
+
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
 
@@ -202,6 +226,10 @@ def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
         # at zero, so two mixes cannot collide by one of them leaving a stock out.
         "value": ",".join(f"{noun}={amount}" for noun, amount in amounts),
         "label": _amounts_in_words(verb, amounts),
+        # The label already says what each option does, so the prompt only has to say that one of
+        # them is what is wanted. Naming the resolution here would be a second description of the
+        # thing the labels are describing, kept in step by hand.
+        "prompt": COMBINATION_PROMPT,
     }
 
 
@@ -256,6 +284,7 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
                     "kind": "combination",
                     "value": "decline" if not action.use else f"use:{action.source}",
                     "label": _confession_in_words(action),
+                    "prompt": COMBINATION_PROMPT,
                 },
                 ("use", "source"),
             )
@@ -268,7 +297,11 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
         # and is settled by the seating order there, not translated into a number here.
         return [
             (
-                {"kind": "seat", "value": action.chosen_start_player.name.lower()},
+                {
+                    "kind": "seat",
+                    "value": action.chosen_start_player.name.lower(),
+                    "prompt": SEAT_PROMPT,
+                },
                 ("chosen_start_player",),
             )
         ]
@@ -276,11 +309,15 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
-            presented.append(({"kind": "resource", "value": value}, (name,)))
+            presented.append(
+                ({"kind": "resource", "value": value, "prompt": RESOURCE_PROMPT}, (name,))
+            )
     for name in BUILDING_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
-            presented.append(({"kind": "building", "value": value}, (name,)))
+            presented.append(
+                ({"kind": "building", "value": value, "prompt": BUILDING_PROMPT}, (name,))
+            )
     for resolution, verb, fields in COMBINATION_STEPS:
         if action.resolution.value != resolution:
             continue
@@ -343,12 +380,19 @@ def decision_steps(action: Any) -> list[dict]:
     # of the action.
     if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
         return _presented_steps(action)
-    steps = [{"kind": "position", "value": action.origin}]
-    steps += [{"kind": "position", "value": position} for position in action.route]
+    # Three positions and three questions. They are the same kind because they are answered the
+    # same way -- by pointing at a space -- and they say different things because they are asking
+    # about different things. The kind is for the page; the words are for the player.
+    steps = [{"kind": "position", "value": action.origin, "prompt": ORIGIN_PROMPT}]
+    steps += [
+        {"kind": "position", "value": position, "prompt": ROUTE_PROMPT} for position in action.route
+    ]
     if isinstance(action, SetupSowAction):
         return steps
-    steps.append({"kind": "position", "value": action.selected_duty})
-    steps.append({"kind": "resolution", "value": action.resolution.value})
+    steps.append({"kind": "position", "value": action.selected_duty, "prompt": DUTY_PROMPT})
+    steps.append(
+        {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
+    )
     steps += _presented_steps(action)
     return steps
 
@@ -388,6 +432,10 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     """
     grouped: dict[tuple, list[Any]] = {}
     for action in legal_actions(state, config):
+        # THE KEY IS THE STEP VALUES AND STAYS THE STEP VALUES. A step carries words to read as
+        # well as a value to match, and the words must not get in here: two spellings of one
+        # question would then be two candidates, and a player would be shown the same choice twice
+        # because the sentence above it differed.
         key = tuple(
             tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
             for step in decision_steps(action)

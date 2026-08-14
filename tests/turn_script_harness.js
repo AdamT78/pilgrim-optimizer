@@ -51,6 +51,13 @@ for (let index = 0; index <= 8; index += 1) {
 const board = makeElement({ 'data-component': 'duty-wheel' });
 board.querySelectorAll = () => spaces;
 
+// One line per question the candidates ask, exactly as the renderer strikes them: all of them,
+// all hidden. A stub holding only the line that ought to be shown could not catch a script that
+// showed the wrong one, or all of them at once.
+const prompts = (job.prompts || []).map((sentence) =>
+  makeElement({ 'data-turn-prompt': sentence })
+);
+
 const keys = job.resolutions.map((name) => makeElement({ 'data-resolution-key': name }));
 const pairs = (job.combinations || []).map((value) =>
   makeElement({ 'data-combination-key': value })
@@ -92,6 +99,7 @@ const reset = makeElement({ 'data-turn-reset': '', 'data-turn-started': 'false' 
 
 const aside = makeElement({ 'data-component': 'play-turn' });
 aside.querySelectorAll = (selector) => {
+  if (selector === '[data-turn-prompt]') return prompts;
   if (selector === '[data-resolution-key]') return keys;
   if (selector === '[data-combination-key]') return pairs;
   if (selector === '[data-turn-panel]') return panels;
@@ -106,6 +114,11 @@ const transcript = {
   askedSeats: [],
   offeredBySeat: [],
   offeredBoards: [],
+  // What was ASKED at each point, and whether the reset button was on offer there. Both are
+  // recorded per point rather than only at the end: the question this PR is about is what the
+  // panel says while a turn is part-answered, and a final reading cannot show that.
+  asking: [],
+  resetShown: [],
   posted: null,
   rewritten: false,
 };
@@ -192,7 +205,19 @@ function snapshot() {
   panels.forEach((panel, index) => {
     if (panel.getAttribute('data-turn-shown') === 'true') shown = index;
   });
-  return { offered, chosen, shown, asked, bySeat, boards };
+  const asking = prompts
+    .filter((line) => line.getAttribute('data-turn-offered') === 'true')
+    .map((line) => line.getAttribute('data-turn-prompt'));
+  return {
+    offered,
+    chosen,
+    shown,
+    asked,
+    bySeat,
+    boards,
+    asking,
+    reset: reset.getAttribute('data-turn-started') === 'true',
+  };
 }
 
 function record() {
@@ -203,6 +228,8 @@ function record() {
   transcript.askedSeats.push(snap.asked);
   transcript.offeredBySeat.push(snap.bySeat);
   transcript.offeredBoards.push(snap.boards);
+  transcript.asking.push(snap.asking);
+  transcript.resetShown.push(snap.reset);
 }
 
 // eslint-disable-next-line no-eval
@@ -246,7 +273,13 @@ job.clicks.forEach((click) => {
 if (job.reset) {
   reset.click();
   const snap = snapshot();
-  transcript.afterReset = { offered: snap.offered, chosen: snap.chosen, shown: snap.shown };
+  transcript.afterReset = {
+    offered: snap.offered,
+    chosen: snap.chosen,
+    shown: snap.shown,
+    asking: snap.asking,
+    reset: snap.reset,
+  };
 }
 
 if (job.confirm) {

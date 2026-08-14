@@ -308,6 +308,32 @@ def render_log_box(payload: dict) -> str:
     )
 
 
+def _prompt_lines(candidates: list[dict]) -> str:
+    """One line per question any candidate asks, all struck here and all hidden.
+
+    Same shape as the keys below, and for the same reason: the page reveals a sentence and never
+    writes one. The words are the seam's -- what a question asks is a fact about the action -- so
+    this does not know that a position on the board means acolytes, or that some of these lines are
+    answered nowhere near the panel they appear in.
+
+    Without them the panel goes quiet exactly when the question leaves it. A setup sow settles its
+    origin by auto-advance and then asks for a space, which is on the board; the panel had no key
+    to show and so showed nothing at all, and the board's two faint rings were the only hint that a
+    click was wanted.
+    """
+    seen: list[str] = []
+    for candidate in candidates:
+        for step in candidate["steps"]:
+            prompt = step.get("prompt")
+            if prompt and prompt not in seen:
+                seen.append(prompt)
+    return "".join(
+        f'<div class="turn-prompt" data-turn-prompt="{escape(prompt)}"'
+        f' data-turn-offered="false">{escape(prompt)}</div>'
+        for prompt in sorted(seen)
+    )
+
+
 def _resolution_keys(candidates: list[dict]) -> str:
     """One key per resolution any candidate offers, all struck here and all hidden.
 
@@ -366,7 +392,7 @@ def _turn_panels(candidates: list[dict]) -> str:
             body = (
                 f'<div class="turn-summary">{escape(str(candidate["summary"]))}</div>'
                 f'<button type="button" class="turn-commit"'
-                f' data-turn-confirm="{escape(str(candidate["action_id"]))}">Confirm this turn'
+                f' data-turn-confirm="{escape(str(candidate["action_id"]))}">Confirm'
                 "</button>"
             )
         else:
@@ -391,11 +417,17 @@ def render_turn_panel(payload: dict) -> str:
         return ""
     return (
         '<div class="play-turn" data-component="play-turn">'
+        f"{_prompt_lines(candidates)}"
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}</div>"
         f"{_turn_panels(candidates)}"
+        # Neutral, because this button is not only ever pressed during a turn. A start-player
+        # selection is an action like any other and "start this turn again" is not true of it. The
+        # summary directly above already says what is being confirmed, which is why the button does
+        # not have to -- and a label that named the action would be a second description of the
+        # summary, to be kept in step with it by hand.
         '<button type="button" class="turn-reset" data-turn-reset data-turn-started="false">'
-        "Start this turn again</button>"
+        "Clear my choices</button>"
         "</div>"
     )
 
@@ -441,6 +473,7 @@ _TURN_SCRIPT = """<script>
   var aside = document.querySelector('[data-component="play-turn"]');
   if (!board || !aside) { return; }
   var spaces = board.querySelectorAll('[data-board-position-index]');
+  var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var panels = aside.querySelectorAll('[data-turn-panel]');
@@ -454,6 +487,15 @@ _TURN_SCRIPT = """<script>
      rotation the track was drawn at. */
   var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
+  /* Whether the PLAYER has answered anything, which is not whether anything has been answered.
+     `chosen` also holds the steps the auto-advance took on their behalf, and a forced step is not
+     a choice: counting it made the reset button appear before anyone had done anything, offering
+     to undo a decision nobody had made. Pressing it then was a provable no-op, since re-rendering
+     takes the same forced step straight back again.
+
+     A flag rather than a tally. Nothing here needs to know HOW MANY answers there are -- only
+     whether giving them up would undo anything -- and the script does no arithmetic. */
+  var answered = false;
 
   function surviving() {
     return CANDIDATES.filter(function (candidate) {
@@ -504,6 +546,17 @@ _TURN_SCRIPT = """<script>
     return values;
   }
 
+  /* What the offered steps are ASKING, which is not sorted by kind: three of the questions are
+     answered by pointing at a space and each asks for a different one. The sentence comes off the
+     step whole. Nothing here composes, shortens or joins one. */
+  function promptsOf(offered) {
+    var values = [];
+    offered.forEach(function (step) {
+      if (step.prompt && values.indexOf(step.prompt) === -1) { values.push(step.prompt); }
+    });
+    return values;
+  }
+
   function mark(elements, attribute, values) {
     Array.prototype.forEach.call(elements, function (element) {
       var name = element.getAttribute(attribute);
@@ -520,6 +573,7 @@ _TURN_SCRIPT = """<script>
       space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
       space.setAttribute('data-play-chosen', chosen.indexOf(index) === -1 ? 'false' : 'true');
     });
+    mark(prompts, 'data-turn-prompt', promptsOf(offered));
     mark(keys, 'data-resolution-key', offeredByKind(offered, 'resolution'));
     mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
@@ -549,7 +603,7 @@ _TURN_SCRIPT = """<script>
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
     });
-    if (reset) { reset.setAttribute('data-turn-started', chosen.length ? 'true' : 'false'); }
+    if (reset) { reset.setAttribute('data-turn-started', answered ? 'true' : 'false'); }
   }
 
   function render() {
@@ -571,6 +625,7 @@ _TURN_SCRIPT = """<script>
     space.addEventListener('click', function () {
       if (space.getAttribute('data-play-offered') !== 'true') { return; }
       chosen.push(Number(space.getAttribute('data-board-position-index')));
+      answered = true;
       render();
     });
   });
@@ -582,6 +637,7 @@ _TURN_SCRIPT = """<script>
       key.addEventListener('click', function () {
         if (key.getAttribute('data-turn-offered') !== 'true') { return; }
         chosen.push(key.getAttribute(attribute));
+        answered = true;
         render();
       });
     });
@@ -607,7 +663,7 @@ _TURN_SCRIPT = """<script>
   if (reset) {
     /* Purely local. Nothing has been sent, because nothing is sent until the player presses
        confirm, so giving up is forgetting the clicks rather than undoing anything. */
-    reset.addEventListener('click', function () { chosen = []; render(); });
+    reset.addEventListener('click', function () { chosen = []; answered = false; render(); });
   }
 
   render();
@@ -635,6 +691,13 @@ def turn_styles(route_color: str) -> str:
     width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px; padding: 10px 12px;
   }}
+  /* One line per question, all drawn, all hidden until the script says theirs is the one being
+     asked. Above the keys because several of these are answered nowhere near them -- on the board,
+     on a seat's own stock, on a hex of the round track -- and a line that only appeared when the
+     answer was in the panel would go quiet in exactly the cases it is there for. */
+  .turn-prompt {{ display: none; margin-bottom: 8px; color: #E8E2CE; }}
+  .turn-prompt[data-turn-offered="true"] {{ display: block; }}
+
   .turn-keys {{ display: flex; flex-wrap: wrap; gap: 6px; }}
   .turn-key, .turn-commit, .turn-reset {{
     color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
