@@ -21,6 +21,7 @@ import threading
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId
 from pilgrim.rules.transition import apply_action, legal_actions
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
+from tools.ui_debug import render_play_view
 from tools.ui_debug.render_play_view import render_play_view_from_payload
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
@@ -261,6 +263,17 @@ needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is no
 REFERENCE = Path(__file__).resolve().parents[1] / "scenarios" / "play_view_reference_4p_001.json"
 
 
+def _generated(tmp_path: Path, players: int = 4, seed: int = 99) -> Path:
+    """A fresh board, written out, with nothing about it yet decided."""
+    from pilgrim.cli import main as cli_main
+
+    path = tmp_path / "scenario.json"
+    cli_main(
+        ["generate-setup", "--players", str(players), "--seed", str(seed), "--output", str(path)]
+    )
+    return path
+
+
 def _served(tmp_path: Path, players: int = 4, seed: int = 99):
     """A server on a fresh game, already past the decision that opens one.
 
@@ -268,13 +281,9 @@ def _served(tmp_path: Path, players: int = 4, seed: int = 99):
     turns that follow it. That opening is the subject of its own test, which is where it is asserted
     rather than being incidentally rehearsed by every test that needs a board.
     """
-    from pilgrim.cli import main as cli_main
-
-    path = tmp_path / "scenario.json"
-    cli_main(
-        ["generate-setup", "--players", str(players), "--seed", str(seed), "--output", str(path)]
+    return _past_the_start_player_decision(
+        PlayServer(("127.0.0.1", 0), _generated(tmp_path, players, seed))
     )
-    return _past_the_start_player_decision(PlayServer(("127.0.0.1", 0), path))
 
 
 UNPRESENTED = "tithe_resource"
@@ -398,6 +407,10 @@ def _run_script(
         json.dumps(
             {
                 "script": source,
+                # Every question any candidate asks, which is what the renderer draws. The stub
+                # gets all of them for the same reason it gets every building on the track: a page
+                # holding only the right answer cannot show a script picking the wrong one.
+                "prompts": _prompts_drawn(candidates),
                 "resolutions": _key_values(candidates, "resolution"),
                 "combinations": _key_values(candidates, "combination"),
                 # Every building on the track, not only the constructible ones, because the page
@@ -449,6 +462,16 @@ def _key_values(candidates: list[dict], kind: str) -> list[str]:
     return sorted(
         {step["value"] for c in candidates for step in c["steps"] if step["kind"] == kind}
     )
+
+
+def _prompts_drawn(candidates: list[dict]) -> list[str]:
+    """Every distinct question the candidates ask, which is one line each on the page.
+
+    By prompt and not by kind. Three of these questions are answered the same way -- by pointing at
+    a space -- and ask about different things, so a page that drew one line per kind would ask for
+    an origin when it wanted the next space on a route.
+    """
+    return sorted({step["prompt"] for c in candidates for step in c["steps"] if "prompt" in step})
 
 
 def _at(value):
@@ -787,12 +810,25 @@ def _stocks(server, player_id: str) -> dict:
     return dict(player_record(server.payload, player_id)["resources"])
 
 
+def _resolves(candidate: dict, resolution: str) -> bool:
+    """Whether one candidate's turn resolves the named way.
+
+    Matched on kind and value, which is what a step IS. The other things it carries are what a
+    player reads -- the label on a combination key, the sentence asking the question -- and two
+    steps that differ only in those are the same decision worded twice, which is exactly why the
+    grouping key on the server is built from the values alone.
+    """
+    return any(
+        step["kind"] == "resolution" and step["value"] == resolution for step in candidate["steps"]
+    )
+
+
 def _asked(server, resolution: str, kind: str) -> list[dict]:
     """Candidates for one resolution that go on to ask a further question of the given kind."""
     return [
         candidate
         for candidate in server.payload["turn_candidates"]
-        if {"kind": "resolution", "value": resolution} in candidate["steps"]
+        if _resolves(candidate, resolution)
         and any(step["kind"] == kind for step in candidate["steps"])
     ]
 
@@ -1021,7 +1057,7 @@ def _mix_groups(server) -> dict[tuple, set[str]]:
     """
     groups: dict[tuple, set[str]] = {}
     for candidate in server.payload["turn_candidates"]:
-        if {"kind": "resolution", "value": "taxation"} not in candidate["steps"]:
+        if not _resolves(candidate, "taxation"):
             continue
         mix = [step["value"] for step in candidate["steps"] if step["kind"] == "combination"]
         if not mix:
@@ -1129,7 +1165,7 @@ def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -
     """
     server = _reference_server()
     while not any(
-        {"kind": "resolution", "value": "taxation"} in candidate["steps"]
+        _resolves(candidate, "taxation")
         and any(step["kind"] == "combination" for step in candidate["steps"])
         for candidate in server.payload["turn_candidates"]
     ):
@@ -1140,8 +1176,7 @@ def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -
     candidate = next(
         c
         for c in server.payload["turn_candidates"]
-        if {"kind": "resolution", "value": "taxation"} in c["steps"]
-        and any(step["kind"] == "combination" for step in c["steps"])
+        if _resolves(c, "taxation") and any(step["kind"] == "combination" for step in c["steps"])
     )
     forced = _answer(candidate, "combination")
 
@@ -1812,18 +1847,59 @@ def test_an_action_id_that_is_not_legal_here_is_refused(tmp_path: Path) -> None:
     assert after == before
 
 
+def _script_carried_by(page: str) -> str:
+    """The turn script as the page actually carries it, opening and closing tags and all."""
+    found = re.search(r"<script>.*?</script>", page, re.S)
+    assert found is not None, "the page carried no turn script"
+    return found.group(0)
+
+
+def _the_script_is_the_template_with_only_its_two_values_filled_in(
+    page: str, payload: dict
+) -> None:
+    """What lets the greps below read the template instead of the page.
+
+    They grep `_TURN_SCRIPT`, which is the code as written, with no data in it at all -- so nothing
+    has to be subtracted before searching and nothing can be over-subtracted by accident. That is
+    only sound while the template IS the whole of the code, and this is what says so: the script on
+    the page has to be the template with its two placeholders filled in and nothing else done to
+    it. Anything injected by a second route breaks this equality, and the guard reports that its
+    own coverage has stopped being what it claims rather than quietly checking less.
+    """
+    expected = render_play_view._TURN_SCRIPT.replace(
+        "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
+    ).replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+    assert _script_carried_by(page) == expected, (
+        "the page's script is not the template with its two placeholders filled in, so grepping "
+        "the template no longer covers everything that reaches the browser"
+    )
+
+
 def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> None:
     """No rule may be computed in the browser, so there is nowhere for a second one to live.
 
     Adjacency, route length and legality are the engine's, and every turn the page can express came
     from it whole. This greps for a second implementation rather than trusting the intent.
+
+    Read off the TEMPLATE rather than the rendered page. Only code can implement a rule, and the
+    template is exactly the code: the candidates are the engine's own list arriving as data, and
+    they carry summaries and prompts written to be read by a player. One of those prompts says the
+    word "route", because that is what the space being asked for is part of -- a page forbidden to
+    name the thing it is asking about could not ask. Subtracting the data from the rendered page
+    would work, but it fails open: whatever such a rule over-strips goes silently unchecked.
     """
     server = _played_through_setup(_served(tmp_path))
     page = render_play_view_from_payload(server.payload)
-    script = re.search(r"<script>\n(.*?)\n</script>", page, re.S).group(1)
-    # Comments are stripped first: prose about what the code does not do is not the code doing it,
-    # and a grep that cannot tell them apart would be satisfied by deleting the explanation.
-    code = re.sub(r"/\*.*?\*/", "", script, flags=re.S)
+
+    # The template is the whole of the code, and these two assertions are what make that a fact
+    # rather than an assumption the greps rest on.
+    assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__TOKEN__") == 1
+    _the_script_is_the_template_with_only_its_two_values_filled_in(page, server.payload)
+
+    # Comments are stripped: prose about what the code does not do is not the code doing it, and a
+    # grep that cannot tell them apart would be satisfied by deleting the explanation.
+    code = re.sub(r"/\*.*?\*/", "", render_play_view._TURN_SCRIPT, flags=re.S)
     code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
 
     for forbidden in ("adjacen", "neighbour", "neighbor", "legal", "Math.", "sqrt", "route"):
@@ -1849,6 +1925,385 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
         *ALMS_PAIR,
     ):
         assert field not in page, f"the page was told about the field {field!r}"
+
+
+def test_a_rule_computed_in_the_script_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION. Work out what lies next to what, and the greps have to find it.
+
+    Patched into the template, so the page carries it too and the equality above still holds. That
+    is the point: this is a rule genuinely reaching the browser through the ordinary route, and the
+    greps are what catch it rather than the coverage check.
+    """
+    monkeypatch.setattr(
+        render_play_view,
+        "_TURN_SCRIPT",
+        render_play_view._TURN_SCRIPT.replace(
+            "  var chosen = [];",
+            "  var chosen = [];\n  var adjacent = { 0: [1, 8], 1: [0, 2] };",
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="looks like it computes"):
+        test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path)
+
+
+def test_a_second_thing_injected_into_the_script_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION. Write into the script from somewhere else, and the coverage claim must break.
+
+    This is the failure the whole arrangement guards against: greps that read the template prove
+    nothing about a page whose script is not only the template. Here the render puts one more line
+    in, the template knows nothing about it, and the greps would sail past it -- so the equality
+    has to be what notices, and it has to notice even though the smuggled line is innocent.
+    """
+    whole_page = render_play_view.render_play_view_html
+
+    def with_something_smuggled_in(*args, **kwargs):
+        page = whole_page(*args, **kwargs)
+        return page.replace("  var chosen = [];", '  var chosen = [];\n  var SEAT = "player_one";')
+
+    monkeypatch.setattr(render_play_view, "render_play_view_html", with_something_smuggled_in)
+
+    server = _played_through_setup(_served(tmp_path))
+    page = render_play_view.render_play_view_from_payload(server.payload)
+    assert 'var SEAT = "player_one";' in page, "the mutation reached nothing, so nothing is tested"
+
+    with pytest.raises(AssertionError, match="no longer covers everything that reaches"):
+        _the_script_is_the_template_with_only_its_two_values_filled_in(page, server.payload)
+
+
+# ---------------------------------------------------------------------------------------------
+# What the script reaches for, a player can hit
+# ---------------------------------------------------------------------------------------------
+
+# SVG paints; HTML does not. Only a painted shape is hit tested, and only over the area it paints,
+# so these are the tags the rule below has anything to say about. A container paints nothing itself
+# and is reached through whatever it holds.
+_SVG_SHAPES = frozenset(
+    {"rect", "circle", "ellipse", "line", "path", "polygon", "polyline", "text", "image"}
+)
+_SVG_CONTAINERS = frozenset({"svg", "g", "a", "use"})
+
+
+class _Markup(HTMLParser):
+    """The page as a tree, because hit testing is a question about ancestry.
+
+    A `<g>` is reached through its children, so an element cannot be judged on its own attributes
+    alone and a flat scan of tags would have to guess.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.root: dict = {"tag": "#document", "attrs": {}, "children": []}
+        self._open = [self.root]
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        node = {"tag": tag, "attrs": dict(attrs), "children": []}
+        self._open[-1]["children"].append(node)
+        self._open.append(node)
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        self._open[-1]["children"].append({"tag": tag, "attrs": dict(attrs), "children": []})
+
+    def handle_endtag(self, tag: str) -> None:
+        for index in range(len(self._open) - 1, 0, -1):
+            if self._open[index]["tag"] == tag:
+                del self._open[index:]
+                return
+
+
+def _every_element(node: dict):
+    yield node
+    for child in node["children"]:
+        yield from _every_element(child)
+
+
+def _class_fills(page: str) -> dict[str, str]:
+    """What fill, if any, this page's own stylesheets give each class.
+
+    Read off the page rather than assumed, because the wheel's spaces are filled from a rule and
+    not from an attribute -- and a check that only looked at attributes would call the one
+    affordance that has always worked a failure.
+    """
+    fills: dict[str, str] = {}
+    for sheet in re.findall(r"<style[^>]*>(.*?)</style>", page, re.S):
+        for selector, body in re.findall(r"([^{}]*)\{([^{}]*)\}", sheet):
+            declared = re.search(r"(?<![-\w])fill\s*:\s*([^;}]+)", body)
+            if declared is None:
+                continue
+            for name in re.findall(r"\.([A-Za-z0-9_-]+)", selector):
+                fills[name] = declared.group(1).strip()
+    return fills
+
+
+def _paints(node: dict, fills: dict[str, str]) -> bool:
+    """Whether a shape is hit anywhere inside it, rather than only along its outline."""
+    if node["attrs"].get("pointer-events") == "all":
+        return True
+    fill = node["attrs"].get("fill")
+    if fill is not None and fill != "none":
+        return True
+    return any(
+        fills.get(name, "none") != "none" for name in (node["attrs"].get("class") or "").split()
+    )
+
+
+def _is_hit_testable(node: dict, fills: dict[str, str]) -> bool:
+    if node["tag"] in _SVG_SHAPES:
+        return _paints(node, fills)
+    if node["tag"] in _SVG_CONTAINERS:
+        return any(_is_hit_testable(child, fills) for child in node["children"])
+    return True
+
+
+def _queried_attributes() -> list[str]:
+    """Every attribute the script goes looking for, read off the script itself.
+
+    Off the script rather than out of a list kept here, because a list kept here is one somebody
+    has to remember to add to -- and the affordance that gets forgotten is exactly the one that
+    ships unclickable. A new `querySelectorAll` is covered the moment it is written.
+    """
+    found = sorted(
+        set(re.findall(r"querySelectorAll\(.\[([a-z-]+)", render_play_view._TURN_SCRIPT))
+    )
+    assert found, "no attributes were read out of the script, so this test checks nothing"
+    return found
+
+
+def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> None:
+    """An affordance a player cannot click in the middle is not an affordance.
+
+    A shape painted `fill="none"` is hit tested ON ITS STROKE and nowhere else. It still draws as a
+    box, still lights up, still says "press me" -- and a click a few pixels inside the line goes
+    straight through it to whatever is behind. That is what the seat key did: every board on the
+    page looked selectable and only its 6px border was.
+
+    WHAT THIS CANNOT SEE. Draw order and overlap. An element that paints its whole area is still
+    unreachable if something opaque is drawn on top of it, and nothing here knows what covers what
+    -- that needs a real browser and a real click. This checks the property that made the seat key
+    fail, which is a property of the element on its own.
+    """
+    server = _reference_server()
+    page = render_play_view_from_payload(server.payload)
+    tree = _Markup()
+    tree.feed(page)
+    fills = _class_fills(page)
+
+    unreachable = []
+    for attribute in _queried_attributes():
+        carrying = [node for node in _every_element(tree.root) if attribute in node["attrs"]]
+        # Every one of them has to be ON the page as well as reachable. An attribute the script
+        # asks for and the renderer never draws would otherwise pass this test by being absent,
+        # which is the same silence the seat key hid in.
+        assert carrying, f"the script looks for [{attribute}] and the page draws none"
+        unreachable += [
+            f'[{attribute}="{node["attrs"][attribute]}"] is a <{node["tag"]}> hit only on its edge'
+            for node in carrying
+            if not _is_hit_testable(node, fills)
+        ]
+
+    assert not unreachable, (
+        "affordances a click in the middle falls straight through:\n"
+        + "\n".join(f"  {line}" for line in unreachable)
+    )
+
+
+def _opened(tmp_path: Path):
+    """A generated game at the moment it opens, before anything has been answered."""
+    server = PlayServer(("127.0.0.1", 0), _generated(tmp_path))
+    assert server.payload["state"]["phase"] == "start_player_selection"
+    return server
+
+
+def _the_panel_asks_for_the_next_space(transcript) -> None:
+    """The setup sow's one open question, put in words rather than left to the board's rings."""
+    assert transcript["asking"][0] == ["Point at the next space on the route."], (
+        f"the panel said {transcript['asking'][0]} while the board held the question"
+    )
+
+
+def _the_button_waits(transcript) -> None:
+    """Nothing to take back until the player has taken something."""
+    assert transcript["resetShown"][0] is False, "the button was up before anything had been chosen"
+
+
+@needs_node
+def test_the_panel_still_asks_when_the_answer_is_given_on_the_board(tmp_path: Path) -> None:
+    """The case the panel used to go quiet in, which is the case it is most needed in.
+
+    A setup sow settles its origin by auto-advance, so the only question left is a space -- and a
+    space is answered on the board, where the panel has no key to reveal. It showed nothing at all:
+    two faintly ringed spaces on a nine-space wheel, no summary, no button, and no words anywhere
+    saying that pointing at one was what was wanted.
+    """
+    server = _served(tmp_path)
+    assert server.payload["state"]["phase"] == "setup_sow"
+    transcript = _run_script(server, [], tmp_path)
+
+    _the_panel_asks_for_the_next_space(transcript)
+    # And it is the question that was actually left open. The origin was taken on the player's
+    # behalf, so asking for one would be asking about a decision already made.
+    assert transcript["offered"][0] == [1, 5], "these are the spaces the engine left open"
+    assert transcript["shownPanel"][0] == -1, "nothing was settled, so no summary was up"
+
+
+@needs_node
+def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: Path) -> None:
+    """Several questions are answered by pointing at a space, and they are not the same question.
+
+    A page that drew one line per KIND of step would ask for an origin when it wanted the next
+    space on a route, because both are positions. So the line follows the question rather than the
+    affordance, and this walks a whole turn watching it change.
+    """
+    server = _played_through_setup(_served(tmp_path))
+    decisions = _engine_decisions(server)
+    candidate = next(
+        c
+        for c in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" for step in c["steps"])
+    )
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+    transcript = _run_script(server, clicks, tmp_path)
+
+    asked = [point for point in transcript["asking"] if point]
+    assert asked, "the panel never asked anything during a whole turn"
+    for point in asked:
+        assert len(point) == 1, f"two questions were put at once: {point}"
+    # The words move on rather than standing still, which is what tells a player the click landed.
+    assert len({tuple(point) for point in asked}) > 1, (
+        f"one sentence covered the whole turn: {asked[0]}"
+    )
+    # And a settled turn has a summary to read instead, so the asking stops rather than leaving a
+    # question standing over a decision that has been made.
+    for asking, shown in zip(transcript["asking"], transcript["shownPanel"], strict=True):
+        if shown != -1:
+            assert asking == [], f"a settled turn was still asking {asking}"
+
+
+@needs_node
+def test_the_reset_button_waits_for_a_choice_the_player_actually_made(tmp_path: Path) -> None:
+    """A forced step is not a choice, so there is nothing yet to take back.
+
+    At a setup sow the origin is settled by auto-advance before the player has touched anything,
+    and the button counted that. It offered to undo a decision nobody had made -- and pressing it
+    was a provable no-op, because re-rendering takes the same forced step straight back again.
+    """
+    server = _served(tmp_path)
+    assert server.payload["state"]["phase"] == "setup_sow"
+
+    opening = _run_script(server, [], tmp_path)
+    _the_button_waits(opening)
+
+    answered = _run_script(server, [_at(1)], tmp_path, reset=True)
+    assert answered["resetShown"] == [False, True], (
+        "the button did not appear once the player had chosen a space"
+    )
+    # And pressing it puts the position back exactly where the opening render left it, rather than
+    # to an empty one -- the forced step is retaken, which is why counting it made no sense.
+    assert answered["afterReset"]["offered"] == opening["offered"][0]
+    assert answered["afterReset"]["asking"] == opening["asking"][0]
+    assert answered["afterReset"]["reset"] is False
+
+
+def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Path) -> None:
+    """A start-player selection is an action, and none of it is a turn.
+
+    The words were borrowed from the turn flow, where they were true. The opening decision of a
+    generated game is now the first thing anybody clicks, and "start this turn again" is not a
+    description of it. The summary directly above says what is being agreed to, so the button does
+    not have to -- and a label that named the action would be a second description to keep in step.
+    """
+    page = render_play_view_from_payload(_opened(tmp_path).payload)
+
+    assert re.search(r"data-turn-confirm=\"[^\"]*\">Confirm<", page), "the commit button changed"
+    assert re.search(r"data-turn-reset[^>]*>Clear my choices<", page), "the reset button changed"
+    for borrowed in ("Confirm this turn", "Start this turn again"):
+        assert borrowed not in page, f"the panel still calls this a turn: {borrowed!r}"
+
+
+def test_the_opening_decision_is_put_on_every_board_and_can_be_hit(tmp_path: Path) -> None:
+    """THE SYMPTOM, in the position a new game actually opens in.
+
+    Four candidates, one per seat, every board offered as an answer -- and every one of those keys
+    reachable by a click in the middle of the board rather than only along its border.
+    """
+    server = _opened(tmp_path)
+    candidates = server.payload["turn_candidates"]
+    offered = {step["value"] for c in candidates for step in c["steps"] if step["kind"] == "seat"}
+
+    assert len(candidates) == 4, f"a four-player opening offered {len(candidates)} choices"
+    assert offered == _seated(server), "the choosable boards are not the seated players"
+
+    page = render_play_view_from_payload(server.payload)
+    keys = re.findall(r"<rect data-seat-choice-key=\"([^\"]*)\"[^>]*>", page)
+    assert len(keys) == 4, f"the page drew {len(keys)} seat keys"
+    for key in re.findall(r"<rect data-seat-choice-key=[^>]*>", page):
+        assert 'pointer-events="all"' in key, f"a seat key is hit only on its edge: {key}"
+
+
+@needs_node
+def test_counting_the_forced_steps_as_choices_is_caught(tmp_path: Path) -> None:
+    """MUTATION. Read the reset button off `chosen`, which is the bug that shipped.
+
+    It looks right: `chosen` is the answers so far, and offering to clear them when there are some
+    is exactly what the button is for. What it misses is that `chosen` also holds what nobody
+    chose.
+    """
+    server = _served(tmp_path)
+    counted = _run_script(
+        server,
+        [],
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "'data-turn-started', answered ? 'true' : 'false'",
+            "'data-turn-started', chosen.length ? 'true' : 'false'",
+        ),
+    )
+    with pytest.raises(AssertionError, match="before anything had been chosen"):
+        _the_button_waits(counted)
+
+
+@needs_node
+def test_matching_the_line_by_affordance_instead_of_by_question_is_caught(tmp_path: Path) -> None:
+    """MUTATION. Match the line the way everything else in the script is matched, and it goes dark.
+
+    Tempting because every other thing the script reveals IS matched by kind, and the prompts sit
+    in the same panel as the keys. But a kind names where an answer is given, and a line has to
+    name what is being asked: keyed on the kind, a sentence is compared against a board position
+    and matches nothing. The panel falls silent at exactly the setup sow this PR is about, which is
+    the original bug wearing a different cause.
+    """
+    server = _served(tmp_path)
+    by_kind = _run_script(
+        server,
+        [],
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "mark(prompts, 'data-turn-prompt', promptsOf(offered));",
+            "mark(prompts, 'data-turn-prompt', offeredByKind(offered, 'position'));",
+        ),
+    )
+    with pytest.raises(AssertionError, match="while the board held the question"):
+        _the_panel_asks_for_the_next_space(by_kind)
+
+
+def test_an_outline_key_that_forgets_pointer_events_is_caught(monkeypatch) -> None:
+    """MUTATION. Draw the seat key the way it was drawn, and the guard above must say so.
+
+    This is the shipped bug, reinstated. It is worth pinning permanently because the mistake is
+    invisible in the markup -- `fill="none"` is exactly right for an outline, and nothing about it
+    looks like it also turns the click off.
+    """
+    from tools.ui_debug import render_player_boards_v2
+
+    outline_only = render_player_boards_v2._render_seat_choice_key
+
+    def without_pointer_events(geometry, player):
+        return outline_only(geometry, player).replace(' pointer-events="all"', "")
+
+    monkeypatch.setattr(render_player_boards_v2, "_render_seat_choice_key", without_pointer_events)
+
+    with pytest.raises(AssertionError, match="data-seat-choice-key"):
+        test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid()
 
 
 # ---------------------------------------------------------------------------------------------

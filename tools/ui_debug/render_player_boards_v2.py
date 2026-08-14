@@ -507,6 +507,12 @@ def _render_seat_choice_key(geometry: dict, player: dict) -> str:
     of the player it stands for, so a page can tell which board was pressed without knowing where
     any of them sit -- and without turning a player into a chair number, which is the translation
     that has gone wrong here before.
+
+    `pointer-events="all"` because the key is an outline. A shape painted `fill="none"` is hit
+    tested on its stroke and nowhere else, so without this a click in the middle of a board falls
+    straight through the key to the artwork behind it and the choice never registers -- while the
+    key still LOOKS like a target, which is the part that makes it hard to spot. The building key
+    on the map is an outline for the same reason and says this the same way.
     """
     inset = SEAT_CHOICE_INSET
     return (
@@ -514,7 +520,8 @@ def _render_seat_choice_key(geometry: dict, player: dict) -> str:
         f' x="{inset:g}" y="{inset:g}"'
         f' width="{geometry["panel_width"] - 2 * inset:.0f}"'
         f' height="{geometry["panel_height"] - 2 * inset:.0f}"'
-        f' rx="{PANEL_CORNER_RADIUS:g}" fill="none" stroke="{SEAT_CHOICE_STROKE}"'
+        f' rx="{PANEL_CORNER_RADIUS:g}" fill="none" pointer-events="all"'
+        f' stroke="{SEAT_CHOICE_STROKE}"'
         f' stroke-width="{SEAT_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
     )
 
