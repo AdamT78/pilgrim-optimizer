@@ -211,6 +211,20 @@ Then, as a separate action by that player:
 
 The holder choosing themselves is one of the ordinary options and is not special-cased.
 
+### Where the marker lives
+
+`GameState.first_player_marker` is the holder, and it is durable: set at a round end, it sits with
+that player through the whole round that follows and is not touched again until the next round end.
+In particular `apply_start_player_selection` does **not** move it. A holder who names somebody else
+keeps the marker while that other player begins the round, and that divergence is the rule -- it is
+the only position in which the two values visibly differ, and the play view draws it as the seal
+and the active-seat wash landing on different boards.
+
+The field is **optional**, and `None` means *unknown* rather than *nobody*. The holder was won at a
+round end from piety that has since moved, so it cannot be recomputed on load: the answer would be
+who would win it now, standing in for who won it then. Scenario files written before the field
+existed load with `None` and no seal is drawn. Generated games always carry it.
+
 ### What the two events read
 
 ```

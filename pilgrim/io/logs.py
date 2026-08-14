@@ -40,6 +40,13 @@ def state_to_record(state: GameState) -> dict[str, Any]:
     return {
         "active_player": state.active_player.name.lower(),
         "start_player_id": state.start_player.name.lower(),
+        # Written even when it is null, because null is an answer here: this state does not know
+        # who holds the marker. Omitting the key would make "unknown" and "the writer is older than
+        # the field" the same absence, and they are read differently -- a reader that sees null can
+        # say so, where a reader that sees nothing has to guess which it is looking at.
+        "first_player_marker": (
+            None if state.first_player_marker is None else state.first_player_marker.name.lower()
+        ),
         "phase": state.phase.value,
         "turn": state.turn,
         "timing": {

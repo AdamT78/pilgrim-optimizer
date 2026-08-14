@@ -271,14 +271,19 @@ def award_first_player_marker(
             )
         )
 
-    # The marker holder is the player who acts next, and `active_player` is how this state says
-    # whose turn it is to act. `start_player` is deliberately left alone: it still names the seat
-    # the round just played from, which is what the next tie-break will walk from, and it is not
-    # replaced until somebody chooses.
+    # Three writes, and only two of them are about right now. `first_player_marker` is the durable
+    # one: it says who holds the marker for the round that follows, and nothing before the next
+    # round end takes it off them. `active_player` says who acts, which at this instant is the same
+    # player only because the thing being waited for is their choice.
+    #
+    # `start_player` is deliberately left alone: it still names the seat the round just played
+    # from, which is what the next tie-break will walk from, and it is not replaced until somebody
+    # chooses.
     next_state = replace(
         next_state,
         phase=TurnPhase.START_PLAYER_SELECTION,
         active_player=deciding_player,
+        first_player_marker=deciding_player,
     )
     events.append(
         GameEvent(
@@ -317,6 +322,11 @@ def apply_start_player_selection(
     Two writes, both meant: `start_player` is the seat the next round is played from and the seat a
     future tie-break walks from, and `active_player` is who moves now. They agree here because the
     round is about to start with the player who was chosen, and they are still not the same fact.
+
+    `first_player_marker` is NOT among them, and must not become one. The holder keeps the marker
+    through the round they have just given away, and a line here that moved it along to the chosen
+    player would delete the only occasion on which the two ever visibly differ -- which is to say,
+    it would delete the rule.
     """
     if chosen_start_player not in choosable_start_players(state):
         raise TransitionValidationError(

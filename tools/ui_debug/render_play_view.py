@@ -48,6 +48,7 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     acolytes_by_position,
     dummy_acolytes_by_position,
     duty_by_position_name,
+    first_player_seat,
     merchant_position_name,
     resources_for,
     seated_player_ids,
@@ -643,7 +644,7 @@ def render_play_view_html(
             piety_layout,
             piety_config,
             piety_variant,
-            seat_of(payload["state"]["start_player_id"]),
+            first_player_seat(payload),
         ),
         scale.crop["piety"],
     )

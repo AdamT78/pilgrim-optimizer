@@ -57,6 +57,16 @@ class GameState:
     phase: TurnPhase
     players: tuple[PlayerState, ...]
     start_player: PlayerId = PlayerId.PLAYER_ONE
+    # Who holds the First Player marker, which is NOT who begins the round. It is won at a round
+    # end on effective piety and then sits with that player until the next round end takes it away,
+    # so it outlives the phase where they were asked to name a start player -- and it stays put
+    # when they name somebody else, which is the whole of what the marker is worth.
+    #
+    # `None` means UNKNOWN rather than nobody. The holder was settled at a round end from piety
+    # values that have moved since, so a state that never carried one cannot have it worked out
+    # afterwards: the answer would be who would win it now, presented as who won it then. Scenario
+    # files written before the field existed load with `None` and the seal is simply not drawn.
+    first_player_marker: PlayerId | None = None
     timing: TimingState = field(default_factory=TimingState)
     table_player_count: int = 4
     dummy_acolytes: DummyAcolyteGroups = field(default_factory=DummyAcolyteGroups)
@@ -94,6 +104,10 @@ class GameState:
             raise ValueError("active_player must be one of the real players in state.")
         if int(self.start_player) >= len(self.players):
             raise ValueError("start_player must be one of the real players in state.")
+        if self.first_player_marker is not None and int(self.first_player_marker) >= len(
+            self.players
+        ):
+            raise ValueError("first_player_marker must be one of the real players in state.")
         if self.table_player_count not in (2, 3, 4):
             raise ValueError("table_player_count must be one of: 2, 3, 4.")
         if self.ship_position < 0:
@@ -179,6 +193,15 @@ class GameState:
 
     def with_start_player(self, start_player: PlayerId) -> GameState:
         return replace(self, start_player=start_player)
+
+    def with_first_player_marker(self, first_player_marker: PlayerId) -> GameState:
+        """Hand the marker to a player. Deliberately no way to say "and the start player too".
+
+        The two move on different occasions -- the marker at a round end, the start player when the
+        holder names one -- and a helper that set both would make keeping them in step the easy
+        thing to write. Keeping them in step is the bug.
+        """
+        return replace(self, first_player_marker=first_player_marker)
 
     def with_game_over(self, game_over: bool) -> GameState:
         return replace(self, game_over=game_over)
