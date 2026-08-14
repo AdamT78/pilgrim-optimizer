@@ -127,6 +127,11 @@ DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
 # optional precisely because most resolutions never ask -- so no step is emitted for it.
 RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_resource")
 
+# Fields answered by pointing at a building where it stands on the round track. Same kind of step
+# whichever field asks it, as with the stocks, and a `None` means this action does not ask -- a
+# Construct that only lays road carries no building at all.
+BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
+
 # Fields that are only legal in certain COMBINATIONS, offered whole rather than one at a time.
 # Setting one number and then the other would walk through states the engine never offered, and
 # deciding which second number goes with a given first is a rule -- the engine's rule, which the
@@ -173,6 +178,10 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
         value = getattr(action, name, None)
         if value is not None:
             presented.append(({"kind": "resource", "value": value}, (name,)))
+    for name in BUILDING_CHOICE_FIELDS:
+        value = getattr(action, name, None)
+        if value is not None:
+            presented.append(({"kind": "building", "value": value}, (name,)))
     for resolution, fields in COMBINATION_STEPS:
         if action.resolution.value != resolution:
             continue
@@ -228,8 +237,9 @@ def decision_steps(action: Any) -> list[dict]:
 
     Each step says what KIND of thing it is, because they are not answered in the same place: a
     position is a space on the board, a resolution is beside the board, a stock is on the asking
-    seat's own board, a seat is a whole board, and a combination is a set of amounts that only go
-    together one way. The page routes on the kind and never on what any particular step means.
+    seat's own board, a seat is a whole board, a building is a hex on the round track, and a
+    combination is a set of amounts that only go together one way. The page routes on the kind and
+    never on what any particular step means.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.

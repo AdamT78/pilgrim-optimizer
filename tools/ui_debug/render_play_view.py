@@ -39,6 +39,7 @@ if __package__ in (None, ""):
 
 from tools.ui_debug.generate_game_setup import (  # noqa: E402  # noqa: E402
     DEFAULT_START_ROLL,
+    building_choice_styles,
     render_setup_map_svg,
     rotated_edge_path,
     site_by_index,
@@ -414,6 +415,10 @@ _TURN_SCRIPT = """<script>
      Which seat that is is read off the page, where it is already written down, rather than worked
      out here from whose turn it might be. */
   var seats = document.querySelectorAll('[data-component="player-board-v2"][data-player-seat]');
+  /* Every building the round track carries. Which hex each one stands on is the map's business and
+     is not asked about here: a key names the building it belongs to, so this never learns the
+     rotation the track was drawn at. */
+  var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
 
   function surviving() {
@@ -483,6 +488,7 @@ _TURN_SCRIPT = """<script>
     });
     mark(keys, 'data-resolution-key', offeredByKind(offered, 'resolution'));
     mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
+    mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
     /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
        three are not merely unlit: their keys are marked unoffered too, so a key that something
        else revealed still cannot be pressed. Nobody reaches across the table. */
@@ -535,7 +541,7 @@ _TURN_SCRIPT = """<script>
     });
   });
 
-  /* Four kinds of key, answered the same way: press one that is offered and it becomes the next
+  /* Five kinds of key, answered the same way: press one that is offered and it becomes the next
      answer. What the key stands for is the attribute it carries, and this does not read it. */
   function answers(elements, attribute) {
     Array.prototype.forEach.call(elements, function (key) {
@@ -549,6 +555,7 @@ _TURN_SCRIPT = """<script>
 
   answers(keys, 'data-resolution-key');
   answers(pairs, 'data-combination-key');
+  answers(buildings, 'data-building-choice-key');
   Array.prototype.forEach.call(seats, function (seat) {
     answers(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key');
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
@@ -611,6 +618,11 @@ def turn_styles(route_color: str) -> str:
      renderer's, as they are for the seals. */
   [data-resource-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
 
+  /* Every building on the round track carries a key, and the rule below shows the offered ones --
+     so the map says which buildings may be constructed by ringing the ones that may, in the same
+     parchment an offered space on the wheel is ringed in. Visibility only: the hex, its outline and
+     which round it stands on are the map's, as they are for the seals and the stock keys. */
+{building_choice_styles()}
 {seat_choice_styles()}
   /* Same shape of rule for the board-sized key, and the same reason: every chair carries one and
      a chair the choice does not include has its taken back out. Unlike the stock keys, several are
@@ -683,12 +695,19 @@ def render_play_view_html(
         ),
         scale.crop["action"],
     )
+    candidates = payload.get("turn_candidates") or []
+    # A key on every building the track carries, drawn hidden, because which of them a turn will
+    # come to ask about is not known until that turn is part-built. Only the offered ones are ever
+    # revealed, and `building_choice_styles` is what reveals them.
     map_svg = crop_svg(
-        render_setup_map_svg(map_layout, map_placements_for(payload, catalog, site_data)),
+        render_setup_map_svg(
+            map_layout,
+            map_placements_for(payload, catalog, site_data),
+            choice_keys=bool(candidates),
+        ),
         scale.crop["map"],
     )
 
-    candidates = payload.get("turn_candidates") or []
     panels = []
     for seat, player_id in enumerate(SEATED_PLAYERS, start=1):
         # An empty chair is still drawn and then hidden, exactly as the debug table hides one: a

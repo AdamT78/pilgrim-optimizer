@@ -375,6 +375,10 @@ def _run_script(
                 "script": source,
                 "resolutions": _key_values(candidates, "resolution"),
                 "combinations": _key_values(candidates, "combination"),
+                # Every building on the track, not only the constructible ones, because the page
+                # draws a key for every one of them. A stub holding only the right answers cannot
+                # show a script reaching past them.
+                "buildings": _buildings_on_the_track(server),
                 # Every seat, with the page's own word for which one is on, so the script has four
                 # boards to choose wrongly between rather than one it cannot help but get right.
                 # Always four, however many are playing, because the page always draws four and
@@ -401,6 +405,12 @@ def _run_script(
         ["node", str(HARNESS), str(job)], capture_output=True, text=True, check=True
     )
     return json.loads(finished.stdout)
+
+
+def _buildings_on_the_track(server) -> list[str]:
+    """Read off the page, which is where the keys really are, rather than off the state."""
+    page = render_play_view_from_payload(server.payload)
+    return re.findall(r'data-building-choice-key="([a-z_]+)"', page)
 
 
 def _seated(server) -> set[str]:
@@ -438,6 +448,11 @@ def _name(player_id: str):
     return {"kind": "seat", "value": player_id}
 
 
+def _build(building_id: str):
+    """Press a building where it stands on the round track."""
+    return {"kind": "building", "value": building_id}
+
+
 def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
     if step["kind"] == "position":
@@ -448,6 +463,8 @@ def _click_for(server, step: dict) -> dict:
         return _pay(step["value"])
     if step["kind"] == "seat":
         return _name(step["value"])
+    if step["kind"] == "building":
+        return _build(step["value"])
     return _do(step["value"])
 
 
@@ -478,6 +495,8 @@ def _engine_steps(action) -> list[dict]:
     for name in ("tithe_resource", "taxation_step1_resource"):
         if getattr(action, name) is not None:
             steps.append({"kind": "resource", "value": getattr(action, name)})
+    if action.construct_building_id is not None:
+        steps.append({"kind": "building", "value": action.construct_building_id})
     if action.resolution.value == "give_alms_paid":
         silver, wheat = (getattr(action, name) for name in ALMS_PAIR)
         steps.append({"kind": "combination", "value": f"silver={silver},wheat={wheat}"})
@@ -945,6 +964,151 @@ def test_only_the_seat_being_asked_has_keys_on_its_board(tmp_path: Path) -> None
 
 
 # ---------------------------------------------------------------------------------------------
+# Constructing, which is answered by pressing a building where it stands on the round track
+# ---------------------------------------------------------------------------------------------
+
+
+def _played_until_a_construct_offers_a_choice(server, limit: int = 30):
+    """Play on until a turn asks which building, so the test has the question it is about.
+
+    The reference board reaches one in round 4, when a second building has gone live and the seat
+    can afford both. Round 3 has exactly one and is the subject of its own test.
+    """
+    for _turn in range(limit):
+        if _building_choices(server):
+            return server
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+    raise AssertionError("no construct ever offered a choice, so nothing was tested")
+
+
+def _building_choices(server) -> dict[tuple, set[str]]:
+    """Every prefix that reaches a construct, and the buildings it goes on to offer.
+
+    Grouped by everything a candidate decides EXCEPT the building, so what comes back is the choice
+    itself rather than the candidates carrying it. Only prefixes offering more than one are kept: a
+    prefix with a single building is not a choice and the point of it is that nothing asks.
+    """
+    choices: dict[tuple, set[str]] = {}
+    for candidate in server.payload["turn_candidates"]:
+        named = [step["value"] for step in candidate["steps"] if step["kind"] == "building"]
+        if not named:
+            continue
+        choices.setdefault(tuple(_values_except(candidate["steps"], "building")), set()).add(
+            named[0]
+        )
+    return {prefix: seen for prefix, seen in choices.items() if len(seen) > 1}
+
+
+def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
+    """Read off the actions themselves, not off the steps the page was handed."""
+    return sorted(
+        {
+            action.construct_building_id
+            for action in legal_actions(server.state, server.config)
+            if getattr(action, "construct_building_id", None) is not None
+            and tuple(_values_except(_engine_steps(action), "building")) == prefix
+        }
+    )
+
+
+@needs_node
+def test_a_construct_turn_is_playable_and_the_building_named_is_the_one_constructed(
+    tmp_path: Path,
+) -> None:
+    """End to end, and checked in the state rather than in the log.
+
+    A log line saying a Chapter House was constructed is written by the same turn that would write
+    it if the wrong building moved, so it cannot be the evidence. What is checked is the market
+    losing exactly that building and the seat's board gaining exactly it.
+    """
+    server = _played_until_a_construct_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_building_choices(server).items())[0]
+    wanted = sorted(offered)[0]
+    candidate = next(
+        c
+        for c in server.payload["turn_candidates"]
+        if tuple(_values_except(c["steps"], "building")) == prefix
+        and _answer(c, "building") == wanted
+    )
+    seat = server.payload["state"]["active_player"]
+    market_before = list(server.payload["state"]["building_market"])
+    held_before = _buildings_held(server, seat)
+
+    _played_from_the_page(server, candidate, tmp_path)
+
+    assert wanted in market_before
+    assert wanted not in server.payload["state"]["building_market"]
+    assert _buildings_held(server, seat) == [*held_before, wanted]
+    # And the one that was not pressed stayed exactly where it was.
+    for other in offered - {wanted}:
+        assert other in server.payload["state"]["building_market"]
+
+
+def _buildings_held(server, player_id: str) -> list[str]:
+    from tools.ui_debug.play_view_adapter import player_record
+
+    return list(player_record(server.payload, player_id)["player_board_slots"]["active_buildings"])
+
+
+@needs_node
+def test_the_buildings_offered_are_the_ones_the_engine_would_construct(tmp_path: Path) -> None:
+    """The lit hexes are the distinct values among the survivors, and nothing wider.
+
+    Twelve buildings stand on the track and each carries a key, so "every building drawn" is a
+    reading this page could have taken and it is not the one it takes. What the offered set is
+    checked against is the engine's own actions, read off the field they carry.
+    """
+    server = _played_until_a_construct_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_building_choices(server).items())[0]
+    accepted = _buildings_the_engine_would_construct(server, prefix)
+    assert sorted(offered) == accepted
+
+    on_the_track = _buildings_on_the_track(server)
+    assert len(on_the_track) > len(accepted), (
+        "every building was constructible, so nothing is shown"
+    )
+
+    decisions = _engine_decisions(server)
+    transcript = _run_script(server, _clicks_to(server, decisions, list(prefix)), tmp_path)
+    assert sorted(v for v in transcript["offered"][-1] if v in on_the_track) == accepted
+
+
+@needs_node
+def test_a_construct_with_one_building_to_go_at_never_puts_the_question(tmp_path: Path) -> None:
+    """A step every survivor agrees on is taken, not asked, and this is one of those.
+
+    Round 3 of the reference board has a single building live, so the construct turns there carry a
+    building step whose value nobody has a choice about. It has to behave like every other forced
+    step -- swallowed on the way past -- rather than becoming a hex the player must press to
+    confirm something that was never in doubt.
+    """
+    server = _reference_server()
+    while not any(
+        step["kind"] == "building"
+        for candidate in server.payload["turn_candidates"]
+        for step in candidate["steps"]
+    ):
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+
+    assert _building_choices(server) == {}, "this position had a choice, so it tests nothing"
+    candidate = next(
+        c
+        for c in server.payload["turn_candidates"]
+        if any(step["kind"] == "building" for step in c["steps"])
+    )
+    forced = _answer(candidate, "building")
+
+    decisions = _engine_decisions(server)
+    prefix = _values_except(candidate["steps"], "building")
+    transcript = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path, confirm=True)
+
+    assert forced not in transcript["offered"][-1], "the only building on offer was still asked for"
+    assert transcript["posted"]["action_id"] == candidate["action_id"]
+
+
+# ---------------------------------------------------------------------------------------------
 # Naming a player, which is answered by pressing a whole board
 # ---------------------------------------------------------------------------------------------
 
@@ -1106,6 +1270,83 @@ def test_asking_every_seat_for_the_stock_is_caught(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="the wrong seat's board was asked"):
         _only_the_active_seat_is_asked(every_seat, seat)
+
+
+@needs_node
+def test_lighting_the_whole_round_track_is_caught(tmp_path: Path) -> None:
+    """MUTATION. Light every building while one is being asked for, and the offered set must notice.
+
+    The tempting bug, and the one this affordance invites: the keys are already on the map and all
+    twelve are within reach, so revealing them together is one line shorter than revealing the two
+    that may actually be built. It would look like a map that had woken up rather than like a
+    question, and every hex it lit but two would refuse the click it invited.
+    """
+    server = _played_until_a_construct_offers_a_choice(_reference_server())
+    prefix, offered = sorted(_building_choices(server).items())[0]
+    decisions = _engine_decisions(server)
+    on_the_track = _buildings_on_the_track(server)
+
+    every_one = _run_script(
+        server,
+        _clicks_to(server, decisions, list(prefix)),
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));",
+            "Array.prototype.forEach.call(buildings, function (key) {"
+            " key.setAttribute('data-turn-offered',"
+            " offeredByKind(offered, 'building').length ? 'true' : 'false'); });",
+        ),
+    )
+
+    lit = sorted(value for value in every_one["offered"][-1] if value in on_the_track)
+    assert lit != sorted(offered), "the mutation changed nothing, so it proves nothing"
+    assert len(lit) == len(on_the_track)
+
+
+@needs_node
+def test_lighting_the_live_market_instead_of_the_answers_is_caught(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """MUTATION, on the engine, because that is the only place these two readings part.
+
+    "The buildings the engine offers" and "the buildings live in the market" name the same set in
+    every position the reference board reaches -- the engine's filter is liveness, ownership, an
+    empty board slot and enough stone, and on this board the last three never bite while a building
+    is live. So a page computing liveness for itself would pass every test above, and it would be
+    computing a rule in the browser, which is the thing none of this is allowed to do.
+
+    Narrowing what the engine will construct separates them. A page reading the survivors asks
+    nothing here, because one building is not a choice; a page reading the market goes on lighting
+    both and offers a turn that does not exist.
+    """
+    from pilgrim.rules import transition
+
+    server = _played_until_a_construct_offers_a_choice(_reference_server())
+    _prefix, both = sorted(_building_choices(server).items())[0]
+    assert len(both) == 2
+    only_one = (sorted(both)[0],)
+
+    monkeypatch.setattr(transition, "_constructible_building_ids", lambda **_kwargs: only_one)
+    narrowed = PlayServer(("127.0.0.1", 0), REFERENCE)
+    narrowed.state = server.state
+    narrowed._refresh()
+
+    assert _building_choices(narrowed) == {}, "the engine still offers a choice here"
+    still_live = [
+        building for building in narrowed.payload["state"]["building_market"] if building in both
+    ]
+    assert sorted(still_live) == sorted(both), "the market no longer holds the pair that separates"
+
+    decisions = _engine_decisions(narrowed)
+    prefix = next(
+        _values_except(c["steps"], "building")
+        for c in narrowed.payload["turn_candidates"]
+        if any(step["kind"] == "building" for step in c["steps"])
+    )
+    transcript = _run_script(narrowed, _clicks_to(narrowed, decisions, prefix), tmp_path)
+    on_the_track = _buildings_on_the_track(narrowed)
+    assert [value for value in transcript["offered"][-1] if value in on_the_track] == []
 
 
 @needs_node
@@ -1291,7 +1532,13 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # next field needs the script taught about it rather than merely published to it. The whole
     # page is searched, candidates and all, because a field name reaching the browser as data is a
     # field name the browser can start to depend on.
-    for field in ("tithe_resource", "taxation_step1_resource", "chosen_start_player", *ALMS_PAIR):
+    for field in (
+        "tithe_resource",
+        "taxation_step1_resource",
+        "chosen_start_player",
+        "construct_building_id",
+        *ALMS_PAIR,
+    ):
         assert field not in page, f"the page was told about the field {field!r}"
 
 

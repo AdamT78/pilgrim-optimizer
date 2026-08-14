@@ -2,8 +2,9 @@
 // the shipped JavaScript rather than a second copy of it written in Python.
 //
 // Reads a JSON job on argv: { script, resolutions, combinations, seats, panels, clicks, reset,
-// confirm }. A click is { kind: 'position'|'resolution'|'combination'|'resource'|'seat', value };
-// a resource click also carries { seat }, and a seat click names the player whose board is pressed.
+// confirm }. A click is { kind: 'position'|'resolution'|'combination'|'resource'|'seat'|'building',
+// value }; a resource click also carries { seat }, a seat click names the player whose board is
+// pressed, and a building click names the building whose hex on the round track is pressed.
 // Prints a JSON transcript: what was offered at each point, which seat was asked for a stock, which
 // boards were offered as an answer in themselves, what was marked as chosen, which panel was
 // revealed, and what was finally posted.
@@ -53,6 +54,11 @@ board.querySelectorAll = () => spaces;
 const keys = job.resolutions.map((name) => makeElement({ 'data-resolution-key': name }));
 const pairs = (job.combinations || []).map((value) =>
   makeElement({ 'data-combination-key': value })
+);
+// Every building the round track carries, not merely the ones a turn may construct, so a script
+// that revealed the wrong ones has wrong ones available to reveal.
+const buildings = (job.buildings || []).map((id) =>
+  makeElement({ 'data-building-choice-key': id })
 );
 
 // One board per seat, each carrying the keys the board renderer draws hidden: three for the stocks
@@ -112,6 +118,7 @@ global.document = {
   },
   querySelectorAll(selector) {
     if (selector === '[data-component="player-board-v2"][data-player-seat]') return seats;
+    if (selector === '[data-building-choice-key]') return buildings;
     return [];
   },
   open() {},
@@ -147,6 +154,11 @@ function snapshot() {
   pairs.forEach((pair) => {
     if (pair.getAttribute('data-turn-offered') === 'true') {
       offered.push(pair.getAttribute('data-combination-key'));
+    }
+  });
+  buildings.forEach((key) => {
+    if (key.getAttribute('data-turn-offered') === 'true') {
+      offered.push(key.getAttribute('data-building-choice-key'));
     }
   });
   // A stock counts as offered once, however many boards carry a key for it, but which seats were
@@ -224,6 +236,9 @@ job.clicks.forEach((click) => {
     pairs.find((pair) => pair.getAttribute('data-combination-key') === click.value).click();
   } else if (click.kind === 'resource') pressResource(click);
   else if (click.kind === 'seat') pressBoard(click);
+  else if (click.kind === 'building') {
+    buildings.find((key) => key.getAttribute('data-building-choice-key') === click.value).click();
+  }
   else keys.find((key) => key.getAttribute('data-resolution-key') === click.value).click();
   record();
 });
