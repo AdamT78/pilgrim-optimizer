@@ -81,7 +81,11 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         duty_category = str(details.get("duty_category", "")).strip()
         duty_with_category = f"{duty_label} ({duty_category})" if duty_category else duty_label
         if details.get("mode") == "tithe":
-            return f"{event_name}: selected {duty_with_category}; mode tithe"
+            line = f"{event_name}: selected {duty_with_category}; mode tithe"
+            tithe_resource = details.get("tithe_resource")
+            if tithe_resource:
+                line += f"; gained {tithe_resource}"
+            return line
         fragments = [f"selected {duty_with_category}"]
         if "strength" in details:
             fragments.append(f"relation {details['strength']}")

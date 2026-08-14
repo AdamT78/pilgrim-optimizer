@@ -79,7 +79,9 @@ def test_cloisters_opponent_hire_pays_owner_and_skips_city_before_sowing() -> No
     assert sowing_details["skipped"] == city
     assert result.events.index(hired_event) < result.events.index(bonus_event)
     assert result.events.index(bonus_event) < result.events.index(sowing_event)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
+    # The hire spends the last wheat and the tithe on north puts one straight back: north carries a
+    # wheat counter, and the tithe these building tests ride on now pays what it stands on.
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
 
 

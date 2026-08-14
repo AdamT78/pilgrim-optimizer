@@ -245,7 +245,9 @@ def test_hired_kogge_own_cloisters_combined_generates_and_pays_once() -> None:
 
     assert hired_details["building_id"] == "kogge"
     assert hired_details["source"] == "market"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
+    # The hires spend the wheat and the tithe on south hands one back: south carries a wheat
+    # counter, and these route-modifier turns all resolve as tithes.
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
 
 
 def test_own_kogge_hired_cloisters_combined_generates_and_pays_once() -> None:
@@ -270,7 +272,7 @@ def test_own_kogge_hired_cloisters_combined_generates_and_pays_once() -> None:
 
     assert hired_details["building_id"] == "cloisters"
     assert hired_details["source"] == "market"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
 
 
 def test_hired_both_market_combined_emits_two_hires_before_bonuses_and_sowing() -> None:
@@ -306,7 +308,7 @@ def test_hired_both_market_combined_emits_two_hires_before_bonuses_and_sowing() 
     assert result.events.index(hired_events[1]) < result.events.index(kogge_bonus)
     assert result.events.index(kogge_bonus) < result.events.index(cloisters_bonus)
     assert result.events.index(cloisters_bonus) < result.events.index(sowing_event)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
 
 
 def test_hired_both_opponent_combined_pays_owner_twice() -> None:
@@ -330,7 +332,7 @@ def test_hired_both_opponent_combined_pays_owner_twice() -> None:
 
     assert len(hired_events) == 2
     assert all(dict(event.details)["payee"] == "player_two" for event in hired_events)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 2
 
 

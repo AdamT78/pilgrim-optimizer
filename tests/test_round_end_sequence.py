@@ -73,7 +73,9 @@ def test_round_end_excess_caps_stone_and_wheat_with_silver_unchanged() -> None:
     assert details_by_player["player_one"]["wheat_before"] == 7
     assert details_by_player["player_one"]["wheat_after"] == 6
     assert "stone_before" not in details_by_player["player_two"]
-    assert details_by_player["player_two"]["wheat_before"] == 10
+    # Ten held plus the one the tithe took. The cap is what this test is about and it still lands
+    # on six, but the figure it caps from now includes the turn's own gain.
+    assert details_by_player["player_two"]["wheat_before"] == 11
     assert details_by_player["player_two"]["wheat_after"] == 6
 
 

@@ -230,14 +230,27 @@ Required wheat | Mill waiver | Actual wheat spent
   - Taxation recalls acolytes only from the selected Taxation tile.
   - Taxation does not change piety, does not advance Alms, and does not consume Tithe counters.
   - Special Activities and Produce/Clerical building effects do not boost Taxation resources.
-- Tithe counters are modeled separately from `tithe` action mode:
+- Tithe counters:
   - `tithe_counters` map physical duty positions to one of
     `stone` / `silver` / `wheat` / `cornucopia` (or `null`).
   - `city` is never valid for a counter.
   - The physical position currently mapped to duty category `taxation` must have no non-null
     Tithe counter.
-  - `cornucopia` is a Taxation Step-II wildcard source: it unlocks chosen resource gains from
-    `stone` / `silver` / `wheat` and is not itself a gained resource.
+  - `cornucopia` is a wildcard rather than a resource: it unlocks a chosen gain of
+    `stone` / `silver` / `wheat` and is never itself gained. It is read by Taxation Step II, by
+    the `tithe` action below, and by Merchant hire payment.
+- The `tithe` action gains the counter on the SELECTED duty position:
+  - Exactly one unit. It does not scale with duty value or with majority/parity/minority. This is
+    the same statement `_scriptorium_can_affect_action` already makes by excluding `tithe` from
+    Scriptorium variants on the grounds that relation and value cannot change its outcome.
+  - On a `cornucopia` the tithing player chooses, so enumeration offers one variant per resource.
+    All three are always offered: a tithe gains rather than spends, so there is no affordability
+    to prune against.
+  - Taxation carries no counter, so `tithe` is NOT legal on the Taxation tile and is not
+    enumerated there.
+  - The chosen resource is settled at enumeration and carried on the action's `tithe_resource`
+    field, including where the counter is plain and only one resource was possible. Apply pays
+    what the action names and does not read the counter.
 - Verbose CLI now prints duty layout and shows category in action/event text:
   - `selected duty: north_east (clerical)`
   - `DUTY_RESOLUTION: selected east (build_roads); ...; action build_roads_deferred`

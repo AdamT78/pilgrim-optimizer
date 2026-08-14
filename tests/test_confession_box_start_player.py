@@ -157,7 +157,9 @@ def test_market_hired_confession_box_pays_bank_then_applies_bonus() -> None:
     assert bonus_details["base_piety"] == 9
     assert bonus_details["effective_piety"] == 11
     assert dict(selection_event.details)["selected_start_player"] == "player_two"
-    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 0
+    # The hire's wheat goes out and the tithe's wheat comes back: these round-ending turns resolve
+    # as tithes, which stopped being free of resource effects when they started paying counters.
+    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
     assert result.events.index(hired_event) < result.events.index(bonus_event)
 
 
@@ -186,7 +188,7 @@ def test_opponent_hired_confession_box_pays_owner_then_applies_bonus() -> None:
     assert hired_details["resource"] == "wheat"
     assert hired_details["amount"] == 1
     assert dict(bonus_event.details)["effective_piety"] == 11
-    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 0
+    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
     assert result.events.index(hired_event) < result.events.index(bonus_event)
 
@@ -223,7 +225,7 @@ def test_multiple_players_confession_box_resolves_in_start_player_order() -> Non
     assert dict(bonus_events[1].details)["player"] == "player_one"
     assert result.events.index(hired_event) < result.events.index(bonus_events[0])
     assert result.events.index(bonus_events[0]) < result.events.index(bonus_events[1])
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
+    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 0
 
 

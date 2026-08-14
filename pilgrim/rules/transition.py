@@ -106,6 +106,11 @@ from pilgrim.rules.timing import (
     resolve_round_end,
     resolve_season_end,
 )
+from pilgrim.rules.tithe import (
+    TITHE_GAIN,
+    TITHE_RESOURCES,
+    tithe_resources_for_position,
+)
 from pilgrim.rules.validation import (
     TransitionValidationError,
     ensure_acolyte_conservation,
@@ -1289,14 +1294,16 @@ def _legal_full_turn_actions_for_state(
                                     resolution=category_action,
                                 )
                             )
-                    actions.append(
-                        FullTurnAction(
-                            origin=origin,
-                            route=route,
-                            selected_duty=duty_position,
-                            resolution=TurnResolutionType.TITHE,
+                    for tithe_resource in tithe_resources_for_position(config, duty_position):
+                        actions.append(
+                            FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.TITHE,
+                                tithe_resource=tithe_resource,
+                            )
                         )
-                    )
                     if (
                         route_option.building_id is not None
                         or conversion_option is not None
@@ -2279,8 +2286,26 @@ def _apply_full_turn_action(
     ]
 
     if action.resolution is TurnResolutionType.TITHE:
-        updated_state = state_after_sow
         duty_category = config.duty_category_for_position(action.selected_duty)
+        # Pay what the ACTION says, and do not read the counter here for any purpose. On a
+        # cornucopia the tile answers "any of three", so re-deriving would meet the wildcard a
+        # second time and have to guess -- which is how the Merchant hire choice was thrown away
+        # once already. An action naming wheat moves wheat even if the tile beneath it changed.
+        if action.tithe_resource is None:
+            raise TransitionValidationError(
+                "A tithe must name the resource it gains; enumeration settles it."
+            )
+        if action.tithe_resource not in TITHE_RESOURCES:
+            message = f"Unknown tithe resource {action.tithe_resource!r}."
+            raise TransitionValidationError(message)
+        player_state = state_after_sow.player_state(player)
+        updated_state = state_after_sow.with_player_state(
+            player,
+            replace(
+                player_state,
+                resources=player_state.resources.add(**{action.tithe_resource: TITHE_GAIN}),
+            ),
+        )
         events.append(
             GameEvent(
                 event_type=EventType.DUTY_RESOLUTION,
@@ -2290,7 +2315,20 @@ def _apply_full_turn_action(
                     duty_position=action.selected_duty,
                     duty_category=duty_category,
                     mode="tithe",
+                    tithe_resource=action.tithe_resource,
                     recall=False,
+                ),
+            )
+        )
+        events.append(
+            GameEvent(
+                event_type=EventType.RESOURCE_DELTA,
+                actor=player,
+                action_id=transition_action_id,
+                details=make_event_details(
+                    stone=TITHE_GAIN if action.tithe_resource == "stone" else 0,
+                    silver=TITHE_GAIN if action.tithe_resource == "silver" else 0,
+                    wheat=TITHE_GAIN if action.tithe_resource == "wheat" else 0,
                 ),
             )
         )
