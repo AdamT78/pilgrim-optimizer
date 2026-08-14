@@ -334,7 +334,7 @@ def test_apply_rejects_buy_conversion_above_piety_cap() -> None:
         apply_action(capped_state, invalid_action, scenario.config)
 
 
-def test_converted_piety_can_change_round_end_start_player_selection() -> None:
+def test_converted_piety_can_change_who_takes_the_first_player_marker() -> None:
     scenario, actions, conversions = _indulgences_actions(
         "scenarios/indulgences_buy_then_round_end_start_player_001.json"
     )
@@ -357,13 +357,15 @@ def test_converted_piety_can_change_round_end_start_player_selection() -> None:
     with_conversion = apply_action(scenario.state, buy_action, scenario.config)
     without_conversion = apply_action(scenario.state, no_conversion_action, scenario.config)
 
-    assert with_conversion.state.start_player is PlayerId.PLAYER_TWO
-    assert without_conversion.state.start_player is PlayerId.PLAYER_ONE
-    selection_event = _first_action(
-        _events_of_type(with_conversion.events, EventType.START_PLAYER_SELECTION),
+    # Converted piety buys the marker, not the round: who begins is still nobody's answer
+    # yet, and is the holder's to give.
+    assert with_conversion.state.active_player is PlayerId.PLAYER_TWO
+    assert without_conversion.state.active_player is PlayerId.PLAYER_ONE
+    marker_event = _first_action(
+        _events_of_type(with_conversion.events, EventType.START_PLAYER_MARKER),
         lambda _event: True,
     )
-    assert dict(selection_event.details)["selected_start_player"] == "player_two"
+    assert dict(marker_event.details)["deciding_player"] == "player_two"
 
 
 def test_action_summary_includes_indulgences_conversion_and_hire_suffix() -> None:

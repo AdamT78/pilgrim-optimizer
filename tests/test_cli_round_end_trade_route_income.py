@@ -33,9 +33,9 @@ def test_cli_round_end_trade_route_income_basic_order_and_wording(capsys) -> Non
     assert exit_code == 0
     assert "MERCHANT_ADVANCE:" in output
     assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" in output
-    assert "START_PLAYER_SELECTION:" in output
+    assert "START_PLAYER_MARKER:" in output
     assert output.index("MERCHANT_ADVANCE:") < output.index("TRADE_ROUTE_INCOME:")
-    assert output.index("TRADE_ROUTE_INCOME:") < output.index("START_PLAYER_SELECTION:")
+    assert output.index("TRADE_ROUTE_INCOME:") < output.index("START_PLAYER_MARKER:")
 
 
 def test_cli_round_end_trade_route_income_plural_wording(capsys) -> None:
@@ -81,4 +81,4 @@ def test_cli_round_end_trade_route_income_after_two_guild_moves_regression(capsy
     )
     assert output.index(
         "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route"
-    ) < output.index("START_PLAYER_SELECTION:")
+    ) < output.index("START_PLAYER_MARKER:")

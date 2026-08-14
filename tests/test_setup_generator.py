@@ -143,9 +143,14 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
     metadata = generated["setup_metadata"]  # type: ignore[index]
     players = initial_state["players"]
 
-    assert initial_state["active_player"] == "player_one"
+    # The marker opens on the first player board, which is red, which is `player_two` -- and this
+    # line cannot tell you that, which is why it once read `player_one` and passed. The check that
+    # can is in tests/test_opening_marker_seat.py, by colour.
+    assert initial_state["active_player"] == "player_two"
     assert initial_state["start_player_id"] == "player_one"
-    assert initial_state["phase"] == "setup_sow"
+    # A generated game opens on the decision it is supposed to open on. The setup sows follow it,
+    # in the order whoever holds the marker sets, which is why they cannot come first.
+    assert initial_state["phase"] == "start_player_selection"
     assert initial_state["setup"] == {
         "setup_sow_required": True,
         "setup_sow_complete": False,

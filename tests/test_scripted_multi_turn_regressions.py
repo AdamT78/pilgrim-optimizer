@@ -4,9 +4,14 @@ from dataclasses import dataclass, replace
 from typing import Callable, Iterable
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction, GameAction, action_id
+from pilgrim.model.actions import (
+    FullTurnAction,
+    GameAction,
+    StartPlayerSelectionAction,
+    action_id,
+)
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
 from pilgrim.rules.buildings import future_buildings, is_building_live, live_buildings
@@ -58,14 +63,36 @@ def select_tithe() -> Selector:
     )
 
 
+def whoever_holds_the_marker_keeps_it(state: GameState) -> PlayerId:
+    """One way a table could answer, chosen here so these scripts stay about turns.
+
+    A SCRIPT, NOT A RULE. The holder is free to name anyone, and the tests for that live with the
+    rule. Fixing an answer here keeps a six-turn sequencing test from also being a test of who
+    begins each round, and picking the holder is the answer that leaves the seating alone.
+    """
+    return state.active_player
+
+
 def apply_scripted_turns(
     initial_state: GameState,
     config: GameConfig,
     selectors: Iterable[Selector],
+    *,
+    who_begins: Callable[[GameState], PlayerId] = whoever_holds_the_marker_keeps_it,
 ) -> tuple[ScriptedStep, ...]:
     steps: list[ScriptedStep] = []
     state = initial_state
     for step_index, selector in enumerate(selectors, start=1):
+        # A round end stops the table on the marker holder. Answered here rather than counted as a
+        # scripted step, so that one selector still means one player turn and the round numbers
+        # these tests assert keep meaning what they did. What the answer produces is asserted where
+        # the rule is tested, not here.
+        if state.phase is TurnPhase.START_PLAYER_SELECTION:
+            state = apply_action(
+                state,
+                StartPlayerSelectionAction(chosen_start_player=who_begins(state)),
+                config,
+            ).state
         actions = legal_actions(state, config)
         if not actions:
             raise AssertionError(f"No legal actions at scripted step {step_index}.")
@@ -151,12 +178,13 @@ def test_scripted_basic_two_player_round_flow_over_six_turns() -> None:
         if EventType.ROUND_ADVANCE in step_events:
             round_end_steps += 1
             assert EventType.MERCHANT_ADVANCE in step_events
-            assert EventType.START_PLAYER_SELECTION in step_events
+            assert EventType.START_PLAYER_MARKER in step_events
             assert step.result.state.timing.turn_in_round == 0
-            assert step.result.state.active_player is step.result.state.start_player
+            # Stopped on the marker holder rather than run on into the next round.
+            assert step.result.state.phase is TurnPhase.START_PLAYER_SELECTION
         else:
             assert EventType.MERCHANT_ADVANCE not in step_events
-            assert EventType.START_PLAYER_SELECTION not in step_events
+            assert EventType.START_PLAYER_MARKER not in step_events
 
     assert round_end_steps == 3
 
@@ -228,7 +256,7 @@ def test_scripted_season_end_sequence_runs_in_expected_order_after_two_turns() -
             EventType.ALMS_SEASON_REWARD,
             EventType.ALMS_RESET,
             EventType.MERCHANT_ADVANCE,
-            EventType.START_PLAYER_SELECTION,
+            EventType.START_PLAYER_MARKER,
             EventType.TURN_ADVANCE,
         ),
     )
@@ -236,7 +264,7 @@ def test_scripted_season_end_sequence_runs_in_expected_order_after_two_turns() -
     season_state = scripted[1].result.state
     assert season_state.timing.round_number == 10
     assert season_state.timing.season_number == 2
-    assert season_state.active_player is season_state.start_player
+    assert season_state.phase is TurnPhase.START_PLAYER_SELECTION
     assert season_state.player_state(PlayerId.PLAYER_ONE).alms_position == 0
     assert season_state.player_state(PlayerId.PLAYER_TWO).alms_position == 0
 

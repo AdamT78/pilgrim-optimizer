@@ -51,14 +51,14 @@ def test_round_end_emits_excess_ship_merchant_start_player_and_round_advance() -
     assert EventType.EXCESS_RESOURCE_CAP in event_types
     assert EventType.SHIP_ADVANCE in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
+    assert EventType.START_PLAYER_MARKER in event_types
     assert EventType.ROUND_ADVANCE in event_types
     assert EventType.ALMS_SEASON_END not in event_types
     assert EventType.SEASON_END not in event_types
     assert EventType.DUMMY_ACOLYTE_MOVE not in event_types
     assert result.state.ship_position == 2
     assert result.state.merchant_board_position == 1
-    assert result.state.start_player is PlayerId.PLAYER_TWO
+    assert result.state.active_player is PlayerId.PLAYER_TWO
     assert result.state.timing.round_number == 3
 
 
@@ -112,8 +112,8 @@ def test_start_player_tie_break_chooses_clockwise_away_from_current_holder() -> 
     result = apply_action(scenario.state, action, scenario.config)
     event_types = {event.event_type for event in result.events}
     assert EventType.START_PLAYER_TIE_BREAK in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
-    assert result.state.start_player is PlayerId.PLAYER_TWO
+    assert EventType.START_PLAYER_MARKER in event_types
+    assert result.state.active_player is PlayerId.PLAYER_TWO
     assert result.state.active_player is PlayerId.PLAYER_TWO
 
 

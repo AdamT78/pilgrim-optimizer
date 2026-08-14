@@ -204,7 +204,7 @@ def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) ->
     assert "SHIP_ADVANCE:" in output
     assert "ROUND_ADVANCE:" in output
     assert "MERCHANT_ADVANCE:" in output
-    assert "START_PLAYER_SELECTION:" in output
+    assert "START_PLAYER_MARKER:" in output
 
 
 def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> None:

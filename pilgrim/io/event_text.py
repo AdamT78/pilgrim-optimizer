@@ -682,10 +682,23 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
             f"current start player {current_start}; deciding player {deciding_player}"
         )
 
+    if event.event_type is EventType.START_PLAYER_MARKER:
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        effective_piety = details.get("highest_effective_piety", "unknown")
+        return (
+            f"{event_name}: {deciding_player} takes the First Player marker on effective piety "
+            f"{effective_piety} and must choose who begins the next round"
+        )
+
     if event.event_type is EventType.START_PLAYER_SELECTION:
+        # Both names, every time, including when they are the same name twice. This is the one line
+        # in the log where the decider and the player they chose are visibly two things, so it is
+        # the one line that may not drop either. Shortening the self-selection to "chose to begin"
+        # would leave a reader working out from a MISSING name whether the holder kept the round or
+        # the message elided who they gave it to, and those read alike while meaning opposites.
         deciding_player = str(details.get("deciding_player", "unknown"))
         selected_player = str(details.get("selected_start_player", "unknown"))
-        return f"{event_name}: {deciding_player} selected {selected_player} as next start player"
+        return f"{event_name}: {deciding_player} chose {selected_player} to begin the next round"
 
     if event.event_type is EventType.GAME_END:
         reason = str(details.get("reason", "")).strip()

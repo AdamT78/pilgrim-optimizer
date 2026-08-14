@@ -149,4 +149,7 @@ def test_cli_apply_indulgences_buy_then_round_end_shows_start_player_selection(c
     assert exit_code == 0
     assert "BUILDING_BONUS: indulgences bought 1 piety for 1 silver" in output
     assert "RESOURCE_DELTA: player_two silver -1; piety +1" in output
-    assert "START_PLAYER_SELECTION: player_two selected player_two as next start player" in output
+    assert (
+        "START_PLAYER_MARKER: player_two takes the First Player marker on effective "
+        "piety 2 and must choose who begins the next round"
+    ) in output

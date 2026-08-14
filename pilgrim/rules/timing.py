@@ -112,9 +112,12 @@ def advance_timing(
             f"Absolute turn exceeds max_absolute_turns={config.max_absolute_turns}."
         )
 
+    # On a round-ending turn "next in order" is not who plays next and never was: the round end
+    # awards the First Player marker, and the holder says who begins. So the seat is left where it
+    # is and the round end moves it, rather than being written here and thrown away there.
     updated_state = replace(
         state,
-        active_player=next_player,
+        active_player=state.active_player if round_ended else next_player,
         phase=TurnPhase.SOW,
         timing=base_timing,
     )

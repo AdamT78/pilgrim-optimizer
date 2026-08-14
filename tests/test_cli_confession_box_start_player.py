@@ -46,7 +46,10 @@ def test_cli_apply_owned_confession_box_shows_temporary_piety_above_twelve(capsy
         "12 + 2 = 14 for start-player selection"
     ) in output
     assert "BUILDING_HIRED: player_one hired Confession Box" not in output
-    assert "START_PLAYER_SELECTION: player_one selected player_one as next start player" in output
+    assert (
+        "START_PLAYER_MARKER: player_one takes the First Player marker on effective "
+        "piety 14 and must choose who begins the next round"
+    ) in output
     assert "Piety position: 12" in output
 
 
@@ -80,7 +83,7 @@ def test_cli_apply_market_hired_confession_box_shows_hire_then_bonus(capsys) -> 
     assert hire_text in output
     assert bonus_text in output
     assert output.index(hire_text) < output.index(bonus_text) < output.index(
-        "START_PLAYER_SELECTION:"
+        "START_PLAYER_MARKER:"
     )
 
 
@@ -143,8 +146,8 @@ def test_cli_apply_confession_box_tie_break_orders_bonus_before_tie_break(capsys
         "8 + 2 = 10 for start-player selection"
     )
     tie_break_text = "START_PLAYER_TIE_BREAK:"
-    selection_text = "START_PLAYER_SELECTION: player_one selected player_one as next start player"
+    marker_text = "START_PLAYER_MARKER: player_one takes the First Player marker"
     assert bonus_text in output
     assert tie_break_text in output
-    assert selection_text in output
-    assert output.index(bonus_text) < output.index(tie_break_text) < output.index(selection_text)
+    assert marker_text in output
+    assert output.index(bonus_text) < output.index(tie_break_text) < output.index(marker_text)

@@ -38,7 +38,7 @@ def test_final_nw_pilgrimage_resolves_alms_before_game_end() -> None:
     assert EventType.GAME_END in event_types
     assert EventType.MERCHANT_ADVANCE not in event_types
     assert EventType.TRADE_ROUTE_INCOME not in event_types
-    assert EventType.START_PLAYER_SELECTION not in event_types
+    assert EventType.START_PLAYER_MARKER not in event_types
 
     assert _event_index(result.events, EventType.SHIP_ADVANCE) < _event_index(
         result.events,
@@ -65,7 +65,7 @@ def test_non_final_pilgrimage_continues_to_merchant_trade_route_and_start_player
     assert EventType.ALMS_RESET in event_types
     assert EventType.MERCHANT_ADVANCE in event_types
     assert EventType.TRADE_ROUTE_INCOME in event_types
-    assert EventType.START_PLAYER_SELECTION in event_types
+    assert EventType.START_PLAYER_MARKER in event_types
 
     assert _event_index(result.events, EventType.SHIP_ADVANCE) < _event_index(
         result.events,
@@ -78,7 +78,7 @@ def test_non_final_pilgrimage_continues_to_merchant_trade_route_and_start_player
         EventType.MERCHANT_ADVANCE,
     ) < _event_index(result.events, EventType.TRADE_ROUTE_INCOME) < _event_index(
         result.events,
-        EventType.START_PLAYER_SELECTION,
+        EventType.START_PLAYER_MARKER,
     )
 
 
@@ -97,4 +97,4 @@ def test_non_pilgrimage_round_end_order_is_unchanged() -> None:
     ) < _event_index(result.events, EventType.MERCHANT_ADVANCE) < _event_index(
         result.events,
         EventType.TRADE_ROUTE_INCOME,
-    ) < _event_index(result.events, EventType.START_PLAYER_SELECTION)
+    ) < _event_index(result.events, EventType.START_PLAYER_MARKER)

@@ -10,6 +10,7 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     SetupSowAction,
+    StartPlayerSelectionAction,
     StartPlayerConfessionBoxUse,
     action_id,
     readable_route,
@@ -71,8 +72,10 @@ from pilgrim.rules.ordination import (
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.round_end import (
     apply_excess_resource_caps,
+    apply_start_player_selection,
+    award_first_player_marker,
+    choosable_start_players,
     resolve_trade_route_income,
-    select_next_start_player,
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.sow_routes import (
@@ -406,6 +409,8 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
         return ()
     if state.phase is TurnPhase.SETUP_SOW:
         return _legal_setup_sow_actions(state, config)
+    if state.phase is TurnPhase.START_PLAYER_SELECTION:
+        return _legal_start_player_selection_actions(state)
     if state.phase is not TurnPhase.SOW:
         return ()
     return _legal_full_turn_actions(state, config)
@@ -415,9 +420,59 @@ def apply_action(state: GameState, action: GameAction, config: GameConfig) -> Tr
     """Apply one full-turn action with invariant checks."""
     if isinstance(action, SetupSowAction):
         return _apply_setup_sow_action(state, action, config)
+    if isinstance(action, StartPlayerSelectionAction):
+        return _apply_start_player_selection_action(state, action, config)
     if isinstance(action, FullTurnAction):
         return _apply_full_turn_action(state, action, config)
     raise TypeError(f"Unsupported action type: {type(action)!r}")
+
+
+def _legal_start_player_selection_actions(state: GameState) -> tuple[GameAction, ...]:
+    """One action per player the marker holder may name, which is every player.
+
+    The holder is `state.active_player`, so nothing here needs to be told who is choosing, and a
+    submission cannot name a different chooser than the state agrees with.
+    """
+    return tuple(
+        StartPlayerSelectionAction(chosen_start_player=player_id)
+        for player_id in choosable_start_players(state)
+    )
+
+
+def _phase_after_start_player_selection(state: GameState) -> TurnPhase:
+    """What the table does once somebody has begun: sow, or set up first if it never has.
+
+    The same decision opens the game and closes every round, so the phase it hands to is read off
+    the state rather than written into two places that could come to disagree.
+    """
+    if state.setup_sow_required and not state.setup_sow_complete:
+        return TurnPhase.SETUP_SOW
+    return TurnPhase.SOW
+
+
+def _apply_start_player_selection_action(
+    state: GameState,
+    action: StartPlayerSelectionAction,
+    config: GameConfig,
+) -> TransitionResult:
+    if state.phase is not TurnPhase.START_PLAYER_SELECTION:
+        raise TransitionValidationError(
+            "Start player selection is only legal while the marker holder is being waited on; "
+            f"phase is {state.phase.value}."
+        )
+    next_state, events = apply_start_player_selection(
+        state,
+        chosen_start_player=action.chosen_start_player,
+        actor=state.active_player,
+        action_id=action_id(action),
+        next_phase=_phase_after_start_player_selection(state),
+    )
+    # Nothing was gained, spent or moved, so the conservation checks a turn runs have nothing to
+    # say here. What CAN go wrong is handing the table to a seat that may not have it, which is
+    # what the setup and timing checks are about.
+    ensure_valid_timing(next_state)
+    ensure_valid_setup_state(next_state)
+    return TransitionResult(state=next_state, events=tuple(events))
 
 
 def _legal_setup_sow_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
@@ -1500,12 +1555,30 @@ def _start_player_confession_box_variants_for_action(
     config: GameConfig,
     action: FullTurnAction,
 ) -> tuple[FullTurnAction, ...]:
+    """Confession Box variants worth offering, which is the ones that change WHO DECIDES.
+
+    A Confession Box lends two piety for the purposes of the marker, so what it can buy is the
+    marker itself. It cannot buy a particular start player: the holder chooses freely and may
+    choose anyone, so every combination leads to the same set of possible next start players and
+    they differ only in who gets to pick between them.
+
+    That is what the predicate compares. It used to compare the next start player, which was the
+    same number only because the placeholder made the holder start; against a real choice it would
+    have found every variant identical and pruned all of them, silently.
+
+    KNOWN SHAPE PROBLEM, LEFT ALONE DELIBERATELY. The uses are an ordered tuple hanging off the
+    round-ending turn, so one player's action carries other players' decisions. That is wrong and
+    is not fixed here; only the predicate is.
+    """
     base_action = _with_start_player_confession_box_uses(action, ())
     preview_result = _apply_full_turn_action(state, base_action, config)
     if preview_result.state.game_over:
         return (base_action,)
+    # The marker is what these variants are about, so the question is whether the turn awards one.
+    # Keyed off the marker rather than the selection, because the selection is now a later action
+    # by a different player and no longer happens on this turn at all.
     if not any(
-        event.event_type is EventType.START_PLAYER_SELECTION for event in preview_result.events
+        event.event_type is EventType.START_PLAYER_MARKER for event in preview_result.events
     ):
         return (base_action,)
 
@@ -1518,24 +1591,24 @@ def _start_player_confession_box_variants_for_action(
         config=config,
         ordered_players=ordered_players,
     )
-    state_before_start_player_selection = replace(
+    state_before_marker = replace(
         preview_result.state,
         start_player=state.start_player,
         active_player=state.start_player,
     )
-    baseline_next_start_player = _resolved_next_start_player_for_confession_uses(
-        state=state_before_start_player_selection,
+    baseline_decider = _resolved_marker_holder_for_confession_uses(
+        state=state_before_marker,
         uses=(),
     )
     kept_use_combinations: list[tuple[StartPlayerConfessionBoxUse, ...]] = [()]
     for use_combination in use_combinations:
         if not use_combination:
             continue
-        candidate_next_start_player = _resolved_next_start_player_for_confession_uses(
-            state=state_before_start_player_selection,
+        candidate_decider = _resolved_marker_holder_for_confession_uses(
+            state=state_before_marker,
             uses=use_combination,
         )
-        if candidate_next_start_player != baseline_next_start_player:
+        if candidate_decider != baseline_decider:
             kept_use_combinations.append(use_combination)
     return tuple(
         _with_start_player_confession_box_uses(base_action, use_combination)
@@ -1641,11 +1714,16 @@ def _confession_box_source_is_live_for_start_player_phase(
     return is_building_live(state, _BUILDING_CONFESSION_BOX)
 
 
-def _resolved_next_start_player_for_confession_uses(
+def _resolved_marker_holder_for_confession_uses(
     *,
     state: GameState,
     uses: tuple[StartPlayerConfessionBoxUse, ...],
 ) -> PlayerId:
+    """Who would end up with the marker if these Confession Boxes were used.
+
+    The same arithmetic `award_first_player_marker` does, run without paying for anything, because
+    enumeration needs the answer before it decides whether the variant is worth offering.
+    """
     temporary_bonus_players = {use.player for use in uses}
     players = tuple(PlayerId(index) for index in range(state.player_count))
     highest_effective_piety = max(
@@ -4794,15 +4872,20 @@ def _resolve_round_end_phases(
     )
     events.extend(trade_route_income_events)
 
-    # 7) Start-player placeholder policy.
-    next_state, start_player_events, _ = select_next_start_player(
+    # 7) The First Player marker goes to the highest effective piety, and the round STOPS there.
+    #
+    # This is the last of the seven steps, so pausing costs nothing: there is no eighth step left
+    # waiting behind the decision. The state returned is not ready for the next round and is not
+    # meant to be -- it is a table waiting on one named player, the same way it waits during setup
+    # sow, and `legal_actions` will offer that player their choice and nothing else.
+    next_state, marker_events, _ = award_first_player_marker(
         next_state,
         config=config,
         actor=actor,
         action_id=action_id,
         confession_box_uses=action.start_player_confession_box_uses,
     )
-    events.extend(start_player_events)
+    events.extend(marker_events)
     return next_state, tuple(events)
 
 

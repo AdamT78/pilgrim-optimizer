@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import StartPlayerConfessionBoxUse, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules import transition
 from pilgrim.rules.piety import score_piety
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
@@ -40,7 +41,13 @@ def test_confession_box_no_use_variant_remains_legal() -> None:
     assert () in _confession_uses(actions)
 
 
-def test_confession_box_variant_generated_when_bonus_changes_start_player() -> None:
+def test_confession_box_variant_generated_when_bonus_changes_who_decides() -> None:
+    """What a Confession Box can buy is the marker, so that is when using it is worth offering.
+
+    It cannot buy a particular start player: the holder chooses freely and may name anyone, so
+    every variant leads to the same possible next start players and differs only in who picks
+    between them.
+    """
     _scenario, actions = _round_ending_tithe_actions(
         "scenarios/confession_box_owned_start_player_001.json"
     )
@@ -49,18 +56,50 @@ def test_confession_box_variant_generated_when_bonus_changes_start_player() -> N
     ) in _confession_uses(actions)
 
 
-def test_confession_box_variant_pruned_when_bonus_does_not_change_start_player() -> None:
+def test_confession_box_variant_pruned_when_bonus_does_not_change_who_decides() -> None:
     _scenario, actions = _round_ending_tithe_actions(
         "scenarios/confession_box_owned_no_outcome_change_pruned_001.json"
     )
     assert _confession_uses(actions) == [()]
 
 
-def test_hired_confession_box_variant_pruned_when_bonus_does_not_change_start_player() -> None:
+def test_hired_confession_box_variant_pruned_when_bonus_does_not_change_who_decides() -> None:
     _scenario, actions = _round_ending_tithe_actions(
         "scenarios/confession_box_hire_market_no_outcome_change_pruned_001.json"
     )
     assert _confession_uses(actions) == [()]
+
+
+def test_a_predicate_blind_to_who_decides_prunes_a_variant_that_should_survive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The failure this predicate had to be changed to avoid, made to happen on purpose.
+
+    Under the old rule the predicate compared who would be CHOSEN, which was the same number as who
+    decides only because the placeholder made the holder start. Against a real choice, who is chosen
+    is not a function of the Confession Boxes at all -- the holder names whoever they like -- so
+    that comparison finds every variant identical. Modelled here by a predicate that answers the
+    same thing however many boxes are used, which is what comparing a free choice amounts to.
+
+    Nothing raises. The variant simply stops being generated, which is why this is worth a test: the
+    only visible symptom is a legal move quietly no longer being offered.
+    """
+    scenario, actions = _round_ending_tithe_actions(
+        "scenarios/confession_box_owned_start_player_001.json"
+    )
+    survives = (StartPlayerConfessionBoxUse(player=PlayerId.PLAYER_ONE, source="own_active"),)
+    assert survives in _confession_uses(actions)
+
+    monkeypatch.setattr(
+        transition,
+        "_resolved_marker_holder_for_confession_uses",
+        lambda *, state, uses: state.start_player,
+    )
+    _scenario, blinded = _round_ending_tithe_actions(
+        "scenarios/confession_box_owned_start_player_001.json"
+    )
+    assert survives not in _confession_uses(blinded)
+    assert _confession_uses(blinded) == [()]
 
 
 def test_temporary_piety_bonus_can_exceed_twelve_and_does_not_persist() -> None:
@@ -84,9 +123,9 @@ def test_temporary_piety_bonus_can_exceed_twelve_and_does_not_persist() -> None:
     result = apply_action(scenario.state, action, scenario.config)
 
     bonus_event = _events_of_type(result.events, EventType.CONFESSION_BOX_BONUS)[0]
-    selection_event = _events_of_type(result.events, EventType.START_PLAYER_SELECTION)[0]
+    marker_event = _events_of_type(result.events, EventType.START_PLAYER_MARKER)[0]
     bonus_details = dict(bonus_event.details)
-    selection_details = dict(selection_event.details)
+    marker_details = dict(marker_event.details)
     after_piety = result.state.player_state(PlayerId.PLAYER_ONE).piety
     after_vp = score_piety(after_piety, scenario.config.piety)
 
@@ -94,8 +133,8 @@ def test_temporary_piety_bonus_can_exceed_twelve_and_does_not_persist() -> None:
     assert bonus_details["base_piety"] == 12
     assert bonus_details["temporary_bonus"] == 2
     assert bonus_details["effective_piety"] == 14
-    assert selection_details["highest_effective_piety"] == 14
-    assert selection_details["selected_start_player"] == "player_one"
+    assert marker_details["highest_effective_piety"] == 14
+    assert marker_details["deciding_player"] == "player_one"
     assert after_piety == 12
     assert before_vp == after_vp
     assert EventType.PIETY_DELTA not in {event.event_type for event in result.events}
@@ -121,8 +160,8 @@ def test_owned_confession_box_works_for_free_even_when_merchant_resource_is_none
 
     assert EventType.BUILDING_HIRED not in event_types
     assert EventType.CONFESSION_BOX_BONUS in event_types
-    assert dict(_events_of_type(result.events, EventType.START_PLAYER_SELECTION)[0].details)[
-        "selected_start_player"
+    assert dict(_events_of_type(result.events, EventType.START_PLAYER_MARKER)[0].details)[
+        "deciding_player"
     ] == "player_one"
 
 
@@ -144,7 +183,7 @@ def test_market_hired_confession_box_pays_bank_then_applies_bonus() -> None:
 
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _events_of_type(result.events, EventType.CONFESSION_BOX_BONUS)[0]
-    selection_event = _events_of_type(result.events, EventType.START_PLAYER_SELECTION)[0]
+    marker_event = _events_of_type(result.events, EventType.START_PLAYER_MARKER)[0]
     hired_details = dict(hired_event.details)
     bonus_details = dict(bonus_event.details)
 
@@ -156,7 +195,7 @@ def test_market_hired_confession_box_pays_bank_then_applies_bonus() -> None:
     assert bonus_details["player"] == "player_two"
     assert bonus_details["base_piety"] == 9
     assert bonus_details["effective_piety"] == 11
-    assert dict(selection_event.details)["selected_start_player"] == "player_two"
+    assert dict(marker_event.details)["deciding_player"] == "player_two"
     # The hire's wheat goes out and the tithe's wheat comes back: these round-ending turns resolve
     # as tithes, which stopped being free of resource effects when they started paying counters.
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
@@ -252,8 +291,10 @@ def test_tie_break_uses_effective_piety_after_confession_box_bonus() -> None:
 
     assert tie_break_details["current_start_player"] == "player_two"
     assert tie_break_details["deciding_player"] == "player_one"
-    assert result.state.start_player is PlayerId.PLAYER_ONE
+    # The bonus wins player_one the marker. It does not win them the round: they hold the
+    # marker and have yet to say who begins, so the start player is still player_two.
     assert result.state.active_player is PlayerId.PLAYER_ONE
+    assert result.state.start_player is PlayerId.PLAYER_TWO
 
 
 def test_hired_confession_box_choices_block_when_merchant_resource_is_none() -> None:
@@ -281,6 +322,7 @@ def test_game_end_before_start_player_selection_skips_confession_box_variants_an
     event_types = {event.event_type for event in result.events}
 
     assert EventType.GAME_END in event_types
+    assert EventType.START_PLAYER_MARKER not in event_types
     assert EventType.START_PLAYER_SELECTION not in event_types
     assert EventType.CONFESSION_BOX_BONUS not in event_types
     assert EventType.BUILDING_HIRED not in event_types

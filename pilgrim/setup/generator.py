@@ -102,9 +102,21 @@ def generate_setup_scenario(
             ),
         },
         "initial_state": {
-            "active_player": "player_one",
+            # Nobody has any piety yet, so no seat has earned the marker. It starts on the first
+            # player board, which is RED, and red is `player_two` -- see SEATED_PLAYERS in
+            # tools/ui_debug/render_table_layout.py. `player_one` is WHITE and sits at the far end
+            # of the row, so reading "first board" as "first player id" puts the marker four seats
+            # from where the rule puts it. That holds at two and three players as well, where the
+            # boards are still white then red.
+            #
+            # Stated rather than walked. A tie-break walks clockwise from the current start player,
+            # and at game open there is no current start player: `start_player_id` below is a seed
+            # that the opening choice overwrites before any round ends. Walking from it would be
+            # deriving who chooses from a value nobody chose, which the chooser is about to
+            # replace. The two happen to agree today, and a test holds them to it.
+            "active_player": "player_two",
             "start_player_id": "player_one",
-            "phase": "setup_sow",
+            "phase": "start_player_selection",
             "setup": {
                 "setup_sow_required": True,
                 "setup_sow_complete": False,

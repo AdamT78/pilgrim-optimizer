@@ -64,6 +64,10 @@ class TurnPhase(Enum):
     """Top-level turn phase for the Mancala sandbox."""
 
     SETUP_SOW = "setup_sow"
+    # One player acts outside the run of normal turns: whoever holds the First Player marker says
+    # who begins the next round. A phase rather than a step inside a turn, because the player who
+    # answers is not the player whose turn just ended and may not be either of them.
+    START_PLAYER_SELECTION = "start_player_selection"
     SOW = "sow"
     DUTY = "duty"
 
@@ -136,6 +140,7 @@ class ActionType(Enum):
     """Action categories used for stable action IDs and logging."""
 
     SETUP_SOW = "setup_sow"
+    START_PLAYER_SELECTION = "start_player_selection"
     FULL_TURN = "full_turn"
     SOW = "sow"
     RESOLVE_DUTY = "resolve_duty"
@@ -182,6 +187,10 @@ class EventType(Enum):
     TRADE_ROUTE_INCOME = "trade_route_income"
     TRADE_ROUTE_INCOME_SKIPPED = "trade_route_income_skipped"
     START_PLAYER_TIE_BREAK = "start_player_tie_break"
+    # Who receives the marker, said when it is received. The selection that follows is a separate
+    # event because it is a separate act by a player, and the table needs to be told who it is
+    # waiting for before it waits rather than only once the waiting is over.
+    START_PLAYER_MARKER = "start_player_marker"
     START_PLAYER_SELECTION = "start_player_selection"
     GAME_END = "game_end"
     TURN_ADVANCE = "turn_advance"

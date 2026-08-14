@@ -15,11 +15,12 @@ from pilgrim.model.actions import (
     FullTurnAction,
     GameAction,
     SetupSowAction,
+    StartPlayerSelectionAction,
     action_id,
     action_summary,
 )
 from pilgrim.model.config import GameConfig
-from pilgrim.model.enums import PlayerId, TurnResolutionType
+from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.state import GameState
 from pilgrim.rules.transition import apply_action, legal_actions
 from pilgrim.setup.generator import generate_setup_scenario
@@ -274,6 +275,17 @@ def _run_trace_rows(
     rows: list[TraceStepRow] = []
     current_state = state
     for step in range(1, steps + 1):
+        # A game opens, and every round ends, by stopping on whoever holds the First Player marker.
+        # Answered and stepped over rather than measured: a row counts how a TURN branches --
+        # routes, duties, what to do with them -- and a position whose only question is who begins
+        # has none of that. Its branching is one per seat, and is not what this audit looks at.
+        # The holder keeps it, so the trace walks a fixed seating rather than a wandering one.
+        while current_state.phase is TurnPhase.START_PLAYER_SELECTION:
+            current_state = apply_action(
+                current_state,
+                StartPlayerSelectionAction(chosen_start_player=current_state.active_player),
+                config,
+            ).state
         actions = legal_actions(current_state, config)
         if not actions:
             break
