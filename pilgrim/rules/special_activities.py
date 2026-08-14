@@ -2,12 +2,40 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 
 from pilgrim.model.actions import AllocationMove
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import MAX_SPECIAL_ACTIVITY_ACOLYTES, SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import PlayerState
+
+AllocationOutcome = tuple[tuple[str, int], ...]
+
+
+def allocation_outcome(moves: tuple[AllocationMove, ...]) -> AllocationOutcome:
+    """Where a sequence of allocation moves leaves the acolytes, net of how it got there.
+
+    An allocation move carries one acolyte from one slot to another and costs nothing, so a
+    sequence is fully described by how many acolytes each slot ends up gaining or losing. Order
+    gates legality -- you cannot move out of an empty slot -- but never the result.
+
+    Two things fall out of that, and the second is why this is worth having. Sequences that differ
+    only in the order of their moves land on the same vector. So do sequences of DIFFERENT lengths
+    whenever the longer one contains a detour: Abbey to Fields and back again returns every acolyte
+    where it started, and cancels out of the vector entirely. Both are offered today as separate
+    moves, which is how one decision came to offer eight hundred and fifty-eight ways of doing
+    sixty-four things.
+
+    Slots that end level are dropped rather than recorded as zero, so a sequence that puts
+    everything back where it found it projects to the empty tuple -- which is honest, because that
+    is precisely what such a sequence does.
+    """
+    net: Counter[str] = Counter()
+    for move in moves:
+        net[move.destination] += 1
+        net[move.source] -= 1
+    return tuple(sorted((slot, delta) for slot, delta in net.items() if delta))
 
 
 def occupied_special_activities(player_state: PlayerState) -> tuple[str, ...]:
