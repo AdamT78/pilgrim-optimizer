@@ -1,0 +1,201 @@
+{
+  "scenario_id": "deep_round_eighteen_seed_seven_two_player_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "board_file": "configs/board.json",
+  "duties_file": "configs/duties.json",
+  "piety_file": "configs/piety.json",
+  "alms_file": "configs/alms.json",
+  "timing_file": "configs/timing.json",
+  "merchant_file": "configs/merchant.json",
+  "ship_file": "configs/ship.json",
+  "buildings_file": "configs/buildings.json",
+  "duty_tiles": {
+    "north": "ordination",
+    "north_east": "taxation",
+    "east": "give_alms",
+    "south_east": "build_roads",
+    "south": "produce",
+    "south_west": "allocation",
+    "west": "clerical",
+    "north_west": "construct"
+  },
+  "tithe_counters": {
+    "north": "wheat",
+    "east": "cornucopia",
+    "south_east": "silver",
+    "south": "stone",
+    "south_west": "stone",
+    "west": "silver",
+    "north_west": "wheat"
+  },
+  "initial_state": {
+    "active_player": "player_one",
+    "start_player_id": "player_one",
+    "first_player_marker": "player_two",
+    "phase": "sow",
+    "timing": {
+      "absolute_turn": 34,
+      "round_number": 18,
+      "season_number": 3,
+      "turn_in_round": 0
+    },
+    "setup": {
+      "setup_sow_required": true,
+      "setup_sow_complete": true,
+      "setup_sow_completed_by": [
+        "player_one",
+        "player_two"
+      ]
+    },
+    "start_player_confession": {
+      "pending": [],
+      "used": []
+    },
+    "game_over": false,
+    "ship_position": 17,
+    "completed_rounds": 17,
+    "merchant_board_position": 3,
+    "building_market": [
+      "well",
+      "infirmary",
+      "chapter_house",
+      "mint",
+      "grain_store",
+      "library",
+      "dormitory",
+      "cloisters",
+      "mill",
+      "inquisition",
+      "kogge",
+      "pulpit"
+    ],
+    "building_availability": {
+      "chapter_house": 5,
+      "cloisters": 17,
+      "dormitory": 16,
+      "grain_store": 12,
+      "infirmary": 4,
+      "inquisition": 20,
+      "kogge": 21,
+      "library": 15,
+      "mill": 19,
+      "mint": 6,
+      "pulpit": 22,
+      "well": 3
+    },
+    "pilgrimage_rounds": {
+      "site_1": 1,
+      "site_2": 10,
+      "site_3": 13,
+      "site_4": 23
+    },
+    "dummy_acolytes": {
+      "north_group": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "south_group": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 6,
+          "silver": 1,
+          "wheat": 0
+        },
+        "piety": 0,
+        "alms_position": 0,
+        "victory_points": 0,
+        "trade_routes_count": 0,
+        "workforce": {
+          "mancala": [
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          "village": 2,
+          "abbey": 7,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 2
+          }
+        },
+        "special_activities": {},
+        "player_board_slots": {
+          "active_buildings": [],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 6,
+          "silver": 1,
+          "wheat": 0
+        },
+        "piety": 0,
+        "alms_position": 0,
+        "victory_points": 0,
+        "trade_routes_count": 0,
+        "workforce": {
+          "mancala": [
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          "village": 2,
+          "abbey": 9,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        },
+        "special_activities": {},
+        "player_board_slots": {
+          "active_buildings": [],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
+        }
+      }
+    }
+  }
+}
