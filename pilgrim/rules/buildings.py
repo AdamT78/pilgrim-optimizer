@@ -48,6 +48,13 @@ class BuildingAbilitySource:
     payable_to: str | None = None
     usable: bool = False
     reason: str = ""
+    # True when `hire_resource` is a resource the payer PICKED, rather than the one the Merchant
+    # named. Only the cornucopia creates that choice, and only enumeration can settle it -- looking
+    # the source up again later finds the wildcard, not the pick. So a source carrying this must
+    # have the pick written onto the action, or applying it will find the wildcard and fail. Every
+    # consumer of a hire source gets to see this rather than having to remember the cornucopia
+    # exists, which is what went wrong the three times it has gone wrong.
+    hire_resource_chosen: bool = False
 
 
 @dataclass(frozen=True, slots=True)
