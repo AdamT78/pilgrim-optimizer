@@ -468,6 +468,7 @@ def render_setup_map_svg(
     map_layout: dict,
     placements: list[dict],
     choice_keys: bool = False,
+    ship_hex: str | None = None,
 ) -> str:
     """The map with a round's setup on it: the fills under the map, the names and ship over it.
 
@@ -480,10 +481,17 @@ def render_setup_map_svg(
     struck last so a key lies over the hex it catches clicks for rather than under the label on it.
     Opt in for the reason the board's keys are: a page that will never ask should not carry a key
     per building that no stylesheet it has can reveal, which is not hidden markup but dead markup.
+
+    `ship_hex` is where the ship stands. Left out it stands on the first slot, which is the setup
+    page's whole subject and is where a game begins -- but is a guess on any board that has been
+    played, and one that looks right for exactly as long as it takes to finish round one.
     """
     map_svg = render_map_svg(map_layout, render_setup_fill_layer(map_layout, placements))
     map_svg = _with_overlay(map_svg, render_setup_label_layer(map_layout, placements))
-    map_svg = _with_overlay(map_svg, render_ship_overlay(map_layout, placements[0]["hex"]))
+    map_svg = _with_overlay(
+        map_svg,
+        render_ship_overlay(map_layout, placements[0]["hex"] if ship_hex is None else ship_hex),
+    )
     if choice_keys:
         map_svg = _with_overlay(map_svg, render_setup_choice_layer(map_layout, placements))
     return map_svg
