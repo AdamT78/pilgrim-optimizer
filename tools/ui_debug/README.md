@@ -1638,6 +1638,33 @@ at rest; `game_setup.html` does not, because there is no turn on that page and s
 ever ask. Three rects a board that no stylesheet can reveal and no script would want are not hidden
 markup but dead markup, indistinguishable from a mistake.
 
+### The building keys, which are on the map because that is where a building is
+
+`render_setup_map_svg(..., choice_keys=True)` draws one hidden hex per building standing on the
+round track, which `building_choice_styles()` reveals for the ones a turn may construct. The market
+is not a list anywhere in this game — a building stands on the round it goes live on — so asking in
+a panel would mean naming the buildings a second time, in a second order, and leaving the player to
+match the name they picked against the hex they had been reading.
+
+The key is the whole hex, not the name written on it, for the reason the stock keys are the whole
+pill: the label is two short lines of 8pt type. `fill="none"` with `pointer-events="all"` catches
+the click without covering the building, so the name stays readable while it is being offered. The
+outline is the same parchment an offered space on the duty wheel wears, and deliberately not the
+building's own palette — a building already draws itself in its level's colours, and more of the
+same would read as a property of the building rather than as a question about it.
+
+Unlike the stock and seat keys there is no container flag. Those exist so a page can say *which
+seat* is being asked and *which boards* are in the answer; there is one map, so a flag for it would
+have one possible value.
+
+**What a construct changes on screen, in full.** The constructing seat's stone count drops on its
+board, the building vanishes from the round track — the track is drawn from `building_market`, so
+its hex loses its colour and its name — and the log gains a `BUILDING_CONSTRUCTED` line. What does
+*not* happen is the building arriving anywhere: the play view passes no `board_state` to the board
+renderer, so all six building slots on every seat are drawn empty whatever `active_buildings` holds.
+You can watch a building leave the market and not watch it land. That is a gap in the boards, not in
+the turn.
+
 ### The seat key, which is a different question and a different set
 
 `render_player_board_v2_svg(..., seat_key=True)` draws one more hidden rect, and it covers the whole

@@ -145,6 +145,14 @@ SHIP_POSITION_COUNT = len(EDGE_HEX_PATH)
 
 SHIP_COLOR = "#000000"
 
+# The outline a building wears while it is one of the ones that may be constructed. Deliberately
+# the parchment an offered duty space on the wheel is ringed in, and deliberately not the
+# building's own palette: a building already draws itself in its level's colours, and lighting an
+# offered one in more of the same would read as a property of the building rather than as
+# something being asked about it right now.
+BUILDING_CHOICE_STROKE = "#F2EEDF"
+BUILDING_CHOICE_STROKE_WIDTH = 4.0
+
 # The start roll decides which eligible hex carries setup slot 1; the rest follow clockwise.
 START_HEX_BY_ROLL = {1: "E1", 2: "D1", 3: "D2", 4: "C3", 5: "C4", 6: "B5"}
 DEFAULT_START_ROLL = 1
@@ -379,6 +387,59 @@ def render_setup_label_layer(map_layout: dict, placements: list[dict]) -> str:
     return f'<g id="setup-labels">{"".join(groups)}</g>'
 
 
+def render_setup_choice_layer(map_layout: dict, placements: list[dict]) -> str:
+    """One key per building on the track, drawn hidden, for a page that has to ask WHICH BUILDING.
+
+    On the map, because that is where a building already is. The market is not a list anywhere in
+    this game -- a building stands on the round it goes live on, and a player looking for one looks
+    at the track. Asking in a panel beside the board would mean naming the buildings a second time,
+    in a second order, and leaving the player to match the name they picked against the hex they
+    had been reading.
+
+    The key is the whole hex rather than the name written on it, for the reason the stock keys are
+    the whole pill: the label is two short lines of 8pt type and is not a thing to ask anyone to
+    aim at. `fill="none"` with `pointer-events="all"` makes the hex catch the click without putting
+    anything over the building it encloses, so the name stays readable while it is being offered.
+
+    Struck here rather than in the page's script, like every other affordance: the script reveals
+    and hides and never assigns a fill. A key carries the id of the building it stands for, so a
+    page can tell which was pressed without knowing which hex this start roll put it on -- and the
+    rotation is a layout sample, so that is not a thing any page should be made to know.
+    """
+    hex_size = map_layout["hex_size"]
+    points = " ".join(f"{x:.2f},{y:.2f}" for x, y in hex_vertices(0.0, 0.0, hex_size))
+    centers = hex_centers(map_layout)
+    keys = []
+    for placement in placements:
+        building = placement["building"]
+        if building is None:
+            continue
+        center_x, center_y = centers[placement["hex"]]
+        keys.append(
+            f'<polygon data-building-choice-key="{escape(str(building["id"]))}"'
+            f' points="{points}" transform="translate({center_x:.1f},{center_y:.1f})"'
+            f' fill="none" pointer-events="all" stroke="{BUILDING_CHOICE_STROKE}"'
+            f' stroke-width="{BUILDING_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
+        )
+    return f'<g id="setup-choice-keys">{"".join(keys)}</g>'
+
+
+def building_choice_styles() -> str:
+    """What one attribute on a key does to it, for any page that shows the building keys.
+
+    Only the offered ones, and there is no container flag to pair it with. The stock keys have one
+    because a page must say WHICH SEAT is being asked, and the seat keys have one because a page
+    must say which boards are in the answer; there is one map, so "which map" is not a question and
+    a flag for it would be a flag with one possible value. Reveal and a cursor -- no colour is named
+    here or anywhere the script can reach.
+    """
+    return (
+        '  [data-building-choice-key][data-turn-offered="true"] {\n'
+        "    visibility: visible; cursor: pointer;\n"
+        "  }\n"
+    )
+
+
 def render_ship_overlay(map_layout: dict, start_hex: str) -> str:
     """The ship marker alone: the other stops stay unmarked, the ship is moved onto them.
 
@@ -403,17 +464,29 @@ def _with_overlay(svg: str, overlay: str) -> str:
     return f"{svg[:closing]}  {overlay}\n{svg[closing:]}"
 
 
-def render_setup_map_svg(map_layout: dict, placements: list[dict]) -> str:
+def render_setup_map_svg(
+    map_layout: dict,
+    placements: list[dict],
+    choice_keys: bool = False,
+) -> str:
     """The map with a round's setup on it: the fills under the map, the names and ship over it.
 
     The fills go under the map's own edges and labels, so a placed building recolours its hex
     instead of covering it. The names and the ship go on top of the finished map.
 
     This page and the composed game table both draw the map this way, so they draw it from here.
+
+    `choice_keys` adds the hidden keys a page needs to ask which building is being constructed,
+    struck last so a key lies over the hex it catches clicks for rather than under the label on it.
+    Opt in for the reason the board's keys are: a page that will never ask should not carry a key
+    per building that no stylesheet it has can reveal, which is not hidden markup but dead markup.
     """
     map_svg = render_map_svg(map_layout, render_setup_fill_layer(map_layout, placements))
     map_svg = _with_overlay(map_svg, render_setup_label_layer(map_layout, placements))
-    return _with_overlay(map_svg, render_ship_overlay(map_layout, placements[0]["hex"]))
+    map_svg = _with_overlay(map_svg, render_ship_overlay(map_layout, placements[0]["hex"]))
+    if choice_keys:
+        map_svg = _with_overlay(map_svg, render_setup_choice_layer(map_layout, placements))
+    return map_svg
 
 
 def render_player_controls(discs: list[dict]) -> str:
