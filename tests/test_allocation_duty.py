@@ -6,7 +6,11 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.model.special_activities import SpecialActivities
-from pilgrim.rules.special_activities import apply_allocation_move, legal_allocation_moves
+from pilgrim.rules.special_activities import (
+    allocation_outcome,
+    apply_allocation_move,
+    legal_allocation_moves,
+)
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
@@ -107,7 +111,15 @@ def test_allocation_multi_move_two_abbey_transfers_consume_two_abbey() -> None:
     assert after.special_activities.count_for("road_engineer") == 1
 
 
-def test_allocation_special_to_abbey_then_abbey_to_special_is_legal() -> None:
+def test_allocation_moving_between_special_activities_through_an_empty_abbey_is_legal() -> None:
+    """The acolyte can leave Fields and arrive at Engraver even with nothing in the Abbey.
+
+    This used to name the two-move spelling -- Fields to Abbey, then Abbey to Engraver -- and take
+    it as the proof. Generation now offers one sequence per outcome, and that outcome's shortest
+    spelling is the single move Fields to Engraver, so naming the long way round would test which
+    words the engine chose rather than what a player may do. The rule under test was always the
+    arrival, so that is what is asked for.
+    """
     scenario = load_scenario("scenarios/allocation_multi_move_001.json")
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
     mutated_player_one = replace(
@@ -117,18 +129,12 @@ def test_allocation_special_to_abbey_then_abbey_to_special_is_legal() -> None:
     )
     mutated_state = scenario.state.with_player_state(PlayerId.PLAYER_ONE, mutated_player_one)
 
-    actions = [
-        action
-        for action in legal_actions(mutated_state, scenario.config)
-        if action.resolution is TurnResolutionType.ALLOCATION and len(action.allocation_moves) == 2
-    ]
+    wanted = (("engraver", 1), ("fields", -1))
     sequence_action = next(
         action
-        for action in actions
-        if action.allocation_moves[0].source == "fields"
-        and action.allocation_moves[0].destination == "abbey"
-        and action.allocation_moves[1].source == "abbey"
-        and action.allocation_moves[1].destination == "engraver"
+        for action in legal_actions(mutated_state, scenario.config)
+        if action.resolution is TurnResolutionType.ALLOCATION
+        and allocation_outcome(action.allocation_moves) == wanted
     )
 
     result = apply_action(mutated_state, sequence_action, scenario.config)

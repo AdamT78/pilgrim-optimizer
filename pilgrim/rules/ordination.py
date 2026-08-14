@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 
 from pilgrim.model.state import PlayerState
@@ -9,6 +10,24 @@ from pilgrim.model.state import PlayerState
 ORDINATION_ORDAIN = "ordain"
 ORDINATION_MISSION = "mission"
 ORDINATION_STEP_TYPES: tuple[str, str] = (ORDINATION_ORDAIN, ORDINATION_MISSION)
+
+OrdinationOutcome = tuple[tuple[str, int], ...]
+
+
+def ordination_outcome(steps: tuple[str, ...]) -> OrdinationOutcome:
+    """What a step sequence does, with the order it was written in discarded.
+
+    Order gates legality -- you cannot mission out of an empty Abbey -- but it never gates the
+    result. Each ordain moves a serf from village to Abbey, each mission moves an acolyte from
+    Abbey to the City, and each of either costs one wheat, so what a sequence leaves behind is
+    settled by HOW MANY of each it contains and not by the order they were written in. The count
+    also fixes the length, which matters because length is read separately for the wheat cost and
+    for the Infirmary bonus.
+
+    So `('ordain', 'mission')` and `('mission', 'ordain')` project to the same thing, and only one
+    of them needs offering.
+    """
+    return tuple(sorted(Counter(steps).items()))
 
 
 def legal_ordination_steps(player_state: PlayerState) -> tuple[str, ...]:
@@ -65,37 +84,48 @@ def legal_ordination_step_sequences(
     *,
     max_steps: int,
 ) -> tuple[tuple[str, ...], ...]:
-    """Generate deterministic legal ordination step sequences up to max_steps."""
+    """Generate one legal ordination step sequence per distinct outcome, up to max_steps.
+
+    This used to walk depth first and emit every legal SPELLING, so a player was offered both
+    `('ordain', 'mission')` and `('mission', 'ordain')` as separate moves although they leave the
+    game in exactly the same place. That is a real cost to the search and an incoherent thing to
+    put in front of a player, who would be asked to pick between two descriptions of one move.
+
+    So the walk is breadth first and remembers outcomes rather than paths. Reaching an outcome a
+    second time adds nothing -- the position after it is the same position, so everything reachable
+    onward from it has already been queued -- and the branch is dropped where it is found rather
+    than generated and collapsed afterwards.
+
+    Breadth first is what makes the surviving spelling the SHORTEST one, since an outcome is
+    recorded the first time it is reached and no later arrival can be shorter. Where several
+    spellings of one outcome share that shortest length, the surviving one is whichever the walk
+    reached first: parents in the order the previous level recorded them, and within a parent the
+    order `legal_ordination_steps` returns. Nothing is constructed -- every sequence handed back is
+    one this function walked and found legal step by step.
+    """
     if max_steps <= 0:
         return ()
 
-    discovered_sequences: list[tuple[str, ...]] = []
+    shortest_by_outcome: dict[OrdinationOutcome, tuple[str, ...]] = {}
+    frontier: list[tuple[PlayerState, tuple[str, ...]]] = [(player_state, ())]
 
-    def _walk(current_player_state: PlayerState, current_path: tuple[str, ...]) -> None:
-        if len(current_path) >= max_steps:
-            return
-        for step in legal_ordination_steps(current_player_state):
-            try:
-                next_state = apply_ordination_step(current_player_state, step)
-            except ValueError:
-                continue
-            next_path = (*current_path, step)
-            discovered_sequences.append(next_path)
-            _walk(next_state, next_path)
+    for _depth in range(max_steps):
+        next_frontier: list[tuple[PlayerState, tuple[str, ...]]] = []
+        for current_player_state, current_path in frontier:
+            for step in legal_ordination_steps(current_player_state):
+                try:
+                    next_state = apply_ordination_step(current_player_state, step)
+                except ValueError:
+                    continue
+                next_path = (*current_path, step)
+                outcome = ordination_outcome(next_path)
+                if outcome in shortest_by_outcome:
+                    continue
+                shortest_by_outcome[outcome] = next_path
+                next_frontier.append((next_state, next_path))
+        frontier = next_frontier
 
-    _walk(player_state, ())
-
-    ordered_sequences: list[tuple[str, ...]] = []
-    for length in range(max_steps, 0, -1):
-        for sequence in discovered_sequences:
-            if len(sequence) == length:
-                ordered_sequences.append(sequence)
-
-    seen: set[tuple[str, ...]] = set()
-    unique_sequences: list[tuple[str, ...]] = []
-    for sequence in ordered_sequences:
-        if sequence in seen:
-            continue
-        seen.add(sequence)
-        unique_sequences.append(sequence)
-    return tuple(unique_sequences)
+    # Longest first, as this has always emitted them. The sort is stable, so sequences of one
+    # length keep the order the walk found them in.
+    sequences = sorted(shortest_by_outcome.values(), key=len, reverse=True)
+    return tuple(sequences)

@@ -103,6 +103,8 @@ from pilgrim.rules.sow_routes import (
     sow_vector_with_optional_city_kogge as _sow_vector_with_optional_city_kogge,
 )
 from pilgrim.rules.special_activities import (
+    AllocationOutcome,
+    allocation_outcome,
     alms_house_duty_value_bonus_capacity,
     alms_house_extra_payment_options,
     apply_allocation_move_with_capacity,
@@ -1021,9 +1023,8 @@ def _legal_full_turn_actions_for_state(
                                     player_state,
                                     max_moves=duty_value + 1,
                                     special_activity_capacity=activity_capacity,
+                                    min_moves=duty_value + 1,
                                 ):
-                                    if len(move_sequence) <= duty_value:
-                                        continue
                                     actions.append(
                                         _with_hire_payment_fields(
                                             FullTurnAction(
@@ -8578,48 +8579,80 @@ def _allocation_move_sequences(
     *,
     max_moves: int,
     special_activity_capacity: int,
+    min_moves: int = 1,
 ) -> tuple[tuple[AllocationMove, ...], ...]:
+    """Generate one legal allocation move sequence per distinct outcome, between the move bounds.
+
+    This used to walk depth first and emit every legal SPELLING. Because allocation moves are free
+    and reversible, the spellings vastly outnumber the positions they reach: at the round-eighteen
+    fixture allocation was thirty-six thousand of the forty thousand moves on offer, and two thirds
+    of those were another way of writing one already there. A duty value of two offers seventy-two
+    ways of doing twenty-two things there, and a duty value of three eight hundred and fifty-eight
+    ways of doing forty-two.
+
+    So the walk is breadth first and remembers outcomes rather than paths, dropping a branch where
+    it is found rather than generating everything and collapsing afterwards. Reaching an outcome
+    again at the same depth adds nothing, because the position after it is the same position with
+    the same moves left, so its continuations are already queued.
+
+    Breadth first is what makes the surviving spelling the SHORTEST, which matters more here than
+    it does for ordination: a detour that returns an acolyte where it started cancels out of the
+    outcome but not out of the length, so the shortest spelling is the one that says plainly what
+    the move does. Where several share that length, the survivor is whichever the walk reached
+    first: parents in the order the previous level recorded them, then the order
+    `legal_allocation_moves` returns. Nothing is constructed -- a shorter route may LOOK obviously
+    legal without being so, and that is the enumerator's call rather than ours, so every sequence
+    handed back is one this walk found legal move by move.
+
+    WHY `min_moves`, AND WHY THE MEMO CARRIES THE DEPTH. Hiring the Infirmary buys one extra move,
+    and the caller that does so wants only sequences that actually use it -- a hire that changes
+    nothing is not worth offering. Length is therefore read as well as outcome, so it is not enough
+    to keep each outcome once at its shortest: an outcome reachable in two moves must ALSO be
+    offered as a three-move sequence to that caller, or hiring the Infirmary to reach it stops
+    being a move the engine will admit. Keying the memo on outcome and depth together keeps every
+    length an outcome is reachable at, and `min_moves` then picks the shortest at or above the
+    length the caller needs.
+    """
     if max_moves <= 0:
         return ()
 
-    discovered_sequences: list[tuple[AllocationMove, ...]] = []
+    # Keyed on depth as well as outcome, so every length an outcome is reachable at survives.
+    # Filled level by level, so iterating it later walks the depths in ascending order.
+    by_outcome_and_depth: dict[
+        tuple[AllocationOutcome, int],
+        tuple[AllocationMove, ...],
+    ] = {}
+    frontier: list[tuple[object, tuple[AllocationMove, ...]]] = [(player_state, ())]
 
-    def _walk(
-        current_player_state,
-        current_path: tuple[AllocationMove, ...],
-    ) -> None:
-        if len(current_path) >= max_moves:
-            return
-        for move in legal_allocation_moves(
-            current_player_state,
-            capacity=special_activity_capacity,
-        ):
-            try:
-                next_state = apply_allocation_move_with_capacity(
-                    current_player_state,
-                    move,
-                    capacity=special_activity_capacity,
-                )
-            except ValueError:
-                continue
-            next_path = (*current_path, move)
-            discovered_sequences.append(next_path)
-            _walk(next_state, next_path)
+    for depth in range(1, max_moves + 1):
+        next_frontier: list[tuple[object, tuple[AllocationMove, ...]]] = []
+        for current_player_state, current_path in frontier:
+            for move in legal_allocation_moves(
+                current_player_state,
+                capacity=special_activity_capacity,
+            ):
+                try:
+                    next_state = apply_allocation_move_with_capacity(
+                        current_player_state,
+                        move,
+                        capacity=special_activity_capacity,
+                    )
+                except ValueError:
+                    continue
+                next_path = (*current_path, move)
+                key = (allocation_outcome(next_path), depth)
+                if key in by_outcome_and_depth:
+                    continue
+                by_outcome_and_depth[key] = next_path
+                next_frontier.append((next_state, next_path))
+        frontier = next_frontier
 
-    _walk(player_state, ())
-
-    ordered_sequences: list[tuple[AllocationMove, ...]] = []
-    for length in range(max_moves, 0, -1):
-        for sequence in discovered_sequences:
-            if len(sequence) == length:
-                ordered_sequences.append(sequence)
-
-    seen: set[tuple[tuple[str, str], ...]] = set()
-    unique_sequences: list[tuple[AllocationMove, ...]] = []
-    for sequence in ordered_sequences:
-        key = tuple((move.source, move.destination) for move in sequence)
-        if key in seen:
+    shortest_by_outcome: dict[AllocationOutcome, tuple[AllocationMove, ...]] = {}
+    for (outcome, depth), path in by_outcome_and_depth.items():
+        if depth < min_moves or outcome in shortest_by_outcome:
             continue
-        seen.add(key)
-        unique_sequences.append(sequence)
-    return tuple(unique_sequences)
+        shortest_by_outcome[outcome] = path
+
+    # Longest first, as this has always emitted them. The sort is stable, so sequences of one
+    # length keep the order the walk found them in.
+    return tuple(sorted(shortest_by_outcome.values(), key=len, reverse=True))
