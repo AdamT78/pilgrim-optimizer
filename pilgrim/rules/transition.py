@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from itertools import combinations_with_replacement
 
@@ -562,8 +564,85 @@ def _legal_setup_sow_actions(state: GameState, config: GameConfig) -> tuple[Game
     )
 
 
+class _ActionAccumulator:
+    """The action sequence being generated, with an index so de-dup costs no linear scan.
+
+    Generation used to de-dup by writing `if action not in actions` against a plain list. That is
+    O(n) per check and so O(n^2) over a position, which is invisible at the couple of hundred
+    actions the committed scenarios offer and fatal beyond that. The round-eighteen fixture in
+    scenarios/ offers forty thousand, and took a hundred and seventy seconds making 1.4 billion
+    comparisons to find its twenty-eight thousand duplicates.
+
+    Those duplicates are real, which is worth saying because the checks look redundant when every
+    scenario in front of you is shallow. They are not: the same action arrives by several routes
+    once buildings are live, and dropping the checks would change what the engine emits.
+
+    The list remains the emitted sequence and its ORDER is the contract -- a saved search depends
+    on it. The counts are only an index of what the list already holds, so `add_if_new` admits and
+    rejects exactly what the linear scan admitted and rejected. That substitution is sound because
+    every action dataclass is frozen with a generated `__hash__` built from the same fields as its
+    `__eq__`, so equal actions hash equal and a lookup cannot disagree with a scan.
+
+    WHY COUNTS AND NOT A SET. The list is not append-only: `__setitem__` rewrites a stretch of it
+    in place, to fold route and conversion fields into actions already added. A set cannot answer
+    membership after a removal -- it does not know whether the action being written over was the
+    only copy -- so it would start disagreeing with the scan it is standing in for. Counting
+    occurrences mirrors the list exactly, and every operation stays O(1).
+
+    `append` exists because roughly a third of the call sites never de-duped at all, and turning
+    them into de-duping ones would be a behaviour change smuggled in under a performance fix. They
+    still go through here rather than touching the list directly, because a member the index did
+    not record would make some later `add_if_new` admit a duplicate the old scan would have caught.
+    """
+
+    __slots__ = ("_actions", "_counts")
+
+    def __init__(self) -> None:
+        self._actions: list[GameAction] = []
+        self._counts: Counter[GameAction] = Counter()
+
+    def append(self, action: GameAction) -> None:
+        """Add unconditionally, for the sites that never checked for duplicates."""
+        self._actions.append(action)
+        self._counts[action] += 1
+
+    def extend(self, actions: Iterable[GameAction]) -> None:
+        """Add several unconditionally, in the order given."""
+        for action in actions:
+            self.append(action)
+
+    def add_if_new(self, action: GameAction) -> None:
+        """Add unless an equal action is already present."""
+        if self._counts[action]:
+            return
+        self.append(action)
+
+    def as_tuple(self) -> tuple[GameAction, ...]:
+        """The generated sequence, in generation order."""
+        return tuple(self._actions)
+
+    def __len__(self) -> int:
+        return len(self._actions)
+
+    def __getitem__(self, index: int) -> GameAction:
+        return self._actions[index]
+
+    def __setitem__(self, index: int, action: GameAction) -> None:
+        """Rewrite one entry in place, keeping the index in step with it."""
+        previous = self._actions[index]
+        if previous == action:
+            return
+        remaining = self._counts[previous] - 1
+        if remaining:
+            self._counts[previous] = remaining
+        else:
+            del self._counts[previous]
+        self._actions[index] = action
+        self._counts[action] += 1
+
+
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
-    actions: list[GameAction] = []
+    actions = _ActionAccumulator()
     for start_turn_option in _legal_start_turn_relocation_options(state, config):
         start_turn_state = state if start_turn_option is None else start_turn_option.state
         library_source = _resolved_library_source_for_state(start_turn_state, config)
@@ -581,8 +660,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
         )
         for variant_action in variant_actions:
             if not isinstance(variant_action, FullTurnAction):
-                if variant_action not in actions:
-                    actions.append(variant_action)
+                actions.add_if_new(variant_action)
                 continue
             action = variant_action
             if start_turn_option is not None:
@@ -590,8 +668,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     action,
                     option=start_turn_option,
                 )
-            if action not in actions:
-                actions.append(action)
+            actions.add_if_new(action)
             if library_source is None:
                 continue
             if action.merchant_advance_building_id == _BUILDING_GUILD:
@@ -616,9 +693,8 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                 action=action,
                 source=library_source,
             ):
-                if library_action not in actions:
-                    actions.append(library_action)
-    return tuple(actions)
+                actions.add_if_new(library_action)
+    return actions.as_tuple()
 
 
 def _legal_full_turn_actions_for_state(
@@ -643,7 +719,7 @@ def _legal_full_turn_actions_for_state(
         uses_scriptorium=uses_scriptorium_effective_counts,
         uses_customs_house=uses_customs_house_taxation_override,
     )
-    actions: list[GameAction] = []
+    actions = _ActionAccumulator()
 
     def _append_bank_payment_variants_for_action(
         *,
@@ -670,8 +746,7 @@ def _legal_full_turn_actions_for_state(
         )
         for bank_option in bank_options:
             bank_action = _with_bank_payment_fields(action, option=bank_option)
-            if bank_action not in actions:
-                actions.append(bank_action)
+            actions.add_if_new(bank_action)
 
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
@@ -817,15 +892,12 @@ def _legal_full_turn_actions_for_state(
                                         alms_house_extra_wheat=extra_wheat,
                                     )
 
-                                    if (
-                                        _can_afford_resolution_costs(
-                                            player_state,
-                                            required_silver=required_silver,
-                                            required_wheat=required_wheat,
-                                        )
-                                        and base_action not in actions
+                                    if _can_afford_resolution_costs(
+                                        player_state,
+                                        required_silver=required_silver,
+                                        required_wheat=required_wheat,
                                     ):
-                                        actions.append(base_action)
+                                        actions.add_if_new(base_action)
 
                                     if required_wheat <= 0:
                                         continue
@@ -835,15 +907,12 @@ def _legal_full_turn_actions_for_state(
                                         mill_source.source_type == "own_active"
                                         and mill_source.usable
                                     ):
-                                        if (
-                                            _can_afford_resolution_costs(
-                                                player_state,
-                                                required_silver=required_silver,
-                                                required_wheat=mill_wheat_spent,
-                                            )
-                                            and base_action not in actions
+                                        if _can_afford_resolution_costs(
+                                            player_state,
+                                            required_silver=required_silver,
+                                            required_wheat=mill_wheat_spent,
                                         ):
-                                            actions.append(base_action)
+                                            actions.add_if_new(base_action)
                                     elif _is_hired_source(mill_source) and mill_source.usable:
                                         for hire_option in _legal_hire_payment_options(
                                             source=mill_source,
@@ -875,8 +944,7 @@ def _legal_full_turn_actions_for_state(
                                                 ),
                                                 option=hire_option,
                                             )
-                                            if hired_action not in actions:
-                                                actions.append(hired_action)
+                                            actions.add_if_new(hired_action)
                             if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
                                 for building_id in _legal_give_alms_donation_buildings(
                                     player_state,
@@ -1136,8 +1204,7 @@ def _legal_full_turn_actions_for_state(
                                     resolution=TurnResolutionType.ORDINATION,
                                     ordination_steps=step_sequence,
                                 )
-                                if base_action not in actions:
-                                    actions.append(base_action)
+                                actions.add_if_new(base_action)
                                 if bank_modifier_allowed_for_turn:
                                     _append_bank_payment_variants_for_action(
                                         action=base_action,
@@ -1171,8 +1238,7 @@ def _legal_full_turn_actions_for_state(
                                         resolution=TurnResolutionType.ORDINATION,
                                         ordination_steps=step_sequence,
                                     )
-                                    if bonus_action not in actions:
-                                        actions.append(bonus_action)
+                                    actions.add_if_new(bonus_action)
                                     if bank_modifier_allowed_for_turn:
                                         _append_bank_payment_variants_for_action(
                                             action=bonus_action,
@@ -1283,8 +1349,7 @@ def _legal_full_turn_actions_for_state(
                                         ),
                                         option=hire_option,
                                     )
-                                    if hired_infirmary_action not in actions:
-                                        actions.append(hired_infirmary_action)
+                                    actions.add_if_new(hired_infirmary_action)
 
                         for hire_option in _legal_hire_payment_options(
                             source=mill_source,
@@ -1325,8 +1390,7 @@ def _legal_full_turn_actions_for_state(
                                         ),
                                         option=hire_option,
                                     )
-                                    if hired_mill_action not in actions:
-                                        actions.append(hired_mill_action)
+                                    actions.add_if_new(hired_mill_action)
 
                                 if owns_active_infirmary:
                                     bonus_sequences = legal_ordination_step_sequences(
@@ -1361,8 +1425,7 @@ def _legal_full_turn_actions_for_state(
                                             ),
                                             option=hire_option,
                                         )
-                                        if hired_mill_bonus_action not in actions:
-                                            actions.append(hired_mill_bonus_action)
+                                        actions.add_if_new(hired_mill_bonus_action)
                     elif TurnResolutionType.TAXATION in category_actions:
                         strength = _taxation_duty_strength_for_position(
                             state,
@@ -1463,8 +1526,7 @@ def _legal_full_turn_actions_for_state(
                     action,
                     option=scriptorium_option,
                 )
-                if scriptorium_action not in actions:
-                    actions.append(scriptorium_action)
+                actions.add_if_new(scriptorium_action)
     if allow_pulpit_modifier:
         pulpit_options = _legal_pulpit_workforce_move_options(state, config)
         if pulpit_options:
@@ -1489,8 +1551,7 @@ def _legal_full_turn_actions_for_state(
                     action,
                     option=pulpit_option,
                 )
-                if pulpit_action not in actions:
-                    actions.append(pulpit_action)
+                actions.add_if_new(pulpit_action)
     if allow_customs_house_modifier:
         customs_house_options = _legal_customs_house_taxation_options(state, config)
         if customs_house_options:
@@ -1517,8 +1578,7 @@ def _legal_full_turn_actions_for_state(
                     action,
                     option=customs_house_option,
                 )
-                if customs_house_action not in actions:
-                    actions.append(customs_house_action)
+                actions.add_if_new(customs_house_action)
     if allow_wagon_yard_modifier:
         wagon_yard_options = _legal_wagon_yard_free_hire_options(state, config)
         for wagon_yard_option in wagon_yard_options:
@@ -1554,8 +1614,7 @@ def _legal_full_turn_actions_for_state(
                     action,
                     option=wagon_yard_option,
                 )
-                if wagon_yard_action not in actions:
-                    actions.append(wagon_yard_action)
+                actions.add_if_new(wagon_yard_action)
     if allow_guild_modifier:
         guild_options = _legal_guild_merchant_advance_options(state, config)
         if guild_options:
@@ -1585,9 +1644,8 @@ def _legal_full_turn_actions_for_state(
                     action,
                     option=guild_option,
                 )
-                if guild_action not in actions:
-                    actions.append(guild_action)
-    return tuple(actions)
+                actions.add_if_new(guild_action)
+    return actions.as_tuple()
 
 
 def _confession_box_source_label_for_ability_source(source: BuildingAbilitySource) -> str:
