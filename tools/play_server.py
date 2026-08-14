@@ -120,6 +120,79 @@ class UnknownAction(Exception):
 
 
 DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
+
+# Fields answered by picking one stock out of the three. "Which stock grows" is the same question
+# whichever field is asking it, so both are the same KIND of step and the page reveals the same
+# affordance for either. A `None` here means this action has no such choice to make -- the field is
+# optional precisely because most resolutions never ask -- so no step is emitted for it.
+RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_resource")
+
+# Fields that are only legal in certain COMBINATIONS, offered whole rather than one at a time.
+# Setting one number and then the other would walk through states the engine never offered, and
+# deciding which second number goes with a given first is a rule -- the engine's rule, which the
+# page would then be keeping a second copy of. So the combinations that exist are the ones offered.
+#
+# Keyed off the resolution rather than off the values, the way `action_id` and `action_summary`
+# already are, because zero is a legal amount and so cannot stand for "this action never asks".
+COMBINATION_STEPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    ("give_alms_paid", (("alms_payment_silver", "silver"), ("alms_payment_wheat", "wheat"))),
+)
+
+
+def _amounts_in_words(amounts: list[tuple[str, int]]) -> str:
+    """A combination said in words, because two numbers are not a thing to read off a button."""
+    spoken = [f"{amount} {noun}" for noun, amount in amounts if amount]
+    return f"pay {' and '.join(spoken)}" if spoken else "pay nothing"
+
+
+def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
+    """Each further question this page can put about one action, with the fields it answers.
+
+    Emitted after the resolution because they are answers to it: which stock a tithe takes is only
+    a question once tithe is what is happening. Whether a step appears at all is therefore settled
+    by the resolution, which is an earlier step, so every action in a group carries the same ones.
+
+    The fields are kept BESIDE the step rather than inside it. They are this side's business -- how
+    the refusal knows what has been asked -- and a page holding the name of a field would be a page
+    that could come to depend on it, which is how the next one ends up being a special case.
+    """
+    presented: list[tuple[dict, tuple[str, ...]]] = []
+    for name in RESOURCE_CHOICE_FIELDS:
+        value = getattr(action, name, None)
+        if value is not None:
+            presented.append(({"kind": "resource", "value": value}, (name,)))
+    for resolution, fields in COMBINATION_STEPS:
+        if action.resolution.value != resolution:
+            continue
+        amounts = [(noun, getattr(action, name)) for name, noun in fields]
+        presented.append(
+            (
+                {
+                    "kind": "combination",
+                    # A step value is matched with `===` in the page, so it has to be one scalar.
+                    # Spelled out rather than hashed, so a transcript of a turn stays readable.
+                    "value": ",".join(f"{noun}={amount}" for noun, amount in amounts),
+                    "label": _amounts_in_words(amounts),
+                },
+                tuple(name for name, _noun in fields),
+            )
+        )
+    return presented
+
+
+def _presented_steps(action: Any) -> list[dict]:
+    return [step for step, _fields in _presented(action)]
+
+
+def _covered_fields(action: Any) -> set[str]:
+    """Which residue fields this action's steps actually answer.
+
+    Read off the steps that were really emitted, so a field the page can ask about in principle but
+    did not ask about here still belongs in the refusal.
+    """
+    return {name for _step, fields in _presented(action) for name in fields}
+
+
 RESIDUE_FIELDS = tuple(
     field.name
     for field in dataclasses.fields(FullTurnAction)
@@ -131,11 +204,13 @@ def decision_steps(action: Any) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
     Origin, then the route one space at a time, then which duty was selected, then what to do with
-    it. A setup sow stops after the route because that is all it has.
+    it, then whatever that resolution goes on to ask. A setup sow stops after the route because
+    that is all it has.
 
-    Each step says what KIND of thing it is, because they are not answered the same way: a position
-    is a space on the board and a resolution is not on the board at all. The page needs to know
-    which affordance to reveal without knowing what any particular step means.
+    Each step says what KIND of thing it is, because they are not answered in the same place: a
+    position is a space on the board, a resolution is beside the board, a stock is on the asking
+    seat's own board, and a combination is a set of amounts that only go together one way. The page
+    routes on the kind and never on what any particular step means.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
@@ -146,20 +221,29 @@ def decision_steps(action: Any) -> list[dict]:
         return steps
     steps.append({"kind": "position", "value": action.selected_duty})
     steps.append({"kind": "resolution", "value": action.resolution.value})
+    steps += _presented_steps(action)
     return steps
 
 
 def _unresolved_fields(members: list[Any]) -> list[str]:
     """Which fields the actions in one group still disagree about.
 
-    `FullTurnAction` carries some forty optional fields and this page presents four of them, so
-    answering all four can still leave several actions standing, alike in everything asked and
-    different in something never asked. This names those differences rather than guessing between
-    them: the list IS the backlog, worked out from the position in front of the player instead of
-    from anyone's memory of what is unbuilt, and it shrinks as each field gets a way to be chosen.
+    `FullTurnAction` carries some forty optional fields and this page presents a handful of them,
+    so answering everything asked can still leave several actions standing, alike in everything
+    asked and different in something never asked. This names those differences rather than guessing
+    between them: the list IS the backlog, worked out from the position in front of the player
+    instead of from anyone's memory of what is unbuilt, and it shrinks as each field gets a way to
+    be chosen.
+
+    Presented fields are excluded because a step for them is part of the group key, so they cannot
+    differ within a group. Excluded one group at a time, from the steps actually emitted, so a
+    field goes unmentioned only where it was really asked.
     """
+    covered = _covered_fields(members[0])
     return [
-        name for name in RESIDUE_FIELDS if len({getattr(member, name) for member in members}) > 1
+        name
+        for name in RESIDUE_FIELDS
+        if name not in covered and len({getattr(member, name) for member in members}) > 1
     ]
 
 

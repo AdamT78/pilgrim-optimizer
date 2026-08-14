@@ -76,6 +76,7 @@ from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     load_player_boards_v2_layout,
     player_by_id,
     render_player_board_v2_svg,
+    resource_choice_styles,
 )
 from tools.ui_debug.render_table_layout import (  # noqa: E402
     SEATED_PLAYERS,
@@ -289,6 +290,29 @@ def _resolution_keys(candidates: list[dict]) -> str:
     )
 
 
+def _combination_keys(candidates: list[dict]) -> str:
+    """One key per whole combination any candidate offers, all struck here and all hidden.
+
+    A combination is several amounts that are only legal together, so the key stands for the set of
+    them and there is no key for a part of one. Offering the parts separately would let a player
+    build a pairing the engine never offered, and the page would then have to know which pairings
+    go together -- which is the rule it exists not to hold a copy of.
+
+    The words are the seam's, not this file's. What a combination amounts to is a fact about the
+    action, and composing a sentence for it here would be a second description to keep in step.
+    """
+    seen: dict[str, str] = {}
+    for candidate in candidates:
+        for step in candidate["steps"]:
+            if step["kind"] == "combination":
+                seen.setdefault(step["value"], step.get("label", step["value"]))
+    return "".join(
+        f'<button type="button" class="turn-key" data-combination-key="{escape(value)}"'
+        f' data-turn-offered="false">{escape(label)}</button>'
+        for value, label in sorted(seen.items())
+    )
+
+
 def _turn_panels(candidates: list[dict]) -> str:
     """What each candidate would say if it were the one left standing, written out in advance.
 
@@ -330,7 +354,8 @@ def render_turn_panel(payload: dict) -> str:
         return ""
     return (
         '<div class="play-turn" data-component="play-turn">'
-        f'<div class="turn-keys">{_resolution_keys(candidates)}</div>'
+        f'<div class="turn-keys">{_resolution_keys(candidates)}'
+        f"{_combination_keys(candidates)}</div>"
         f"{_turn_panels(candidates)}"
         '<button type="button" class="turn-reset" data-turn-reset data-turn-started="false">'
         "Start this turn again</button>"
@@ -380,8 +405,13 @@ _TURN_SCRIPT = """<script>
   if (!board || !aside) { return; }
   var spaces = board.querySelectorAll('[data-board-position-index]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
+  var pairs = aside.querySelectorAll('[data-combination-key]');
   var panels = aside.querySelectorAll('[data-turn-panel]');
   var reset = aside.querySelector('[data-turn-reset]');
+  /* Every seat's board, so the one being asked can be picked out of them and the rest left alone.
+     Which seat that is is read off the page, where it is already written down, rather than worked
+     out here from whose turn it might be. */
+  var seats = document.querySelectorAll('[data-component="player-board-v2"][data-player-seat]');
   var chosen = [];
 
   function surviving() {
@@ -421,21 +451,44 @@ _TURN_SCRIPT = """<script>
     request.send(JSON.stringify({ action_id: actionId, state_token: TOKEN }));
   }
 
-  function show(offered, settled) {
-    var positions = [];
-    var resolutions = [];
+  /* A step says how it is answered and this sorts them by that, so a new kind of question is a new
+     bucket here and nothing else. No step is recognised by what it is ABOUT: there is no field
+     name anywhere in this file, and a page that told a tithe's stock from a taxation's would be
+     one that had to be taught about the next one. */
+  function offeredByKind(offered, kind) {
+    var values = [];
     offered.forEach(function (step) {
-      if (step.kind === 'position') { positions.push(step.value); }
-      else { resolutions.push(step.value); }
+      if (step.kind === kind) { values.push(step.value); }
     });
+    return values;
+  }
+
+  function mark(elements, attribute, values) {
+    Array.prototype.forEach.call(elements, function (element) {
+      var name = element.getAttribute(attribute);
+      element.setAttribute('data-turn-offered', values.indexOf(name) === -1 ? 'false' : 'true');
+    });
+  }
+
+  function show(offered, settled) {
+    var positions = offeredByKind(offered, 'position');
+    var stocks = offeredByKind(offered, 'resource');
     Array.prototype.forEach.call(spaces, function (space) {
       var index = Number(space.getAttribute('data-board-position-index'));
       space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
       space.setAttribute('data-play-chosen', chosen.indexOf(index) === -1 ? 'false' : 'true');
     });
-    Array.prototype.forEach.call(keys, function (key) {
-      var name = key.getAttribute('data-resolution-key');
-      key.setAttribute('data-turn-offered', resolutions.indexOf(name) === -1 ? 'false' : 'true');
+    mark(keys, 'data-resolution-key', offeredByKind(offered, 'resolution'));
+    mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
+    /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
+       three are not merely unlit: their keys are marked unoffered too, so a key that something
+       else revealed still cannot be pressed. Nobody reaches across the table. */
+    Array.prototype.forEach.call(seats, function (seat) {
+      var asking = stocks.length && seat.getAttribute('data-active-seat') === 'true';
+      if (asking) { seat.setAttribute('data-resource-choice', 'true'); }
+      else { seat.removeAttribute('data-resource-choice'); }
+      mark(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key',
+           asking ? stocks : []);
     });
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
@@ -467,12 +520,22 @@ _TURN_SCRIPT = """<script>
     });
   });
 
-  Array.prototype.forEach.call(keys, function (key) {
-    key.addEventListener('click', function () {
-      if (key.getAttribute('data-turn-offered') !== 'true') { return; }
-      chosen.push(key.getAttribute('data-resolution-key'));
-      render();
+  /* Three kinds of key, answered the same way: press one that is offered and it becomes the next
+     answer. What the key stands for is the attribute it carries, and this does not read it. */
+  function answers(elements, attribute) {
+    Array.prototype.forEach.call(elements, function (key) {
+      key.addEventListener('click', function () {
+        if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+        chosen.push(key.getAttribute(attribute));
+        render();
+      });
     });
+  }
+
+  answers(keys, 'data-resolution-key');
+  answers(pairs, 'data-combination-key');
+  Array.prototype.forEach.call(seats, function (seat) {
+    answers(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key');
   });
 
   Array.prototype.forEach.call(panels, function (panel) {
@@ -520,9 +583,17 @@ def turn_styles(route_color: str) -> str:
     color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
     padding: 6px 10px; cursor: pointer; font: 13px/1.4 Helvetica, Arial, sans-serif;
   }}
-  /* A resolution is only pressable while it is one of the answers still standing. */
+  /* A key is only pressable while it is one of the answers still standing. Resolutions and whole
+     combinations are both keys and both hide the same way. */
   .turn-key {{ display: none; }}
   .turn-key[data-turn-offered="true"] {{ display: inline-block; }}
+
+{resource_choice_styles()}
+  /* The board renderer draws all three stock keys and the rule above shows them together. A stock
+     the surviving turns do not offer is taken back out again here, so the seat is never shown a
+     key it cannot press. Visibility only: the pill, the keyline and where it sits are the
+     renderer's, as they are for the seals. */
+  [data-resource-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
 
   /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
   .turn-panel {{ display: none; }}
@@ -592,6 +663,7 @@ def render_play_view_html(
         scale.crop["map"],
     )
 
+    candidates = payload.get("turn_candidates") or []
     panels = []
     for seat, player_id in enumerate(SEATED_PLAYERS, start=1):
         # An empty chair is still drawn and then hidden, exactly as the debug table hides one: a
@@ -599,8 +671,13 @@ def render_play_view_html(
         # the two who are seated are the two ENDS of the row rather than the first two of it.
         taken = player_id in seated
         player = player_by_id(board_layout, player_id)
+        # The three stock keys, drawn hidden on every seat's board because which seat will be asked
+        # is not known until a turn is part-built. Only the asking seat's are ever revealed, and
+        # `resource_choice_styles` is what reveals them.
         board = render_player_board_v2_svg(
-            _board_layout_for(payload, board_layout, player_id), player
+            _board_layout_for(payload, board_layout, player_id),
+            player,
+            choice_keys=bool(candidates),
         )
         active = taken and player_id == payload["state"]["active_player"]
         panels.append(
@@ -614,7 +691,6 @@ def render_play_view_html(
 
     active_seat = seat_of(payload["state"]["active_player"])
     active_color = player_by_id(board_layout, payload["state"]["active_player"])["fill"]
-    candidates = payload.get("turn_candidates") or []
     # Both are opt-in, the way the choice keys and the extra seals are: a position with nothing to
     # decide is a page with nothing to press, and it should not be carrying the styles for
     # affordances that can never appear on it.
