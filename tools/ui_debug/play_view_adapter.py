@@ -191,14 +191,35 @@ def timeline_slots(payload: dict) -> list[dict]:
 
 
 def state_header(payload: dict) -> list[tuple[str, str]]:
-    """The one status line the box keeps: this round, and how many seats have finished in it.
-
-    `turn_in_round` is taken as-is from the payload and not derived in the page.
-    """
+    """The one status sentence the box keeps: setup progress or round progress."""
     state = payload["state"]
     timing = state["timing"]
+    setup = state.get("setup", {})
     player_count = state.get("table_player_count") or len(state.get("players") or [])
-    return [("Round", f'{timing["round_number"]} - {timing["turn_in_round"]} of {player_count} played')]
+    if state.get("phase") == "setup_sow" and setup.get("setup_sow_required"):
+        sown = len(setup.get("setup_sow_completed_by") or ())
+        return [("Status", f"Setup - {sown} of {player_count} sown")]
+    if (
+        setup.get("setup_sow_required")
+        and setup.get("setup_sow_complete")
+        and timing.get("absolute_turn") == 0
+        and timing.get("turn_in_round") == 0
+    ):
+        sown = len(setup.get("setup_sow_completed_by") or ())
+        return [
+            (
+                "Status",
+                "Setup - "
+                f"{sown} of {player_count} sown. "
+                f'Round {timing["round_number"]} - 0 of {player_count} turns played',
+            )
+        ]
+    return [
+        (
+            "Status",
+            f'Round {timing["round_number"]} - {timing["turn_in_round"]} of {player_count} turns played',
+        )
+    ]
 
 
 def played_this_round(payload: dict) -> tuple[str, ...]:

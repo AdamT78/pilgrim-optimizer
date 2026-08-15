@@ -356,10 +356,10 @@ def _log_blocks(payload: dict) -> list[dict]:
 
 def render_log_box(payload: dict) -> str:
     """Status, question, controls and transcript in one readable box under the Alms panel."""
-    key, value = state_header(payload)[0]
+    _key, sentence = state_header(payload)[0]
     rows = (
-        f'<div class="log-line log-status-line"><span class="log-key">{say(key)}</span>'
-        f'<span class="log-value">{say(value)}</span>{_played_round_pips(payload)}</div>'
+        f'<div class="log-status-line" data-status-line="{escape(sentence)}">'
+        f"{say(sentence)}{_played_round_pips(payload)}</div>"
     )
     # Already formatted when it got here. Newest block first, then put back into reading order by
     # `column-reverse`, so the box opens on what just happened without any scrolling script.
@@ -373,7 +373,10 @@ def render_log_box(payload: dict) -> str:
         )
     entries = "".join(entries_parts)
     transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
-    return f'<div class="play-log" data-component="play-log">{rows}{render_turn_panel(payload)}{transcript}</div>'
+    return (
+        f'<div class="play-log" data-component="play-log">'
+        f"{rows}{render_turn_panel(payload)}{transcript}</div>"
+    )
 
 
 def _prompt_lines(candidates: list[dict]) -> str:
@@ -529,13 +532,11 @@ def log_styles() -> str:
     width: 100%; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px;
     padding: 10px 12px;
-    display: flex; flex-direction: column; min-height: 0;
+    align-self: stretch;
+    display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto;
   }
-  .log-line { display: flex; align-items: center; gap: 10px; }
-  .log-status-line { margin-bottom: 8px; }
-  .log-key { color: #9A9A9A; }
-  .log-value { color: #F2EEDF; text-align: left; }
-  .round-pips { display: inline-flex; gap: 6px; margin-left: auto; }
+  .log-status-line { margin-bottom: 8px; color: #F2EEDF; text-align: left; }
+  .round-pips { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
   .round-pip {
     width: 9px; height: 9px; border-radius: 50%; opacity: 0.30;
     border: 1px solid rgba(255,255,255,0.35);
@@ -549,7 +550,7 @@ def log_styles() -> str:
   .log-transcript {
     margin-top: 8px; padding-top: 8px; border-top: 1px solid #333333;
     display: flex; flex-direction: column-reverse;
-    min-height: 0; overflow-y: auto;
+    min-height: 0; overflow-y: auto; flex: 1 1 auto;
   }
   .log-block {
     margin-bottom: 8px; padding: 6px 8px;

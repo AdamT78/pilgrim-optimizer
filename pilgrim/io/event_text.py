@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pilgrim.model.actions import readable_route
 from pilgrim.model.config import GameConfig
+from pilgrim.model.duties import duty_category_at_position
 from pilgrim.model.enums import EventType, position_name
 from pilgrim.model.events import GameEvent
 
@@ -760,52 +761,84 @@ def _title_words(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
-def _duty_label_for_players(details: dict, positions: tuple[str, ...]) -> str:
+def _duty_label_for_players(details: dict, config: GameConfig) -> str:
     duty_category = str(details.get("duty_category", "")).strip()
     if duty_category:
         return _title_words(duty_category)
     duty_position = details.get("duty_position")
     if isinstance(duty_position, int):
-        return _title_words(position_name(duty_position, positions))
+        if duty_position == 0:
+            return "City"
+        try:
+            return _title_words(duty_category_at_position(config, duty_position))
+        except (TypeError, ValueError):
+            return _title_words(position_name(duty_position, config.board.positions))
     return "Unknown Duty"
+
+
+_PLAYER_TURN_STEP_EVENT_TYPES: set[EventType] = {
+    EventType.PIETY_DELTA,
+    EventType.TAXATION,
+    EventType.RESOURCE_DELTA,
+    EventType.ALMS_PAYMENT,
+    EventType.ALMS_PROGRESS,
+    EventType.ALMS_THRESHOLD_REWARD,
+    EventType.ACOLYTE_RECALL,
+    EventType.START_PLAYER_SELECTION,
+}
+
+_PLAYER_ROUND_END_EVENT_TYPES: set[EventType] = {
+    EventType.SHIP_ADVANCE,
+    EventType.MERCHANT_ADVANCE,
+    EventType.START_PLAYER_MARKER,
+    EventType.ROUND_END,
+}
+
+
+_PLAYER_DROPPED_EVENT_TYPES: set[EventType] = {
+    EventType.SOWING,
+    EventType.SETUP_SOWING,
+    EventType.SETUP_SOW_COMPLETE,
+    EventType.SETUP_PLAYER_ADVANCE,
+    EventType.DUTY_RESOLUTION,
+    EventType.DUTY_DEFERRED,
+    EventType.INVARIANT_CHECK,
+    EventType.TRADE_ROUTE_INCOME_SKIPPED,
+    EventType.START_PLAYER_TIE_BREAK,
+    EventType.TURN_ADVANCE,
+    EventType.ROUND_ADVANCE,
+    EventType.SEASON_ADVANCE,
+    EventType.CONFESSION_BOX_PHASE,
+}
+
+_PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
+    EventType.SETUP_COMPLETE,
+    *_PLAYER_TURN_STEP_EVENT_TYPES,
+    EventType.BUILDING_DONATION,
+    EventType.BUILDING_CONSTRUCTED,
+    EventType.ALLOCATION,
+    *_PLAYER_ROUND_END_EVENT_TYPES,
+}
+
+PLAYER_EVENT_FALLBACK_TYPES: tuple[EventType, ...] = tuple(
+    event_type
+    for event_type in EventType
+    if event_type not in (_PLAYER_DROPPED_EVENT_TYPES | _PLAYER_EXPLICIT_EVENT_TYPES)
+)
 
 
 def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None:
     """One player-facing line per event, or None when this event is transcript-noise."""
     details = dict(event.details)
-    positions = config.board.positions
     actor = event.actor.name.lower()
     event_type = event.event_type
 
-    if event_type in {
-        EventType.SOWING,
-        EventType.SETUP_SOWING,
-        EventType.SETUP_SOW_COMPLETE,
-        EventType.SETUP_PLAYER_ADVANCE,
-        EventType.INVARIANT_CHECK,
-        EventType.TRADE_ROUTE_INCOME_SKIPPED,
-        EventType.TURN_ADVANCE,
-        EventType.ROUND_ADVANCE,
-        EventType.SEASON_ADVANCE,
-    }:
+    if event_type in _PLAYER_DROPPED_EVENT_TYPES:
         return None
 
     if event_type is EventType.SETUP_COMPLETE:
         start_player = str(details.get("start_player", "unknown"))
         return f"Setup complete. {start_player} begins this round."
-
-    if event_type is EventType.DUTY_RESOLUTION:
-        duty = _duty_label_for_players(details, positions)
-        if details.get("mode") == "tithe":
-            resource = str(details.get("tithe_resource", "")).strip() or "a resource"
-            return f"{actor} took the tithe at {duty} and gained {resource}."
-        effect = str(details.get("effect", "")).strip()
-        action = _title_words(effect) if effect else "an action"
-        if effect == "produce_wheat":
-            return f"{actor} chose {action} at {duty} and gained wheat."
-        if effect == "produce_stone":
-            return f"{actor} chose {action} at {duty} and gained stone."
-        return f"{actor} chose {action} at {duty}."
 
     if event_type is EventType.RESOURCE_DELTA:
         deltas = [
@@ -817,30 +850,154 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         changed = [(name, delta) for name, delta in deltas if delta != 0]
         if not changed:
             return None
-        # One positive stock only is usually already named by the duty-resolution line.
+        # One positive stock only is usually already named by the action summary line.
         if len(changed) == 1 and changed[0][1] > 0 and changed[0][0] != "piety":
             return None
         return f"{actor} " + "; ".join(f"{name} {delta:+d}" for name, delta in changed)
 
+    if event_type is EventType.TAXATION:
+        step = str(details.get("step", "")).strip()
+        if step == "step_1":
+            resource = str(details.get("resource", "a resource")).strip() or "a resource"
+            return f"{actor} took {resource} from Taxation."
+        if step == "step_2":
+            no_bonus = bool(details.get("no_bonus", False))
+            resources = [
+                resource.strip()
+                for resource in str(details.get("resources", "")).split(",")
+                if resource.strip()
+            ]
+            if no_bonus or not resources:
+                return f"{actor} took no bonus resource from other majority duties."
+            if len(resources) == 1:
+                text = resources[0]
+            elif len(resources) == 2:
+                text = f"{resources[0]} and {resources[1]}"
+            else:
+                text = ", ".join(resources[:-1]) + f", and {resources[-1]}"
+            return f"{actor} took bonus {text} from other majority duties."
+        return f"{actor} completed Taxation."
+
+    if event_type is EventType.PIETY_DELTA:
+        if "old_piety_position" in details and "new_piety_position" in details:
+            old_position = int(details["old_piety_position"])
+            new_position = int(details["new_piety_position"])
+            if old_position == new_position:
+                return None
+            delta = new_position - old_position
+            if delta > 0:
+                return f"{actor} gained {delta} piety and now has {new_position} piety."
+            return f"{actor} lost {abs(delta)} piety and now has {new_position} piety."
+        amount = int(details.get("piety", 0))
+        if amount == 0:
+            return None
+        if amount > 0:
+            return f"{actor} gained {amount} piety."
+        return f"{actor} lost {abs(amount)} piety."
+
+    if event_type is EventType.ALMS_PAYMENT:
+        credited_silver = details.get("credited_silver")
+        credited_wheat = details.get("credited_wheat")
+        actual_paid_silver = details.get("actual_paid_silver")
+        actual_paid_wheat = details.get("actual_paid_wheat")
+        minority_silver_cost = int(details.get("minority_silver_cost", 0))
+
+        if (
+            credited_silver is not None
+            and credited_wheat is not None
+            and actual_paid_silver is not None
+            and actual_paid_wheat is not None
+        ):
+            line = (
+                f"{actor} committed {int(credited_silver)} silver and {int(credited_wheat)} wheat "
+                "for Give Alms"
+            )
+            if int(actual_paid_silver) != int(credited_silver) or int(actual_paid_wheat) != int(
+                credited_wheat
+            ):
+                line += (
+                    f" and paid {int(actual_paid_silver)} silver and {int(actual_paid_wheat)} wheat"
+                )
+        else:
+            silver = int(details.get("silver", 0))
+            wheat = int(details.get("wheat", 0))
+            line = f"{actor} paid {silver} silver and {wheat} wheat for Give Alms"
+        if minority_silver_cost > 0:
+            line += f", including minority cost {minority_silver_cost} silver"
+        return f"{line}."
+
+    if event_type is EventType.BUILDING_DONATION:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        donated_label = building_name if building_name else _title_words(building_id)
+        donation_vp = int(details.get("donation_vp", 0))
+        return f"{actor} donated {donated_label} for {donation_vp} victory points."
+
+    if event_type is EventType.BUILDING_CONSTRUCTED:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        built_label = building_name if building_name else _title_words(building_id)
+        source = str(details.get("source", "market"))
+        stone_cost = int(details.get("stone_cost", 0))
+        return f"{actor} constructed {built_label} from {source} for {stone_cost} stone."
+
+    if event_type is EventType.ALLOCATION:
+        from_pool = _title_words(str(details.get("from_pool", "unknown")))
+        to_pool = _title_words(str(details.get("to_pool", "unknown")))
+        amount = int(details.get("amount", 0))
+        noun = "acolyte" if amount == 1 else "acolytes"
+        return f"{actor} moved {amount} {noun} from {from_pool} to {to_pool}."
+
+    if event_type is EventType.ALMS_PROGRESS:
+        old_row = int(details.get("old_row", 0))
+        new_row = int(details.get("new_row", 0))
+        return f"{actor} moved on the Alms table from row {old_row} to row {new_row}."
+
+    if event_type is EventType.ALMS_THRESHOLD_REWARD:
+        threshold = int(details.get("threshold", -1))
+        reward_key = str(details.get("reward", ""))
+        moved = bool(details.get("moved", False))
+        if reward_key == "village_to_abbey":
+            return (
+                f"Crossed Alms row {threshold} and moved 1 serf from Village to Abbey."
+                if moved
+                else f"Crossed Alms row {threshold}; no Village serf was available to move."
+            )
+        if reward_key == "abbey_to_city":
+            return (
+                f"Crossed Alms row {threshold} and moved 1 acolyte from Abbey to City."
+                if moved
+                else f"Crossed Alms row {threshold}; no Abbey acolyte was available to move."
+            )
+        if reward_key == "village_to_city":
+            return (
+                f"Crossed Alms row {threshold} and moved 1 serf from Village to City."
+                if moved
+                else f"Crossed Alms row {threshold}; no Village serf was available to move."
+            )
+        reward = _title_words(reward_key) if reward_key else "reward"
+        return f"Crossed Alms row {threshold}; reward {reward}."
+
     if event_type is EventType.ACOLYTE_RECALL:
         duty_position = int(details.get("duty_position", -1))
         recalled = int(details.get("recalled", 0))
-        duty = _title_words(position_name(duty_position, positions))
-        return f"Round end: recalled {recalled} from {duty} to City."
+        duty = _duty_label_for_players({"duty_position": duty_position}, config)
+        noun = "acolyte" if recalled == 1 else "acolytes"
+        return f"{actor} recalled {recalled} {noun} from {duty} to City."
 
     if event_type is EventType.SHIP_ADVANCE:
         from_position = int(details.get("from_position", 0))
         to_position = int(details.get("to_position", 0))
-        return f"Round end: ship advanced {from_position} -> {to_position}."
+        return f"Round end: ship advanced from {from_position} to {to_position}."
 
     if event_type is EventType.MERCHANT_ADVANCE:
         from_duty = _title_words(str(details.get("from_duty", "unknown")))
         to_duty = _title_words(str(details.get("to_duty", "unknown")))
-        return f"Round end: Merchant advanced {from_duty} -> {to_duty}."
+        return f"Round end: Merchant advanced from {from_duty} to {to_duty}."
 
     if event_type is EventType.START_PLAYER_MARKER:
         deciding_player = str(details.get("deciding_player", "unknown"))
-        return f"{deciding_player} took the First Player marker for this round."
+        return f"Round end: {deciding_player} took the First Player marker for this round."
 
     if event_type is EventType.START_PLAYER_SELECTION:
         deciding_player = str(details.get("deciding_player", "unknown"))
@@ -855,4 +1012,6 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         if "enabled_route" in details or "skipped_location" in details:
             return None
 
-    return format_event(event, config)
+    if event_type in PLAYER_EVENT_FALLBACK_TYPES:
+        return format_event(event, config)
+    raise AssertionError(f"Unhandled player event formatting branch for {event_type.value}")
