@@ -20,6 +20,7 @@ import subprocess
 import threading
 import urllib.error
 import urllib.request
+from collections import Counter
 from contextlib import contextmanager
 from html import escape
 from html.parser import HTMLParser
@@ -2401,6 +2402,47 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
     }
 
 
+def _previewed_destinations(snapshot: dict, player_id: str) -> Counter:
+    """Where the preview says cubes stand for one seat, with repeats as counts."""
+    shown: Counter = Counter()
+    for position in snapshot:
+        visible = _visible_cubes(snapshot, position, player_id)
+        if visible:
+            shown[position] = visible
+    return shown
+
+
+def _destinations_named_by(route_edges: list[str]) -> Counter:
+    """Where the chosen route says cubes were placed, read straight off the edge answers."""
+    return Counter(edge.split("->", 1)[1] for edge in route_edges)
+
+
+def _assert_preview_matches_route(snapshot: dict, player_id: str, route_edges: list[str]) -> None:
+    expected = _destinations_named_by(route_edges)
+    shown = _previewed_destinations(snapshot, player_id)
+    if shown == expected:
+        return
+    unexpected = sorted(
+        position for position in shown if shown[position] > expected.get(position, 0)
+    )
+    missing = sorted(
+        position for position in expected if expected[position] > shown.get(position, 0)
+    )
+    note = []
+    if unexpected:
+        note.append(f"unexpected cube at {', '.join(unexpected)}")
+    if missing:
+        note.append(f"missing cube at {', '.join(missing)}")
+    assert shown == expected, (
+        "preview diverged from the route the answers named: "
+        + "; ".join(note)
+        + f"; expected {dict(expected)}, got {dict(shown)}"
+    )
+
+
+SETUP_SWEEP_SEEDS = (7, 99)
+
+
 @needs_node
 def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
     server = _served(tmp_path)
@@ -2461,6 +2503,94 @@ def test_reset_restores_every_cube_to_its_opening_opacity(tmp_path: Path) -> Non
 
 
 @needs_node
+def test_preview_cubes_follow_the_non_first_branch_back_through_the_city(
+    tmp_path: Path,
+) -> None:
+    """The preview lands cubes where the chosen arrows point, including the City."""
+    server = _served(tmp_path)
+    active = server.payload["state"]["active_player"]
+    route = [
+        "city->north",
+        "north->north_east",
+        "north_east->east",
+        "east->city",
+        "city->south",
+    ]
+    clicks = [_follow("city->north"), _follow("east->city"), _follow("city->south")]
+    transcript = _run_script(server, clicks, tmp_path)
+    after = transcript["cubes"][-1]
+
+    assert transcript["offered"][2] == ["city->north", "city->south"]
+    assert clicks[-1]["value"] == transcript["offered"][2][1], "the branch taken was not the non-first one"
+    _assert_preview_matches_route(after, active, route)
+    assert _visible_cubes(after, "north", active) == 1
+    assert _visible_cubes(after, "north_east", active) == 1
+    assert _visible_cubes(after, "east", active) == 1
+    assert _visible_cubes(after, "city", active) == 1
+    assert _visible_cubes(after, "south", active) == 1
+    assert _visible_cubes(after, "south_east", active) == 0
+
+
+@needs_node
+@pytest.mark.parametrize("seed", SETUP_SWEEP_SEEDS)
+def test_after_any_setup_answers_preview_matches_the_route_those_answers_name(
+    tmp_path: Path,
+    seed: int,
+) -> None:
+    """For every setup route in the sweep, placements match the chosen route's destinations."""
+    server = _served(tmp_path, seed=seed)
+    active = server.payload["state"]["active_player"]
+    decisions = _engine_decisions(server)
+
+    assert decisions, f"seed {seed} had no setup-sow routes to check"
+    for route in decisions:
+        route_edges = [step["value"] for step in route if step["kind"] == "edge"]
+        clicks = _clicks_to(server, decisions, _values(route))
+        transcript = _run_script(server, clicks, tmp_path)
+        _assert_preview_matches_route(transcript["cubes"][-1], active, route_edges)
+
+
+@needs_node
+def test_restoring_first_survivor_destination_lookup_is_caught(tmp_path: Path) -> None:
+    """MUTATION. Re-deriving the destination from `live[0]` must fail on branch choice."""
+    server = _served(tmp_path)
+    active = server.payload["state"]["active_player"]
+    route = [
+        "city->north",
+        "north->north_east",
+        "north_east->east",
+        "east->city",
+        "city->south",
+    ]
+    clicks = [_follow("city->north"), _follow("east->city"), _follow("city->south")]
+    regressed = _run_script(
+        server,
+        clicks,
+        tmp_path,
+        mutate=lambda code: code.replace(
+            (
+                "var stepIndex = prefix.length;\n"
+                "      var step = null;\n"
+                "      live.forEach(function (candidate) {\n"
+                "        var offered = candidate.steps[stepIndex];\n"
+                "        if (step || !offered) { return; }\n"
+                "        if (offered.value === answer) {\n"
+                "          step = offered;\n"
+                "        }\n"
+                "      });"
+            ),
+            "var stepIndex = prefix.length;\n      var step = live[0].steps[stepIndex];",
+        ).replace(
+            "var ends = String(answer).split('->');",
+            "var ends = String(step.value).split('->');",
+        ),
+    )
+
+    with pytest.raises(AssertionError, match="south_east"):
+        _assert_preview_matches_route(regressed["cubes"][-1], active, route)
+
+
+@needs_node
 def test_a_preview_overflow_is_recorded_and_stops_further_preview(tmp_path: Path) -> None:
     """MUTATION. If one placement fails, previewing stops and the overflow is observable."""
     server = _served(tmp_path)
@@ -2478,9 +2608,6 @@ def test_a_preview_overflow_is_recorded_and_stops_further_preview(tmp_path: Path
     assert overflowed["overflow"][-1] is True, "overflow was not recorded"
     assert overflowed["counterShown"][-1] == ["5"], "preview kept counting after overflow"
     assert _visible_cubes(overflowed["cubes"][-1], "north", active) == 0
-
-
-SETUP_SWEEP_SEEDS = (7, 99)
 
 
 @needs_node
