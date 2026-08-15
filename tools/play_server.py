@@ -56,6 +56,7 @@ from pilgrim.model.actions import (  # noqa: E402
     action_id,
     action_summary,
 )
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
 
@@ -185,7 +186,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 # Sentences, not fragments, and no sentence is composed in JavaScript. The page reveals one of
 # these whole, the way it reveals a summary or a key.
 ORIGIN_PROMPT = "Point at the space to lift acolytes from."
-ROUTE_PROMPT = "Point at the next space on the route."
+ROUTE_PROMPT = "Follow an arrow to the next space."
 DUTY_PROMPT = "Point at the duty to select."
 RESOLUTION_PROMPT = "Choose what to do with that duty."
 RESOURCE_PROMPT = "Choose a resource on your own board."
@@ -332,6 +333,17 @@ def _presented_steps(action: Any) -> list[dict]:
     return [step for step, _fields in _presented(action)]
 
 
+def _position_name(position: int) -> str:
+    """Engine position name for one index, in the canonical order view payloads carry."""
+    return CANONICAL_POSITION_NAMES[position]
+
+
+def _counter_start(action: Any) -> int:
+    """How many cubes this route lifts before any edge is followed."""
+    route = tuple(getattr(action, "route", ()) or ())
+    return len(route)
+
+
 def _covered_fields(action: Any) -> set[str]:
     """Which residue fields this action's steps actually answer.
 
@@ -379,9 +391,27 @@ def decision_steps(action: Any) -> list[dict]:
     # Three positions and three questions. They are the same kind because they are answered the
     # same way -- by pointing at a space -- and they say different things because they are asking
     # about different things. The kind is for the page; the words are for the player.
-    steps = [{"kind": "position", "value": action.origin, "prompt": ORIGIN_PROMPT}]
+    route = tuple(action.route)
+    counter = _counter_start(action)
+    steps = [
+        {
+            "kind": "position",
+            "value": action.origin,
+            "prompt": ORIGIN_PROMPT,
+            # What the counter reads once the origin is taken and the hand is lifted.
+            "counter": counter,
+        }
+    ]
+    path = (action.origin, *route)
     steps += [
-        {"kind": "position", "value": position, "prompt": ROUTE_PROMPT} for position in action.route
+        {
+            "kind": "edge",
+            "value": f"{_position_name(path[index])}->{_position_name(path[index + 1])}",
+            "prompt": ROUTE_PROMPT,
+            # Read by the page verbatim. No counting in JavaScript.
+            "counter": counter - (index + 1),
+        }
+        for index in range(len(route))
     ]
     if isinstance(action, SetupSowAction):
         return steps
@@ -445,6 +475,9 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
         candidates.append(
             {
                 "steps": decision_steps(members[0]),
+                # The count before any route step is followed. The page reads this value directly
+                # rather than deriving it from route length.
+                "counter_start": _counter_start(members[0]),
                 # Nothing to submit while the choice is incomplete, so there is no id to quote and
                 # no summary to agree to. The page has to say so rather than send something.
                 "action_id": action_id(members[0]) if settled else None,
