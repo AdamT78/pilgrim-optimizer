@@ -1,16 +1,15 @@
-"""A thin local process holding one loaded scenario, so the play view can be looked at live.
+"""A thin local process serving setup + live play views from one in-memory session.
 
 Standard library only. The repo declares no dependencies at all -- `pyproject.toml` has
 `dependencies = []` -- so bringing in a framework to serve four routes would be the first one, and
 `http.server` is enough for one local page playing one game.
 
-    GET  /              the play view, rendered from the state now held
+    GET  /              setup page (when no game loaded) or play view (when one is loaded)
     GET  /state.json    the payload the adapter was handed, verbatim
     GET  /actions.json  the legal actions, structured, with an id each and a token for the state
+    POST /start         generate a scenario from setup choices and load it into this session
+    POST /new-game      clear the loaded game and return to setup
     POST /action        apply one of them, by id, quoting the token it was read from
-
-SETUP SOW ONLY. `/action` will apply whatever `legal_actions` offers, but the page only knows how
-to ask for a setup sow; a normal turn is a later PR. The distinction is the page's, not this file's.
 
 ONE GAME, IN MEMORY, NO PERSISTENCE. Restarting the process loses the position. That is a real
 limitation and is left rather than papered over: saving would mean choosing a format and a place to
@@ -25,7 +24,7 @@ one directory up is how the seam stays visible rather than becoming a convention
 
 Run from the repo root:
 
-    python3 -m pilgrim.cli generate-setup --players 4 --seed 99 --output /tmp/scenario.json
+    python3 tools/play_server.py
     python3 tools/play_server.py /tmp/scenario.json
 """
 
@@ -36,12 +35,16 @@ import dataclasses
 import enum
 import hashlib
 import json
+import random
 import socketserver
 import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from html import escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -50,6 +53,7 @@ from pilgrim.io.event_text import format_event_for_players  # noqa: E402
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
+from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scenario  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
     SetupSowAction,
     StartPlayerConfessionBoxAction,
@@ -58,9 +62,41 @@ from pilgrim.model.actions import (  # noqa: E402
     action_summary_for_players,
 )
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
-from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
+from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload  # noqa: E402
+from tools.ui_debug.render_table_layout import SEATED_PLAYERS  # noqa: E402
 
 DEFAULT_PORT = 8765
+SETUP_MODE_RANDOM = "random"
+SETUP_MODE_BASIC = "basic"
+ROLE_HUMAN = "human"
+ROLE_BOT = "bot"
+SEAT_ROLE_OPTIONS: tuple[str, ...] = (ROLE_HUMAN, ROLE_BOT)
+SCENARIO_PATH_FIELDS: tuple[str, ...] = (
+    "board_file",
+    "duties_file",
+    "piety_file",
+    "alms_file",
+    "timing_file",
+    "merchant_file",
+    "ship_file",
+    "buildings_file",
+)
+
+
+@dataclasses.dataclass(slots=True)
+class SessionState:
+    """Local UI-session facts that are intentionally not part of the engine state.
+
+    `game_loaded` and seat roles belong beside the server process, never in `GameState` and never
+    in scenario JSON. If they crossed the seam, search would see bot seats and evaluate a different
+    game than the one a human is playing.
+    """
+
+    game_loaded: bool = False
+    seat_roles: dict[str, str] = dataclasses.field(default_factory=dict)
+    setup_mode: str = SETUP_MODE_RANDOM
+    player_count: int = 4
+    seed: int | None = None
 
 
 def _plain(value: Any) -> Any:
@@ -119,6 +155,164 @@ class StaleStateToken(Exception):
 
 class UnknownAction(Exception):
     """The submission named an action that is not legal in the position now held."""
+
+
+def _default_seat_roles(player_count: int) -> dict[str, str]:
+    return {SEATED_PLAYERS[index]: ROLE_HUMAN for index in range(player_count)}
+
+
+def _prefill_seed() -> int:
+    """Server-side seed suggestion for the setup form."""
+    return random.SystemRandom().randint(1000, 9999)
+
+
+def _rewrite_generated_paths_absolute(generated: dict[str, Any]) -> None:
+    """Make generated config file paths loadable from any temporary scenario location."""
+    repo_root = Path(__file__).resolve().parents[1]
+    for field_name in SCENARIO_PATH_FIELDS:
+        raw = generated.get(field_name)
+        if not isinstance(raw, str):
+            raise ValueError(f"Generated scenario field '{field_name}' must be a string path.")
+        path = Path(raw)
+        generated[field_name] = str((path if path.is_absolute() else (repo_root / path)).resolve())
+
+
+def _render_setup_page(*, suggested_seed: int) -> str:
+    """The pre-game setup form served when no game is loaded in this session."""
+    count_options = "".join(
+        f'<option value="{count}"{" selected" if count == 4 else ""}>{count}</option>'
+        for count in SUPPORTED_PLAYER_COUNTS
+    )
+    seat_rows = []
+    for seat, player_id in enumerate(SEATED_PLAYERS, start=1):
+        colour = SEAT_COLOURS[player_id]
+        seat_rows.append(
+            "<div class=\"seat-row\" data-seat-row=\"{seat}\">"
+            "<span class=\"seat-label\">Seat {seat} ({colour})</span>"
+            "<select name=\"seat_{seat}_role\">"
+            "<option value=\"human\" selected>Human</option>"
+            "<option value=\"bot\" disabled>Bot (disabled)</option>"
+            "</select></div>".format(seat=seat, colour=escape(colour))
+        )
+    rows = "".join(seat_rows)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pilgrim Optimizer - Start Game</title>
+<style>
+  body {{
+    margin: 0; padding: 24px; background: #151515; color: #F2EEDF;
+    font: 14px/1.5 Helvetica, Arial, sans-serif;
+    display: flex; justify-content: center;
+  }}
+  .setup-card {{
+    width: min(680px, 100%);
+    background: #101010; border: 1px solid #333333; border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.5); padding: 20px 22px;
+  }}
+  h1 {{ margin: 0 0 8px 0; font-size: 22px; }}
+  p {{ margin: 0 0 16px 0; color: #C9C4B4; }}
+  .field {{ margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }}
+  label {{ color: #D5D0BE; }}
+  select, input, button {{
+    font: inherit; border-radius: 8px; border: 1px solid #4A4A4A;
+    background: #1D1D1D; color: #F2EEDF; padding: 8px 10px;
+  }}
+  .seat-rows {{
+    border: 1px solid #2F2F2F; border-radius: 8px; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px;
+  }}
+  .seat-row {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
+  /* `.seat-row` sets an author display, so `[hidden]` needs an explicit author override too. */
+  .seat-row[hidden] {{ display: none; }}
+  .seat-label {{ font-weight: 600; color: #DFD5BD; }}
+  .actions {{ margin-top: 18px; display: flex; justify-content: flex-end; }}
+  button {{
+    background: #2E7B76; border-color: #2E7B76; color: #F2EEDF; font-weight: 600;
+    cursor: pointer;
+  }}
+  button:hover {{ filter: brightness(1.08); }}
+</style>
+</head>
+<body>
+  <main class="setup-card">
+    <h1>Start A New Game</h1>
+    <p>Choose seats and a seed, then deal a fresh setup.</p>
+    <form method="post" action="/start">
+      <div class="field">
+        <label for="player_count">Player count</label>
+        <select id="player_count" name="player_count">{count_options}</select>
+      </div>
+      <div class="field">
+        <label>Seat roles</label>
+        <div class="seat-rows" id="seat-rows">{rows}</div>
+      </div>
+      <div class="field">
+        <label for="setup_mode">Setup</label>
+        <select id="setup_mode" name="setup_mode">
+          <option value="{SETUP_MODE_RANDOM}" selected>Random</option>
+          <option value="{SETUP_MODE_BASIC}" disabled>Basic (disabled)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="seed">Seed</label>
+        <input id="seed" name="seed" type="number" required value="{suggested_seed}">
+      </div>
+      <div class="actions">
+        <button type="submit">Start game</button>
+      </div>
+    </form>
+  </main>
+<script>
+  (function () {{
+    var count = document.getElementById('player_count');
+    var rows = document.querySelectorAll('[data-seat-row]');
+    function refreshRows() {{
+      var selected = Number(count.value || 4);
+      Array.prototype.forEach.call(rows, function (row) {{
+        row.hidden = Number(row.getAttribute('data-seat-row')) > selected;
+      }});
+    }}
+    count.addEventListener('change', refreshRows);
+    refreshRows();
+  }})();
+</script>
+</body>
+</html>
+"""
+
+
+def _render_board_page(payload: dict, *, allow_reset_to_setup: bool) -> str:
+    """Render the play board, optionally with a session-level return-to-setup control."""
+    page = render_play_view_from_payload(payload)
+    if not allow_reset_to_setup:
+        return page
+    style = """
+<style>
+  .session-reset {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+  }
+  .session-reset button {
+    font: 12px/1.2 Helvetica, Arial, sans-serif;
+    border: 1px solid #5B3D2B;
+    border-radius: 8px;
+    background: #2A1A14;
+    color: #EACFB7;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+  .session-reset button:hover { filter: brightness(1.08); }
+</style>
+"""
+    control = (
+        '<form class="session-reset" method="post" action="/new-game">'
+        '<button type="submit">Start a new game (discard this game)</button></form>'
+    )
+    return page.replace("</head>", f"{style}</head>", 1).replace("<body>", f"<body>{control}", 1)
 
 
 DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
@@ -519,21 +713,116 @@ class PlayServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], scenario_path: Path) -> None:
+    def __init__(self, address: tuple[str, int], scenario_path: Path | None = None) -> None:
         super().__init__(address, PlayHandler)
-        scenario = load_scenario(str(scenario_path))
-        self.state = scenario.state
-        self.config = scenario.config
+        self._setup_door_enabled = scenario_path is None
+        self._session_workspace = tempfile.TemporaryDirectory(prefix="play-server-session-")
+        self._workspace_path = Path(self._session_workspace.name)
+        self._latest_generated_scenario: dict[str, Any] | None = None
+        self.session = SessionState(
+            game_loaded=False,
+            seat_roles=_default_seat_roles(4),
+            setup_mode=SETUP_MODE_RANDOM,
+            player_count=4,
+            seed=None,
+        )
+        self.state: Any | None = None
+        self.config: Any | None = None
+        self.state_payload: dict[str, Any] = {}
+        self.token = ""
+        self.payload: dict[str, Any] = {}
         self.log_lines: list[str] = []
         self.log_blocks: list[dict[str, Any]] = []
         # Threaded, so two submissions can arrive at once even from one browser. Reading the legal
         # set and replacing the state have to be one step, or the loser of the race applies a move
         # chosen against a board the winner has already moved.
         self._applying = threading.Lock()
+        if scenario_path is not None:
+            self._load_scenario_file(scenario_path)
+
+    def _load_scenario_file(self, scenario_path: Path, *, intro_line: str | None = None) -> None:
+        scenario = load_scenario(str(scenario_path))
+        self.state = scenario.state
+        self.config = scenario.config
+        player_count = len(tuple(getattr(self.state, "players", ()) or ()))
+        if player_count:
+            self.session.player_count = player_count
+            if (
+                not self.session.seat_roles
+                or len(self.session.seat_roles) != player_count
+            ):
+                self.session.seat_roles = _default_seat_roles(player_count)
+        if intro_line:
+            self.log_lines = [intro_line]
+            self.log_blocks = [{"lines": [intro_line], "round_end": False}]
+        else:
+            self.log_lines = []
+            self.log_blocks = []
+        self.session.game_loaded = True
         self._refresh()
+
+    def _clear_game(self) -> None:
+        self.state = None
+        self.config = None
+        self.state_payload = {}
+        self.token = ""
+        self.payload = {}
+        self.log_lines = []
+        self.log_blocks = []
+        self.session = SessionState(
+            game_loaded=False,
+            seat_roles=_default_seat_roles(4),
+            setup_mode=SETUP_MODE_RANDOM,
+            player_count=4,
+            seed=None,
+        )
+
+    def _start_generated_game(
+        self,
+        *,
+        player_count: int,
+        seed: int,
+        setup_mode: str,
+        seat_roles: dict[str, str],
+    ) -> None:
+        if player_count not in SUPPORTED_PLAYER_COUNTS:
+            raise ValueError(
+                f"Unsupported player count {player_count}. Supported: {SUPPORTED_PLAYER_COUNTS}."
+            )
+        if setup_mode != SETUP_MODE_RANDOM:
+            raise ValueError("Only Random setup is available in this build.")
+        if any(role not in SEAT_ROLE_OPTIONS for role in seat_roles.values()):
+            raise ValueError("Unknown seat role in request.")
+        if any(role != ROLE_HUMAN for role in seat_roles.values()):
+            raise ValueError("Bot seats are not available in this build.")
+
+        generated = generate_setup_scenario(player_count=player_count, seed=seed)
+        _rewrite_generated_paths_absolute(generated)
+        scenario_path = self._workspace_path / "generated_scenario.json"
+        scenario_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
+        self._latest_generated_scenario = json.loads(json.dumps(generated))
+        self.session = SessionState(
+            game_loaded=True,
+            seat_roles=dict(seat_roles),
+            setup_mode=setup_mode,
+            player_count=player_count,
+            seed=seed,
+        )
+        self._load_scenario_file(
+            scenario_path,
+            intro_line=f"New game - {player_count} players, seed {seed}.",
+        )
+
+    def has_game(self) -> bool:
+        return self.session.game_loaded and self.state is not None and self.config is not None
 
     def _refresh(self) -> None:
         """Re-read everything the page is drawn from, after the position has changed."""
+        if not self.has_game():
+            self.state_payload = {}
+            self.token = ""
+            self.payload = {}
+            return
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
         self.payload = dict(
@@ -559,6 +848,8 @@ class PlayServer(ThreadingHTTPServer):
             self._apply_locked(submitted_id, submitted_token)
 
     def _apply_locked(self, submitted_id: str, submitted_token: str) -> None:
+        if not self.has_game():
+            raise UnknownAction("no game is loaded; start a game first")
         if submitted_token != self.token:
             raise StaleStateToken(
                 f"state token {submitted_token!r} is not the current {self.token!r}; "
@@ -616,21 +907,68 @@ class PlayServer(ThreadingHTTPServer):
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
 
+    def server_close(self) -> None:
+        try:
+            super().server_close()
+        finally:
+            self._session_workspace.cleanup()
+
 
 class PlayHandler(BaseHTTPRequestHandler):
     server: PlayServer
 
+    def _no_game_document(self, *, route: str) -> dict[str, Any]:
+        return {
+            "status": "no_game_loaded",
+            "route": route,
+            "message": "No game is loaded. Start one from the setup page.",
+        }
+
     def do_GET(self) -> None:  # noqa: N802 -- BaseHTTPRequestHandler's own spelling
         route = self.path.split("?", 1)[0]
         if route == "/":
-            page = render_play_view_from_payload(self.server.payload)
+            if self.server.has_game():
+                page = _render_board_page(
+                    self.server.payload,
+                    allow_reset_to_setup=self.server._setup_door_enabled,
+                )
+            elif self.server._setup_door_enabled:
+                page = _render_setup_page(suggested_seed=_prefill_seed())
+            else:
+                # Scenario mode is expected to open straight to a board.
+                self._send(
+                    409,
+                    "application/json",
+                    json.dumps(
+                        self._no_game_document(route=route)
+                        | {"message": "No game is loaded in scenario mode."}
+                    ),
+                )
+                return
             self._send(200, "text/html; charset=utf-8", page)
         elif route == "/state.json":
+            if not self.server.has_game():
+                self._send(
+                    409,
+                    "application/json",
+                    json.dumps(self._no_game_document(route=route), indent=1),
+                )
+                return
             # The state as the engine describes it, without the token, the candidates or the log:
             # those are this process's bookkeeping, and a test comparing two positions should not
             # have to look past them to see whether anything moved.
             self._send(200, "application/json", json.dumps(self.server.state_payload, indent=1))
         elif route == "/actions.json":
+            if not self.server.has_game():
+                self._send(
+                    409,
+                    "application/json",
+                    json.dumps(
+                        self._no_game_document(route=route) | {"count": 0, "actions": []},
+                        indent=1,
+                    ),
+                )
+                return
             document = actions_document(
                 self.server.state, self.server.config, self.server.state_payload
             )
@@ -640,13 +978,69 @@ class PlayHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 -- BaseHTTPRequestHandler's own spelling
         route = self.path.split("?", 1)[0]
-        if route != "/action":
+        if route not in {"/action", "/start", "/new-game"}:
             self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
             return
 
+        length = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(length) if length > 0 else b""
+
+        if route == "/new-game":
+            if not self.server._setup_door_enabled:
+                self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
+                return
+            self.server._clear_game()
+            self._send(
+                200,
+                "text/html; charset=utf-8",
+                _render_setup_page(suggested_seed=_prefill_seed()),
+            )
+            return
+
+        if route == "/start":
+            if not self.server._setup_door_enabled:
+                self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
+                return
+            try:
+                content_type = str(self.headers.get("Content-Type", ""))
+                if "application/json" in content_type:
+                    body = json.loads(raw or b"{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("body must be a JSON object")
+                    source = {str(k): str(v) for k, v in body.items()}
+                else:
+                    source = {
+                        key: values[-1]
+                        for key, values in parse_qs(raw.decode("utf-8"), keep_blank_values=True).items()
+                    }
+                player_count = int(source.get("player_count", "4"))
+                seed = int(source.get("seed", "0"))
+                setup_mode = source.get("setup_mode", SETUP_MODE_RANDOM)
+                seat_roles = {
+                    SEATED_PLAYERS[index]: source.get(f"seat_{index + 1}_role", ROLE_HUMAN)
+                    for index in range(player_count)
+                }
+                self.server._start_generated_game(
+                    player_count=player_count,
+                    seed=seed,
+                    setup_mode=setup_mode,
+                    seat_roles=seat_roles,
+                )
+            except Exception as exc:
+                self._reject(422, str(exc))
+                return
+            self._send(
+                200,
+                "text/html; charset=utf-8",
+                _render_board_page(self.server.payload, allow_reset_to_setup=True),
+            )
+            return
+
+        if not self.server.has_game():
+            self._reject(409, "no game is loaded; start a game first")
+            return
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(length) or b"{}")
+            body = json.loads(raw or b"{}")
         except (ValueError, TypeError):
             self._reject(400, "body must be JSON")
             return
@@ -669,7 +1063,10 @@ class PlayHandler(BaseHTTPRequestHandler):
         self._send(
             200,
             "text/html; charset=utf-8",
-            render_play_view_from_payload(self.server.payload),
+            _render_board_page(
+                self.server.payload,
+                allow_reset_to_setup=self.server._setup_door_enabled,
+            ),
         )
 
     def _reject(self, status: int, reason: str) -> None:
@@ -691,16 +1088,22 @@ class PlayHandler(BaseHTTPRequestHandler):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "scenario", type=Path, help="Scenario JSON, from `pilgrim.cli generate-setup`."
+        "scenario",
+        type=Path,
+        nargs="?",
+        help="Scenario JSON, from `pilgrim.cli generate-setup`.",
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args(argv)
 
     server = PlayServer((args.host, args.port), args.scenario)
-    document = actions_document(server.state, server.config, server.state_payload)
-    print(f"serving {args.scenario} on http://{args.host}:{args.port}/")
-    print(f"state token {document['state_token']}; {document['count']} legal actions")
+    if args.scenario is None:
+        print(f"serving setup page on http://{args.host}:{args.port}/")
+    else:
+        document = actions_document(server.state, server.config, server.state_payload)
+        print(f"serving {args.scenario} on http://{args.host}:{args.port}/")
+        print(f"state token {document['state_token']}; {document['count']} legal actions")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

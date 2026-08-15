@@ -271,7 +271,9 @@ def test_the_seats_stand_in_one_row_below_the_main_row(page: str) -> None:
 
     assert stage.index('<div class="row">') < stage.index('<div class="seats">')
     assert seats.count('data-component="player-board-v2"') == 4
-    assert ".seats { display: flex; gap: var(--gap); }" in page
+    assert ".seats {" in page
+    assert "display: flex; gap: var(--gap);" in page
+    assert "align-self: stretch; justify-content: center;" in page
     assert "align-items: flex-start" in page[page.index(".game-table-stage") :][:200]
 
 
@@ -680,13 +682,12 @@ def test_controls_stay_compact_without_explanatory_text(page: str) -> None:
     assert controls.count('data-controls-row="') == 4
 
 
-def test_player_count_script_hides_later_seats_without_reflowing(page: str) -> None:
+def test_player_count_script_hides_later_seats_by_taking_them_out_of_flow(page: str) -> None:
     assert visible_seats_by_count() == {"2": [1, 2], "3": [1, 2, 3], "4": [1, 2, 3, 4]}
     assert 'var VISIBLE = {"2":[1,2],"3":[1,2,3],"4":[1,2,3,4]};' in page
     assert f"var DEFAULT_COUNT = {DEFAULT_PLAYER_COUNT};" in page
-    assert "board.style.visibility" in page
+    assert "board.style.display" in page
     assert "disc.style.visibility" in page
-    assert "display: none" not in page
 
 
 def test_setup_roll_script_uses_game_setup_mapping(page: str) -> None:
