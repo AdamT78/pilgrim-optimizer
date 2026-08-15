@@ -158,8 +158,12 @@ def start_player_confession_order(state: GameState) -> tuple[PlayerId, ...]:
     a player the boxes are still choosing. Ordering by it would need the answer to the question the
     phase exists to ask.
     """
+    current_start = _require_start_player(
+        state,
+        context="Confession Box turn order requires the round's chosen start player.",
+    )
     return tuple(
-        PlayerId((int(state.start_player) + offset) % state.player_count)
+        PlayerId((int(current_start) + offset) % state.player_count)
         for offset in range(state.player_count)
     )
 
@@ -354,6 +358,10 @@ def award_first_player_marker(
     a new one -- the seat the walk starts from is the one the round was played from.
     """
     players = _real_players(state)
+    current_start = _require_start_player(
+        state,
+        context="First Player marker tie-break requires the round's chosen start player.",
+    )
     bonus_players = set(state.start_player_confession_used)
     events: list[GameEvent] = []
 
@@ -368,7 +376,7 @@ def award_first_player_marker(
     else:
         deciding_player = _clockwise_tie_break(
             tied_players=tied,
-            current_start=state.start_player,
+            current_start=current_start,
             player_count=state.player_count,
         )
         events.append(
@@ -378,7 +386,7 @@ def award_first_player_marker(
                 action_id=action_id,
                 details=make_event_details(
                     tied_players=",".join(player.name.lower() for player in tied),
-                    current_start_player=state.start_player.name.lower(),
+                    current_start_player=current_start.name.lower(),
                     deciding_player=deciding_player.name.lower(),
                     highest_effective_piety=highest_effective_piety,
                 ),
@@ -412,7 +420,7 @@ def award_first_player_marker(
             details=make_event_details(
                 highest_effective_piety=highest_effective_piety,
                 deciding_player=deciding_player.name.lower(),
-                current_start_player=state.start_player.name.lower(),
+                current_start_player=current_start.name.lower(),
             ),
         )
     )
@@ -529,3 +537,10 @@ def _clockwise_tie_break(
         if player in tied_players:
             return player
     raise ValueError("No tied player found during start-player tie-break.")
+
+
+def _require_start_player(state: GameState, *, context: str) -> PlayerId:
+    """The chosen start player, which some round-end steps cannot proceed without."""
+    if state.start_player is None:
+        raise TransitionValidationError(context)
+    return state.start_player

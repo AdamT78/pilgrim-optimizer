@@ -145,8 +145,6 @@ def _game_state_from_dict(
     ship_position = int(raw.get("ship_position", ship_start_position))
     completed_rounds = int(raw.get("completed_rounds", max(0, timing.round_number - 1)))
     start_player = _start_player_from_dict(raw)
-    if start_player is None:
-        start_player = PlayerId.from_string(str(raw["active_player"]))
     first_player_marker = _first_player_marker_from_dict(raw)
     game_over = bool(raw.get("game_over", False))
     confession_pending, confession_used = _start_player_confession_from_dict(raw)
@@ -439,6 +437,11 @@ def _merchant_board_position_from_dict(
 
 
 def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
+    """Who begins this round, or None when the state does not say yet.
+
+    Absent and null both mean the same thing: this state carries no chosen start player. That is a
+    real answer at game open, where the first decision is about who begins and no one has said yet.
+    """
     start_player_raw = raw.get("start_player_id")
     if start_player_raw is None:
         return None
@@ -450,12 +453,11 @@ def _start_player_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
 def _first_player_marker_from_dict(raw: Mapping[str, Any]) -> PlayerId | None:
     """Who holds the marker, or `None` for a file that does not say.
 
-    Absent is left absent. Every other optional field here has a defensible default -- a missing
-    ship position is where ships start, a missing start player is whoever is acting -- but there is
-    no such reading for this one. The holder was won at a round end on piety values the file has
-    since moved past, so anything derived on load would be who would win it NOW, written into a
-    field that means who won it THEN. Three hundred fixtures that never had a holder do not
-    acquire one by being opened.
+    Absent is left absent. A missing ship position has a defensible default -- where ships start --
+    and this field does not: the holder was won at a round end on piety values the file has since
+    moved past, so anything derived on load would be who would win it NOW, written into a field
+    that means who won it THEN. Three hundred fixtures that never had a holder do not acquire one
+    by being opened.
     """
     marker_raw = raw.get("first_player_marker")
     if marker_raw is None:

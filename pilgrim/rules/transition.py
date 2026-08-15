@@ -1780,12 +1780,13 @@ def _apply_setup_sow_action(
         completed_by=completed_by,
     )
     if next_player is None:
+        chosen_start_player = _require_start_player_for_setup_completion(state)
         next_state = replace(
             state_after_sow,
             setup_sow_complete=True,
             setup_sow_completed_by=tuple(completed_by),
             phase=TurnPhase.SOW,
-            active_player=state.start_player,
+            active_player=chosen_start_player,
         )
         events.append(
             GameEvent(
@@ -1793,7 +1794,7 @@ def _apply_setup_sow_action(
                 actor=player,
                 action_id=transition_action_id,
                 details=make_event_details(
-                    start_player=_player_label(state.start_player),
+                    start_player=_player_label(chosen_start_player),
                 ),
             )
         )
@@ -4855,6 +4856,15 @@ def _next_incomplete_setup_player(
         if candidate not in completed_set:
             return candidate
     return None
+
+
+def _require_start_player_for_setup_completion(state: GameState) -> PlayerId:
+    """Setup sow cannot finish into normal play until somebody has been chosen to begin."""
+    if state.start_player is None:
+        raise TransitionValidationError(
+            "Setup sow cannot complete before a start player has been chosen."
+        )
+    return state.start_player
 
 
 def _legal_start_turn_relocation_options(

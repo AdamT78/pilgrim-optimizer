@@ -6,9 +6,9 @@ This script is reporting-only and does not modify gameplay behavior.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Iterable
 
 from pilgrim.io.scenarios import LoadedScenario, load_scenario
 from pilgrim.model.actions import (
@@ -614,12 +614,15 @@ def _load_generated_setup(root: Path, *, player_count: int, seed: int) -> Loaded
     for field in _CONFIG_PATH_FIELDS:
         generated[field] = str((root / str(generated[field])).resolve())  # type: ignore[index]
     initial_state = generated["initial_state"]  # type: ignore[index]
+    chosen_start_player = "player_one"
     initial_state["phase"] = "sow"
     initial_state["setup"] = {
         "setup_sow_required": False,
         "setup_sow_complete": True,
         "setup_sow_completed_by": [],
     }
+    initial_state["start_player_id"] = chosen_start_player
+    initial_state["active_player"] = chosen_start_player
     output_path = Path("/tmp") / f"pilgrim_multi_turn_branching_{player_count}p_seed_{seed}.json"
     output_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
     return load_scenario(output_path)

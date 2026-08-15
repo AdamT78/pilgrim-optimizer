@@ -314,6 +314,7 @@ def test_season_end_uses_piety_then_turn_order_for_tie_breaks() -> None:
     full_tie_state = GameState(
         active_player=PlayerId.PLAYER_TWO,
         phase=TurnPhase.SOW,
+        start_player=PlayerId.PLAYER_ONE,
         players=(
             PlayerState(alms_position=3, piety=5, workforce=Workforce(mancala=(0,) * 9, abbey=1)),
             PlayerState(alms_position=3, piety=5, workforce=Workforce(mancala=(0,) * 9, abbey=1)),

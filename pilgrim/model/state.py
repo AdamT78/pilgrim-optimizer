@@ -56,7 +56,10 @@ class GameState:
     active_player: PlayerId
     phase: TurnPhase
     players: tuple[PlayerState, ...]
-    start_player: PlayerId = PlayerId.PLAYER_ONE
+    # The seat the round is played from, once one has been chosen. A generated game opens by
+    # asking who begins; before that answer exists this is None rather than a seed value that reads
+    # like a fact and cannot be told apart from one.
+    start_player: PlayerId | None = None
     # Who holds the First Player marker, which is NOT who begins the round. It is won at a round
     # end on effective piety and then sits with that player until the next round end takes it away,
     # so it outlives the phase where they were asked to name a start player -- and it stays put
@@ -112,7 +115,7 @@ class GameState:
             raise ValueError("turn_in_round must be less than number of players.")
         if int(self.active_player) >= len(self.players):
             raise ValueError("active_player must be one of the real players in state.")
-        if int(self.start_player) >= len(self.players):
+        if self.start_player is not None and int(self.start_player) >= len(self.players):
             raise ValueError("start_player must be one of the real players in state.")
         if self.first_player_marker is not None and int(self.first_player_marker) >= len(
             self.players

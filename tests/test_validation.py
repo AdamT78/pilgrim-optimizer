@@ -89,6 +89,20 @@ def test_negative_committed_count_fails_validation() -> None:
         )
 
 
+def test_start_player_must_still_be_a_real_player_when_set() -> None:
+    with pytest.raises(ValueError, match="start_player must be one of the real players in state."):
+        GameState(
+            active_player=PlayerId.PLAYER_ONE,
+            phase=TurnPhase.SOW,
+            start_player=PlayerId.PLAYER_THREE,
+            players=(
+                PlayerState(),
+                PlayerState(),
+            ),
+            turn=0,
+        )
+
+
 def test_mancala_vector_length_must_be_nine() -> None:
     with pytest.raises(ValueError):
         Workforce(mancala=(1, 2, 3))

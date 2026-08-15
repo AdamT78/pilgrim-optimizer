@@ -109,12 +109,6 @@ def generate_setup_scenario(
             # from where the rule puts it. That holds at two and three players as well, where the
             # boards are still white then red.
             #
-            # Stated rather than walked. A tie-break walks clockwise from the current start player,
-            # and at game open there is no current start player: `start_player_id` below is a seed
-            # that the opening choice overwrites before any round ends. Walking from it would be
-            # deriving who chooses from a value nobody chose, which the chooser is about to
-            # replace. The two happen to agree today, and a test holds them to it.
-            #
             # Both lines below name that seat, and they are not one line twice. The marker is who
             # HOLDS it, for the whole first round and past the choice about to be made; the active
             # player is who is being waited on, which is the holder only until they answer. A
@@ -122,7 +116,6 @@ def generate_setup_scenario(
             # unlike a saved fixture, which may not know.
             "active_player": "player_two",
             "first_player_marker": "player_two",
-            "start_player_id": "player_one",
             "phase": "start_player_selection",
             "setup": {
                 "setup_sow_required": True,

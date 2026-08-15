@@ -20,6 +20,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.enums import PlayerId
 from pilgrim.rules.round_end import award_first_player_marker
+from pilgrim.rules.validation import TransitionValidationError
 from pilgrim.setup.generator import generate_setup_scenario
 from tools.ui_debug.render_player_boards_v2 import load_player_boards_v2_layout
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
@@ -83,30 +84,20 @@ def test_a_generated_game_opens_with_the_marker_on_the_red_board(player_count: i
 
 
 @pytest.mark.parametrize("player_count", [2, 3, 4])
-def test_the_opening_marker_lands_where_a_round_end_would_have_put_it(
+def test_round_end_marker_award_refuses_to_run_before_a_start_player_is_chosen(
     tmp_path: Path,
     player_count: int,
 ) -> None:
-    """Setup and round end name the same seat, and this is what says so.
-
-    They are not the same mechanism and must not be made into one: a round end walks clockwise from
-    the seat the round was played from, and at game open no round has been played and no start
-    player has been chosen. The seed the generator writes is an artefact that the opening choice
-    overwrites. So setup STATES the seat and this checks the answer against the walk -- which is
-    the check that was missing when setup said white and every round end said red.
-    """
+    """A game open has no chosen start player, so clockwise tie-break has no anchor yet."""
     scenario = _opening_scenario(tmp_path, player_count)
-    opening_holder = scenario.state.active_player
-
-    _, _, walked_to = award_first_player_marker(
-        scenario.state,
-        config=scenario.config,
-        actor=opening_holder,
-        action_id="opening_marker_probe",
-    )
-
-    assert BOARD_COLOUR[walked_to.name.lower()] == "red"
-    assert walked_to is opening_holder
+    assert scenario.state.start_player is None
+    with pytest.raises(TransitionValidationError):
+        award_first_player_marker(
+            scenario.state,
+            config=scenario.config,
+            actor=scenario.state.active_player,
+            action_id="opening_marker_probe",
+        )
 
 
 @pytest.mark.parametrize("player_count", [2, 3, 4])
@@ -117,4 +108,4 @@ def test_the_marker_holder_is_not_written_in_as_the_start_player(player_count: i
 
     assert initial_state["phase"] == "start_player_selection"
     assert BOARD_COLOUR[str(initial_state["active_player"])] == "red"
-    assert initial_state["active_player"] != initial_state["start_player_id"]
+    assert "start_player_id" not in initial_state

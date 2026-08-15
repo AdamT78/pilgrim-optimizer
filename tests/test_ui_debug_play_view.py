@@ -592,6 +592,16 @@ def test_the_log_says_the_position_and_works_none_of_it_out() -> None:
     assert header["Setup sow"] == "complete"
 
 
+@pytest.mark.parametrize("missing", [False, True])
+def test_the_header_says_when_no_start_player_has_been_chosen(missing: bool) -> None:
+    payload = _payload([_player([5] + [0] * 8) for _ in range(2)])
+    if missing:
+        del payload["state"]["start_player_id"]
+    else:
+        payload["state"]["start_player_id"] = None
+    assert dict(state_header(payload))["Start player"] == "not chosen yet"
+
+
 def test_the_transcript_is_written_backwards_so_it_opens_on_its_newest_line() -> None:
     """The two halves of one trick, asserted together because either alone is a bug.
 

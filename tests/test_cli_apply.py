@@ -1,8 +1,40 @@
+import json
+from pathlib import Path
+
 from pilgrim.cli import main
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import TurnResolutionType
 from pilgrim.rules.transition import legal_actions
+from pilgrim.setup.generator import generate_setup_scenario
+
+
+def _generated_sow_state_with_start_player_unknown(tmp_path: Path) -> Path:
+    generated = generate_setup_scenario(player_count=2, seed=99)
+    root = Path.cwd().resolve()
+    for field in (
+        "board_file",
+        "duties_file",
+        "piety_file",
+        "alms_file",
+        "timing_file",
+        "merchant_file",
+        "ship_file",
+        "buildings_file",
+    ):
+        generated[field] = str((root / str(generated[field])).resolve())  # type: ignore[index]
+    initial_state = generated["initial_state"]  # type: ignore[index]
+    initial_state["phase"] = "sow"
+    initial_state["active_player"] = "player_one"
+    initial_state["start_player_id"] = None
+    initial_state["setup"] = {
+        "setup_sow_required": False,
+        "setup_sow_complete": True,
+        "setup_sow_completed_by": [],
+    }
+    path = tmp_path / "start_player_unknown.json"
+    path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def test_cli_apply_selects_action_by_one_based_index(capsys) -> None:
@@ -60,6 +92,35 @@ def test_cli_apply_zero_index_is_invalid_for_one_based_indexing(capsys) -> None:
 
     assert exit_code == 2
     assert f"Invalid action index 0. Scenario has {action_count} legal actions." in captured.err
+
+
+def test_cli_apply_verbose_says_when_start_player_is_not_chosen_yet(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    path = _generated_sow_state_with_start_player_unknown(tmp_path)
+    exit_code = main(["apply", str(path), "--action-index", "1", "--verbose"])
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "State after action:" in output
+    assert "Start player: not chosen yet" in output
+
+
+def test_cli_apply_verbose_names_start_player_when_set(capsys) -> None:
+    exit_code = main(
+        [
+            "apply",
+            "scenarios/alms_sandbox_001.json",
+            "--action-index",
+            "1",
+            "--verbose",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Start player: player_one" in output
 
 
 def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:

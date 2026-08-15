@@ -368,6 +368,9 @@ def _format_state_summary(
         positions=config.board.positions,
     )
     setup_lines = _format_setup_summary(state)
+    start_player_name = (
+        state.start_player.name.lower() if state.start_player is not None else "not chosen yet"
+    )
 
     lines: list[str] = [
         f"Acted player: {acted_name}",
@@ -377,7 +380,7 @@ def _format_state_summary(
         f"  Round: {state.timing.round_number}",
         f"  Season: {state.timing.season_number}",
         f"  Turn in round: {state.timing.turn_in_round}",
-        f"  Start player: {state.start_player.name.lower()}",
+        f"  Start player: {start_player_name}",
         f"  Game over: {str(state.game_over).lower()}",
         *setup_lines,
         "Ship:",
