@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Callable, Iterable
 
 import pytest
 
@@ -317,18 +317,19 @@ def _load_generated_setup(
 
     initial_state = generated["initial_state"]  # type: ignore[index]
     if normal_sow:
+        chosen_start_player = "player_one"
         initial_state["phase"] = "sow"
         initial_state["setup"] = {
             "setup_sow_required": False,
             "setup_sow_complete": True,
             "setup_sow_completed_by": [],
         }
-        # Fast-forwarding the opening also means fast-forwarding the choice it opens on, so the
-        # round has to begin where that choice would have left it: on the start player. A generated
-        # game hands `active_player` to the MARKER HOLDER, who is red rather than the start player,
-        # and carrying that through would open the round one seat along from the seat it counts
-        # turn order out from.
-        initial_state["active_player"] = initial_state["start_player_id"]
+        # Fast-forwarding the opening also means making the choice it opens on. Without this the
+        # state is contradictory by construction: in normal play setup sow cannot be complete and
+        # phase=sow while start player is still unchosen.
+        initial_state["start_player_id"] = chosen_start_player
+        # The round begins from the chosen seat, not from the marker holder who was asked.
+        initial_state["active_player"] = chosen_start_player
 
     scenario_path = tmp_path / f"generated_{player_count}p_seed_{seed}.json"
     scenario_path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")

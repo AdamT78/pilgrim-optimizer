@@ -370,8 +370,7 @@ def resolve_alms_season_end(
 def _determine_alms_leader(state: GameState, config: AlmsConfig) -> _AlmsLeaderSelection:
     players = tuple(PlayerId(index) for index in range(state.player_count))
     highest_alms = max(
-        clamp_alms_position(state.player_state(player).alms_position, config)
-        for player in players
+        clamp_alms_position(state.player_state(player).alms_position, config) for player in players
     )
     alms_tied = tuple(
         player
@@ -401,7 +400,7 @@ def _determine_alms_leader(state: GameState, config: AlmsConfig) -> _AlmsLeaderS
         )
 
     turn_order = _current_turn_order_from_start_player(
-        start_player=state.start_player,
+        start_player=_start_player_for_turn_order(state),
         player_count=state.player_count,
     )
     winner = next(player for player in turn_order if player in piety_tied)
@@ -419,6 +418,16 @@ def _current_turn_order_from_start_player(
     player_count: int,
 ) -> tuple[PlayerId, ...]:
     return tuple(
-        PlayerId((int(start_player) + offset) % player_count)
-        for offset in range(player_count)
+        PlayerId((int(start_player) + offset) % player_count) for offset in range(player_count)
     )
+
+
+def _start_player_for_turn_order(state: GameState) -> PlayerId:
+    """The current round's start player, required for clockwise tie-breaks.
+
+    This is not optional here: if nobody has chosen who began the round, there is no turn order to
+    break a tie by. Raising is deliberate and better than guessing.
+    """
+    if state.start_player is None:
+        raise ValueError("Alms season-end tie-break requires a chosen start player.")
+    return state.start_player

@@ -202,6 +202,12 @@ def state_header(payload: dict) -> list[tuple[str, str]]:
     """
     state = payload["state"]
     timing, setup = state["timing"], state["setup"]
+    start_player = state.get("start_player_id")
+    start_player_text = (
+        str(start_player)
+        if start_player is not None and str(start_player).strip()
+        else "not chosen yet"
+    )
     if not setup["setup_sow_required"]:
         setup_text = "not required"
     elif setup["setup_sow_complete"]:
@@ -211,7 +217,7 @@ def state_header(payload: dict) -> list[tuple[str, str]]:
         setup_text = f"sown by {', '.join(done)}" if done else "no seat has sown yet"
     return [
         ("Active player", state["active_player"]),
-        ("Start player", state["start_player_id"]),
+        ("Start player", start_player_text),
         ("Phase", state["phase"]),
         ("Round", str(timing["round_number"])),
         ("Season", str(timing["season_number"])),

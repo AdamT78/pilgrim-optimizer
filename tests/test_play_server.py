@@ -1377,6 +1377,23 @@ def _players_the_engine_would_accept(server) -> list[str]:
     )
 
 
+def test_at_game_open_the_start_player_is_unset_and_the_header_says_so(tmp_path: Path) -> None:
+    server = _opening(tmp_path)
+    assert server.state.start_player is None
+
+    page = render_play_view_from_payload(server.payload)
+    assert ("Start player", "not chosen yet") in _header_of(page)
+
+
+def test_after_the_opening_choice_the_header_names_the_chosen_seat(tmp_path: Path) -> None:
+    server = _opening(tmp_path)
+    server.apply("start_player_selection:player_four", server.payload["state_token"])
+
+    assert server.state.start_player is PlayerId.PLAYER_FOUR
+    page = render_play_view_from_payload(server.payload)
+    assert ("Start player", "Blue") in _header_of(page)
+
+
 @needs_node
 @pytest.mark.parametrize("players", [2, 3, 4])
 def test_the_boards_offered_are_the_players_the_engine_would_accept(

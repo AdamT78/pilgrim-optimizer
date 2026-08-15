@@ -8,7 +8,7 @@ import pytest
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.duties import DUTY_CATEGORIES, DUTY_POSITIONS
-from pilgrim.model.enums import TurnResolutionType
+from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.rules.buildings import load_building_config
 from pilgrim.rules.transition import legal_actions
 from pilgrim.setup.generator import generate_setup_scenario
@@ -147,7 +147,8 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
     # line cannot tell you that, which is why it once read `player_one` and passed. The check that
     # can is in tests/test_opening_marker_seat.py, by colour.
     assert initial_state["active_player"] == "player_two"
-    assert initial_state["start_player_id"] == "player_one"
+    # Nobody has chosen who begins yet. Carrying a seed here looked like a decision downstream.
+    assert "start_player_id" not in initial_state
     # A generated game opens on the decision it is supposed to open on. The setup sows follow it,
     # in the order whoever holds the marker sets, which is why they cannot come first.
     assert initial_state["phase"] == "start_player_selection"
@@ -191,6 +192,51 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
         assert player_state["workforce"]["mancala"] == [5, 0, 0, 0, 0, 0, 0, 0, 0]
         assert player_state["workforce"]["village"] == 8
         assert player_state["workforce"]["abbey"] == 3
+
+
+def test_all_committed_scenarios_still_load_with_optional_start_player() -> None:
+    root = Path(__file__).resolve().parents[1]
+    paths = sorted(root.joinpath("scenarios").glob("*.json"))
+    assert len(paths) == 308
+    for path in paths:
+        load_scenario(path)
+
+
+def test_scenario_start_player_id_loads_set_and_missing_or_null_as_none(tmp_path: Path) -> None:
+    root = Path.cwd().resolve()
+    generated = generate_setup_scenario(player_count=2, seed=77)
+    for field in (
+        "board_file",
+        "duties_file",
+        "piety_file",
+        "alms_file",
+        "timing_file",
+        "merchant_file",
+        "ship_file",
+        "buildings_file",
+    ):
+        generated[field] = str((root / str(generated[field])).resolve())  # type: ignore[index]
+    initial_state = generated["initial_state"]  # type: ignore[index]
+    initial_state["phase"] = "sow"
+    initial_state["setup"] = {
+        "setup_sow_required": False,
+        "setup_sow_complete": True,
+        "setup_sow_completed_by": [],
+    }
+
+    def _write(name: str) -> Path:
+        path = tmp_path / name
+        path.write_text(json.dumps(generated, indent=2) + "\n", encoding="utf-8")
+        return path
+
+    initial_state["start_player_id"] = "player_two"
+    assert load_scenario(_write("start_player_set.json")).state.start_player is PlayerId.PLAYER_TWO
+
+    initial_state["start_player_id"] = None
+    assert load_scenario(_write("start_player_null.json")).state.start_player is None
+
+    del initial_state["start_player_id"]
+    assert load_scenario(_write("start_player_missing.json")).state.start_player is None
 
 
 def test_cornucopia_is_valid_counter_and_unlocks_all_step2_resource_types(tmp_path: Path) -> None:

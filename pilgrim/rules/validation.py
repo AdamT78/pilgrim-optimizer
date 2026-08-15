@@ -163,7 +163,7 @@ def ensure_valid_round_end_state(state: GameState) -> None:
         raise TransitionValidationError("Ship position cannot be negative.")
     if state.completed_rounds < 0:
         raise TransitionValidationError("completed_rounds cannot be negative.")
-    if int(state.start_player) >= state.player_count:
+    if state.start_player is not None and int(state.start_player) >= state.player_count:
         raise TransitionValidationError("start_player must be a valid real player.")
     if int(state.active_player) >= state.player_count:
         raise TransitionValidationError("active_player must be a valid real player.")
