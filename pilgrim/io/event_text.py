@@ -750,3 +750,109 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         return f"{event_name}: season {from_season} -> {to_season}"
 
     return f"{event_name}: {details}"
+
+
+# KEEP THESE TWO TOGETHER.
+# `format_event` is the developer/CLI voice and `format_event_for_players` is the in-page player
+# voice. They are a pair by design: adding, removing or rewording one without checking the other is
+# a drift bug waiting to happen.
+def _title_words(value: str) -> str:
+    return value.replace("_", " ").strip().title()
+
+
+def _duty_label_for_players(details: dict, positions: tuple[str, ...]) -> str:
+    duty_category = str(details.get("duty_category", "")).strip()
+    if duty_category:
+        return _title_words(duty_category)
+    duty_position = details.get("duty_position")
+    if isinstance(duty_position, int):
+        return _title_words(position_name(duty_position, positions))
+    return "Unknown Duty"
+
+
+def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None:
+    """One player-facing line per event, or None when this event is transcript-noise."""
+    details = dict(event.details)
+    positions = config.board.positions
+    actor = event.actor.name.lower()
+    event_type = event.event_type
+
+    if event_type in {
+        EventType.SOWING,
+        EventType.SETUP_SOWING,
+        EventType.SETUP_SOW_COMPLETE,
+        EventType.SETUP_PLAYER_ADVANCE,
+        EventType.INVARIANT_CHECK,
+        EventType.TRADE_ROUTE_INCOME_SKIPPED,
+        EventType.TURN_ADVANCE,
+        EventType.ROUND_ADVANCE,
+        EventType.SEASON_ADVANCE,
+    }:
+        return None
+
+    if event_type is EventType.SETUP_COMPLETE:
+        start_player = str(details.get("start_player", "unknown"))
+        return f"Setup complete. {start_player} begins this round."
+
+    if event_type is EventType.DUTY_RESOLUTION:
+        duty = _duty_label_for_players(details, positions)
+        if details.get("mode") == "tithe":
+            resource = str(details.get("tithe_resource", "")).strip() or "a resource"
+            return f"{actor} took the tithe at {duty} and gained {resource}."
+        effect = str(details.get("effect", "")).strip()
+        action = _title_words(effect) if effect else "an action"
+        if effect == "produce_wheat":
+            return f"{actor} chose {action} at {duty} and gained wheat."
+        if effect == "produce_stone":
+            return f"{actor} chose {action} at {duty} and gained stone."
+        return f"{actor} chose {action} at {duty}."
+
+    if event_type is EventType.RESOURCE_DELTA:
+        deltas = [
+            ("stone", int(details.get("stone", 0))),
+            ("silver", int(details.get("silver", 0))),
+            ("wheat", int(details.get("wheat", 0))),
+            ("piety", int(details.get("piety", 0))),
+        ]
+        changed = [(name, delta) for name, delta in deltas if delta != 0]
+        if not changed:
+            return None
+        # One positive stock only is usually already named by the duty-resolution line.
+        if len(changed) == 1 and changed[0][1] > 0 and changed[0][0] != "piety":
+            return None
+        return f"{actor} " + "; ".join(f"{name} {delta:+d}" for name, delta in changed)
+
+    if event_type is EventType.ACOLYTE_RECALL:
+        duty_position = int(details.get("duty_position", -1))
+        recalled = int(details.get("recalled", 0))
+        duty = _title_words(position_name(duty_position, positions))
+        return f"Round end: recalled {recalled} from {duty} to City."
+
+    if event_type is EventType.SHIP_ADVANCE:
+        from_position = int(details.get("from_position", 0))
+        to_position = int(details.get("to_position", 0))
+        return f"Round end: ship advanced {from_position} -> {to_position}."
+
+    if event_type is EventType.MERCHANT_ADVANCE:
+        from_duty = _title_words(str(details.get("from_duty", "unknown")))
+        to_duty = _title_words(str(details.get("to_duty", "unknown")))
+        return f"Round end: Merchant advanced {from_duty} -> {to_duty}."
+
+    if event_type is EventType.START_PLAYER_MARKER:
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        return f"{deciding_player} took the First Player marker for this round."
+
+    if event_type is EventType.START_PLAYER_SELECTION:
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        selected_player = str(details.get("selected_start_player", "unknown"))
+        return f"{deciding_player} chose {selected_player} to begin this round."
+
+    if event_type is EventType.ROUND_END:
+        round_number = int(details.get("round", 0))
+        return f"Round {round_number} ended."
+
+    if event_type is EventType.BUILDING_BONUS:
+        if "enabled_route" in details or "skipped_location" in details:
+            return None
+
+    return format_event(event, config)

@@ -1119,6 +1119,15 @@ def test_the_shell_names_every_control_a_turn_will_be_driven_from() -> None:
     assert 'data-turn-counter-value="0"' in overlay
 
 
+def test_counter_only_overlay_draws_no_control_plaques() -> None:
+    overlay = turn_control_overlay(
+        render_duty_wheel_svg(layout(), turn_controls=True, turn_control_names=())
+    )
+
+    assert 'data-turn-counter="cubes-in-hand"' in overlay
+    assert 'data-turn-control="' not in overlay
+
+
 def test_nothing_but_sow_can_be_reached_before_a_turn_has_started() -> None:
     """Dimmed rather than dropped, so the corners keep their shape as a turn moves through them."""
     overlay = turn_control_overlay(render_duty_wheel_svg(layout(), turn_controls=True))

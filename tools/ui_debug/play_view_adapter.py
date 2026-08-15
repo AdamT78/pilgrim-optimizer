@@ -191,34 +191,29 @@ def timeline_slots(payload: dict) -> list[dict]:
 
 
 def state_header(payload: dict) -> list[tuple[str, str]]:
-    """The position in words: who is on, where the clock stands, and whether setup is done.
+    """The one status line the box keeps: this round, and how many seats have finished in it.
 
-    Every line is read from the payload. None of it is worked out here -- `turn_in_round` in
-    particular is the engine's counter and not a count of anything this file can see.
+    `turn_in_round` is taken as-is from the payload and not derived in the page.
     """
     state = payload["state"]
-    timing, setup = state["timing"], state["setup"]
-    start_player = state.get("start_player_id")
-    start_player_text = (
-        str(start_player)
-        if start_player is not None and str(start_player).strip()
-        else "not chosen yet"
-    )
-    if not setup["setup_sow_required"]:
-        setup_text = "not required"
-    elif setup["setup_sow_complete"]:
-        setup_text = "complete"
-    else:
-        done = setup["setup_sow_completed_by"]
-        setup_text = f"sown by {', '.join(done)}" if done else "no seat has sown yet"
+    timing = state["timing"]
     player_count = state.get("table_player_count") or len(state.get("players") or [])
-    players_done = f'{timing["turn_in_round"]} of {player_count}'
-    return [
-        ("Active player", state["active_player"]),
-        ("Start player", start_player_text),
-        ("Phase", state["phase"]),
-        ("Round", str(timing["round_number"])),
-        ("Season", str(timing["season_number"])),
-        ("Players done", players_done),
-        ("Setup sow", setup_text),
-    ]
+    return [("Round", f'{timing["round_number"]} - {timing["turn_in_round"]} of {player_count} played')]
+
+
+def played_this_round(payload: dict) -> tuple[str, ...]:
+    """Seats the payload explicitly says have already finished this round.
+
+    This is pass-through only. If the payload does not carry it, this returns empty and the page
+    does not infer it from other fields.
+    """
+    raw = payload["state"].get("played_this_round")
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    seated = set(seated_player_ids(payload))
+    seen: list[str] = []
+    for value in raw:
+        player_id = str(value)
+        if player_id in seated and player_id not in seen:
+            seen.append(player_id)
+    return tuple(seen)

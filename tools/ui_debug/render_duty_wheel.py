@@ -1010,6 +1010,7 @@ def render_turn_control_overlay(
     state: str = "idle",
     *,
     counter_values: tuple[int, ...] | None = None,
+    controls: tuple[str, ...] | None = None,
 ) -> str:
     """The four corner plaques, drawn in the board's root units above everything else.
 
@@ -1025,8 +1026,14 @@ def render_turn_control_overlay(
     Each anchor in the layout is the corner of its own group nearest the corner of the board it
     hangs in -- a left anchor gives the left edge and a bottom anchor the bottom edge -- so a row
     grows inward and downward from the corner it belongs to whichever way round it is written.
+
+    `controls` selects which control plaques are drawn. Left out, all five are drawn. The counter
+    readout is independent of that set, so a caller can ask for counter-only overlay.
     """
     anchors = layout["turn_controls"]
+    selected = ("sow", "reset", "confirm", "action", "tithe") if controls is None else controls
+    selected_set = set(selected)
+
     counters = (
         [
             render_turn_cube_counter(
@@ -1046,20 +1053,28 @@ def render_turn_control_overlay(
             )
         ]
     )
-    parts = [
-        _turn_control_row(anchors["top_left"], "top_left", (("Sow", "sow", True),)),
-        *counters,
-        _turn_control_row(
-            anchors["bottom_left"],
-            "bottom_left",
-            (("Reset", "reset", False), ("Confirm", "confirm", False)),
-        ),
-        _turn_control_row(
-            anchors["bottom_right"],
-            "bottom_right",
-            (("Action", "action", False), ("Tithe", "tithe", False)),
-        ),
-    ]
+    top_left = tuple(
+        button for button in (("Sow", "sow", True),) if button[1] in selected_set
+    )
+    bottom_left = tuple(
+        button
+        for button in (("Reset", "reset", False), ("Confirm", "confirm", False))
+        if button[1] in selected_set
+    )
+    bottom_right = tuple(
+        button
+        for button in (("Action", "action", False), ("Tithe", "tithe", False))
+        if button[1] in selected_set
+    )
+
+    parts = []
+    if top_left:
+        parts.append(_turn_control_row(anchors["top_left"], "top_left", top_left))
+    parts.extend(counters)
+    if bottom_left:
+        parts.append(_turn_control_row(anchors["bottom_left"], "bottom_left", bottom_left))
+    if bottom_right:
+        parts.append(_turn_control_row(anchors["bottom_right"], "bottom_right", bottom_right))
     return (
         f'<g data-component="duty-wheel-turn-controls" data-turn-state="{state}"'
         f' aria-label="Turn controls">{"".join(parts)}</g>'
@@ -1124,6 +1139,7 @@ def render_duty_wheel_svg(
     interactive: bool = False,
     turn_controls: bool = False,
     turn_counter_values: tuple[int, ...] | None = None,
+    turn_control_names: tuple[str, ...] | None = None,
 ) -> str:
     """The whole board: title, ground, arrows, and the nine spaces with their contents.
 
@@ -1134,7 +1150,8 @@ def render_duty_wheel_svg(
     and none of its behaviour; it is off unless a page asks for it, so a page that has not been
     designed around it does not quietly grow a set of controls. `turn_counter_values` asks for one
     counter plaque per value, each struck hidden and keyed by that value, for pages that reveal a
-    pre-drawn counter rather than writing text into one.
+    pre-drawn counter rather than writing text into one. `turn_control_names` narrows the plaques
+    drawn without changing the counter.
     """
     board = layout["board"]
     palette = layout["palette"]
@@ -1193,7 +1210,7 @@ def render_duty_wheel_svg(
         "</g>"
         # Outside the scaled group: the corners are measured on the canvas the page is cropped
         # against, so the plaques are written in those same units rather than the board's.
-        f"{render_turn_control_overlay(layout, counter_values=turn_counter_values) if turn_controls else ''}"
+        f"{render_turn_control_overlay(layout, counter_values=turn_counter_values, controls=turn_control_names) if turn_controls else ''}"
         "</svg>"
     )
 
