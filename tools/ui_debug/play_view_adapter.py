@@ -211,12 +211,14 @@ def state_header(payload: dict) -> list[tuple[str, str]]:
     else:
         done = setup["setup_sow_completed_by"]
         setup_text = f"sown by {', '.join(done)}" if done else "no seat has sown yet"
+    player_count = state.get("table_player_count") or len(state.get("players") or [])
+    players_done = f'{timing["turn_in_round"]} of {player_count}'
     return [
         ("Active player", state["active_player"]),
         ("Start player", start_player_text),
         ("Phase", state["phase"]),
         ("Round", str(timing["round_number"])),
         ("Season", str(timing["season_number"])),
-        ("Turn in round", str(timing["turn_in_round"])),
+        ("Players done", players_done),
         ("Setup sow", setup_text),
     ]

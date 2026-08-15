@@ -582,8 +582,16 @@ def test_the_log_says_the_position_and_works_none_of_it_out() -> None:
     assert header["Start player"] == "player_two"
     assert header["Round"] == "3"
     assert header["Season"] == "2"
-    assert header["Turn in round"] == "1"
+    assert header["Players done"] == "1 of 4"
+    assert "Turn in round" not in header
     assert header["Setup sow"] == "complete"
+
+
+def test_the_header_row_is_players_done_not_turn_in_round() -> None:
+    payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
+    page = render_play_view_from_payload(payload)
+    assert "Turn in round" not in page
+    assert "Players done" in page
 
 
 @pytest.mark.parametrize("missing", [False, True])
@@ -634,6 +642,35 @@ def test_a_setup_that_is_part_done_says_who_has_sown() -> None:
         },
     )
     assert dict(state_header(payload))["Setup sow"] == "sown by player_one"
+
+
+def test_start_and_duty_candidate_styles_both_exist_and_are_distinct() -> None:
+    payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
+    payload["turn_candidates"] = [
+        {
+            "steps": [],
+            "action_id": "sample",
+            "summary": "sample summary",
+            "variants": 1,
+            "unresolved": [],
+        }
+    ]
+    page = render_play_view_from_payload(payload)
+    start = re.search(
+        r'\[data-turn-start-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
+        page,
+        re.S,
+    )
+    duty = re.search(
+        r'\[data-turn-duty-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
+        page,
+        re.S,
+    )
+    assert start is not None, "start-candidate board-circle rule was not present"
+    assert duty is not None, "duty-candidate board-circle rule was not present"
+    start_rule = " ".join(start.group(1).split())
+    duty_rule = " ".join(duty.group(1).split())
+    assert start_rule != duty_rule
 
 
 def test_the_page_offers_nothing_to_press() -> None:

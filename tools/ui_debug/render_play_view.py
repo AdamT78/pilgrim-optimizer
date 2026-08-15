@@ -1071,12 +1071,18 @@ def turn_styles(route_color: str) -> str:
     The whole space and arrow are the targets rather than just their outlines, so a click in the
     painted area counts.
     """
-    return f"""  /* Two space questions on one board: where to lift from and which duty to take. */
+    return f"""  /* Two space questions on one board, marked differently on purpose.
+     Start candidates mean "lift from here": dashed teal rings.
+     Duty candidates mean "take this duty now": solid amber rings. */
   [data-turn-start-candidate="true"] {{ cursor: pointer; }}
-  [data-turn-start-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-start-candidate="true"] .board-circle {{
+    stroke: #2E7B76; stroke-width: 4.4; stroke-dasharray: 8 4;
+  }}
   [data-turn-start-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
   [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
-  [data-turn-duty-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-duty-candidate="true"] .board-circle {{
+    stroke: #B56A2A; stroke-width: 4.8; stroke-dasharray: none;
+  }}
   [data-turn-duty-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 3.5; }}
   [data-ornament-position][data-turn-duty-selected="true"] circle {{
     fill: {route_color}; stroke-opacity: 0.7;
