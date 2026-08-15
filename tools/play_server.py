@@ -178,21 +178,16 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 # that this particular space is where acolytes are lifted from. That is why three of these are the
 # same KIND -- a position -- and say three different things.
 #
-# The panel used to fall silent exactly when the question moved onto the board. A setup sow settles
-# its origin by auto-advance, leaving a board with two faintly ringed spaces and no words anywhere
-# saying that pointing at one is what is wanted. A player who does not already know the rules has
-# nothing to go on.
-#
-# Sentences, not fragments, and no sentence is composed in JavaScript. The page reveals one of
-# these whole, the way it reveals a summary or a key.
-ORIGIN_PROMPT = "Point at the space to lift acolytes from."
-ROUTE_PROMPT = "Follow an arrow to the next space."
-DUTY_PROMPT = "Point at the duty to select."
-RESOLUTION_PROMPT = "Choose what to do with that duty."
-RESOURCE_PROMPT = "Choose a resource on your own board."
-BUILDING_PROMPT = "Choose a building on the round track."
-COMBINATION_PROMPT = "Choose one of these."
-SEAT_PROMPT = "Point at the board of the player who begins the next round."
+# These are sentence tails. The actor is prefixed in `decision_steps` from `state.active_player`,
+# so the visible line is always "player_id: <question>" and the page never composes one itself.
+ORIGIN_PROMPT = "choose a space to lift from."
+ROUTE_PROMPT = "follow an arrow."
+DUTY_PROMPT = "choose a duty to take."
+RESOLUTION_PROMPT = "Action or Tithe."
+RESOURCE_PROMPT = "choose a resource."
+BUILDING_PROMPT = "choose a building."
+COMBINATION_PROMPT = "choose one."
+SEAT_PROMPT = "choose who begins the next round."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
@@ -338,6 +333,30 @@ def _position_name(position: int) -> str:
     return CANONICAL_POSITION_NAMES[position]
 
 
+def _speaking_player_id(state: Any) -> str:
+    """The acting player as an engine id string."""
+    active = getattr(state, "active_player", None)
+    if isinstance(active, enum.Enum):
+        return active.name.lower()
+    return str(active)
+
+
+def _addressed(prompt: str, player_id: str) -> str:
+    """One prompt as the seat's own spoken line."""
+    return f"{player_id}: {prompt}"
+
+
+def _address_steps(steps: list[dict], player_id: str) -> list[dict]:
+    """A copy of these steps with each prompt prefixed by the acting player id."""
+    addressed = []
+    for step in steps:
+        if "prompt" in step:
+            addressed.append(dict(step, prompt=_addressed(step["prompt"], player_id)))
+        else:
+            addressed.append(dict(step))
+    return addressed
+
+
 def _counter_start(action: Any) -> int:
     """How many cubes this route lifts before any edge is followed."""
     route = tuple(getattr(action, "route", ()) or ())
@@ -367,7 +386,7 @@ def _residue_fields(action: Any) -> tuple[str, ...]:
     )
 
 
-def decision_steps(action: Any) -> list[dict]:
+def decision_steps(action: Any, player_id: str) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
     Origin, then the route one space at a time, then which duty was selected, then what to do with
@@ -390,7 +409,7 @@ def decision_steps(action: Any) -> list[dict]:
     # from and no duty to resolve: whoever holds the marker names a player, and that is the whole
     # of the action.
     if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
-        return _presented_steps(action)
+        return _address_steps(_presented_steps(action), player_id)
     # The route still walks spaces by index. What changed is the kind names for the two space
     # questions around it: where to lift from (`origin`) and which duty to take (`duty`).
     route = tuple(action.route)
@@ -416,13 +435,13 @@ def decision_steps(action: Any) -> list[dict]:
         for index in range(len(route))
     ]
     if isinstance(action, SetupSowAction):
-        return steps
+        return _address_steps(steps, player_id)
     steps.append({"kind": "duty", "value": action.selected_duty, "prompt": DUTY_PROMPT})
     steps.append(
         {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
     )
     steps += _presented_steps(action)
-    return steps
+    return _address_steps(steps, player_id)
 
 
 def _unresolved_fields(members: list[Any]) -> list[str]:
@@ -459,6 +478,7 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     print for the same action, and there is no second description to keep in step with the first.
     """
     grouped: dict[tuple, list[Any]] = {}
+    player_id = _speaking_player_id(state)
     for action in legal_actions(state, config):
         # THE KEY IS THE STEP VALUES AND STAYS THE STEP VALUES. A step carries words to read as
         # well as a value to match, and the words must not get in here: two spellings of one
@@ -466,7 +486,7 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
         # because the sentence above it differed.
         key = tuple(
             tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-            for step in decision_steps(action)
+            for step in decision_steps(action, player_id)
         )
         grouped.setdefault(key, []).append(action)
 
@@ -476,7 +496,7 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
         settled = not unresolved
         candidates.append(
             {
-                "steps": decision_steps(members[0]),
+                "steps": decision_steps(members[0], player_id),
                 # The count before any route step is followed. The page reads this value directly
                 # rather than deriving it from route length.
                 "counter_start": _counter_start(members[0]),

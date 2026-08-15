@@ -2437,8 +2437,9 @@ def _visible_cubes(snapshot: dict, position: str, player_id: str) -> int:
     )
 
 
-def _setup_sow_uses_board_signals_not_panel_prompts(transcript) -> None:
-    assert transcript["asking"][0] == [], "board-answered steps still print panel prompts"
+def _exactly_one_prompt_is_visible(transcript) -> None:
+    for point in transcript["asking"]:
+        assert len(point) <= 1, f"two questions were put at once: {point}"
 
 
 def _reset_waits_for_a_followed_arrow(transcript) -> None:
@@ -2514,7 +2515,10 @@ def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
     assert server.payload["state"]["phase"] == "setup_sow"
     transcript = _run_script(server, [], tmp_path)
 
-    _setup_sow_uses_board_signals_not_panel_prompts(transcript)
+    _exactly_one_prompt_is_visible(transcript)
+    assert transcript["asking"][0] == [
+        f"{server.payload['state']['active_player']}: follow an arrow."
+    ], "setup sow did not name the route question it was asking"
     assert transcript["offered"][0] == ["city->north", "city->south"], (
         f"setup sow offered {transcript['offered'][0]} instead of the two City arrows"
     )
@@ -2551,13 +2555,25 @@ def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: 
 
     asked = [point for point in transcript["asking"] if point]
     assert asked, "the panel never asked anything during a whole turn"
-    for point in asked:
-        assert len(point) == 1, f"two questions were put at once: {point}"
+    _exactly_one_prompt_is_visible(transcript)
     # And a settled turn has a summary to read instead, so the asking stops rather than leaving a
     # question standing over a decision that has been made.
     for asking, shown in zip(transcript["asking"], transcript["shownPanel"], strict=True):
         if shown != -1:
             assert asking == [], f"a settled turn was still asking {asking}"
+
+
+def test_turn_prompt_lines_name_the_acting_seat_by_colour(tmp_path: Path) -> None:
+    """Prompt text says the acting seat by colour, never by engine id."""
+    server = _played_through_setup(_served(tmp_path))
+    page = render_play_view_from_payload(server.payload)
+    spoken = re.findall(r'<div class="turn-prompt"[^>]*>([^<]*)</div>', page)
+    active = server.payload["state"]["active_player"]
+    expected = f"{SEAT_COLOURS[active]}:"
+
+    assert spoken, "no turn prompt lines were drawn"
+    assert all(line.startswith(expected) for line in spoken), spoken
+    assert not any("player_" in line for line in spoken), spoken
 
 
 @needs_node
@@ -2642,29 +2658,33 @@ def test_after_normal_turn_route_answers_preview_matches_the_named_route(tmp_pat
 
 
 @needs_node
-def test_origin_and_duty_space_marks_are_distinct_in_a_normal_turn(tmp_path: Path) -> None:
-    """Origin and duty spaces are marked separately as the turn advances."""
+def test_taken_origin_clears_its_ring_and_duty_candidates_match_the_engine_offer(
+    tmp_path: Path,
+) -> None:
+    """After lifting, the origin is unmarked and duty candidates come straight from candidates."""
     server = _played_through_setup(_served(tmp_path))
     decisions = _engine_decisions(server)
-    route = next(steps for steps in decisions if any(step["kind"] == "edge" for step in steps))
-    route_answers = []
-    for step in route:
-        if step["kind"] == "duty":
-            break
-        route_answers.append(step["value"])
-
     opening = _run_script(server, [], tmp_path)
-    after_route = _run_script(server, _clicks_to(server, decisions, route_answers), tmp_path)
-
     assert opening["startCandidates"][-1], "no origin spaces were marked at turn start"
-    assert opening["dutyCandidates"][-1] == [], "duty spaces were marked before the hand emptied"
-    assert after_route["startCandidates"][-1] == [], (
-        "origin marks stayed up once route answering was done"
+
+    chosen_origin = None
+    after_origin = None
+    for origin in opening["startCandidates"][-1]:
+        candidate = _run_script(server, [_at(origin)], tmp_path)
+        if candidate["dutyCandidates"][-1]:
+            chosen_origin = origin
+            after_origin = candidate
+            break
+    assert chosen_origin is not None and after_origin is not None, (
+        "no clicked origin reached a duty-choice state to check"
     )
-    assert after_route["dutyCandidates"][-1], "no duty spaces were marked after the hand emptied"
-    assert not [value for value in after_route["offered"][-1] if "->" in str(value)], (
-        "route arrows stayed lit after duty candidates were offered"
-    )
+
+    prefix = _forced_prefix(decisions, [chosen_origin])
+    expected = sorted(step["value"] for step in _next_steps(decisions, prefix))
+    assert expected, "the engine offered no duties at this point"
+    assert chosen_origin not in after_origin["startCandidates"][-1]
+    assert chosen_origin not in after_origin["dutyCandidates"][-1]
+    assert sorted(after_origin["dutyCandidates"][-1]) == expected
 
 
 @needs_node
@@ -2876,21 +2896,59 @@ def test_dimming_reset_after_origin_is_taken_is_caught(tmp_path: Path) -> None:
 
 
 @needs_node
-def test_putting_board_step_prompts_back_in_the_panel_is_caught(tmp_path: Path) -> None:
-    """MUTATION. If board questions reappear as panel prompts, the guard has to say so."""
+def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> None:
+    """MUTATION. If prompts are no longer one-at-a-time, the guard has to say so."""
     server = _served(tmp_path)
-    by_kind = _run_script(
+    active = server.payload["state"]["active_player"]
+    server.payload = dict(
+        server.payload,
+        turn_candidates=[
+            {
+                "steps": [
+                    {
+                        "kind": "origin",
+                        "value": 1,
+                        "prompt": f"{active}: choose a space to lift from.",
+                        "counter": 1,
+                    }
+                ],
+                "counter_start": 1,
+                "action_id": None,
+                "summary": None,
+                "unresolved": [],
+                "variants": 1,
+            },
+            {
+                "steps": [
+                    {
+                        "kind": "origin",
+                        "value": 2,
+                        "prompt": f"{active}: choose a duty to take.",
+                        "counter": 1,
+                    }
+                ],
+                "counter_start": 1,
+                "action_id": None,
+                "summary": None,
+                "unresolved": [],
+                "variants": 1,
+            },
+        ],
+    )
+    widened = _run_script(
         server,
         [],
         tmp_path,
         mutate=lambda code: code.replace(
-            "if (step.kind === 'origin' || step.kind === 'duty' ||"
-            " step.kind === 'edge') { return; }",
-            "",
+            "return prompt === null ? [] : [prompt];",
+            (
+                "return offered.filter(function (step) { return step.prompt; }).map(function"
+                " (step) { return step.prompt; });"
+            ),
         ),
     )
-    with pytest.raises(AssertionError, match="board-answered steps still print panel prompts"):
-        _setup_sow_uses_board_signals_not_panel_prompts(by_kind)
+    with pytest.raises(AssertionError, match="two questions were put at once"):
+        _exactly_one_prompt_is_visible(widened)
 
 
 def test_an_outline_key_that_forgets_pointer_events_is_caught(monkeypatch) -> None:

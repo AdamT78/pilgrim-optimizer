@@ -644,8 +644,8 @@ def test_a_setup_that_is_part_done_says_who_has_sown() -> None:
     assert dict(state_header(payload))["Setup sow"] == "sown by player_one"
 
 
-def test_start_and_duty_candidate_styles_both_exist_and_are_distinct() -> None:
-    payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
+def _payload_with_turn_candidates(active_player: str) -> dict:
+    payload = _payload([_player([5] + [0] * 8) for _ in range(4)], active_player=active_player)
     payload["turn_candidates"] = [
         {
             "steps": [],
@@ -655,22 +655,48 @@ def test_start_and_duty_candidate_styles_both_exist_and_are_distinct() -> None:
             "unresolved": [],
         }
     ]
-    page = render_play_view_from_payload(payload)
-    start = re.search(
-        r'\[data-turn-start-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
-        page,
-        re.S,
-    )
-    duty = re.search(
-        r'\[data-turn-duty-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
-        page,
-        re.S,
-    )
-    assert start is not None, "start-candidate board-circle rule was not present"
-    assert duty is not None, "duty-candidate board-circle rule was not present"
-    start_rule = " ".join(start.group(1).split())
-    duty_rule = " ".join(duty.group(1).split())
-    assert start_rule != duty_rule
+    return payload
+
+
+def test_offer_ring_colour_follows_the_active_seat_for_two_different_seats() -> None:
+    fills = {
+        player["id"]: player["fill"]
+        for player in load_player_boards_v2_layout()["players"]
+    }
+    seen: dict[str, tuple[str, str]] = {}
+    for player_id in ("player_one", "player_two"):
+        page = render_play_view_from_payload(_payload_with_turn_candidates(player_id))
+        start = re.search(
+            r'\[data-turn-start-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
+            page,
+            re.S,
+        )
+        duty = re.search(
+            r'\[data-turn-duty-candidate="true"\]\s+\.board-circle\s*\{([^}]*)\}',
+            page,
+            re.S,
+        )
+        chosen = re.search(
+            r'\[data-turn-duty-selected="true"\]\s+\.board-circle\s*\{([^}]*)\}',
+            page,
+            re.S,
+        )
+        assert start is not None, "start-candidate board-circle rule was not present"
+        assert duty is not None, "duty-candidate board-circle rule was not present"
+        assert chosen is not None, "duty-selected board-circle rule was not present"
+
+        start_rule = " ".join(start.group(1).split())
+        duty_rule = " ".join(duty.group(1).split())
+        chosen_rule = " ".join(chosen.group(1).split())
+        assert f"stroke: {fills[player_id]}" in start_rule
+        assert f"stroke: {fills[player_id]}" in duty_rule
+        assert f"stroke: {fills[player_id]}" in chosen_rule
+        assert "stroke-dasharray: 8 4" in start_rule
+        assert "stroke-dasharray: 8 4" in duty_rule
+        assert "stroke-dasharray" not in chosen_rule
+        seen[player_id] = (start_rule, duty_rule)
+
+    assert seen["player_one"] != seen["player_two"], "offer ring colour stopped following seat"
 
 
 def test_the_page_offers_nothing_to_press() -> None:

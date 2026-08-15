@@ -352,16 +352,13 @@ def _prompt_lines(candidates: list[dict]) -> str:
     this does not know that a position on the board means acolytes, or that some of these lines are
     answered nowhere near the panel they appear in.
 
-    Prompts for choices made directly on the board are deliberately absent: lit origin spaces,
-    duty spaces, and arrows already say what to point at, and repeating that in the panel turns one
-    thing to track into two.
+    This includes board-answered steps too. The board marks where to point; this says what the
+    question is, in one seam sentence the script only reveals.
     """
     seen: list[str] = []
     for candidate in candidates:
         for step in candidate["steps"]:
             prompt = step.get("prompt")
-            if step["kind"] in {"origin", "duty", "edge"}:
-                continue
             if prompt and prompt not in seen:
                 seen.append(prompt)
     return "".join(
@@ -603,16 +600,15 @@ _TURN_SCRIPT = """<script>
     return values;
   }
 
-  /* What the offered steps are ASKING, which is not sorted by kind: three of the questions are
-     answered by pointing at a space and each asks for a different one. The sentence comes off the
-     step whole. Nothing here composes, shortens or joins one. */
+  /* What the offered step is ASKING, in one line at a time. The sentence comes off the step
+     whole. Nothing here composes, shortens or joins one. */
   function promptsOf(offered) {
-    var values = [];
+    var prompt = null;
     offered.forEach(function (step) {
-      if (step.kind === 'origin' || step.kind === 'duty' || step.kind === 'edge') { return; }
-      if (step.prompt && values.indexOf(step.prompt) === -1) { values.push(step.prompt); }
+      if (prompt !== null) { return; }
+      if (step.prompt) { prompt = step.prompt; }
     });
-    return values;
+    return prompt === null ? [] : [prompt];
   }
 
   function mark(elements, attribute, values) {
@@ -814,11 +810,9 @@ _TURN_SCRIPT = """<script>
       } else {
         space.setAttribute('data-turn-duty-candidate', 'true');
       }
-      if (preview.origin === index) {
-        space.setAttribute('data-turn-start-selected', 'true');
-      } else {
-        space.removeAttribute('data-turn-start-selected');
-      }
+      /* Offered and taken are different marks. Once origin is taken, it is no longer offered and
+         carries no ring of its own. */
+      space.removeAttribute('data-turn-start-selected');
       if (preview.duty === index) {
         space.setAttribute('data-turn-duty-selected', 'true');
       } else {
@@ -929,31 +923,7 @@ _TURN_SCRIPT = """<script>
       show([], [], CANDIDATES.indexOf(live[0]), live[0].action_id !== null, preview);
       return;
     }
-    if (!resolutions.length) {
-      show(offered, [], -1, false, preview);
-      return;
-    }
-    if (resolutionSplit === 'action') {
-      show(
-        offered.filter(function (step) {
-          return step.kind !== 'resolution' || step.value !== 'tithe';
-        }),
-        resolutions,
-        -1,
-        false,
-        preview
-      );
-      return;
-    }
-    show(
-      offered.filter(function (step) {
-        return step.kind !== 'resolution';
-      }),
-      resolutions,
-      -1,
-      false,
-      preview
-    );
+    show(offered, resolutions, -1, false, preview);
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
@@ -1071,17 +1041,16 @@ def turn_styles(route_color: str) -> str:
     The whole space and arrow are the targets rather than just their outlines, so a click in the
     painted area counts.
     """
-    return f"""  /* Two space questions on one board, marked differently on purpose.
-     Start candidates mean "lift from here": dashed teal rings.
-     Duty candidates mean "take this duty now": solid amber rings. */
+    return f"""  /* One offered-ring language: dashed means "offered now", solid means "taken".
+     Origin and duty candidates intentionally use the same dashed seat-colour ring. That is safe
+     because they are never offered together, and the prompt line says which question is live. */
   [data-turn-start-candidate="true"] {{ cursor: pointer; }}
   [data-turn-start-candidate="true"] .board-circle {{
-    stroke: #2E7B76; stroke-width: 4.4; stroke-dasharray: 8 4;
+    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
   }}
-  [data-turn-start-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
   [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
   [data-turn-duty-candidate="true"] .board-circle {{
-    stroke: #B56A2A; stroke-width: 4.8; stroke-dasharray: none;
+    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
   }}
   [data-turn-duty-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 3.5; }}
   [data-ornament-position][data-turn-duty-selected="true"] circle {{
