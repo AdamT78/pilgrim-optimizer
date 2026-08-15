@@ -21,6 +21,7 @@ import threading
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
+from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -40,7 +41,7 @@ from pilgrim.rules.transition import apply_action, legal_actions
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug import render_play_view
-from tools.ui_debug.render_play_view import render_play_view_from_payload
+from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
@@ -1875,6 +1876,121 @@ def _the_script_is_the_template_with_only_its_two_values_filled_in(
     )
 
 
+def test_the_page_says_a_seat_by_colour_and_never_by_the_engines_name(tmp_path: Path) -> None:
+    """The engine seats white first and the table seats it last, so an id is never a seat number.
+
+    Blue is the third chair and is `player_four`; there is no arrangement under which those two
+    numbers agree. So an id printed at a player does not merely fail to help -- it reads as a
+    numbering, and is one, of something other than the chairs in front of them.
+
+    The check is on text nodes only. The ids are all over this page in attributes and have to be,
+    which is asserted first: a guard that could be satisfied by removing them from everywhere would
+    be a guard against keeping the seam.
+    """
+    server = _played_through_setup(_served(tmp_path))
+    page = render_play_view_from_payload(server.payload)
+
+    for engine_id in SEAT_COLOURS:
+        assert engine_id in page, f"{engine_id} has left the page entirely, attributes and all"
+
+    said = _out_loud(page)
+    offenders = [
+        (where, text, engine_id)
+        for where, text in said
+        for engine_id in SEAT_COLOURS
+        if engine_id in text
+    ]
+    assert not offenders, "the page said the engine's name for a seat out loud: " + "; ".join(
+        f"{engine_id!r} in {where} -- {text!r}" for where, text, engine_id in offenders[:4]
+    )
+
+    # And it is saying something: a page that had stopped naming seats at all would pass the check
+    # above by being silent.
+    spoken = " ".join(text for _, text in said)
+    assert any(colour in spoken for colour in SEAT_COLOURS.values())
+
+
+def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Path) -> None:
+    """The colour is a lookup on the id, so the third board is Blue wherever it is mentioned.
+
+    Named against the board's own markup rather than against a list written here, so the page and
+    the page's words cannot drift: the seat that carries `data-player="player_four"` is the one the
+    sentence has to call Blue.
+    """
+    # Before the opening decision rather than after it, because that decision is the one place a
+    # seat is named four times over -- once per board a player may point at.
+    server = PlayServer(("127.0.0.1", 0), _generated(tmp_path))
+    page = render_play_view_from_payload(server.payload)
+
+    third = re.search(r'data-player-seat="3" data-player="(\w+)"', page)
+    assert third, "no third board on the page"
+    assert third.group(1) == "player_four", "the third chair is not who it was"
+    assert SEAT_COLOURS[third.group(1)] == "Blue"
+
+    summaries = re.findall(r'<div class="turn-summary">([^<]*)</div>', page)
+    assert "Start player selection: Blue begins the next round" in summaries
+    assert not any("player_" in summary for summary in summaries)
+
+    # Choosing that board, the transcript names both seats by colour and the header follows.
+    blue = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["value"] == "player_four" for step in candidate["steps"])
+    )
+    server.apply(blue["action_id"], server.payload["state_token"])
+    after = render_play_view_from_payload(server.payload)
+    events = re.findall(r'<div class="log-event">([^<]*)</div>', after)
+    assert any("chose Blue" in line for line in events), events
+    assert ("Active player", "Blue") in _header_of(after)
+
+
+def _header_of(page: str) -> list[tuple[str, str]]:
+    """The state header as key/value pairs, read off the rendered page."""
+    return re.findall(
+        r'<span class="log-key">([^<]*)</span><span class="log-value">([^<]*)</span>', page
+    )
+
+
+def test_a_box_hired_from_another_seat_names_that_seat_by_colour() -> None:
+    """The one offer that names a player, put to the page directly.
+
+    `_played_until_a_box_is_offered` reaches a position offering your own box and the market's, and
+    never one belonging to a neighbour, so the walk cannot exercise the case that actually carries
+    a seat. Handing the page the step it would build is what makes this checkable at all -- and it
+    is the case that matters, since a box hired from a neighbour is paid to that neighbour.
+    """
+    offer = {
+        "kind": "combination",
+        "value": "player_four",
+        "label": "hire the Confession Box from player_four",
+        "prompt": "Choose one of these.",
+    }
+    payload = {
+        "turn_candidates": [{"steps": [offer], "action_id": "x", "summary": "s", "variants": 1}]
+    }
+    page = render_play_view.render_turn_panel(payload)
+
+    assert ">hire the Confession Box from Blue<" in page
+    # The value it is answered by is untouched: the script routes on the engine's name.
+    assert 'data-combination-key="player_four"' in page
+
+
+def test_saying_the_engines_name_for_a_seat_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION. Put the ids back and the guard has to notice, and say where it found one."""
+    monkeypatch.setattr(render_play_view, "say", lambda value: escape(str(value)))
+    server = _played_through_setup(_served(tmp_path))
+    page = render_play_view_from_payload(server.payload)
+
+    offenders = [
+        (where, text)
+        for where, text in _out_loud(page)
+        for engine_id in SEAT_COLOURS
+        if engine_id in text
+    ]
+    assert offenders, "the guard would not have noticed the ids coming back"
+    assert any("log-value" in where or "log-event" in where for where, _ in offenders), offenders
+
+
 def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> None:
     """No rule may be computed in the browser, so there is nowhere for a second one to live.
 
@@ -1982,6 +2098,50 @@ _SVG_SHAPES = frozenset(
     {"rect", "circle", "ellipse", "line", "path", "polygon", "polyline", "text", "image"}
 )
 _SVG_CONTAINERS = frozenset({"svg", "g", "a", "use"})
+
+
+class _Spoken(HTMLParser):
+    """Every run of text the page shows a reader, with the element it sits in.
+
+    Scoped to text nodes, and that scope is the point rather than a convenience. The page is full
+    of engine player ids in ATTRIBUTES -- `data-player`, `data-seat-choice-key`, the candidates the
+    script routes on -- and they have to stay there, because the script routes on them and the seam
+    is defined in the engine's names. A guard that searched the whole page could only be satisfied
+    by pulling the seam apart, so it would be a guard against the wrong thing.
+
+    `script` and `style` are skipped for the same reason: their contents are data and rules, not
+    words. The title is not skipped -- a tab is somewhere a reader looks.
+    """
+
+    QUIET = {"script", "style"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.spoken: list[tuple[str, str]] = []
+        self._quiet = 0
+        self._where = "#document"
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in self.QUIET:
+            self._quiet += 1
+        found = dict(attrs)
+        marks = " ".join(f"{k}={v!r}" for k, v in found.items() if k in ("class", "id"))
+        self._where = f"<{tag} {marks}>" if marks else f"<{tag}>"
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.QUIET and self._quiet:
+            self._quiet -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._quiet or not data.strip():
+            return
+        self.spoken.append((self._where, data.strip()))
+
+
+def _out_loud(page: str) -> list[tuple[str, str]]:
+    parser = _Spoken()
+    parser.feed(page)
+    return parser.spoken
 
 
 class _Markup(HTMLParser):
@@ -2438,10 +2598,16 @@ def test_a_box_offer_reads_as_a_sentence_and_names_where_it_comes_from(tmp_path:
     assert "decline the Confession Box" in labels
     using = next(label for label in labels if label != "decline the Confession Box")
     assert using.startswith(("use your own", "hire the Confession Box from"))
-    for label in labels:
-        # The values behind these are `own_active`, `market` and `player_one`, and none of them
-        # is English. A label carrying an underscore is one that let a value through.
-        assert "_" not in label, f"a value leaked into what a player reads: {label}"
+
+    # Checked on the page rather than on the label, because that is now where the sentence is
+    # finished. `own_active` and `market` are turned into English here, since they are not seats
+    # and the page has no lookup for them; a seat is left in the engine's name and said as a
+    # colour by the page's one door. So the label alone is no longer the thing a player reads.
+    page = render_play_view_from_payload(server.payload)
+    offered = re.findall(r'<button[^>]*data-combination-key="[^"]*"[^>]*>([^<]*)</button>', page)
+    assert offered, "the offers never reached the page"
+    for text in offered:
+        assert "_" not in text, f"a value leaked into what a player reads: {text}"
 
 
 def test_the_boxes_are_answered_one_seat_at_a_time_and_the_marker_waits(tmp_path: Path) -> None:

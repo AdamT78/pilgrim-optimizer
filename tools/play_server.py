@@ -246,15 +246,11 @@ def _confession_in_words(action: Any) -> str:
         return "use your own Confession Box"
     if action.source == "market":
         return "hire the Confession Box from the market"
-    return f"hire the Confession Box from {_SEAT_WORDS.get(action.source, action.source)}"
-
-
-_SEAT_WORDS = {
-    "player_one": "player one",
-    "player_two": "player two",
-    "player_three": "player three",
-    "player_four": "player four",
-}
+    # The seat is left in the engine's own name. It used to be spelled out here as "player one",
+    # which read better than the id and was wrong in the same way -- white is not the first chair
+    # -- and it was a second place that decided what a seat is called. The page has one door for
+    # that now, and this goes through it like every other sentence.
+    return f"hire the Confession Box from {action.source}"
 
 
 def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:

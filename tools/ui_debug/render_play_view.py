@@ -39,6 +39,7 @@ Run from the repo root to write it out:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from html import escape
 from pathlib import Path
@@ -132,6 +133,39 @@ def piety_variant_for(seated: list[str]) -> str:
 def seat_of(player_id: str) -> int:
     """Which chair an engine player sits in. See the adapter's point 3: this is not their index."""
     return SEATED_PLAYERS.index(player_id) + 1
+
+
+def _seat_colours() -> dict[str, str]:
+    """What each engine player is called at the table, from the layout that already says so."""
+    return {
+        player["id"]: player["color"].capitalize()
+        for player in load_player_boards_v2_layout()["players"]
+    }
+
+
+SEAT_COLOURS = _seat_colours()
+_SEAT_NAMED = re.compile(r"\b(" + "|".join(sorted(SEAT_COLOURS)) + r")\b")
+
+
+def say(value: object) -> str:
+    """Put a string on the page, saying seats by the colour a player can see.
+
+    THE ONE DOOR. Everything that becomes readable text goes through here, and everything that
+    becomes an attribute goes through `escape` instead. That split is the whole rule: `data-player`
+    and its kin stay in the engine's names because the script routes on them and the seam is
+    defined in those names, while what the page says out loud is the page's own business.
+
+    It has to be one door rather than one call per producer, because there are three producers --
+    the state header, the transcript, the turn summaries -- and they are the engine's sentences
+    arriving whole. Rewriting them at the source would be the page editing the engine's account of
+    itself, and would leave the fourth producer to be found by whoever notices.
+
+    Why it is needed at all: the engine seats white first and the table seats it last, so an engine
+    id is never a seat number and never can be. Blue is the third chair and is `player_four`. There
+    is no reading under which those two agree, so a page that prints the id is reliably confusing
+    in a way a wrong number would not be -- it looks like a numbering and is not one.
+    """
+    return escape(_SEAT_NAMED.sub(lambda found: SEAT_COLOURS[found.group(1)], str(value)))
 
 
 def duty_layout_for(payload: dict, duty_layout: dict) -> dict:
@@ -290,16 +324,20 @@ def render_log_box(payload: dict) -> str:
     is where this PR's successor will put the event transcript underneath them.
     """
     rows = "".join(
-        f'<div class="log-line"><span class="log-key">{escape(key)}</span>'
-        f'<span class="log-value">{escape(value)}</span></div>'
+        f'<div class="log-line"><span class="log-key">{say(key)}</span>'
+        f'<span class="log-value">{say(value)}</span></div>'
         for key, value in state_header(payload)
     )
     # Already formatted when it got here. The sentences are the CLI's own, written by the shared
     # formatter on the engine's side of the seam, so the two accounts of a game cannot drift; an
     # event the formatter declines to describe never becomes a line and is not represented by a
     # blank one.
+    #
+    # Newest first, and drawn back into order by `column-reverse`. That pair is what keeps the box
+    # showing its newest line once it is scrolling, on a page that has no script to scroll it with.
     entries = "".join(
-        f'<div class="log-event">{escape(str(line))}</div>' for line in payload.get("log", ())
+        f'<div class="log-event">{say(line)}</div>'
+        for line in reversed(list(payload.get("log", ())))
     )
     transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
     return (
@@ -329,7 +367,7 @@ def _prompt_lines(candidates: list[dict]) -> str:
                 seen.append(prompt)
     return "".join(
         f'<div class="turn-prompt" data-turn-prompt="{escape(prompt)}"'
-        f' data-turn-offered="false">{escape(prompt)}</div>'
+        f' data-turn-offered="false">{say(prompt)}</div>'
         for prompt in sorted(seen)
     )
 
@@ -348,7 +386,7 @@ def _resolution_keys(candidates: list[dict]) -> str:
                 seen.append(step["value"])
     return "".join(
         f'<button type="button" class="turn-key" data-resolution-key="{escape(name)}"'
-        f' data-turn-offered="false">{escape(name.replace("_", " "))}</button>'
+        f' data-turn-offered="false">{say(name.replace("_", " "))}</button>'
         for name in sorted(seen)
     )
 
@@ -371,7 +409,7 @@ def _combination_keys(candidates: list[dict]) -> str:
                 seen.setdefault(step["value"], step.get("label", step["value"]))
     return "".join(
         f'<button type="button" class="turn-key" data-combination-key="{escape(value)}"'
-        f' data-turn-offered="false">{escape(label)}</button>'
+        f' data-turn-offered="false">{say(label)}</button>'
         for value, label in sorted(seen.items())
     )
 
@@ -390,14 +428,14 @@ def _turn_panels(candidates: list[dict]) -> str:
     for index, candidate in enumerate(candidates):
         if candidate["action_id"] is not None:
             body = (
-                f'<div class="turn-summary">{escape(str(candidate["summary"]))}</div>'
+                f'<div class="turn-summary">{say(candidate["summary"])}</div>'
                 f'<button type="button" class="turn-commit"'
                 f' data-turn-confirm="{escape(str(candidate["action_id"]))}">Confirm'
                 "</button>"
             )
         else:
             fields = "".join(
-                f'<li class="turn-field">{escape(name)}</li>' for name in candidate["unresolved"]
+                f'<li class="turn-field">{say(name)}</li>' for name in candidate["unresolved"]
             )
             body = (
                 '<div class="turn-blocked">This turn is not decided yet. '
@@ -439,13 +477,27 @@ def log_styles() -> str:
     width: 100%; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px;
     padding: 10px 12px;
+    /* A column, so the transcript can be handed what the header lines leave;
+       min-height: 0 so the box may be squeezed below its content, which is what
+       lets the column's cap reach the one part willing to give. The header lines
+       and the turn panel keep their auto floor and so never give any. */
+    display: flex; flex-direction: column; min-height: 0;
   }
   .log-line { display: flex; justify-content: space-between; gap: 12px; }
   .log-key { color: #9A9A9A; }
   .log-value { color: #F2EEDF; text-align: right; }
+  /* The one thing on the page with no height of its own. It takes what is left
+     and scrolls inside itself, rather than a fixed max-height that is too tall
+     on a short window and too short on a tall one.
+
+     column-reverse is what pins it to the newest line, and is why the events are
+     written newest first: a reversed column starts scrolled at its own start,
+     which is the bottom of the box. It costs no script -- and there is no script
+     to put it in, since a page served with nothing to decide carries none. */
   .log-transcript {
     margin-top: 8px; padding-top: 8px; border-top: 1px solid #333333;
-    max-height: 220px; overflow-y: auto;
+    display: flex; flex-direction: column-reverse;
+    min-height: 0; overflow-y: auto;
   }
   .log-event { color: #C9C4B4; font-size: 12px; margin-bottom: 3px; }
 
