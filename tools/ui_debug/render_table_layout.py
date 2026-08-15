@@ -544,6 +544,21 @@ def table_layout_styles(scale: TableScale) -> str:
     display: flex; flex-direction: column; align-items: center;
     align-self: stretch; justify-content: flex-start; gap: 8px;
     width: calc(var(--w-alms) + {PANEL_CHROME}px);
+    /* And no taller than the row, for the same reason it is no wider than the
+       Alms Table. Whatever sits in the slack is the column's tenant: it takes
+       the room that is there and finds its own way to live in less, rather than
+       pushing the row down and the page into a scrollbar. Everything here is
+       sized from 100vh, so a page that scrolls is also a page drawing at a
+       different scale -- which is how the same six panels came out as two
+       different-looking layouts on a short window.
+
+       `overflow-y: auto` is the backstop for a tenant that cannot shrink. The
+       play view's log gives way and never reaches it; the debug table's control
+       stack has a fixed height and, on a short enough window, does. Scrolling
+       the column reaches it -- capping without this would hide controls with no
+       way to get at them, which is worse than the taller page it replaced. */
+    max-height: var(--row-height);
+    overflow-y: auto;
   }}
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short

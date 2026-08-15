@@ -592,6 +592,34 @@ def test_the_log_says_the_position_and_works_none_of_it_out() -> None:
     assert header["Setup sow"] == "complete"
 
 
+def test_the_transcript_is_written_backwards_so_it_opens_on_its_newest_line() -> None:
+    """The two halves of one trick, asserted together because either alone is a bug.
+
+    A box that scrolls has to open at the end, or it silently shows the oldest event -- which is
+    worse than the taller page it replaced. There is no script to scroll it with: a page served
+    with nothing to decide carries none, and a second one would break what the turn script's guard
+    claims to cover. So the events are written newest first and `column-reverse` turns them back,
+    which puts the scrolling start at the bottom of the box.
+
+    Reverse the markup without the CSS and the log reads backwards; drop the CSS without the markup
+    and it opens on the oldest line. Neither is visible from the other half, so both are held here.
+    """
+    payload = _payload([_player([5] + [0] * 8)]) | {"log": ["oldest", "middle", "newest"]}
+    page = render_play_view_from_payload(payload)
+
+    assert re.findall(r'<div class="log-event">([^<]*)</div>', page) == [
+        "newest",
+        "middle",
+        "oldest",
+    ]
+    rule = re.search(r"\.log-transcript \{(.*?)\}", page, re.S)
+    assert rule, "the transcript has no rule of its own"
+    assert "column-reverse" in rule.group(1)
+    # And it is the thing that gives when the column runs short: no floor, and its own scrollbar.
+    assert "min-height: 0" in rule.group(1)
+    assert "overflow-y: auto" in rule.group(1)
+
+
 def test_a_setup_that_is_part_done_says_who_has_sown() -> None:
     payload = _payload(
         [_player([5] + [0] * 8) for _ in range(2)],

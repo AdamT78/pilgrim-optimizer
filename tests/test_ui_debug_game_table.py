@@ -2325,6 +2325,25 @@ def test_the_left_column_is_the_artworks_width_and_not_its_widest_sentence(page:
     assert width.group(1) == f"calc(var(--w-alms) + {PANEL_CHROME}px)"
 
 
+def test_the_left_column_gives_way_before_the_page_does(page: str) -> None:
+    """A column that grows past the row makes the whole page taller, and that is not a local cost.
+
+    Every panel here is sized from `100vh`, so a page that scrolls is also a page drawing at a
+    smaller scale. That is how the play view and the debug table came out looking like two
+    different layouts on a short window while being identical at a matched one: the log pushed one
+    of them into a scrollbar and the scrollbar re-solved the cube.
+
+    So the column is capped at the row it sits in, and whatever lives in the slack finds its own
+    way to fit. The overflow is the backstop for a tenant that cannot: the debug table's controls
+    have a fixed height, and hiding a control with no way to reach it would be worse than the
+    taller page.
+    """
+    rule = re.search(r"\.left \{(.*?)\}", page, re.S)
+    assert rule, "the left column has no rule at all"
+    assert "max-height: var(--row-height);" in rule.group(1)
+    assert "overflow-y: auto;" in rule.group(1)
+
+
 def test_the_duty_wheel_is_the_one_panel_sized_by_height(page: str) -> None:
     """It fills what the row has left, so the gap above it is the gap used everywhere else.
 
