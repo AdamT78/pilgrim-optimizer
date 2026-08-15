@@ -770,9 +770,16 @@ from the bottom at two players, two and two at three. That mirrors `docs/rules/D
 which is also why the City has no neutral column: dummy acolytes are seeded and moved on the duty
 ring, and the City is not on that ring. The City's own columns have room for six cubes a seat —
 `CITY_STACK_HEIGHT`, a seat's whole holding rather than a duty tile's handful — and stand lower in
-the space so the taller stacks share the room under the title evenly. They open holding
-`city_sample_cubes_per_seat`, which is two, leaving four spaces free for a page with buttons to fill.
-Drawn `interactive`, a column draws every slot it has room for and hides the empty ones, the way
+the space so the taller stacks share the room under the title evenly. On the debug pages they open
+holding `city_sample_cubes_per_seat`, which is two, leaving four spaces free for a page with buttons
+to fill; that number is part of `default_duty_wheel_state` rather than part of how the City draws,
+because a sample is data a page chose to show. Every column shows what is standing in it, City
+included, and a page that hands the wheel a real position — the play view does — gets that position
+drawn. More cubes than a column has room for raises `CubeOverflow` rather than being quietly
+dropped: the stack heights are artefacts of how these boards were drawn, so a position that exceeds
+one is a board this renderer cannot draw, and a tile showing three of the four standing on it would
+be a page saying something untrue. Drawn `interactive`, a column draws every slot it has room for and
+hides the empty ones, the way
 every other board here draws the slots a cube can stand in — six in the City, `TILE_STACK_HEIGHT` on
 a duty tile, which is the three that fit between the baseline and the title, and none at all in the
 neutral column, since no seat plays those cubes. Drawn plain, a column is the cubes standing in it

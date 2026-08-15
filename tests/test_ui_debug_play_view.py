@@ -450,6 +450,36 @@ def test_the_wheels_cubes_are_keyed_by_tile_but_counted_by_position() -> None:
     assert sum(counts["player_one"] for counts in state.values()) == 7
 
 
+def test_the_city_on_the_page_holds_what_the_position_puts_in_it() -> None:
+    """The state reaching the wheel was never the trouble; the drawing of it was.
+
+    `duty_board_state_for` has always reported the City correctly. The wheel then threw it away
+    and drew `city_sample_cubes_per_seat` instead, so this had to be asserted on the rendered page
+    rather than on the state, which is where it was passing all along. Two seats holding different
+    numbers, and neither of them the sample, so a page drawing one number for everybody cannot
+    pass by accident.
+    """
+    sample = int(load_duty_wheel_layout()["city_sample_cubes_per_seat"])
+    payload = _payload([_player([5, 0, 0, 0, 0, 0, 0, 0, 0]), _player([4, 3, 0, 0, 0, 0, 0, 0, 0])])
+    page = render_play_view_from_payload(payload)
+
+    assert sample not in (5, 4)
+    assert _cubes_standing_on(page, "city") == {"player_one": 5, "player_two": 4}
+    # And what left the City is standing where it went, rather than the ring drawing zero because
+    # only the City was wired.
+    assert _cubes_standing_on(page, "produce") == {"player_two": 3}
+
+
+def _cubes_standing_on(page: str, space: str) -> dict[str, int]:
+    """How many cubes each seat's column draws on one space of the rendered wheel."""
+    start = page.index(f'data-cube-tally="{space}"')
+    tally = page[start : page.index("</g>", start)]
+    counted: dict[str, int] = {}
+    for seat in re.findall(r'<rect [^>]*data-player="(\w+)"', tally):
+        counted[seat] = counted.get(seat, 0) + 1
+    return counted
+
+
 def test_the_derived_acolytes_array_is_not_the_one_that_is_read() -> None:
     """Fact (d): `acolytes` is a backward-compatible view of the same tuples. One is read, not two.
 

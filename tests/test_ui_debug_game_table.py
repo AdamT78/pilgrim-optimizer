@@ -2303,6 +2303,28 @@ def test_every_panel_is_sized_from_the_one_cube(page: str) -> None:
         assert re.search(rule, page), panel
 
 
+def test_the_left_column_is_the_artworks_width_and_not_its_widest_sentence(page: str) -> None:
+    """Otherwise the boards rescale whenever the text under them gets longer.
+
+    `.left` holds the Alms Table over whatever a page puts in the slack beneath it -- controls
+    here, the event log on the play view. With no width of its own a flex column takes its widest
+    child's, so the first logged sentence stretched it and the artwork above rescaled to match, by
+    an amount that depended on the wording rather than on the layout. Pinning it to the Alms
+    Table's own width makes the text wrap inside the column instead.
+
+    The width has to be `--w-alms`, not a number: every panel here is solved from the one cube, so
+    a column measured in pixels would come loose from the board it is supposed to be as wide as.
+    """
+    rule = re.search(r"\.left \{(.*?)\}", page, re.S)
+    assert rule, "the left column has no rule at all"
+    width = re.search(r"width: ([^;]+);", rule.group(1))
+    assert width, "the left column is still sized by whichever child is widest"
+    assert "var(--w-alms)" in width.group(1)
+    # Panel and all: the column is as wide as the Alms Table comes out on screen, which is the
+    # drawing plus the border and padding every panel carries.
+    assert width.group(1) == f"calc(var(--w-alms) + {PANEL_CHROME}px)"
+
+
 def test_the_duty_wheel_is_the_one_panel_sized_by_height(page: str) -> None:
     """It fills what the row has left, so the gap above it is the gap used everywhere else.
 
