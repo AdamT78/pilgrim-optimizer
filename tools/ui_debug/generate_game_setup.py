@@ -105,7 +105,7 @@ SUBTITLE = (
 PAGE_BACKGROUND = "#000000"
 
 # The setup page has four players, so it uses the 3-4 player track: two disc rows on the starting
-# space, one disc per player, in the seat order white, red, yellow, blue. The 2 player variant is
+# space, one disc per player, in the seat order red, yellow, blue, white. The 2 player variant is
 # not drawn here; it stays on the standalone piety track v2 page.
 PIETY_VARIANT_ID = "3_4_player"
 

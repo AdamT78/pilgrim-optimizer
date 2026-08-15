@@ -22,10 +22,9 @@ THE FOUR THINGS THIS DELIBERATELY DOES NOT REDISCOVER
 2. The duty arrangement is config, not state, so it arrives in the payload. The wheel cannot be
    drawn without it.
 
-3. Engine player id order is NOT seat order. `player_one` is white and the table seats red first,
-   so `player_one` is seat 4. Everything per-player goes through `SEATED_PLAYERS`. Indexing the
-   players array by seat happens to look right at four seats and is wrong at two, where the engine
-   seats `player_one` and `player_two` -- white and red, seats 4 and 1, not the first two chairs.
+3. Seat order is explicit, once, in `SEATED_PLAYERS`. It matches engine order today, and still
+   goes through one constant so a future reseating has one source of truth instead of a spread of
+   "first N players" assumptions.
 
 4. `players[].workforce.mancala` is authoritative. The payload also carries a top-level `acolytes`
    array, but it is a derived backward-compatible view of exactly the same tuples; reading both
@@ -49,10 +48,8 @@ RESOURCE_IDS = ("wheat", "stone", "silver")
 def seated_player_ids(payload: dict) -> list[str]:
     """The engine's player ids that have a seat, in seat order, with gaps left out.
 
-    Not the first N seats. At two players the engine seats `player_one` and `player_two`, which are
-    white and red -- seats 4 and 1 -- so the occupied chairs are the two ends of the row and not
-    the two nearest ends of it. Filtering the seating order by who exists is what gets that right
-    without anywhere having to know the answer for each count.
+    Filtered from `SEATED_PLAYERS` rather than derived from player count, so one constant owns seat
+    order wherever this page needs it.
     """
     present = set(player_ids_in_engine_order(payload))
     return [player_id for player_id in SEATED_PLAYERS if player_id in present]
@@ -78,9 +75,8 @@ def first_player_seat(payload: dict) -> int | None:
     screenshot can show -- so reading `start_player_id` here would draw the seal on the wrong board
     exactly when it finally had something to say.
 
-    Through the seating order, like every other per-player value on this page. The seal is a chair,
-    the marker is a player, and pairing them by array index is the mistake this file's point 3
-    exists to name: it looks right at four seats and is wrong at two.
+    Through the seating order, like every other per-player value on this page. The seal is a chair
+    and the marker is a player, and this keeps that join in one place.
 
     None means the state does not know its holder, which is what a scenario written before the
     engine kept one looks like. Nothing is drawn, because a marker put on the likeliest seat is a

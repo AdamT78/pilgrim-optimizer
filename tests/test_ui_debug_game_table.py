@@ -367,16 +367,16 @@ def test_the_four_seat_slots_carry_stable_player_count_hooks(page: str) -> None:
     )
 
     assert hooks == [
-        ("1", "player_two", "red"),
-        ("2", "player_three", "yellow"),
-        ("3", "player_four", "blue"),
-        ("4", "player_one", "white"),
+        ("1", "player_one", "red"),
+        ("2", "player_two", "yellow"),
+        ("3", "player_three", "blue"),
+        ("4", "player_four", "white"),
     ]
     assert seat_numbers_by_player() == {
-        "player_two": 1,
-        "player_three": 2,
-        "player_four": 3,
-        "player_one": 4,
+        "player_one": 1,
+        "player_two": 2,
+        "player_three": 3,
+        "player_four": 4,
     }
 
 
@@ -444,17 +444,20 @@ def test_row_one_ends_with_the_control_that_says_who_holds_the_marker(page: str)
 
     assert 'id="first-player-seat"' in body
     assert body.index(">M+<") < body.index('id="first-player-seat"')
-    seats = re.findall(r'<option value="(\d)"( selected)?>FP\d</option>', body)
-    assert [seat for seat, _ in seats] == ["1", "2", "3", "4"]
+    seats = re.findall(
+        r'<option value="(\d)"( selected)?>(Red|Yellow|Blue|White)</option>',
+        body,
+    )
+    assert [seat for seat, _, _ in seats] == ["1", "2", "3", "4"]
     # No "nobody" entry: the marker always sits with someone.
     assert len(seats) == len(SEATED_PLAYERS)
-    assert [seat for seat, chosen in seats if chosen] == [str(FIRST_PLAYER_SEAT_AT_START)]
+    assert [seat for seat, chosen, _ in seats if chosen] == [str(FIRST_PLAYER_SEAT_AT_START)]
 
 
 def test_the_table_opens_with_the_marker_on_the_seat_that_starts_the_game(page: str) -> None:
     """Every piety disc starts on 0, so the tie resolves to the first board: seat 1, red."""
     assert FIRST_PLAYER_SEAT_AT_START == 1
-    assert SEATED_PLAYERS[FIRST_PLAYER_SEAT_AT_START - 1] == "player_two"  # red
+    assert SEATED_PLAYERS[FIRST_PLAYER_SEAT_AT_START - 1] == "player_one"  # red
     assert f"firstPlayerSeat: {FIRST_PLAYER_SEAT_AT_START}," in page
     assert f'data-first-player-seat="{FIRST_PLAYER_SEAT_AT_START}"' in page
 
@@ -524,8 +527,11 @@ def test_row_two_has_disc_player_dropdown_and_step_buttons(page: str) -> None:
     assert row_two is not None
     body = row_two.group(1)
 
-    options = re.findall(r'<option value="(\d)"(?: selected)?>(P\d)</option>', body)
-    assert options == [("1", "P1"), ("2", "P2"), ("3", "P3"), ("4", "P4")]
+    options = re.findall(
+        r'<option value="(\d)"(?: selected)?>(Red|Yellow|Blue|White)</option>',
+        body,
+    )
+    assert options == [("1", "Red"), ("2", "Yellow"), ("3", "Blue"), ("4", "White")]
     assert 'id="disc-player-seat"' in body
     assert 'data-disc-track="alms" data-disc-delta="1">A+</button>' in body
     assert 'data-disc-track="alms" data-disc-delta="-1">A-</button>' in body
@@ -569,8 +575,11 @@ def test_row_three_carries_the_season_end_winner_controls(page: str) -> None:
     assert row_three is not None
     body = row_three.group(1)
 
-    options = re.findall(r'<option value="(\d)"(?: selected)?>(P\d)</option>', body)
-    assert options == [("1", "P1"), ("2", "P2"), ("3", "P3"), ("4", "P4")]
+    options = re.findall(
+        r'<option value="(\d)"(?: selected)?>(Red|Yellow|Blue|White)</option>',
+        body,
+    )
+    assert options == [("1", "Red"), ("2", "Yellow"), ("3", "Blue"), ("4", "White")]
     assert 'id="alms-winner-player-seat" data-alms-winner-player-select="true"' in body
     assert 'data-alms-winner-button="add">AT+</button>' in body
     assert 'data-alms-winner-button="reset">ATr</button>' in body
@@ -1245,10 +1254,10 @@ def test_alms_and_piety_discs_share_the_seat_order_the_boards_use(page: str) -> 
         )
 
     expected = {
-        ("1", "1", "player_two", "red"),
-        ("2", "2", "player_three", "yellow"),
-        ("3", "3", "player_four", "blue"),
-        ("4", "4", "player_one", "white"),
+        ("1", "1", "player_one", "red"),
+        ("2", "2", "player_two", "yellow"),
+        ("3", "3", "player_three", "blue"),
+        ("4", "4", "player_four", "white"),
     }
     assert set(discs(alms)) == expected
     assert set(discs(piety)) == expected
@@ -1294,12 +1303,7 @@ def test_the_duty_wheel_is_driven_from_the_compact_rows_not_its_own_controls(pag
 
 
 def test_the_wheel_seats_the_players_this_table_seats(page: str) -> None:
-    """2P is red and yellow here, not the red and blue the wheel's own layout seats.
-
-    Every other board on this page counts players in one order -- the seats in the row, the discs
-    on both tracks -- so a wheel that dropped a different colour would be the one board disagreeing
-    about who is playing. Only the seating is overridden; the neutral column is still the wheel's.
-    """
+    """Every board on this page counts players in the same seat order."""
     layout = duty_wheel_seating(load_duty_wheel_layout())
     colours = {player["id"]: player["color"] for player in layout["players"]}
     columns = {
@@ -1319,11 +1323,11 @@ def test_the_wheel_seats_the_players_this_table_seats(page: str) -> None:
     assert [colours[piece["id"]] for piece in city] == ["red", "yellow"]
 
 
-def test_the_wheels_own_page_still_seats_red_and_blue() -> None:
-    """The override is this page's, so the standalone wheel is left as it was."""
+def test_the_wheels_own_page_seats_the_first_two_boards_at_two_players() -> None:
+    """The standalone wheel now shares the table's left-to-right seat order."""
     layout = load_duty_wheel_layout()
 
-    assert layout["seats_by_player_count"]["2"] == ["player_two", "player_four"]
+    assert layout["seats_by_player_count"]["2"] == ["player_one", "player_two"]
     assert layout["default_player_count"] == 2
 
 
@@ -1543,11 +1547,7 @@ def test_a_space_holding_nothing_of_the_seat_s_is_nothing_to_start_from(page: st
 
 
 def test_the_board_whose_turn_it_is_is_asked_who_it_is(page: str) -> None:
-    """Seats and players are two different lists: the first seat is red, and red is `player_two`.
-
-    So the flow reads the player off the board that is on the table rather than pairing seat to
-    player itself, which is the one way of getting it that cannot drift from what is drawn.
-    """
+    """The flow reads the player id from the rendered board at that seat."""
     active = page[page.index("function seatBoard(seat)") :]
     active = active[: active.index("function updateActiveSeatIndicator()")]
 
@@ -1565,10 +1565,10 @@ def test_the_board_whose_turn_it_is_is_asked_who_it_is(page: str) -> None:
         page,
     )
     assert seats == [
-        ("1", "player_two", "red"),
-        ("2", "player_three", "yellow"),
-        ("3", "player_four", "blue"),
-        ("4", "player_one", "white"),
+        ("1", "player_one", "red"),
+        ("2", "player_two", "yellow"),
+        ("3", "player_three", "blue"),
+        ("4", "player_four", "white"),
     ]
 
 

@@ -77,7 +77,7 @@ BASELINE_SOURCE = UI_DEBUG_DIR / "prototype_sources" / "piety_tracks_v2.py.txt"
 
 VARIANT_IDS = ("3_4_player", "2_player")
 PLAYER_IDS = ("player_one", "player_two", "player_three", "player_four")
-PLAYER_COLORS = ("white", "red", "yellow", "blue")
+PLAYER_COLORS = ("red", "yellow", "blue", "white")
 POSITION_COUNT = 13
 VP_VALUES = (-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 7, 9)
 
@@ -177,7 +177,7 @@ def test_the_layout_names_four_players_by_colour() -> None:
 
     assert [player["id"] for player in players] == list(PLAYER_IDS)
     assert [player["color"] for player in players] == list(PLAYER_COLORS)
-    assert player_by_id(layout(), "player_one")["fill"] == "#FFFFFF"
+    assert player_by_id(layout(), "player_one")["fill"] == "#C0392B"
     with pytest.raises(KeyError):
         player_by_id(layout(), "player_five")
 
@@ -816,25 +816,21 @@ def test_the_debug_page_shows_the_marker_at_every_seat_that_can_hold_it() -> Non
 
 
 def test_the_page_shows_the_marker_on_whichever_seats_a_variant_actually_sits() -> None:
-    """Not 1..n: the 2 player variant seats white and red, which are seats 4 and 1.
-
-    Read off the discs the variant puts on the board, so a variant that later seats a different
-    pair shows seals for that pair rather than for the first two seat numbers.
-    """
+    """Read from seated discs, so a variant controls which seats can hold the marker."""
     assert seats_that_can_hold_the_marker(layout(), "3_4_player") == [1, 2, 3, 4]
-    assert seats_that_can_hold_the_marker(layout(), "2_player") == [1, 4]
+    assert seats_that_can_hold_the_marker(layout(), "2_player") == [1, 2]
 
     section = marker_panels(render_piety_tracks_v2_html(layout(), config()))
     assert "<figcaption>2 player track — seat 1, red</figcaption>" in section
-    assert "<figcaption>2 player track — seat 4, white</figcaption>" in section
-    assert "2 player track — seat 2" not in section
+    assert "<figcaption>2 player track — seat 2, yellow</figcaption>" in section
+    assert "2 player track — seat 4" not in section
 
 
 def test_the_marker_section_renders_the_real_panel_rather_than_a_picture_of_one() -> None:
     """So what is reviewed is what would ship. Same renderer, same call, only a seat added."""
     section = marker_panels(render_piety_tracks_v2_html(layout(), config()))
 
-    for variant_id, seat in (("3_4_player", 1), ("2_player", 4), ("3_4_player", None)):
+    for variant_id, seat in (("3_4_player", 1), ("2_player", 2), ("3_4_player", None)):
         assert render_piety_track_v2_svg(layout(), config(), variant_id, seat) in section
 
 
@@ -894,7 +890,7 @@ def test_which_seats_get_a_seal_comes_from_who_is_seated_not_from_counting_to_fo
         int(seat) for seat in re.findall(r'data-first-player-seal[^>]*data-player-seat="(\d)"', two)
     ]
 
-    assert seats == seats_that_can_hold_the_marker(layout(), "2_player") == [1, 4]
+    assert seats == seats_that_can_hold_the_marker(layout(), "2_player") == [1, 2]
 
 
 def test_asking_for_every_seat_but_naming_none_hides_the_lot() -> None:

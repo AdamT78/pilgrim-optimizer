@@ -173,7 +173,7 @@ def test_a_generated_game_always_knows_who_holds_the_marker(
     """New games are never in the unknown case, so the seal is drawn from the first frame."""
     scenario = _generated(tmp_path, player_count)
 
-    assert scenario.state.first_player_marker is PlayerId.PLAYER_TWO
+    assert scenario.state.first_player_marker is PlayerId.PLAYER_ONE
     assert scenario.state.phase is TurnPhase.START_PLAYER_SELECTION
     assert scenario.state.first_player_marker is not scenario.state.start_player
 

@@ -242,37 +242,31 @@ def test_neither_the_adapter_nor_the_play_view_imports_the_engine_at_all() -> No
 
 
 # ---------------------------------------------------------------------------------------------
-# Seating, which is not the players array's order
+# Seating
 # ---------------------------------------------------------------------------------------------
 
 
-def test_two_players_sit_at_the_two_ends_of_the_row_and_not_the_first_two_chairs() -> None:
-    """The trap fact (c) names. Checked by colour, because index is what gets this wrong.
-
-    A two-player game seats `player_one` and `player_two`. The boards layout makes `player_one`
-    white and the table seats red first, so the pair on the table is white and red -- seats 4 and 1.
-    Slicing the seating order to its first two would seat red and yellow and look entirely
-    plausible while being the wrong two players.
-    """
+def test_two_players_sit_in_the_first_two_chairs() -> None:
+    """At 2P the occupied seats are 1 and 2, in the same seat order as every other page."""
     payload = _payload([_player([5] + [0] * 8), _player([5] + [0] * 8)])
     seated = seated_player_ids(payload)
-    assert seated == ["player_two", "player_one"]
-    assert [seat_of(player_id) for player_id in seated] == [1, 4]
+    assert seated == ["player_one", "player_two"]
+    assert [seat_of(player_id) for player_id in seated] == [1, 2]
 
     boards = json.loads((UI_DEBUG / "player_boards_v2_layout.json").read_text(encoding="utf-8"))
     color = {player["id"]: player["color"] for player in boards["players"]}
-    assert [color[player_id] for player_id in seated] == ["red", "white"]
+    assert [color[player_id] for player_id in seated] == ["red", "yellow"]
 
 
-def test_three_players_leave_the_blue_chair_empty() -> None:
+def test_three_players_leave_the_white_chair_empty() -> None:
     payload = _payload([_player([5] + [0] * 8) for _ in range(3)])
-    assert seated_player_ids(payload) == ["player_two", "player_three", "player_one"]
+    assert seated_player_ids(payload) == ["player_one", "player_two", "player_three"]
 
 
 def test_the_short_table_gets_the_board_that_is_actually_shorter() -> None:
     """The two-player piety track is a different board, not a narrower one: one row of discs."""
-    assert piety_variant_for(["player_two", "player_one"]) == "2_player"
-    assert piety_variant_for(["player_two", "player_three", "player_one"]) == "3_4_player"
+    assert piety_variant_for(["player_one", "player_two"]) == "2_player"
+    assert piety_variant_for(["player_one", "player_two", "player_three"]) == "3_4_player"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -291,7 +285,7 @@ def _seal_in(page: str) -> dict[str, str] | None:
 def test_the_seal_goes_to_the_marker_holder_through_the_seating_order() -> None:
     """A player, turned into a chair the way every per-player value on this page is turned into one.
 
-    Yellow is `player_three`, who is the third id and the SECOND seat, so an adapter reaching for
+    Blue is `player_three`, who is the third id and the THIRD seat, so an adapter reaching for
     the players array by index would put this seal one chair along -- and would look right doing it
     at four seats, which is the whole reason this is checked by colour at three.
     """
@@ -300,10 +294,10 @@ def test_the_seal_goes_to_the_marker_holder_through_the_seating_order() -> None:
         first_player_marker="player_three",
         start_player_id="player_one",
     )
-    assert first_player_seat(payload) == 2
+    assert first_player_seat(payload) == 3
 
     seal = _seal_in(render_play_view_from_payload(payload))
-    assert seal == {"player": "player_three", "color": "yellow"}
+    assert seal == {"player": "player_three", "color": "blue"}
 
 
 def test_the_seal_and_the_wash_come_apart_when_a_holder_gives_the_round_away() -> None:
@@ -322,7 +316,7 @@ def test_the_seal_and_the_wash_come_apart_when_a_holder_gives_the_round_away() -
     )
     page = render_play_view_from_payload(payload)
 
-    assert _seal_in(page) == {"player": "player_two", "color": "red"}
+    assert _seal_in(page) == {"player": "player_two", "color": "yellow"}
     washed = re.findall(
         r'data-player="(\w+)" data-player-color="\w+"[^>]*data-active-seat="true"', page
     )
@@ -664,7 +658,7 @@ def test_an_empty_chair_keeps_its_width_so_the_others_do_not_slide() -> None:
         r' data-seat-taken="(true|false)"',
         page,
     )
-    assert chairs == [("1", "true"), ("2", "false"), ("3", "false"), ("4", "true")]
+    assert chairs == [("1", "true"), ("2", "true"), ("3", "false"), ("4", "false")]
     assert '.p-player[data-seat-taken="false"] { visibility: hidden; }' in page
 
 

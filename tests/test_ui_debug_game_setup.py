@@ -93,7 +93,7 @@ GENERATOR_SCRIPT = UI_DEBUG_DIR / "generate_game_setup.py"
 INDEX_HTML = UI_DEBUG_DIR / "index.html"
 
 TITLE = "PILGRIM — Game Setup Debug View"
-PLAYER_LABELS = ("Player 1", "Player 2", "Player 3", "Player 4")
+PLAYER_LABELS = ("Red", "Yellow", "Blue", "White")
 
 
 @pytest.fixture(scope="module")
@@ -672,7 +672,7 @@ ROLE_LABELS = (
     "Engraver",
     "Vestry",
 )
-PLAYER_BOARD_FILLS = ("#FFFFFF", "#B7382E", "#D9B33B", "#3B6EA5")
+PLAYER_BOARD_FILLS = ("#B7382E", "#D9B33B", "#3B6EA5", "#FFFFFF")
 
 
 def _player_board(page: str, player_id: str) -> str:

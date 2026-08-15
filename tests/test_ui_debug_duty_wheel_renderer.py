@@ -69,12 +69,12 @@ RING_DUTY_LABELS = (
     "Give Alms",
 )
 PLAYER_SEATS = ("player_one", "player_two", "player_three", "player_four")
-PLAYER_COLOURS = ("white", "red", "yellow", "blue")
+PLAYER_COLOURS = ("red", "yellow", "blue", "white")
 PLAYER_FILLS = {
-    "player_one": "#FFFFFF",
-    "player_two": "#C94C4C",
-    "player_three": "#E3C64A",
-    "player_four": "#3B6EA5",
+    "player_one": "#C94C4C",
+    "player_two": "#E3C64A",
+    "player_three": "#3B6EA5",
+    "player_four": "#FFFFFF",
 }
 DUMMY_BLACK = "#1F1F1F"
 MERCHANT_PURPLE = "#8E63D7"
@@ -286,7 +286,7 @@ def test_layout_names_the_four_seats_with_their_cube_colours() -> None:
 
     assert [player["id"] for player in players] == list(PLAYER_SEATS)
     assert [player["color"] for player in players] == list(PLAYER_COLOURS)
-    assert [player["label"] for player in players] == [f"Player {seat}" for seat in (1, 2, 3, 4)]
+    assert [player["label"] for player in players] == ["Red", "Yellow", "Blue", "White"]
     assert {player["id"]: player["fill"] for player in players} == PLAYER_FILLS
 
 
@@ -299,13 +299,13 @@ def test_layout_offers_the_two_three_and_four_player_views() -> None:
 
 
 def test_players_for_count_seats_the_colours_the_layout_sits_at_each_table() -> None:
-    """Which colours sit down is the layout's to say, not simply the first few in the list."""
+    """Which colours sit down is the layout's to say."""
     data = layout()
     seated = {count: players_for_count(data, count) for count in data["player_counts"]}
 
-    assert [player["color"] for player in seated[2]] == ["red", "blue"]
-    assert [player["color"] for player in seated[3]] == ["white", "red", "blue"]
-    assert [player["color"] for player in seated[4]] == ["white", "red", "yellow", "blue"]
+    assert [player["color"] for player in seated[2]] == ["red", "yellow"]
+    assert [player["color"] for player in seated[3]] == ["red", "yellow", "blue"]
+    assert [player["color"] for player in seated[4]] == ["red", "yellow", "blue", "white"]
     assert [player["id"] for player in seated[4]] == list(PLAYER_SEATS)
     # Every roster is a subset of the four seats, kept in the order the layout names them.
     for count, players in seated.items():
@@ -330,8 +330,8 @@ def test_a_duty_tile_carries_the_neutral_column_and_the_city_does_not() -> None:
     tile = duty_position_by_id(data, "produce")
     city = duty_position_by_id(data, data["city_id"])
 
-    assert [piece["color"] for piece in tally_pieces(data, tile, 2)] == ["red", "blue", "black"]
-    assert [piece["color"] for piece in tally_pieces(data, city, 2)] == ["red", "blue"]
+    assert [piece["color"] for piece in tally_pieces(data, tile, 2)] == ["red", "yellow", "black"]
+    assert [piece["color"] for piece in tally_pieces(data, city, 2)] == ["red", "yellow"]
     # A full table seats no neutrals, so the tile and the City agree again.
     assert [piece["color"] for piece in tally_pieces(data, tile, 4)] == list(PLAYER_COLOURS)
     assert [piece["color"] for piece in tally_pieces(data, city, 4)] == list(PLAYER_COLOURS)
@@ -529,7 +529,7 @@ def test_the_city_stands_below_its_title_with_room_for_a_full_column() -> None:
 
     # Drawn plain, a column is the cubes standing in it and no more.
     assert opening < CITY_STACK_HEIGHT
-    assert Counter(cubes) == {"player_two": opening, "player_four": opening}
+    assert Counter(cubes) == {"player_one": opening, "player_two": opening}
     # It stands lower than a duty tile's, with the room under the title shared evenly around it.
     assert CITY_TALLY_OFFSET_Y > TALLY_OFFSET_Y
     title = cy + LABEL_OFFSET_Y
@@ -559,13 +559,13 @@ def test_the_city_holds_six_cubes_a_seat_and_opens_holding_two() -> None:
     # Every space in the column is drawn, numbered from the baseline up, and the first two of each
     # are the ones standing.
     assert Counter(player for player, _, _ in drawn) == {
+        "player_one": CITY_STACK_HEIGHT,
         "player_two": CITY_STACK_HEIGHT,
-        "player_four": CITY_STACK_HEIGHT,
     }
-    for column in ("player_two", "player_four"):
+    for column in ("player_one", "player_two"):
         indices = [index for player, index, _ in drawn if player == column]
         assert indices == [str(index) for index in range(CITY_STACK_HEIGHT)]
-    assert Counter(standing) == {"player_two": 2, "player_four": 2}
+    assert Counter(standing) == {"player_one": 2, "player_two": 2}
 
     # Same cube and same pitch as everywhere else on the wheel: the column found its room by
     # standing lower, not by drawing anything smaller or closer together.
@@ -842,10 +842,10 @@ def test_interactive_board_only_draws_the_seats_a_player_count_seats() -> None:
     produce = svg[svg.index('data-cube-tally="produce" data-player-count="2"') :]
     two_player = produce[: produce.index("</g>")]
 
+    assert 'data-player="player_one"' in two_player
     assert 'data-player="player_two"' in two_player
-    assert 'data-player="player_four"' in two_player
-    assert 'data-player="player_one"' not in two_player
     assert 'data-player="player_three"' not in two_player
+    assert 'data-player="player_four"' not in two_player
     # And the neutrals stand beside them, on the duty tile but not in the City.
     assert 'data-player="dummy"' in two_player
     city = svg[svg.index('data-cube-tally="city" data-player-count="2"') :]
