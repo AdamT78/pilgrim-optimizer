@@ -253,7 +253,10 @@ def tag_resource_readouts(fragment: str, board_layout: dict) -> str:
     tagged = fragment
     for resource in board_layout["resources"]:
         resource_id = resource["id"]
-        group = re.compile(rf'(<g data-resource="{re.escape(resource_id)}">.*?)<text ', re.DOTALL)
+        group = re.compile(
+            rf'(<g data-resource="{re.escape(resource_id)}"[^>]*>.*?)<text ',
+            re.DOTALL,
+        )
         tagged, count = group.subn(
             rf'\1<text data-player-resource="{resource_id}" ', tagged, count=1
         )

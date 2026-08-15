@@ -700,7 +700,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         effective_piety = details.get("highest_effective_piety", "unknown")
         return (
             f"{event_name}: {deciding_player} takes the First Player marker on effective piety "
-            f"{effective_piety} and must choose who begins the next round"
+            f"{effective_piety} and must choose who begins this round"
         )
 
     if event.event_type is EventType.START_PLAYER_SELECTION:
@@ -711,7 +711,7 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         # the message elided who they gave it to, and those read alike while meaning opposites.
         deciding_player = str(details.get("deciding_player", "unknown"))
         selected_player = str(details.get("selected_start_player", "unknown"))
-        return f"{event_name}: {deciding_player} chose {selected_player} to begin the next round"
+        return f"{event_name}: {deciding_player} chose {selected_player} to begin this round"
 
     if event.event_type is EventType.GAME_END:
         reason = str(details.get("reason", "")).strip()

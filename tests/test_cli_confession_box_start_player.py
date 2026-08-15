@@ -126,7 +126,7 @@ def test_cli_apply_owned_confession_box_shows_temporary_piety_above_twelve(
     assert "BUILDING_HIRED: player_one hired Confession Box" not in output
     assert (
         "START_PLAYER_MARKER: player_one takes the First Player marker on effective "
-        "piety 14 and must choose who begins the next round"
+        "piety 14 and must choose who begins this round"
     ) in output
     assert "Piety position: 12" in output
 

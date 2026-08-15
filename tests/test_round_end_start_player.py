@@ -181,7 +181,7 @@ def test_the_log_names_the_decider_and_the_player_they_chose_even_when_those_are
 
     This is the only line in the log where the decider and the player they chose are visibly two
     things, so it is the line that carries the whole point of separating them. Written short for the
-    self-selection -- "player_one chose to begin the next round" -- it reads exactly like a line
+    self-selection -- "player_one chose to begin this round" -- it reads exactly like a line
     that meant to name somebody and lost them, and a reader has to work out which from a name that
     is not there. The shape is compared with the names blanked out, so the two cases have to be the
     same sentence and not merely both mention two players.
@@ -191,10 +191,10 @@ def test_the_log_names_the_decider_and_the_player_they_chose_even_when_those_are
     chose_other = _selection_message(scenario, PlayerId.PLAYER_TWO)
 
     assert chose_self == (
-        "START_PLAYER_SELECTION: player_one chose player_one to begin the next round"
+        "START_PLAYER_SELECTION: player_one chose player_one to begin this round"
     )
     assert chose_other == (
-        "START_PLAYER_SELECTION: player_one chose player_two to begin the next round"
+        "START_PLAYER_SELECTION: player_one chose player_two to begin this round"
     )
 
     assert len(_PLAYER_NAME.findall(chose_self)) == 2

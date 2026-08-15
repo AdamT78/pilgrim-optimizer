@@ -599,7 +599,7 @@ def test_the_resource_icons_are_the_size_the_duty_wheel_draws_the_same_things(la
 def _readouts(svg: str) -> list[tuple[str, str, float, str]]:
     """Each readout: its id, its artwork, where its amount is centred, and what the amount says."""
     rows = []
-    for row in re.findall(r'<g data-resource="\w+">.*?</g>', svg, re.S):
+    for row in re.findall(r'<g data-resource="\w+"[^>]*>.*?</g>', svg, re.S):
         amount = re.search(r'<text x="(-?[\d.]+)"[^>]*>(\d+)</text>', row)
         rows.append(
             (
@@ -687,6 +687,15 @@ def test_every_stock_gets_a_key_big_enough_to_press(layout: dict) -> None:
         ) in svg
     assert RESOURCE_CHOICE_WIDTH == 66.0 and RESOURCE_CHOICE_HEIGHT == 61.0
     assert resource_icon_size("coin") < RESOURCE_CHOICE_WIDTH / 2
+
+
+def test_resource_artwork_is_decorative_and_never_takes_pointer_events(layout: dict) -> None:
+    svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+    readouts = re.findall(r'<g data-resource="\w+"[^>]*>', svg)
+
+    assert readouts, "no resource readouts were drawn"
+    for readout in readouts:
+        assert 'pointer-events="none"' in readout
 
 
 def test_a_key_is_drawn_hidden_and_only_an_attribute_shows_it(layout: dict) -> None:

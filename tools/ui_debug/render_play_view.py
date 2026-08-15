@@ -1093,13 +1093,21 @@ def turn_styles(route_color: str) -> str:
      which round it stands on are the map's, as they are for the seals and the stock keys. */
 {building_choice_styles()}
 {seat_choice_styles()}
+  /* Both seat keys and building keys are outlines struck with pointer-events="all", so hiding one
+     by visibility alone does not remove it from hit testing. An unoffered key must be both hidden
+     and non-interactive or it can sit above another live target and swallow the click. */
+  [data-building-choice-key][data-turn-offered="false"] {{
+    visibility: hidden; pointer-events: none;
+  }}
   /* Same shape of rule for the board-sized key, and the same reason: every chair carries one and
      a chair the choice does not include has its taken back out. Unlike the stock keys, several are
      shown at once -- the question names a player and most of the players it may name are not the
      one acting, so the mark has to say "one of these" and not "these are all active". It is the
      outline an offered space on the wheel wears, which is already what this page's "you may point
      at this" looks like, and it is nothing like the wash that means whose turn it is. */
-  [data-seat-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
+  [data-seat-choice-key][data-turn-offered="false"] {{
+    visibility: hidden; pointer-events: none;
+  }}
 
   /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
   .turn-panel {{ display: none; }}
