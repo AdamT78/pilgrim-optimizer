@@ -567,7 +567,12 @@ def table_layout_styles(scale: TableScale) -> str:
   }}
   /* One row of four fixed slots, under the main row. Hiding a seat leaves its
      width in place so the others do not slide. */
-  .seats {{ display: flex; gap: var(--gap); }}
+  .seats {{
+    display: flex; gap: var(--gap);
+    /* The main row sets the table's width; this row stretches to it and centres whichever seats
+       are in play, so 2P and 3P no longer leave their empty width on one side. */
+    align-self: stretch; justify-content: center;
+  }}
 
   .panel {{
     width: fit-content;

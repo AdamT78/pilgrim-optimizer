@@ -1668,9 +1668,7 @@ def render_compact_controls_script(
     var shown = visibleSeats(state.count);
     Array.prototype.forEach.call(seatBoards, function (board) {{
       var seat = Number(board.getAttribute('data-player-seat'));
-      /* visibility, not display: hidden seats keep their width, so the row's geometry
-         and scale never move with player count. */
-      board.style.visibility = shown.indexOf(seat) === -1 ? 'hidden' : 'visible';
+      board.style.display = shown.indexOf(seat) === -1 ? 'none' : '';
     }});
   }}
 

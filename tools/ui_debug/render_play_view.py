@@ -564,9 +564,8 @@ def log_styles() -> str:
   .log-event { color: #C9C4B4; font-size: 12px; margin-bottom: 3px; }
   .log-event:last-child { margin-bottom: 0; }
 
-  /* Visibility, not display: an empty chair keeps its width so the seated ones stay where the
-     table would put them. */
-  .p-player[data-seat-taken="false"] { visibility: hidden; }"""
+  /* Seats now centre by count, so chairs not at the table are removed from flow. */
+  .p-player[data-seat-taken="false"] { display: none; }"""
 
 
 _TURN_SCRIPT = """<script>

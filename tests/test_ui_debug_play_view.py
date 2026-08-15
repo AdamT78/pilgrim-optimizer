@@ -752,8 +752,8 @@ def test_the_log_stands_where_the_debug_tables_controls_do() -> None:
     assert 'class="play-log"' in left
 
 
-def test_an_empty_chair_keeps_its_width_so_the_others_do_not_slide() -> None:
-    """Four chairs are always drawn; two of them are simply hidden at a two-player table."""
+def test_empty_chairs_are_drawn_but_removed_from_flow_when_not_seated() -> None:
+    """All chairs are in markup, and unseated ones are not laid out in the seats row."""
     page = render_play_view_from_payload(_payload([_player([5] + [0] * 8) for _ in range(2)]))
     chairs = re.findall(
         r'data-player-seat="(\d)" data-player="\w+" data-player-color="\w+"'
@@ -761,7 +761,13 @@ def test_an_empty_chair_keeps_its_width_so_the_others_do_not_slide() -> None:
         page,
     )
     assert chairs == [("1", "true"), ("2", "true"), ("3", "false"), ("4", "false")]
-    assert '.p-player[data-seat-taken="false"] { visibility: hidden; }' in page
+    assert '.p-player[data-seat-taken="false"] { display: none; }' in page
+
+
+def test_the_seats_row_centres_whichever_boards_are_occupied() -> None:
+    page = render_play_view_from_payload(_payload([_player([5] + [0] * 8) for _ in range(2)]))
+    assert ".seats {" in page
+    assert "align-self: stretch; justify-content: center;" in page
 
 
 # ---------------------------------------------------------------------------------------------

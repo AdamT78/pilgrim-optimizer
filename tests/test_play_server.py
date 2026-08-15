@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
 from contextlib import contextmanager
@@ -256,6 +257,243 @@ def test_the_page_the_server_serves_is_the_page_the_file_writer_writes(tmp_path:
     assert written.read_text(encoding="utf-8") == render_play_view_from_payload(payload)
 
 
+def _start_fields(*, player_count: int, seed: int) -> dict[str, str]:
+    fields = {
+        "player_count": str(player_count),
+        "setup_mode": "random",
+        "seed": str(seed),
+    }
+    for seat in range(1, player_count + 1):
+        fields[f"seat_{seat}_role"] = "human"
+    return fields
+
+
+def _style_block(page: str) -> str:
+    match = re.search(r"<style>\n(.*?)\n</style>", page, re.S)
+    assert match is not None, "page carried no stylesheet"
+    return match.group(1)
+
+
+def _script_block(page: str) -> str:
+    match = re.search(r"<script>\n(.*?)\n</script>", page, re.S)
+    assert match is not None, "page carried no script"
+    return match.group(1)
+
+
+def _display_declarations(styles: str) -> list[tuple[str, str]]:
+    declarations: list[tuple[str, str]] = []
+    cleaned = re.sub(r"/\*.*?\*/", "", styles, flags=re.S)
+    for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", cleaned, re.S):
+        selectors = [selector.strip() for selector in rule.group(1).split(",")]
+        display = re.search(r"display\s*:\s*([^;]+);", rule.group(2))
+        if display is None:
+            continue
+        value = " ".join(display.group(1).split())
+        declarations.extend((selector, value) for selector in selectors if selector)
+    return declarations
+
+
+def _declared_display(styles: str, selector: str) -> str | None:
+    value = None
+    for written_selector, written_display in _display_declarations(styles):
+        if written_selector == selector:
+            value = written_display
+    return value
+
+
+def _assert_hidden_display_pairing(page: str) -> None:
+    """If script sets `hidden` on display-styled elements, CSS must switch them off via `[hidden]`."""
+    styles = _style_block(page)
+    script = _script_block(page)
+    hidden_selectors = [
+        selector
+        for variable, selector in re.findall(
+            r"var\s+([A-Za-z_]\w*)\s*=\s*document\.querySelectorAll\('([^']+)'\);",
+            script,
+        )
+        if re.search(rf"\b{re.escape(variable)}\b.*?\.hidden\s*=", script, re.S)
+    ]
+    assert hidden_selectors, "script never sets hidden on any selector"
+
+    for selector in hidden_selectors:
+        attr_names = re.findall(r"\[([a-zA-Z0-9_-]+)\]", selector)
+        class_names: set[str] = set()
+        for attr_name in attr_names:
+            for class_attr in re.findall(
+                rf'class="([^"]*)"[^>]*\b{re.escape(attr_name)}=',
+                page,
+            ):
+                class_names.update(token for token in class_attr.split() if token)
+        assert class_names, f"no class names found for hidden selector {selector!r}"
+        for class_name in class_names:
+            base_display = _declared_display(styles, f".{class_name}")
+            if base_display is None:
+                continue
+            hidden_display = _declared_display(styles, f".{class_name}[hidden]")
+            assert hidden_display == "none", (
+                f".{class_name} sets display={base_display!r} but .{class_name}[hidden] "
+                "does not set display: none"
+            )
+
+
+def _computed_seat_row_display(styles: str, *, hidden: bool) -> str:
+    """Display for a setup seat row under this stylesheet, using a tiny cascade model."""
+    # UA baseline for [hidden], then author rules in source order.
+    display = "none" if hidden else "block"
+    for selector, value in _display_declarations(styles):
+        if selector == ".seat-row":
+            display = value
+        elif selector == ".seat-row[hidden]" and hidden:
+            display = value
+        elif selector == "[hidden]" and hidden:
+            display = value
+    return display
+
+
+def test_no_argument_server_serves_a_setup_page_before_any_game_exists() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _get(base, "/")
+
+    assert status == 200
+    assert "<!DOCTYPE html>" in page
+    assert '<form method="post" action="/start">' in page
+    assert 'name="player_count"' in page
+    assert "Bot (disabled)" in page
+    assert "Basic (disabled)" in page
+    assert "Seat 1 (Red)" in page
+    assert "Seat 2 (Yellow)" in page
+    assert "Seat 3 (Blue)" in page
+    assert "Seat 4 (White)" in page
+
+
+def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribute() -> None:
+    page = play_server._render_setup_page(suggested_seed=4471)
+    styles = _style_block(page)
+    for player_count, shown in ((2, (1, 2)), (3, (1, 2, 3))):
+        for seat in (1, 2, 3, 4):
+            hidden = seat > player_count
+            display = _computed_seat_row_display(styles, hidden=hidden)
+            height = 0 if display == "none" else 1
+            if seat in shown:
+                assert display != "none", (player_count, seat, display)
+                assert height > 0, (player_count, seat, height)
+            else:
+                assert display == "none", (player_count, seat, display)
+                assert height == 0, (player_count, seat, height)
+
+
+def test_setup_styles_pair_display_rules_with_hidden_overrides() -> None:
+    page = play_server._render_setup_page(suggested_seed=4471)
+    _assert_hidden_display_pairing(page)
+
+
+def test_removing_hidden_display_override_is_caught() -> None:
+    page = play_server._render_setup_page(suggested_seed=4471)
+    mutated = page.replace(".seat-row[hidden] { display: none; }", "", 1)
+    assert mutated != page, "mutation matched nothing"
+    with pytest.raises(AssertionError, match=r"\.seat-row\[hidden\]"):
+        _assert_hidden_display_pairing(mutated)
+
+
+@pytest.mark.parametrize("player_count,expected_dummy", [(2, 6), (3, 4), (4, 0)])
+def test_starting_counts_2_3_4_loads_matching_board_and_neutral_acolytes(
+    player_count: int, expected_dummy: int
+) -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _post_form(base, "/start", _start_fields(player_count=player_count, seed=99))
+        assert status == 200
+        assert 'data-component="play-log"' in page
+        state = _get_json(base, "/state.json")
+
+    assert len(state["state"]["players"]) == player_count
+    assert sum(int(value) for value in state["state"]["dummy_acolytes"]["total"]) == expected_dummy
+
+
+def test_starting_with_the_same_count_and_seed_twice_reproduces_the_same_state() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        _post_form(base, "/start", _start_fields(player_count=3, seed=4471))
+        first = _get_json(base, "/state.json")
+        status, setup_page = _post_form(base, "/new-game", {})
+        assert status == 200
+        assert '<form method="post" action="/start">' in setup_page
+        _post_form(base, "/start", _start_fields(player_count=3, seed=4471))
+        second = _get_json(base, "/state.json")
+
+    assert first == second
+
+
+def test_setup_session_facts_stay_out_of_scenarios_and_view_payloads() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        _post_form(base, "/start", _start_fields(player_count=3, seed=99))
+        _ = _get_json(base, "/state.json")
+        _ = _get_json(base, "/actions.json")
+
+    assert server.session.game_loaded is True
+    assert server.session.seat_roles == {
+        "player_one": "human",
+        "player_two": "human",
+        "player_three": "human",
+    }
+    assert server._latest_generated_scenario is not None
+    forbidden = ("seat_roles", "game_loaded", "setup_mode", "not_started", "session")
+    for payload in (
+        server._latest_generated_scenario,
+        server.state_payload,
+        server.payload,
+        actions_document(server.state, server.config, server.state_payload),
+    ):
+        text = json.dumps(payload)
+        for marker in forbidden:
+            assert marker not in text
+
+
+def test_json_routes_answer_clearly_before_a_game_exists() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        state_status, state_body = _get(base, "/state.json")
+        actions_status, actions_body = _get(base, "/actions.json")
+
+    assert state_status == 409
+    assert actions_status == 409
+    assert json.loads(state_body)["status"] == "no_game_loaded"
+    actions = json.loads(actions_body)
+    assert actions["status"] == "no_game_loaded"
+    assert actions["count"] == 0
+    assert actions["actions"] == []
+
+
+def test_setup_started_board_opens_with_seed_line_and_restart_control() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _post_form(base, "/start", _start_fields(player_count=3, seed=4471))
+        refreshed_status, refreshed = _get(base, "/")
+
+    assert status == 200
+    assert refreshed_status == 200
+    assert "New game - 3 players, seed 4471." in page
+    assert "New game - 3 players, seed 4471." in refreshed
+    assert 'class="session-reset"' in refreshed
+    assert "Start a new game (discard this game)" in refreshed
+    panel = refreshed[refreshed.index('data-component="play-turn"') : refreshed.index("</body>")]
+    assert "session-reset" not in panel
+
+
+def test_file_argument_still_serves_the_board_directly(tmp_path: Path) -> None:
+    server = PlayServer(("127.0.0.1", 0), _generated(tmp_path))
+    with _running(server) as base:
+        status, page = _get(base, "/")
+
+    assert status == 200
+    assert "<!DOCTYPE html>" in page
+    assert 'data-component="play-log"' in page
+    assert '<form method="post" action="/start">' not in page
+    assert "Start a new game (discard this game)" not in page
+
+
 # ---------------------------------------------------------------------------------------------
 # Playing a setup sow
 # ---------------------------------------------------------------------------------------------
@@ -411,6 +649,29 @@ def _post(base: str, action_id_value: str, token: str):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status, response.read().decode("utf-8")
+    except urllib.error.HTTPError as refused:
+        return refused.code, refused.read().decode("utf-8")
+
+
+def _post_form(base: str, route: str, fields: dict[str, str]) -> tuple[int, str]:
+    request = urllib.request.Request(
+        f"{base}{route}",
+        data=urllib.parse.urlencode(fields).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status, response.read().decode("utf-8")
+    except urllib.error.HTTPError as refused:
+        return refused.code, refused.read().decode("utf-8")
+
+
+def _get(base: str, route: str) -> tuple[int, str]:
+    request = urllib.request.Request(f"{base}{route}", method="GET")
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             return response.status, response.read().decode("utf-8")
