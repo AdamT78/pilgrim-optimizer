@@ -17,7 +17,10 @@
       "width": 572.0,
       "height": 283.0
     },
-    "title_anchor": { "x": 16.0, "y": 29.0 },
+    "title_anchor": {
+      "x": 16.0,
+      "y": 29.0
+    },
     "inset": 7.5
   },
   "palette": {
@@ -30,16 +33,34 @@
     "star_label_fill": "#000000"
   },
   "ornament": {
-    "trefoil": { "center_x": 242.0, "y": 24.0 }
+    "trefoil": {
+      "center_x": 242.0,
+      "y": 24.0
+    }
   },
-  "zone_divider": { "x": 379.0, "y1": 42.0, "y2": 229.0 },
+  "zone_divider": {
+    "x": 379.0,
+    "y1": 42.0,
+    "y2": 229.0
+  },
   "track": {
-    "step_centers": [36.0, 80.0, 124.0, 168.0, 212.0, 256.0, 300.0],
+    "step_centers": [
+      36.0,
+      80.0,
+      124.0,
+      168.0,
+      212.0,
+      256.0,
+      300.0
+    ],
     "step_pitch": 44,
     "number_label_y": 69.0,
     "disc_grid_center_y": 96.0,
     "effect_tick_y": 122.0,
-    "step_rule": { "y1": 59.0, "y2": 132.0 },
+    "step_rule": {
+      "y1": 59.0,
+      "y2": 132.0
+    },
     "bonus_pocket": {
       "label": "1st",
       "center_y": 96.0,
@@ -55,43 +76,55 @@
   "players": [
     {
       "id": "player_one",
-      "label": "Player 1",
-      "color": "white",
-      "fill": "#FFFFFF",
-      "stroke": "#8B7B4E",
-      "seat": { "column": 1, "row": 1 },
-      "cube_fill": "#FFFFFF",
-      "cube_stroke": "#8B7B4E"
-    },
-    {
-      "id": "player_two",
-      "label": "Player 2",
+      "label": "Red",
       "color": "red",
       "fill": "#C0392B",
       "stroke": "#7A2020",
-      "seat": { "column": -1, "row": -1 },
+      "seat": {
+        "column": -1,
+        "row": -1
+      },
       "cube_fill": "#B7382E",
       "cube_stroke": "#7A241C"
     },
     {
-      "id": "player_three",
-      "label": "Player 3",
+      "id": "player_two",
+      "label": "Yellow",
       "color": "yellow",
       "fill": "#F4D03F",
       "stroke": "#B8960C",
-      "seat": { "column": -1, "row": 1 },
+      "seat": {
+        "column": -1,
+        "row": 1
+      },
       "cube_fill": "#D9B33B",
       "cube_stroke": "#8A6B1E"
     },
     {
-      "id": "player_four",
-      "label": "Player 4",
+      "id": "player_three",
+      "label": "Blue",
       "color": "blue",
       "fill": "#2E86C1",
       "stroke": "#1B4F72",
-      "seat": { "column": 1, "row": -1 },
+      "seat": {
+        "column": 1,
+        "row": -1
+      },
       "cube_fill": "#3B6EA5",
       "cube_stroke": "#254A73"
+    },
+    {
+      "id": "player_four",
+      "label": "White",
+      "color": "white",
+      "fill": "#FFFFFF",
+      "stroke": "#8B7B4E",
+      "seat": {
+        "column": 1,
+        "row": 1
+      },
+      "cube_fill": "#FFFFFF",
+      "cube_stroke": "#8B7B4E"
     }
   ],
   "starting_position": 0,
@@ -108,9 +141,19 @@
   "record": {
     "x": 392.0,
     "width": 127.0,
-    "heading": { "text": "Season end winners", "x": 455.5, "y": 46.0 },
-    "rule": { "x1": 392.0, "x2": 519.0, "y": 82.0 },
-    "cube": { "stroke_width": 1.2 },
+    "heading": {
+      "text": "Season end winners",
+      "x": 455.5,
+      "y": 46.0
+    },
+    "rule": {
+      "x1": 392.0,
+      "x2": 519.0,
+      "y": 82.0
+    },
+    "cube": {
+      "stroke_width": 1.2
+    },
     "placeholder_slots": {
       "center_y": 59.5,
       "label_y": 75.0

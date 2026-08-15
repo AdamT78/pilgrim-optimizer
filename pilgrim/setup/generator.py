@@ -102,20 +102,13 @@ def generate_setup_scenario(
             ),
         },
         "initial_state": {
-            # Nobody has any piety yet, so no seat has earned the marker. It starts on the first
-            # player board, which is RED, and red is `player_two` -- see SEATED_PLAYERS in
-            # tools/ui_debug/render_table_layout.py. `player_one` is WHITE and sits at the far end
-            # of the row, so reading "first board" as "first player id" puts the marker four seats
-            # from where the rule puts it. That holds at two and three players as well, where the
-            # boards are still white then red.
-            #
             # Both lines below name that seat, and they are not one line twice. The marker is who
             # HOLDS it, for the whole first round and past the choice about to be made; the active
             # player is who is being waited on, which is the holder only until they answer. A
             # generated game always writes the marker, so the seal is drawn from the first frame --
             # unlike a saved fixture, which may not know.
-            "active_player": "player_two",
-            "first_player_marker": "player_two",
+            "active_player": "player_one",
+            "first_player_marker": "player_one",
             "phase": "start_player_selection",
             "setup": {
                 "setup_sow_required": True,

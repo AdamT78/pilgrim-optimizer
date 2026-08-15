@@ -145,10 +145,9 @@ PAGE_TITLE = "Pilgrim — Game Table"
 # Four seats are drawn in the layout, so the 3-4 player track. The 2 player variant stays on the
 # standalone v2 page.
 
-# Every seat the layout describes, in the order they sit along the row. It is the layout's own
-# order read from the red board rather than from the first one, so the run is the seating order
-# the layout already gives and red simply leads it. The 2P/3P/4P control only toggles which of
-# these fixed seats are visible; it does not reseat anyone or ask the scale to recompute.
+# Every seat the layout describes, in the order they sit along the row. The 2P/3P/4P control only
+# toggles which of these fixed seats are visible; it does not reseat anyone or ask the scale to
+# recompute.
 
 # --- page chrome, in px ----------------------------------------------------------------------
 # The gap between panels, between the two rows, and between the player boards.
@@ -270,18 +269,25 @@ def _options(choices: list[tuple[str, str]], selected: str) -> str:
     )
 
 
-def _control_player_options() -> list[tuple[str, str]]:
-    return [(str(seat), f"P{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
+def _seat_colour_options(board_layout: dict) -> list[tuple[str, str]]:
+    colours = {player["id"]: player["color"].capitalize() for player in board_layout["players"]}
+    return [
+        (str(seat), colours[player_id]) for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
+    ]
 
 
-def _first_player_options() -> list[tuple[str, str]]:
+def _control_player_options(board_layout: dict) -> list[tuple[str, str]]:
+    return _seat_colour_options(board_layout)
+
+
+def _first_player_options(board_layout: dict) -> list[tuple[str, str]]:
     """The seats the marker can sit with, and no other entry.
 
     There is no `nobody` here on purpose: the marker always sits with someone. The renderer will
     draw a panel with no marker on it, which is what leaves the standalone pages alone, but that is
     a rendering default and not a state this table can be in.
     """
-    return [(str(seat), f"FP{seat}") for seat in range(1, len(SEATED_PLAYERS) + 1)]
+    return _seat_colour_options(board_layout)
 
 
 def _resource_buttons(board_layout: dict) -> str:
@@ -326,7 +332,7 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         f' aria-pressed="{"true" if roll == DEFAULT_START_ROLL else "false"}">{roll}</button>'
         for roll in SETUP_ROLLS
     )
-    players = _control_player_options()
+    players = _control_player_options(board_layout)
     places = acolyte_places(board_layout)
     first_role = places[1][0] if len(places) > 1 else places[0][0]
     buildings = _building_options(placements)
@@ -340,7 +346,7 @@ def render_compact_controls(board_layout: dict, placements: list[dict]) -> str:
         '<button type="button" data-ship-advance="true">S+</button>'
         '<button type="button" data-merchant-advance-button="true">M+</button>'
         '<select id="first-player-seat" data-first-player-select="true">'
-        f"{_options(_first_player_options(), str(FIRST_PLAYER_SEAT_AT_START))}</select>"
+        f"{_options(_first_player_options(board_layout), str(FIRST_PLAYER_SEAT_AT_START))}</select>"
         "</div>"
         '<div class="control-row" data-controls-row="2">'
         f'<select id="disc-player-seat">{_options(players, str(DEFAULT_CONTROL_PLAYER_SEAT))}</select>'
@@ -462,11 +468,9 @@ def resource_control_data(board_layout: dict) -> dict:
 def duty_wheel_seating(layout: dict) -> dict:
     """The wheel drawn with this table's seating rather than its own.
 
-    The wheel's layout seats a short table on red and blue, the pair that carries against its own
-    parchment. This page seats P1 to P4 in one order everywhere else it counts players -- the boards
-    in the row, the discs on both tracks -- so a wheel that dropped a different colour would be the
-    one board disagreeing about who is playing. Only who sits where changes: the neutral column, the
-    geometry, and the standalone wheel page are all untouched.
+    This page seats P1 to P4 in one order everywhere else it counts players -- the boards in the
+    row, the discs on both tracks -- so the wheel is reseated to match. Only who sits where
+    changes: the neutral column, the geometry, and the standalone wheel page are all untouched.
     """
     seated = dict(layout)
     seated["seats_by_player_count"] = {

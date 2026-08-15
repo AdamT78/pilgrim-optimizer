@@ -83,10 +83,10 @@ PLAYER_BOARD_V1_PROTOTYPE = UI_DEBUG_DIR / "prototypes" / "player_board.html"
 TITLE = "PILGRIM — Player Board"
 SUBTITLE_START = "Player boards for up to 4 players"
 PLAYER_COLORS = {
-    "player_one": ("white", "#FFFFFF", "#8B7B4E"),
-    "player_two": ("red", "#B7382E", "#7A241C"),
-    "player_three": ("yellow", "#D9B33B", "#8A6B1E"),
-    "player_four": ("blue", "#3B6EA5", "#254A73"),
+    "player_one": ("red", "#B7382E", "#7A241C"),
+    "player_two": ("yellow", "#D9B33B", "#8A6B1E"),
+    "player_three": ("blue", "#3B6EA5", "#254A73"),
+    "player_four": ("white", "#FFFFFF", "#8B7B4E"),
 }
 WORKER_ROLES = (
     "Fields",
@@ -279,13 +279,13 @@ def test_the_white_seat_is_washed_in_the_colour_its_own_pieces_are_drawn_with(
     the warm brown its cubes are outlined in -- the colour that already exists on that board to
     make white legible against this parchment, which is the same problem being solved twice.
     """
-    white = player_by_id(layout, "player_one")
+    white = player_by_id(layout, "player_four")
 
     assert white["fill"] == "#FFFFFF"
     assert white["glow"] == white["stroke"] == "#8B7B4E"
     assert f'stop-color="{white["glow"]}"' in render_player_board_v2_svg(layout, white)
     # The other three have nothing to solve: their own colour is a colour on parchment.
-    for player_id in ("player_two", "player_three", "player_four"):
+    for player_id in ("player_one", "player_two", "player_three"):
         player = player_by_id(layout, player_id)
         assert player["glow"] == player["fill"]
 
@@ -905,7 +905,7 @@ def test_html_carries_the_board_labels_and_player_colours(page: str) -> None:
 
 def test_every_board_on_the_page_carries_its_own_resources(page: str) -> None:
     """Four boards, each with the same three readouts: no board is singled out any more."""
-    assert 'data-player="player_one" data-player-color="white"' in _board_wraps(page)[0]
+    assert 'data-player="player_one" data-player-color="red"' in _board_wraps(page)[0]
     for board in _svg_bodies(page):
         assert len(_readouts(board)) == RESOURCE_READOUT_COUNT
         assert board.count("data-resource-divider") == RESOURCE_READOUT_COUNT - 1

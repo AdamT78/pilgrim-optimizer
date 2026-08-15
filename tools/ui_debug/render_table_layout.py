@@ -10,8 +10,7 @@ or a resource key are the debug table's own, because a read-only page has no use
 carrying them would be the same dead markup the choice keys were.
 
 The seating order is here too, since it is a fact about the row of seats rather than about either
-page: `SEATED_PLAYERS` is the engine's player ids in the order the table seats them, and it is not
-the engine's own order. Red is seated first and red is `player_two`.
+page: `SEATED_PLAYERS` is the engine's player ids in the order the table seats them.
 """
 
 from __future__ import annotations
@@ -50,11 +49,9 @@ PAGE_BACKGROUND = "#000000"
 # Which piety variant the table draws. The 2P layout differs, and the table shows the 3-4P board.
 PIETY_VARIANT_ID = "3_4_player"
 
-# The engine's player ids in SEAT ORDER, which is not the engine's order. The boards layout makes
-# `player_one` white and the table seats red first, so `player_one` is seat 4. Anything pairing a
-# seat with a player by array index pairs them wrongly -- it happens to look right at four seats
-# and is wrong at two, where the engine seats `player_one` and `player_two`: white and red.
-SEATED_PLAYERS = ("player_two", "player_three", "player_four", "player_one")
+# The engine's player ids in seat order. Seat 1 is the first board (red), then yellow, blue,
+# white, and this order is what every composed panel is keyed against.
+SEATED_PLAYERS = ("player_one", "player_two", "player_three", "player_four")
 
 # --- page chrome, in px ----------------------------------------------------------------------
 

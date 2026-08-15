@@ -131,7 +131,7 @@ def piety_variant_for(seated: list[str]) -> str:
 
 
 def seat_of(player_id: str) -> int:
-    """Which chair an engine player sits in. See the adapter's point 3: this is not their index."""
+    """Which chair an engine player sits in."""
     return SEATED_PLAYERS.index(player_id) + 1
 
 
@@ -502,7 +502,7 @@ def log_styles() -> str:
   .log-event { color: #C9C4B4; font-size: 12px; margin-bottom: 3px; }
 
   /* Visibility, not display: an empty chair keeps its width so the seated ones stay where the
-     table would put them. At two players those are the two ends of the row, not the first two. */
+     table would put them. */
   .p-player[data-seat-taken="false"] { visibility: hidden; }"""
 
 
@@ -862,8 +862,7 @@ def render_play_view_html(
     panels = []
     for seat, player_id in enumerate(SEATED_PLAYERS, start=1):
         # An empty chair is still drawn and then hidden, exactly as the debug table hides one: a
-        # chair removed from the row would let the occupied ones slide along it, and at two players
-        # the two who are seated are the two ENDS of the row rather than the first two of it.
+        # chair removed from the row would let the occupied ones slide along it.
         taken = player_id in seated
         player = player_by_id(board_layout, player_id)
         # The three stock keys, drawn hidden on every seat's board because which seat will be asked

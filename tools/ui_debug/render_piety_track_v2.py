@@ -109,45 +109,14 @@ SEAL_RING_DARKEN = 0.72
 SEAL_CROWN_DARKEN = 0.50
 
 # Which player sits in which seat. Named here because nothing in this renderer resolves it: the
-# discs are drawn from `variant["seats"]`, which says where in the 2x2 cluster each player's disc
-# goes and nothing about seat numbers, and `data-player-seat` is not emitted here at all -- the
-# game table stamps it onto the rendered fragment afterwards, and this module cannot import the
-# page that composes it. Only the ids are named. The colours stay in the layout's own `players`,
-# which is what draws the discs, so there is no second seat-colour table to fall out of step with
-# that one. `test_the_seat_order_is_the_one_the_game_table_seats_its_players_in` holds the two
-# lists together.
+# discs are drawn from `variant["seats"]`, which says where in the cluster each player's disc goes
+# and nothing about seat numbers, and `data-player-seat` is stamped on later by the composing page.
+# Keeping seat order explicit here and there, and asserted equal in tests, keeps one source of
+# truth if table seating changes again.
 #
 # THIS IS BOARD ORDER, NOT TURN ORDER. Where a player sits is fixed for the whole game; who plays
-# first changes every round. The two are not the same list and must not be made into one.
-#
-# The distinction has teeth shortly: a later PR is to permute the discs on a track value to show
-# the turn sequence, which re-shuffles whenever the start player does. That permutation must come
-# from turn state and must not be read off this list, and `data-player-seat` must go on meaning
-# which seat a player occupies rather than which slot their disc has been moved into -- otherwise a
-# marker naming seat 1 and a disc labelled seat 1 stop being the same player.
-#
-# THE DISC LAYOUT RULE, which is one rule and not a case per player count:
-#
-#   The discs at a track value are filled in TURN order. First player row 1, second player row 2.
-#   With three or four players a second column is added for the third and fourth. With two players
-#   there is one column, centred in the space.
-#
-# The slot follows turn order and moves whenever the start player changes. The seat is fixed for
-# the whole game and the board ordering never changes.
-#
-# TWO KNOWN ISSUES, neither of them this module's to fix today:
-#
-#   The 2 player variant here seats white and red -- seats 4 and 1 -- side by side, which matches
-#   neither the game table's seating (it seats 1 and 2, red and yellow) nor its arrangement (one
-#   centred column, not a pair side by side). Where the two disagree the game table is the
-#   authority: `DISC.pair.piety["0"]` is `[34.6, 83.7, 103.7]`, one x at the midpoint of the two
-#   3-4 player columns and two ys.
-#
-#   The table places discs by seat rather than by turn order. `renderDiscTrack` reads
-#   `y = seat === 1 ? pair[1] : pair[2];` and `DISC.targets` is seat-keyed throughout, so handing
-#   the start to another player leaves that player's disc in the wrong row. That line is where the
-#   turn-order PR begins.
-SEAT_ORDER = ("player_two", "player_three", "player_four", "player_one")
+# first changes every round.
+SEAT_ORDER = ("player_one", "player_two", "player_three", "player_four")
 
 # The crown, as fractions of its own box about the seal's centre. It is one closed polygon and not
 # a band with points standing on it: at this size two shapes leave a seam across the middle where
@@ -430,9 +399,8 @@ def first_player_by_seat(layout: dict, seat: int) -> dict:
 def seats_that_can_hold_the_marker(layout: dict, variant_id: str) -> list[int]:
     """Seat numbers a variant puts a disc on, in seat order.
 
-    Read off the discs the variant actually seats rather than assumed to run 1..n, because it does
-    not: the 2 player variant seats white and red, which are seats 4 and 1. A marker can only be
-    held by someone at the table, so this is what a page can offer the marker to.
+    Read off the discs the variant actually seats rather than assumed to run 1..n. A marker can
+    only be held by someone at the table, so this is what a page can offer the marker to.
     """
     seated = {player["id"] for player in seated_players(layout, variant_id)}
     return [seat for seat, player_id in enumerate(SEAT_ORDER, start=1) if player_id in seated]
@@ -672,8 +640,7 @@ def render_piety_tracks_v2_html(layout: dict, config: dict) -> str:
     seal_note = (
         "The same panels, asked for with data-first-player-seat. The seal is struck in the "
         "holder's own seat colour and pressed over the header rule; with no seat set nothing is "
-        "drawn and nothing is left behind. The 2 player variant seats white and red, which are "
-        "seats 4 and 1 rather than 1 and 2."
+        "drawn and nothing is left behind."
     )
     background = layout["page_background"]
     subtitle = f"{layout['subtitle']} Generated from {LAYOUT_FILENAME}, VP values from "

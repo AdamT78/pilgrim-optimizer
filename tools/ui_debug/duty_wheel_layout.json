@@ -1,7 +1,7 @@
 {
   "page": {
-    "title": "PILGRIM — Flat-top Circle Grid",
-    "board_title": "PILGRIM — 3x3 Circle Grid",
+    "title": "PILGRIM \u2014 Flat-top Circle Grid",
+    "board_title": "PILGRIM \u2014 3x3 Circle Grid",
     "subtitle": [
       "Eight action spaces around a central City, sown clockwise. Each space shows how many cubes",
       "stand there, as one column per seat on a shared baseline, plus a neutral column on the duty",
@@ -53,31 +53,31 @@
   "players": [
     {
       "id": "player_one",
-      "label": "Player 1",
-      "color": "white",
-      "fill": "#FFFFFF",
-      "cube_stroke_width": 1.8
-    },
-    {
-      "id": "player_two",
-      "label": "Player 2",
+      "label": "Red",
       "color": "red",
       "fill": "#C94C4C",
       "cube_stroke_width": 1.5
     },
     {
-      "id": "player_three",
-      "label": "Player 3",
+      "id": "player_two",
+      "label": "Yellow",
       "color": "yellow",
       "fill": "#E3C64A",
       "cube_stroke_width": 1.8
     },
     {
-      "id": "player_four",
-      "label": "Player 4",
+      "id": "player_three",
+      "label": "Blue",
       "color": "blue",
       "fill": "#3B6EA5",
       "cube_stroke_width": 1.5
+    },
+    {
+      "id": "player_four",
+      "label": "White",
+      "color": "white",
+      "fill": "#FFFFFF",
+      "cube_stroke_width": 1.8
     }
   ],
   "dummy_acolytes": {
@@ -114,13 +114,13 @@
   ],
   "seats_by_player_count": {
     "2": [
-      "player_two",
-      "player_four"
+      "player_one",
+      "player_two"
     ],
     "3": [
       "player_one",
       "player_two",
-      "player_four"
+      "player_three"
     ],
     "4": [
       "player_one",

@@ -65,31 +65,31 @@
   "players": [
     {
       "id": "player_one",
-      "label": "Player 1",
-      "color": "white",
-      "fill": "#FFFFFF",
-      "stroke": "#8B7B4E"
-    },
-    {
-      "id": "player_two",
-      "label": "Player 2",
+      "label": "Red",
       "color": "red",
       "fill": "#C0392B",
       "stroke": "#7A2020"
     },
     {
-      "id": "player_three",
-      "label": "Player 3",
+      "id": "player_two",
+      "label": "Yellow",
       "color": "yellow",
       "fill": "#F4D03F",
       "stroke": "#B8960C"
     },
     {
-      "id": "player_four",
-      "label": "Player 4",
+      "id": "player_three",
+      "label": "Blue",
       "color": "blue",
       "fill": "#2E86C1",
       "stroke": "#1B4F72"
+    },
+    {
+      "id": "player_four",
+      "label": "White",
+      "color": "white",
+      "fill": "#FFFFFF",
+      "stroke": "#8B7B4E"
     }
   ],
   "variants": [
@@ -98,10 +98,26 @@
       "label": "3\u20134 player track",
       "disc_rows": 2,
       "seats": [
-        { "player": "player_one", "row": 1, "column": 1 },
-        { "player": "player_two", "row": -1, "column": -1 },
-        { "player": "player_three", "row": 1, "column": -1 },
-        { "player": "player_four", "row": -1, "column": 1 }
+        {
+          "player": "player_one",
+          "row": -1,
+          "column": -1
+        },
+        {
+          "player": "player_two",
+          "row": 1,
+          "column": -1
+        },
+        {
+          "player": "player_three",
+          "row": -1,
+          "column": 1
+        },
+        {
+          "player": "player_four",
+          "row": 1,
+          "column": 1
+        }
       ]
     },
     {
@@ -109,8 +125,16 @@
       "label": "2 player track",
       "disc_rows": 1,
       "seats": [
-        { "player": "player_one", "row": 0, "column": -1 },
-        { "player": "player_two", "row": 0, "column": 1 }
+        {
+          "player": "player_one",
+          "row": 0,
+          "column": -1
+        },
+        {
+          "player": "player_two",
+          "row": 0,
+          "column": 1
+        }
       ]
     }
   ]

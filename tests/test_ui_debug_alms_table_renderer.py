@@ -85,7 +85,7 @@ BASELINE_SVG = PROTOTYPES_DIR / "alms_table.svg"
 BASELINE_SOURCE = UI_DEBUG_DIR / "prototype_sources" / "alms_table.py.txt"
 
 PLAYER_IDS = ("player_one", "player_two", "player_three", "player_four")
-PLAYER_COLORS = ("white", "red", "yellow", "blue")
+PLAYER_COLORS = ("red", "yellow", "blue", "white")
 SEASON_END_VP = (5, 11, 18, 26)
 THRESHOLD_POSITIONS = (2, 4, 6)
 
@@ -313,7 +313,7 @@ def test_generator_writes_the_page_to_a_temp_path(tmp_path: Path) -> None:
     assert "Alms Table" in content
     assert 'data-component="alms-table"' in content
     # The generated debug page is the one with the controls on it.
-    assert "Move Player 1 up" in content
+    assert "Move Red up" in content
     assert "Add white cube to Season end winner" in content
 
 
@@ -407,14 +407,14 @@ def test_the_static_board_carries_no_controls_or_hidden_slots() -> None:
     assert "data-season-end-winner-slot" not in content
     assert "data-alms-discs" not in content
     assert "<script" not in content
-    assert "Move Player 1 up" not in content
+    assert "Move Red up" not in content
 
 
 def test_the_interactive_page_offers_every_control() -> None:
     content = render_alms_table_html(layout(), config(), interactive=True)
 
-    assert "Move Player 1 up" in content
-    assert "Move Player 1 down" in content
+    assert "Move Red up" in content
+    assert "Move Red down" in content
     for color in PLAYER_COLORS:
         assert f"Add {color} cube to Season end winner" in content
     assert 'data-player="player_one"' in content
@@ -426,7 +426,7 @@ def test_the_interactive_page_opens_in_the_state_it_says_it_is_in() -> None:
     """Rendered ready, so the page reads correctly even before the script runs."""
     content = render_alms_table_html(layout(), config(), interactive=True)
 
-    assert "Player 1 on step 0 &middot; 0 of 4 winner cubes" in content
+    assert "Red on step 0 &middot; 0 of 4 winner cubes" in content
     # Nobody can move below the first step, so the button says so from the start.
     assert re.search(r'id="alms-move-down"\s+disabled', content)
     assert not re.search(r'id="alms-move-up"\s+disabled', content)

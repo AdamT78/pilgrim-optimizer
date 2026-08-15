@@ -1,13 +1,8 @@
-"""Which seat the First Player marker opens on, asserted by the COLOUR of the board it sits on.
+"""Which seat the First Player marker opens on, asserted by the COLOUR of that board.
 
-The rule names a colour: at the start of a game the marker sits on the first player board, and the
-first player board is red. Engine player ids carry no colour, and the two orders do not line up --
-`player_one` is WHITE and sits at the far END of the row of seats, so "the first board" and "the
-first player id" name different seats at every player count. An assertion written against the id
-passes under both readings, which is how the marker came to open on white while a test watched.
-
-So every assertion here goes through the colour, and the colour comes from the layout the boards
-are actually drawn from rather than from a table retyped into this file.
+The rule names a colour: at game open the marker sits on the first player board, and the first
+player board is red. Player ids are UI mapping and may be remapped again; colour is what the rule
+itself says, so this file keeps asserting through colour even when id order and seat order align.
 """
 
 from __future__ import annotations
@@ -39,6 +34,12 @@ _CONFIG_PATH_FIELDS: tuple[str, ...] = (
 BOARD_COLOUR = {
     str(player["id"]): str(player["color"]) for player in load_player_boards_v2_layout()["players"]
 }
+LAYOUT_FILES = (
+    "player_boards_v2_layout.json",
+    "alms_table_layout.json",
+    "duty_wheel_layout.json",
+    "piety_track_v2_layout.json",
+)
 
 
 def _opening_holder(player_count: int) -> str:
@@ -56,16 +57,34 @@ def _opening_scenario(tmp_path: Path, player_count: int):
     return load_scenario(scenario_path)
 
 
-def test_the_first_board_and_the_first_player_id_are_different_seats() -> None:
-    """The premise every other test here depends on, checked rather than assumed.
+def test_seat_one_is_player_one_and_red_at_two_three_and_four_players() -> None:
+    """Seat 1 is deliberately aligned to player_one, and that board is red."""
+    assert SEATED_PLAYERS[0] == "player_one"
+    assert BOARD_COLOUR["player_one"] == "red"
+    for player_count in (2, 3, 4):
+        holder = _opening_holder(player_count)
+        assert holder == "player_one"
+        assert BOARD_COLOUR[holder] == "red"
 
-    If white were seated first, or if the seating order ran in id order, a by-colour assertion
-    would be worth no more than a by-id one and the rest of this file could be deleted. It is worth
-    something precisely because these two disagree.
-    """
-    assert BOARD_COLOUR["player_one"] == "white"
-    assert BOARD_COLOUR[SEATED_PLAYERS[0]] == "red"
-    assert SEATED_PLAYERS[0] != "player_one"
+
+def _id_to_colour(path: Path) -> dict[str, str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {str(player["id"]): str(player["color"]) for player in data["players"]}
+
+
+def test_all_four_layout_files_share_one_id_to_colour_mapping() -> None:
+    """Read from files, not retyped: all four copies of this fact have to agree."""
+    root = Path(__file__).resolve().parents[1] / "tools" / "ui_debug"
+    mappings = {name: _id_to_colour(root / name) for name in LAYOUT_FILES}
+    first = next(iter(mappings.values()))
+    for name, mapping in mappings.items():
+        assert mapping == first, f"{name} drifted from the shared id-to-colour mapping"
+    assert first == {
+        "player_one": "red",
+        "player_two": "yellow",
+        "player_three": "blue",
+        "player_four": "white",
+    }
 
 
 @pytest.mark.parametrize("player_count", [2, 3, 4])

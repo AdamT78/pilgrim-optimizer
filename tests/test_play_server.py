@@ -1391,7 +1391,7 @@ def test_after_the_opening_choice_the_header_names_the_chosen_seat(tmp_path: Pat
 
     assert server.state.start_player is PlayerId.PLAYER_FOUR
     page = render_play_view_from_payload(server.payload)
-    assert ("Start player", "Blue") in _header_of(page)
+    assert ("Start player", "White") in _header_of(page)
 
 
 @needs_node
@@ -1894,11 +1894,10 @@ def _the_script_is_the_template_with_only_its_two_values_filled_in(
 
 
 def test_the_page_says_a_seat_by_colour_and_never_by_the_engines_name(tmp_path: Path) -> None:
-    """The engine seats white first and the table seats it last, so an id is never a seat number.
+    """Ids remain in attributes, but visible seat names stay colour words.
 
-    Blue is the third chair and is `player_four`; there is no arrangement under which those two
-    numbers agree. So an id printed at a player does not merely fail to help -- it reads as a
-    numbering, and is one, of something other than the chairs in front of them.
+    The rule names colours. Player ids are mapping, and this mapping has already changed once, so a
+    page that says ids out loud would be saying implementation detail where table language belongs.
 
     The check is on text nodes only. The ids are all over this page in attributes and have to be,
     which is asserted first: a guard that could be satisfied by removing them from everywhere would
@@ -1931,7 +1930,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     """The colour is a lookup on the id, so the third board is Blue wherever it is mentioned.
 
     Named against the board's own markup rather than against a list written here, so the page and
-    the page's words cannot drift: the seat that carries `data-player="player_four"` is the one the
+    the page's words cannot drift: the seat that carries `data-player="player_three"` is the one the
     sentence has to call Blue.
     """
     # Before the opening decision rather than after it, because that decision is the one place a
@@ -1941,7 +1940,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
 
     third = re.search(r'data-player-seat="3" data-player="(\w+)"', page)
     assert third, "no third board on the page"
-    assert third.group(1) == "player_four", "the third chair is not who it was"
+    assert third.group(1) == "player_three", "the third chair is not who it was"
     assert SEAT_COLOURS[third.group(1)] == "Blue"
 
     summaries = re.findall(r'<div class="turn-summary">([^<]*)</div>', page)
@@ -1952,7 +1951,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     blue = next(
         candidate
         for candidate in server.payload["turn_candidates"]
-        if any(step["value"] == "player_four" for step in candidate["steps"])
+        if any(step["value"] == "player_three" for step in candidate["steps"])
     )
     server.apply(blue["action_id"], server.payload["state_token"])
     after = render_play_view_from_payload(server.payload)
@@ -1987,7 +1986,7 @@ def test_a_box_hired_from_another_seat_names_that_seat_by_colour() -> None:
     }
     page = render_play_view.render_turn_panel(payload)
 
-    assert ">hire the Confession Box from Blue<" in page
+    assert ">hire the Confession Box from White<" in page
     # The value it is answered by is untouched: the script routes on the engine's name.
     assert 'data-combination-key="player_four"' in page
 
