@@ -532,10 +532,18 @@ def table_layout_styles(scale: TableScale) -> str:
   .row  {{ display: flex; gap: var(--gap); align-items: stretch; }}
   /* Alms Table over the compact controls. The controls sit in the slack under
      the alms table rather than stretching the left column past the map, so the scale
-     solver never has to know about it. */
+     solver never has to know about it.
+
+     The width is the Alms Table's own, panel and all. Without it the column is
+     sized by whichever child is widest, so a page whose slack holds text -- the
+     play view's event log -- rescaled the artwork above every time a longer
+     sentence was logged, by an amount nobody could predict from the layout. The
+     column is the artwork's width and the text lives inside it, so the text
+     wraps and the boards hold still. */
   .left {{
     display: flex; flex-direction: column; align-items: center;
     align-self: stretch; justify-content: flex-start; gap: 8px;
+    width: calc(var(--w-alms) + {PANEL_CHROME}px);
   }}
   /* .col pins the piety track to the TOP of that space and the duty wheel to
      the BOTTOM. The wheel is sized so the pair comes to exactly one gap short

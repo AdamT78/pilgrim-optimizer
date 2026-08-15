@@ -23,10 +23,12 @@ from tools.ui_debug.render_duty_wheel import (
     TALLY_OFFSET_Y,
     TILE_STACK_HEIGHT,
     TURN_CONTROL_DISABLED_OPACITY,
+    CubeOverflow,
     board_edges,
     board_position_of,
     board_positions,
     branching_positions,
+    default_duty_wheel_state,
     default_layout_path,
     dummy_acolytes,
     duties_of,
@@ -607,6 +609,100 @@ def test_a_tile_draws_the_three_cubes_it_has_room_for_and_stands_what_it_stood_b
     assert [b - a for a, b in zip(column, column[1:], strict=False)] == [
         pytest.approx(CUBE_CELL_HEIGHT)
     ] * (TILE_STACK_HEIGHT - 1)
+
+
+# ---------------------------------------------------------------------------------------------
+# A column shows what is standing in it
+# ---------------------------------------------------------------------------------------------
+
+
+def _drawn_seats(data: dict) -> list[str]:
+    """The columns a plain board draws: the seats that sit down at the opening table size."""
+    return [player["id"] for player in players_for_count(data, data["default_player_count"])]
+
+
+def _standing(space: str, state: dict) -> Counter:
+    """How many cubes each seat's column draws on one space, from a position handed in."""
+    data = layout()
+    tally = _tally_of(render_duty_wheel_svg(data, state), space)
+    return Counter(player for player, _ in _cubes(tally))
+
+
+def test_the_city_draws_the_position_it_was_handed_and_not_a_sample() -> None:
+    """The one rule, and the City is not exempt from it.
+
+    It used to answer with `city_sample_cubes_per_seat` whatever the position said, so the play
+    view -- which hands it real acolytes -- drew two a seat through a game in which every seat had
+    five in the City and then none. A sample is something a page chose to show; where it is shown
+    is the page's business, and how a column draws is not.
+    """
+    data = layout()
+    seats = _drawn_seats(data)
+    sample = int(data["city_sample_cubes_per_seat"])
+
+    for standing in (0, 1, sample, 5, CITY_STACK_HEIGHT):
+        state = {data["city_id"]: dict.fromkeys(seats, standing)}
+        assert _standing(data["city_id"], state) == Counter(
+            {seat: standing for seat in seats if standing}
+        ), standing
+
+    # The sample is the one position the old reading got right, so a test that only ever handed it
+    # that number would pass either way. This is the number the play view actually holds at setup.
+    assert sample != 5
+    assert set(_standing(data["city_id"], {data["city_id"]: dict.fromkeys(seats, 5)}).values()) == {
+        5
+    }
+
+
+def test_the_baseline_sample_moved_to_the_state_the_debug_pages_are_handed() -> None:
+    """The number did not go away, it changed hands. It is now data a page passes in.
+
+    Which is what lets the sixteen generated pages come out unchanged while the play view stops
+    lying: the debug pages ask for the sample and get it, and the play view asks for the position.
+    """
+    data = layout()
+    state = default_duty_wheel_state(data)
+    sample = int(data["city_sample_cubes_per_seat"])
+
+    assert set(state[data["city_id"]].values()) == {sample}
+    assert state[data["city_id"]].keys() == {player["id"] for player in data["players"]}
+    # A duty tile's share of the baseline still comes from that tile's own entry, untouched.
+    for duty in ring_duties(data):
+        assert state[duty["id"]] == {
+            player["id"]: int(duty.get("sample_cubes", {}).get(player["id"], 0))
+            for player in data["players"]
+        }
+
+
+def test_cubes_that_will_not_fit_are_an_error_rather_than_a_quiet_drop() -> None:
+    """A tile that shows three of the four standing on it is a page telling the player something
+    untrue.
+
+    The stack heights are artefacts of how these boards were drawn rather than rules of the game,
+    so this is reachable in ordinary play: a setup sow route is five steps long and may land on
+    one space more than once. It should fire as something we can see.
+    """
+    data = layout()
+    duty = ring_duties(data)[0]
+    seat = _drawn_seats(data)[0]
+
+    with pytest.raises(CubeOverflow) as raised:
+        render_duty_wheel_svg(data, {duty["id"]: {seat: TILE_STACK_HEIGHT + 1}})
+
+    # The space, the seat, and both numbers -- enough to find the position without a debugger.
+    message = str(raised.value)
+    assert duty["id"] in message
+    assert seat in message
+    assert str(TILE_STACK_HEIGHT + 1) in message
+    assert str(TILE_STACK_HEIGHT) in message
+
+    # Exactly at the limit is not an overflow, and the City's limit is its own taller one.
+    render_duty_wheel_svg(data, {duty["id"]: {seat: TILE_STACK_HEIGHT}})
+    render_duty_wheel_svg(data, {data["city_id"]: {seat: CITY_STACK_HEIGHT}})
+    with pytest.raises(CubeOverflow) as city_raised:
+        render_duty_wheel_svg(data, {data["city_id"]: {seat: CITY_STACK_HEIGHT + 1}})
+    assert data["city_id"] in str(city_raised.value)
+    assert str(CITY_STACK_HEIGHT) in str(city_raised.value)
 
 
 def test_each_trefoil_says_which_space_it_stands_over() -> None:

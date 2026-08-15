@@ -97,6 +97,18 @@ TALLY_OFFSET_Y = 19.0
 TILE_STACK_HEIGHT = 3
 CITY_STACK_HEIGHT = 6
 
+
+class CubeOverflow(ValueError):
+    """More cubes stand on a space than this drawing of it has room to show.
+
+    The stack heights above are artefacts of how these boards were drawn rather than limits the
+    game imposes, so this is the renderer admitting it cannot draw a legal position. A setup sow
+    route is five steps long and may land on one space more than once, so it is reachable in
+    ordinary play. It is raised rather than absorbed because a column silently showing three of
+    the four cubes standing in it is a page telling the player something untrue.
+    """
+
+
 # Tithe capsule: a stadium under the title, its left cap holding the Tithe token icon and its
 # right cap the Merchant token when the Merchant stands here.
 CAPSULE_OFFSET_Y = 34.0
@@ -258,12 +270,19 @@ def default_duty_wheel_state(layout: dict) -> dict:
     """The cubes the baseline shows standing on each duty.
 
     This is sample debug state, not `GameState`: it is what a debug page has to draw before
-    anything real is wired up.
+    anything real is wired up. The City's share of it is one number for every seat rather than a
+    per-seat sample, since the point of it is to leave most of the column free for a page with
+    buttons to fill; a duty tile's comes from that tile's own entry in the layout.
     """
     player_ids = [player["id"] for player in layout["players"]]
+    city_sample = int(layout["city_sample_cubes_per_seat"])
     return {
         duty["id"]: {
-            player_id: int(duty.get("sample_cubes", {}).get(player_id, 0))
+            player_id: (
+                city_sample
+                if duty["id"] == layout["city_id"]
+                else int(duty.get("sample_cubes", {}).get(player_id, 0))
+            )
             for player_id in player_ids
         }
         for duty in duties_of(layout)
@@ -328,19 +347,34 @@ def tally_columns(layout: dict, duty: dict, count: int) -> list[dict]:
 
 
 def cubes_standing(layout: dict, duty: dict, piece: dict, counts: dict, count: int) -> int:
-    """How many cubes one column shows.
+    """How many cubes one column shows: what is standing in it.
 
-    A seat on a duty tile shows what the debug state puts there, capped at what a tile has room
-    for. Every City column opens on the same sample, which is well short of what the space holds so
-    that a page with buttons has somewhere to put a cube. The neutral column reads its own seeding
-    out of the layout, since neutrals are not part of the players' state.
+    One rule for every space, the City included. What a page wants a column to show is the page's
+    to say and arrives in `counts` — real acolytes on the play view, a sample on a debug page — so
+    that the City is not a board that draws something other than the position it was handed. The
+    neutral column is the exception, reading its own seeding out of the layout, since neutrals are
+    not part of the players' state and so never appear in anybody's counts.
+
+    Raises `CubeOverflow` rather than dropping cubes that will not fit. The stack heights are
+    artefacts of how these boards were drawn rather than rules of the game, so a position that
+    exceeds one is a board this renderer cannot draw, and saying so is better than quietly
+    drawing a different position.
     """
     if piece["id"] == layout["dummy_acolytes"]["id"]:
         seeded = layout["dummy_acolytes"]["sample_cubes"].get(str(count), {})
         return int(seeded.get(duty["id"], 0))
-    if duty["id"] == layout["city_id"]:
-        return int(layout["city_sample_cubes_per_seat"])
-    return min(int(counts.get(piece["id"], 0)), TILE_STACK_HEIGHT)
+    standing = int(counts.get(piece["id"], 0))
+    room = stack_height(layout, duty)
+    if standing > room:
+        raise CubeOverflow(
+            f"{duty['id']} has {standing} cubes for {piece['id']}, and room to draw {room}"
+        )
+    return standing
+
+
+def stack_height(layout: dict, duty: dict) -> int:
+    """How many cubes one column of this space has room to draw."""
+    return CITY_STACK_HEIGHT if duty["id"] == layout["city_id"] else TILE_STACK_HEIGHT
 
 
 def column_room(layout: dict, duty: dict, piece: dict, interactive: bool) -> int | None:
@@ -353,7 +387,7 @@ def column_room(layout: dict, duty: dict, piece: dict, interactive: bool) -> int
     """
     if not interactive or piece["id"] == layout["dummy_acolytes"]["id"]:
         return None
-    return CITY_STACK_HEIGHT if duty["id"] == layout["city_id"] else TILE_STACK_HEIGHT
+    return stack_height(layout, duty)
 
 
 def merchant_path(layout: dict) -> list[str]:
