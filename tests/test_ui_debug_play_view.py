@@ -820,7 +820,7 @@ def _wheel(page: str) -> str:
 
 
 def _resource_amounts(fragment: str) -> list[str]:
-    return re.findall(r'<g data-resource="[a-z]+">.*?<text[^>]*>(\d+)</text>', fragment)
+    return re.findall(r'<g data-resource="[a-z]+"[^>]*>.*?<text[^>]*>(\d+)</text>', fragment)
 
 
 def _merchant_space_index(page: str) -> int:

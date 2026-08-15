@@ -1576,6 +1576,15 @@ def test_the_first_thing_a_new_game_asks_is_which_board_begins(tmp_path: Path) -
 
 
 @needs_node
+def test_start_player_selection_prompt_says_this_round(tmp_path: Path) -> None:
+    server = _opening(tmp_path)
+    transcript = _run_script(server, [], tmp_path)
+    active = server.payload["state"]["active_player"]
+
+    assert transcript["asking"][0] == [f"{active}: choose first player for this round."]
+
+
+@needs_node
 def test_the_holder_can_name_themselves_by_pressing_their_own_board(tmp_path: Path) -> None:
     """Their own board is one of the ones lit, and pressing it is not a different path."""
     server = _opening(tmp_path)
@@ -2084,7 +2093,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     assert SEAT_COLOURS[third.group(1)] == "Blue"
 
     summaries = re.findall(r'<div class="turn-summary">([^<]*)</div>', page)
-    assert "Start player selection: Blue begins the next round" in summaries
+    assert "Start player selection: Blue begins this round" in summaries
     assert not any("player_" in summary for summary in summaries)
 
     # Choosing that board, the transcript names both seats by colour and the header follows.
@@ -2396,8 +2405,8 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
 
     WHAT THIS CANNOT SEE. Draw order and overlap. An element that paints its whole area is still
     unreachable if something opaque is drawn on top of it, and nothing here knows what covers what
-    -- that needs a real browser and a real click. This checks the property that made the seat key
-    fail, which is a property of the element on its own.
+    -- that needs a real browser and a real click. Hidden-choice-key pointer gates are asserted
+    separately below; what still needs eyes is one visible key covering another visible target.
     """
     server = _reference_server()
     page = render_play_view_from_payload(server.payload)
@@ -2422,6 +2431,26 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
         "affordances a click in the middle falls straight through:\n"
         + "\n".join(f"  {line}" for line in unreachable)
     )
+
+
+def _hidden_choice_key_rules_drop_pointer_events(page: str) -> None:
+    """Any rule hiding a whole-board/map choice key must also make it non-interactive."""
+    selectors = (
+        '[data-seat-choice-key][data-turn-offered="false"]',
+        '[data-building-choice-key][data-turn-offered="false"]',
+    )
+    for selector in selectors:
+        match = re.search(rf"{re.escape(selector)}\s*\{{([^}}]*)\}}", page, re.S)
+        assert match is not None, f"no hide rule for {selector}"
+        body = " ".join(match.group(1).split())
+        assert "visibility: hidden" in body, f"{selector} hide rule stopped hiding"
+        assert "pointer-events: none" in body, f"{selector} hide rule still takes clicks"
+
+
+def test_each_hidden_choice_key_rule_also_disables_pointer_events() -> None:
+    server = _reference_server()
+    page = render_play_view_from_payload(server.payload)
+    _hidden_choice_key_rules_drop_pointer_events(page)
 
 
 def _opened(tmp_path: Path):
@@ -2969,6 +2998,26 @@ def test_an_outline_key_that_forgets_pointer_events_is_caught(monkeypatch) -> No
 
     with pytest.raises(AssertionError, match="data-seat-choice-key"):
         test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid()
+
+
+def test_removing_hidden_choice_key_pointer_gate_is_caught(monkeypatch) -> None:
+    """MUTATION. A hidden whole-board/map key must not keep swallowing clicks."""
+    from tools.ui_debug import render_play_view
+
+    with_gate = render_play_view.turn_styles
+
+    def without_first_gate(route_color: str) -> str:
+        return with_gate(route_color).replace(
+            "visibility: hidden; pointer-events: none;",
+            "visibility: hidden;",
+            1,
+        )
+
+    monkeypatch.setattr(render_play_view, "turn_styles", without_first_gate)
+    page = render_play_view_from_payload(_reference_server().payload)
+
+    with pytest.raises(AssertionError, match="still takes clicks"):
+        _hidden_choice_key_rules_drop_pointer_events(page)
 
 
 # ---------------------------------------------------------------------------------------------

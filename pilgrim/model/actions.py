@@ -114,7 +114,7 @@ class SetupSowAction:
 
 @dataclass(frozen=True, slots=True)
 class StartPlayerSelectionAction:
-    """Who begins the next round, said by whoever holds the First Player marker.
+    """Who begins this round, said by whoever holds the First Player marker.
 
     One field, because one thing is being decided. The player saying it is not carried here: it is
     the active player, the way it is for every other action, and holding it twice would let a
@@ -401,7 +401,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if isinstance(action, StartPlayerSelectionAction):
         return (
             "Start player selection: "
-            f"{action.chosen_start_player.name.lower()} begins the next round"
+            f"{action.chosen_start_player.name.lower()} begins this round"
         )
 
     # Full-turn actions only below.

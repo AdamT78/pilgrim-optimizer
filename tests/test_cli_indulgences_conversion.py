@@ -151,5 +151,5 @@ def test_cli_apply_indulgences_buy_then_round_end_shows_start_player_selection(c
     assert "RESOURCE_DELTA: player_two silver -1; piety +1" in output
     assert (
         "START_PLAYER_MARKER: player_two takes the First Player marker on effective "
-        "piety 2 and must choose who begins the next round"
+        "piety 2 and must choose who begins this round"
     ) in output

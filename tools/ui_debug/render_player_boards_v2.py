@@ -706,12 +706,17 @@ def resource_icon_center_y(icon: str) -> float:
 
 
 def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> str:
-    """One readout: the icon, and its amount centred under it."""
+    """One readout: the icon, and its amount centred under it.
+
+    The key behind this readout is the clickable thing. The icon and numeral painted over it are
+    decoration, so they take no pointer events: a key has to stay the topmost pointer target across
+    its own area, not only around its edges.
+    """
     icon = resource["icon"]
     if icon not in _ICON_RENDERERS:
         raise KeyError(f"unknown resource icon: {icon}")
     return (
-        f'<g data-resource="{escape(str(resource["id"]))}">'
+        f'<g data-resource="{escape(str(resource["id"]))}" pointer-events="none">'
         + _ICON_RENDERERS[icon](
             cx,
             block["icon_cy"] + resource_icon_center_y(icon),

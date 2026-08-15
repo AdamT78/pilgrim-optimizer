@@ -187,7 +187,7 @@ RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "choose a resource."
 BUILDING_PROMPT = "choose a building."
 COMBINATION_PROMPT = "choose one."
-SEAT_PROMPT = "choose who begins the next round."
+SEAT_PROMPT = "choose first player for this round."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
