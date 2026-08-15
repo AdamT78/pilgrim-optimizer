@@ -539,6 +539,10 @@ def _at(value):
     return {"kind": "position", "value": value}
 
 
+def _press(name: str):
+    return {"kind": "control", "value": name}
+
+
 def _follow(value: str):
     return {"kind": "edge", "value": value}
 
@@ -568,7 +572,7 @@ def _build(building_id: str):
 
 def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
-    if step["kind"] == "position":
+    if step["kind"] in {"position", "origin", "duty"}:
         return _at(step["value"])
     if step["kind"] == "edge":
         return _follow(step["value"])
@@ -603,7 +607,7 @@ def _engine_steps(action) -> list[dict]:
     what the offers are checked against is the engine's own answer about what is legal.
     """
     route = tuple(action.route)
-    steps = [{"kind": "position", "value": action.origin}]
+    steps = [{"kind": "origin", "value": action.origin}]
     path = (action.origin, *route)
     steps += [
         {
@@ -615,7 +619,7 @@ def _engine_steps(action) -> list[dict]:
     ]
     if isinstance(action, SetupSowAction):
         return steps
-    steps.append({"kind": "position", "value": action.selected_duty})
+    steps.append({"kind": "duty", "value": action.selected_duty})
     steps.append({"kind": "resolution", "value": action.resolution.value})
     for name in ("tithe_resource", "taxation_step1_resource"):
         # Read through the constant so that a test which takes a field off the page takes it off
@@ -672,8 +676,11 @@ def _next_values(decisions: list[list[dict]], prefix: list) -> list:
 def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
     """Advance past every step the survivors agree on, as the page does."""
     prefix = list(prefix)
-    while len(_next_values(decisions, prefix)) == 1:
-        prefix.append(_next_values(decisions, prefix)[0])
+    while len(_next_steps(decisions, prefix)) == 1:
+        step = _next_steps(decisions, prefix)[0]
+        if step["kind"] == "resolution":
+            break
+        prefix.append(step["value"])
     return prefix
 
 
@@ -694,6 +701,16 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             return clicks
         value = target[len(prefix)]
         step = next(s for s in _next_steps(decisions, prefix) if s["value"] == value)
+        if step["kind"] == "resolution":
+            options = [s for s in _next_steps(decisions, prefix) if s["kind"] == "resolution"]
+            if value == "tithe":
+                clicks.append(_press("tithe"))
+            else:
+                clicks.append(_press("action"))
+                if len([s for s in options if s["value"] != "tithe"]) > 1:
+                    clicks.append(_do(value))
+            prefix.append(value)
+            continue
         prefix.append(value)
         clicks.append(_click_for(server, step))
 
@@ -717,14 +734,40 @@ def test_what_is_offered_is_what_the_engine_says_may_come_next(phase, tmp_path: 
     prefix: list = []
     for _question in range(3):
         prefix = _forced_prefix(decisions, prefix)
-        expected = _next_values(decisions, prefix)
+        next_steps = _next_steps(decisions, prefix)
+        expected = _values(next_steps)
         if len(expected) <= 1:
             break
         transcript = _run_script(server, list(clicks), tmp_path)
-        assert sorted(map(str, transcript["offered"][-1])) == sorted(map(str, expected))
-        step = next(s for s in _next_steps(decisions, prefix) if s["value"] == expected[0])
+        if all(step["kind"] == "resolution" for step in next_steps):
+            grouped = []
+            if any(step["value"] != "tithe" for step in next_steps):
+                grouped.append("action")
+            if any(step["value"] == "tithe" for step in next_steps):
+                grouped.append("tithe")
+            assert sorted(map(str, transcript["offered"][-1])) == sorted(map(str, grouped))
+        else:
+            assert sorted(map(str, transcript["offered"][-1])) == sorted(map(str, expected))
+        step = next(s for s in next_steps if s["value"] == expected[0])
         prefix.append(expected[0])
-        clicks.append(_click_for(server, step))
+        if step["kind"] == "resolution":
+            if step["value"] == "tithe":
+                clicks.append(_press("tithe"))
+            else:
+                clicks.append(_press("action"))
+                if (
+                    len(
+                        [
+                            s
+                            for s in next_steps
+                            if s["kind"] == "resolution" and s["value"] != "tithe"
+                        ]
+                    )
+                    > 1
+                ):
+                    clicks.append(_do(step["value"]))
+        else:
+            clicks.append(_click_for(server, step))
     assert clicks, "the position asked nothing, so nothing was checked"
 
 
@@ -738,8 +781,24 @@ def test_a_step_the_survivors_agree_on_is_never_put_as_a_question(phase, tmp_pat
     decisions = _engine_decisions(server)
     prefix = _forced_prefix(decisions, [])
     opening = _next_steps(decisions, prefix)
-
-    transcript = _run_script(server, [_click_for(server, opening[0])], tmp_path)
+    first = opening[0]
+    if first["kind"] == "resolution":
+        clicks = [_press("tithe")] if first["value"] == "tithe" else [_press("action")]
+        if (
+            first["value"] != "tithe"
+            and len(
+                [
+                    step
+                    for step in opening
+                    if step["kind"] == "resolution" and step["value"] != "tithe"
+                ]
+            )
+            > 1
+        ):
+            clicks.append(_do(first["value"]))
+    else:
+        clicks = [_click_for(server, first)]
+    transcript = _run_script(server, clicks, tmp_path)
     for offered in transcript["offered"]:
         assert len(offered) != 1, f"a single option was presented as a choice: {offered}"
 
@@ -2123,7 +2182,8 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert not re.search(r"#[0-9A-Fa-f]{3,6}\b", code)
     assert not re.search(r"\b(cx|cy|stroke|fill|translate)\s*[=:]", code)
     # It may say only these things about the board and the panel.
-    assert "setAttribute('data-play-offered'" in code
+    assert "setAttribute('data-turn-start-candidate'" in code
+    assert "setAttribute('data-turn-duty-candidate'" in code
     assert "setAttribute('data-turn-shown'" in code
     # And it may not know what any step is ABOUT. A step says how it is answered and the script
     # routes on that; the day it can tell a tithe's stock from a taxation's by name is the day the
@@ -2373,9 +2433,7 @@ def _opened(tmp_path: Path):
 
 def _visible_cubes(snapshot: dict, position: str, player_id: str) -> int:
     return sum(
-        1
-        for cube in snapshot[position]
-        if cube["player"] == player_id and cube["opacity"] != "0"
+        1 for cube in snapshot[position] if cube["player"] == player_id and cube["opacity"] != "0"
     )
 
 
@@ -2394,21 +2452,26 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
         "chosen": transcript["chosen"][index],
         "shown": transcript["shownPanel"][index],
         "asking": transcript["asking"][index],
+        "startCandidates": transcript["startCandidates"][index],
+        "dutyCandidates": transcript["dutyCandidates"][index],
         "reset": transcript["resetShown"][index],
         "counter": transcript["counterShown"][index],
         "controls": transcript["controls"][index],
+        "controlActive": transcript["controlActive"][index],
         "cubes": transcript["cubes"][index],
         "overflow": transcript["overflow"][index],
     }
 
 
-def _previewed_destinations(snapshot: dict, player_id: str) -> Counter:
-    """Where the preview says cubes stand for one seat, with repeats as counts."""
+def _previewed_destinations(before: dict, after: dict, player_id: str) -> Counter:
+    """Where preview put cubes down, as the positive column deltas for one seat."""
     shown: Counter = Counter()
-    for position in snapshot:
-        visible = _visible_cubes(snapshot, position, player_id)
-        if visible:
-            shown[position] = visible
+    for position in before:
+        gained = _visible_cubes(after, position, player_id) - _visible_cubes(
+            before, position, player_id
+        )
+        if gained > 0:
+            shown[position] = gained
     return shown
 
 
@@ -2417,9 +2480,11 @@ def _destinations_named_by(route_edges: list[str]) -> Counter:
     return Counter(edge.split("->", 1)[1] for edge in route_edges)
 
 
-def _assert_preview_matches_route(snapshot: dict, player_id: str, route_edges: list[str]) -> None:
+def _assert_preview_matches_route(
+    before: dict, after: dict, player_id: str, route_edges: list[str]
+) -> None:
     expected = _destinations_named_by(route_edges)
-    shown = _previewed_destinations(snapshot, player_id)
+    shown = _previewed_destinations(before, after, player_id)
     if shown == expected:
         return
     unexpected = sorted(
@@ -2476,7 +2541,10 @@ def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: 
     candidate = next(
         c
         for c in server.payload["turn_candidates"]
-        if any(step["kind"] == "resolution" for step in c["steps"])
+        if any(
+            step["kind"] == "resolution" and step["value"].startswith("produce_")
+            for step in c["steps"]
+        )
     )
     clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
     transcript = _run_script(server, clicks, tmp_path)
@@ -2499,7 +2567,9 @@ def test_reset_restores_every_cube_to_its_opening_opacity(tmp_path: Path) -> Non
     transcript = _run_script(server, [_follow("city->north")], tmp_path, reset=True)
     opening = _snapshot_at(transcript, 0)
 
-    assert transcript["afterReset"] == opening, "reset did not return to the opening setup-sow snapshot"
+    assert transcript["afterReset"] == opening, (
+        "reset did not return to the opening setup-sow snapshot"
+    )
 
 
 @needs_node
@@ -2518,11 +2588,14 @@ def test_preview_cubes_follow_the_non_first_branch_back_through_the_city(
     ]
     clicks = [_follow("city->north"), _follow("east->city"), _follow("city->south")]
     transcript = _run_script(server, clicks, tmp_path)
+    before = transcript["cubes"][0]
     after = transcript["cubes"][-1]
 
     assert transcript["offered"][2] == ["city->north", "city->south"]
-    assert clicks[-1]["value"] == transcript["offered"][2][1], "the branch taken was not the non-first one"
-    _assert_preview_matches_route(after, active, route)
+    assert clicks[-1]["value"] == transcript["offered"][2][1], (
+        "the branch taken was not the non-first one"
+    )
+    _assert_preview_matches_route(before, after, active, route)
     assert _visible_cubes(after, "north", active) == 1
     assert _visible_cubes(after, "north_east", active) == 1
     assert _visible_cubes(after, "east", active) == 1
@@ -2547,7 +2620,106 @@ def test_after_any_setup_answers_preview_matches_the_route_those_answers_name(
         route_edges = [step["value"] for step in route if step["kind"] == "edge"]
         clicks = _clicks_to(server, decisions, _values(route))
         transcript = _run_script(server, clicks, tmp_path)
-        _assert_preview_matches_route(transcript["cubes"][-1], active, route_edges)
+        _assert_preview_matches_route(
+            transcript["cubes"][0], transcript["cubes"][-1], active, route_edges
+        )
+
+
+@needs_node
+def test_after_normal_turn_route_answers_preview_matches_the_named_route(tmp_path: Path) -> None:
+    """The same route guard in a normal turn, where cubes are already out on the wheel."""
+    server = _played_through_setup(_served(tmp_path))
+    active = server.payload["state"]["active_player"]
+    decisions = _engine_decisions(server)
+    route = next(steps for steps in decisions if any(step["kind"] == "edge" for step in steps))
+    route_answers = [step["value"] for step in route if step["kind"] in {"origin", "edge"}]
+    route_edges = [step["value"] for step in route if step["kind"] == "edge"]
+    transcript = _run_script(server, _clicks_to(server, decisions, route_answers), tmp_path)
+
+    _assert_preview_matches_route(
+        transcript["cubes"][0], transcript["cubes"][-1], active, route_edges
+    )
+
+
+@needs_node
+def test_origin_and_duty_space_marks_are_distinct_in_a_normal_turn(tmp_path: Path) -> None:
+    """Origin and duty spaces are marked separately as the turn advances."""
+    server = _played_through_setup(_served(tmp_path))
+    decisions = _engine_decisions(server)
+    route = next(steps for steps in decisions if any(step["kind"] == "edge" for step in steps))
+    route_answers = []
+    for step in route:
+        if step["kind"] == "duty":
+            break
+        route_answers.append(step["value"])
+
+    opening = _run_script(server, [], tmp_path)
+    after_route = _run_script(server, _clicks_to(server, decisions, route_answers), tmp_path)
+
+    assert opening["startCandidates"][-1], "no origin spaces were marked at turn start"
+    assert opening["dutyCandidates"][-1] == [], "duty spaces were marked before the hand emptied"
+    assert after_route["startCandidates"][-1] == [], (
+        "origin marks stayed up once route answering was done"
+    )
+    assert after_route["dutyCandidates"][-1], "no duty spaces were marked after the hand emptied"
+    assert not [value for value in after_route["offered"][-1] if "->" in str(value)], (
+        "route arrows stayed lit after duty candidates were offered"
+    )
+
+
+@needs_node
+def test_action_on_produce_keeps_resolution_open_and_offers_remaining_keys(tmp_path: Path) -> None:
+    """Action narrows to non-tithe survivors and does not pick among them for the player."""
+    server = _played_through_setup(_served(tmp_path))
+    decisions = _engine_decisions(server)
+    produce = next(
+        steps
+        for steps in decisions
+        if any(
+            step["kind"] == "resolution" and step["value"].startswith("produce_") for step in steps
+        )
+    )
+    prefix = []
+    for step in produce:
+        if step["kind"] == "resolution":
+            break
+        prefix.append(step["value"])
+    to_duty = _clicks_to(server, decisions, prefix)
+    selected = _run_script(server, to_duty, tmp_path)
+    after_action = _run_script(server, [*to_duty, _press("action")], tmp_path)
+
+    assert selected["controls"][-1]["action"] == "true"
+    assert after_action["shownPanel"][-1] == -1, "Action quietly settled a still-open resolution"
+    assert after_action["controls"][-1]["confirm"] == "false"
+    assert after_action["controls"][-1]["tithe"] == "false"
+    assert after_action["controlActive"][-1]["action"] == "true"
+    assert sorted(
+        value for value in after_action["offered"][-1] if value.startswith("produce_")
+    ) == [
+        "produce_stone",
+        "produce_wheat",
+    ]
+
+
+@needs_node
+def test_tithe_is_dark_when_the_selected_duty_offers_no_tithe(tmp_path: Path) -> None:
+    """Driven with Taxation rather than asserted as a rule."""
+    server = _played_through_setup(_served(tmp_path))
+    decisions = _engine_decisions(server)
+    taxation = next(
+        steps
+        for steps in decisions
+        if any(step["kind"] == "resolution" and step["value"] == "taxation" for step in steps)
+    )
+    prefix = []
+    for step in taxation:
+        if step["kind"] == "resolution":
+            break
+        prefix.append(step["value"])
+    transcript = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path)
+
+    assert transcript["controls"][-1]["action"] == "true"
+    assert transcript["controls"][-1]["tithe"] == "false"
 
 
 @needs_node
@@ -2587,7 +2759,7 @@ def test_restoring_first_survivor_destination_lookup_is_caught(tmp_path: Path) -
     )
 
     with pytest.raises(AssertionError, match="south_east"):
-        _assert_preview_matches_route(regressed["cubes"][-1], active, route)
+        _assert_preview_matches_route(regressed["cubes"][0], regressed["cubes"][-1], active, route)
 
 
 @needs_node
@@ -2624,7 +2796,9 @@ def test_every_setup_route_on_the_sweep_seeds_avoids_preview_overflow(
     for route in decisions:
         clicks = _clicks_to(server, decisions, _values(route))
         transcript = _run_script(server, clicks, tmp_path)
-        assert not any(transcript["overflow"]), f"seed {seed} overflowed on route {_values(route)!r}"
+        assert not any(transcript["overflow"]), (
+            f"seed {seed} overflowed on route {_values(route)!r}"
+        )
 
 
 def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Path) -> None:
@@ -2693,7 +2867,7 @@ def test_dimming_reset_after_origin_is_taken_is_caught(tmp_path: Path) -> None:
         [_follow("city->north")],
         tmp_path,
         mutate=lambda code: code.replace(
-            "setControl('reset', preview.resettable);",
+            "setControl('reset', preview.resettable, false);",
             "setControl('reset', false);",
         ),
     )
@@ -2710,7 +2884,8 @@ def test_putting_board_step_prompts_back_in_the_panel_is_caught(tmp_path: Path) 
         [],
         tmp_path,
         mutate=lambda code: code.replace(
-            "if (step.kind === 'position' || step.kind === 'edge') { return; }",
+            "if (step.kind === 'origin' || step.kind === 'duty' ||"
+            " step.kind === 'edge') { return; }",
             "",
         ),
     )
@@ -2863,7 +3038,7 @@ def test_a_confession_box_is_asked_of_one_player_and_answered_from_the_page(
 
 
 def test_a_box_offer_reads_as_a_sentence_and_names_where_it_comes_from(tmp_path: Path) -> None:
-    """The three sources cost different things and are owed to different people, so all are named."""
+    """The three sources cost different things and are owed to different people."""
     server = _played_until_a_box_is_offered(_played_through_setup(_served(tmp_path)))
     labels = [c["steps"][0]["label"] for c in server.payload["turn_candidates"]]
 

@@ -4,9 +4,10 @@
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount }.
 //
-// A click is { kind: 'position'|'edge'|'resolution'|'combination'|'resource'|'seat'|'building',
-// value }; a resource click also carries { seat }, a seat click names the player whose board is
-// pressed, and a building click names the building whose hex on the round track is pressed.
+// A click is { kind: 'position'|'origin'|'duty'|'edge'|'resolution'|'combination'|'resource'
+// |'seat'|'building'|'control', value }; a resource click also carries { seat }, a seat click
+// names the player whose board is pressed, a building click names the building whose hex on the
+// round track is pressed, and a control click presses one board plaque by name.
 //
 // Prints a JSON transcript: what was offered at each point, which seat was asked for a stock, which
 // boards were offered as an answer in themselves, what was marked as chosen, which panel was shown,
@@ -207,6 +208,8 @@ const transcript = {
   askedSeats: [],
   offeredBySeat: [],
   offeredBoards: [],
+  startCandidates: [],
+  dutyCandidates: [],
   asking: [],
   resetShown: [],
   counterShown: [],
@@ -262,9 +265,17 @@ function cubeSnapshot() {
 function snapshot() {
   const offered = [];
   const chosen = [];
+  const starts = [];
+  const duties = [];
   spaces.forEach((space, index) => {
-    if (space.getAttribute('data-play-offered') === 'true') offered.push(index);
-    if (space.getAttribute('data-play-chosen') === 'true') chosen.push(index);
+    const asksOrigin = space.getAttribute('data-turn-start-candidate') === 'true';
+    const asksDuty = space.getAttribute('data-turn-duty-candidate') === 'true';
+    if (asksOrigin || asksDuty) offered.push(index);
+    if (asksOrigin) starts.push(index);
+    if (asksDuty) duties.push(index);
+    const pickedOrigin = space.getAttribute('data-turn-start-selected') === 'true';
+    const pickedDuty = space.getAttribute('data-turn-duty-selected') === 'true';
+    if (pickedOrigin || pickedDuty) chosen.push(index);
   });
   arrows.forEach((arrow) => {
     if (arrow.getAttribute('data-turn-offered') === 'true') {
@@ -322,8 +333,13 @@ function snapshot() {
     .filter((item) => item.getAttribute('data-turn-offered') === 'true')
     .map((item) => item.getAttribute('data-turn-counter'));
   const states = {};
+  const activeStates = {};
   controls.forEach((item) => {
     states[item.getAttribute('data-turn-control')] = item.getAttribute('data-turn-control-enabled');
+    activeStates[item.getAttribute('data-turn-control')] = item.getAttribute('data-turn-control-active');
+  });
+  ['action', 'tithe'].forEach((name) => {
+    if (states[name] === 'true' && offered.indexOf(name) === -1) offered.push(name);
   });
   const overflow = board.getAttribute('data-turn-preview-overflow') === 'true';
   return {
@@ -333,10 +349,13 @@ function snapshot() {
     asked,
     bySeat,
     boards,
+    starts,
+    duties,
     asking,
     reset: control('reset') ? control('reset').getAttribute('data-turn-control-enabled') === 'true' : false,
     counter,
     controls: states,
+    controlActive: activeStates,
     cubes: cubeSnapshot(),
     overflow,
   };
@@ -350,10 +369,14 @@ function record() {
   transcript.askedSeats.push(snap.asked);
   transcript.offeredBySeat.push(snap.bySeat);
   transcript.offeredBoards.push(snap.boards);
+  transcript.startCandidates.push(snap.starts);
+  transcript.dutyCandidates.push(snap.duties);
   transcript.asking.push(snap.asking);
   transcript.resetShown.push(snap.reset);
   transcript.counterShown.push(snap.counter);
   transcript.controls.push(snap.controls);
+  transcript.controlActive = transcript.controlActive || [];
+  transcript.controlActive.push(snap.controlActive);
   transcript.cubes.push(snap.cubes);
   transcript.overflow.push(snap.overflow);
 }
@@ -384,11 +407,14 @@ function pressBoard(click) {
 }
 
 job.clicks.forEach((click) => {
-  if (click.kind === 'position') {
+  if (click.kind === 'position' || click.kind === 'origin' || click.kind === 'duty') {
     spaces.find((space) =>
       Number(space.getAttribute('data-board-position-index')) === Number(click.value)).click();
   } else if (click.kind === 'edge') {
     arrows.find((arrow) => arrow.getAttribute('data-arrow') === click.value).click();
+  } else if (click.kind === 'control') {
+    const button = control(click.value);
+    if (button) button.click();
   } else if (click.kind === 'combination') {
     pairs.find((pair) => pair.getAttribute('data-combination-key') === click.value).click();
   } else if (click.kind === 'resource') {
@@ -412,9 +438,12 @@ if (job.reset) {
     chosen: snap.chosen,
     shown: snap.shown,
     asking: snap.asking,
+    startCandidates: snap.starts,
+    dutyCandidates: snap.duties,
     reset: snap.reset,
     counter: snap.counter,
     controls: snap.controls,
+    controlActive: snap.controlActive,
     cubes: snap.cubes,
     overflow: snap.overflow,
   };

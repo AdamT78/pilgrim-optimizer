@@ -352,14 +352,15 @@ def _prompt_lines(candidates: list[dict]) -> str:
     this does not know that a position on the board means acolytes, or that some of these lines are
     answered nowhere near the panel they appear in.
 
-    Prompts for choices made directly on the board are deliberately absent: a lit space or arrow is
-    already that instruction and repeating it in the panel turns one thing to track into two.
+    Prompts for choices made directly on the board are deliberately absent: lit origin spaces,
+    duty spaces, and arrows already say what to point at, and repeating that in the panel turns one
+    thing to track into two.
     """
     seen: list[str] = []
     for candidate in candidates:
         for step in candidate["steps"]:
             prompt = step.get("prompt")
-            if step["kind"] in {"position", "edge"}:
+            if step["kind"] in {"origin", "duty", "edge"}:
                 continue
             if prompt and prompt not in seen:
                 seen.append(prompt)
@@ -523,6 +524,7 @@ _TURN_SCRIPT = """<script>
   var aside = document.querySelector('[data-component="play-turn"]');
   if (!board || !aside) { return; }
   var spaces = board.querySelectorAll('[data-board-position-index]');
+  var ornaments = board.querySelectorAll('.ornament-header g');
   var arrows = board.querySelectorAll('[data-arrow]');
   var counters = board.querySelectorAll('[data-turn-counter]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
@@ -538,7 +540,9 @@ _TURN_SCRIPT = """<script>
      rotation the track was drawn at. */
   var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
+  var answered = [];
   var autoAdvance = true;
+  var resolutionSplit = null;
   var baseline = [];
   var activePlayer = null;
   Array.prototype.forEach.call(seats, function (seat) {
@@ -584,10 +588,13 @@ _TURN_SCRIPT = """<script>
     request.send(JSON.stringify({ action_id: actionId, state_token: TOKEN }));
   }
 
-  /* A step says how it is answered and this sorts them by that, so a new kind of question is a new
-     bucket here and nothing else. No step is recognised by what it is ABOUT: there is no field
-     name anywhere in this file, and a page that told a tithe's stock from a taxation's would be
-     one that had to be taught about the next one. */
+  /* A step says how it is answered and this sorts them by that, so a new
+     kind of question is a new bucket here and nothing else. That now
+     includes two kinds answered on the same wheel: `origin` and `duty`
+     split so they can be marked differently without naming fields. No
+     step is recognised by what it is ABOUT: there is no field name
+     anywhere in this file, and a page that told a tithe's stock from a
+     taxation's would be one that had to be taught about the next one. */
   function offeredByKind(offered, kind) {
     var values = [];
     offered.forEach(function (step) {
@@ -602,7 +609,7 @@ _TURN_SCRIPT = """<script>
   function promptsOf(offered) {
     var values = [];
     offered.forEach(function (step) {
-      if (step.kind === 'position' || step.kind === 'edge') { return; }
+      if (step.kind === 'origin' || step.kind === 'duty' || step.kind === 'edge') { return; }
       if (step.prompt && values.indexOf(step.prompt) === -1) { values.push(step.prompt); }
     });
     return values;
@@ -619,10 +626,11 @@ _TURN_SCRIPT = """<script>
     return board.querySelector('[data-turn-control="' + name + '"]');
   }
 
-  function setControl(name, enabled) {
+  function setControl(name, enabled, active) {
     var item = control(name);
     if (!item) { return; }
     item.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
+    item.setAttribute('data-turn-control-active', active ? 'true' : 'false');
     item.setAttribute('aria-disabled', enabled ? 'false' : 'true');
   }
 
@@ -704,9 +712,11 @@ _TURN_SCRIPT = """<script>
 
   function applyPreview() {
     var started = false;
-    var resettable = false;
     var overflow = false;
     var count = null;
+    var origin = null;
+    var duty = null;
+    var resolution = null;
     var prefix = [];
     var remaining = chosen.slice();
     restoreBaseline();
@@ -731,10 +741,11 @@ _TURN_SCRIPT = """<script>
       });
       prefix.push(answer);
       if (!step) { continue; }
-      if (step.kind === 'position' && prefix.length === 1) {
-        var origin = positionName(step.value);
-        if (origin && activePlayer) {
-          hide(visibleColumnAt(origin, activePlayer));
+      if (step.kind === 'origin') {
+        origin = step.value;
+        var start = positionName(step.value);
+        if (start && activePlayer) {
+          hide(visibleColumnAt(start, activePlayer));
         }
         started = true;
         if (step.counter !== undefined && step.counter !== null) {
@@ -744,8 +755,15 @@ _TURN_SCRIPT = """<script>
         }
         continue;
       }
+      if (step.kind === 'duty') {
+        duty = step.value;
+        continue;
+      }
+      if (step.kind === 'resolution') {
+        resolution = step.value;
+        continue;
+      }
       if (step.kind !== 'edge') { continue; }
-      resettable = true;
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
       if (destination && activePlayer) {
@@ -761,24 +779,64 @@ _TURN_SCRIPT = """<script>
         count = step.counter;
       }
     }
-    return { started: started, resettable: resettable, overflow: overflow, count: count };
+    return {
+      started: started,
+      resettable: started && answered.length > 0,
+      overflow: overflow,
+      count: count,
+      origin: origin,
+      duty: duty,
+      resolution: resolution
+    };
   }
 
-  function show(offered, settled, confirmable, preview) {
-    var positions = offeredByKind(offered, 'position');
+  function show(offered, resolutionOptions, settled, confirmable, preview) {
+    var origins = offeredByKind(offered, 'origin');
+    var duties = offeredByKind(offered, 'duty');
     var edges = offeredByKind(offered, 'edge');
+    var resolutions = resolutionOptions || [];
+    var actionResolutions = resolutions.filter(function (value) {
+      return value !== 'tithe';
+    });
+    var shownResolutions = resolutionSplit === 'action' ? actionResolutions : [];
+    var dutyName = preview.duty === null ? null : positionName(preview.duty);
     var stocks = offeredByKind(offered, 'resource');
     var boards = offeredByKind(offered, 'seat');
     Array.prototype.forEach.call(spaces, function (space) {
       var index = Number(space.getAttribute('data-board-position-index'));
-      space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
-      space.setAttribute('data-play-chosen', chosen.indexOf(index) === -1 ? 'false' : 'true');
+      if (origins.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-start-candidate');
+      } else {
+        space.setAttribute('data-turn-start-candidate', 'true');
+      }
+      if (duties.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-duty-candidate');
+      } else {
+        space.setAttribute('data-turn-duty-candidate', 'true');
+      }
+      if (preview.origin === index) {
+        space.setAttribute('data-turn-start-selected', 'true');
+      } else {
+        space.removeAttribute('data-turn-start-selected');
+      }
+      if (preview.duty === index) {
+        space.setAttribute('data-turn-duty-selected', 'true');
+      } else {
+        space.removeAttribute('data-turn-duty-selected');
+      }
+    });
+    Array.prototype.forEach.call(ornaments, function (ornament) {
+      if (dutyName && ornament.getAttribute('data-ornament-position') === dutyName) {
+        ornament.setAttribute('data-turn-duty-selected', 'true');
+      } else {
+        ornament.removeAttribute('data-turn-duty-selected');
+      }
     });
     mark(arrows, 'data-arrow', edges);
     mark(counters, 'data-turn-counter', preview.count === null ? [] : [String(preview.count)]);
     board.setAttribute('data-turn-preview-overflow', preview.overflow ? 'true' : 'false');
     mark(prompts, 'data-turn-prompt', promptsOf(offered));
-    mark(keys, 'data-resolution-key', offeredByKind(offered, 'resolution'));
+    mark(keys, 'data-resolution-key', shownResolutions);
     mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
     /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
@@ -807,11 +865,22 @@ _TURN_SCRIPT = """<script>
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
     });
-    setControl('sow', false);
-    setControl('reset', preview.resettable);
-    setControl('confirm', confirmable && !preview.overflow);
-    setControl('action', false);
-    setControl('tithe', false);
+    setControl('sow', false, preview.started && preview.duty === null);
+    setControl('reset', preview.resettable, false);
+    setControl('confirm', confirmable && !preview.overflow, false);
+    setControl(
+      'action',
+      actionResolutions.length > 0 && preview.resolution === null && resolutionSplit !== 'tithe',
+      resolutionSplit === 'action'
+        || (preview.resolution !== null && preview.resolution !== 'tithe')
+    );
+    setControl(
+      'tithe',
+      resolutions.indexOf('tithe') !== -1
+        && preview.resolution === null
+        && resolutionSplit !== 'action',
+      resolutionSplit === 'tithe' || preview.resolution === 'tithe'
+    );
   }
 
   function render() {
@@ -820,8 +889,36 @@ _TURN_SCRIPT = """<script>
        Which steps those are is not written down anywhere; it falls out of the candidates. */
     if (autoAdvance) {
       while (stepsAt(chosen.length, live).length === 1) {
-        chosen.push(stepsAt(chosen.length, live)[0].value);
+        var forced = stepsAt(chosen.length, live)[0];
+        if (forced.kind === 'resolution') { break; }
+        chosen.push(forced.value);
         live = surviving();
+      }
+    }
+    var offered = stepsAt(chosen.length, live);
+    var resolutions = offeredByKind(offered, 'resolution');
+    if (!resolutions.length) {
+      resolutionSplit = null;
+    } else if (resolutionSplit === 'tithe' && resolutions.indexOf('tithe') !== -1) {
+      chosen.push('tithe');
+      answered.push('tithe');
+      resolutionSplit = null;
+      autoAdvance = true;
+      render();
+      return;
+    } else if (resolutionSplit === 'action') {
+      var actionResolutions = resolutions.filter(function (value) {
+        return value !== 'tithe';
+      });
+      if (!actionResolutions.length) {
+        resolutionSplit = null;
+      } else if (actionResolutions.length === 1) {
+        chosen.push(actionResolutions[0]);
+        answered.push(actionResolutions[0]);
+        resolutionSplit = null;
+        autoAdvance = true;
+        render();
+        return;
       }
     }
     var preview = applyPreview();
@@ -829,16 +926,46 @@ _TURN_SCRIPT = """<script>
        would be committed as, or what is still undecided about
        it -- and the player says so. */
     if (live.length === 1) {
-      show([], CANDIDATES.indexOf(live[0]), live[0].action_id !== null, preview);
+      show([], [], CANDIDATES.indexOf(live[0]), live[0].action_id !== null, preview);
       return;
     }
-    show(stepsAt(chosen.length, live), -1, false, preview);
+    if (!resolutions.length) {
+      show(offered, [], -1, false, preview);
+      return;
+    }
+    if (resolutionSplit === 'action') {
+      show(
+        offered.filter(function (step) {
+          return step.kind !== 'resolution' || step.value !== 'tithe';
+        }),
+        resolutions,
+        -1,
+        false,
+        preview
+      );
+      return;
+    }
+    show(
+      offered.filter(function (step) {
+        return step.kind !== 'resolution';
+      }),
+      resolutions,
+      -1,
+      false,
+      preview
+    );
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
     space.addEventListener('click', function () {
-      if (space.getAttribute('data-play-offered') !== 'true') { return; }
-      chosen.push(Number(space.getAttribute('data-board-position-index')));
+      if (
+        space.getAttribute('data-turn-start-candidate') !== 'true'
+        && space.getAttribute('data-turn-duty-candidate') !== 'true'
+      ) { return; }
+      var value = Number(space.getAttribute('data-board-position-index'));
+      chosen.push(value);
+      answered.push(value);
+      resolutionSplit = null;
       autoAdvance = true;
       render();
     });
@@ -847,7 +974,10 @@ _TURN_SCRIPT = """<script>
   Array.prototype.forEach.call(arrows, function (arrow) {
     arrow.addEventListener('click', function () {
       if (arrow.getAttribute('data-turn-offered') !== 'true') { return; }
-      chosen.push(arrow.getAttribute('data-arrow'));
+      var edge = arrow.getAttribute('data-arrow');
+      chosen.push(edge);
+      answered.push(edge);
+      resolutionSplit = null;
       autoAdvance = true;
       render();
     });
@@ -859,7 +989,10 @@ _TURN_SCRIPT = """<script>
     Array.prototype.forEach.call(elements, function (key) {
       key.addEventListener('click', function () {
         if (key.getAttribute('data-turn-offered') !== 'true') { return; }
-        chosen.push(key.getAttribute(attribute));
+        var value = key.getAttribute(attribute);
+        chosen.push(value);
+        answered.push(value);
+        resolutionSplit = null;
         autoAdvance = true;
         render();
       });
@@ -889,16 +1022,35 @@ _TURN_SCRIPT = """<script>
     resetControl.addEventListener('click', function () {
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
       chosen = [];
+      answered = [];
+      resolutionSplit = null;
       autoAdvance = true;
       render();
     });
   }
 
+  function chooseResolutionSplit(name) {
+    var live = surviving();
+    var offered = stepsAt(chosen.length, live);
+    var resolutions = offeredByKind(offered, 'resolution');
+    if (!resolutions.length) { return; }
+    if (name === 'tithe') {
+      if (resolutions.indexOf('tithe') === -1) { return; }
+      resolutionSplit = 'tithe';
+    } else {
+      if (!resolutions.filter(function (value) { return value !== 'tithe'; }).length) { return; }
+      resolutionSplit = 'action';
+    }
+    autoAdvance = true;
+    render();
+  }
+
   ['action', 'tithe'].forEach(function (name) {
-    var inactive = control(name);
-    if (!inactive) { return; }
-    inactive.addEventListener('click', function () {
-      return;
+    var controlButton = control(name);
+    if (!controlButton) { return; }
+    controlButton.addEventListener('click', function () {
+      if (controlButton.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      chooseResolutionSplit(name);
     });
   });
 
@@ -919,10 +1071,16 @@ def turn_styles(route_color: str) -> str:
     The whole space and arrow are the targets rather than just their outlines, so a click in the
     painted area counts.
     """
-    return f"""  /* Hidden by default: a space is offered only while it is one of the moves left. */
-  [data-play-offered="true"] {{ cursor: pointer; }}
-  [data-play-offered="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
-  [data-play-chosen="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
+    return f"""  /* Two space questions on one board: where to lift from and which duty to take. */
+  [data-turn-start-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-start-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-start-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
+  [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-duty-candidate="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
+  [data-turn-duty-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 3.5; }}
+  [data-ornament-position][data-turn-duty-selected="true"] circle {{
+    fill: {route_color}; stroke-opacity: 0.7;
+  }}
   [data-arrow][data-turn-offered="true"] {{ cursor: pointer; }}
   [data-arrow][data-turn-offered="true"] .arrow-interior {{ fill: rgb(30, 122, 52); }}
 
@@ -977,6 +1135,9 @@ def turn_styles(route_color: str) -> str:
   .turn-field {{ font-family: Menlo, monospace; font-size: 12px; }}
   [data-turn-control][data-turn-control-enabled="true"] {{ opacity: 1; cursor: pointer; }}
   [data-turn-control][data-turn-control-enabled="false"] {{ opacity: 0.34; }}
+  [data-turn-control][data-turn-control-active="true"] {{ opacity: 1; }}
+  [data-turn-control][data-turn-control-active="true"] rect {{ fill: #F2EEDF; }}
+  [data-turn-control][data-turn-control-active="true"] text {{ fill: #1C1C1C; }}
   [data-turn-counter][data-turn-offered="false"] {{ visibility: hidden; }}
   [data-turn-counter][data-turn-offered="true"] {{ visibility: visible; }}"""
 
