@@ -55,7 +55,7 @@ from pilgrim.model.actions import (  # noqa: E402
     StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_id,
-    action_summary,
+    action_summary_for_players,
 )
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
@@ -180,7 +180,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 #
 # These are sentence tails. The actor is prefixed in `decision_steps` from `state.active_player`,
 # so the visible line is always "player_id: <question>" and the page never composes one itself.
-ORIGIN_PROMPT = "choose a space to lift from."
+ORIGIN_PROMPT = "choose a space to lift acolytes from."
 ROUTE_PROMPT = "follow an arrow."
 DUTY_PROMPT = "choose a duty to take."
 RESOLUTION_PROMPT = "Action or Tithe."
@@ -474,8 +474,7 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     one candidate carrying the count and the disagreement, so the page can refuse it honestly
     instead of picking one of them on the player's behalf.
 
-    The summary is the CLI's own, so the words somebody confirms are the words the tool would
-    print for the same action, and there is no second description to keep in step with the first.
+    The summary is player-facing. It is the same sentence the transcript writes for this action.
     """
     grouped: dict[tuple, list[Any]] = {}
     player_id = _speaking_player_id(state)
@@ -503,7 +502,11 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
                 # Nothing to submit while the choice is incomplete, so there is no id to quote and
                 # no summary to agree to. The page has to say so rather than send something.
                 "action_id": action_id(members[0]) if settled else None,
-                "summary": action_summary(members[0], config) if settled else None,
+                "summary": (
+                    action_summary_for_players(members[0], config, actor=state.active_player)
+                    if settled
+                    else None
+                ),
                 "unresolved": unresolved,
                 "variants": len(members),
             }
@@ -572,13 +575,25 @@ class PlayServer(ThreadingHTTPServer):
         if chosen is None:
             raise UnknownAction(f"no legal action with id {submitted_id!r} in this position")
 
+        actor = self.state.active_player
+        summary_line = action_summary_for_players(chosen, self.config, actor=actor)
         result = apply_action(self.state, chosen, self.config)
         self.state = result.state
-        # None means the event is not for players' transcript. Keep CLI wording separate.
-        player_lines = [
+        has_taxation_event = any(event.event_type is EventType.TAXATION for event in result.events)
+        # None means the event is not for players' transcript.
+        event_lines = [
             line
-            for line in (format_event_for_players(event, self.config) for event in result.events)
+            for line in (
+                format_event_for_players(event, self.config)
+                for event in result.events
+                if not (
+                    has_taxation_event and event.event_type is EventType.RESOURCE_DELTA
+                )
+            )
             if line is not None
+        ]
+        player_lines = [summary_line] + [
+            line for line in event_lines if line.strip() and line != summary_line
         ]
         if player_lines:
             round_end = any(

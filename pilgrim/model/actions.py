@@ -383,6 +383,91 @@ def readable_route(
     return " -> ".join(position_name(position_id, positions) for position_id in path)
 
 
+# KEEP THESE TWO TOGETHER.
+# `action_summary` is the CLI/developer voice and `action_summary_for_players` is the in-page
+# player voice. They are a pair by design: changing one without checking the other is drift.
+def _player_wording(value: str) -> str:
+    return value.replace("_", " ").strip().title()
+
+
+_SMALL_NUMBER_WORDS: tuple[str, ...] = (
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+)
+
+
+def _spoken_count(value: int) -> str:
+    if 0 <= value < len(_SMALL_NUMBER_WORDS):
+        return _SMALL_NUMBER_WORDS[value]
+    return str(value)
+
+
+def _actor_name(actor: PlayerId | str | None) -> str:
+    if isinstance(actor, PlayerId):
+        return actor.name.lower()
+    if actor is None:
+        return "unknown"
+    return str(actor).strip() or "unknown"
+
+
+def _board_label_for_position(config: GameConfig, position: int) -> str:
+    """What a player sees printed on that board slot."""
+    if position == 0:
+        return "City"
+    return _player_wording(duty_category_at_position(config, position))
+
+
+def action_summary_for_players(
+    action: GameAction, config: GameConfig, *, actor: PlayerId | str | None = None
+) -> str:
+    """Return one player-facing sentence describing what this action will do."""
+    speaker = _actor_name(actor)
+
+    if isinstance(action, SetupSowAction):
+        count = len(action.route)
+        noun = "acolyte" if count == 1 else "acolytes"
+        origin = _board_label_for_position(config, action.origin)
+        ending = _board_label_for_position(config, action.route[-1] if action.route else action.origin)
+        origin_phrase = f"the {origin}" if origin == "City" else origin
+        return (
+            f"{speaker} sowed {_spoken_count(count)} {noun} "
+            f"from {origin_phrase}, ending at {ending}."
+        )
+
+    if isinstance(action, StartPlayerConfessionBoxAction):
+        if not action.use:
+            return f"{speaker} declined the Confession Box."
+        if action.source == "own_active":
+            return f"{speaker} used the Confession Box."
+        if action.source == "market":
+            return f"{speaker} hired the Confession Box from market."
+        return f"{speaker} hired the Confession Box from {action.source}."
+
+    if isinstance(action, StartPlayerSelectionAction):
+        chosen = action.chosen_start_player.name.lower()
+        return f"{speaker} chose {chosen} to begin this round."
+
+    duty = _player_wording(duty_category_at_position(config, action.selected_duty))
+    if action.resolution is TurnResolutionType.TITHE:
+        gained = action.tithe_resource or "a resource"
+        return f"{speaker} took the tithe at {duty} and gained {gained}."
+
+    action_name = _player_wording(action.resolution.value)
+    if action.resolution is TurnResolutionType.PRODUCE_WHEAT:
+        return f"{speaker} chose {action_name} at {duty} and gained wheat."
+    if action.resolution is TurnResolutionType.PRODUCE_STONE:
+        return f"{speaker} chose {action_name} at {duty} and gained stone."
+    return f"{speaker} chose {action_name} at {duty}."
+
+
 def action_summary(action: GameAction, config: GameConfig) -> str:
     """Return a human-readable action summary for CLI/debug output."""
     positions = config.board.positions

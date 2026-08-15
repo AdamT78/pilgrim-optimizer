@@ -578,26 +578,52 @@ def test_the_log_says_the_position_and_works_none_of_it_out() -> None:
         },
     )
     header = dict(state_header(payload))
-    assert header == {"Round": "3 - 1 of 4 played"}
+    assert header == {"Status": "Round 3 - 1 of 4 turns played"}
     for removed in ("Active player", "Start player", "Phase", "Season", "Setup sow", "Players done"):
         assert removed not in header
 
 
-def test_the_header_row_is_round_progress_in_one_line() -> None:
+def test_the_header_row_is_setup_progress_while_setup_sow_is_running() -> None:
     payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
     page = render_play_view_from_payload(payload)
     assert "Turn in round" not in page
     assert "Players done" not in page
-    assert "Round" in page
-    assert "of 4 played" in page
+    assert "Setup - 0 of 4 sown" in page
+    assert "Round 1" not in page
+
+
+def test_the_header_row_switches_to_round_progress_after_setup() -> None:
+    payload = _payload(
+        [_player([5] + [0] * 8) for _ in range(4)],
+        phase="turn",
+        timing={
+            "absolute_turn": 1,
+            "round_number": 1,
+            "season_number": 1,
+            "turn_in_round": 0,
+        },
+        setup={
+            "setup_sow_required": True,
+            "setup_sow_complete": True,
+            "setup_sow_completed_by": ["player_one", "player_two", "player_three", "player_four"],
+        },
+    )
+    page = render_play_view_from_payload(payload)
+
+    assert "Round 1 - 0 of 4 turns played" in page
 
 
 def test_the_header_omits_the_removed_rows() -> None:
     page = render_play_view_from_payload(_payload([_player([5] + [0] * 8) for _ in range(4)]))
-    line = re.search(r'<div class="log-line[^"]*">(.*?)</div>', page, re.S)
+    line = re.search(r'<div class="log-status-line"[^>]*>(.*?)</div>', page, re.S)
 
     assert line is not None
-    assert page.count('class="log-line') == 1
+    assert page.count('class="log-status-line"') == 1
+    assert 'class="log-key"' not in page
+    assert 'class="log-value"' not in page
+    status_rule = re.search(r"\.log-status-line \{(.*?)\}", page, re.S)
+    assert status_rule is not None
+    assert "text-align: left" in status_rule.group(1)
     for removed in ("Active player", "Start player", "Phase", "Season", "Setup sow"):
         assert removed not in line.group(1)
 
@@ -639,9 +665,13 @@ def test_the_transcript_is_written_backwards_so_it_opens_on_its_newest_line() ->
     # And it is the thing that gives when the column runs short: no floor, and its own scrollbar.
     assert "min-height: 0" in rule.group(1)
     assert "overflow-y: auto" in rule.group(1)
+    assert "flex: 1 1 auto" in rule.group(1)
+    log_box_rule = re.search(r"\.play-log \{(.*?)\}", page, re.S)
+    assert log_box_rule, "the play box has no CSS rule"
+    assert "flex: 1 1 auto" in log_box_rule.group(1)
 
 
-def test_the_one_line_header_ignores_setup_progress_details() -> None:
+def test_the_one_line_header_reads_setup_progress_from_the_completed_by_list() -> None:
     payload = _payload(
         [_player([5] + [0] * 8) for _ in range(2)],
         setup={
@@ -650,7 +680,7 @@ def test_the_one_line_header_ignores_setup_progress_details() -> None:
             "setup_sow_completed_by": ["player_one"],
         },
     )
-    assert dict(state_header(payload)) == {"Round": "1 - 0 of 2 played"}
+    assert dict(state_header(payload)) == {"Status": "Setup - 1 of 2 sown"}
 
 
 def _payload_with_turn_candidates(active_player: str) -> dict:

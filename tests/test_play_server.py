@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from contextlib import contextmanager
-from html import escape
+from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -35,9 +35,9 @@ from pilgrim.model.actions import (
     SetupSowAction,
     StartPlayerSelectionAction,
     action_id,
-    action_summary,
+    action_summary_for_players,
 )
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, legal_actions
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
@@ -349,6 +349,48 @@ def _played_through_setup(server):
             server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"]
         )
     return server
+
+
+_RESOLUTION_NAMES = tuple(resolution.value for resolution in TurnResolutionType)
+
+
+def _log_blocks_by_resolution_from_fixture(tmp_path: Path) -> tuple[dict[str, list[str]], tuple[str, ...]]:
+    """One transcript block per reached resolution, and the names not reached from this fixture."""
+    server = _played_through_setup(_served(tmp_path))
+    reached: dict[str, list[str]] = {}
+    max_absolute_turns = int(server.config.timing.max_absolute_turns)
+    for _ in range(480):
+        if len(reached) == len(_RESOLUTION_NAMES):
+            break
+        if int(server.state.timing.absolute_turn) >= max_absolute_turns:
+            break
+        actions = list(legal_actions(server.state, server.config))
+        if not actions:
+            break
+        full_turns = [action for action in actions if getattr(action, "resolution", None) is not None]
+        if not full_turns:
+            server.apply(action_id(actions[0]), server.payload["state_token"])
+            continue
+        chosen = next(
+            (
+                action
+                for action in full_turns
+                if action.resolution.value not in reached
+            ),
+            full_turns[0],
+        )
+        resolution = chosen.resolution.value
+        server.apply(action_id(chosen), server.payload["state_token"])
+        if resolution not in reached:
+            reached[resolution] = list(server.payload["log_blocks"][-1]["lines"])
+    missing = tuple(name for name in _RESOLUTION_NAMES if name not in reached)
+    return reached, missing
+
+
+@pytest.fixture(scope="module")
+def resolution_guard_sample(tmp_path_factory):
+    """Reachable-resolution sample used by the player-language guard below."""
+    return _log_blocks_by_resolution_from_fixture(tmp_path_factory.mktemp("resolution_guard"))
 
 
 @contextlib.contextmanager
@@ -889,8 +931,8 @@ def test_a_normal_turn_moves_the_cubes_pays_for_itself_and_passes_the_seat(
 def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: Path) -> None:
     """Nothing is committed by running out of questions. The last click is agreeing to it.
 
-    The words are the CLI's, taken from `action_summary` rather than written again here, so the
-    sentence somebody confirms is the sentence the tool prints for that same action.
+    The words are player-facing, and the line above Confirm comes from the same formatter the log
+    block will use for this action.
     """
     server = _played_through_setup(_served(tmp_path))
     decisions = _engine_decisions(server)
@@ -908,11 +950,24 @@ def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: 
         for action in legal_actions(server.state, server.config)
         if action_id(action) == candidate["action_id"]
     )
-    assert candidate["summary"] == action_summary(chosen, server.config)
+    assert candidate["summary"] == action_summary_for_players(
+        chosen, server.config, actor=server.state.active_player
+    )
 
     confirmed = _run_script(server, clicks, tmp_path, confirm=True)
     assert confirmed["posted"]["action_id"] == candidate["action_id"]
     assert confirmed["posted"]["state_token"] == server.payload["state_token"]
+
+
+def test_confirm_summary_and_logged_action_line_are_identical(tmp_path: Path) -> None:
+    server = _played_through_setup(_served(tmp_path))
+    candidate = next(c for c in server.payload["turn_candidates"] if c["action_id"])
+    summary = candidate["summary"]
+    assert summary is not None
+
+    server.apply(candidate["action_id"], server.payload["state_token"])
+    block = server.payload["log_blocks"][-1]
+    assert block["lines"][0] == summary
 
 
 @needs_node
@@ -1063,6 +1118,105 @@ def test_round_closing_actions_are_marked_as_round_end_log_blocks(tmp_path: Path
     page = render_play_view_from_payload(server.payload)
     assert 'data-round-end="true"' in page
     assert ">Round end<" in page
+
+
+def test_player_log_drops_developer_dump_lines_in_ordinary_play(tmp_path: Path) -> None:
+    server = _played_through_setup(_served(tmp_path))
+    for _ in range(4):
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+
+    lines = [line for block in server.payload["log_blocks"] for line in block["lines"]]
+    assert lines, "ordinary play produced no log lines"
+    assert not any("DUTY_DEFERRED" in line for line in lines)
+    assert not any("START_PLAYER_TIE_BREAK" in line for line in lines)
+    assert not any(re.search(r"\b[A-Z_]+: .*; .*", line) for line in lines), lines
+
+
+def test_recall_is_a_turn_step_and_round_end_prefixes_stay_on_round_end_steps(tmp_path: Path) -> None:
+    server = _played_through_setup(_served(tmp_path))
+
+    first_turn = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+    server.apply(first_turn["action_id"], server.payload["state_token"])
+    turn_lines = server.payload["log_blocks"][-1]["lines"]
+    recall_line = next((line for line in turn_lines if "recalled" in line.lower()), None)
+    assert recall_line is not None, f"turn block had no recall line: {turn_lines}"
+    assert not recall_line.startswith("Round end:"), recall_line
+
+    while server.payload["state"]["timing"]["round_number"] == 1:
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+
+    round_end_lines = server.payload["log_blocks"][-1]["lines"]
+    for expected in ("ship advanced", "Merchant advanced", "First Player marker"):
+        matched = [line for line in round_end_lines if expected in line]
+        assert matched, f"no round-end line mentioning {expected!r}: {round_end_lines}"
+        assert all(line.startswith("Round end:") for line in matched), matched
+
+
+def _contains_compass_position_name(text: str) -> bool:
+    lowered = text.lower()
+    for name in CANONICAL_POSITION_NAMES[1:]:
+        pattern = rf"\b{name.replace('_', r'[_ ]')}\b"
+        if re.search(pattern, lowered):
+            return True
+    return False
+
+
+@pytest.mark.parametrize("resolution", _RESOLUTION_NAMES)
+def test_reachable_resolution_log_lines_stay_in_player_language(
+    resolution: str, resolution_guard_sample
+) -> None:
+    reached, missing = resolution_guard_sample
+    if resolution not in reached:
+        pytest.skip(f"fixture cannot reach resolution: {resolution}; missing set: {', '.join(missing)}")
+
+    lines = reached[resolution]
+    assert lines, f"{resolution} produced no player log lines"
+    missing_text = ", ".join(missing) if missing else "none"
+    for line in lines:
+        spoken = unescape(render_play_view.say(line))
+        assert "_" not in spoken, (
+            f"{resolution} leaked underscore text: {spoken!r}. "
+            f"fixture missing resolutions: {missing_text}"
+        )
+        assert "->" not in spoken and "-&gt;" not in spoken, (
+            f"{resolution} leaked arrow text: {spoken!r}. "
+            f"fixture missing resolutions: {missing_text}"
+        )
+        assert not re.match(r"^[A-Z_]+:\s", spoken), (
+            f"{resolution} leaked developer prefix text: {spoken!r}. "
+            f"fixture missing resolutions: {missing_text}"
+        )
+        assert not _contains_compass_position_name(spoken), (
+            f"{resolution} leaked board-position name: {spoken!r}. "
+            f"fixture missing resolutions: {missing_text}"
+        )
+
+
+def test_taxation_lines_carry_the_gain_without_a_resource_delta_duplicate(
+    resolution_guard_sample,
+) -> None:
+    reached, missing = resolution_guard_sample
+    if "taxation" not in reached:
+        pytest.skip(f"fixture cannot reach resolution: taxation; missing set: {', '.join(missing)}")
+
+    spoken = [unescape(render_play_view.say(line)) for line in reached["taxation"]]
+    assert any("took" in line.lower() and "taxation" in line.lower() for line in spoken), spoken
+    assert not any(re.search(r"\b(stone|silver|wheat)\s+[+-]\\d", line.lower()) for line in spoken), spoken
+
+
+def test_piety_lines_drop_track_vp_debug_wording(resolution_guard_sample) -> None:
+    reached, missing = resolution_guard_sample
+    if "clerical_devotion" not in reached:
+        pytest.skip(
+            f"fixture cannot reach resolution: clerical_devotion; missing set: {', '.join(missing)}"
+        )
+
+    spoken = [unescape(render_play_view.say(line)) for line in reached["clerical_devotion"]]
+    piety_lines = [line for line in spoken if "piety" in line.lower()]
+    assert piety_lines, spoken
+    assert not any("track vp" in line.lower() for line in piety_lines), piety_lines
 
 
 @needs_node
@@ -1563,7 +1717,7 @@ def test_at_game_open_the_header_is_one_round_progress_line(tmp_path: Path) -> N
     assert server.state.start_player is None
 
     page = render_play_view_from_payload(server.payload)
-    assert _header_of(page) == [("Round", "1 - 0 of 4 played")]
+    assert _header_of(page) == [("Status", "Round 1 - 0 of 4 turns played")]
 
 
 def test_after_the_opening_choice_the_header_stays_a_round_progress_line(tmp_path: Path) -> None:
@@ -1572,7 +1726,27 @@ def test_after_the_opening_choice_the_header_stays_a_round_progress_line(tmp_pat
 
     assert server.state.start_player is PlayerId.PLAYER_FOUR
     page = render_play_view_from_payload(server.payload)
-    assert ("Round", "1 - 0 of 4 played") in _header_of(page)
+    assert ("Status", "Setup - 0 of 4 sown") in _header_of(page)
+
+
+def test_setup_status_counts_sows_and_then_hands_off_to_round_progress(tmp_path: Path) -> None:
+    server = _served(tmp_path)
+    seen = []
+    while server.payload["state"]["phase"] == "setup_sow":
+        page = render_play_view_from_payload(server.payload)
+        seen.append(dict(_header_of(page))["Status"])
+        server.apply(server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"])
+
+    after_setup = render_play_view_from_payload(server.payload)
+    assert seen == [
+        "Setup - 0 of 4 sown",
+        "Setup - 1 of 4 sown",
+        "Setup - 2 of 4 sown",
+        "Setup - 3 of 4 sown",
+    ]
+    assert dict(_header_of(after_setup))["Status"] == (
+        "Setup - 4 of 4 sown. Round 1 - 0 of 4 turns played"
+    )
 
 
 @needs_node
@@ -2134,7 +2308,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     assert SEAT_COLOURS[third.group(1)] == "Blue"
 
     summaries = re.findall(r'<div class="turn-summary">([^<]*)</div>', page)
-    assert "Start player selection: Blue begins this round" in summaries
+    assert "Red chose Blue to begin this round." in summaries
     assert not any("player_" in summary for summary in summaries)
 
     # Choosing that board, the transcript names both seats by colour and the header follows.
@@ -2147,14 +2321,12 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     after = render_play_view_from_payload(server.payload)
     events = re.findall(r'<div class="log-event">([^<]*)</div>', after)
     assert any("chose Blue" in line for line in events), events
-    assert ("Round", "1 - 0 of 4 played") in _header_of(after)
+    assert ("Status", "Setup - 0 of 4 sown") in _header_of(after)
 
 
 def _header_of(page: str) -> list[tuple[str, str]]:
-    """The state header as key/value pairs, read off the rendered page."""
-    return re.findall(
-        r'<span class="log-key">([^<]*)</span><span class="log-value">([^<]*)</span>', page
-    )
+    """The one status sentence in the box header."""
+    return [("Status", text) for text in re.findall(r'data-status-line="([^"]+)"', page)]
 
 
 def test_a_box_hired_from_another_seat_names_that_seat_by_colour() -> None:
@@ -2990,7 +3162,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                     {
                         "kind": "origin",
                         "value": 1,
-                        "prompt": f"{active}: choose a space to lift from.",
+                        "prompt": f"{active}: choose a space to lift acolytes from.",
                         "counter": 1,
                     }
                 ],
