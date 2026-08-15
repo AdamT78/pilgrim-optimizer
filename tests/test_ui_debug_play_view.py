@@ -578,30 +578,39 @@ def test_the_log_says_the_position_and_works_none_of_it_out() -> None:
         },
     )
     header = dict(state_header(payload))
-    assert header["Active player"] == "player_three"
-    assert header["Start player"] == "player_two"
-    assert header["Round"] == "3"
-    assert header["Season"] == "2"
-    assert header["Players done"] == "1 of 4"
-    assert "Turn in round" not in header
-    assert header["Setup sow"] == "complete"
+    assert header == {"Round": "3 - 1 of 4 played"}
+    for removed in ("Active player", "Start player", "Phase", "Season", "Setup sow", "Players done"):
+        assert removed not in header
 
 
-def test_the_header_row_is_players_done_not_turn_in_round() -> None:
+def test_the_header_row_is_round_progress_in_one_line() -> None:
     payload = _payload([_player([5] + [0] * 8) for _ in range(4)])
     page = render_play_view_from_payload(payload)
     assert "Turn in round" not in page
-    assert "Players done" in page
+    assert "Players done" not in page
+    assert "Round" in page
+    assert "of 4 played" in page
+
+
+def test_the_header_omits_the_removed_rows() -> None:
+    page = render_play_view_from_payload(_payload([_player([5] + [0] * 8) for _ in range(4)]))
+    line = re.search(r'<div class="log-line[^"]*">(.*?)</div>', page, re.S)
+
+    assert line is not None
+    assert page.count('class="log-line') == 1
+    for removed in ("Active player", "Start player", "Phase", "Season", "Setup sow"):
+        assert removed not in line.group(1)
 
 
 @pytest.mark.parametrize("missing", [False, True])
-def test_the_header_says_when_no_start_player_has_been_chosen(missing: bool) -> None:
+def test_start_player_presence_does_not_change_the_one_line_header(missing: bool) -> None:
     payload = _payload([_player([5] + [0] * 8) for _ in range(2)])
+    before = dict(state_header(payload))
     if missing:
         del payload["state"]["start_player_id"]
     else:
         payload["state"]["start_player_id"] = None
-    assert dict(state_header(payload))["Start player"] == "not chosen yet"
+    assert dict(state_header(payload)) == before
 
 
 def test_the_transcript_is_written_backwards_so_it_opens_on_its_newest_line() -> None:
@@ -632,7 +641,7 @@ def test_the_transcript_is_written_backwards_so_it_opens_on_its_newest_line() ->
     assert "overflow-y: auto" in rule.group(1)
 
 
-def test_a_setup_that_is_part_done_says_who_has_sown() -> None:
+def test_the_one_line_header_ignores_setup_progress_details() -> None:
     payload = _payload(
         [_player([5] + [0] * 8) for _ in range(2)],
         setup={
@@ -641,7 +650,7 @@ def test_a_setup_that_is_part_done_says_who_has_sown() -> None:
             "setup_sow_completed_by": ["player_one"],
         },
     )
-    assert dict(state_header(payload))["Setup sow"] == "sown by player_one"
+    assert dict(state_header(payload)) == {"Round": "1 - 0 of 2 played"}
 
 
 def _payload_with_turn_candidates(active_player: str) -> dict:

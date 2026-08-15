@@ -864,7 +864,7 @@ def test_four_players_sow_in_turn_and_the_board_comes_back_with_the_acolytes_on_
     assert final["state"]["phase"] == "sow"
     assert final["state"]["active_player"] == final["state"]["start_player_id"]
     log = server.payload["log"]
-    assert any("SETUP_COMPLETE" in line for line in log)
+    assert any("Setup complete." in line for line in log)
     assert any(final["state"]["start_player_id"] in line for line in log)
 
 
@@ -1022,6 +1022,47 @@ def test_a_cornucopia_tithe_is_playable_and_only_the_stock_that_was_picked_moves
     untouched = [stock for stock in before if stock != picked]
     assert [after[stock] for stock in untouched] == [before[stock] for stock in untouched]
     assert after[picked] == before[picked] + 1
+
+
+@needs_node
+def test_a_cornucopia_tithe_writes_one_player_line_without_sow_path_noise(tmp_path: Path) -> None:
+    server = _reference_server()
+    candidate = _asked(server, "tithe", "resource")[0]
+    picked = _answer(candidate, "resource")
+    duty_index = _answer(candidate, "duty")
+    duty_position = server.payload["board_positions"][duty_index]
+    duty_tile = next(tile for tile in server.payload["duty_tiles"] if tile["position_name"] == duty_position)
+    duty_label = duty_tile["duty"].replace("_", " ")
+    actor = server.payload["state"]["active_player"]
+
+    _played_from_the_page(server, candidate, tmp_path)
+
+    block = server.payload["log_blocks"][-1]
+    assert block["round_end"] is False
+    assert len(block["lines"]) == 1
+    line = block["lines"][0].lower()
+    assert actor in line
+    assert duty_label in line
+    assert f"gained {picked}" in line
+    assert "invariant_check" not in line
+    assert "route " not in line
+
+
+def test_round_closing_actions_are_marked_as_round_end_log_blocks(tmp_path: Path) -> None:
+    server = _played_through_setup(_served(tmp_path))
+    opening_round = server.payload["state"]["timing"]["round_number"]
+
+    for _ in range(20):
+        if server.payload["state"]["timing"]["round_number"] > opening_round:
+            break
+        settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
+        server.apply(settled["action_id"], server.payload["state_token"])
+
+    assert server.payload["state"]["timing"]["round_number"] > opening_round
+    assert any(block["round_end"] for block in server.payload["log_blocks"])
+    page = render_play_view_from_payload(server.payload)
+    assert 'data-round-end="true"' in page
+    assert ">Round end<" in page
 
 
 @needs_node
@@ -1517,21 +1558,21 @@ def _players_the_engine_would_accept(server) -> list[str]:
     )
 
 
-def test_at_game_open_the_start_player_is_unset_and_the_header_says_so(tmp_path: Path) -> None:
+def test_at_game_open_the_header_is_one_round_progress_line(tmp_path: Path) -> None:
     server = _opening(tmp_path)
     assert server.state.start_player is None
 
     page = render_play_view_from_payload(server.payload)
-    assert ("Start player", "not chosen yet") in _header_of(page)
+    assert _header_of(page) == [("Round", "1 - 0 of 4 played")]
 
 
-def test_after_the_opening_choice_the_header_names_the_chosen_seat(tmp_path: Path) -> None:
+def test_after_the_opening_choice_the_header_stays_a_round_progress_line(tmp_path: Path) -> None:
     server = _opening(tmp_path)
     server.apply("start_player_selection:player_four", server.payload["state_token"])
 
     assert server.state.start_player is PlayerId.PLAYER_FOUR
     page = render_play_view_from_payload(server.payload)
-    assert ("Start player", "White") in _header_of(page)
+    assert ("Round", "1 - 0 of 4 played") in _header_of(page)
 
 
 @needs_node
@@ -2106,7 +2147,7 @@ def test_the_seat_a_page_names_is_the_one_the_player_is_looking_at(tmp_path: Pat
     after = render_play_view_from_payload(server.payload)
     events = re.findall(r'<div class="log-event">([^<]*)</div>', after)
     assert any("chose Blue" in line for line in events), events
-    assert ("Active player", "Blue") in _header_of(after)
+    assert ("Round", "1 - 0 of 4 played") in _header_of(after)
 
 
 def _header_of(page: str) -> list[tuple[str, str]]:
@@ -2862,10 +2903,22 @@ def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Pa
 
     assert 'data-turn-confirm="' not in page, "the panel still carries its own confirm button"
     assert "data-turn-reset" not in page, "the panel still carries its own reset button"
-    assert 'data-turn-control="confirm"' in page, "the confirm plaque is missing"
-    assert 'data-turn-control="reset"' in page, "the reset plaque is missing"
+    for control in ("action", "tithe", "reset", "confirm"):
+        assert f'data-turn-control="{control}"' in page, f"the {control} control is missing"
     for borrowed in ("Confirm this turn", "Start this turn again"):
         assert borrowed not in page, f"the panel still calls this a turn: {borrowed!r}"
+
+
+def test_the_wheel_corners_keep_only_the_counter_and_box_holds_the_controls(tmp_path: Path) -> None:
+    page = render_play_view_from_payload(_served(tmp_path).payload)
+    action = page[page.index('<div class="panel p-action">') : page.index('<div class="panel p-map">')]
+    box = page[page.index('data-component="play-turn"') : page.index('class="log-transcript"')]
+
+    assert 'data-turn-counter="' in action
+    assert 'data-turn-control="' not in action
+    for control in ("action", "tithe", "reset", "confirm"):
+        assert f'data-turn-control="{control}"' in box
+    assert 'data-turn-control="sow"' not in page
 
 
 def test_the_opening_decision_is_put_on_every_board_and_can_be_hit(tmp_path: Path) -> None:

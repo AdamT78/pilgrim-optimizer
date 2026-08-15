@@ -62,6 +62,7 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     duty_by_position_name,
     first_player_seat,
     merchant_position_name,
+    played_this_round,
     player_record,
     resources_for,
     seated_player_ids,
@@ -315,33 +316,64 @@ def _slot_label(slot: dict, building: dict | None) -> str:
     return "Empty"
 
 
-def render_log_box(payload: dict) -> str:
-    """The state header, in the slack the debug table puts its controls in.
-
-    Real content rather than a placeholder: every line is a value read off the state, and the box
-    is where this PR's successor will put the event transcript underneath them.
-    """
-    rows = "".join(
-        f'<div class="log-line"><span class="log-key">{say(key)}</span>'
-        f'<span class="log-value">{say(value)}</span></div>'
-        for key, value in state_header(payload)
-    )
-    # Already formatted when it got here. The sentences are the CLI's own, written by the shared
-    # formatter on the engine's side of the seam, so the two accounts of a game cannot drift; an
-    # event the formatter declines to describe never becomes a line and is not represented by a
-    # blank one.
-    #
-    # Newest first, and drawn back into order by `column-reverse`. That pair is what keeps the box
-    # showing its newest line once it is scrolling, on a page that has no script to scroll it with.
-    entries = "".join(
-        f'<div class="log-event">{say(line)}</div>'
-        for line in reversed(list(payload.get("log", ())))
-    )
-    transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
+def _played_round_pips(payload: dict) -> str:
+    """Four seat-coloured pips, filled only for seats state explicitly marks as already played."""
+    done = set(played_this_round(payload))
+    if not done:
+        return ""
     return (
-        f'<div class="play-log" data-component="play-log">{rows}{transcript}</div>'
-        f"{render_turn_panel(payload)}"
+        '<span class="round-pips" aria-label="Seats played this round">'
+        + "".join(
+            f'<span class="round-pip" data-player="{escape(player_id)}"'
+            f' data-player-color="{SEAT_COLOURS[player_id].lower()}"'
+            f' data-played="{"true" if player_id in done else "false"}"></span>'
+            for player_id in SEATED_PLAYERS
+        )
+        + "</span>"
     )
+
+
+def _log_blocks(payload: dict) -> list[dict]:
+    """Action-sized transcript blocks, or one line per block when only flat lines are available."""
+    raw = payload.get("log_blocks")
+    blocks: list[dict] = []
+    if isinstance(raw, list):
+        for block in raw:
+            if not isinstance(block, dict):
+                continue
+            lines = [str(line) for line in block.get("lines", ()) if str(line).strip()]
+            if not lines:
+                continue
+            blocks.append({"lines": lines, "round_end": bool(block.get("round_end"))})
+    if blocks:
+        return blocks
+    return [
+        {"lines": [str(line)], "round_end": False}
+        for line in payload.get("log", ())
+        if str(line).strip()
+    ]
+
+
+def render_log_box(payload: dict) -> str:
+    """Status, question, controls and transcript in one readable box under the Alms panel."""
+    key, value = state_header(payload)[0]
+    rows = (
+        f'<div class="log-line log-status-line"><span class="log-key">{say(key)}</span>'
+        f'<span class="log-value">{say(value)}</span>{_played_round_pips(payload)}</div>'
+    )
+    # Already formatted when it got here. Newest block first, then put back into reading order by
+    # `column-reverse`, so the box opens on what just happened without any scrolling script.
+    entries_parts = []
+    for block in reversed(_log_blocks(payload)):
+        marker = '<div class="log-block-mark">Round end</div>' if block["round_end"] else ""
+        lines = "".join(f'<div class="log-event">{say(line)}</div>' for line in block["lines"])
+        entries_parts.append(
+            f'<div class="log-block" data-round-end="{str(block["round_end"]).lower()}">'
+            f"{marker}{lines}</div>"
+        )
+    entries = "".join(entries_parts)
+    transcript = f'<div class="log-transcript">{entries}</div>' if entries else ""
+    return f'<div class="play-log" data-component="play-log">{rows}{render_turn_panel(payload)}{transcript}</div>'
 
 
 def _prompt_lines(candidates: list[dict]) -> str:
@@ -439,6 +471,28 @@ def _turn_panels(candidates: list[dict]) -> str:
     return "".join(panels)
 
 
+def _box_turn_controls() -> str:
+    """The box controls. Same `data-turn-control` handles, new location."""
+
+    def button(label: str, key: str) -> str:
+        return (
+            f'<button type="button" class="turn-control" data-turn-control="{key}"'
+            ' data-turn-control-enabled="false" data-turn-control-active="false"'
+            f' aria-label="{label}" aria-disabled="true">{label}</button>'
+        )
+
+    return (
+        '<div class="turn-controls" data-component="turn-controls">'
+        '<div class="turn-control-row turn-control-row-top">'
+        f'{button("Action", "action")}{button("Tithe", "tithe")}'
+        "</div>"
+        '<div class="turn-control-row turn-control-row-bottom">'
+        f'{button("Reset", "reset")}{button("Confirm", "confirm")}'
+        "</div>"
+        "</div>"
+    )
+
+
 def render_turn_panel(payload: dict) -> str:
     """Where a turn is answered and agreed to, beside the log rather than on the board."""
     candidates = payload.get("turn_candidates") or []
@@ -450,6 +504,7 @@ def render_turn_panel(payload: dict) -> str:
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}</div>"
         f"{_turn_panels(candidates)}"
+        f"{_box_turn_controls()}"
         "</div>"
     )
 
@@ -469,35 +524,44 @@ def _turn_counter_values(candidates: list[dict]) -> tuple[int, ...]:
 
 
 def log_styles() -> str:
-    return """  /* The log stands in the slack under the Alms Table, the same slot the debug table
-     puts its control stack in. It is the one place the two pages differ. */
+    return """  /* The play box stands in the slack under the Alms Table. */
   .play-log {
     width: 100%; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px;
     padding: 10px 12px;
-    /* A column, so the transcript can be handed what the header lines leave;
-       min-height: 0 so the box may be squeezed below its content, which is what
-       lets the column's cap reach the one part willing to give. The header lines
-       and the turn panel keep their auto floor and so never give any. */
     display: flex; flex-direction: column; min-height: 0;
   }
-  .log-line { display: flex; justify-content: space-between; gap: 12px; }
+  .log-line { display: flex; align-items: center; gap: 10px; }
+  .log-status-line { margin-bottom: 8px; }
   .log-key { color: #9A9A9A; }
-  .log-value { color: #F2EEDF; text-align: right; }
-  /* The one thing on the page with no height of its own. It takes what is left
-     and scrolls inside itself, rather than a fixed max-height that is too tall
-     on a short window and too short on a tall one.
+  .log-value { color: #F2EEDF; text-align: left; }
+  .round-pips { display: inline-flex; gap: 6px; margin-left: auto; }
+  .round-pip {
+    width: 9px; height: 9px; border-radius: 50%; opacity: 0.30;
+    border: 1px solid rgba(255,255,255,0.35);
+  }
+  .round-pip[data-player-color="red"] { background: #B7382E; }
+  .round-pip[data-player-color="yellow"] { background: #B9923A; }
+  .round-pip[data-player-color="blue"] { background: #335C8F; }
+  .round-pip[data-player-color="white"] { background: #DFD5BD; }
+  .round-pip[data-played="true"] { opacity: 1; }
 
-     column-reverse is what pins it to the newest line, and is why the events are
-     written newest first: a reversed column starts scrolled at its own start,
-     which is the bottom of the box. It costs no script -- and there is no script
-     to put it in, since a page served with nothing to decide carries none. */
   .log-transcript {
     margin-top: 8px; padding-top: 8px; border-top: 1px solid #333333;
     display: flex; flex-direction: column-reverse;
     min-height: 0; overflow-y: auto;
   }
+  .log-block {
+    margin-bottom: 8px; padding: 6px 8px;
+    background: #151515; border: 1px solid #262626; border-radius: 8px;
+  }
+  .log-block[data-round-end="true"] { border-color: #6A5A32; }
+  .log-block-mark {
+    color: #E0C36A; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
   .log-event { color: #C9C4B4; font-size: 12px; margin-bottom: 3px; }
+  .log-event:last-child { margin-bottom: 0; }
 
   /* Visibility, not display: an empty chair keeps its width so the seated ones stay where the
      table would put them. */
@@ -619,7 +683,7 @@ _TURN_SCRIPT = """<script>
   }
 
   function control(name) {
-    return board.querySelector('[data-turn-control="' + name + '"]');
+    return document.querySelector('[data-turn-control="' + name + '"]');
   }
 
   function setControl(name, enabled, active) {
@@ -1067,7 +1131,7 @@ def turn_styles(route_color: str) -> str:
      asked. Above the keys because several of these are answered nowhere near them -- on the board,
      on a seat's own stock, on a hex of the round track -- and a line that only appeared when the
      answer was in the panel would go quiet in exactly the cases it is there for. */
-  .turn-prompt {{ display: none; margin-bottom: 8px; color: #E8E2CE; }}
+  .turn-prompt {{ display: none; margin-bottom: 8px; color: {route_color}; font-weight: 700; }}
   .turn-prompt[data-turn-offered="true"] {{ display: block; }}
 
   .turn-keys {{ display: flex; flex-wrap: wrap; gap: 6px; }}
@@ -1079,6 +1143,18 @@ def turn_styles(route_color: str) -> str:
      combinations are both keys and both hide the same way. */
   .turn-key {{ display: none; }}
   .turn-key[data-turn-offered="true"] {{ display: inline-block; }}
+
+  .turn-controls {{ margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }}
+  .turn-control-row {{ display: flex; gap: 6px; }}
+  .turn-control {{
+    flex: 1;
+    color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
+    padding: 6px 10px; font: 13px/1.4 Helvetica, Arial, sans-serif;
+  }}
+  .turn-control-row-bottom [data-turn-control="reset"],
+  .turn-control-row-bottom [data-turn-control="confirm"] {{
+    min-width: 0;
+  }}
 
 {resource_choice_styles()}
   /* The board renderer draws all three stock keys and the rule above shows them together. A stock
@@ -1117,10 +1193,11 @@ def turn_styles(route_color: str) -> str:
   .turn-fields {{ margin: 0 0 4px 0; padding-left: 18px; color: #C9C4B4; }}
   .turn-field {{ font-family: Menlo, monospace; font-size: 12px; }}
   [data-turn-control][data-turn-control-enabled="true"] {{ opacity: 1; cursor: pointer; }}
-  [data-turn-control][data-turn-control-enabled="false"] {{ opacity: 0.34; }}
+  [data-turn-control][data-turn-control-enabled="false"] {{ opacity: 0.34; cursor: default; }}
   [data-turn-control][data-turn-control-active="true"] {{ opacity: 1; }}
-  [data-turn-control][data-turn-control-active="true"] rect {{ fill: #F2EEDF; }}
-  [data-turn-control][data-turn-control-active="true"] text {{ fill: #1C1C1C; }}
+  [data-turn-control][data-turn-control-active="true"] {{
+    background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
+  }}
   [data-turn-counter][data-turn-offered="false"] {{ visibility: hidden; }}
   [data-turn-counter][data-turn-offered="true"] {{ visibility: visible; }}"""
 
@@ -1175,6 +1252,7 @@ def render_play_view_html(
                 interactive=bool(candidates),
                 turn_controls=bool(candidates),
                 turn_counter_values=_turn_counter_values(candidates) if candidates else None,
+                turn_control_names=(),
             ),
             hexagon,
         ),

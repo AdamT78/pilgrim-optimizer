@@ -46,7 +46,8 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pilgrim.io.event_text import format_event  # noqa: E402
+from pilgrim.io.event_text import format_event_for_players  # noqa: E402
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
@@ -56,7 +57,6 @@ from pilgrim.model.actions import (  # noqa: E402
     action_id,
     action_summary,
 )
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import render_play_view_from_payload  # noqa: E402
 
@@ -522,6 +522,7 @@ class PlayServer(ThreadingHTTPServer):
         self.state = scenario.state
         self.config = scenario.config
         self.log_lines: list[str] = []
+        self.log_blocks: list[dict[str, Any]] = []
         # Threaded, so two submissions can arrive at once even from one browser. Reading the legal
         # set and replacing the state have to be one step, or the loser of the race applies a move
         # chosen against a board the winner has already moved.
@@ -537,6 +538,7 @@ class PlayServer(ThreadingHTTPServer):
             state_token=self.token,
             turn_candidates=turn_candidates(self.state, self.config),
             log=list(self.log_lines),
+            log_blocks=[dict(block, lines=list(block["lines"])) for block in self.log_blocks],
         )
 
     def apply(self, submitted_id: str, submitted_token: str) -> None:
@@ -572,12 +574,19 @@ class PlayServer(ThreadingHTTPServer):
 
         result = apply_action(self.state, chosen, self.config)
         self.state = result.state
-        # None means the event is meant not to print, so it is dropped rather than shown blank.
-        self.log_lines.extend(
+        # None means the event is not for players' transcript. Keep CLI wording separate.
+        player_lines = [
             line
-            for line in (format_event(event, self.config) for event in result.events)
+            for line in (format_event_for_players(event, self.config) for event in result.events)
             if line is not None
-        )
+        ]
+        if player_lines:
+            round_end = any(
+                event.event_type in {EventType.ROUND_END, EventType.ROUND_ADVANCE}
+                for event in result.events
+            )
+            self.log_lines.extend(player_lines)
+            self.log_blocks.append({"lines": player_lines, "round_end": round_end})
         self._refresh()
 
     def server_bind(self) -> None:
