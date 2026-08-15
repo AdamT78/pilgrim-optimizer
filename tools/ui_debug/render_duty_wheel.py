@@ -808,17 +808,25 @@ def ring_arrow_ends(layout: dict, index: int) -> tuple[str, str]:
     comes back is the pair of board positions, because that is what a move is made of; the spaces
     were only how the turning was counted.
     """
-    order = layout["clockwise_order"]
-    ends = (order[(index - 1) % len(order)], order[index % len(order)])
-    origin, destination = (
-        board_position_of(duty_position_by_id(layout, duty_id)) for duty_id in ends
+    # The ring arrows are fixed to board positions in this order, whatever duties were dealt there.
+    order = (
+        "north",
+        "north_east",
+        "east",
+        "south_east",
+        "south",
+        "south_west",
+        "west",
+        "north_west",
     )
+    origin, destination = (order[(index - 1) % len(order)], order[index % len(order)])
     return origin, destination
 
 
 def _arrow_ends_markup(origin: str, destination: str, board: dict) -> str:
     """The pair of positions one arrow joins, named and numbered as the engine names them."""
     return (
+        f' data-arrow="{origin}->{destination}"'
         f' data-from-position="{origin}" data-to-position="{destination}"'
         f' data-from-position-index="{board_position_index(origin, board)}"'
         f' data-to-position-index="{board_position_index(destination, board)}"'
@@ -844,21 +852,32 @@ def _render_ring_arrows(layout: dict) -> str:
 def _render_middle_arrows(layout: dict) -> str:
     """The four arrows across the middle, tagged with the pair of positions each one joins.
 
-    The ring arrows carry the same pair of attributes, so a page asking which ways lead out of a
-    position puts the one question to both families of arrow -- and gets an answer in the names the
-    engine moves cubes by rather than in the names this board happens to print on its tiles.
+    The four spokes are fixed to north/east/south/west, exactly as the painted board is. Their
+    legacy ids mention default duty categories (`produce`, `clerical`, `taxation`, `construct`);
+    those names are interpreted as those fixed spokes and never as whichever tile currently carries
+    that category.
     """
     path = layout["artwork"]["middle_arrow_path"]
     board = load_board_config()
+    spoke_by_default_tile = {
+        "produce": "north",
+        "clerical": "east",
+        "taxation": "south",
+        "construct": "west",
+    }
     arrows = []
     for arrow in layout["middle_arrows"]:
         x, y = arrow["at"]
         transform = f"translate({_num(x)} {_num(y)})"
         if arrow["rotate"]:
             transform += f" rotate({arrow['rotate']:g})"
-        origin, destination = (
-            board_position_of(duty_position_by_id(layout, arrow[end])) for end in ("from", "to")
-        )
+        fixed_spoke = spoke_by_default_tile[
+            arrow["to"] if arrow["from"] == layout["city_id"] else arrow["from"]
+        ]
+        if arrow["from"] == layout["city_id"]:
+            origin, destination = layout["city_id"], fixed_spoke
+        else:
+            origin, destination = fixed_spoke, layout["city_id"]
         arrows.append(
             f'<g transform="{transform}" data-middle-arrow="{arrow["id"]}"'
             f"{_arrow_ends_markup(origin, destination, board)}>"
@@ -937,7 +956,14 @@ def _turn_counter_label(value: int) -> str:
     return f"\u00d7 {value}"
 
 
-def render_turn_cube_counter(x: float, y: float, value: int = TURN_COUNTER_IDLE_VALUE) -> str:
+def render_turn_cube_counter(
+    x: float,
+    y: float,
+    value: int = TURN_COUNTER_IDLE_VALUE,
+    *,
+    key: str = "cubes-in-hand",
+    offered: bool = True,
+) -> str:
     """The cubes-in-hand plaque, its top-left corner at `x, y`.
 
     A readout rather than a button, so it takes no role and no enabled state. The cube on it is a
@@ -955,7 +981,8 @@ def render_turn_cube_counter(x: float, y: float, value: int = TURN_COUNTER_IDLE_
         anchor="start",
     )
     return (
-        f'<g data-turn-counter="cubes-in-hand" data-turn-counter-value="{value}"'
+        f'<g data-turn-counter="{escape(key)}" data-turn-counter-value="{value}"'
+        f' data-turn-offered="{str(offered).lower()}"'
         f' aria-label="Cubes in hand: {value}">'
         f"{_plaque(x, y, width, TURN_CONTROL_FILL)}"
         f'<rect x="{cube_x:.1f}" y="{middle - TURN_COUNTER_CUBE_SIZE / 2:.1f}"'
@@ -978,7 +1005,12 @@ def _turn_control_row(anchor: dict, corner: str, buttons: tuple[tuple[str, str, 
     return "".join(rendered)
 
 
-def render_turn_control_overlay(layout: dict, state: str = "idle") -> str:
+def render_turn_control_overlay(
+    layout: dict,
+    state: str = "idle",
+    *,
+    counter_values: tuple[int, ...] | None = None,
+) -> str:
     """The four corner plaques, drawn in the board's root units above everything else.
 
     This is the shell of a turn and none of its behaviour: the wheel draws Sow, what is in hand,
@@ -995,12 +1027,28 @@ def render_turn_control_overlay(layout: dict, state: str = "idle") -> str:
     grows inward and downward from the corner it belongs to whichever way round it is written.
     """
     anchors = layout["turn_controls"]
+    counters = (
+        [
+            render_turn_cube_counter(
+                anchors["top_right"]["x"] - turn_counter_width(value),
+                anchors["top_right"]["y"],
+                value=value,
+                key=str(value),
+                offered=False,
+            )
+            for value in sorted(set(counter_values), reverse=True)
+        ]
+        if counter_values is not None
+        else [
+            render_turn_cube_counter(
+                anchors["top_right"]["x"] - turn_counter_width(TURN_COUNTER_IDLE_VALUE),
+                anchors["top_right"]["y"],
+            )
+        ]
+    )
     parts = [
         _turn_control_row(anchors["top_left"], "top_left", (("Sow", "sow", True),)),
-        render_turn_cube_counter(
-            anchors["top_right"]["x"] - turn_counter_width(TURN_COUNTER_IDLE_VALUE),
-            anchors["top_right"]["y"],
-        ),
+        *counters,
         _turn_control_row(
             anchors["bottom_left"],
             "bottom_left",
@@ -1075,6 +1123,7 @@ def render_duty_wheel_svg(
     merchant_on: str | None = None,
     interactive: bool = False,
     turn_controls: bool = False,
+    turn_counter_values: tuple[int, ...] | None = None,
 ) -> str:
     """The whole board: title, ground, arrows, and the nine spaces with their contents.
 
@@ -1083,7 +1132,9 @@ def render_duty_wheel_svg(
     controls switch between; left off, the board is the fixed picture the prototype shows.
     `turn_controls` adds the turn-control shell in the corners, which is a picture of a turn flow
     and none of its behaviour; it is off unless a page asks for it, so a page that has not been
-    designed around it does not quietly grow a set of controls.
+    designed around it does not quietly grow a set of controls. `turn_counter_values` asks for one
+    counter plaque per value, each struck hidden and keyed by that value, for pages that reveal a
+    pre-drawn counter rather than writing text into one.
     """
     board = layout["board"]
     palette = layout["palette"]
@@ -1142,7 +1193,7 @@ def render_duty_wheel_svg(
         "</g>"
         # Outside the scaled group: the corners are measured on the canvas the page is cropped
         # against, so the plaques are written in those same units rather than the board's.
-        f"{render_turn_control_overlay(layout) if turn_controls else ''}"
+        f"{render_turn_control_overlay(layout, counter_values=turn_counter_values) if turn_controls else ''}"
         "</svg>"
     )
 

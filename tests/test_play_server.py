@@ -403,6 +403,10 @@ def _run_script(
         assert source != script.group(1), "the mutation matched nothing, so nothing was mutated"
 
     candidates = server.payload["turn_candidates"]
+    spaces = [
+        {"index": index, "name": name}
+        for index, name in enumerate(server.payload["board_positions"])
+    ]
     job = tmp_path / "job.json"
     job.write_text(
         json.dumps(
@@ -414,6 +418,26 @@ def _run_script(
                 "prompts": _prompts_drawn(candidates),
                 "resolutions": _key_values(candidates, "resolution"),
                 "combinations": _key_values(candidates, "combination"),
+                "arrows": _arrows_drawn(page),
+                "controls": _controls_drawn(page),
+                "counters": sorted(
+                    {
+                        str(value)
+                        for candidate in candidates
+                        for value in [
+                            candidate.get("counter_start"),
+                            *[
+                                step.get("counter")
+                                for step in candidate.get("steps", ())
+                                if step.get("counter") is not None
+                            ],
+                        ]
+                        if value is not None
+                    }
+                ),
+                "spaces": spaces,
+                "cubes": _cube_slots(server),
+                "playerCount": len(server.payload["state"]["players"]),
                 # Every building on the track, not only the constructible ones, because the page
                 # draws a key for every one of them. A stub holding only the right answers cannot
                 # show a script reaching past them.
@@ -453,7 +477,7 @@ def _buildings_on_the_track(server) -> list[str]:
 
 
 def _seated(server) -> set[str]:
-    """The engine's player ids that have a chair, which at two players is not the first two."""
+    """The engine ids that have a chair at this player count."""
     count = len(server.payload["state"]["players"])
     return {f"player_{word}" for word in ("one", "two", "three", "four")[:count]}
 
@@ -475,8 +499,47 @@ def _prompts_drawn(candidates: list[dict]) -> list[str]:
     return sorted({step["prompt"] for c in candidates for step in c["steps"] if "prompt" in step})
 
 
+def _arrows_drawn(page: str) -> list[str]:
+    return sorted(set(re.findall(r'data-arrow="([^"]+)"', page)))
+
+
+def _controls_drawn(page: str) -> dict[str, bool]:
+    return {
+        name: enabled == "true"
+        for name, enabled in re.findall(
+            r'data-turn-control="([^"]+)"[^>]*data-turn-control-enabled="([^"]+)"', page
+        )
+    }
+
+
+def _cube_slots(server) -> dict[str, list[dict[str, str]]]:
+    slots: dict[str, list[dict[str, str]]] = {}
+    seated = [player_id for player_id in SEATED_PLAYERS if player_id in _seated(server)]
+    names = list(server.payload["board_positions"])
+    for position_index, position_name in enumerate(names):
+        room = 6 if position_name == "city" else 3
+        columns: list[dict[str, str]] = []
+        for player_id in seated:
+            standing = server.payload["state"]["acolytes"][SEATED_PLAYERS.index(player_id)][
+                position_index
+            ]
+            columns.extend(
+                {
+                    "player": player_id,
+                    "opacity": "1" if slot < standing else "0",
+                }
+                for slot in range(room)
+            )
+        slots[position_name] = columns
+    return slots
+
+
 def _at(value):
     return {"kind": "position", "value": value}
+
+
+def _follow(value: str):
+    return {"kind": "edge", "value": value}
 
 
 def _do(name):
@@ -506,6 +569,8 @@ def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
     if step["kind"] == "position":
         return _at(step["value"])
+    if step["kind"] == "edge":
+        return _follow(step["value"])
     if step["kind"] == "resource":
         return _take(step["value"], _active_seat(server))
     if step["kind"] == "combination":
@@ -536,7 +601,17 @@ def _engine_steps(action) -> list[dict]:
     would only show the page copied it faithfully. Every field is read off the action itself, so
     what the offers are checked against is the engine's own answer about what is legal.
     """
-    steps = [{"kind": "position", "value": position} for position in (action.origin, *action.route)]
+    route = tuple(action.route)
+    steps = [{"kind": "position", "value": action.origin}]
+    path = (action.origin, *route)
+    steps += [
+        {
+            "kind": "edge",
+            "value": f"{CANONICAL_POSITION_NAMES[path[index]]}"
+            f"->{CANONICAL_POSITION_NAMES[path[index + 1]]}",
+        }
+        for index in range(len(route))
+    ]
     if isinstance(action, SetupSowAction):
         return steps
     steps.append({"kind": "position", "value": action.selected_duty})
@@ -660,9 +735,10 @@ def test_a_step_the_survivors_agree_on_is_never_put_as_a_question(phase, tmp_pat
     if phase == "sow":
         _played_through_setup(server)
     decisions = _engine_decisions(server)
-    opening = _next_values(decisions, _forced_prefix(decisions, []))
+    prefix = _forced_prefix(decisions, [])
+    opening = _next_steps(decisions, prefix)
 
-    transcript = _run_script(server, [_at(opening[0])], tmp_path)
+    transcript = _run_script(server, [_click_for(server, opening[0])], tmp_path)
     for offered in transcript["offered"]:
         assert len(offered) != 1, f"a single option was presented as a choice: {offered}"
 
@@ -715,7 +791,11 @@ def test_four_players_sow_in_turn_and_the_board_comes_back_with_the_acolytes_on_
             pages.append(page)
         final = _get_json(base, "/state.json")
 
-    sown = [step["value"] for step in candidate["steps"] if step["value"] != 0]
+    sown = [
+        CANONICAL_POSITION_NAMES.index(step["value"].split("->", 1)[1])
+        for step in candidate["steps"]
+        if step["kind"] == "edge"
+    ]
     assert _cubes_at(page_before, sown[0], first) == 0
     assert _cubes_at(pages[0], sown[0], first) > 0
     assert final["state"]["acolytes"][0][0] < city_before
@@ -2239,7 +2319,7 @@ def _queried_attributes() -> list[str]:
     ships unclickable. A new `querySelectorAll` is covered the moment it is written.
     """
     found = sorted(
-        set(re.findall(r"querySelectorAll\(.\[([a-z-]+)", render_play_view._TURN_SCRIPT))
+        set(re.findall(r"querySelector(?:All)?\(.\[([a-z-]+)", render_play_view._TURN_SCRIPT))
     )
     assert found, "no attributes were read out of the script, so this test checks nothing"
     return found
@@ -2290,46 +2370,65 @@ def _opened(tmp_path: Path):
     return server
 
 
-def _the_panel_asks_for_the_next_space(transcript) -> None:
-    """The setup sow's one open question, put in words rather than left to the board's rings."""
-    assert transcript["asking"][0] == ["Point at the next space on the route."], (
-        f"the panel said {transcript['asking'][0]} while the board held the question"
+def _visible_cubes(snapshot: dict, position: str, player_id: str) -> int:
+    return sum(
+        1
+        for cube in snapshot[position]
+        if cube["player"] == player_id and cube["opacity"] != "0"
     )
 
 
-def _the_button_waits(transcript) -> None:
-    """Nothing to take back until the player has taken something."""
-    assert transcript["resetShown"][0] is False, "the button was up before anything had been chosen"
+def _setup_sow_uses_board_signals_not_panel_prompts(transcript) -> None:
+    assert transcript["asking"][0] == [], "board-answered steps still print panel prompts"
+
+
+def _reset_waits_for_a_followed_arrow(transcript) -> None:
+    assert transcript["resetShown"][0] is False, "reset lit before any arrow was followed"
+    assert transcript["resetShown"][-1] is True, "reset stayed dark after an arrow was followed"
+
+
+def _snapshot_at(transcript: dict, index: int) -> dict:
+    return {
+        "offered": transcript["offered"][index],
+        "chosen": transcript["chosen"][index],
+        "shown": transcript["shownPanel"][index],
+        "asking": transcript["asking"][index],
+        "reset": transcript["resetShown"][index],
+        "counter": transcript["counterShown"][index],
+        "controls": transcript["controls"][index],
+        "cubes": transcript["cubes"][index],
+        "overflow": transcript["overflow"][index],
+    }
 
 
 @needs_node
-def test_the_panel_still_asks_when_the_answer_is_given_on_the_board(tmp_path: Path) -> None:
-    """The case the panel used to go quiet in, which is the case it is most needed in.
-
-    A setup sow settles its origin by auto-advance, so the only question left is a space -- and a
-    space is answered on the board, where the panel has no key to reveal. It showed nothing at all:
-    two faintly ringed spaces on a nine-space wheel, no summary, no button, and no words anywhere
-    saying that pointing at one was what was wanted.
-    """
+def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
     server = _served(tmp_path)
     assert server.payload["state"]["phase"] == "setup_sow"
     transcript = _run_script(server, [], tmp_path)
 
-    _the_panel_asks_for_the_next_space(transcript)
-    # And it is the question that was actually left open. The origin was taken on the player's
-    # behalf, so asking for one would be asking about a decision already made.
-    assert transcript["offered"][0] == [1, 5], "these are the spaces the engine left open"
+    _setup_sow_uses_board_signals_not_panel_prompts(transcript)
+    assert transcript["offered"][0] == ["city->north", "city->south"], (
+        f"setup sow offered {transcript['offered'][0]} instead of the two City arrows"
+    )
+    assert transcript["counterShown"][0] == ["5"], "the counter did not open on five in hand"
+    assert transcript["resetShown"][0] is False, "reset lit before any arrow was followed"
+    assert transcript["controls"][0]["confirm"] == "false", "confirm lit before a turn was settled"
+    assert transcript["controls"][0]["action"] == "false"
+    assert transcript["controls"][0]["tithe"] == "false"
     assert transcript["shownPanel"][0] == -1, "nothing was settled, so no summary was up"
 
 
 @needs_node
-def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: Path) -> None:
-    """Several questions are answered by pointing at a space, and they are not the same question.
+def test_reset_lights_only_after_following_an_arrow(tmp_path: Path) -> None:
+    server = _served(tmp_path)
+    transcript = _run_script(server, [_follow("city->north")], tmp_path)
+    _reset_waits_for_a_followed_arrow(transcript)
 
-    A page that drew one line per KIND of step would ask for an origin when it wanted the next
-    space on a route, because both are positions. So the line follows the question rather than the
-    affordance, and this walks a whole turn watching it change.
-    """
+
+@needs_node
+def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: Path) -> None:
+    """When the panel does ask, it asks one open panel question at a time."""
     server = _played_through_setup(_served(tmp_path))
     decisions = _engine_decisions(server)
     candidate = next(
@@ -2344,10 +2443,6 @@ def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: 
     assert asked, "the panel never asked anything during a whole turn"
     for point in asked:
         assert len(point) == 1, f"two questions were put at once: {point}"
-    # The words move on rather than standing still, which is what tells a player the click landed.
-    assert len({tuple(point) for point in asked}) > 1, (
-        f"one sentence covered the whole turn: {asked[0]}"
-    )
     # And a settled turn has a summary to read instead, so the asking stops rather than leaving a
     # question standing over a decision that has been made.
     for asking, shown in zip(transcript["asking"], transcript["shownPanel"], strict=True):
@@ -2356,28 +2451,53 @@ def test_one_question_is_asked_at_a_time_and_it_is_the_one_still_open(tmp_path: 
 
 
 @needs_node
-def test_the_reset_button_waits_for_a_choice_the_player_actually_made(tmp_path: Path) -> None:
-    """A forced step is not a choice, so there is nothing yet to take back.
-
-    At a setup sow the origin is settled by auto-advance before the player has touched anything,
-    and the button counted that. It offered to undo a decision nobody had made -- and pressing it
-    was a provable no-op, because re-rendering takes the same forced step straight back again.
-    """
+def test_reset_restores_every_cube_to_its_opening_opacity(tmp_path: Path) -> None:
+    """Reset returns to the same opening setup-sow snapshot the page started from."""
     server = _served(tmp_path)
-    assert server.payload["state"]["phase"] == "setup_sow"
+    transcript = _run_script(server, [_follow("city->north")], tmp_path, reset=True)
+    opening = _snapshot_at(transcript, 0)
 
-    opening = _run_script(server, [], tmp_path)
-    _the_button_waits(opening)
+    assert transcript["afterReset"] == opening, "reset did not return to the opening setup-sow snapshot"
 
-    answered = _run_script(server, [_at(1)], tmp_path, reset=True)
-    assert answered["resetShown"] == [False, True], (
-        "the button did not appear once the player had chosen a space"
+
+@needs_node
+def test_a_preview_overflow_is_recorded_and_stops_further_preview(tmp_path: Path) -> None:
+    """MUTATION. If one placement fails, previewing stops and the overflow is observable."""
+    server = _served(tmp_path)
+    active = server.payload["state"]["active_player"]
+    overflowed = _run_script(
+        server,
+        [_follow("city->north")],
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "if (!slot) { return false; }",
+            "if (name === 'north') { return false; }\n    if (!slot) { return false; }",
+        ),
     )
-    # And pressing it puts the position back exactly where the opening render left it, rather than
-    # to an empty one -- the forced step is retaken, which is why counting it made no sense.
-    assert answered["afterReset"]["offered"] == opening["offered"][0]
-    assert answered["afterReset"]["asking"] == opening["asking"][0]
-    assert answered["afterReset"]["reset"] is False
+
+    assert overflowed["overflow"][-1] is True, "overflow was not recorded"
+    assert overflowed["counterShown"][-1] == ["5"], "preview kept counting after overflow"
+    assert _visible_cubes(overflowed["cubes"][-1], "north", active) == 0
+
+
+SETUP_SWEEP_SEEDS = (7, 99)
+
+
+@needs_node
+@pytest.mark.parametrize("seed", SETUP_SWEEP_SEEDS)
+def test_every_setup_route_on_the_sweep_seeds_avoids_preview_overflow(
+    tmp_path: Path,
+    seed: int,
+) -> None:
+    """Tripwire: every setup route we sweep stays within the board's drawn cube capacity."""
+    server = _served(tmp_path, seed=seed)
+    decisions = _engine_decisions(server)
+
+    assert decisions, f"seed {seed} had no setup-sow routes to check"
+    for route in decisions:
+        clicks = _clicks_to(server, decisions, _values(route))
+        transcript = _run_script(server, clicks, tmp_path)
+        assert not any(transcript["overflow"]), f"seed {seed} overflowed on route {_values(route)!r}"
 
 
 def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Path) -> None:
@@ -2390,8 +2510,10 @@ def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Pa
     """
     page = render_play_view_from_payload(_opened(tmp_path).payload)
 
-    assert re.search(r"data-turn-confirm=\"[^\"]*\">Confirm<", page), "the commit button changed"
-    assert re.search(r"data-turn-reset[^>]*>Clear my choices<", page), "the reset button changed"
+    assert 'data-turn-confirm="' not in page, "the panel still carries its own confirm button"
+    assert "data-turn-reset" not in page, "the panel still carries its own reset button"
+    assert 'data-turn-control="confirm"' in page, "the confirm plaque is missing"
+    assert 'data-turn-control="reset"' in page, "the reset plaque is missing"
     for borrowed in ("Confirm this turn", "Start this turn again"):
         assert borrowed not in page, f"the panel still calls this a turn: {borrowed!r}"
 
@@ -2417,49 +2539,56 @@ def test_the_opening_decision_is_put_on_every_board_and_can_be_hit(tmp_path: Pat
 
 
 @needs_node
-def test_counting_the_forced_steps_as_choices_is_caught(tmp_path: Path) -> None:
-    """MUTATION. Read the reset button off `chosen`, which is the bug that shipped.
+def test_removing_one_data_arrow_attribute_is_caught(tmp_path: Path, monkeypatch) -> None:
+    """MUTATION. One offered edge with no drawn arrow must fail the setup-sow guard."""
+    from tools.ui_debug import render_duty_wheel
 
-    It looks right: `chosen` is the answers so far, and offering to clear them when there are some
-    is exactly what the button is for. What it misses is that `chosen` also holds what nobody
-    chose.
-    """
-    server = _served(tmp_path)
-    counted = _run_script(
-        server,
-        [],
-        tmp_path,
-        mutate=lambda code: code.replace(
-            "'data-turn-started', answered ? 'true' : 'false'",
-            "'data-turn-started', chosen.length ? 'true' : 'false'",
-        ),
-    )
-    with pytest.raises(AssertionError, match="before anything had been chosen"):
-        _the_button_waits(counted)
+    original = render_duty_wheel._arrow_ends_markup
+
+    def without_city_north(origin: str, destination: str, board: dict) -> str:
+        markup = original(origin, destination, board)
+        if origin == "city" and destination == "north":
+            return markup.replace(f' data-arrow="{origin}->{destination}"', "", 1)
+        return markup
+
+    monkeypatch.setattr(render_duty_wheel, "_arrow_ends_markup", without_city_north)
+
+    with pytest.raises(AssertionError, match="setup sow offered"):
+        test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path)
 
 
 @needs_node
-def test_matching_the_line_by_affordance_instead_of_by_question_is_caught(tmp_path: Path) -> None:
-    """MUTATION. Match the line the way everything else in the script is matched, and it goes dark.
+def test_dimming_reset_after_origin_is_taken_is_caught(tmp_path: Path) -> None:
+    """MUTATION. If reset never lights after following an arrow, the guard has to say so."""
+    server = _served(tmp_path)
+    counted = _run_script(
+        server,
+        [_follow("city->north")],
+        tmp_path,
+        mutate=lambda code: code.replace(
+            "setControl('reset', preview.resettable);",
+            "setControl('reset', false);",
+        ),
+    )
+    with pytest.raises(AssertionError, match="reset stayed dark after an arrow was followed"):
+        _reset_waits_for_a_followed_arrow(counted)
 
-    Tempting because every other thing the script reveals IS matched by kind, and the prompts sit
-    in the same panel as the keys. But a kind names where an answer is given, and a line has to
-    name what is being asked: keyed on the kind, a sentence is compared against a board position
-    and matches nothing. The panel falls silent at exactly the setup sow this PR is about, which is
-    the original bug wearing a different cause.
-    """
+
+@needs_node
+def test_putting_board_step_prompts_back_in_the_panel_is_caught(tmp_path: Path) -> None:
+    """MUTATION. If board questions reappear as panel prompts, the guard has to say so."""
     server = _served(tmp_path)
     by_kind = _run_script(
         server,
         [],
         tmp_path,
         mutate=lambda code: code.replace(
-            "mark(prompts, 'data-turn-prompt', promptsOf(offered));",
-            "mark(prompts, 'data-turn-prompt', offeredByKind(offered, 'position'));",
+            "if (step.kind === 'position' || step.kind === 'edge') { return; }",
+            "",
         ),
     )
-    with pytest.raises(AssertionError, match="while the board held the question"):
-        _the_panel_asks_for_the_next_space(by_kind)
+    with pytest.raises(AssertionError, match="board-answered steps still print panel prompts"):
+        _setup_sow_uses_board_signals_not_panel_prompts(by_kind)
 
 
 def test_an_outline_key_that_forgets_pointer_events_is_caught(monkeypatch) -> None:

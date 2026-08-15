@@ -1,10 +1,9 @@
-"""The play view: one engine position drawn on the table layout, and nothing to press.
+"""The play view: one engine position drawn on the table layout, with only seam-driven choices.
 
-Same panels as the debug table, in the same places, from the same layout module -- and no controls,
-no selects and no script. It is read-only on purpose. Where the debug table is a sandbox whose
-buttons move its own SVG about, this draws a position that came from the engine and offers no way
-to change it, so anything on it that looks wrong is the engine's or the mapping's and never a
-button someone pressed.
+Same panels as the debug table, in the same places, from the same layout module. Unlike that
+sandbox, this page does not invent a move and does not carry a second rules copy: its script only
+filters and reveals the candidates the server already offered, previews the route those candidates
+already contain, and submits one action id back.
 
 WHAT IS REAL AND WHAT IS STILL THE SAMPLE
 
@@ -160,10 +159,9 @@ def say(value: object) -> str:
     arriving whole. Rewriting them at the source would be the page editing the engine's account of
     itself, and would leave the fourth producer to be found by whoever notices.
 
-    Why it is needed at all: the engine seats white first and the table seats it last, so an engine
-    id is never a seat number and never can be. Blue is the third chair and is `player_four`. There
-    is no reading under which those two agree, so a page that prints the id is reliably confusing
-    in a way a wrong number would not be -- it looks like a numbering and is not one.
+    Why it is needed at all: the engine ids and the words players use at the table are different
+    vocabularies. Attributes keep the ids because that is what the seam routes on; visible text says
+    the seat colours because that is what the rulebook names and what a player can point at.
     """
     return escape(_SEAT_NAMED.sub(lambda found: SEAT_COLOURS[found.group(1)], str(value)))
 
@@ -354,15 +352,15 @@ def _prompt_lines(candidates: list[dict]) -> str:
     this does not know that a position on the board means acolytes, or that some of these lines are
     answered nowhere near the panel they appear in.
 
-    Without them the panel goes quiet exactly when the question leaves it. A setup sow settles its
-    origin by auto-advance and then asks for a space, which is on the board; the panel had no key
-    to show and so showed nothing at all, and the board's two faint rings were the only hint that a
-    click was wanted.
+    Prompts for choices made directly on the board are deliberately absent: a lit space or arrow is
+    already that instruction and repeating it in the panel turns one thing to track into two.
     """
     seen: list[str] = []
     for candidate in candidates:
         for step in candidate["steps"]:
             prompt = step.get("prompt")
+            if step["kind"] in {"position", "edge"}:
+                continue
             if prompt and prompt not in seen:
                 seen.append(prompt)
     return "".join(
@@ -427,12 +425,7 @@ def _turn_panels(candidates: list[dict]) -> str:
     panels = []
     for index, candidate in enumerate(candidates):
         if candidate["action_id"] is not None:
-            body = (
-                f'<div class="turn-summary">{say(candidate["summary"])}</div>'
-                f'<button type="button" class="turn-commit"'
-                f' data-turn-confirm="{escape(str(candidate["action_id"]))}">Confirm'
-                "</button>"
-            )
+            body = f'<div class="turn-summary">{say(candidate["summary"])}</div>'
         else:
             fields = "".join(
                 f'<li class="turn-field">{say(name)}</li>' for name in candidate["unresolved"]
@@ -459,15 +452,22 @@ def render_turn_panel(payload: dict) -> str:
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}</div>"
         f"{_turn_panels(candidates)}"
-        # Neutral, because this button is not only ever pressed during a turn. A start-player
-        # selection is an action like any other and "start this turn again" is not true of it. The
-        # summary directly above already says what is being confirmed, which is why the button does
-        # not have to -- and a label that named the action would be a second description of the
-        # summary, to be kept in step with it by hand.
-        '<button type="button" class="turn-reset" data-turn-reset data-turn-started="false">'
-        "Clear my choices</button>"
         "</div>"
     )
+
+
+def _turn_counter_values(candidates: list[dict]) -> tuple[int, ...]:
+    """Distinct counter readouts the candidates can reach, pre-drawn for reveal-only updates."""
+    seen: set[int] = set()
+    for candidate in candidates:
+        start = candidate.get("counter_start")
+        if isinstance(start, int):
+            seen.add(start)
+        for step in candidate.get("steps", ()):
+            count = step.get("counter")
+            if isinstance(count, int):
+                seen.add(count)
+    return tuple(sorted(seen, reverse=True))
 
 
 def log_styles() -> str:
@@ -509,14 +509,12 @@ def log_styles() -> str:
 _TURN_SCRIPT = """<script>
 (function () {
   'use strict';
-  /* CLICKING FILTERS. IT DOES NOT CONSTRUCT.
+  /* CLICKING FILTERS AND REVEALS. IT DOES NOT CONSTRUCT.
 
      Every candidate below is an answer the engine already offered, carrying the sequence of
-     decisions that reaches it: where to pick up from, each step of the route, which duty was
-     selected, and what to do with it. This narrows that list. It never builds a route, never asks
-     whether a step is allowed, never decides what lies next to what, and never counts how long a
-     route should be -- routes are as long as they are. An illegal turn cannot be expressed here
-     because it was never in the list to begin with. */
+     decisions that reaches it. This narrows that list. It never invents a move, never asks whether
+     a step is allowed, and never derives the hand count: each count is read off a step the seam
+     already provided. */
   var CANDIDATES = __CANDIDATES__;
   var TOKEN = __TOKEN__;
   if (!CANDIDATES.length) { return; }
@@ -525,11 +523,12 @@ _TURN_SCRIPT = """<script>
   var aside = document.querySelector('[data-component="play-turn"]');
   if (!board || !aside) { return; }
   var spaces = board.querySelectorAll('[data-board-position-index]');
+  var arrows = board.querySelectorAll('[data-arrow]');
+  var counters = board.querySelectorAll('[data-turn-counter]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var panels = aside.querySelectorAll('[data-turn-panel]');
-  var reset = aside.querySelector('[data-turn-reset]');
   /* Every seat's board, so the one being asked can be picked out of them and the rest left alone.
      Which seat that is is read off the page, where it is already written down, rather than worked
      out here from whose turn it might be. */
@@ -539,15 +538,14 @@ _TURN_SCRIPT = """<script>
      rotation the track was drawn at. */
   var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
-  /* Whether the PLAYER has answered anything, which is not whether anything has been answered.
-     `chosen` also holds the steps the auto-advance took on their behalf, and a forced step is not
-     a choice: counting it made the reset button appear before anyone had done anything, offering
-     to undo a decision nobody had made. Pressing it then was a provable no-op, since re-rendering
-     takes the same forced step straight back again.
-
-     A flag rather than a tally. Nothing here needs to know HOW MANY answers there are -- only
-     whether giving them up would undo anything -- and the script does no arithmetic. */
-  var answered = false;
+  var autoAdvance = true;
+  var baseline = [];
+  var activePlayer = null;
+  Array.prototype.forEach.call(seats, function (seat) {
+    if (seat.getAttribute('data-active-seat') === 'true') {
+      activePlayer = seat.getAttribute('data-player');
+    }
+  });
 
   function surviving() {
     return CANDIDATES.filter(function (candidate) {
@@ -604,6 +602,7 @@ _TURN_SCRIPT = """<script>
   function promptsOf(offered) {
     var values = [];
     offered.forEach(function (step) {
+      if (step.kind === 'position' || step.kind === 'edge') { return; }
       if (step.prompt && values.indexOf(step.prompt) === -1) { values.push(step.prompt); }
     });
     return values;
@@ -616,8 +615,150 @@ _TURN_SCRIPT = """<script>
     });
   }
 
-  function show(offered, settled) {
+  function control(name) {
+    return board.querySelector('[data-turn-control="' + name + '"]');
+  }
+
+  function setControl(name, enabled) {
+    var item = control(name);
+    if (!item) { return; }
+    item.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
+    item.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  }
+
+  function spaceAt(name) {
+    return board.querySelector('[data-board-position="' + name + '"]');
+  }
+
+  function tallyAt(name) {
+    var space = spaceAt(name);
+    return space ? space.querySelector('[data-cube-tally]') : null;
+  }
+
+  function positionName(index) {
+    var name = null;
+    Array.prototype.forEach.call(spaces, function (space) {
+      if (Number(space.getAttribute('data-board-position-index')) === index) {
+        name = space.getAttribute('data-board-position');
+      }
+    });
+    return name;
+  }
+
+  function columnAt(name, player) {
+    var tally = tallyAt(name);
+    if (!tally || !player) { return []; }
+    return Array.prototype.filter.call(tally.querySelectorAll('rect'), function (cube) {
+      return cube.getAttribute('data-player') === player;
+    });
+  }
+
+  function visibleColumnAt(name, player) {
+    return columnAt(name, player).filter(function (cube) {
+      return cube.getAttribute('opacity') !== '0';
+    });
+  }
+
+  function hide(cubes) {
+    cubes.forEach(function (cube) {
+      cube.setAttribute('opacity', '0');
+    });
+  }
+
+  function restore(cubes) {
+    cubes.forEach(function (entry) {
+      if (entry.opacity === null) {
+        entry.cube.removeAttribute('opacity');
+      } else {
+        entry.cube.setAttribute('opacity', entry.opacity);
+      }
+    });
+  }
+
+  function firstEmptySlotAt(name, player) {
+    return columnAt(name, player).filter(function (cube) {
+      return cube.getAttribute('opacity') === '0';
+    })[0] || null;
+  }
+
+  function placeOneCubeAt(name, player) {
+    var slot = firstEmptySlotAt(name, player);
+    if (!slot) { return false; }
+    slot.setAttribute('opacity', '1');
+    return true;
+  }
+
+  function captureBaseline() {
+    baseline = [];
+    Array.prototype.forEach.call(
+      board.querySelectorAll('[data-cube-tally] rect[data-player]'),
+      function (cube) {
+        baseline.push({ cube: cube, opacity: cube.getAttribute('opacity') });
+      }
+    );
+  }
+
+  function restoreBaseline() {
+    restore(baseline);
+  }
+
+  function applyPreview() {
+    var started = false;
+    var resettable = false;
+    var overflow = false;
+    var count = null;
+    var prefix = [];
+    var remaining = chosen.slice();
+    restoreBaseline();
+    while (remaining.length) {
+      var answer = remaining[0];
+      remaining = remaining.slice(1);
+      var live = CANDIDATES.filter(function (candidate) {
+        return prefix.every(function (value, index) {
+          var step = candidate.steps[index];
+          return step !== undefined && step.value === value;
+        });
+      });
+      if (!live.length) { break; }
+      var step = live[0].steps[prefix.length];
+      prefix.push(answer);
+      if (!step) { continue; }
+      if (step.kind === 'position' && prefix.length === 1) {
+        var origin = positionName(step.value);
+        if (origin && activePlayer) {
+          hide(visibleColumnAt(origin, activePlayer));
+        }
+        started = true;
+        if (step.counter !== undefined && step.counter !== null) {
+          count = step.counter;
+        } else if (live[0].counter_start !== undefined && live[0].counter_start !== null) {
+          count = live[0].counter_start;
+        }
+        continue;
+      }
+      if (step.kind !== 'edge') { continue; }
+      resettable = true;
+      var ends = String(step.value).split('->');
+      var destination = ends.length === 2 ? ends[1] : null;
+      if (destination && activePlayer) {
+        if (!placeOneCubeAt(destination, activePlayer)) {
+          overflow = true;
+          if (window.console && window.console.error) {
+            window.console.error('turn preview overflow: no slot at ' + destination);
+          }
+          break;
+        }
+      }
+      if (step.counter !== undefined && step.counter !== null) {
+        count = step.counter;
+      }
+    }
+    return { started: started, resettable: resettable, overflow: overflow, count: count };
+  }
+
+  function show(offered, settled, confirmable, preview) {
     var positions = offeredByKind(offered, 'position');
+    var edges = offeredByKind(offered, 'edge');
     var stocks = offeredByKind(offered, 'resource');
     var boards = offeredByKind(offered, 'seat');
     Array.prototype.forEach.call(spaces, function (space) {
@@ -625,6 +766,9 @@ _TURN_SCRIPT = """<script>
       space.setAttribute('data-play-offered', positions.indexOf(index) === -1 ? 'false' : 'true');
       space.setAttribute('data-play-chosen', chosen.indexOf(index) === -1 ? 'false' : 'true');
     });
+    mark(arrows, 'data-arrow', edges);
+    mark(counters, 'data-turn-counter', preview.count === null ? [] : [String(preview.count)]);
+    board.setAttribute('data-turn-preview-overflow', preview.overflow ? 'true' : 'false');
     mark(prompts, 'data-turn-prompt', promptsOf(offered));
     mark(keys, 'data-resolution-key', offeredByKind(offered, 'resolution'));
     mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
@@ -655,29 +799,48 @@ _TURN_SCRIPT = """<script>
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
     });
-    if (reset) { reset.setAttribute('data-turn-started', answered ? 'true' : 'false'); }
+    setControl('sow', false);
+    setControl('reset', preview.resettable);
+    setControl('confirm', confirmable && !preview.overflow);
+    setControl('action', false);
+    setControl('tithe', false);
   }
 
   function render() {
     var live = surviving();
     /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
        Which steps those are is not written down anywhere; it falls out of the candidates. */
-    while (live.length > 1 && stepsAt(chosen.length, live).length === 1) {
-      chosen.push(stepsAt(chosen.length, live)[0].value);
-      live = surviving();
+    if (autoAdvance) {
+      while (stepsAt(chosen.length, live).length === 1) {
+        chosen.push(stepsAt(chosen.length, live)[0].value);
+        live = surviving();
+      }
     }
+    var preview = applyPreview();
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
-       would be committed as, over the button that commits it, or what is still undecided about
+       would be committed as, or what is still undecided about
        it -- and the player says so. */
-    if (live.length === 1) { show([], CANDIDATES.indexOf(live[0])); return; }
-    show(stepsAt(chosen.length, live), -1);
+    if (live.length === 1) {
+      show([], CANDIDATES.indexOf(live[0]), live[0].action_id !== null, preview);
+      return;
+    }
+    show(stepsAt(chosen.length, live), -1, false, preview);
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
     space.addEventListener('click', function () {
       if (space.getAttribute('data-play-offered') !== 'true') { return; }
       chosen.push(Number(space.getAttribute('data-board-position-index')));
-      answered = true;
+      autoAdvance = true;
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(arrows, function (arrow) {
+    arrow.addEventListener('click', function () {
+      if (arrow.getAttribute('data-turn-offered') !== 'true') { return; }
+      chosen.push(arrow.getAttribute('data-arrow'));
+      autoAdvance = true;
       render();
     });
   });
@@ -689,7 +852,7 @@ _TURN_SCRIPT = """<script>
       key.addEventListener('click', function () {
         if (key.getAttribute('data-turn-offered') !== 'true') { return; }
         chosen.push(key.getAttribute(attribute));
-        answered = true;
+        autoAdvance = true;
         render();
       });
     });
@@ -703,21 +866,35 @@ _TURN_SCRIPT = """<script>
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });
 
-  Array.prototype.forEach.call(panels, function (panel) {
-    var commit = panel.querySelector('[data-turn-confirm]');
-    if (commit) {
-      commit.addEventListener('click', function () {
-        submit(commit.getAttribute('data-turn-confirm'));
-      });
-    }
-  });
-
-  if (reset) {
-    /* Purely local. Nothing has been sent, because nothing is sent until the player presses
-       confirm, so giving up is forgetting the clicks rather than undoing anything. */
-    reset.addEventListener('click', function () { chosen = []; answered = false; render(); });
+  var confirmControl = control('confirm');
+  if (confirmControl) {
+    confirmControl.addEventListener('click', function () {
+      if (confirmControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      var live = surviving();
+      if (live.length !== 1 || !live[0].action_id) { return; }
+      submit(live[0].action_id);
+    });
   }
 
+  var resetControl = control('reset');
+  if (resetControl) {
+    resetControl.addEventListener('click', function () {
+      if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      chosen = [];
+      autoAdvance = true;
+      render();
+    });
+  }
+
+  ['action', 'tithe'].forEach(function (name) {
+    var inactive = control(name);
+    if (!inactive) { return; }
+    inactive.addEventListener('click', function () {
+      return;
+    });
+  });
+
+  captureBaseline();
   render();
 })();
 </script>"""
@@ -731,13 +908,15 @@ def turn_styles(route_color: str) -> str:
     JavaScript -- the colour of the route is the active seat\'s own, written in by the page that
     knows which seat that is.
 
-    The whole space is the target rather than the artwork on it: `.board-circle` is the space\'s
-    filled shape, so a click anywhere on the parchment counts and nobody has to hit a label.
+    The whole space and arrow are the targets rather than just their outlines, so a click in the
+    painted area counts.
     """
     return f"""  /* Hidden by default: a space is offered only while it is one of the moves left. */
   [data-play-offered="true"] {{ cursor: pointer; }}
   [data-play-offered="true"] .board-circle {{ stroke: #F2EEDF; stroke-width: 4; }}
   [data-play-chosen="true"] .board-circle {{ stroke: {route_color}; stroke-width: 5.5; }}
+  [data-arrow][data-turn-offered="true"] {{ cursor: pointer; }}
+  [data-arrow][data-turn-offered="true"] .arrow-interior {{ fill: rgb(30, 122, 52); }}
 
   .play-turn {{
     width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
@@ -751,7 +930,7 @@ def turn_styles(route_color: str) -> str:
   .turn-prompt[data-turn-offered="true"] {{ display: block; }}
 
   .turn-keys {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-  .turn-key, .turn-commit, .turn-reset {{
+  .turn-key {{
     color: #F2EEDF; background: #1C1C1C; border: 1px solid #3A3A3A; border-radius: 8px;
     padding: 6px 10px; cursor: pointer; font: 13px/1.4 Helvetica, Arial, sans-serif;
   }}
@@ -785,13 +964,13 @@ def turn_styles(route_color: str) -> str:
   .turn-panel {{ display: none; }}
   .turn-panel[data-turn-shown="true"] {{ display: block; }}
   .turn-summary {{ margin: 8px 0; color: #F2EEDF; }}
-  .turn-commit {{ width: 100%; border-color: {route_color}; }}
   .turn-blocked {{ margin: 8px 0; color: #E0C36A; }}
   .turn-fields {{ margin: 0 0 4px 0; padding-left: 18px; color: #C9C4B4; }}
   .turn-field {{ font-family: Menlo, monospace; font-size: 12px; }}
-
-  .turn-reset {{ display: none; margin-top: 8px; width: 100%; }}
-  .turn-reset[data-turn-started="true"] {{ display: block; }}"""
+  [data-turn-control][data-turn-control-enabled="true"] {{ opacity: 1; cursor: pointer; }}
+  [data-turn-control][data-turn-control-enabled="false"] {{ opacity: 0.34; }}
+  [data-turn-counter][data-turn-offered="false"] {{ visibility: hidden; }}
+  [data-turn-counter][data-turn-offered="true"] {{ visibility: visible; }}"""
 
 
 def render_play_view_html(
@@ -808,6 +987,7 @@ def render_play_view_html(
     alms_config: dict,
 ) -> str:
     seated = seated_player_ids(payload)
+    candidates = payload.get("turn_candidates") or []
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
     piety_variant = piety_variant_for(seated)
 
@@ -840,12 +1020,14 @@ def render_play_view_html(
                 scenario_duty,
                 duty_board_state_for(payload, scenario_duty),
                 merchant_on=merchant_duty_for(payload, scenario_duty),
+                interactive=bool(candidates),
+                turn_controls=bool(candidates),
+                turn_counter_values=_turn_counter_values(candidates) if candidates else None,
             ),
             hexagon,
         ),
         scale.crop["action"],
     )
-    candidates = payload.get("turn_candidates") or []
     # A key on every building the track carries, drawn hidden, because which of them a turn will
     # come to ask about is not known until that turn is part-built. Only the offered ones are ever
     # revealed, and `building_choice_styles` is what reveals them.

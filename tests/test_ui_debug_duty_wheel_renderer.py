@@ -1032,11 +1032,17 @@ def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
     for origin, target, origin_index, target_index in indexed:
         assert BOARD_POSITIONS[int(origin_index)] == origin
         assert BOARD_POSITIONS[int(target_index)] == target
+    tagged = re.findall(r'data-arrow="(\w+->\w+)" data-from-position="(\w+)" data-to-position="(\w+)"', svg)
+    assert tagged, "no arrow carried the scalar edge tag"
+    for edge, origin, target in tagged:
+        assert edge == f"{origin}->{target}"
     # And the ring arrows still say what they say by where they were turned to.
     assert [ring_arrow_ends(layout(), index) for index in range(RING_ARROW_COUNT)] == [
         (origin, target)
         for origin, target in re.findall(
-            r'data-ring-arrow="\d" data-from-position="(\w+)" data-to-position="(\w+)"', svg
+            r'data-ring-arrow="\d+" data-arrow="[^"]+"'
+            r' data-from-position="(\w+)" data-to-position="(\w+)"',
+            svg,
         )
     ]
 
