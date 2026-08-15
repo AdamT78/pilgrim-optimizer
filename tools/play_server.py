@@ -374,11 +374,14 @@ def decision_steps(action: Any) -> list[dict]:
     it, then whatever that resolution goes on to ask. A setup sow stops after the route because
     that is all it has.
 
-    Each step says what KIND of thing it is, because they are not answered in the same place: a
-    position is a space on the board, a resolution is beside the board, a stock is on the asking
-    seat's own board, a seat is a whole board, a building is a hex on the round track, and a
-    combination is a set of amounts that only go together one way. The page routes on the kind and
-    never on what any particular step means.
+    Each step says what KIND of thing it is, because they are not answered in the same place -- and
+    one pair now share a place and still have to be told apart on it. `origin` and `duty` are both
+    answered by pointing at a wheel space, and are distinct kinds so the page can mark "where to
+    lift from" differently from "which duty to take" without consulting field names or writing a
+    second copy of what either one means. The others are still separated by where they are answered:
+    a resolution is beside the board, a stock is on the asking seat's own board, a seat is a whole
+    board, a building is a hex on the round track, and a combination is a set of amounts that only
+    go together one way.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
@@ -388,14 +391,13 @@ def decision_steps(action: Any) -> list[dict]:
     # of the action.
     if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
         return _presented_steps(action)
-    # Three positions and three questions. They are the same kind because they are answered the
-    # same way -- by pointing at a space -- and they say different things because they are asking
-    # about different things. The kind is for the page; the words are for the player.
+    # The route still walks spaces by index. What changed is the kind names for the two space
+    # questions around it: where to lift from (`origin`) and which duty to take (`duty`).
     route = tuple(action.route)
     counter = _counter_start(action)
     steps = [
         {
-            "kind": "position",
+            "kind": "origin",
             "value": action.origin,
             "prompt": ORIGIN_PROMPT,
             # What the counter reads once the origin is taken and the hand is lifted.
@@ -415,7 +417,7 @@ def decision_steps(action: Any) -> list[dict]:
     ]
     if isinstance(action, SetupSowAction):
         return steps
-    steps.append({"kind": "position", "value": action.selected_duty, "prompt": DUTY_PROMPT})
+    steps.append({"kind": "duty", "value": action.selected_duty, "prompt": DUTY_PROMPT})
     steps.append(
         {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
     )
