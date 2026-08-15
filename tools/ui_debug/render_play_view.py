@@ -720,7 +720,15 @@ _TURN_SCRIPT = """<script>
         });
       });
       if (!live.length) { break; }
-      var step = live[0].steps[prefix.length];
+      var stepIndex = prefix.length;
+      var step = null;
+      live.forEach(function (candidate) {
+        var offered = candidate.steps[stepIndex];
+        if (step || !offered) { return; }
+        if (offered.value === answer) {
+          step = offered;
+        }
+      });
       prefix.push(answer);
       if (!step) { continue; }
       if (step.kind === 'position' && prefix.length === 1) {
@@ -738,7 +746,7 @@ _TURN_SCRIPT = """<script>
       }
       if (step.kind !== 'edge') { continue; }
       resettable = true;
-      var ends = String(step.value).split('->');
+      var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
       if (destination && activePlayer) {
         if (!placeOneCubeAt(destination, activePlayer)) {
