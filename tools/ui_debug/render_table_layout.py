@@ -199,8 +199,8 @@ def board_measurements(
     """The content box, hexagon box and cube size of every board, in each board's own units.
 
     The piety variant is asked for because the two-player track is a different board rather than a
-    narrower one: it has a single row of discs and so is shorter, and measuring the wrong one crops
-    the panel to a box the drawing does not fill.
+    crop of the four-player one: its disc cluster differs, and measurement must follow whichever
+    variant is drawn.
     """
     alms_board = alms_layout["board"]
     piety_variant = variant_by_id(piety_layout, piety_variant_id)

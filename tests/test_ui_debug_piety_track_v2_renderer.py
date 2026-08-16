@@ -59,6 +59,7 @@ from tools.ui_debug.render_piety_track_v2 import (
     position_rule_x,
     render_piety_track_v2_svg,
     render_piety_tracks_v2_html,
+    seated_players,
     seats_that_can_hold_the_marker,
     track_geometry,
     variant_by_id,
@@ -152,7 +153,7 @@ def test_layout_file_exists_and_is_json() -> None:
 def test_the_layout_describes_both_player_count_variants() -> None:
     assert [variant["id"] for variant in layout()["variants"]] == list(VARIANT_IDS)
     assert variant_by_id(layout(), "3_4_player")["disc_rows"] == 2
-    assert variant_by_id(layout(), "2_player")["disc_rows"] == 1
+    assert variant_by_id(layout(), "2_player")["disc_rows"] == 2
     with pytest.raises(KeyError):
         variant_by_id(layout(), "5_player")
 
@@ -202,8 +203,9 @@ def test_the_two_player_variant_seats_two_discs_on_position_zero() -> None:
     discs = re.findall(r'<circle[^>]*data-player-disc="true"[^>]*/>', content)
     assert len(discs) == 2
     assert all('data-piety-position="0"' in disc for disc in discs)
-    # One row, so both discs sit at the same height.
-    assert len({re.search(r'cy="([\d.]+)"', disc).group(1) for disc in discs}) == 1
+    # Two rows, one column: the pair stacks vertically and shares a centre x.
+    assert len({re.search(r'cx="([\d.]+)"', disc).group(1) for disc in discs}) == 1
+    assert len({re.search(r'cy="([\d.]+)"', disc).group(1) for disc in discs}) == 2
 
 
 def test_discs_start_on_the_position_the_layout_starts_them_on() -> None:
@@ -214,6 +216,42 @@ def test_discs_start_on_the_position_the_layout_starts_them_on() -> None:
         _, disc_y = position_center(layout(), variant_id, 0)
         geometry = track_geometry(layout(), variant_by_id(layout(), variant_id)["disc_rows"])
         assert disc_y == geometry["discs_cy"]
+
+
+def test_explicit_piety_positions_place_discs_on_the_named_steps() -> None:
+    expected_positions = {"player_one": 2, "player_two": 7, "player_three": 11}
+    panel = render_piety_track_v2_svg(
+        layout(),
+        config(),
+        "3_4_player",
+        piety_positions_by_player=expected_positions,
+    )
+    discs = re.findall(r'<circle[^>]*data-player-disc="true"[^>]*/>', panel)
+    by_player = {re.search(r'data-player="(\w+)"', disc).group(1): disc for disc in discs}
+    offsets = {player["id"]: player for player in seated_players(layout(), "3_4_player")}
+
+    assert set(by_player) == set(expected_positions)
+    for player_id, position in expected_positions.items():
+        disc = by_player[player_id]
+        assert f'data-piety-position="{position}"' in disc
+        x = float(re.search(r'cx="([\d.]+)"', disc).group(1))
+        y = float(re.search(r'cy="([\d.]+)"', disc).group(1))
+        expected = offsets[player_id]
+        assert x == pytest.approx(position_center_x(layout(), position) + expected["cx_offset"], abs=0.05)
+        assert y == pytest.approx(expected["cy"], abs=0.05)
+
+
+@pytest.mark.parametrize("position", [-1, 13])
+def test_renderer_refuses_out_of_range_piety_positions(position: int) -> None:
+    with pytest.raises(
+        ValueError, match=rf"player_one piety position {position} is outside the drawn range 0..12"
+    ):
+        render_piety_track_v2_svg(
+            layout(),
+            config(),
+            "2_player",
+            piety_positions_by_player={"player_one": position, "player_two": 0},
+        )
 
 
 def test_vp_values_come_from_the_piety_config_not_the_layout() -> None:
@@ -402,23 +440,20 @@ def test_the_stars_stand_level_with_the_second_row_of_the_alms_tables_key() -> N
 
     assert track_geometry(layout(), 2)["star_cy"] == pytest.approx(second_row_center_y)
 
-    # It is bought in the gap over the stars, so the strip is still a stack: a disc row fewer
-    # brings them up with it rather than leaving a hole where the row was.
+    # It is bought in the gap over the stars, so the strip is still a stack: asking for a row
+    # fewer brings the stars up with it rather than leaving a hole where the row was.
     short = track_geometry(layout(), 1)
     disc = layout()["track"]["disc"]
     assert second_row_center_y - short["star_cy"] == pytest.approx(2 * disc["radius"] + disc["gap"])
 
 
-def test_the_two_player_panel_is_one_disc_row_shorter() -> None:
-    """Dropping a row shortens the panel by exactly that row and nothing else."""
-    disc = layout()["track"]["disc"]
-    row_step = 2 * disc["radius"] + disc["gap"]
-
+def test_the_two_player_panel_keeps_the_three_four_player_height() -> None:
+    """With two stacked rows at 2P, both variants now stand at the same panel height."""
     tall = track_geometry(layout(), 2)
-    short = track_geometry(layout(), 1)
+    two_player = track_geometry(layout(), variant_by_id(layout(), "2_player")["disc_rows"])
 
-    assert tall["panel_height"] - short["panel_height"] == pytest.approx(row_step)
-    assert tall["panel_width"] == short["panel_width"]
+    assert two_player["panel_height"] == pytest.approx(tall["panel_height"])
+    assert two_player["panel_width"] == pytest.approx(tall["panel_width"])
 
 
 def test_the_page_stacks_every_variant() -> None:
@@ -463,7 +498,7 @@ def test_generator_creates_a_missing_output_directory(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("variant_id", "baseline"),
-    [("3_4_player", BASELINE_SVG), ("2_player", BASELINE_2P_SVG)],
+    [("3_4_player", BASELINE_SVG)],
 )
 def test_the_track_the_baseline_drew_is_still_the_track_here(
     variant_id: str, baseline: Path
@@ -503,6 +538,19 @@ def test_the_track_the_baseline_drew_is_still_the_track_here(
     for disc in made_discs:
         assert 'r="9"' in disc
         assert 'stroke-width="1.2"' in disc
+
+
+def test_the_two_player_track_intentionally_differs_from_the_old_baseline() -> None:
+    """The 2P discs now stack on one step, so this variant is no longer baseline-identical."""
+    drawn = baseline_svg(BASELINE_2P_SVG)
+    generated = strip_data_hooks(svg("2_player"))
+
+    assert generated != drawn
+    discs = re.findall(r'<circle[^>]*data-player-disc="true"[^>]*/>', svg("2_player"))
+    xs = {re.search(r'cx="([\d.]+)"', disc).group(1) for disc in discs}
+    ys = {re.search(r'cy="([\d.]+)"', disc).group(1) for disc in discs}
+    assert len(xs) == 1
+    assert len(ys) == 2
 
 
 def test_the_polish_is_what_moved_the_board_away_from_the_baseline() -> None:

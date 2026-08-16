@@ -113,6 +113,22 @@ def resources_for(payload: dict, player_id: str) -> dict[str, int]:
     return {resource: int(record["resources"][resource]) for resource in RESOURCE_IDS}
 
 
+def piety_by_player(payload: dict) -> dict[str, int]:
+    """Each occupied seat's piety, keyed by player id and passed through unchanged.
+
+    This is the same seam as every other per-seat value on this page: read from the state record,
+    in seating order, and hand over exactly what is there. Position 0..12 has geometry on the
+    board; values beyond that are still returned as-is and are for the renderer to reject loudly.
+    """
+    values: dict[str, int] = {}
+    for player_id in seated_player_ids(payload):
+        record = player_record(payload, player_id)
+        if record is None:
+            continue
+        values[player_id] = int(record["piety"])
+    return values
+
+
 def duty_by_position_name(payload: dict) -> dict[str, str]:
     """Board position name -> the duty lying there in this scenario."""
     return {tile["position_name"]: tile["duty"] for tile in payload["duty_tiles"]}

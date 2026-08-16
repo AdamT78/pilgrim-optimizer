@@ -7,9 +7,9 @@ put either, because its boxes butt against the panel edge. So the strip becomes 
 *contains* the boxes, gaining side padding, a title band, and a little more room at the bottom.
 That also puts the board's name in the artwork rather than leaving it to the page heading.
 
-The page shows the panel twice: once for 3-4 players (two disc rows on the starting space) and
-once for 2 players (one row). Both are the same panel, so the variants differ only in disc rows
-and the height that follows from them.
+The page shows the panel twice: once for 3-4 players (two rows of two discs), and once for
+2 players (the same two rows, with one disc above the other). Both are the same panel; the
+variants differ in where each seated player's disc sits within a position.
 
 This is a debug/visual tool only. It reads `piety_track_v2_layout.json` for geometry and
 `configs/piety.json` for the VP values printed on the stars. It is not connected to `GameState`
@@ -193,9 +193,9 @@ def track_geometry(layout: dict, disc_rows: int) -> dict:
     The two gaps used to be one number. They are separate because the second one is doing a job
     the first is not: the composed game table stands this panel's top level with the Alms Table's,
     and `discs_to_stars` is what lands this row of stars on the row the `11` star sits in there,
-    so a score reads across the table at one height. That holds for the variant the table stands
-    on. The 2 player one is a disc row shorter and its stars come up with the rest of the strip,
-    which is the same rule applied, not an exception to it.
+    so a score reads across the table at one height. The row count controls both where the discs
+    stand and how tall the panel is; variants can therefore change the cluster without touching any
+    other vertical numbers.
 
     Every y here is already in panel coordinates. There is no separate title band to add on: what
     used to be one is now the drop itself, which is the thing worth naming.
@@ -270,6 +270,44 @@ def seated_players(layout: dict, variant_id: str) -> list[dict]:
         }
         for seat in variant["seats"]
     ]
+
+
+def _coerce_piety_position(value: object, player_id: str, position_count: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{player_id} piety position must be an integer, got {value!r}")
+    if not 0 <= value < position_count:
+        raise ValueError(
+            f"{player_id} piety position {value} is outside the drawn range 0..{position_count - 1}"
+        )
+    return value
+
+
+def disc_positions_by_player(
+    layout: dict, variant_id: str, piety_positions_by_player: dict[str, int] | None
+) -> dict[str, int]:
+    """Where each rendered disc stands on the track.
+
+    With no explicit positions this is the layout sample: every seated disc stands on the starting
+    position. When positions are provided, only those players are drawn, and each value must be an
+    in-range integer.
+    """
+    seated = seated_players(layout, variant_id)
+    track = layout["track"]
+    if piety_positions_by_player is None:
+        start = int(track["disc_position"])
+        return {player["id"]: start for player in seated}
+
+    seated_ids = {player["id"] for player in seated}
+    unknown = sorted(set(piety_positions_by_player) - seated_ids)
+    if unknown:
+        listed = ", ".join(unknown)
+        raise KeyError(f"piety positions include players this variant does not seat: {listed}")
+
+    position_count = int(track["position_count"])
+    return {
+        player_id: _coerce_piety_position(position, player_id, position_count)
+        for player_id, position in piety_positions_by_player.items()
+    }
 
 
 def render_position_label(layout: dict, geometry: dict, index: int) -> str:
@@ -520,6 +558,7 @@ def render_piety_track_v2_svg(
     variant_id: str,
     first_player_seat: int | None = None,
     interactive: bool = False,
+    piety_positions_by_player: dict[str, int] | None = None,
 ) -> str:
     """One ornamented panel: the grey rounded rect, the ornament, then the track inside it.
 
@@ -531,6 +570,11 @@ def render_piety_track_v2_svg(
     named, so a page can move the marker without building any SVG of its own. Left off, the panel
     is the fixed picture every standalone page here draws. That is the same bargain the Alms Table
     makes for its own discs and winner cubes.
+
+    `piety_positions_by_player` is the state seam for disc placement: player id -> piety position.
+    Left out, the layout sample is drawn (everyone on the starting position). Given, each value
+    must be an integer in the drawn range the layout defines; outside it, rendering raises loudly
+    rather than pretending a value still on the board.
 
     No seat with `interactive` on is a legitimate state for a page mid-build: every seal is struck
     and every one is hidden. It is not a game state -- the marker always sits with someone -- but
@@ -564,10 +608,14 @@ def render_piety_track_v2_svg(
     ]
 
     seated = seated_players(layout, variant_id)
+    positions = disc_positions_by_player(layout, variant_id, piety_positions_by_player)
     for index, vp in enumerate(vp_values):
         parts.append(render_position_label(layout, geometry, index))
-        if index == track["disc_position"]:
-            parts += [render_player_disc(layout, index, player) for player in seated]
+        parts += [
+            render_player_disc(layout, index, player)
+            for player in seated
+            if positions.get(player["id"]) == index
+        ]
         parts.append(render_vp_star(layout, geometry, index, vp))
 
     # Struck last, because wax goes on top of what it is pressed onto.
