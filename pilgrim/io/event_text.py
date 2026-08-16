@@ -761,6 +761,41 @@ def _title_words(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
+def _player_list(raw: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _join_players(players: tuple[str, ...]) -> str:
+    if not players:
+        return "unknown"
+    if len(players) == 1:
+        return players[0]
+    if len(players) == 2:
+        return f"{players[0]} and {players[1]}"
+    return ", ".join(players[:-1]) + f", and {players[-1]}"
+
+
+def _join_possessive_scores(players: tuple[str, ...], score: int) -> str:
+    if not players:
+        return f"others' {score}"
+    if len(players) == 1:
+        return f"{players[0]}'s {score}"
+    possessive_names = [f"{player}'s" for player in players]
+    if len(possessive_names) == 2:
+        return f"{possessive_names[0]} and {possessive_names[1]} {score}"
+    return ", ".join(possessive_names[:-1]) + f", and {possessive_names[-1]} {score}"
+
+
+def _confession_bonus_suffix(details: dict) -> str:
+    bonus_players = _player_list(str(details.get("confession_bonus_players", "")).strip())
+    if not bonus_players:
+        return ""
+    return (
+        " Confession Box bonus (+2) applied to "
+        f"{_join_players(bonus_players)}."
+    )
+
+
 def _duty_label_for_players(details: dict, config: GameConfig) -> str:
     duty_category = str(details.get("duty_category", "")).strip()
     if duty_category:
@@ -790,6 +825,7 @@ _PLAYER_TURN_STEP_EVENT_TYPES: set[EventType] = {
 _PLAYER_ROUND_END_EVENT_TYPES: set[EventType] = {
     EventType.SHIP_ADVANCE,
     EventType.MERCHANT_ADVANCE,
+    EventType.START_PLAYER_TIE_BREAK,
     EventType.START_PLAYER_MARKER,
     EventType.ROUND_END,
 }
@@ -804,7 +840,6 @@ _PLAYER_DROPPED_EVENT_TYPES: set[EventType] = {
     EventType.DUTY_DEFERRED,
     EventType.INVARIANT_CHECK,
     EventType.TRADE_ROUTE_INCOME_SKIPPED,
-    EventType.START_PLAYER_TIE_BREAK,
     EventType.TURN_ADVANCE,
     EventType.ROUND_ADVANCE,
     EventType.SEASON_ADVANCE,
@@ -995,9 +1030,31 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         to_duty = _title_words(str(details.get("to_duty", "unknown")))
         return f"Round end: Merchant advanced from {from_duty} to {to_duty}."
 
-    if event_type is EventType.START_PLAYER_MARKER:
+    if event_type is EventType.START_PLAYER_TIE_BREAK:
+        tied_players = _player_list(str(details.get("tied_players", "")).strip())
         deciding_player = str(details.get("deciding_player", "unknown"))
-        return f"Round end: {deciding_player} took the First Player marker for this round."
+        current_start_player = str(details.get("current_start_player", "unknown"))
+        highest = int(details.get("highest_effective_piety", 0))
+        line = (
+            "Round end: "
+            f"{_join_players(tied_players)} tied on {highest} piety; "
+            f"{deciding_player} takes the First Player marker, being the first of them clockwise "
+            f"from {current_start_player}."
+        )
+        return line + _confession_bonus_suffix(details)
+
+    if event_type is EventType.START_PLAYER_MARKER:
+        if bool(details.get("tie_break_applied", False)):
+            return None
+        deciding_player = str(details.get("deciding_player", "unknown"))
+        highest = int(details.get("highest_effective_piety", 0))
+        runner_up = int(details.get("runner_up_effective_piety", 0))
+        runner_up_players = _player_list(str(details.get("runner_up_players", "")).strip())
+        line = (
+            f"Round end: {deciding_player} took the First Player marker "
+            f"with {highest} piety to {_join_possessive_scores(runner_up_players, runner_up)}."
+        )
+        return line + _confession_bonus_suffix(details)
 
     if event_type is EventType.START_PLAYER_SELECTION:
         deciding_player = str(details.get("deciding_player", "unknown"))

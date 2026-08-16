@@ -363,22 +363,40 @@ def award_first_player_marker(
         context="First Player marker tie-break requires the round's chosen start player.",
     )
     bonus_players = set(state.start_player_confession_used)
+    confession_bonus_players = tuple(player for player in players if player in bonus_players)
     events: list[GameEvent] = []
 
     def effective_piety(player_id: PlayerId) -> int:
         bonus = _CONFESSION_BOX_TEMPORARY_PIETY_BONUS if player_id in bonus_players else 0
         return state.player_state(player_id).piety + bonus
 
-    highest_effective_piety = max(effective_piety(player) for player in players)
-    tied = tuple(player for player in players if effective_piety(player) == highest_effective_piety)
-    if len(tied) == 1:
+    effective_piety_by_player = {player: effective_piety(player) for player in players}
+    highest_effective_piety = max(effective_piety_by_player.values())
+    tied = tuple(
+        player for player in players if effective_piety_by_player[player] == highest_effective_piety
+    )
+    tie_break_applied = len(tied) > 1
+    if not tie_break_applied:
         deciding_player = tied[0]
+        runner_up_effective_piety = max(
+            effective_piety_by_player[player]
+            for player in players
+            if player != deciding_player
+        )
+        runner_up_players = tuple(
+            player
+            for player in players
+            if player != deciding_player
+            and effective_piety_by_player[player] == runner_up_effective_piety
+        )
     else:
         deciding_player = _clockwise_tie_break(
             tied_players=tied,
             current_start=current_start,
             player_count=state.player_count,
         )
+        runner_up_effective_piety = highest_effective_piety
+        runner_up_players = tuple(player for player in tied if player != deciding_player)
         events.append(
             GameEvent(
                 event_type=EventType.START_PLAYER_TIE_BREAK,
@@ -389,6 +407,9 @@ def award_first_player_marker(
                     current_start_player=current_start.name.lower(),
                     deciding_player=deciding_player.name.lower(),
                     highest_effective_piety=highest_effective_piety,
+                    confession_bonus_players=",".join(
+                        player.name.lower() for player in confession_bonus_players
+                    ),
                 ),
             )
         )
@@ -421,6 +442,12 @@ def award_first_player_marker(
                 highest_effective_piety=highest_effective_piety,
                 deciding_player=deciding_player.name.lower(),
                 current_start_player=current_start.name.lower(),
+                tie_break_applied=tie_break_applied,
+                runner_up_effective_piety=runner_up_effective_piety,
+                runner_up_players=",".join(player.name.lower() for player in runner_up_players),
+                confession_bonus_players=",".join(
+                    player.name.lower() for player in confession_bonus_players
+                ),
             ),
         )
     )
