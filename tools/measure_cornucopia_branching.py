@@ -49,9 +49,9 @@ def main() -> int:
         hires = [a for a in actions if getattr(a, "hired_building_id", None) is not None]
         paid_in = sorted(
             {
-                a.hire_payment_resource
+                resource
                 for a in actions
-                if getattr(a, "hire_payment_resource", None) is not None
+                for _building, resource in a.hire_payments
             }
         )
         print(

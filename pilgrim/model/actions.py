@@ -88,16 +88,17 @@ class FullTurnAction:
     workforce_move_building_source: str | None = None
     hired_building_id: str | None = None
     hired_building_source: str | None = None
-    # Only set when the Merchant stands on the cornucopia, where the hire cost is a wildcard and
-    # the payer picks which stock it comes out of. Every other hire has one possible resource, so
-    # naming it on the action would say nothing the action does not already imply.
-    hire_payment_resource: str | None = None
+    # One payment per hired building: (building_id, resource), sorted by building id.
+    #
+    # The key is the building id because a building is hired at most once in one turn; see
+    # transition validation, which rejects an action that names the same hired building twice.
+    hire_payments: tuple[tuple[str, str], ...] = ()
     # What a TITHE gains. Set on EVERY tithe, including the tiles carrying a plain counter where
     # only one resource was ever possible, because the point is that apply pays what the action
     # says rather than looking the tile up again. A wildcard read twice is read differently the
     # second time, which is exactly how the Merchant hire choice was lost once already.
     #
-    # Not `hire_payment_resource`. That is a payment for a building and this is a gain from a
+    # Not `hire_payments`. That is a payment for a building and this is a gain from a
     # tile; they are two decisions that happen to have the same three answers.
     tithe_resource: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
@@ -349,10 +350,11 @@ def action_id(action: GameAction) -> str:
             f":hire_building:{action.hired_building_id or 'none'}"
             f":from:{action.hired_building_source or 'unknown'}"
         )
-    # Appended only when a choice was actually made, so that the id of every hire paid the one way
-    # it could be paid stays exactly what it was before the cornucopia had a say.
-    if action.hire_payment_resource is not None:
-        hire_suffix += f":paid_in:{action.hire_payment_resource}"
+    if action.hire_payments:
+        payments = ",".join(
+            f"{building_id}={resource}" for building_id, resource in action.hire_payments
+        )
+        hire_suffix += f":hire_payments:{payments}"
     # Every tithe now names what it takes, so every tithe id changes. That is not churn to be
     # minimised: two tithes on the same tile that gain different resources are different moves,
     # and an id that could not tell them apart would be the one thing wrong with it.

@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 
@@ -231,12 +232,20 @@ def test_apply_rejects_conversion_that_cannot_keep_wheat_after_hire() -> None:
     scenario = load_scenario("scenarios/brewery_insufficient_after_hire_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     base_action = _first_action(actions, lambda candidate: candidate.resolution is TurnResolutionType.TITHE)
+    source = building_ability_source(
+        scenario.state,
+        scenario.config,
+        acting_player=scenario.state.active_player,
+        building_key="brewery",
+    )
+    assert source.hire_resource == "wheat"
     invalid_action = replace(
         base_action,
         building_conversion_id="brewery",
         building_conversion_source="market",
         building_conversion_direction="sell_wheat_for_silver",
         building_conversion_amount=1,
+        hire_payments=(("brewery", "wheat"),),
     )
 
     with pytest.raises(

@@ -45,7 +45,7 @@ SEED_SEVEN_FIELDS: frozenset[str] = frozenset(
         "building_conversion_amount",
         "hired_building_id",
         "hired_building_source",
-        "hire_payment_resource",
+        "hire_payments",
     }
 )
 
