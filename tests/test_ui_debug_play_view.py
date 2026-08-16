@@ -20,6 +20,7 @@ from tools.ui_debug.play_view_adapter import (
     dummy_acolytes_by_position,
     duty_by_position_name,
     first_player_seat,
+    piety_by_player,
     player_record,
     resources_for,
     seated_player_ids,
@@ -30,6 +31,11 @@ from tools.ui_debug.play_view_adapter import (
 from tools.ui_debug.render_buildings import load_building_catalog
 from tools.ui_debug.render_donated_buildings import load_donated_building_tiles
 from tools.ui_debug.render_duty_wheel import load_duty_wheel_layout
+from tools.ui_debug.render_piety_track_v2 import (
+    load_piety_track_v2_layout,
+    position_center_x,
+    seated_players,
+)
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites
 from tools.ui_debug.render_play_view import (
     _board_state_for,
@@ -263,8 +269,8 @@ def test_three_players_leave_the_white_chair_empty() -> None:
     assert seated_player_ids(payload) == ["player_one", "player_two", "player_three"]
 
 
-def test_the_short_table_gets_the_board_that_is_actually_shorter() -> None:
-    """The two-player piety track is a different board, not a narrower one: one row of discs."""
+def test_the_short_table_gets_the_two_player_piety_variant() -> None:
+    """The two-player piety track is a different board, with its own disc layout."""
     assert piety_variant_for(["player_one", "player_two"]) == "2_player"
     assert piety_variant_for(["player_one", "player_two", "player_three"]) == "3_4_player"
 
@@ -524,6 +530,112 @@ def test_each_seat_stands_on_the_alms_row_the_state_puts_it_on() -> None:
     )
     assert rows["player_one"] == "5"
     assert rows["player_two"] == "2"
+
+
+def _piety_disc_states(page: str) -> dict[str, dict[str, float | int]]:
+    discs: dict[str, dict[str, float | int]] = {}
+    for cx, cy, player_id, position in re.findall(
+        r'<circle cx="([\d.]+)" cy="([\d.]+)"[^>]*data-player-disc="true"'
+        r'[^>]*data-player="(\w+)"[^>]*data-piety-position="(-?\d+)"',
+        page,
+    ):
+        discs[player_id] = {"cx": float(cx), "cy": float(cy), "position": int(position)}
+    return discs
+
+
+@pytest.mark.parametrize(
+    ("count", "before", "after", "moved"),
+    [
+        (2, (0, 0), (2, 0), "player_one"),
+        (3, (0, 1, 2), (0, 4, 2), "player_two"),
+        (4, (0, 1, 2, 3), (0, 1, 5, 3), "player_three"),
+    ],
+)
+def test_changing_a_seats_piety_moves_its_disc_and_not_the_others(
+    count: int, before: tuple[int, ...], after: tuple[int, ...], moved: str
+) -> None:
+    layout = load_piety_track_v2_layout()
+    variant = piety_variant_for(["player_one", "player_two", "player_three", "player_four"][:count])
+    offsets = {player["id"]: player["cx_offset"] for player in seated_players(layout, variant)}
+    zeros = [5] + [0] * 8
+    before_page = render_play_view_from_payload(
+        _payload([_player(zeros, piety=before[index]) for index in range(count)])
+    )
+    after_page = render_play_view_from_payload(
+        _payload([_player(zeros, piety=after[index]) for index in range(count)])
+    )
+
+    before_discs = _piety_disc_states(before_page)
+    after_discs = _piety_disc_states(after_page)
+    assert len(before_discs) == count
+    assert len(after_discs) == count
+
+    assert before_discs[moved]["position"] != after_discs[moved]["position"]
+    assert before_discs[moved]["cx"] != after_discs[moved]["cx"]
+    assert before_discs[moved]["cx"] == pytest.approx(
+        position_center_x(layout, before_discs[moved]["position"]) + offsets[moved], abs=0.05
+    )
+    assert after_discs[moved]["cx"] == pytest.approx(
+        position_center_x(layout, after_discs[moved]["position"]) + offsets[moved], abs=0.05
+    )
+
+    for player_id in before_discs:
+        if player_id == moved:
+            continue
+        assert before_discs[player_id] == after_discs[player_id]
+
+
+def test_two_player_discs_stack_vertically_on_their_steps() -> None:
+    layout = load_piety_track_v2_layout()
+    page = render_play_view_from_payload(
+        _payload([_player([5] + [0] * 8, piety=2), _player([5] + [0] * 8, piety=2)])
+    )
+    discs = _piety_disc_states(page)
+    one, two = discs["player_one"], discs["player_two"]
+
+    assert one["position"] == two["position"] == 2
+    assert one["cx"] == pytest.approx(two["cx"], abs=0.05)
+    assert one["cy"] != pytest.approx(two["cy"], abs=0.05)
+    assert one["cx"] == pytest.approx(position_center_x(layout, 2), abs=0.05)
+
+
+def test_piety_disc_x_matches_its_steps_number_away_from_starting_position() -> None:
+    layout = load_piety_track_v2_layout()
+    page = render_play_view_from_payload(
+        _payload(
+            [
+                _player([5] + [0] * 8, piety=8),
+                _player([5] + [0] * 8, piety=1),
+            ]
+        )
+    )
+    disc = _piety_disc_states(page)["player_one"]
+
+    assert disc["position"] == 8
+    assert disc["cx"] == pytest.approx(position_center_x(layout, 8), abs=0.05)
+
+
+def test_the_adapter_passes_each_seats_piety_without_rediscovering_it() -> None:
+    payload = _payload(
+        [
+            _player([5] + [0] * 8, piety=4),
+            _player([5] + [0] * 8, piety=2),
+            _player([5] + [0] * 8, piety=9),
+        ]
+    )
+
+    assert piety_by_player(payload) == {"player_one": 4, "player_two": 2, "player_three": 9}
+
+
+@pytest.mark.parametrize("position", [13, -1])
+def test_out_of_range_piety_fails_loudly(position: int) -> None:
+    payload = _payload(
+        [_player([5] + [0] * 8, piety=position), _player([5] + [0] * 8, piety=0)]
+    )
+    with pytest.raises(
+        ValueError, match=rf"player_one piety position {position} is outside the drawn range 0..12"
+    ):
+        render_play_view_from_payload(payload)
 
 
 def test_the_neutral_acolytes_are_the_ones_the_engine_dealt() -> None:

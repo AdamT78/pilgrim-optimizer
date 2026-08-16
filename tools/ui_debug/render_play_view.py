@@ -19,8 +19,8 @@ obviously is not, so the split is written down rather than left to a screenshot:
                             six role circles -- the buildings standing in each seat's slots and
                             which of them were donated, how far around the ring the ship has come,
                             and every line of the log
-  still the layout's sample the piety discs, and which map hex round 1 starts on -- which is also
-                            what pins the ring the ship is counted around
+  still the layout's sample which map hex round 1 starts on -- which is also what pins the ring
+                            the ship is counted around
   in the state, with        committed acolytes, which stand on roads, shrines, market ports and
   nowhere to draw it        pilgrimage sites -- none of which this page draws at all; cardinal
                             favour tiles, which have no area on the player board; victory points,
@@ -62,6 +62,7 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     duty_by_position_name,
     first_player_seat,
     merchant_position_name,
+    piety_by_player,
     played_this_round,
     player_record,
     resources_for,
@@ -1240,6 +1241,7 @@ def render_play_view_html(
             piety_config,
             piety_variant,
             first_player_seat(payload),
+            piety_positions_by_player=piety_by_player(payload),
         ),
         scale.crop["piety"],
     )

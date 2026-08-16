@@ -123,17 +123,17 @@
     {
       "id": "2_player",
       "label": "2 player track",
-      "disc_rows": 1,
+      "disc_rows": 2,
       "seats": [
         {
           "player": "player_one",
-          "row": 0,
-          "column": -1
+          "row": -1,
+          "column": 0
         },
         {
           "player": "player_two",
-          "row": 0,
-          "column": 1
+          "row": 1,
+          "column": 0
         }
       ]
     }
