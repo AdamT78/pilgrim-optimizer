@@ -607,19 +607,303 @@ _TURN_SCRIPT = """<script>
   var resolutionSplit = null;
   var baseline = [];
   var activePlayer = null;
+  var activeSeat = null;
+  var arrangementBaseline = [];
+  var arrangementStartCounts = null;
+  var arrangementHeldFrom = null;
+  var arrangementEnvelope = null;
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
       activePlayer = seat.getAttribute('data-player');
+      activeSeat = seat;
     }
   });
 
-  function surviving() {
+  function surviving(prefix) {
+    var answers = prefix || chosen;
     return CANDIDATES.filter(function (candidate) {
-      return chosen.every(function (answer, index) {
+      return answers.every(function (answer, index) {
         var step = candidate.steps[index];
         return step !== undefined && step.value === answer;
       });
     });
+  }
+
+  function tokenVisible(token) {
+    return token.getAttribute('opacity') !== '0' && token.getAttribute('visibility') !== 'hidden';
+  }
+
+  function roleIdsOnActiveSeat() {
+    var found = [];
+    if (!activeSeat) { return found; }
+    Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-role-circle]'), function (circle) {
+      var role = circle.getAttribute('data-role-circle');
+      if (role && found.indexOf(role) === -1) {
+        found.push(role);
+      }
+    });
+    return found;
+  }
+
+  function abbeyTokensOnActiveSeat() {
+    if (!activeSeat) { return []; }
+    var tokens = Array.prototype.slice.call(activeSeat.querySelectorAll('[data-token="abbey"]'));
+    tokens.sort(function (left, right) {
+      return Number(left.getAttribute('data-token-index')) - Number(right.getAttribute('data-token-index'));
+    });
+    return tokens;
+  }
+
+  function roleTokensOnActiveSeat(roleId) {
+    if (!activeSeat) { return []; }
+    return Array.prototype.slice.call(
+      activeSeat.querySelectorAll('[data-token="role"][data-role="' + roleId + '"]')
+    );
+  }
+
+  function roleCircleOnActiveSeat(roleId) {
+    if (!activeSeat) { return null; }
+    return activeSeat.querySelector('[data-role-circle="' + roleId + '"]');
+  }
+
+  function roleCount(roleId) {
+    return roleTokensOnActiveSeat(roleId).filter(tokenVisible).length;
+  }
+
+  function abbeyCount() {
+    return abbeyTokensOnActiveSeat().filter(tokenVisible).length;
+  }
+
+  function currentArrangementCounts() {
+    if (!activeSeat) { return null; }
+    var counts = { abbey: abbeyCount() };
+    roleIdsOnActiveSeat().forEach(function (roleId) {
+      counts[roleId] = roleCount(roleId);
+    });
+    return counts;
+  }
+
+  function setRoleCount(roleId, count) {
+    if (!activeSeat) { return; }
+    var capped = Math.max(0, Math.min(2, Number(count) || 0));
+    var single = activeSeat.querySelector(
+      '[data-token="role"][data-role="' + roleId + '"][data-role-slot="single"]'
+    );
+    var pair = activeSeat.querySelectorAll(
+      '[data-token="role"][data-role="' + roleId + '"][data-role-slot="pair"]'
+    );
+    if (single) {
+      single.setAttribute('opacity', capped === 1 ? '1' : '0');
+    }
+    Array.prototype.forEach.call(pair, function (token) {
+      token.setAttribute('opacity', capped === 2 ? '1' : '0');
+    });
+  }
+
+  function setAbbeyCount(count) {
+    var capped = Math.max(0, Math.min(abbeyTokensOnActiveSeat().length, Number(count) || 0));
+    abbeyTokensOnActiveSeat().forEach(function (token, index) {
+      token.setAttribute('opacity', index < capped ? '1' : '0');
+    });
+  }
+
+  function setAllocationCount(slot, count) {
+    if (slot === 'abbey') {
+      setAbbeyCount(count);
+      return;
+    }
+    setRoleCount(slot, count);
+  }
+
+  function parseArrangementValue(value) {
+    if (value === 'none' || value === '') { return {}; }
+    var parsed = {};
+    String(value).split(',').forEach(function (part) {
+      var split = part.split('=');
+      if (split.length !== 2) { return; }
+      var slot = split[0];
+      var delta = Number(split[1]);
+      if (!slot || Number.isNaN(delta)) { return; }
+      parsed[slot] = delta;
+    });
+    return parsed;
+  }
+
+  function encodeArrangementDelta(start, current) {
+    var slots = Object.keys(start || {}).sort();
+    var parts = [];
+    slots.forEach(function (slot) {
+      var delta = (current[slot] || 0) - (start[slot] || 0);
+      if (!delta) { return; }
+      parts.push(slot + '=' + (delta > 0 ? '+' + String(delta) : String(delta)));
+    });
+    return parts.length ? parts.join(',') : 'none';
+  }
+
+  function arrangementEnvelopeFor(values) {
+    if (!arrangementStartCounts) {
+      arrangementStartCounts = currentArrangementCounts();
+    }
+    if (!arrangementStartCounts) {
+      return { low: {}, high: {} };
+    }
+    var vectors = values.map(parseArrangementValue);
+    var low = {};
+    var high = {};
+    Object.keys(arrangementStartCounts).forEach(function (slot) {
+      var minDelta = 0;
+      var maxDelta = 0;
+      vectors.forEach(function (vector) {
+        var delta = Object.prototype.hasOwnProperty.call(vector, slot) ? vector[slot] : 0;
+        minDelta = Math.min(minDelta, delta);
+        maxDelta = Math.max(maxDelta, delta);
+      });
+      low[slot] = arrangementStartCounts[slot] + minDelta;
+      high[slot] = arrangementStartCounts[slot] + maxDelta;
+    });
+    return { low: low, high: high };
+  }
+
+  function arrangementSelection(values) {
+    if (!values.length || !activeSeat) { return null; }
+    if (!arrangementStartCounts) {
+      arrangementStartCounts = currentArrangementCounts();
+    }
+    var current = currentArrangementCounts();
+    if (!arrangementStartCounts || !current) { return null; }
+    var encoded = encodeArrangementDelta(arrangementStartCounts, current);
+    return values.indexOf(encoded) === -1 ? null : encoded;
+  }
+
+  function clearArrangementMarks() {
+    if (!activeSeat) { return; }
+    activeSeat.removeAttribute('data-arrangement-choice');
+    Array.prototype.forEach.call(
+      activeSeat.querySelectorAll(
+        '[data-arrangement-can-lift],[data-arrangement-can-place],[data-arrangement-held]'
+      ),
+      function (node) {
+        node.removeAttribute('data-arrangement-can-lift');
+        node.removeAttribute('data-arrangement-can-place');
+        node.removeAttribute('data-arrangement-held');
+      }
+    );
+  }
+
+  function markArrangementSlot(slot, counts) {
+    if (!activeSeat || !arrangementEnvelope) { return; }
+    var current = counts[slot] || 0;
+    var low = arrangementEnvelope.low[slot];
+    var high = arrangementEnvelope.high[slot];
+    var canLift = current - 1 >= low;
+    var canPlace = current + 1 <= high;
+    var held = arrangementHeldFrom === slot;
+    var waitingToPlace = arrangementHeldFrom !== null;
+    var canLiftNow = !waitingToPlace && canLift;
+    var canPlaceNow = waitingToPlace && canPlace;
+
+    if (slot === 'abbey') {
+      abbeyTokensOnActiveSeat().forEach(function (token) {
+        token.setAttribute('data-arrangement-can-lift', canLiftNow ? 'true' : 'false');
+        token.setAttribute('data-arrangement-can-place', canPlaceNow ? 'true' : 'false');
+        token.setAttribute('data-arrangement-held', held ? 'true' : 'false');
+      });
+      return;
+    }
+
+    roleTokensOnActiveSeat(slot).forEach(function (token) {
+      token.setAttribute('data-arrangement-can-lift', canLiftNow ? 'true' : 'false');
+      token.setAttribute('data-arrangement-can-place', canPlaceNow ? 'true' : 'false');
+      token.setAttribute('data-arrangement-held', held ? 'true' : 'false');
+    });
+    var circle = roleCircleOnActiveSeat(slot);
+    if (!circle) { return; }
+    circle.setAttribute('data-arrangement-can-lift', canLiftNow ? 'true' : 'false');
+    circle.setAttribute('data-arrangement-can-place', canPlaceNow ? 'true' : 'false');
+    circle.setAttribute('data-arrangement-held', held ? 'true' : 'false');
+  }
+
+  function showArrangement(values) {
+    if (!activeSeat) { return; }
+    if (!values.length) {
+      arrangementStartCounts = null;
+      arrangementEnvelope = null;
+      arrangementHeldFrom = null;
+      clearArrangementMarks();
+      return;
+    }
+    activeSeat.setAttribute('data-arrangement-choice', 'true');
+    arrangementEnvelope = arrangementEnvelopeFor(values);
+    var counts = currentArrangementCounts() || {};
+    markArrangementSlot('abbey', counts);
+    roleIdsOnActiveSeat().forEach(function (roleId) {
+      markArrangementSlot(roleId, counts);
+    });
+  }
+
+  function captureArrangementBaseline() {
+    arrangementBaseline = [];
+    if (!activeSeat) { return; }
+    Array.prototype.forEach.call(
+      activeSeat.querySelectorAll('[data-token="abbey"],[data-token="role"]'),
+      function (token) {
+        arrangementBaseline.push({
+          token: token,
+          opacity: token.getAttribute('opacity')
+        });
+      }
+    );
+  }
+
+  function restoreArrangementBaseline() {
+    arrangementBaseline.forEach(function (entry) {
+      if (entry.opacity === null) {
+        entry.token.removeAttribute('opacity');
+      } else {
+        entry.token.setAttribute('opacity', entry.opacity);
+      }
+    });
+    arrangementStartCounts = null;
+    arrangementEnvelope = null;
+    arrangementHeldFrom = null;
+    clearArrangementMarks();
+  }
+
+  function arrangementCanLift(slot) {
+    var counts = currentArrangementCounts() || {};
+    if (!arrangementEnvelope) { return false; }
+    return (counts[slot] || 0) - 1 >= arrangementEnvelope.low[slot];
+  }
+
+  function arrangementCanPlace(slot) {
+    var counts = currentArrangementCounts() || {};
+    if (!arrangementEnvelope) { return false; }
+    return (counts[slot] || 0) + 1 <= arrangementEnvelope.high[slot];
+  }
+
+  function arrangementClick(slot, sourceKind) {
+    if (!activeSeat || !activeSeat.getAttribute('data-arrangement-choice')) { return; }
+    var counts = currentArrangementCounts();
+    if (!counts) { return; }
+    if (arrangementHeldFrom === null) {
+      if (sourceKind !== 'token' || !arrangementCanLift(slot)) { return; }
+      setAllocationCount(slot, (counts[slot] || 0) - 1);
+      arrangementHeldFrom = slot;
+    } else {
+      if (slot === arrangementHeldFrom) {
+        setAllocationCount(slot, (counts[slot] || 0) + 1);
+        arrangementHeldFrom = null;
+      } else if (sourceKind === 'token' && slot !== 'abbey') {
+        return;
+      } else if (arrangementCanPlace(slot)) {
+        setAllocationCount(slot, (counts[slot] || 0) + 1);
+        arrangementHeldFrom = null;
+      } else {
+        return;
+      }
+    }
+    autoAdvance = true;
+    render();
   }
 
   function stepsAt(index, live) {
@@ -851,7 +1135,7 @@ _TURN_SCRIPT = """<script>
     };
   }
 
-  function show(offered, resolutionOptions, settled, confirmable, preview) {
+  function show(offered, resolutionOptions, settled, confirmable, preview, arrangementValues) {
     var origins = offeredByKind(offered, 'origin');
     var duties = offeredByKind(offered, 'duty');
     var edges = offeredByKind(offered, 'edge');
@@ -920,6 +1204,7 @@ _TURN_SCRIPT = """<script>
       mark(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key',
            offering ? boards : []);
     });
+    showArrangement(arrangementValues || []);
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
@@ -943,7 +1228,7 @@ _TURN_SCRIPT = """<script>
   }
 
   function render() {
-    var live = surviving();
+    var live = surviving(chosen);
     /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
        Which steps those are is not written down anywhere; it falls out of the candidates. */
     if (autoAdvance) {
@@ -951,10 +1236,19 @@ _TURN_SCRIPT = """<script>
         var forced = stepsAt(chosen.length, live)[0];
         if (forced.kind === 'resolution') { break; }
         chosen.push(forced.value);
-        live = surviving();
+        live = surviving(chosen);
       }
     }
     var offered = stepsAt(chosen.length, live);
+    var arrangements = offeredByKind(offered, 'arrangement');
+    var arrangementPicked = arrangementSelection(arrangements);
+    var narrowed = live;
+    if (arrangements.length && arrangementPicked !== null) {
+      narrowed = live.filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined && step.kind === 'arrangement' && step.value === arrangementPicked;
+      });
+    }
     var resolutions = offeredByKind(offered, 'resolution');
     if (!resolutions.length) {
       resolutionSplit = null;
@@ -984,11 +1278,19 @@ _TURN_SCRIPT = """<script>
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
        would be committed as, or what is still undecided about
        it -- and the player says so. */
-    if (live.length === 1) {
-      show([], [], CANDIDATES.indexOf(live[0]), live[0].action_id !== null, preview);
+    if (narrowed.length === 1 && (!arrangements.length || arrangementPicked !== null)) {
+      var shownOffered = arrangements.length ? offered : [];
+      show(
+        shownOffered,
+        [],
+        CANDIDATES.indexOf(narrowed[0]),
+        narrowed[0].action_id !== null,
+        preview,
+        arrangements
+      );
       return;
     }
-    show(offered, resolutions, -1, false, preview);
+    show(offered, resolutions, -1, false, preview, arrangements);
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
@@ -1041,12 +1343,39 @@ _TURN_SCRIPT = """<script>
     answers(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key');
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });
+  if (activeSeat) {
+    Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="abbey"]'), function (token) {
+      token.addEventListener('click', function () {
+        arrangementClick('abbey', 'token');
+      });
+    });
+    Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="role"]'), function (token) {
+      token.addEventListener('click', function () {
+        arrangementClick(token.getAttribute('data-role'), 'token');
+      });
+    });
+    Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-role-circle]'), function (circle) {
+      circle.addEventListener('click', function () {
+        arrangementClick(circle.getAttribute('data-role-circle'), 'circle');
+      });
+    });
+  }
 
   var confirmControl = control('confirm');
   if (confirmControl) {
     confirmControl.addEventListener('click', function () {
       if (confirmControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
-      var live = surviving();
+      var live = surviving(chosen);
+      var offered = stepsAt(chosen.length, live);
+      var arrangements = offeredByKind(offered, 'arrangement');
+      if (arrangements.length) {
+        var picked = arrangementSelection(arrangements);
+        if (picked === null) { return; }
+        live = live.filter(function (candidate) {
+          var step = candidate.steps[chosen.length];
+          return step !== undefined && step.kind === 'arrangement' && step.value === picked;
+        });
+      }
       if (live.length !== 1 || !live[0].action_id) { return; }
       submit(live[0].action_id);
     });
@@ -1056,6 +1385,7 @@ _TURN_SCRIPT = """<script>
   if (resetControl) {
     resetControl.addEventListener('click', function () {
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      restoreArrangementBaseline();
       chosen = [];
       answered = [];
       resolutionSplit = null;
@@ -1065,7 +1395,7 @@ _TURN_SCRIPT = """<script>
   }
 
   function chooseResolutionSplit(name) {
-    var live = surviving();
+    var live = surviving(chosen);
     var offered = stepsAt(chosen.length, live);
     var resolutions = offeredByKind(offered, 'resolution');
     if (!resolutions.length) { return; }
@@ -1090,6 +1420,7 @@ _TURN_SCRIPT = """<script>
   });
 
   captureBaseline();
+  captureArrangementBaseline();
   render();
 })();
 </script>"""
@@ -1184,6 +1515,35 @@ def turn_styles(route_color: str) -> str:
      at this" looks like, and it is nothing like the wash that means whose turn it is. */
   [data-seat-choice-key][data-turn-offered="false"] {{
     visibility: hidden; pointer-events: none;
+  }}
+
+  /* Allocation is answered on the acting board itself. The renderer draws tags on every board,
+     but only the acting one is made live while this question is being asked. */
+  [data-component="player-board-v2"] [data-token="abbey"],
+  [data-component="player-board-v2"] [data-token="role"],
+  [data-component="player-board-v2"] [data-role-circle] {{
+    pointer-events: none;
+  }}
+  /* `pointer-events` on an SVG element is a presentation attribute and loses to author CSS.
+     Liveness is stated once in this stylesheet, keyed by data-arrangement-* attributes. */
+  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-lift="true"][opacity="1"],
+  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-place="true"],
+  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-held="true"],
+  [data-arrangement-choice="true"] [data-token="role"][data-arrangement-can-lift="true"][opacity="1"],
+  [data-arrangement-choice="true"] [data-token="role"][data-arrangement-held="true"],
+  [data-arrangement-choice="true"] [data-role-circle][data-arrangement-can-place="true"],
+  [data-arrangement-choice="true"] [data-role-circle][data-arrangement-held="true"] {{
+    pointer-events: all; cursor: pointer;
+  }}
+  [data-arrangement-choice="true"] [data-role-circle][data-arrangement-can-place="true"] {{
+    stroke: {route_color}; stroke-width: 4; stroke-dasharray: 8 4;
+  }}
+  [data-arrangement-choice="true"] [data-role-circle][data-arrangement-held="true"] {{
+    stroke: {route_color}; stroke-width: 4;
+  }}
+  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-place="true"],
+  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-held="true"] {{
+    stroke: {route_color}; stroke-width: 2.2;
   }}
 
   /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
@@ -1289,6 +1649,7 @@ def render_play_view_html(
             _board_layout_for(payload, board_layout, player_id),
             player,
             board_state=_board_state_for(payload, board_layout, player_id, catalog, donated_data),
+            interactive=bool(candidates),
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
         )

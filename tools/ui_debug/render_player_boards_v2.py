@@ -776,9 +776,17 @@ def _render_resource_block(
     return "".join(parts)
 
 
-def _render_worker_circle(cx: float, cy: float, palette: dict) -> str:
+def _render_worker_circle(
+    cx: float,
+    cy: float,
+    palette: dict,
+    role_id: str = "",
+    interactive: bool = False,
+) -> str:
+    marker = f' data-role-circle="{role_id}"' if interactive and role_id else ""
     return (
         f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{ROLE_CIRCLE_RADIUS:g}"'
+        f"{marker}"
         f' fill="{palette["worker_fill"]}"'
         f' stroke="{palette["worker_edge"]}" stroke-width="2"/>'
     )
@@ -951,7 +959,7 @@ def render_player_board_v2_svg(
     role_cy = geometry["role_circle_cy"]
     label_baseline = geometry["role_label_baseline"]
     for cx, role in zip(geometry["role_x"], roles, strict=True):
-        parts.append(_render_worker_circle(cx, role_cy, palette))
+        parts.append(_render_worker_circle(cx, role_cy, palette, role["id"], interactive))
         parts.append(_render_role_label(cx, label_baseline, role["label"], palette["ink"]))
     for cx, role in zip(geometry["role_x"], roles, strict=True):
         count = int(state["roles"].get(role["id"], 0))

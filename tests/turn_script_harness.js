@@ -2,12 +2,15 @@
 // the shipped JavaScript rather than a second copy of it written in Python.
 //
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
-// reset, confirm, spaces, arrows, counters, controls, cubes, playerCount }.
+// reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
+// arrangementPointerRules }.
 //
 // A click is { kind: 'position'|'origin'|'duty'|'edge'|'resolution'|'combination'|'resource'
-// |'seat'|'building'|'control', value }; a resource click also carries { seat }, a seat click
-// names the player whose board is pressed, a building click names the building whose hex on the
-// round track is pressed, and a control click presses one board plaque by name.
+// |'seat'|'building'|'control'|'abbey'|'role', value }; a resource click also carries { seat }, a
+// seat click names the player whose board is pressed, a building click names the building whose
+// hex on the round track is pressed, and a control click presses one board plaque by name.
+// `abbey` clicks one Abbey token on the active seat's board; `role` clicks either a role token or
+// the role circle (when click.target === 'circle') on the active seat's board.
 //
 // Prints a JSON transcript: what was offered at each point, which seat was asked for a stock, which
 // boards were offered as an answer in themselves, what was marked as chosen, which panel was shown,
@@ -61,10 +64,11 @@ function search(root, selector) {
 }
 
 function makeElement(tag, attrs, children) {
-  return {
+  const element = {
     tag,
     attrs: Object.assign({}, attrs),
     children: children || [],
+    parent: null,
     listeners: {},
     getAttribute(name) {
       return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
@@ -88,6 +92,10 @@ function makeElement(tag, attrs, children) {
       (this.listeners.click || []).forEach((fn) => fn());
     },
   };
+  element.children.forEach((child) => {
+    child.parent = element;
+  });
+  return element;
 }
 
 const boardPositions = job.spaces || [
@@ -105,6 +113,7 @@ const playerCount =
   job.playerCount
   || (job.seats || []).filter((seat) => seat.taken).length
   || 4;
+const ROLE_IDS = ['fields', 'road_engineer', 'stone_mason', 'alms_house', 'engraver', 'vestry'];
 
 function cubeElement(cube, slot) {
   const attrs = { 'data-player': cube.player || 'player_one', 'data-slot': String(slot) };
@@ -170,8 +179,75 @@ const buildings = (job.buildings || []).map((id) =>
   makeElement('g', { 'data-building-choice-key': id }, [])
 );
 
-const seats = (job.seats || []).map((seat) =>
-  makeElement(
+function abbeyTokensFor(count) {
+  const visible = Math.max(0, Math.min(8, Number(count) || 0));
+  return Array.from({ length: 8 }, (_, index) =>
+    makeElement(
+      'rect',
+      {
+        'data-token': 'abbey',
+        'data-token-index': String(index),
+        opacity: index < visible ? '1' : '0',
+      },
+      []
+    )
+  );
+}
+
+function roleTokensFor(roleId, count) {
+  const capped = Math.max(0, Math.min(2, Number(count) || 0));
+  return [
+    makeElement(
+      'rect',
+      {
+        'data-token': 'role',
+        'data-role': roleId,
+        'data-role-slot': 'single',
+        opacity: capped === 1 ? '1' : '0',
+      },
+      []
+    ),
+    makeElement(
+      'rect',
+      {
+        'data-token': 'role',
+        'data-role': roleId,
+        'data-role-slot': 'pair',
+        opacity: capped === 2 ? '1' : '0',
+      },
+      []
+    ),
+    makeElement(
+      'rect',
+      {
+        'data-token': 'role',
+        'data-role': roleId,
+        'data-role-slot': 'pair',
+        opacity: capped === 2 ? '1' : '0',
+      },
+      []
+    ),
+  ];
+}
+
+function roleElementsFor(roles) {
+  const entries = [];
+  const byRole = roles || {};
+  ROLE_IDS.forEach((roleId) => {
+    entries.push(makeElement('circle', { 'data-role-circle': roleId }, []));
+    roleTokensFor(roleId, byRole[roleId]).forEach((token) => entries.push(token));
+  });
+  return entries;
+}
+
+const seats = (job.seats || []).map((seat) => {
+  const staticKeys = ['wheat', 'stone', 'silver']
+    .map((stock) => makeElement('g', { 'data-resource-choice-key': stock }, []))
+    .concat([makeElement('rect', { 'data-seat-choice-key': seat.player }, [])]);
+  const tokens = []
+    .concat(abbeyTokensFor(seat.abbey))
+    .concat(roleElementsFor(seat.roles));
+  return makeElement(
     'div',
     {
       'data-component': 'player-board-v2',
@@ -180,11 +256,9 @@ const seats = (job.seats || []).map((seat) =>
       'data-seat-taken': seat.taken ? 'true' : 'false',
       'data-active-seat': seat.active ? 'true' : 'false',
     },
-    ['wheat', 'stone', 'silver']
-      .map((stock) => makeElement('g', { 'data-resource-choice-key': stock }, []))
-      .concat([makeElement('rect', { 'data-seat-choice-key': seat.player }, [])])
-  )
-);
+    staticKeys.concat(tokens)
+  );
+});
 
 const panels = [];
 for (let index = 0; index < (job.panels || []).length; index += 1) {
@@ -215,6 +289,7 @@ const transcript = {
   counterShown: [],
   controls: [],
   cubes: [],
+  arrangements: [],
   overflow: [],
   posted: null,
   rewritten: false,
@@ -249,6 +324,168 @@ function control(name) {
   return controls.find((candidate) => candidate.getAttribute('data-turn-control') === name) || null;
 }
 
+const ARRANGEMENT_POINTER_RULES = {
+  blanket: {
+    abbeyToken: true,
+    roleToken: true,
+    roleCircle: true,
+  },
+  live: {
+    abbeyLiftVisible: true,
+    abbeyCanPlace: true,
+    abbeyHeld: true,
+    roleLiftVisible: true,
+    roleHeld: true,
+    roleCircleCanPlace: true,
+    roleCircleHeld: true,
+  },
+};
+const pointerRules = Object.assign({}, ARRANGEMENT_POINTER_RULES, job.arrangementPointerRules || {});
+pointerRules.blanket = Object.assign({}, ARRANGEMENT_POINTER_RULES.blanket, pointerRules.blanket || {});
+pointerRules.live = Object.assign({}, ARRANGEMENT_POINTER_RULES.live, pointerRules.live || {});
+
+function boardOf(element) {
+  let node = element;
+  while (node) {
+    if (
+      typeof node.getAttribute === 'function'
+      && node.getAttribute('data-component') === 'player-board-v2'
+    ) {
+      return node;
+    }
+    node = node.parent;
+  }
+  return null;
+}
+
+function arrangementKind(element) {
+  const token = element.getAttribute('data-token');
+  if (token === 'abbey') return 'abbey-token';
+  if (token === 'role') return 'role-token';
+  if (element.getAttribute('data-role-circle') !== null) return 'role-circle';
+  return null;
+}
+
+function arrangementPointKey(element) {
+  if (!element) return null;
+  const role = element.getAttribute('data-role');
+  if (
+    element.getAttribute('data-token') === 'role'
+    && role
+    && element.getAttribute('data-role-slot') === 'single'
+  ) {
+    return 'role-center:' + role;
+  }
+  const circleRole = element.getAttribute('data-role-circle');
+  if (circleRole) {
+    return 'role-center:' + circleRole;
+  }
+  return null;
+}
+
+function arrangementElementsAtPoint(seat, pointKey) {
+  if (!seat || !pointKey) return [];
+  const circles = seat.querySelectorAll('[data-role-circle]');
+  const singles = seat.querySelectorAll('[data-token="role"][data-role-slot="single"]');
+  return circles.concat(singles).filter((element) => arrangementPointKey(element) === pointKey);
+}
+
+function arrangementElementLabel(element) {
+  if (!element) return null;
+  if (element.getAttribute('data-role-circle') !== null) {
+    return 'role-circle:' + element.getAttribute('data-role-circle');
+  }
+  if (element.getAttribute('data-token') === 'role') {
+    return (
+      'role-token:'
+      + element.getAttribute('data-role')
+      + ':'
+      + element.getAttribute('data-role-slot')
+    );
+  }
+  return element.tag;
+}
+
+function tokenIsVisible(element) {
+  return element.getAttribute('opacity') !== '0' && element.getAttribute('visibility') !== 'hidden';
+}
+
+function arrangementPointerEvents(element) {
+  const kind = arrangementKind(element);
+  if (!kind) return null;
+  const kindKey = kind === 'abbey-token' ? 'abbeyToken' : kind === 'role-token' ? 'roleToken' : 'roleCircle';
+  const baselineNone = pointerRules.blanket[kindKey] === true;
+  let pointer = baselineNone ? 'none' : 'all';
+  const seat = boardOf(element);
+  if (!seat || seat.getAttribute('data-arrangement-choice') !== 'true') {
+    return pointer;
+  }
+  const canLift = element.getAttribute('data-arrangement-can-lift') === 'true';
+  const canPlace = element.getAttribute('data-arrangement-can-place') === 'true';
+  const held = element.getAttribute('data-arrangement-held') === 'true';
+  const visible = tokenIsVisible(element);
+  if (kind === 'abbey-token') {
+    if (pointerRules.live.abbeyLiftVisible && canLift && visible) return 'all';
+    if (pointerRules.live.abbeyCanPlace && canPlace) return 'all';
+    if (pointerRules.live.abbeyHeld && held) return 'all';
+    return pointer;
+  }
+  if (kind === 'role-token') {
+    if (pointerRules.live.roleLiftVisible && canLift && visible) return 'all';
+    if (pointerRules.live.roleHeld && held) return 'all';
+    return pointer;
+  }
+  if (pointerRules.live.roleCircleCanPlace && canPlace) return 'all';
+  if (pointerRules.live.roleCircleHeld && held) return 'all';
+  return pointer;
+}
+
+function computedPointerEvents(element) {
+  const arrangement = arrangementPointerEvents(element);
+  if (arrangement !== null) return arrangement;
+  const attr = element.getAttribute('pointer-events');
+  return attr === null ? 'all' : attr;
+}
+
+function isReachable(element) {
+  if (!element) return false;
+  if (element.getAttribute('visibility') === 'hidden') return false;
+  return computedPointerEvents(element) !== 'none';
+}
+
+function topmostLiveAtPoint(element) {
+  const pointKey = arrangementPointKey(element);
+  const seat = boardOf(element);
+  if (!pointKey || !seat) {
+    return isReachable(element) ? element : null;
+  }
+  const layers = arrangementElementsAtPoint(seat, pointKey);
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    if (isReachable(layers[index])) return layers[index];
+  }
+  return null;
+}
+
+function clickReachable(element, note) {
+  if (!element) throw new Error('missing click target: ' + note);
+  const resolved = topmostLiveAtPoint(element);
+  if (!resolved) {
+    const seat = boardOf(element);
+    const pointKey = arrangementPointKey(element);
+    const layers = pointKey && seat
+      ? arrangementElementsAtPoint(seat, pointKey).map((layer) => (
+        arrangementElementLabel(layer) + ':' + computedPointerEvents(layer)
+      ))
+      : [];
+    throw new Error(
+      'unreachable click target: '
+      + note
+      + (pointKey ? ' point=' + pointKey + ' layers=' + layers.join('|') : '')
+    );
+  }
+  resolved.click();
+}
+
 function cubeSnapshot() {
   const byPosition = {};
   spaces.forEach((space) => {
@@ -260,6 +497,87 @@ function cubeSnapshot() {
     }));
   });
   return byPosition;
+}
+
+function occupiedRoleTokenFor(seat, roleCounts) {
+  for (const roleId of ROLE_IDS) {
+    if ((roleCounts[roleId] || 0) <= 0) continue;
+    const tokens = seat
+      .querySelectorAll('[data-token="role"][data-role="' + roleId + '"]')
+      .filter((token) => tokenIsVisible(token));
+    if (tokens.length) {
+      return { roleId, token: tokens[0] };
+    }
+  }
+  return null;
+}
+
+function emptyRoleCircleFor(seat, roleCounts) {
+  for (const roleId of ROLE_IDS) {
+    if ((roleCounts[roleId] || 0) !== 0) continue;
+    const circle = seat.querySelector('[data-role-circle="' + roleId + '"]');
+    if (circle) return { roleId, circle };
+  }
+  return null;
+}
+
+function roleCenterLayerState(seat, roleId) {
+  const pointKey = 'role-center:' + roleId;
+  const layers = arrangementElementsAtPoint(seat, pointKey);
+  let topmost = null;
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    if (isReachable(layers[index])) {
+      topmost = layers[index];
+      break;
+    }
+  }
+  return {
+    drawOrder: layers.map((layer) => arrangementElementLabel(layer)),
+    topmostLive: arrangementElementLabel(topmost),
+  };
+}
+
+function arrangementSnapshot() {
+  const bySeat = {};
+  seats.forEach((seat) => {
+    const seatId = seat.getAttribute('data-player-seat');
+    const abbey = seat
+      .querySelectorAll('[data-token="abbey"]')
+      .filter((token) => token.getAttribute('opacity') !== '0').length;
+    const roles = {};
+    ROLE_IDS.forEach((roleId) => {
+      roles[roleId] = seat
+        .querySelectorAll('[data-token="role"][data-role="' + roleId + '"]')
+        .filter((token) => token.getAttribute('opacity') !== '0').length;
+    });
+    const abbeyTokens = seat.querySelectorAll('[data-token="abbey"]');
+    const firstAbbeyToken = abbeyTokens[0] || null;
+    const visibleAbbeyToken = abbeyTokens.find((token) => tokenIsVisible(token)) || null;
+    const firstRoleToken = seat.querySelectorAll('[data-token="role"]')[0] || null;
+    const occupiedRole = occupiedRoleTokenFor(seat, roles);
+    const emptyRole = emptyRoleCircleFor(seat, roles);
+    const roleCenterLayers = {};
+    ROLE_IDS.forEach((roleId) => {
+      roleCenterLayers[roleId] = roleCenterLayerState(seat, roleId);
+    });
+    bySeat[seatId] = {
+      player: seat.getAttribute('data-player'),
+      abbey,
+      roles,
+      arrangementChoice: seat.getAttribute('data-arrangement-choice') === 'true',
+      occupiedRoleId: occupiedRole ? occupiedRole.roleId : null,
+      emptyRoleId: emptyRole ? emptyRole.roleId : null,
+      roleCenterLayers,
+      pointerEvents: {
+        firstAbbeyToken: firstAbbeyToken ? computedPointerEvents(firstAbbeyToken) : null,
+        visibleAbbeyToken: visibleAbbeyToken ? computedPointerEvents(visibleAbbeyToken) : null,
+        firstRoleToken: firstRoleToken ? computedPointerEvents(firstRoleToken) : null,
+        occupiedRoleToken: occupiedRole ? computedPointerEvents(occupiedRole.token) : null,
+        emptyRoleCircle: emptyRole ? computedPointerEvents(emptyRole.circle) : null,
+      },
+    };
+  });
+  return bySeat;
 }
 
 function snapshot() {
@@ -357,6 +675,7 @@ function snapshot() {
     controls: states,
     controlActive: activeStates,
     cubes: cubeSnapshot(),
+    arrangements: arrangementSnapshot(),
     overflow,
   };
 }
@@ -378,6 +697,7 @@ function record() {
   transcript.controlActive = transcript.controlActive || [];
   transcript.controlActive.push(snap.controlActive);
   transcript.cubes.push(snap.cubes);
+  transcript.arrangements.push(snap.arrangements);
   transcript.overflow.push(snap.overflow);
 }
 
@@ -390,48 +710,82 @@ function pressResource(click) {
   const seat = seats.find(
     (candidate) => candidate.getAttribute('data-player-seat') === String(click.seat)
   );
-  seat
+  const key = seat
     .querySelectorAll('[data-resource-choice-key]')
-    .find((key) => key.getAttribute('data-resource-choice-key') === click.value)
-    .click();
+    .find((candidate) => candidate.getAttribute('data-resource-choice-key') === click.value);
+  clickReachable(key, 'resource ' + click.value + ' on seat ' + String(click.seat));
 }
 
 function pressBoard(click) {
   const seat = seats.find(
     (candidate) => candidate.getAttribute('data-player') === click.value
   );
-  seat
+  const key = seat
     .querySelectorAll('[data-seat-choice-key]')
-    .find((key) => key.getAttribute('data-seat-choice-key') === click.value)
-    .click();
+    .find((candidate) => candidate.getAttribute('data-seat-choice-key') === click.value);
+  clickReachable(key, 'seat ' + click.value);
+}
+
+function activeSeat() {
+  return seats.find((seat) => seat.getAttribute('data-active-seat') === 'true') || null;
+}
+
+function pressAbbey() {
+  const seat = activeSeat();
+  if (!seat) throw new Error('no active seat for abbey click');
+  const tokens = seat.querySelectorAll('[data-token="abbey"]');
+  const target = tokens.find((token) => isReachable(token)) || null;
+  clickReachable(target, 'abbey token');
+}
+
+function pressRole(click) {
+  const seat = activeSeat();
+  if (!seat) throw new Error('no active seat for role click');
+  if (click.target === 'circle') {
+    const circle = seat.querySelector('[data-role-circle="' + click.value + '"]');
+    clickReachable(circle, 'role circle ' + click.value);
+    return;
+  }
+  const tokens = seat.querySelectorAll('[data-token="role"][data-role="' + click.value + '"]');
+  const target = tokens.find((token) => isReachable(token)) || null;
+  clickReachable(target, 'role token ' + click.value);
 }
 
 job.clicks.forEach((click) => {
   if (click.kind === 'position' || click.kind === 'origin' || click.kind === 'duty') {
-    spaces.find((space) =>
-      Number(space.getAttribute('data-board-position-index')) === Number(click.value)).click();
+    const target = spaces.find((space) =>
+      Number(space.getAttribute('data-board-position-index')) === Number(click.value));
+    clickReachable(target, click.kind + ' ' + String(click.value));
   } else if (click.kind === 'edge') {
-    arrows.find((arrow) => arrow.getAttribute('data-arrow') === click.value).click();
+    const target = arrows.find((arrow) => arrow.getAttribute('data-arrow') === click.value);
+    clickReachable(target, 'edge ' + click.value);
   } else if (click.kind === 'control') {
     const button = control(click.value);
-    if (button) button.click();
+    clickReachable(button, 'control ' + click.value);
   } else if (click.kind === 'combination') {
-    pairs.find((pair) => pair.getAttribute('data-combination-key') === click.value).click();
+    const target = pairs.find((pair) => pair.getAttribute('data-combination-key') === click.value);
+    clickReachable(target, 'combination ' + click.value);
   } else if (click.kind === 'resource') {
     pressResource(click);
   } else if (click.kind === 'seat') {
     pressBoard(click);
   } else if (click.kind === 'building') {
-    buildings.find((key) => key.getAttribute('data-building-choice-key') === click.value).click();
+    const target = buildings.find((key) => key.getAttribute('data-building-choice-key') === click.value);
+    clickReachable(target, 'building ' + click.value);
+  } else if (click.kind === 'abbey') {
+    pressAbbey();
+  } else if (click.kind === 'role') {
+    pressRole(click);
   } else {
-    keys.find((key) => key.getAttribute('data-resolution-key') === click.value).click();
+    const target = keys.find((key) => key.getAttribute('data-resolution-key') === click.value);
+    clickReachable(target, 'resolution ' + click.value);
   }
   record();
 });
 
 if (job.reset) {
   const reset = control('reset');
-  if (reset) reset.click();
+  clickReachable(reset, 'control reset');
   const snap = snapshot();
   transcript.afterReset = {
     offered: snap.offered,
@@ -445,13 +799,14 @@ if (job.reset) {
     controls: snap.controls,
     controlActive: snap.controlActive,
     cubes: snap.cubes,
+    arrangements: snap.arrangements,
     overflow: snap.overflow,
   };
 }
 
 if (job.confirm) {
   const confirmControl = control('confirm');
-  if (confirmControl) confirmControl.click();
+  clickReachable(confirmControl, 'control confirm');
   transcript.confirmable =
     confirmControl && confirmControl.getAttribute('data-turn-control-enabled') === 'true';
 }
