@@ -6,11 +6,9 @@ it crashes, and nothing shallower than picking it finds out.
 
 Nothing checked this until now, and the cost of not checking it was 3,374 unappliable actions at
 the round-eighteen fixture -- one move in five. They all came of the same thing: the cornucopia
-lets the payer choose which resource a hire is paid in, a turn may hire several buildings, and an
-action has ONE field to record that choice in. Each hire was enumerated as though it chose
-independently. Where nothing wrote the choice down at all, applying looked the source up again,
-found the wildcard and failed; where two hires wrote down different choices, applying spent one
-resource on both and overdrew.
+lets the payer choose which resource a hire is paid in, and a turn may hire several buildings. The
+engine now records one payment per hired building so application can replay exactly what
+enumeration chose.
 
 So this walks every committed position, applies every action offered there, and requires none to
 raise. It is not a fast test. The round-eighteen fixture alone is thirty thousand actions and about
@@ -104,13 +102,23 @@ def _hired_sources(action) -> int:
     if not isinstance(action, FullTurnAction):
         return 0
     labels = (
-        action.hired_building_source,
-        action.building_conversion_source,
-        action.sow_route_building_source,
-        action.sow_route_secondary_building_source,
-        action.start_turn_building_source,
+        (action.hired_building_id, action.hired_building_source),
+        (action.building_conversion_id, action.building_conversion_source),
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
+        (action.start_turn_building_id, action.start_turn_building_source),
+        (action.end_turn_building_id, action.end_turn_building_source),
+        (action.merchant_advance_building_id, action.merchant_advance_building_source),
+        (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
+        (action.taxation_majority_building_id, action.taxation_majority_building_source),
+        (action.workforce_move_building_id, action.workforce_move_building_source),
+        (action.bank_payment_building_id, action.bank_payment_building_source),
     )
-    return sum(1 for label in labels if label is not None and label != "own_active")
+    return sum(
+        1
+        for building_id, source_label in labels
+        if building_id is not None and source_label is not None and source_label != "own_active"
+    )
 
 
 def test_a_hire_on_the_wildcard_says_what_it_pays_with(deep_actions) -> None:
@@ -124,10 +132,10 @@ def test_a_hire_on_the_wildcard_says_what_it_pays_with(deep_actions) -> None:
     silent = [
         action
         for action in actions
-        if _hired_sources(action) > 0 and action.hire_payment_resource is None
+        if _hired_sources(action) > 0 and len(action.hire_payments) != _hired_sources(action)
     ]
     assert not silent, (
-        f"{len(silent)} actions hire on the wildcard without naming a resource, "
+        f"{len(silent)} actions hire without recording one payment per hired building, "
         f"e.g. {action_id(silent[0])}"
     )
 
@@ -139,29 +147,31 @@ def test_the_wildcard_is_a_choice_and_the_payer_can_afford_what_it_offers(deep_a
     passing on a wildcard nobody exercises. And every resource offered has to be one the payer can
     settle, which is what stops the choice from being three actions of which two fail.
 
-    On this fixture the payer holds six stone, one silver and no wheat, so both halves are visible
-    at once: a single hire may be paid in stone or in silver, never in wheat, and a turn hiring
-    twice can only be paid in stone because one silver does not stretch to two hires. That is not a
-    fact to hard-code -- it is read off the payer's stock, so it stays true if the fixture moves.
+    This fixture reaches hires after optional pre-sow effects that can change stock, so affordability
+    is observed through "everything offered applies" above rather than by comparing only to opening
+    resources.
     """
-    scenario, actions = deep_actions
-    stock = scenario.state.player_state(scenario.state.active_player).resources
-    affordable = {name for name in ("wheat", "stone", "silver") if getattr(stock, name) > 0}
-
+    _scenario, actions = deep_actions
     offered = Counter(
-        action.hire_payment_resource
+        resource
         for action in actions
-        if _hired_sources(action) > 0 and action.hire_payment_resource is not None
+        if _hired_sources(action) > 0
+        for _building, resource in action.hire_payments
     )
-    assert set(offered) <= affordable, (
-        f"offered a hire paid in something the payer has none of: {dict(offered)} against {stock}"
+    assert set(offered) <= {"wheat", "stone", "silver"}, (
+        f"offered an unknown hire payment resource: {dict(offered)}"
     )
     assert len(offered) > 1, (
         f"the wildcard offered only {set(offered)}; it is not being presented as a choice"
     )
 
-    richest = max(affordable, key=lambda name: getattr(stock, name))
-    multi = {action.hire_payment_resource for action in actions if _hired_sources(action) > 1}
-    assert multi == {richest}, (
-        f"turns hiring more than once were paid in {multi}, but only {richest} stretches that far"
+    mixed_multi = [
+        action
+        for action in actions
+        if _hired_sources(action) > 1
+        and len({resource for _building, resource in action.hire_payments}) > 1
+    ]
+    assert mixed_multi, (
+        "turns hiring more than once never mix hire payment resources; "
+        "per-hire payment choices are not being expressed"
     )

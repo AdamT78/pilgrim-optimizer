@@ -220,11 +220,8 @@ class _ResolvedGrainStoreConversion:
 class _HirePaymentOption:
     """One way of paying for one hire: the resource, and the source resolved to expect it.
 
-    There is exactly one of these per hire today, because the Merchant offers a single resource
-    and the payer has no say in it. The type exists so that the day the Merchant offers a wildcard
-    -- the cornucopia, where the payer chooses between wheat, stone and silver -- the choice is a
-    longer list from one function rather than a new branch at each of the sixteen places that
-    construct a hire.
+    On a plain Merchant resource there is one option; on the cornucopia there is one option per
+    affordable resource the payer may choose between.
 
     `source` is the hire source with `hire_resource` resolved to `resource`, so affordability
     checks and payment keep reading it the way they already do.
@@ -647,17 +644,18 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
     actions = _ActionAccumulator()
     for start_turn_option in _legal_start_turn_relocation_options(state, config):
         start_turn_state = state if start_turn_option is None else start_turn_option.state
-        # A Dormitory or Inquisition hired at the start of the turn settles the cornucopia before
-        # anything else in the turn gets a say, and every later hire has to pay in the same
-        # resource because the action has only the one field to record it in.
-        start_turn_settled = _wildcard_pick(
-            None if start_turn_option is None else start_turn_option.source,
+        # Library is hired at end of turn, after the duty has resolved. Its hire can therefore be
+        # paid from resources the turn earned, not only from what remained after any start-turn
+        # hire. Resolve Library availability from start_turn_state, but filter payment variants from
+        # the pre-turn payer stock so generation does not refuse lines that apply can settle.
+        library_sources = _resolved_library_sources_for_state(
+            start_turn_state,
+            config,
+            payer_state=state.player_state(state.active_player),
         )
-        library_source = _resolved_library_source_for_state(start_turn_state, config)
         variant_actions = _legal_full_turn_actions_for_state(
             start_turn_state,
             config,
-            settled_resource=start_turn_settled,
             allow_guild_modifier=start_turn_option is None,
             allow_pulpit_modifier=start_turn_option is None,
             allow_scriptorium_modifier=start_turn_option is None,
@@ -677,10 +675,8 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                     action,
                     option=start_turn_option,
                 )
-                if start_turn_settled is not None:
-                    action = replace(action, hire_payment_resource=start_turn_settled)
             actions.add_if_new(action)
-            if library_source is None:
+            if not library_sources:
                 continue
             if action.merchant_advance_building_id == _BUILDING_GUILD:
                 # Defer mixed Guild+Library hire-order interactions for this milestone.
@@ -697,14 +693,15 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
             if action.free_hire_enabler_building_id == _BUILDING_WAGON_YARD:
                 # Defer mixed Wagon Yard+Library hire-order interactions for this milestone.
                 continue
-            for library_action in _library_suffix_variants_for_action(
-                original_state=state,
-                state_for_turn=start_turn_state,
-                config=config,
-                action=action,
-                source=library_source,
-            ):
-                actions.add_if_new(library_action)
+            for library_source in library_sources:
+                for library_action in _library_suffix_variants_for_action(
+                    original_state=state,
+                    state_for_turn=start_turn_state,
+                    config=config,
+                    action=action,
+                    source=library_source,
+                ):
+                    actions.add_if_new(library_action)
     return actions.as_tuple()
 
 
@@ -712,7 +709,6 @@ def _legal_full_turn_actions_for_state(
     state: GameState,
     config: GameConfig,
     *,
-    settled_resource: str | None = None,
     allow_guild_modifier: bool,
     allow_pulpit_modifier: bool,
     allow_scriptorium_modifier: bool,
@@ -818,18 +814,6 @@ def _legal_full_turn_actions_for_state(
                 *_legal_brewery_conversion_options(route_state, config),
             )
             for conversion_option in conversion_options:
-                # Every hire this turn makes is paid out of one recorded resource, so the route
-                # modifiers and the conversion have to have picked the same one. Where they did
-                # not, the combination is unsayable and is dropped here rather than generated and
-                # refused later; where they did, that pick binds every hire generated below.
-                turn_settled = _settled_wildcard_resource(
-                    route_option.source,
-                    route_option.secondary_source,
-                    None if conversion_option is None else conversion_option.source,
-                    already=settled_resource,
-                )
-                if isinstance(turn_settled, _Conflict):
-                    continue
                 state_for_turn = (
                     route_state if conversion_option is None else conversion_option.state
                 )
@@ -941,7 +925,6 @@ def _legal_full_turn_actions_for_state(
                                         for hire_option in _legal_hire_payment_options(
                                             source=mill_source,
                                             player_state=player_state,
-                                            required_resource=turn_settled,
                                         ):
                                             if not _can_afford_resolution_costs(
                                                 player_state,
@@ -1035,7 +1018,6 @@ def _legal_full_turn_actions_for_state(
                             for hire_option in _legal_hire_payment_options(
                                 source=infirmary_source,
                                 player_state=player_state,
-                                required_resource=turn_settled,
                             ):
                                 if not _can_afford_resolution_costs(
                                     player_state,
@@ -1335,7 +1317,6 @@ def _legal_full_turn_actions_for_state(
                         for hire_option in _legal_hire_payment_options(
                             source=infirmary_source,
                             player_state=player_state,
-                            required_resource=turn_settled,
                         ):
                             hired_infirmary_player_state = _player_state_with_wheat_delta(
                                 player_state,
@@ -1380,7 +1361,6 @@ def _legal_full_turn_actions_for_state(
                         for hire_option in _legal_hire_payment_options(
                             source=mill_source,
                             player_state=player_state,
-                            required_resource=turn_settled,
                         ):
                             hired_mill_player_state = _player_state_with_wheat_delta(
                                 player_state,
@@ -1499,7 +1479,6 @@ def _legal_full_turn_actions_for_state(
                                     route=route,
                                     selected_duty=duty_position,
                                     resolution=category_action,
-                                    settled_resource=turn_settled,
                                 )
                             )
                     for tithe_resource in tithe_resources_for_position(config, duty_position):
@@ -1527,15 +1506,6 @@ def _legal_full_turn_actions_for_state(
                                     action,
                                     option=conversion_option,
                                 )
-                            # A route or conversion hire settles the cornucopia just as a bonus
-                            # building hire does, and the action has to say so: resolving it later
-                            # looks the source up again and finds the wildcard, not the pick. Where
-                            # a hire below already recorded the same resource this changes nothing.
-                            if isinstance(turn_settled, str):
-                                action = replace(
-                                    action,
-                                    hire_payment_resource=turn_settled,
-                                )
                             actions[index] = action
     if allow_scriptorium_modifier:
         scriptorium_options = _legal_scriptorium_effective_acolyte_options(state, config)
@@ -1544,7 +1514,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 scriptorium_option.state,
                 config,
-                settled_resource=settled_resource,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
@@ -1572,7 +1541,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 pulpit_option.state,
                 config,
-                settled_resource=settled_resource,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
@@ -1598,7 +1566,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 customs_house_option.state,
                 config,
-                settled_resource=settled_resource,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
@@ -1625,7 +1592,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 wagon_yard_option.state,
                 config,
-                settled_resource=settled_resource,
                 allow_guild_modifier=(wagon_yard_option.target_building_id == _BUILDING_GUILD),
                 allow_pulpit_modifier=(wagon_yard_option.target_building_id == _BUILDING_PULPIT),
                 allow_scriptorium_modifier=(
@@ -1668,7 +1634,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 state_after_guild,
                 config,
-                settled_resource=settled_resource,
                 allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
@@ -3123,6 +3088,10 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Same building cannot be hired more than once in one turn."
             )
+        _validate_hire_payments_for_action(
+            action,
+            hired_buildings=hire_context.hired_buildings,
+        )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
             required_mill_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
@@ -5003,19 +4972,22 @@ def _with_start_turn_relocation_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         start_turn_building_id=option.building_id,
         start_turn_building_source=source_label,
         start_turn_relocation_from=option.from_position,
         start_turn_relocation_to=option.to_position,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
-def _resolved_library_source_for_state(
+def _resolved_library_sources_for_state(
     state: GameState,
     config: GameConfig,
-) -> BuildingAbilitySource | None:
+    *,
+    payer_state: PlayerState,
+) -> tuple[BuildingAbilitySource, ...]:
     source = building_ability_source(
         state,
         config,
@@ -5023,10 +4995,15 @@ def _resolved_library_source_for_state(
         building_key="library",
     )
     if not source.usable:
-        return None
-    if source.source_type == "own_active" or _is_hired_source(source):
-        return source
-    return None
+        return ()
+    if source.source_type == "own_active":
+        return (source,)
+    if _is_hired_source(source):
+        return _hire_payment_source_variants(
+            source,
+            payer_state,
+        )
+    return ()
 
 
 def _library_suffix_variants_for_action(
@@ -5136,13 +5113,14 @@ def _with_end_turn_library_relocation_fields(
     source_label = (
         "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
     )
-    return replace(
+    updated = replace(
         action,
         end_turn_building_id="library",
         end_turn_building_source=source_label,
         end_turn_relocation_from=from_position,
         end_turn_relocation_to=to_target,
     )
+    return _with_hire_payment_for_source(updated, source=source)
 
 
 def _is_action_apply_legal(
@@ -5342,17 +5320,19 @@ def _with_kogge_route_fields(
     source: BuildingAbilitySource,
 ) -> FullTurnAction:
     if source.source_type == "own_active":
-        return replace(
+        updated = replace(
             action,
             sow_route_building_id="kogge",
             sow_route_building_source="own_active",
         )
+        return _with_hire_payment_for_source(updated, source=source)
     if _is_hired_source(source):
-        return replace(
+        updated = replace(
             action,
             sow_route_building_id="kogge",
             sow_route_building_source=_hired_building_source_label(source),
         )
+        return _with_hire_payment_for_source(updated, source=source)
     raise ValueError("Kogge route source must be own-active or hired.")
 
 
@@ -5363,19 +5343,21 @@ def _with_cloisters_route_fields(
     omitted_location: int,
 ) -> FullTurnAction:
     if source.source_type == "own_active":
-        return replace(
+        updated = replace(
             action,
             sow_route_building_id=_ROUTE_BUILDING_CLOISTERS,
             sow_route_building_source="own_active",
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(updated, source=source)
     if _is_hired_source(source):
-        return replace(
+        updated = replace(
             action,
             sow_route_building_id=_ROUTE_BUILDING_CLOISTERS,
             sow_route_building_source=_hired_building_source_label(source),
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(updated, source=source)
     raise ValueError("Cloisters route source must be own-active or hired.")
 
 
@@ -5386,19 +5368,21 @@ def _with_secondary_cloisters_route_fields(
     omitted_location: int,
 ) -> FullTurnAction:
     if source.source_type == "own_active":
-        return replace(
+        updated = replace(
             action,
             sow_route_secondary_building_id=_ROUTE_BUILDING_CLOISTERS,
             sow_route_secondary_building_source="own_active",
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(updated, source=source)
     if _is_hired_source(source):
-        return replace(
+        updated = replace(
             action,
             sow_route_secondary_building_id=_ROUTE_BUILDING_CLOISTERS,
             sow_route_secondary_building_source=_hired_building_source_label(source),
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(updated, source=source)
     raise ValueError("Cloisters secondary route source must be own-active or hired.")
 
 
@@ -5707,7 +5691,6 @@ def _legal_hire_payment_options(
     *,
     source: BuildingAbilitySource,
     player_state: PlayerState | None = None,
-    required_resource: str | None = None,
 ) -> tuple[_HirePaymentOption, ...]:
     """Enumerate the ways one hire may be paid for.
 
@@ -5717,18 +5700,10 @@ def _legal_hire_payment_options(
     which is the same answer Taxation gives for a different reason.
 
     Only affordable resources are listed. Offering a variant that cannot be paid would be a legal
-    action that immediately fails, and pruning a choice down to its one real option is the same
-    no-op pruning applied elsewhere.
+    action that immediately fails.
 
     Free sources are not hires and are not enumerated here; Wagon Yard's free hire pays nothing,
     so it has no payment resource to choose and stays outside this entirely.
-
-    `required_resource` is for a turn that has ALREADY settled the wildcard somewhere else. One
-    turn may hire several buildings -- a Cloisters to reach the tile, a Grain Store on the way, a
-    Well to work it -- and an action carries a single `hire_payment_resource` for all of them, so
-    the second hire does not get its own say. Left out, each hire chose independently, which
-    produced actions the engine then refused to apply: enumeration had priced the Grain Store in
-    wheat and the Well in silver, while applying spent one resource on both.
     """
     if not _is_hired_source(source) or not source.usable:
         return ()
@@ -5742,18 +5717,13 @@ def _legal_hire_payment_options(
             "A wildcard hire cannot be enumerated without the payer's stock; the affordable "
             "resources are what the choice is drawn from."
         )
-    candidates = (
-        CORNUCOPIA_HIRE_RESOURCES
-        if required_resource is None
-        else tuple(r for r in CORNUCOPIA_HIRE_RESOURCES if r == required_resource)
-    )
     return tuple(
         _HirePaymentOption(
             resource=candidate,
             source=replace(source, hire_resource=candidate, hire_resource_chosen=True),
             chosen=True,
         )
-        for candidate in candidates
+        for candidate in CORNUCOPIA_HIRE_RESOURCES
         if _resource_amount_of(player_state, candidate) >= source.hire_cost
     )
 
@@ -5771,67 +5741,34 @@ def _resource_amount_of(player_state: PlayerState, resource: str) -> int:
     raise TransitionValidationError(f"Unknown hire payment resource: {resource}.")
 
 
-class _Conflict:
-    """Two hires in one turn settled the cornucopia differently, and no action can say both."""
-
-    __slots__ = ()
-
-
-CONFLICT = _Conflict()
-
-
-def _wildcard_pick(source: BuildingAbilitySource | None) -> str | None:
-    """The resource one hire settled the cornucopia on, or None if it had no choice to make."""
-    if source is None or not source.hire_resource_chosen:
-        return None
-    return source.hire_resource
-
-
-def _settled_wildcard_resource(
-    *sources: BuildingAbilitySource | None,
-    already: str | None = None,
-) -> str | _Conflict | None:
-    """What this turn has committed the cornucopia to, if anything has.
-
-    An action records ONE `hire_payment_resource`, and every hire it makes is resolved against that
-    one field. So a turn that hires more than once -- a Dormitory to start it, a Cloisters to reach
-    the tile, a Grain Store on the way, a Well to work it -- gets one choice between them, not one
-    each. `already` is what an enclosing hire settled; the sources are what this step would settle.
-
-    Returns None when nothing has been settled, which is the ordinary case: either the Merchant is
-    offering a plain resource and there is no choice to make, or nothing has been hired yet and the
-    later hires are free to choose. Returns CONFLICT when two of them settled on different
-    resources, which is a combination no action can express and so must not be generated.
-    """
-    picked = {pick for pick in (_wildcard_pick(source) for source in sources) if pick is not None}
-    if already is not None:
-        picked.add(already)
-    if not picked:
-        return None
-    if len(picked) > 1:
-        return CONFLICT
-    return picked.pop()
-
-
 def _hire_source_for_action(
     source: BuildingAbilitySource,
     action: FullTurnAction,
 ) -> BuildingAbilitySource:
-    """Resolve a wildcard hire source to the resource the action chose to pay in.
-
-    Enumeration settles the choice and records it on the action; resolution re-derives the source
-    from the state and finds the wildcard again. This is where the two meet, so that payment spends
-    the stock the action named rather than whichever one the wildcard is compared against first.
-    """
-    chosen = action.hire_payment_resource
-    if source.hire_resource != CORNUCOPIA_COUNTER or chosen is None:
+    """Resolve one hire source to the resource this action recorded for that building."""
+    if not _is_hired_source(source):
+        return source
+    payments = dict(action.hire_payments)
+    chosen = payments.get(source.building_key)
+    if chosen is None:
+        if _action_declares_hire_for_building(action, source.building_key):
+            raise TransitionValidationError(
+                f"Missing hire payment for {source.building_key}; action must record one per hire."
+            )
         return source
     if chosen not in CORNUCOPIA_HIRE_RESOURCES:
         raise TransitionValidationError(
-            f"hire_payment_resource must be one of {', '.join(CORNUCOPIA_HIRE_RESOURCES)}; "
-            f"got {chosen}."
+            "hire_payments values must be one of "
+            f"{', '.join(CORNUCOPIA_HIRE_RESOURCES)}; got {chosen!r} for {source.building_key}."
         )
-    return replace(source, hire_resource=chosen)
+    if source.hire_resource == CORNUCOPIA_COUNTER:
+        return replace(source, hire_resource=chosen, hire_resource_chosen=True)
+    if source.hire_resource != chosen:
+        raise TransitionValidationError(
+            f"hire_payments recorded {source.building_key}={chosen}, "
+            f"but the resolved source requires {source.hire_resource}."
+        )
+    return source
 
 
 def _hire_payment_source_variants(
@@ -5889,14 +5826,119 @@ def _with_hire_payment_fields(
     *,
     option: _HirePaymentOption,
 ) -> FullTurnAction:
-    """Stamp the chosen payment onto a constructed hire action.
+    """Stamp one hire payment onto a constructed action."""
+    return _with_hire_payment_for_source(action, source=option.source)
 
-    Left alone unless there was a choice. Where the Merchant offers one resource the action already
-    implies it, and recording it would change the id of every hire in the game to say nothing.
-    """
-    if not option.chosen:
+
+def _with_hire_payment_for_source(
+    action: FullTurnAction,
+    *,
+    source: BuildingAbilitySource,
+) -> FullTurnAction:
+    if not _is_hired_source(source):
         return action
-    return replace(action, hire_payment_resource=option.resource)
+    resource = source.hire_resource
+    if resource is None or resource == CORNUCOPIA_COUNTER:
+        raise ValueError(
+            f"Hire source for {source.building_key} is not resolved to a concrete payment resource."
+        )
+    if resource not in CORNUCOPIA_HIRE_RESOURCES:
+        allowed = ", ".join(CORNUCOPIA_HIRE_RESOURCES)
+        raise ValueError(
+            f"Hire source for {source.building_key} has unsupported resource {resource!r}; "
+            f"expected one of {allowed}."
+        )
+    current = dict(action.hire_payments)
+    previous = current.get(source.building_key)
+    if previous is not None and previous != resource:
+        raise ValueError(
+            "Action names two different payments for one hired building "
+            f"({source.building_key}: {previous} and {resource})."
+        )
+    current[source.building_key] = resource
+    canonical = tuple(sorted(current.items()))
+    return replace(action, hire_payments=canonical)
+
+
+def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
+    """Building ids this action says are hired (source set and not own_active)."""
+    candidates = (
+        (action.hired_building_id, action.hired_building_source),
+        (action.start_turn_building_id, action.start_turn_building_source),
+        (action.end_turn_building_id, action.end_turn_building_source),
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
+        (action.building_conversion_id, action.building_conversion_source),
+        (action.merchant_advance_building_id, action.merchant_advance_building_source),
+        (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
+        (action.taxation_majority_building_id, action.taxation_majority_building_source),
+        (action.workforce_move_building_id, action.workforce_move_building_source),
+        (action.bank_payment_building_id, action.bank_payment_building_source),
+    )
+    return tuple(
+        building_id
+        for building_id, source_label in candidates
+        if building_id is not None and source_label is not None and source_label != "own_active"
+    )
+
+
+def _action_declares_hire_for_building(action: FullTurnAction, building_key: str) -> bool:
+    return building_key in _declared_hired_buildings(action)
+
+
+def _validate_hire_payments_for_action(
+    action: FullTurnAction,
+    *,
+    hired_buildings: tuple[str, ...],
+) -> None:
+    entries = action.hire_payments
+    if tuple(sorted(entries)) != entries:
+        raise TransitionValidationError("hire_payments must be sorted by building id.")
+    seen: set[str] = set()
+    for pair in entries:
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise TransitionValidationError(
+                "hire_payments must be a tuple of (building_id, resource) pairs."
+            )
+        building_id, resource = pair
+        if not isinstance(building_id, str) or not building_id:
+            raise TransitionValidationError("hire_payments building ids must be non-empty strings.")
+        if building_id in seen:
+            raise TransitionValidationError(
+                "hire_payments cannot repeat a building id; one hire payment key is one building."
+            )
+        if resource not in CORNUCOPIA_HIRE_RESOURCES:
+            allowed = ", ".join(CORNUCOPIA_HIRE_RESOURCES)
+            raise TransitionValidationError(
+                f"hire_payments resource for {building_id} must be one of {allowed}; got {resource!r}."
+            )
+        seen.add(building_id)
+
+    duplicates = sorted(
+        building for building, count in Counter(hired_buildings).items() if count > 1
+    )
+    if duplicates:
+        listed = ", ".join(duplicates)
+        raise TransitionValidationError(
+            "Action names the same hired building in multiple slots, which is ambiguous for "
+            f"hire_payments: {listed}."
+        )
+
+    hired_set = set(hired_buildings)
+    missing = sorted(hired_set - seen)
+    extras = sorted(seen - hired_set)
+    if missing or extras:
+        messages: list[str] = []
+        if missing:
+            messages.append("missing payments for " + ", ".join(missing))
+        if extras:
+            messages.append("payments for non-hired buildings " + ", ".join(extras))
+        message = (
+            "hire_payments must match hired sources exactly: "
+            + "; ".join(messages)
+            + "."
+        )
+        raise TransitionValidationError(message)
 
 
 def _legal_bank_payment_options_for_action(
@@ -6483,11 +6525,12 @@ def _with_guild_merchant_advance_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         merchant_advance_building_id=option.building_id,
         merchant_advance_building_source=source_label,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_scriptorium_effective_acolyte_fields(
@@ -6500,11 +6543,12 @@ def _with_scriptorium_effective_acolyte_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         effective_acolyte_building_id=option.building_id,
         effective_acolyte_building_source=source_label,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_customs_house_taxation_fields(
@@ -6517,11 +6561,12 @@ def _with_customs_house_taxation_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         taxation_majority_building_id=option.building_id,
         taxation_majority_building_source=source_label,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_wagon_yard_free_hire_fields(
@@ -6547,11 +6592,12 @@ def _with_pulpit_workforce_move_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         workforce_move_building_id=option.building_id,
         workforce_move_building_source=source_label,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_grain_store_conversion_fields(
@@ -6564,13 +6610,14 @@ def _with_grain_store_conversion_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         building_conversion_id=option.building_id,
         building_conversion_source=source_label,
         building_conversion_direction=option.direction,
         building_conversion_amount=option.amount,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_bank_payment_fields(
@@ -6583,13 +6630,14 @@ def _with_bank_payment_fields(
         if option.source.source_type == "own_active"
         else _hired_building_source_label(option.source)
     )
-    return replace(
+    updated = replace(
         action,
         bank_payment_building_id=option.building_id,
         bank_payment_building_source=source_label,
         bank_payment_replaced_resource=option.replaced_resource,
         bank_payment_silver_amount=option.silver_amount,
     )
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _legal_action_variants_for_resolution(
@@ -6600,14 +6648,8 @@ def _legal_action_variants_for_resolution(
     route: tuple[int, ...],
     selected_duty: int,
     resolution: TurnResolutionType,
-    settled_resource: str | None = None,
 ) -> tuple[FullTurnAction, ...]:
-    """Return deterministic action variants for one duty-resolution option.
-
-    `settled_resource` is the resource this turn has already committed the cornucopia to, if an
-    earlier hire settled it. The bonus building hired here shares the action's one payment field
-    with those, so it does not get an independent choice.
-    """
+    """Return deterministic action variants for one duty-resolution option."""
     building_key = _SIMPLE_BONUS_BUILDING_BY_ACTION.get(resolution)
     if building_key is None:
         return (
@@ -6664,7 +6706,6 @@ def _legal_action_variants_for_resolution(
             for hire_option in _legal_hire_payment_options(
                 source=source,
                 player_state=state.player_state(state.active_player),
-                required_resource=settled_resource,
             )
         )
 

@@ -76,15 +76,13 @@ consequence of `path[0]` rather than of the rule.
 
 Building hire is the live consumer of the Merchant resource. When the Merchant sits on the
 cornucopia, the hiring player chooses which of wheat, stone or silver to pay in, and the choice
-shows up as one hire variant per resource they can afford. The action records it in
-`hire_payment_resource`, which is set on nothing else — every other hire has exactly one resource
-it could be paid in, so naming it would say nothing.
+shows up as one hire variant per resource they can afford. The action records payments per hire in
+`hire_payments`, a sorted tuple of `(building_id, resource)` pairs.
 
 Affordability decides how wide the choice is:
 
 - can afford all three: three variants
 - can afford one: one variant, identical to what a plain counter of that resource would generate
-  apart from the record of the choice
 - can afford none: hiring is unavailable, for want of resources rather than for the reason Taxation
   gives — there the Merchant offers nothing at all, whatever the player holds
 

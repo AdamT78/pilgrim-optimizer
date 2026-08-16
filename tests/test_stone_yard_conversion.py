@@ -7,6 +7,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 
@@ -266,12 +267,20 @@ def test_apply_rejects_buy_conversion_that_cannot_pay_after_hire() -> None:
     scenario = load_scenario("scenarios/stone_yard_insufficient_after_hire_001.json")
     actions = legal_actions(scenario.state, scenario.config)
     base_action = _first_action(actions, lambda candidate: candidate.resolution is TurnResolutionType.TITHE)
+    source = building_ability_source(
+        scenario.state,
+        scenario.config,
+        acting_player=scenario.state.active_player,
+        building_key="stone_yard",
+    )
+    assert source.hire_resource == "silver"
     invalid_action = replace(
         base_action,
         building_conversion_id="stone_yard",
         building_conversion_source="market",
         building_conversion_direction="buy_stone",
         building_conversion_amount=1,
+        hire_payments=(("stone_yard", "silver"),),
     )
 
     with pytest.raises(

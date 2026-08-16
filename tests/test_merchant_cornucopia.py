@@ -18,18 +18,34 @@ Merchant on it. The pin has been deleted as instructed and the coverage taken fr
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_id
-from pilgrim.model.enums import TurnResolutionType
+from pilgrim.model.actions import FullTurnAction, action_id
+from pilgrim.model.enums import EventType, TurnResolutionType
 from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.merchant import current_merchant_resource
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
 HIRE_SCENARIO = "scenarios/building_hire_opponent_owned_001.json"
+DEEP_SCENARIO = "scenarios/deep_round_eighteen_seed_seven_two_player_001.json"
+
+
+def _payment_for_hired_building(action) -> str | None:
+    if action.hired_building_id is None:
+        return None
+    return dict(action.hire_payments).get(action.hired_building_id)
+
+
+def _hire_event_resources(events) -> Counter[str]:
+    return Counter(
+        str(dict(event.details).get("resource"))
+        for event in events
+        if event.event_type is EventType.BUILDING_HIRED
+    )
 
 
 def _with_counter_under_the_merchant(scenario, value: str):
@@ -115,13 +131,17 @@ def test_a_cornucopia_offers_one_hire_variant_per_affordable_resource() -> None:
     hires = [
         action for action in legal_actions(state, config) if action.hired_building_id is not None
     ]
-    assert {action.hire_payment_resource for action in hires} == {"wheat", "stone", "silver"}
+    assert {_payment_for_hired_building(action) for action in hires} == {
+        "wheat",
+        "stone",
+        "silver",
+    }
 
     state = _with_stock(scenario.state, stone=0, silver=0, wheat=5)
     hires = [
         action for action in legal_actions(state, config) if action.hired_building_id is not None
     ]
-    assert {action.hire_payment_resource for action in hires} == {"wheat"}
+    assert {_payment_for_hired_building(action) for action in hires} == {"wheat"}
 
     state = _with_stock(scenario.state, stone=0, silver=0, wheat=0)
     assert not [
@@ -132,8 +152,8 @@ def test_a_cornucopia_offers_one_hire_variant_per_affordable_resource() -> None:
 def test_a_single_affordable_resource_costs_nothing_in_extra_actions() -> None:
     """No-op pruning: one option is not a choice, so it should not read as one.
 
-    A cornucopia the payer can only cover in wheat must generate what a plain wheat counter would,
-    give or take the record of which resource was chosen.
+    A cornucopia the payer can only cover in wheat must generate exactly what a plain wheat counter
+    would. With one affordable payment, there is no branch to add.
 
     Tithes are held out of the comparison because they are not subject to the claim. The helper
     moves the counter on the tile the MERCHANT stands on, and that tile is also a duty tile a
@@ -156,7 +176,7 @@ def test_a_single_affordable_resource_costs_nothing_in_extra_actions() -> None:
 
     wildcard_ids = hire_ids(cornucopia_config)
     plain_ids = hire_ids(wheat_config)
-    assert {a.replace(":paid_in:wheat", "") for a in wildcard_ids} == plain_ids
+    assert wildcard_ids == plain_ids
 
 
 @pytest.mark.parametrize(
@@ -195,7 +215,7 @@ def test_a_cornucopia_hire_is_paid_out_of_the_named_stock_and_no_other(
     variants = [
         action
         for action in legal_actions(state, config)
-        if action.hired_building_id is not None and action.hire_payment_resource == paid_in
+        if action.hired_building_id is not None and _payment_for_hired_building(action) == paid_in
     ]
     assert len(variants) == 1, f"expected exactly one hire variant paid in {paid_in}"
 
@@ -232,7 +252,7 @@ def test_paying_a_cornucopia_hire_spends_the_resource_the_action_named() -> None
     ]
     grouped: dict[str, list] = {}
     for action in variants:
-        key = action_id(action).replace(f":paid_in:{action.hire_payment_resource}", "")
+        key = action_id(replace(action, hire_payments=()))
         grouped.setdefault(key, []).append(action)
 
     compared = 0
@@ -243,7 +263,8 @@ def test_paying_a_cornucopia_hire_spends_the_resource_the_action_named() -> None
                     continue
                 here = apply_action(state, paid_here, config).state
                 elsewhere = apply_action(state, paid_elsewhere, config).state
-                spent = paid_here.hire_payment_resource
+                spent = _payment_for_hired_building(paid_here)
+                assert spent is not None
                 assert getattr(here.player_state(state.active_player).resources, spent) < getattr(
                     elsewhere.player_state(state.active_player).resources, spent
                 )
@@ -291,4 +312,108 @@ def test_the_ordinary_counters_are_unaffected_by_the_wildcard_branch(resource: s
         building_key="well",
     )
     assert source.hire_resource == resource
-    assert all(action.hire_payment_resource is None for action in legal_actions(state, config))
+    hires = [action for action in legal_actions(state, config) if action.hired_building_id is not None]
+    assert {_payment_for_hired_building(action) for action in hires} <= {resource}
+
+
+def test_two_hires_on_the_cornucopia_can_pay_different_resources() -> None:
+    scenario = load_scenario(DEEP_SCENARIO)
+    assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
+    actions = legal_actions(scenario.state, scenario.config)
+    action = next(
+        action
+        for action in actions
+        if isinstance(action, FullTurnAction)
+        and Counter(resource for _building, resource in action.hire_payments)
+        == Counter({"wheat": 1, "stone": 1})
+    )
+
+    result = apply_action(scenario.state, action, scenario.config)
+    assert _hire_event_resources(result.events) == Counter({"wheat": 1, "stone": 1})
+
+
+def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire() -> None:
+    scenario = load_scenario(DEEP_SCENARIO)
+    config = _with_counter_under_the_merchant(scenario, "stone")
+    actions = legal_actions(scenario.state, config)
+    action = next(
+        action
+        for action in actions
+        if isinstance(action, FullTurnAction)
+        and len(action.hire_payments) == 2
+        and {resource for _building, resource in action.hire_payments} == {"stone"}
+    )
+
+    result = apply_action(scenario.state, action, config)
+    assert _hire_event_resources(result.events) == Counter({"stone": 2})
+
+
+def test_a_late_library_hire_can_pay_from_turn_earnings() -> None:
+    """A hire late in the turn may be paid out of what the turn earned, not only what it opened with."""
+    scenario = load_scenario(DEEP_SCENARIO)
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.hire_payments == (("dormitory", "silver"), ("library", "silver"))
+    )
+
+    result = apply_action(scenario.state, action, scenario.config)
+    assert _hire_event_resources(result.events) == Counter({"silver": 2})
+    resources = result.state.player_state(scenario.state.active_player).resources
+    assert (resources.stone, resources.silver, resources.wheat) == (6, 0, 0)
+
+
+def test_hire_payments_must_match_hired_sources_exactly() -> None:
+    scenario = load_scenario(DEEP_SCENARIO)
+    base = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction) and len(action.hire_payments) >= 2
+    )
+
+    with_extra = replace(
+        base,
+        hire_payments=tuple(sorted((*base.hire_payments, ("mint", "stone")))),
+    )
+    with pytest.raises(TransitionValidationError, match="non-hired buildings"):
+        apply_action(scenario.state, with_extra, scenario.config)
+
+    with_missing = replace(base, hire_payments=base.hire_payments[1:])
+    with pytest.raises(TransitionValidationError, match="missing payments"):
+        apply_action(scenario.state, with_missing, scenario.config)
+
+
+def test_a_building_named_in_two_route_slots_is_rejected() -> None:
+    scenario = load_scenario("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
+    base = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.sow_route_building_id == "cloisters"
+        and action.sow_route_secondary_building_id is None
+    )
+    duplicated = replace(
+        base,
+        sow_route_secondary_building_id="cloisters",
+        sow_route_secondary_building_source=base.sow_route_building_source,
+    )
+    with pytest.raises(TransitionValidationError, match="cannot be the same"):
+        apply_action(scenario.state, duplicated, scenario.config)
+
+
+def test_action_id_differs_when_hire_payments_differ() -> None:
+    scenario = load_scenario(HIRE_SCENARIO)
+    _state, config = _with_cornucopia_under_the_merchant(scenario)
+    state = _with_stock(scenario.state, stone=5, silver=5, wheat=5)
+    hires = [action for action in legal_actions(state, config) if action.hired_building_id is not None]
+
+    grouped: dict[str, list[FullTurnAction]] = {}
+    for action in hires:
+        if not isinstance(action, FullTurnAction):
+            continue
+        grouped.setdefault(action_id(replace(action, hire_payments=())), []).append(action)
+    group = next(group for group in grouped.values() if len(group) >= 2)
+    first, second = group[0], group[1]
+    assert first.hire_payments != second.hire_payments
+    assert action_id(first) != action_id(second)
