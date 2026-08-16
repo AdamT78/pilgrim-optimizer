@@ -54,6 +54,7 @@ from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType  # noqa: E40
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scenario  # noqa: E402
+from pilgrim.rules.special_activities import allocation_outcome  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
     SetupSowAction,
     StartPlayerConfessionBoxAction,
@@ -382,6 +383,9 @@ RESOURCE_PROMPT = "choose a resource."
 BUILDING_PROMPT = "choose a building."
 COMBINATION_PROMPT = "choose one."
 SEAT_PROMPT = "choose first player for this round."
+ARRANGEMENT_PROMPT = (
+    "move acolytes from the Abbey to Special Activity and/or between Special Activities."
+)
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
@@ -421,6 +425,17 @@ def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
         # thing the labels are describing, kept in step by hand.
         "prompt": COMBINATION_PROMPT,
     }
+
+
+def _arrangement_value(action: Any) -> str:
+    """Allocation answer encoded as one scalar, keyed by where cubes end up and not by move order."""
+    outcome = allocation_outcome(action.allocation_moves)
+    if not outcome:
+        return "none"
+    return ",".join(
+        f"{slot}={delta:+d}"
+        for slot, delta in outcome
+    )
 
 
 def _confession_in_words(action: Any) -> str:
@@ -515,6 +530,17 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
         taken = tuple(getattr(action, name, ()) or ())
         amounts = [(noun, taken.count(noun)) for noun in COMBINATION_STOCKS]
         presented.append((_combination_step(verb, amounts), (name,)))
+    if action.resolution.value == "allocation":
+        presented.append(
+            (
+                {
+                    "kind": "arrangement",
+                    "value": _arrangement_value(action),
+                    "prompt": ARRANGEMENT_PROMPT,
+                },
+                ("allocation_moves",),
+            )
+        )
     return presented
 
 

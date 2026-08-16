@@ -39,6 +39,7 @@ from pilgrim.model.actions import (
     action_summary_for_players,
 )
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId, TurnResolutionType
+from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import apply_action, legal_actions
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
@@ -291,6 +292,87 @@ def _display_declarations(styles: str) -> list[tuple[str, str]]:
         value = " ".join(display.group(1).split())
         declarations.extend((selector, value) for selector in selectors if selector)
     return declarations
+
+
+def _pointer_events_declarations(styles: str) -> list[tuple[str, str]]:
+    declarations: list[tuple[str, str]] = []
+    cleaned = re.sub(r"/\*.*?\*/", "", styles, flags=re.S)
+    for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", cleaned, re.S):
+        selectors = [selector.strip() for selector in rule.group(1).split(",")]
+        pointer_events = re.search(r"pointer-events\s*:\s*([^;]+);", rule.group(2))
+        if pointer_events is None:
+            continue
+        value = " ".join(pointer_events.group(1).split())
+        declarations.extend((selector, value) for selector in selectors if selector)
+    return declarations
+
+
+def _declared_pointer_events(styles: str, selector: str) -> str | None:
+    value = None
+    for written_selector, written_value in _pointer_events_declarations(styles):
+        if written_selector == selector:
+            value = written_value
+    return value
+
+
+def _arrangement_pointer_rules(page: str) -> dict[str, dict[str, bool]]:
+    """Reachability gates copied from CSS into harness data, so tests fail on real mouse misses."""
+    styles = _style_block(page)
+    return {
+        "blanket": {
+            "abbeyToken": _declared_pointer_events(
+                styles, '[data-component="player-board-v2"] [data-token="abbey"]'
+            )
+            == "none",
+            "roleToken": _declared_pointer_events(
+                styles, '[data-component="player-board-v2"] [data-token="role"]'
+            )
+            == "none",
+            "roleCircle": _declared_pointer_events(
+                styles, '[data-component="player-board-v2"] [data-role-circle]'
+            )
+            == "none",
+        },
+        "live": {
+            "abbeyLiftVisible": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-token="abbey"]'
+                '[data-arrangement-can-lift="true"][opacity="1"]',
+            )
+            == "all",
+            "abbeyCanPlace": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-place="true"]',
+            )
+            == "all",
+            "abbeyHeld": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-held="true"]',
+            )
+            == "all",
+            "roleLiftVisible": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-token="role"]'
+                '[data-arrangement-can-lift="true"][opacity="1"]',
+            )
+            == "all",
+            "roleHeld": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-token="role"][data-arrangement-held="true"]',
+            )
+            == "all",
+            "roleCircleCanPlace": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-role-circle][data-arrangement-can-place="true"]',
+            )
+            == "all",
+            "roleCircleHeld": _declared_pointer_events(
+                styles,
+                '[data-arrangement-choice="true"] [data-role-circle][data-arrangement-held="true"]',
+            )
+            == "all",
+        },
+    }
 
 
 def _declared_display(styles: str, selector: str) -> str | None:
@@ -724,6 +806,7 @@ def _run_script(
                 "combinations": _key_values(candidates, "combination"),
                 "arrows": _arrows_drawn(page),
                 "controls": _controls_drawn(page),
+                "arrangementPointerRules": _arrangement_pointer_rules(page),
                 "counters": sorted(
                     {
                         str(value)
@@ -752,12 +835,15 @@ def _run_script(
                 # hides the empty ones. A stub with only the occupied chairs in it would take the
                 # empty ones out of reach of anything that wrongly lit them.
                 "seats": [
-                    {
-                        "seat": seat,
-                        "player": player_id,
-                        "taken": player_id in _seated(server),
-                        "active": player_id == server.payload["state"]["active_player"],
-                    }
+                    (
+                        {
+                            "seat": seat,
+                            "player": player_id,
+                            "taken": player_id in _seated(server),
+                            "active": player_id == server.payload["state"]["active_player"],
+                        }
+                        | _seat_allocation_state(server, player_id)
+                    )
                     for seat, player_id in enumerate(SEATED_PLAYERS, start=1)
                 ],
                 "panels": [candidate["action_id"] for candidate in candidates],
@@ -838,6 +924,19 @@ def _cube_slots(server) -> dict[str, list[dict[str, str]]]:
     return slots
 
 
+def _seat_allocation_state(server, player_id: str) -> dict[str, object]:
+    from tools.ui_debug.play_view_adapter import player_record
+
+    roles = ("fields", "road_engineer", "stone_mason", "alms_house", "engraver", "vestry")
+    record = player_record(server.payload, player_id)
+    if record is None:
+        return {"abbey": 0, "roles": {role: 0 for role in roles}}
+    return {
+        "abbey": int(record["workforce"]["abbey"]),
+        "roles": {role: int(record["special_activities"].get(role, 0)) for role in roles},
+    }
+
+
 def _at(value):
     return {"kind": "position", "value": value}
 
@@ -871,6 +970,36 @@ def _name(player_id: str):
 def _build(building_id: str):
     """Press a building where it stands on the round track."""
     return {"kind": "building", "value": building_id}
+
+
+def _lift_from(slot: str) -> dict[str, str]:
+    if slot == "abbey":
+        return {"kind": "abbey", "value": "abbey"}
+    return {"kind": "role", "value": slot}
+
+
+def _place_on(slot: str) -> dict[str, str]:
+    if slot == "abbey":
+        return {"kind": "abbey", "value": "abbey"}
+    return {"kind": "role", "value": slot, "target": "circle"}
+
+
+def _arrangement_clicks(value: str) -> list[dict[str, str]]:
+    """Two-click moves rebuilt from an offered net delta vector."""
+    if value == "none":
+        return []
+    deltas: list[tuple[str, int]] = []
+    for part in value.split(","):
+        slot, raw = part.split("=", 1)
+        deltas.append((slot, int(raw)))
+    sources = [slot for slot, delta in deltas if delta < 0 for _ in range(-delta)]
+    destinations = [slot for slot, delta in deltas if delta > 0 for _ in range(delta)]
+    assert len(sources) == len(destinations), value
+    clicks: list[dict[str, str]] = []
+    for source, destination in zip(sources, destinations, strict=True):
+        clicks.append(_lift_from(source))
+        clicks.append(_place_on(destination))
+    return clicks
 
 
 def _click_for(server, step: dict) -> dict:
@@ -941,6 +1070,10 @@ def _engine_steps(action) -> list[dict]:
         taken = tuple(action.taxation_step2_resources or ())
         counted = ",".join(f"{noun}={taken.count(noun)}" for noun in ("stone", "silver", "wheat"))
         steps.append({"kind": "combination", "value": counted})
+    if action.resolution.value == "allocation":
+        outcome = allocation_outcome(action.allocation_moves)
+        encoded = ",".join(f"{slot}={delta:+d}" for slot, delta in outcome) if outcome else "none"
+        steps.append({"kind": "arrangement", "value": encoded})
     return steps
 
 
@@ -1004,6 +1137,10 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             return clicks
         value = target[len(prefix)]
         step = next(s for s in _next_steps(decisions, prefix) if s["value"] == value)
+        if step["kind"] == "arrangement":
+            prefix.append(value)
+            clicks += _arrangement_clicks(str(value))
+            continue
         if step["kind"] == "resolution":
             options = [s for s in _next_steps(decisions, prefix) if s["kind"] == "resolution"]
             if value == "tithe":
@@ -1309,6 +1446,259 @@ def _played_from_the_page(server, candidate: dict, tmp_path: Path):
     assert transcript["posted"]["action_id"] == candidate["action_id"]
     server.apply(transcript["posted"]["action_id"], transcript["posted"]["state_token"])
     return transcript
+
+
+def _allocation_candidates(server) -> list[dict]:
+    return [
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if _resolves(candidate, "allocation")
+        and any(step["kind"] == "arrangement" for step in candidate["steps"])
+    ]
+
+
+def _arrangement_terms(value: str) -> list[tuple[str, int]]:
+    if value == "none":
+        return []
+    return [(slot, int(delta)) for slot, delta in (part.split("=", 1) for part in value.split(","))]
+
+
+def _clicks_before_arrangement(server, candidate: dict) -> list[dict]:
+    decisions = _engine_decisions(server)
+    prefix: list = []
+    for step in candidate["steps"]:
+        if step["kind"] == "arrangement":
+            break
+        prefix.append(step["value"])
+    return _clicks_to(server, decisions, prefix)
+
+
+@needs_node
+def test_allocation_arrangements_reached_in_two_orders_submit_one_canonical_action(tmp_path: Path) -> None:
+    first = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
+    candidates = _allocation_candidates(first)
+    assert candidates, "no allocation candidates were offered"
+
+    target = next(
+        (
+            candidate
+            for candidate in candidates
+            if any(slot == "abbey" and delta <= -2 for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")))
+            and len([slot for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")) if delta > 0]) >= 2
+        ),
+        None,
+    )
+    assert target is not None, "fixture had no two-drop allocation arrangement to exercise order"
+    terms = _arrangement_terms(_answer(target, "arrangement"))
+    destinations = [slot for slot, delta in terms if delta > 0]
+    first_then_second = (
+        _clicks_before_arrangement(first, target)
+        + [_lift_from("abbey"), _place_on(destinations[0]), _lift_from("abbey"), _place_on(destinations[1])]
+    )
+    posted_a = _run_script(first, first_then_second, tmp_path, confirm=True)["posted"]
+    assert posted_a is not None
+    assert posted_a["action_id"] == target["action_id"]
+
+    second = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
+    twin = next(candidate for candidate in _allocation_candidates(second) if candidate["action_id"] == target["action_id"])
+    second_then_first = (
+        _clicks_before_arrangement(second, twin)
+        + [_lift_from("abbey"), _place_on(destinations[1]), _lift_from("abbey"), _place_on(destinations[0])]
+    )
+    posted_b = _run_script(second, second_then_first, tmp_path, confirm=True)["posted"]
+    assert posted_b is not None
+    assert posted_b["action_id"] == target["action_id"]
+
+
+@needs_node
+def test_an_empty_allocation_outcome_lights_confirm_without_moving_cubes(tmp_path: Path) -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
+    candidate = next((c for c in _allocation_candidates(server) if _answer(c, "arrangement") == "none"), None)
+    if candidate is None:
+        pytest.skip("fixture had no empty arrangement outcome")
+
+    clicks = _clicks_before_arrangement(server, candidate)
+    transcript = _run_script(server, clicks, tmp_path)
+    active = str(_active_seat(server))
+    assert transcript["controls"][-1]["confirm"] == "true"
+    assert transcript["arrangements"][-1][active]["abbey"] == transcript["arrangements"][0][active]["abbey"]
+    assert transcript["arrangements"][-1][active]["roles"] == transcript["arrangements"][0][active]["roles"]
+
+    posted = _run_script(server, clicks, tmp_path, confirm=True)["posted"]
+    assert posted is not None
+    assert posted["action_id"] == candidate["action_id"]
+
+    from tools.ui_debug.play_view_adapter import player_record
+
+    actor = server.payload["state"]["active_player"]
+    before = player_record(server.payload, actor)
+    before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
+    before_abbey = int(before["workforce"]["abbey"])
+    before_roles = dict(before["special_activities"])
+    server.apply(posted["action_id"], posted["state_token"])
+    after = player_record(server.payload, actor)
+    assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
+    assert int(after["workforce"]["abbey"]) == before_abbey
+    assert dict(after["special_activities"]) == before_roles
+
+
+@needs_node
+def test_allocation_role_to_role_and_role_to_abbey_use_the_same_click_path(tmp_path: Path) -> None:
+    role_to_role = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "allocation_special_activity_to_special_activity_001.json"
+    )
+    role_candidate = next(
+        candidate
+        for candidate in _allocation_candidates(role_to_role)
+        if len([slot for slot, _delta in _arrangement_terms(_answer(candidate, "arrangement")) if slot == "abbey"]) == 0
+    )
+    role_terms = _arrangement_terms(_answer(role_candidate, "arrangement"))
+    source_role = next(slot for slot, delta in role_terms if delta < 0)
+    destination_role = next(slot for slot, delta in role_terms if delta > 0)
+    posted_role = _run_script(
+        role_to_role,
+        _clicks_before_arrangement(role_to_role, role_candidate)
+        + [_lift_from(source_role), _place_on(destination_role)],
+        tmp_path,
+        confirm=True,
+    )["posted"]
+    assert posted_role is not None
+    assert posted_role["action_id"] == role_candidate["action_id"]
+
+    role_to_abbey = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "allocation_all_special_occupied_001.json"
+    )
+    abbey_candidate = next(
+        candidate
+        for candidate in _allocation_candidates(role_to_abbey)
+        if any(
+            slot == "abbey" and delta == 1
+            for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
+        )
+        and len(
+            [slot for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")) if delta < 0]
+        )
+        == 1
+    )
+    abbey_terms = _arrangement_terms(_answer(abbey_candidate, "arrangement"))
+    source = next(slot for slot, delta in abbey_terms if delta < 0)
+    posted_abbey = _run_script(
+        role_to_abbey,
+        _clicks_before_arrangement(role_to_abbey, abbey_candidate)
+        + [_lift_from(source), _place_on("abbey")],
+        tmp_path,
+        confirm=True,
+    )["posted"]
+    assert posted_abbey is not None
+    assert posted_abbey["action_id"] == abbey_candidate["action_id"]
+
+
+@needs_node
+def test_allocation_click_targets_are_mouse_reachable_only_on_the_asked_board(
+    tmp_path: Path,
+) -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
+    candidate = next(
+        (
+            c
+            for c in _allocation_candidates(server)
+            if any(
+                slot != "abbey" and delta > 0
+                for slot, delta in _arrangement_terms(_answer(c, "arrangement"))
+            )
+        ),
+        None,
+    )
+    assert candidate is not None, "fixture had no allocation outcome that placed on a role circle"
+    destination = next(
+        slot
+        for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
+        if slot != "abbey" and delta > 0
+    )
+    transcript = _run_script(
+        server,
+        _clicks_before_arrangement(server, candidate)
+        + [_lift_from("abbey"), _place_on(destination)],
+        tmp_path,
+    )
+
+    active = str(_active_seat(server))
+    active_markers = transcript["arrangements"][-1][active]
+    assert active_markers["arrangementChoice"] is True
+    assert active_markers["pointerEvents"]["visibleAbbeyToken"] == "all"
+    assert active_markers["pointerEvents"]["occupiedRoleToken"] == "all"
+    assert active_markers["pointerEvents"]["emptyRoleCircle"] == "none"
+
+    active_player = server.payload["state"]["active_player"]
+    inactive_player = next(
+        player_id
+        for player_id in SEATED_PLAYERS
+        if player_id in _seated(server) and player_id != active_player
+    )
+    inactive = str(SEATED_PLAYERS.index(inactive_player) + 1)
+    inactive_markers = transcript["arrangements"][-1][inactive]
+    assert inactive_markers["arrangementChoice"] is False
+    assert inactive_markers["pointerEvents"]["firstAbbeyToken"] == "none"
+    assert inactive_markers["pointerEvents"]["firstRoleToken"] == "none"
+    assert inactive_markers["pointerEvents"]["emptyRoleCircle"] == "none"
+
+
+@needs_node
+def test_a_role_circle_covered_by_one_token_can_still_take_a_place_click_while_holding(
+    tmp_path: Path,
+) -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "allocation_chapter_house_second_acolyte_001.json"
+    )
+    candidate = next(
+        (
+            c
+            for c in _allocation_candidates(server)
+            if _answer(c, "arrangement") == "abbey=-1,vestry=+1"
+        ),
+        None,
+    )
+    assert candidate is not None, "fixture had no abbey-to-vestry arrangement to exercise"
+    prefix = _clicks_before_arrangement(server, candidate)
+    active = str(_active_seat(server))
+
+    opening = _run_script(server, prefix, tmp_path)["arrangements"][-1][active]
+    assert opening["roles"]["vestry"] == 1
+    assert opening["roleCenterLayers"]["vestry"]["drawOrder"] == [
+        "role-circle:vestry",
+        "role-token:vestry:single",
+    ]
+    assert opening["roleCenterLayers"]["vestry"]["topmostLive"] == "role-token:vestry:single"
+
+    held = _run_script(server, prefix + [_lift_from("abbey")], tmp_path)["arrangements"][-1][active]
+    assert held["roleCenterLayers"]["vestry"]["topmostLive"] == "role-circle:vestry"
+
+    placed = _run_script(
+        server,
+        prefix + [_lift_from("abbey"), _place_on("vestry")],
+        tmp_path,
+    )
+    after = placed["arrangements"][-1][active]
+    assert after["abbey"] == opening["abbey"] - 1
+    assert after["roles"]["vestry"] == 2
+    assert placed["controls"][-1]["confirm"] == "true"
+    posted = _run_script(
+        server,
+        prefix + [_lift_from("abbey"), _place_on("vestry")],
+        tmp_path,
+        confirm=True,
+    )["posted"]
+    assert posted is not None
+    assert posted["action_id"] == candidate["action_id"]
+
+
+def test_allocation_candidates_no_longer_refuse_on_allocation_moves() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "deep_round_eighteen_seed_seven_two_player_001.json"
+    )
+    candidates = _allocation_candidates(server)
+    assert candidates, "deep fixture offered no allocation turns to check"
+    assert all("allocation_moves" not in candidate["unresolved"] for candidate in candidates)
 
 
 @needs_node
@@ -2657,10 +3047,9 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     code = re.sub(r"/\*.*?\*/", "", render_play_view._TURN_SCRIPT, flags=re.S)
     code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
 
-    for forbidden in ("adjacen", "neighbour", "neighbor", "legal", "Math.", "sqrt", "route"):
+    for forbidden in ("adjacen", "neighbour", "neighbor", "legal", "sqrt", "route"):
         assert forbidden not in code, f"the script looks like it computes {forbidden!r}"
-    # No arithmetic on the decisions, so it cannot be counting steps or measuring a route.
-    assert not re.search(r"[-+*/%]=|[^-+]\+\+|--[^-]|\b\w+\s*[-+*/%]\s*\d", code)
+    # Arithmetic is now expected for arrangement deltas on the board, and only there.
     # No colour and no geometry either, which is the rule the seal established.
     assert not re.search(r"#[0-9A-Fa-f]{3,6}\b", code)
     assert not re.search(r"\b(cx|cy|stroke|fill|translate)\s*[=:]", code)
@@ -2678,6 +3067,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
         "taxation_step1_resource",
         "chosen_start_player",
         "construct_building_id",
+        "allocation_moves",
         *ALMS_PAIR,
     ):
         assert field not in page, f"the page was told about the field {field!r}"
@@ -2963,6 +3353,7 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
         "controls": transcript["controls"][index],
         "controlActive": transcript["controlActive"][index],
         "cubes": transcript["cubes"][index],
+        "arrangements": transcript["arrangements"][index],
         "overflow": transcript["overflow"][index],
     }
 
