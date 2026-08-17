@@ -104,6 +104,7 @@ def test_every_action_dataclass_hashes_the_way_it_compares(dataclass_type) -> No
     assert dataclass_type.__hash__ is not None, f"{dataclass_type.__name__} is unhashable"
 
 
+@pytest.mark.slow
 def test_the_deep_position_hashes_every_action_it_generates(deep_actions) -> None:
     """Hashability asserted on real actions, not on empty ones the fields never populate."""
     assert len(deep_actions) > 10_000, "this fixture is here to be big; something has shrunk it"
@@ -116,6 +117,7 @@ def test_the_deep_position_hashes_every_action_it_generates(deep_actions) -> Non
                 raise AssertionError("equal actions must not both be emitted")
 
 
+@pytest.mark.slow
 def test_a_set_and_a_scan_agree_about_what_is_already_present(deep_actions) -> None:
     """The substitution's whole premise, checked against real actions rather than argued.
 
@@ -232,6 +234,7 @@ def test_the_excluded_membership_tests_are_still_the_ones_we_excluded() -> None:
     )
 
 
+@pytest.mark.slow
 def test_de_dup_stays_linear_in_the_number_of_actions(deep_generation) -> None:
     """The complexity assertion, counted rather than timed.
 
@@ -248,6 +251,7 @@ def test_de_dup_stays_linear_in_the_number_of_actions(deep_generation) -> None:
     )
 
 
+@pytest.mark.slow
 def test_the_deep_fixture_is_the_position_it_says_it_is(deep_position, deep_actions) -> None:
     """Without this the fixture could drift shallow and every assertion above would still pass."""
     assert deep_position.state.round_number == 18

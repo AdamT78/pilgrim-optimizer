@@ -316,6 +316,7 @@ def test_the_shortest_spelling_also_gives_the_shortest_log(generations) -> None:
     assert checked > 100, f"only {checked} logs compared"
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "scenario_name",
     [
@@ -426,6 +427,7 @@ def deep_generation():
     return scenario, before
 
 
+@pytest.mark.slow
 def test_equal_outcome_survives_a_late_position_too(deep_generation) -> None:
     """The same equality check where the decisions are dense, over a bounded sample.
 
@@ -453,14 +455,17 @@ def test_equal_outcome_survives_a_late_position_too(deep_generation) -> None:
     assert pairs >= budget, f"only {pairs} pairs compared at the deep fixture"
 
 
-def test_the_late_position_still_reaches_everything_it_used_to(deep_generation) -> None:
+@pytest.mark.slow
+def test_the_late_position_still_reaches_everything_it_used_to(
+    deep_generation, deep_actions
+) -> None:
     """Completeness at the deep fixture, counted rather than sampled.
 
     Comparing outcomes per decision needs no application, so this one can afford to look at all six
     hundred allocation decisions rather than a sample of them.
     """
     scenario, before = deep_generation
-    after = legal_actions(scenario.state, scenario.config)
+    _shared_scenario, after = deep_actions
 
     reachable_before = defaultdict(set)
     reachable_after = defaultdict(set)

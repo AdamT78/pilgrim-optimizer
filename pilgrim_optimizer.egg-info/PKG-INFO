@@ -5,6 +5,7 @@ Summary: Deterministic rules engine and optimization framework scaffold for Pilg
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
 Provides-Extra: dev
+Requires-Dist: playwright; extra == "dev"
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Requires-Dist: ruff>=0.5.0; extra == "dev"
 
@@ -23,7 +24,7 @@ Requires-Dist: ruff>=0.5.0; extra == "dev"
 
 - Mancala sandbox with 9 positions (city + 8 duties).
 - Directed movement graph and legal route generation.
-- Sowing, duty resolution, and tithe placeholder action.
+- Sowing, duty resolution, and the tithe action, which gains the selected tile's tithe counter.
 - Duty strength (majority/parity/minority), value, and minority silver cost.
 - Deterministic transition pipeline with invariant validation and game events.
 - Depth-limited exact search placeholder built on `legal_actions()` + `apply_action()`.
@@ -48,8 +49,22 @@ python -m pip install -e ".[dev]"
 
 ## Run Tests
 
+Full suite (run this before pushing a branch):
+
 ```bash
 pytest
+```
+
+Fast lane for local inner-loop checks after merging latest changes:
+
+```bash
+pytest -m "not slow"
+```
+
+Browser click-reachability tests are in the slow lane and need a Chromium download:
+
+```bash
+python -m playwright install chromium
 ```
 
 ## CLI Usage
@@ -71,6 +86,11 @@ Solve with temporary exact search:
 ```bash
 python -m pilgrim.cli solve scenarios/mancala_sandbox_001.json --depth 3
 ```
+
+## Documentation
+
+- First CLI walkthrough: `docs/usage/cli_commands.md`
+- The guide explains the first three CLI commands (`validate`, `legal-actions`, and `solve`).
 
 ## Development Principles
 

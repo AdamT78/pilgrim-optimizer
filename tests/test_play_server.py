@@ -1692,6 +1692,7 @@ def test_a_role_circle_covered_by_one_token_can_still_take_a_place_click_while_h
     assert posted["action_id"] == candidate["action_id"]
 
 
+@pytest.mark.slow
 def test_allocation_candidates_no_longer_refuse_on_allocation_moves() -> None:
     server = PlayServer(
         ("127.0.0.1", 0), SCENARIOS / "deep_round_eighteen_seed_seven_two_player_001.json"
