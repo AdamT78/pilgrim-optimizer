@@ -38,8 +38,22 @@ python -m pip install -e ".[dev]"
 
 ## Run Tests
 
+Full suite (run this before pushing a branch):
+
 ```bash
 pytest
+```
+
+Fast lane for local inner-loop checks after merging latest changes:
+
+```bash
+pytest -m "not slow"
+```
+
+Browser click-reachability tests are in the slow lane and need a Chromium download:
+
+```bash
+python -m playwright install chromium
 ```
 
 ## CLI Usage

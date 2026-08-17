@@ -316,10 +316,10 @@ def test_the_ordinary_counters_are_unaffected_by_the_wildcard_branch(resource: s
     assert {_payment_for_hired_building(action) for action in hires} <= {resource}
 
 
-def test_two_hires_on_the_cornucopia_can_pay_different_resources() -> None:
-    scenario = load_scenario(DEEP_SCENARIO)
+@pytest.mark.slow
+def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -> None:
+    scenario, actions = deep_actions
     assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
-    actions = legal_actions(scenario.state, scenario.config)
     action = next(
         action
         for action in actions
@@ -332,6 +332,7 @@ def test_two_hires_on_the_cornucopia_can_pay_different_resources() -> None:
     assert _hire_event_resources(result.events) == Counter({"wheat": 1, "stone": 1})
 
 
+@pytest.mark.slow
 def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire() -> None:
     scenario = load_scenario(DEEP_SCENARIO)
     config = _with_counter_under_the_merchant(scenario, "stone")
@@ -348,12 +349,13 @@ def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire(
     assert _hire_event_resources(result.events) == Counter({"stone": 2})
 
 
-def test_a_late_library_hire_can_pay_from_turn_earnings() -> None:
+@pytest.mark.slow
+def test_a_late_library_hire_can_pay_from_turn_earnings(deep_actions) -> None:
     """A hire late in the turn may be paid out of what the turn earned, not only what it opened with."""
-    scenario = load_scenario(DEEP_SCENARIO)
+    scenario, actions = deep_actions
     action = next(
         action
-        for action in legal_actions(scenario.state, scenario.config)
+        for action in actions
         if isinstance(action, FullTurnAction)
         and action.hire_payments == (("dormitory", "silver"), ("library", "silver"))
     )
@@ -364,11 +366,12 @@ def test_a_late_library_hire_can_pay_from_turn_earnings() -> None:
     assert (resources.stone, resources.silver, resources.wheat) == (6, 0, 0)
 
 
-def test_hire_payments_must_match_hired_sources_exactly() -> None:
-    scenario = load_scenario(DEEP_SCENARIO)
+@pytest.mark.slow
+def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
+    scenario, actions = deep_actions
     base = next(
         action
-        for action in legal_actions(scenario.state, scenario.config)
+        for action in actions
         if isinstance(action, FullTurnAction) and len(action.hire_payments) >= 2
     )
 

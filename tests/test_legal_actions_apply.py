@@ -32,6 +32,7 @@ from pilgrim.rules.transition import apply_action, legal_actions
 
 REPO = Path(__file__).resolve().parents[1]
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
+pytestmark = pytest.mark.slow
 
 # Three actions still refuse to apply, and they are a DIFFERENT bug from the one this file was
 # written for: a Chapter House raises a Special Activity's capacity to two, and donating a building
@@ -50,21 +51,20 @@ def scenario_paths():
     return sorted(REPO.joinpath("scenarios").glob("*.json"))
 
 
-@pytest.fixture(scope="module")
-def deep_actions():
-    scenario = load_scenario(REPO / "scenarios" / f"{DEEP_FIXTURE}.json")
-    return scenario, legal_actions(scenario.state, scenario.config)
-
-
-def test_every_legal_action_applies() -> None:
+def test_every_legal_action_applies(deep_actions) -> None:
     """The contract itself, over every committed position including the deep one."""
+    deep_scenario, deep_legal_actions = deep_actions
     unexpected: list[tuple[str, str, str]] = []
     counted: Counter[str] = Counter()
     total = 0
 
     for path in scenario_paths():
-        scenario = load_scenario(path)
-        actions = legal_actions(scenario.state, scenario.config)
+        if path.stem == DEEP_FIXTURE:
+            scenario = deep_scenario
+            actions = deep_legal_actions
+        else:
+            scenario = load_scenario(path)
+            actions = legal_actions(scenario.state, scenario.config)
         total += len(actions)
         for action in actions:
             try:
