@@ -183,7 +183,8 @@ def test_give_alms_transition_fails_when_payment_is_insufficient() -> None:
         apply_action(state, action, scenario.config)
 
 
-def test_give_alms_transition_fails_when_payment_does_not_match_duty_value() -> None:
+def test_give_alms_transition_refuses_zero_payment() -> None:
+    """Give Alms paid requires at least one resource; zero payment is never legal."""
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = GameState(
         active_player=PlayerId.PLAYER_ONE,
@@ -205,10 +206,40 @@ def test_give_alms_transition_fails_when_payment_does_not_match_duty_value() -> 
         route=(5, 6, 7),
         selected_duty=5,
         resolution=TurnResolutionType.GIVE_ALMS_PAID,
-        alms_payment_silver=1,
+        alms_payment_silver=0,
         alms_payment_wheat=0,
     )
-    with pytest.raises(TransitionValidationError, match="must equal duty value"):
+    with pytest.raises(TransitionValidationError, match="at least 1"):
+        apply_action(state, action, scenario.config)
+
+
+def test_give_alms_transition_refuses_payment_above_duty_ceiling() -> None:
+    """Give Alms paid treats duty value as a ceiling and rejects totals above it."""
+    scenario = load_scenario("scenarios/mancala_sandbox_001.json")
+    state = GameState(
+        active_player=PlayerId.PLAYER_ONE,
+        phase=TurnPhase.SOW,
+        players=(
+            PlayerState(
+                resources=Resources(stone=0, silver=3, wheat=1),
+                workforce=Workforce(mancala=(3, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
+            PlayerState(
+                resources=Resources(stone=0, silver=0, wheat=0),
+                workforce=Workforce(mancala=(0, 0, 0, 0, 0, 0, 0, 0, 0)),
+            ),
+        ),
+        turn=0,
+    )
+    action = FullTurnAction(
+        origin=0,
+        route=(5, 6, 7),
+        selected_duty=5,
+        resolution=TurnResolutionType.GIVE_ALMS_PAID,
+        alms_payment_silver=3,
+        alms_payment_wheat=0,
+    )
+    with pytest.raises(TransitionValidationError, match="cannot exceed duty value"):
         apply_action(state, action, scenario.config)
 
 
@@ -431,9 +462,97 @@ def test_give_alms_payment_options_for_duty_value_two() -> None:
         ),
         turn=0,
     )
-    options = {
+    options = [
         (action.alms_payment_silver, action.alms_payment_wheat)
         for action in legal_actions(state, scenario.config)
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
-    }
-    assert options == {(2, 0), (1, 1), (0, 2)}
+    ]
+    assert set(options) == {(2, 0), (1, 1), (0, 2), (1, 0), (0, 1)}
+    assert len(options) == len(set(options))
+
+
+def test_give_alms_majority_may_pay_below_ceiling_and_move_by_paid_total() -> None:
+    """A majority payer may choose a smaller legal payment and advance one row per resource paid."""
+    scenario = load_scenario("scenarios/give_alms_paid_001.json")
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    legal = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
+    ]
+    partial = next(
+        action
+        for action in legal
+        if action.alms_payment_silver == 1 and action.alms_payment_wheat == 0
+    )
+
+    result = apply_action(scenario.state, partial, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+    progress_details = dict(
+        next(
+            event for event in result.events if event.event_type is EventType.ALMS_PROGRESS
+        ).details
+    )
+
+    assert after.resources.silver == before.resources.silver - 1
+    assert after.resources.wheat == before.resources.wheat
+    assert progress_details["new_row"] - progress_details["old_row"] == 1
+
+
+def test_mill_waiver_applies_against_reduced_give_alms_payment() -> None:
+    """Mill waiver is computed from the reduced wheat payment, not from the duty-value ceiling."""
+    scenario = load_scenario("scenarios/give_alms_hire_mill_market_wheat3_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.hired_building_id == "mill"
+        and candidate.alms_house_extra_silver == 0
+        and candidate.alms_house_extra_wheat == 0
+        and candidate.alms_payment_silver == 0
+        and candidate.alms_payment_wheat == 1
+    )
+
+    result = apply_action(scenario.state, action, scenario.config)
+    payment_details = dict(
+        next(event for event in result.events if event.event_type is EventType.ALMS_PAYMENT).details
+    )
+    progress_details = dict(
+        next(
+            event for event in result.events if event.event_type is EventType.ALMS_PROGRESS
+        ).details
+    )
+
+    assert payment_details["credited_wheat"] == 1
+    assert payment_details["actual_paid_wheat"] == 0
+    assert progress_details["new_row"] - progress_details["old_row"] == 1
+
+
+def test_alms_house_extra_still_extends_a_reduced_base_payment() -> None:
+    """Alms House extra bonus still stacks on a reduced base payment ceiling."""
+    scenario = load_scenario("scenarios/give_alms_chapter_house_two_alms_house_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.alms_house_extra_silver + candidate.alms_house_extra_wheat == 2
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 3
+    )
+
+    result = apply_action(scenario.state, action, scenario.config)
+    progress_details = dict(
+        next(
+            event for event in result.events if event.event_type is EventType.ALMS_PROGRESS
+        ).details
+    )
+    alms_house_bonus = dict(
+        next(
+            event
+            for event in result.events
+            if event.event_type is EventType.SPECIAL_ACTIVITY_BONUS
+            and dict(event.details).get("activity") == "alms_house"
+        ).details
+    )
+
+    assert alms_house_bonus["duty_value_bonus"] == 2
+    assert progress_details["new_row"] - progress_details["old_row"] == 3

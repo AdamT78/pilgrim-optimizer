@@ -303,12 +303,14 @@ def test_converted_silver_can_enable_later_give_alms_paid_costs() -> None:
             candidate.building_conversion_direction == "sell_wheat_for_silver"
             and candidate.building_conversion_amount == 1
             and candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+            and candidate.alms_payment_silver + candidate.alms_payment_wheat == 2
         ),
     )
 
     assert not any(
         action.resolution is TurnResolutionType.GIVE_ALMS_PAID
         and action.building_conversion_id is None
+        and action.alms_payment_silver + action.alms_payment_wheat == 2
         for action in actions
     )
 

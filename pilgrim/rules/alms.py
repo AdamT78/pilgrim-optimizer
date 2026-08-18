@@ -185,13 +185,15 @@ def resolve_give_alms(
     minority_silver_cost: int,
     config: AlmsConfig,
 ) -> GiveAlmsResolution:
-    """Resolve Give Alms resource payment, track movement, and thresholds."""
+    """Resolve Give Alms where duty value is a payment ceiling and movement tracks paid total."""
     if duty_value <= 0:
         raise ValueError("Give Alms requires a positive duty value.")
     if minority_silver_cost < 0:
         raise ValueError("Minority silver cost cannot be negative.")
-    if payment.total != duty_value:
-        raise ValueError("Alms payment amount must equal duty value.")
+    if payment.total <= 0:
+        raise ValueError("Alms payment amount must be at least 1.")
+    if payment.total > duty_value:
+        raise ValueError("Alms payment amount cannot exceed duty value.")
 
     silver_after_cost = player.resources.silver - minority_silver_cost
     if silver_after_cost < payment.silver:
@@ -200,7 +202,7 @@ def resolve_give_alms(
         raise ValueError("Insufficient wheat for Alms payment.")
 
     old_position = clamp_alms_position(player.alms_position, config)
-    new_position = move_alms_position(old_position, duty_value, config)
+    new_position = move_alms_position(old_position, payment.total, config)
     total_silver_cost = minority_silver_cost + payment.silver
 
     resources = Resources(

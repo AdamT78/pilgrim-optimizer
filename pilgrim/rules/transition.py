@@ -8698,13 +8698,15 @@ def _alms_payment_options(
     available_silver: int,
     available_wheat: int,
 ) -> tuple[AlmsPayment, ...]:
+    """Return every legal silver/wheat split for each payment total from 1 up to duty_value."""
     if duty_value <= 0:
         return ()
     options: list[AlmsPayment] = []
-    for silver in range(duty_value, -1, -1):
-        wheat = duty_value - silver
-        if silver <= available_silver and wheat <= available_wheat:
-            options.append(AlmsPayment(silver=silver, wheat=wheat))
+    for total in range(duty_value, 0, -1):
+        for silver in range(total, -1, -1):
+            wheat = total - silver
+            if silver <= available_silver and wheat <= available_wheat:
+                options.append(AlmsPayment(silver=silver, wheat=wheat))
     return tuple(options)
 
 
