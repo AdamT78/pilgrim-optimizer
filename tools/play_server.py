@@ -57,6 +57,7 @@ from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scen
 from pilgrim.rules.ordination import ordination_outcome  # noqa: E402
 from pilgrim.rules.special_activities import allocation_outcome  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
+    FullTurnAction,
     SetupSowAction,
     StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
@@ -64,6 +65,7 @@ from pilgrim.model.actions import (  # noqa: E402
     action_choice_summary_for_players,
     action_summary_for_players,
 )
+from pilgrim.rules.buildings import building_ability_source, building_by_id  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload  # noqa: E402
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS  # noqa: E402
@@ -330,6 +332,7 @@ RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_res
 # whichever field asks it, as with the stocks, and a `None` means this action does not ask -- a
 # Construct that only lays road carries no building at all.
 BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
+HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
 
 # Fields that are only legal in certain COMBINATIONS, offered whole rather than one at a time.
 # Setting one number and then the other would walk through states the engine never offered, and
@@ -430,6 +433,62 @@ def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
     }
 
 
+def _hire_source_phrase(source: str) -> str:
+    if source == "market":
+        return "the market"
+    if source == "own_active":
+        return "your board"
+    return source
+
+
+def _hire_payment_resource(action: FullTurnAction, building_id: str) -> str | None:
+    for paid_building, paid_resource in tuple(action.hire_payments or ()):
+        if paid_building == building_id:
+            return paid_resource
+    return None
+
+
+def _hire_step(
+    action: FullTurnAction,
+    state: Any,
+    config: Any,
+) -> tuple[dict, tuple[str, ...]]:
+    if action.hired_building_id is None:
+        return (
+            {
+                "kind": "hire",
+                "value": "none",
+                "label": "Don't hire",
+                "prompt": COMBINATION_PROMPT,
+            },
+            HIRE_FIELDS,
+        )
+
+    building_id = action.hired_building_id
+    source_label = action.hired_building_source or "unknown"
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=building_id,
+    )
+    payment_resource = _hire_payment_resource(action, building_id) or source.hire_resource or "unknown"
+    building_name = building_by_id(config.buildings, building_id).name
+    return (
+        {
+            "kind": "hire",
+            # One scalar so the page can match with `===`.
+            "value": f"{building_id}:{source_label}:{payment_resource}",
+            "label": (
+                f"Hire the {building_name} from {_hire_source_phrase(source_label)}"
+                f" - {source.hire_cost} {payment_resource}"
+            ),
+            "prompt": COMBINATION_PROMPT,
+        },
+        HIRE_FIELDS,
+    )
+
+
 def _arrangement_value(action: Any) -> str:
     """Allocation answer encoded as one scalar, keyed by where cubes end up and not by move order."""
     outcome = allocation_outcome(action.allocation_moves)
@@ -474,7 +533,13 @@ def _confession_in_words(action: Any) -> str:
     return f"hire the Confession Box from {action.source}"
 
 
-def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
+def _presented(
+    action: Any,
+    *,
+    state: Any | None = None,
+    config: Any | None = None,
+    offer_hire: bool = False,
+) -> list[tuple[dict, tuple[str, ...]]]:
     """Each further question this page can put about one action, with the fields it answers.
 
     Emitted after the resolution because they are answers to it: which stock a tithe takes is only
@@ -523,6 +588,16 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
             )
         ]
     presented: list[tuple[dict, tuple[str, ...]]] = []
+    if offer_hire and isinstance(action, FullTurnAction):
+        if state is None or config is None:
+            raise ValueError("state and config are required to present hire choices.")
+        # ASK HIRE BEFORE RESOLUTION-SPECIFIC EFFECT STEPS.
+        #
+        # A branch that spends to modify a duty asks that cost first, even if only one spend path
+        # survives. For outcomes keyed by net effect (allocation/ordination) this keeps the price
+        # decision ahead of the outcome question; for counted/composed effects (alms payments) it
+        # keeps "pay this cost" ahead of "spend these stocks".
+        presented.append(_hire_step(action, state, config))
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
@@ -571,13 +646,82 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
     return presented
 
 
-def _presented_steps(action: Any) -> list[dict]:
-    return [step for step, _fields in _presented(action)]
+def _presented_rows(
+    action: Any,
+    *,
+    state: Any | None = None,
+    config: Any | None = None,
+    offer_hire: bool = False,
+) -> list[tuple[dict, tuple[str, ...]]]:
+    """Call `_presented`, while still allowing tests to monkeypatch the old one-arg shape."""
+    try:
+        return _presented(
+            action,
+            state=state,
+            config=config,
+            offer_hire=offer_hire,
+        )
+    except TypeError as exc:
+        if "unexpected keyword argument" not in str(exc):
+            raise
+        return _presented(action)
+
+
+def _presented_steps(
+    action: Any,
+    *,
+    state: Any | None = None,
+    config: Any | None = None,
+    offer_hire: bool = False,
+) -> list[dict]:
+    return [
+        step
+        for step, _fields in _presented_rows(
+            action,
+            state=state,
+            config=config,
+            offer_hire=offer_hire,
+        )
+    ]
 
 
 def _position_name(position: int) -> str:
     """Engine position name for one index, in the canonical order view payloads carry."""
     return CANONICAL_POSITION_NAMES[position]
+
+
+def _route_step_values(origin: int, route: tuple[int, ...]) -> tuple[str, ...]:
+    path = (origin, *route)
+    return tuple(
+        f"{_position_name(path[index])}->{_position_name(path[index + 1])}"
+        for index in range(len(route))
+    )
+
+
+def _resolution_context_key(action: FullTurnAction) -> tuple[Any, ...]:
+    return (
+        action.origin,
+        *_route_step_values(action.origin, tuple(action.route)),
+        action.selected_duty,
+        action.resolution.value,
+    )
+
+
+def _action_hires_building(action: FullTurnAction) -> bool:
+    return action.hired_building_id is not None
+
+
+def _hire_contexts(actions: list[Any]) -> set[tuple[Any, ...]]:
+    """Prefixes where at least one legal action hires a building.
+
+    A cost is asked before it is paid, even where hire would otherwise be inferred from a single
+    surviving branch. Context-level so "Don't hire" is available beside each hire option.
+    """
+    return {
+        _resolution_context_key(action)
+        for action in actions
+        if isinstance(action, FullTurnAction) and _action_hires_building(action)
+    }
 
 
 def _speaking_player_id(state: Any) -> str:
@@ -610,13 +754,28 @@ def _counter_start(action: Any) -> int:
     return len(route)
 
 
-def _covered_fields(action: Any) -> set[str]:
+def _covered_fields(
+    action: Any,
+    state: Any,
+    config: Any,
+    *,
+    offer_hire: bool = False,
+) -> set[str]:
     """Which residue fields this action's steps actually answer.
 
     Read off the steps that were really emitted, so a field the page can ask about in principle but
     did not ask about here still belongs in the refusal.
     """
-    return {name for _step, fields in _presented(action) for name in fields}
+    return {
+        name
+        for _step, fields in _presented_rows(
+            action,
+            state=state,
+            config=config,
+            offer_hire=offer_hire,
+        )
+        for name in fields
+    }
 
 
 def _residue_fields(action: Any) -> tuple[str, ...]:
@@ -633,7 +792,14 @@ def _residue_fields(action: Any) -> tuple[str, ...]:
     )
 
 
-def decision_steps(action: Any, player_id: str) -> list[dict]:
+def decision_steps(
+    action: Any,
+    player_id: str,
+    *,
+    state: Any,
+    config: Any,
+    offer_hire: bool = False,
+) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
     Origin, then the route one space at a time, then which duty was selected, then what to do with
@@ -656,7 +822,15 @@ def decision_steps(action: Any, player_id: str) -> list[dict]:
     # from and no duty to resolve: whoever holds the marker names a player, and that is the whole
     # of the action.
     if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
-        return _address_steps(_presented_steps(action), player_id)
+        return _address_steps(
+            _presented_steps(
+                action,
+                state=state,
+                config=config,
+                offer_hire=offer_hire,
+            ),
+            player_id,
+        )
     # The route still walks spaces by index. What changed is the kind names for the two space
     # questions around it: where to lift from (`origin`) and which duty to take (`duty`).
     route = tuple(action.route)
@@ -670,16 +844,15 @@ def decision_steps(action: Any, player_id: str) -> list[dict]:
             "counter": counter,
         }
     ]
-    path = (action.origin, *route)
     steps += [
         {
             "kind": "edge",
-            "value": f"{_position_name(path[index])}->{_position_name(path[index + 1])}",
+            "value": value,
             "prompt": ROUTE_PROMPT,
             # Read by the page verbatim. No counting in JavaScript.
             "counter": counter - (index + 1),
         }
-        for index in range(len(route))
+        for index, value in enumerate(_route_step_values(action.origin, route))
     ]
     if isinstance(action, SetupSowAction):
         return _address_steps(steps, player_id)
@@ -687,11 +860,22 @@ def decision_steps(action: Any, player_id: str) -> list[dict]:
     steps.append(
         {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
     )
-    steps += _presented_steps(action)
+    steps += _presented_steps(
+        action,
+        state=state,
+        config=config,
+        offer_hire=offer_hire,
+    )
     return _address_steps(steps, player_id)
 
 
-def _unresolved_fields(members: list[Any]) -> list[str]:
+def _unresolved_fields(
+    members: list[Any],
+    state: Any,
+    config: Any,
+    *,
+    offer_hire: bool = False,
+) -> list[str]:
     """Which fields the actions in one group still disagree about.
 
     `FullTurnAction` carries some forty optional fields and this page presents a handful of them,
@@ -705,7 +889,12 @@ def _unresolved_fields(members: list[Any]) -> list[str]:
     differ within a group. Excluded one group at a time, from the steps actually emitted, so a
     field goes unmentioned only where it was really asked.
     """
-    covered = _covered_fields(members[0])
+    covered = _covered_fields(
+        members[0],
+        state,
+        config,
+        offer_hire=offer_hire,
+    )
     return [
         name
         for name in _residue_fields(members[0])
@@ -723,32 +912,59 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
 
     The summary is player-facing. It is the same sentence the transcript writes for this action.
     """
-    grouped: dict[tuple, list[Any]] = {}
+    grouped: dict[tuple[Any, ...], list[Any]] = {}
     player_id = _speaking_player_id(state)
-    for action in legal_actions(state, config):
+    actions = list(legal_actions(state, config))
+    hire_contexts = _hire_contexts(actions)
+    steps_by_action_id: dict[str, list[dict]] = {}
+    offer_hire_by_action_id: dict[str, bool] = {}
+    for action in actions:
+        offered_hire = isinstance(action, FullTurnAction) and (
+            _resolution_context_key(action) in hire_contexts
+        )
+        steps = decision_steps(
+            action,
+            player_id,
+            state=state,
+            config=config,
+            offer_hire=offered_hire,
+        )
+        move_id = action_id(action)
+        steps_by_action_id[move_id] = steps
+        offer_hire_by_action_id[move_id] = offered_hire
         # THE KEY IS THE STEP VALUES AND STAYS THE STEP VALUES. A step carries words to read as
         # well as a value to match, and the words must not get in here: two spellings of one
         # question would then be two candidates, and a player would be shown the same choice twice
         # because the sentence above it differed.
         key = tuple(
             tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-            for step in decision_steps(action, player_id)
+            for step in steps
         )
         grouped.setdefault(key, []).append(action)
 
     candidates = []
     for members in grouped.values():
-        unresolved = _unresolved_fields(members) if len(members) > 1 else []
+        move_id = action_id(members[0])
+        unresolved = (
+            _unresolved_fields(
+                members,
+                state,
+                config,
+                offer_hire=offer_hire_by_action_id[move_id],
+            )
+            if len(members) > 1
+            else []
+        )
         settled = not unresolved
         candidates.append(
             {
-                "steps": decision_steps(members[0], player_id),
+                "steps": steps_by_action_id[move_id],
                 # The count before any route step is followed. The page reads this value directly
                 # rather than deriving it from route length.
                 "counter_start": _counter_start(members[0]),
                 # Nothing to submit while the choice is incomplete, so there is no id to quote and
                 # no summary to agree to. The page has to say so rather than send something.
-                "action_id": action_id(members[0]) if settled else None,
+                "action_id": move_id if settled else None,
                 # Candidate summaries are shown BEFORE apply, when no event lines exist yet, so this
                 # carries the full player sentence for what confirming would commit.
                 "summary": (
