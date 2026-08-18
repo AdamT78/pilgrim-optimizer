@@ -3974,6 +3974,8 @@ def _apply_full_turn_action(
                         config=config,
                     )
                 )
+            second_acolyte_placements = 0
+            second_acolyte_destinations: list[str] = []
             for move in action.allocation_moves:
                 destination_activity: str | None = None
                 destination_count_before = 0
@@ -3991,12 +3993,40 @@ def _apply_full_turn_action(
                     )
                 except ValueError as exc:
                     raise TransitionValidationError(str(exc)) from exc
-                if (
-                    chapter_house_active
-                    and destination_activity is not None
-                    and destination_count_before >= 1
-                    and special_activity_count(new_player_state, destination_activity) >= 2
-                ):
+                second_acolyte_placement = (
+                    destination_activity is not None
+                    and destination_count_before == 1
+                    and special_activity_count(new_player_state, destination_activity) == 2
+                )
+                if second_acolyte_placement:
+                    second_acolyte_placements += 1
+                    if second_acolyte_placements > 1:
+                        raise TransitionValidationError(
+                            "Allocation may place a second acolyte on at most one special activity "
+                            "per action."
+                        )
+                    if destination_activity is not None:
+                        second_acolyte_destinations.append(destination_activity)
+                special_bonus_events.append(
+                    GameEvent(
+                        event_type=EventType.ALLOCATION,
+                        actor=player,
+                        action_id=transition_action_id,
+                        details=make_event_details(
+                            from_pool=move.source,
+                            to_pool=move.destination,
+                            amount=1,
+                        ),
+                    )
+                )
+
+            if chapter_house_active:
+                for destination_activity in second_acolyte_destinations:
+                    # Chapter House bonus lines are for second acolytes that are still standing on
+                    # their activity at action end, not for transient placements undone later in
+                    # the same allocation.
+                    if special_activity_count(new_player_state, destination_activity) != 2:
+                        continue
                     building_bonus_events.append(
                         GameEvent(
                             event_type=EventType.BUILDING_BONUS,
@@ -4011,18 +4041,6 @@ def _apply_full_turn_action(
                             ),
                         )
                     )
-                special_bonus_events.append(
-                    GameEvent(
-                        event_type=EventType.ALLOCATION,
-                        actor=player,
-                        action_id=transition_action_id,
-                        details=make_event_details(
-                            from_pool=move.source,
-                            to_pool=move.destination,
-                            amount=1,
-                        ),
-                    )
-                )
 
             if silver_cost:
                 new_resources = new_player_state.resources.add(silver=-silver_cost)
@@ -8776,6 +8794,16 @@ def _taxation_bonus_resource_choices(
     )
 
 
+def _is_allocation_second_acolyte_placement(
+    player_state: PlayerState,
+    move: AllocationMove,
+) -> bool:
+    """Whether this move is the one that raises one activity from one acolyte to two."""
+    if move.destination not in SPECIAL_ACTIVITY_IDS:
+        return False
+    return special_activity_count(player_state, move.destination) == 1
+
+
 def _allocation_move_sequences(
     player_state,
     *,
@@ -8814,6 +8842,15 @@ def _allocation_move_sequences(
     being a move the engine will admit. Keying the memo on outcome and depth together keeps every
     length an outcome is reachable at, and `min_moves` then picks the shortest at or above the
     length the caller needs.
+
+    CHAPTER HOUSE'S PER-ALLOCATION LIMIT. One allocation may place a second acolyte on at most one
+    special activity. That legality depends on ORDER, while the answer this function keeps is an
+    order-independent outcome vector. So the check must happen during the walk, before dedup, and
+    it must be existential: an outcome survives when some legal ordering reaches it.
+
+    That order-dependence also means the frontier has to remember whether the one allowed
+    second-acolyte placement has already been used. Two paths can reach the same outcome and depth
+    but still differ in what they may do next, so those two frontier states are not equivalent.
     """
     if max_moves <= 0:
         return ()
@@ -8824,15 +8861,23 @@ def _allocation_move_sequences(
         tuple[AllocationOutcome, int],
         tuple[AllocationMove, ...],
     ] = {}
-    frontier: list[tuple[object, tuple[AllocationMove, ...]]] = [(player_state, ())]
+    frontier: list[tuple[PlayerState, tuple[AllocationMove, ...], int]] = [(player_state, (), 0)]
 
     for depth in range(1, max_moves + 1):
-        next_frontier: list[tuple[object, tuple[AllocationMove, ...]]] = []
-        for current_player_state, current_path in frontier:
+        next_frontier: list[tuple[PlayerState, tuple[AllocationMove, ...], int]] = []
+        # Depth-local dedup for continuation: same outcome with different second-placement usage
+        # must both survive, because they can have different legal continuations.
+        next_frontier_keys: set[tuple[AllocationOutcome, int]] = set()
+        for current_player_state, current_path, used_second_placements in frontier:
             for move in legal_allocation_moves(
                 current_player_state,
                 capacity=special_activity_capacity,
             ):
+                next_second_placements = used_second_placements + int(
+                    _is_allocation_second_acolyte_placement(current_player_state, move)
+                )
+                if next_second_placements > 1:
+                    continue
                 try:
                     next_state = apply_allocation_move_with_capacity(
                         current_player_state,
@@ -8842,11 +8887,14 @@ def _allocation_move_sequences(
                 except ValueError:
                     continue
                 next_path = (*current_path, move)
-                key = (allocation_outcome(next_path), depth)
-                if key in by_outcome_and_depth:
+                next_outcome = allocation_outcome(next_path)
+                key = (next_outcome, depth)
+                by_outcome_and_depth.setdefault(key, next_path)
+                frontier_key = (next_outcome, next_second_placements)
+                if frontier_key in next_frontier_keys:
                     continue
-                by_outcome_and_depth[key] = next_path
-                next_frontier.append((next_state, next_path))
+                next_frontier_keys.add(frontier_key)
+                next_frontier.append((next_state, next_path, next_second_placements))
         frontier = next_frontier
 
     shortest_by_outcome: dict[AllocationOutcome, tuple[AllocationMove, ...]] = {}
