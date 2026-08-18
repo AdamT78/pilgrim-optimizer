@@ -5,7 +5,7 @@
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
 // arrangementPointerRules }.
 //
-// A click is { kind: 'position'|'origin'|'duty'|'edge'|'resolution'|'combination'|'resource'
+// A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'|'combination'|'resource'
 // |'seat'|'building'|'control'|'village'|'abbey'|'role', value }; a resource click also carries
 // { seat }, a seat click names the player whose board is pressed, a building click names the
 // building whose hex on the round track is pressed, and a control click presses one board plaque by
@@ -326,6 +326,7 @@ const transcript = {
   offeredBySeat: [],
   offeredBoards: [],
   startCandidates: [],
+  skipCandidates: [],
   dutyCandidates: [],
   asking: [],
   resetShown: [],
@@ -655,16 +656,20 @@ function snapshot() {
   const offered = [];
   const chosen = [];
   const starts = [];
+  const skips = [];
   const duties = [];
   spaces.forEach((space, index) => {
     const asksOrigin = space.getAttribute('data-turn-start-candidate') === 'true';
+    const asksSkip = space.getAttribute('data-turn-skip-candidate') === 'true';
     const asksDuty = space.getAttribute('data-turn-duty-candidate') === 'true';
-    if (asksOrigin || asksDuty) offered.push(index);
+    if (asksOrigin || asksSkip || asksDuty) offered.push(index);
     if (asksOrigin) starts.push(index);
+    if (asksSkip) skips.push(index);
     if (asksDuty) duties.push(index);
     const pickedOrigin = space.getAttribute('data-turn-start-selected') === 'true';
+    const pickedSkip = space.getAttribute('data-turn-skip-selected') === 'true';
     const pickedDuty = space.getAttribute('data-turn-duty-selected') === 'true';
-    if (pickedOrigin || pickedDuty) chosen.push(index);
+    if (pickedOrigin || pickedSkip || pickedDuty) chosen.push(index);
   });
   arrows.forEach((arrow) => {
     if (arrow.getAttribute('data-turn-offered') === 'true') {
@@ -739,6 +744,7 @@ function snapshot() {
     bySeat,
     boards,
     starts,
+    skips,
     duties,
     asking,
     reset: control('reset') ? control('reset').getAttribute('data-turn-control-enabled') === 'true' : false,
@@ -760,6 +766,7 @@ function record() {
   transcript.offeredBySeat.push(snap.bySeat);
   transcript.offeredBoards.push(snap.boards);
   transcript.startCandidates.push(snap.starts);
+  transcript.skipCandidates.push(snap.skips);
   transcript.dutyCandidates.push(snap.duties);
   transcript.asking.push(snap.asking);
   transcript.resetShown.push(snap.reset);
@@ -831,7 +838,7 @@ function pressRole(click) {
 }
 
 job.clicks.forEach((click) => {
-  if (click.kind === 'position' || click.kind === 'origin' || click.kind === 'duty') {
+  if (click.kind === 'position' || click.kind === 'origin' || click.kind === 'skip' || click.kind === 'duty') {
     const target = spaces.find((space) =>
       Number(space.getAttribute('data-board-position-index')) === Number(click.value));
     clickReachable(target, click.kind + ' ' + String(click.value));
@@ -874,6 +881,7 @@ if (job.reset) {
     shown: snap.shown,
     asking: snap.asking,
     startCandidates: snap.starts,
+    skipCandidates: snap.skips,
     dutyCandidates: snap.duties,
     reset: snap.reset,
     counter: snap.counter,

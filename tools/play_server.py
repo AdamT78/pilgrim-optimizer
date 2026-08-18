@@ -383,6 +383,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 ORIGIN_PROMPT = "choose a space to lift acolytes from."
 ROUTE_PROMPT = "follow an arrow."
 DUTY_PROMPT = "choose a duty to take."
+SKIP_PROMPT = "choose one City or Duty space to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "choose a resource."
 BUILDING_PROMPT = "choose a building."
@@ -766,7 +767,7 @@ def _covered_fields(
     Read off the steps that were really emitted, so a field the page can ask about in principle but
     did not ask about here still belongs in the refusal.
     """
-    return {
+    covered = {
         name
         for _step, fields in _presented_rows(
             action,
@@ -776,6 +777,9 @@ def _covered_fields(
         )
         for name in fields
     }
+    if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None:
+        covered.add("sow_route_omitted_location")
+    return covered
 
 
 def _residue_fields(action: Any) -> tuple[str, ...]:
@@ -802,18 +806,18 @@ def decision_steps(
 ) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
-    Origin, then the route one space at a time, then which duty was selected, then what to do with
-    it, then whatever that resolution goes on to ask. A setup sow stops after the route because
-    that is all it has.
+    Origin, then the route one space at a time, then (for Cloisters walks) which City/Duty space
+    is left unsown, then which duty was selected, then what to do with it, then whatever that
+    resolution goes on to ask. A setup sow stops after the route because that is all it has.
 
     Each step says what KIND of thing it is, because they are not answered in the same place -- and
-    one pair now share a place and still have to be told apart on it. `origin` and `duty` are both
-    answered by pointing at a wheel space, and are distinct kinds so the page can mark "where to
-    lift from" differently from "which duty to take" without consulting field names or writing a
-    second copy of what either one means. The others are still separated by where they are answered:
-    a resolution is beside the board, a stock is on the asking seat's own board, a seat is a whole
-    board, a building is a hex on the round track, and a combination is a set of amounts that only
-    go together one way.
+    three of them now share one surface and still have to stay distinct on it. `origin`, `skip`
+    and `duty` are all answered by pointing at a wheel space, and are distinct kinds so the page
+    can mark "where to lift from", "which space goes unsown" and "which duty to take" differently
+    without consulting field names or writing a second copy of what any one means. The others are
+    still separated by where they are answered: a resolution is beside the board, a stock is on the
+    asking seat's own board, a seat is a whole board, a building is a hex on the round track, and
+    a combination is a set of amounts that only go together one way.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
@@ -856,6 +860,18 @@ def decision_steps(
     ]
     if isinstance(action, SetupSowAction):
         return _address_steps(steps, player_id)
+    if action.sow_route_omitted_location is not None:
+        # Route first, duty later: Cloisters legality says the chosen duty must still have at least
+        # one non-omitted placement, so the skipped wheel space has to be fixed before duty is asked.
+        # Same wheel, third question. Distinct kind so this can be marked differently from origin
+        # and duty without the page learning field names.
+        steps.append(
+            {
+                "kind": "skip",
+                "value": action.sow_route_omitted_location,
+                "prompt": SKIP_PROMPT,
+            }
+        )
     steps.append({"kind": "duty", "value": action.selected_duty, "prompt": DUTY_PROMPT})
     steps.append(
         {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}

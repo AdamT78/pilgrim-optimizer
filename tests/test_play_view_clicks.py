@@ -133,6 +133,7 @@ def _next_offered_from_dom(
 
     selectors = (
         '[data-board-position-index][data-turn-start-candidate="true"]',
+        '[data-board-position-index][data-turn-skip-candidate="true"]',
         '[data-board-position-index][data-turn-duty-candidate="true"]',
         '[data-arrow][data-turn-offered="true"]',
         '[data-resolution-key][data-turn-offered="true"]',
@@ -253,6 +254,7 @@ def _turn_state_snapshot(page) -> dict[str, object]:
     """A compact view of what the page currently offers and enables in the turn UI."""
     return {
         "origins": page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count(),
+        "skips": page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count(),
         "duties": page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count(),
         "arrows": page.locator('[data-arrow][data-turn-offered="true"]').count(),
         "resolution_keys": page.locator('[data-resolution-key][data-turn-offered="true"]').all_inner_texts(),
@@ -377,6 +379,33 @@ def test_a_wheel_origin_space_and_then_route_arrow_really_receive_clicks(page, s
     counter_after = page.locator('[data-turn-counter][data-turn-offered="true"]').all_inner_texts()
     assert counter_after != counter_before or after_edge_count != before_edge_count, (
         "route-arrow click did not change the turn preview state"
+    )
+
+
+def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> None:
+    """Catches wheel skip-step regressions where the marked unsown-space target is not clickable."""
+    base_url, _server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    def skip_choice_is_live() -> bool:
+        return page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0
+
+    _walk_live_dom_until(page, skip_choice_is_live, target="cloisters skip step")
+
+    skip_target = page.query_selector('[data-board-position-index][data-turn-skip-candidate="true"]')
+    assert skip_target is not None, "no offered skip target on wheel"
+    x, y = _centre(page, skip_target)
+    assert page.evaluate(
+        """({target, x, y}) => {
+            const hit = document.elementFromPoint(x, y);
+            return hit === target || (hit && target.contains(hit));
+        }""",
+        {"target": skip_target, "x": x, "y": y},
+    ), "skip target is not the top hit at its centre"
+    _click_handle_centre(page, skip_target, require_hit=True)
+    page.wait_for_timeout(20)
+    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0, (
+        "skip click did not advance beyond the skip question"
     )
 
 

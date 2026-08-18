@@ -957,6 +957,70 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
     assert not missing, f"missing hire step on {len(missing)} hired candidates: {missing[:10]}"
 
 
+def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step() -> None:
+    """Every candidate that commits a Cloisters skip must ask for that skipped space."""
+    checked = 0
+    missing: list[tuple[str, tuple, list[str], int]] = []
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            actions = list(legal_actions(server.state, server.config))
+            hire_contexts = play_server._hire_contexts(actions)
+            player_id = play_server._speaking_player_id(server.state)
+
+            def key_for_steps(steps: list[dict]) -> tuple:
+                return tuple(
+                    tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
+                    for step in steps
+                )
+
+            by_key: dict[tuple, list[FullTurnAction]] = {}
+            for action in actions:
+                offered_hire = isinstance(action, FullTurnAction) and (
+                    play_server._resolution_context_key(action) in hire_contexts
+                )
+                steps = play_server.decision_steps(
+                    action,
+                    player_id,
+                    state=server.state,
+                    config=server.config,
+                    offer_hire=offered_hire,
+                )
+                by_key.setdefault(key_for_steps(steps), []).append(action)
+
+            candidates_by_key = {
+                key_for_steps(candidate["steps"]): candidate
+                for candidate in server.payload["turn_candidates"]
+            }
+
+            for key, members in by_key.items():
+                if not any(
+                    isinstance(member, FullTurnAction)
+                    and member.sow_route_omitted_location is not None
+                    for member in members
+                ):
+                    continue
+                checked += 1
+                candidate = candidates_by_key.get(key)
+                if candidate is None:
+                    missing.append((scenario_path.name, key, [], len(members)))
+                    continue
+                if not any(step["kind"] == "skip" for step in candidate["steps"]):
+                    missing.append(
+                        (
+                            scenario_path.name,
+                            key,
+                            [str(step["kind"]) for step in candidate["steps"]],
+                            len(members),
+                        )
+                    )
+        finally:
+            server.server_close()
+
+    assert checked > 0, "corpus had no skip candidates, so this checked nothing"
+    assert not missing, f"missing skip step on {len(missing)} Cloisters candidates: {missing[:10]}"
+
+
 def test_construct_building_level2_draws_keys_for_all_eight_constructible_buildings() -> None:
     """Regression: this fixture offered eight construct moves while the page drew one key."""
     server = PlayServer(("127.0.0.1", 0), str(SCENARIOS / "construct_building_level2_001.json"))
@@ -1159,7 +1223,7 @@ def _legal_ordination_orders(
 
 def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
-    if step["kind"] in {"position", "origin", "duty"}:
+    if step["kind"] in {"position", "origin", "skip", "duty"}:
         return _at(step["value"])
     if step["kind"] == "edge":
         return _follow(step["value"])
@@ -1217,6 +1281,8 @@ def _engine_steps(action, *, offer_hire: bool = False) -> list[dict]:
     ]
     if isinstance(action, SetupSowAction):
         return steps
+    if action.sow_route_omitted_location is not None:
+        steps.append({"kind": "skip", "value": action.sow_route_omitted_location})
     steps.append({"kind": "duty", "value": action.selected_duty})
     steps.append({"kind": "resolution", "value": action.resolution.value})
     if offer_hire:
@@ -2076,6 +2142,30 @@ def test_ordination_hire_step_precedes_ordination_and_controls_step_count() -> N
     assert no_hire_steps and hired_steps
     assert 3 in hired_steps
     assert 3 not in no_hire_steps
+
+
+@needs_node
+def test_a_cloisters_turn_is_playable_end_to_end_with_skip_then_duty(tmp_path: Path) -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
+    drawn_arrows = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+    candidate = next(
+        (
+            offered
+            for offered in server.payload["turn_candidates"]
+            if offered["action_id"] is not None
+            and any(step["kind"] == "skip" for step in offered["steps"])
+            and {
+                str(step["value"]) for step in offered["steps"] if step["kind"] == "edge"
+            } <= drawn_arrows
+        ),
+        None,
+    )
+    assert candidate is not None, "fixture offered no settled Cloisters candidate with a skip step"
+    assert _step_index(candidate, "skip") < _step_index(candidate, "duty")
+
+    transcript = _played_from_the_page(server, candidate, tmp_path)
+    assert transcript["posted"] is not None, "Cloisters turn did not submit"
+    assert transcript["posted"]["action_id"] == candidate["action_id"]
 
 
 @needs_node
@@ -3477,6 +3567,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert not re.search(r"\b(cx|cy|stroke|fill|translate)\s*[=:]", code)
     # It may say only these things about the board and the panel.
     assert "setAttribute('data-turn-start-candidate'" in code
+    assert "setAttribute('data-turn-skip-candidate'" in code
     assert "setAttribute('data-turn-duty-candidate'" in code
     assert "setAttribute('data-turn-shown'" in code
     # And it may not know what any step is ABOUT. A step says how it is answered and the script
@@ -3489,6 +3580,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
         "taxation_step1_resource",
         "chosen_start_player",
         "construct_building_id",
+        "sow_route_omitted_location",
         "allocation_moves",
         "ordination_steps",
         *ALMS_PAIR,
@@ -3770,6 +3862,7 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
         "shown": transcript["shownPanel"][index],
         "asking": transcript["asking"][index],
         "startCandidates": transcript["startCandidates"][index],
+        "skipCandidates": transcript["skipCandidates"][index],
         "dutyCandidates": transcript["dutyCandidates"][index],
         "reset": transcript["resetShown"][index],
         "counter": transcript["counterShown"][index],
@@ -4109,8 +4202,8 @@ def test_a_preview_overflow_is_recorded_and_stops_further_preview(tmp_path: Path
         [_follow("city->north")],
         tmp_path,
         mutate=lambda code: code.replace(
-            "if (!slot) { return false; }",
-            "if (name === 'north') { return false; }\n    if (!slot) { return false; }",
+            "if (!slot) { return null; }",
+            "if (name === 'north') { return null; }\n    if (!slot) { return null; }",
         ),
     )
 
