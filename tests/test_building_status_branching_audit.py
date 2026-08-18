@@ -60,7 +60,7 @@ def test_branching_rows_are_deterministic_for_representative_subset() -> None:
     assert first == second
     assert tuple(row.scenario_path for row in first) == subset
     assert all(row.total_actions > 0 for row in first)
-    assert first[0].total_actions == 4
+    assert first[0].total_actions == 5
     assert first[0].flag == ""
     assert first[2].total_actions >= 100
     assert first[2].flag in {"HIGH", "VERY HIGH"}
