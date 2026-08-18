@@ -45,9 +45,22 @@ def test_generate_setup_timeline_metadata_contains_rolls_rounds_and_levels() -> 
     assert len(level_rounds["level_3"]) == 4
 
 
-def test_loader_fallback_without_building_availability_remains_round_two() -> None:
+def test_loader_fallback_without_building_availability_assigns_distinct_market_order_rounds() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = scenario.state
 
-    assert len(state.building_availability) == len(state.building_market)
-    assert all(live_round == 2 for _, live_round in state.building_availability)
+    rounds_by_building = dict(state.building_availability)
+    rounds_in_market_order = [rounds_by_building[building_id] for building_id in state.building_market]
+    assert len(rounds_in_market_order) == len(state.building_market)
+    assert rounds_in_market_order == list(range(2, 2 + len(state.building_market)))
+
+
+def test_loader_fallback_without_building_availability_skips_pilgrimage_rounds() -> None:
+    scenario = load_scenario("scenarios/alms_season_end_unique_leader_001.json")
+    state = scenario.state
+
+    rounds_by_building = dict(state.building_availability)
+    rounds_in_market_order = [rounds_by_building[building_id] for building_id in state.building_market]
+    assert len(set(rounds_in_market_order)) == len(rounds_in_market_order)
+    assert rounds_in_market_order == sorted(rounds_in_market_order)
+    assert set(rounds_in_market_order).isdisjoint(set(state.pilgrimage_rounds))

@@ -666,6 +666,20 @@ def test_the_border_track_carries_the_buildings_this_scenario_deals() -> None:
     assert slots[2]["kind"] == "empty"
 
 
+def test_timeline_slots_refuses_round_collisions_instead_of_dropping_them() -> None:
+    payload = _payload(
+        [_player([5] + [0] * 8)],
+        pilgrimage_rounds=[3],
+        building_market=["quarry"],
+        building_availability={"quarry": 3},
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"round 3: pilgrimage site 1 and building 'quarry'",
+    ):
+        timeline_slots(payload)
+
+
 # ---------------------------------------------------------------------------------------------
 # The log, and what the page refuses to be
 # ---------------------------------------------------------------------------------------------

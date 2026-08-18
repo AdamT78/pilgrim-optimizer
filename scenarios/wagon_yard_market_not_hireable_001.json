@@ -17,7 +17,7 @@
     "building_market": ["wagon_yard", "brewery"],
     "building_availability": {
       "wagon_yard": 2,
-      "brewery": 2
+      "brewery": 3
     },
     "players": {
       "player_one": {

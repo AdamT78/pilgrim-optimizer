@@ -159,10 +159,14 @@ def _game_state_from_dict(
     )
     dummy_acolytes = _dummy_acolytes_from_dict(raw, table_player_count=table_player_count)
     building_market = _building_market_from_dict(raw, buildings_config)
-    building_availability = _building_availability_from_dict(raw, building_market)
     pilgrimage_rounds = _pilgrimage_rounds_from_dict(
         raw,
         scenario_raw=scenario_raw,
+    )
+    building_availability = _building_availability_from_dict(
+        raw,
+        building_market,
+        pilgrimage_rounds=pilgrimage_rounds,
     )
     if ship_position < 0 or ship_position >= ship_path_length:
         raise ValueError(
@@ -511,11 +515,26 @@ def _building_market_from_dict(
 def _building_availability_from_dict(
     raw: Mapping[str, Any],
     building_market: tuple[str, ...],
+    *,
+    pilgrimage_rounds: tuple[int, ...],
 ) -> tuple[tuple[str, int], ...]:
+    """Parse or synthesize building live rounds with one building per timeline round.
+
+    The border track has one building slot on each round and setup generation deals market
+    buildings onto distinct rounds. Legacy scenarios missing `building_availability` are repaired
+    to that legal shape in market order, skipping rounds already occupied by pilgrimage sites.
+    """
     availability_raw = raw.get("building_availability")
     if availability_raw is None:
-        # Backward-compatible fallback for legacy scenarios.
-        return tuple((building_id, 2) for building_id in building_market)
+        blocked_rounds = set(pilgrimage_rounds)
+        fallback: list[tuple[str, int]] = []
+        next_round = 2
+        for building_id in building_market:
+            while next_round in blocked_rounds:
+                next_round += 1
+            fallback.append((building_id, next_round))
+            next_round += 1
+        return tuple(fallback)
     if not isinstance(availability_raw, Mapping):
         raise ValueError("building_availability must be an object mapping building ids to rounds.")
     entries = tuple(

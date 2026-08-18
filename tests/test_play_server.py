@@ -866,6 +866,45 @@ def _buildings_on_the_track(server) -> list[str]:
     return re.findall(r'data-building-choice-key="([a-z_]+)"', page)
 
 
+@pytest.mark.slow
+def test_every_scenario_draws_a_choice_key_for_every_market_building() -> None:
+    missing_by_scenario: dict[str, list[str]] = {}
+    extra_by_scenario: dict[str, list[str]] = {}
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), str(scenario_path))
+        try:
+            drawn = set(_buildings_on_the_track(server))
+            market = set(server.payload["state"]["building_market"])
+        finally:
+            server.server_close()
+        missing = sorted(market - drawn)
+        extra = sorted(drawn - market)
+        if missing:
+            missing_by_scenario[scenario_path.name] = missing
+        if extra:
+            extra_by_scenario[scenario_path.name] = extra
+
+    assert not missing_by_scenario, f"missing building choice keys: {missing_by_scenario}"
+    assert not extra_by_scenario, f"unexpected building choice keys: {extra_by_scenario}"
+
+
+def test_construct_building_level2_draws_keys_for_all_eight_constructible_buildings() -> None:
+    """Regression: this fixture offered eight construct moves while the page drew one key."""
+    server = PlayServer(("127.0.0.1", 0), str(SCENARIOS / "construct_building_level2_001.json"))
+    try:
+        keys = set(_buildings_on_the_track(server))
+        constructible = {
+            action.construct_building_id
+            for action in legal_actions(server.state, server.config)
+            if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
+            and action.construct_building_id is not None
+        }
+        assert len(constructible) == 8
+        assert constructible <= keys
+    finally:
+        server.server_close()
+
+
 def _seated(server) -> set[str]:
     """The engine ids that have a chair at this player count."""
     count = len(server.payload["state"]["players"])

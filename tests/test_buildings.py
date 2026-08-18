@@ -140,7 +140,7 @@ def test_missing_market_uses_deterministic_fallback() -> None:
     )
 
 
-def test_missing_availability_defaults_selected_market_to_live_round_two() -> None:
+def test_missing_availability_defaults_selected_market_to_distinct_live_rounds() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = scenario.state
 
@@ -148,7 +148,10 @@ def test_missing_availability_defaults_selected_market_to_live_round_two() -> No
     assert set(building_id for building_id, _live_round in state.building_availability) == set(
         state.building_market
     )
-    assert all(live_round == 2 for _, live_round in state.building_availability)
+    rounds_by_building = dict(state.building_availability)
+    rounds_in_market_order = [rounds_by_building[building_id] for building_id in state.building_market]
+    assert rounds_in_market_order == list(range(2, 2 + len(state.building_market)))
+    assert len(set(rounds_in_market_order)) == len(rounds_in_market_order)
 
     first_building = state.building_market[0]
     assert building_live_round(state, first_building) == 2
@@ -360,7 +363,7 @@ def test_building_availability_rejects_live_round_above_twenty_six() -> None:
 def test_building_availability_rejects_key_not_in_selected_buildings() -> None:
     scenario = load_scenario("scenarios/building_availability_round2_001.json")
     availability = dict(scenario.state.building_availability)
-    availability["mill"] = 12
+    availability["mill"] = 25
     invalid_state = scenario.state.with_building_availability(tuple(sorted(availability.items())))
 
     with pytest.raises(TransitionValidationError, match="selected building in game state"):
@@ -375,3 +378,9 @@ def test_building_availability_rejects_missing_market_entry_when_explicit() -> N
 
     with pytest.raises(TransitionValidationError, match="missing building_availability round"):
         validate_building_availability(invalid_state, scenario.config)
+
+
+def test_game_state_rejects_two_buildings_sharing_one_live_round() -> None:
+    scenario = load_scenario("scenarios/building_availability_round2_001.json")
+    with pytest.raises(ValueError, match="one live round"):
+        scenario.state.with_building_availability((("well", 2), ("chapel", 2)))
