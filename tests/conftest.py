@@ -21,3 +21,20 @@ def deep_actions():
     """
     scenario = load_scenario(DEEP_FIXTURE_PATH)
     return scenario, tuple(legal_actions(scenario.state, scenario.config))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark tests that use the shared deep_actions fixture as slow."""
+    here = Path(__file__).resolve()
+    for item in items:
+        fixture_info = getattr(item, "_fixtureinfo", None)
+        if fixture_info is None:
+            continue
+        fixture_defs = fixture_info.name2fixturedefs.get("deep_actions", ())
+        uses_shared_fixture = any(
+            Path(fixture_def.func.__code__.co_filename).resolve() == here
+            for fixture_def in fixture_defs
+        )
+        if uses_shared_fixture:
+            item.add_marker(pytest.mark.slow)

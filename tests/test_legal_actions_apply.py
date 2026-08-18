@@ -23,8 +23,6 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-import pytest
-
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, action_id
 from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, current_merchant_resource
@@ -32,7 +30,6 @@ from pilgrim.rules.transition import apply_action, legal_actions
 
 REPO = Path(__file__).resolve().parents[1]
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
-pytestmark = pytest.mark.slow
 
 # Three actions still refuse to apply, and they are a DIFFERENT bug from the one this file was
 # written for: a Chapter House raises a Special Activity's capacity to two, and donating a building

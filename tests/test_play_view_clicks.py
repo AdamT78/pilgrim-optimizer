@@ -369,6 +369,43 @@ def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve
     assert page.locator(f'[data-player-seat="{seat_number}"][data-resource-choice="true"]').count() == 0
 
 
+def test_seat_choice_keys_are_reachable_for_all_four_seats_and_light_confirm(page, serve) -> None:
+    """Catches seat-key regressions: fill-none edge hits and hidden keys swallowing clicks."""
+    base_url, _server = serve(SCENARIOS / "play_view_reference_4p_001.json")
+    offered_selector = '[data-seat-choice-key][data-turn-offered="true"]'
+
+    def offered_seat_keys_are_present() -> bool:
+        return page.locator(offered_selector).count() > 0
+
+    for seat_index in range(4):
+        page.goto(base_url, wait_until="networkidle")
+        _walk_live_dom_until(
+            page,
+            offered_seat_keys_are_present,
+            target="offered seat keys",
+        )
+        keys = page.query_selector_all(offered_selector)
+        assert len(keys) == 4
+
+        for key in keys:
+            visibility = page.evaluate("node => getComputedStyle(node).visibility", key)
+            pointer_events = page.evaluate("node => getComputedStyle(node).pointerEvents", key)
+            assert visibility == "visible"
+            assert pointer_events == "all"
+            x, y = _centre(page, key)
+            assert page.evaluate(
+                """({target, x, y}) => {
+                    const hit = document.elementFromPoint(x, y);
+                    return hit === target;
+                }""",
+                {"target": key, "x": x, "y": y},
+            ), "seat key is not the top hit at its own centre"
+
+        target = page.query_selector_all(offered_selector)[seat_index]
+        _click_handle_centre(page, target, require_hit=True)
+        assert _confirm_enabled(page), "confirm did not light after clicking a seat key"
+
+
 #
 # No offered-key assertion here: in committed scenarios where only one building is legal, the
 # building step is forced and the page answers it without asking. That auto-advance is by design.

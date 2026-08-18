@@ -316,7 +316,6 @@ def test_the_ordinary_counters_are_unaffected_by_the_wildcard_branch(resource: s
     assert {_payment_for_hired_building(action) for action in hires} <= {resource}
 
 
-@pytest.mark.slow
 def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -> None:
     scenario, actions = deep_actions
     assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
@@ -349,7 +348,6 @@ def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire(
     assert _hire_event_resources(result.events) == Counter({"stone": 2})
 
 
-@pytest.mark.slow
 def test_a_late_library_hire_can_pay_from_turn_earnings(deep_actions) -> None:
     """A hire late in the turn may be paid out of what the turn earned, not only what it opened with."""
     scenario, actions = deep_actions
@@ -366,7 +364,6 @@ def test_a_late_library_hire_can_pay_from_turn_earnings(deep_actions) -> None:
     assert (resources.stone, resources.silver, resources.wheat) == (6, 0, 0)
 
 
-@pytest.mark.slow
 def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
     scenario, actions = deep_actions
     base = next(

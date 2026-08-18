@@ -455,7 +455,6 @@ def test_equal_outcome_survives_a_late_position_too(deep_generation) -> None:
     assert pairs >= budget, f"only {pairs} pairs compared at the deep fixture"
 
 
-@pytest.mark.slow
 def test_the_late_position_still_reaches_everything_it_used_to(
     deep_generation, deep_actions
 ) -> None:
