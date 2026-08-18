@@ -388,7 +388,7 @@ SEAT_PROMPT = "choose first player for this round."
 ARRANGEMENT_PROMPT = (
     "move acolytes from the Abbey to Special Activity and/or between Special Activities."
 )
-ORDINATION_PROMPT = "ordain from Village and send from Abbey; City updates as a preview."
+ORDINATION_PROMPT = "choose a serf to ordain, or an acolyte to send on mission."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
