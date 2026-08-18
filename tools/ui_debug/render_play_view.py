@@ -1150,11 +1150,11 @@ _TURN_SCRIPT = """<script>
 
   /* A step says how it is answered and this sorts them by that, so a new
      kind of question is a new bucket here and nothing else. That now
-     includes two kinds answered on the same wheel: `origin` and `duty`
-     split so they can be marked differently without naming fields. No
-     step is recognised by what it is ABOUT: there is no field name
-     anywhere in this file, and a page that told a tithe's stock from a
-     taxation's would be one that had to be taught about the next one. */
+     includes three kinds answered on the same wheel: `origin`, `skip`
+     and `duty`, split so they can be marked differently without naming
+     fields. No step is recognised by what it is ABOUT: there is no field
+     name anywhere in this file, and a page that told a tithe's stock from
+     a taxation's would be one that had to be taught about the next one. */
   function offeredByKind(offered, kind) {
     var values = [];
     offered.forEach(function (step) {
@@ -1250,9 +1250,9 @@ _TURN_SCRIPT = """<script>
 
   function placeOneCubeAt(name, player) {
     var slot = firstEmptySlotAt(name, player);
-    if (!slot) { return false; }
+    if (!slot) { return null; }
     slot.setAttribute('opacity', '1');
-    return true;
+    return slot;
   }
 
   function captureBaseline() {
@@ -1274,8 +1274,10 @@ _TURN_SCRIPT = """<script>
     var overflow = false;
     var count = null;
     var origin = null;
+    var skip = null;
     var duty = null;
     var resolution = null;
+    var placedAlongRoute = {};
     var prefix = [];
     var remaining = chosen.slice();
     restoreBaseline();
@@ -1314,6 +1316,14 @@ _TURN_SCRIPT = """<script>
         }
         continue;
       }
+      if (step.kind === 'skip') {
+        skip = step.value;
+        var skipped = positionName(Number(step.value));
+        if (skipped && placedAlongRoute[skipped] && placedAlongRoute[skipped].length) {
+          placedAlongRoute[skipped].pop().setAttribute('opacity', '0');
+        }
+        continue;
+      }
       if (step.kind === 'duty') {
         duty = step.value;
         continue;
@@ -1326,13 +1336,16 @@ _TURN_SCRIPT = """<script>
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
       if (destination && activePlayer) {
-        if (!placeOneCubeAt(destination, activePlayer)) {
+        var placed = placeOneCubeAt(destination, activePlayer);
+        if (!placed) {
           overflow = true;
           if (window.console && window.console.error) {
             window.console.error('turn preview overflow: no slot at ' + destination);
           }
           break;
         }
+        if (!placedAlongRoute[destination]) { placedAlongRoute[destination] = []; }
+        placedAlongRoute[destination].push(placed);
       }
       if (step.counter !== undefined && step.counter !== null) {
         count = step.counter;
@@ -1344,6 +1357,7 @@ _TURN_SCRIPT = """<script>
       overflow: overflow,
       count: count,
       origin: origin,
+      skip: skip,
       duty: duty,
       resolution: resolution
     };
@@ -1353,6 +1367,7 @@ _TURN_SCRIPT = """<script>
     offered, resolutionOptions, settled, confirmable, preview, arrangementValues, ordinationValues
   ) {
     var origins = offeredByKind(offered, 'origin');
+    var skips = offeredByKind(offered, 'skip');
     var duties = offeredByKind(offered, 'duty');
     var edges = offeredByKind(offered, 'edge');
     var resolutions = resolutionOptions || [];
@@ -1370,6 +1385,11 @@ _TURN_SCRIPT = """<script>
       } else {
         space.setAttribute('data-turn-start-candidate', 'true');
       }
+      if (skips.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-skip-candidate');
+      } else {
+        space.setAttribute('data-turn-skip-candidate', 'true');
+      }
       if (duties.indexOf(index) === -1) {
         space.removeAttribute('data-turn-duty-candidate');
       } else {
@@ -1378,6 +1398,11 @@ _TURN_SCRIPT = """<script>
       /* Offered and taken are different marks. Once origin is taken, it is no longer offered and
          carries no ring of its own. */
       space.removeAttribute('data-turn-start-selected');
+      if (preview.skip === index) {
+        space.setAttribute('data-turn-skip-selected', 'true');
+      } else {
+        space.removeAttribute('data-turn-skip-selected');
+      }
       if (preview.duty === index) {
         space.setAttribute('data-turn-duty-selected', 'true');
       } else {
@@ -1531,6 +1556,7 @@ _TURN_SCRIPT = """<script>
     space.addEventListener('click', function () {
       if (
         space.getAttribute('data-turn-start-candidate') !== 'true'
+        && space.getAttribute('data-turn-skip-candidate') !== 'true'
         && space.getAttribute('data-turn-duty-candidate') !== 'true'
       ) { return; }
       var value = Number(space.getAttribute('data-board-position-index'));
@@ -1690,15 +1716,22 @@ def turn_styles(route_color: str) -> str:
     painted area counts.
     """
     return f"""  /* One offered-ring language: dashed means "offered now", solid means "taken".
-     Origin and duty candidates intentionally use the same dashed seat-colour ring. That is safe
-     because they are never offered together, and the prompt line says which question is live. */
+     Origin, skip and duty candidates intentionally use the same seat-colour ring family. That is
+     safe because only one of those three questions is live at a time, and the prompt says which. */
   [data-turn-start-candidate="true"] {{ cursor: pointer; }}
   [data-turn-start-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
   }}
+  [data-turn-skip-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-skip-candidate="true"] .board-circle {{
+    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 5 3;
+  }}
   [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
   [data-turn-duty-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
+  }}
+  [data-turn-skip-selected="true"] .board-circle {{
+    stroke: {route_color}; stroke-width: 3.5; stroke-dasharray: 3 2;
   }}
   [data-turn-duty-selected="true"] .board-circle {{ stroke: {route_color}; stroke-width: 3.5; }}
   [data-ornament-position][data-turn-duty-selected="true"] circle {{
