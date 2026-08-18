@@ -186,17 +186,39 @@ def timeline_slots(payload: dict) -> list[dict]:
     site_rounds = list(state["pilgrimage_rounds"])
     building_round = dict(state["building_availability"].items())
     by_round: dict[int, dict] = {}
+
+    def _claimant(slot: dict) -> str:
+        if slot["kind"] == "site":
+            return f"pilgrimage site {slot['site_index']}"
+        if slot["kind"] == "building":
+            return f"building {slot['building_id']!r}"
+        return slot["kind"]
+
     for index, round_number in enumerate(sorted(site_rounds), start=1):
-        by_round[round_number] = {"kind": "site", "site_index": index, "building_id": None}
+        next_slot = {"kind": "site", "site_index": index, "building_id": None}
+        taken = by_round.get(round_number)
+        if taken is not None:
+            raise ValueError(
+                f"Timeline round collision at round {round_number}: "
+                f"{_claimant(taken)} and {_claimant(next_slot)}."
+            )
+        by_round[round_number] = next_slot
     for building_id in state["building_market"]:
         round_number = building_round.get(building_id)
-        if round_number is None or round_number in by_round:
+        if round_number is None:
             continue
-        by_round[round_number] = {
+        next_slot = {
             "kind": "building",
             "site_index": None,
             "building_id": building_id,
         }
+        taken = by_round.get(round_number)
+        if taken is not None:
+            raise ValueError(
+                f"Timeline round collision at round {round_number}: "
+                f"{_claimant(taken)} and {_claimant(next_slot)}."
+            )
+        by_round[round_number] = next_slot
     return [
         dict(
             by_round.get(round_number, {"kind": "empty", "site_index": None, "building_id": None}),

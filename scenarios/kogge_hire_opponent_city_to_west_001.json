@@ -10,7 +10,7 @@
     "merchant_board_position": 1,
     "timing": {
       "absolute_turn": 0,
-      "round_number": 3,
+      "round_number": 13,
       "season_number": 1,
       "turn_in_round": 0
     },
@@ -36,7 +36,17 @@
           "wheat": 1
         },
         "workforce": {
-          "mancala": [1, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 8,
           "abbey": 3,
           "committed": {
@@ -55,7 +65,17 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0,
           "committed": {
@@ -67,11 +87,27 @@
           }
         },
         "player_board_slots": {
-          "active_buildings": ["kogge"],
+          "active_buildings": [
+            "kogge"
+          ],
           "donated_buildings": [],
           "cardinal_favor_tiles": 0
         }
       }
+    },
+    "building_availability": {
+      "confession_box": 2,
+      "chapel": 3,
+      "chapter_house": 4,
+      "guild": 5,
+      "brewery": 6,
+      "cloisters": 7,
+      "dormitory": 8,
+      "grain_store": 9,
+      "bank": 10,
+      "customs_house": 11,
+      "inquisition": 12,
+      "mill": 13
     }
   }
 }

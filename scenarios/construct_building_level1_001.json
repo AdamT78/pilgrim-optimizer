@@ -9,7 +9,7 @@
   "initial_state": {
     "timing": {
       "absolute_turn": 0,
-      "round_number": 2,
+      "round_number": 13,
       "season_number": 1,
       "turn_in_round": 0
     },
@@ -35,7 +35,17 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 1, 0, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0
         },
@@ -48,12 +58,36 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 1, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0
         },
         "special_activities": {}
       }
+    },
+    "building_availability": {
+      "well": 2,
+      "chapel": 3,
+      "mint": 4,
+      "quarry": 5,
+      "brewery": 6,
+      "cloisters": 7,
+      "dormitory": 8,
+      "grain_store": 9,
+      "bank": 10,
+      "customs_house": 11,
+      "inquisition": 12,
+      "kogge": 13
     }
   }
 }

@@ -14,10 +14,13 @@
       "season_number": 1,
       "turn_in_round": 0
     },
-    "building_market": ["kogge", "cloisters"],
+    "building_market": [
+      "kogge",
+      "cloisters"
+    ],
     "building_availability": {
       "kogge": 2,
-      "cloisters": 2
+      "cloisters": 3
     },
     "players": {
       "player_one": {
@@ -27,7 +30,17 @@
           "wheat": 1
         },
         "workforce": {
-          "mancala": [2, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 8,
           "abbey": 3,
           "committed": {
@@ -46,7 +59,17 @@
           "wheat": 0
         },
         "workforce": {
-          "mancala": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "mancala": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
           "village": 0,
           "abbey": 0,
           "committed": {

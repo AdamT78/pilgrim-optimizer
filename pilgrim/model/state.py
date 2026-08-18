@@ -143,11 +143,19 @@ class GameState:
         availability_keys = [building_id for building_id, _live_round in self.building_availability]
         if len(set(availability_keys)) != len(availability_keys):
             raise ValueError("building_availability cannot contain duplicate building ids.")
+        live_round_to_building: dict[int, str] = {}
         for building_id, live_round in self.building_availability:
             if not building_id:
                 raise ValueError("building_availability cannot contain empty building ids.")
             if live_round < 0:
                 raise ValueError("building_availability live rounds cannot be negative.")
+            already = live_round_to_building.get(live_round)
+            if already is not None:
+                raise ValueError(
+                    "building_availability cannot place two buildings on one live round: "
+                    f"round {live_round} has both {already!r} and {building_id!r}."
+                )
+            live_round_to_building[live_round] = building_id
         if len(set(self.pilgrimage_rounds)) != len(self.pilgrimage_rounds):
             raise ValueError("pilgrimage_rounds cannot contain duplicate entries.")
         for round_number in self.pilgrimage_rounds:
