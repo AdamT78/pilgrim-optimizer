@@ -12,7 +12,7 @@ enumeration chose.
 
 So this walks every committed position, applies every action offered there, and requires none to
 raise. It is not a fast test. The round-eighteen fixture alone is thirty thousand actions and about
-fourteen seconds of it; the other three hundred and seven positions are four thousand actions and
+fourteen seconds of it; the other three hundred and eight positions are four thousand actions and
 one second. The fixture is in nonetheless, because every one of those 3,374 was found there and
 nowhere else -- it is the only committed position deep enough to have several buildings live at
 once, which is what it takes to hire more than one in a turn.
@@ -31,19 +31,6 @@ from pilgrim.rules.transition import apply_action, legal_actions
 REPO = Path(__file__).resolve().parents[1]
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
 
-# Three actions still refuse to apply, and they are a DIFFERENT bug from the one this file was
-# written for: a Chapter House raises a Special Activity's capacity to two, and donating a building
-# into an activity that is already full is offered anyway. They are pinned by count so that the
-# guard below is a real guard rather than one exception away from being switched off, and so that
-# this bug cannot quietly grow. Fixing it is its own job; nothing here should be read as saying it
-# is acceptable.
-KNOWN_UNAPPLIABLE = {
-    "clerical_vestry_chapter_house_two_acolytes_001": 1,
-    "give_alms_chapter_house_two_alms_house_001": 1,
-    "produce_fields_chapter_house_two_acolytes_001": 1,
-}
-
-
 def scenario_paths():
     return sorted(REPO.joinpath("scenarios").glob("*.json"))
 
@@ -52,7 +39,6 @@ def test_every_legal_action_applies(deep_actions) -> None:
     """The contract itself, over every committed position including the deep one."""
     deep_scenario, deep_legal_actions = deep_actions
     unexpected: list[tuple[str, str, str]] = []
-    counted: Counter[str] = Counter()
     total = 0
 
     for path in scenario_paths():
@@ -67,16 +53,11 @@ def test_every_legal_action_applies(deep_actions) -> None:
             try:
                 apply_action(scenario.state, action, scenario.config)
             except Exception as exc:
-                counted[path.stem] += 1
-                if counted[path.stem] > KNOWN_UNAPPLIABLE.get(path.stem, 0):
-                    unexpected.append((path.stem, action_id(action), str(exc)))
+                unexpected.append((path.stem, action_id(action), str(exc)))
 
     assert total > 30_000, f"only {total} actions walked; the corpus has shrunk"
     assert not unexpected, "legal actions that apply_action refuses:\n" + "\n".join(
         f"  {name}: {reason}\n    {ident}" for name, ident, reason in unexpected[:20]
-    )
-    assert dict(counted) == KNOWN_UNAPPLIABLE, (
-        f"the known-unappliable list is out of date: found {dict(counted)}"
     )
 
 

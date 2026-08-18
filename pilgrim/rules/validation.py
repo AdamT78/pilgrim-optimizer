@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pilgrim.model.dummy import validate_dummy_acolytes
 from pilgrim.model.enums import PlayerId, TurnPhase
-from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
+from pilgrim.model.special_activities import MAX_SPECIAL_ACTIVITY_ACOLYTES, SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import GameState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT
 
@@ -205,18 +205,15 @@ def ensure_valid_player_board_slots_structure(state: GameState) -> None:
 
 def ensure_valid_special_activities_state(state: GameState) -> None:
     for player_id in _real_players(state):
-        player_state = state.player_state(player_id)
         activities = state.player_state(player_id).special_activities
-        chapter_house_active = "chapter_house" in player_state.player_board_slots.active_buildings
-        capacity = 2 if chapter_house_active else 1
         for activity_id in SPECIAL_ACTIVITY_IDS:
             activity_count = activities.count_for(activity_id)
-            if activity_count > capacity:
+            if activity_count > MAX_SPECIAL_ACTIVITY_ACOLYTES:
                 raise TransitionValidationError(
                     f"{player_id.name} special-activity '{activity_id}' exceeds capacity "
-                    f"{capacity}."
+                    f"{MAX_SPECIAL_ACTIVITY_ACOLYTES}."
                 )
-        if activities.count > len(SPECIAL_ACTIVITY_IDS) * capacity:
+        if activities.count > len(SPECIAL_ACTIVITY_IDS) * MAX_SPECIAL_ACTIVITY_ACOLYTES:
             raise TransitionValidationError(
                 f"{player_id.name} special-activity occupancy exceeds capacity."
             )

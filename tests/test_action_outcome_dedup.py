@@ -71,15 +71,24 @@ def every_allocation_spelling(
     Kept here rather than in the engine because it is the thing being compared against. The old
     caller filtered by length after the fact; passing `min_moves` through does the same job, so
     this reproduces what generation used to hand back.
+
+    The Chapter House now also limits one allocation to at most one second-acolyte placement.
+    Exhaustive generation here mirrors that legality too, so these tests still compare two legal
+    generators rather than one legal and one intentionally over-permissive.
     """
     if max_moves <= 0:
         return ()
     found: list[tuple] = []
 
-    def walk(state, path):
+    def walk(state, path, used_second_placements):
         if len(path) >= max_moves:
             return
         for move in legal_allocation_moves(state, capacity=special_activity_capacity):
+            next_second_placements = used_second_placements + int(
+                move.destination != "abbey" and state.special_activities.count_for(move.destination) == 1
+            )
+            if next_second_placements > 1:
+                continue
             try:
                 next_state = apply_allocation_move_with_capacity(
                     state, move, capacity=special_activity_capacity
@@ -87,9 +96,9 @@ def every_allocation_spelling(
             except ValueError:
                 continue
             found.append((*path, move))
-            walk(next_state, (*path, move))
+            walk(next_state, (*path, move), next_second_placements)
 
-    walk(player_state, ())
+    walk(player_state, (), 0)
     keep = [sequence for sequence in found if len(sequence) >= min_moves]
     return tuple(sorted(keep, key=len, reverse=True))
 
