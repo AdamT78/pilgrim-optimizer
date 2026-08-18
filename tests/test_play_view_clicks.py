@@ -273,6 +273,17 @@ def _turn_state_snapshot(page) -> dict[str, object]:
     }
 
 
+def _offered_combination_values(page) -> list[str]:
+    return [
+        str(value)
+        for value in page.eval_on_selector_all(
+            '[data-combination-key][data-turn-offered="true"]',
+            "nodes => nodes.map(node => node.getAttribute('data-combination-key'))",
+        )
+        if value is not None
+    ]
+
+
 def _assert_allocation_vestry_overlap_behaviour(page, base_url: str, server: PlayServer) -> None:
     _candidate_with_step(server, "arrangement", value="abbey=-1,vestry=+1")
 
@@ -489,6 +500,45 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
         page.wait_for_timeout(20)
 
     assert _confirm_enabled(page), f"confirm did not light for ordination outcome {ordination_value}"
+
+
+@pytest.mark.parametrize(
+    ("scenario_name", "resolution", "hire_key"),
+    [
+        ("allocation_hire_infirmary_market_001.json", "allocation", "infirmary:market:wheat"),
+        ("ordination_hire_mill_market_three_steps_001.json", "ordination", "mill:market:wheat"),
+    ],
+)
+def test_bonus_building_hire_options_are_mouse_reachable(
+    page,
+    serve,
+    scenario_name: str,
+    resolution: str,
+    hire_key: str,
+) -> None:
+    base_url, _server = serve(SCENARIOS / scenario_name)
+
+    def hire_step_is_live() -> bool:
+        offered = set(_offered_combination_values(page))
+        return "none" in offered and hire_key in offered
+
+    for choice in ("none", hire_key):
+        page.goto(base_url, wait_until="networkidle")
+        _walk_live_dom_until(
+            page,
+            hire_step_is_live,
+            target=f"hire step for {resolution}",
+            preferred_resolution=resolution,
+        )
+        button = page.query_selector(
+            f'[data-combination-key="{choice}"][data-turn-offered="true"]'
+        )
+        assert button is not None, f"expected offered hire option {choice!r}"
+        _click_handle_centre(page, button, require_hit=True)
+        page.wait_for_timeout(30)
+        assert choice not in set(_offered_combination_values(page)), (
+            "clicking a hire option did not advance past the hire step"
+        )
 
 
 def test_seat_choice_keys_are_reachable_for_all_four_seats_and_light_confirm(page, serve) -> None:

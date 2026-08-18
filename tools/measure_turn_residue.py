@@ -66,7 +66,13 @@ from pilgrim.model.duties import DUTY_CATEGORIES, duty_category_at_position  # n
 from pilgrim.model.enums import TurnResolutionType  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
 from pilgrim.setup.generator import generate_setup_scenario  # noqa: E402
-from tools.play_server import DECIDED_FIELDS, _covered_fields, turn_candidates  # noqa: E402
+from tools.play_server import (  # noqa: E402
+    DECIDED_FIELDS,
+    _covered_fields,
+    _hire_contexts,
+    _resolution_context_key,
+    turn_candidates,
+)
 
 REFERENCE = "scenarios/play_view_reference_4p_001.json"
 
@@ -286,6 +292,14 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
 
         actions = legal_actions(state, config)
         by_id = {action_id(action): action for action in actions}
+        hire_contexts = _hire_contexts(list(actions))
+        offer_hire_by_action_id = {
+            action_id(action): (
+                isinstance(action, FullTurnAction)
+                and _resolution_context_key(action) in hire_contexts
+            )
+            for action in actions
+        }
         for action in actions:
             if not isinstance(action, FullTurnAction):
                 continue
@@ -306,7 +320,12 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
             # principle but did not ask about here is not credited with having been asked.
             answered = candidate["action_id"]
             if answered is not None:
-                for name in _covered_fields(by_id[answered]):
+                for name in _covered_fields(
+                    by_id[answered],
+                    state,
+                    config,
+                    offer_hire=offer_hire_by_action_id[answered],
+                ):
                     worsen(name, ASKED)
             # The four the page opens with -- origin, route, duty, resolution -- are asked of every
             # turn there is, which is why they are excluded from the residue and so from

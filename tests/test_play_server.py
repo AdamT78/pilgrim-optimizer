@@ -33,6 +33,7 @@ from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
 from pilgrim.model.actions import (
+    FullTurnAction,
     SetupSowAction,
     StartPlayerSelectionAction,
     action_id,
@@ -889,6 +890,73 @@ def test_every_scenario_draws_a_choice_key_for_every_market_building() -> None:
     assert not extra_by_scenario, f"unexpected building choice keys: {extra_by_scenario}"
 
 
+def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
+    """Every candidate that commits a hired building must ask for that hire explicitly.
+
+    This guards against silent cost consent: unambiguous branches still need the explicit hire
+    question in the turn panel before any effect step that depends on that payment.
+    """
+    checked = 0
+    missing: list[tuple[str, tuple, list[str], int]] = []
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            actions = list(legal_actions(server.state, server.config))
+            hire_contexts = play_server._hire_contexts(actions)
+            player_id = play_server._speaking_player_id(server.state)
+
+            def key_for_steps(steps: list[dict]) -> tuple:
+                return tuple(
+                    tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
+                    for step in steps
+                )
+
+            by_key: dict[tuple, list[FullTurnAction]] = {}
+            for action in actions:
+                offered_hire = isinstance(action, FullTurnAction) and (
+                    play_server._resolution_context_key(action) in hire_contexts
+                )
+                steps = play_server.decision_steps(
+                    action,
+                    player_id,
+                    state=server.state,
+                    config=server.config,
+                    offer_hire=offered_hire,
+                )
+                by_key.setdefault(key_for_steps(steps), []).append(action)
+
+            candidates_by_key = {
+                key_for_steps(candidate["steps"]): candidate
+                for candidate in server.payload["turn_candidates"]
+            }
+
+            for key, members in by_key.items():
+                if not any(
+                    isinstance(member, FullTurnAction) and member.hired_building_id is not None
+                    for member in members
+                ):
+                    continue
+                checked += 1
+                candidate = candidates_by_key.get(key)
+                if candidate is None:
+                    missing.append((scenario_path.name, key, [], len(members)))
+                    continue
+                if not any(step["kind"] == "hire" for step in candidate["steps"]):
+                    missing.append(
+                        (
+                            scenario_path.name,
+                            key,
+                            [str(step["kind"]) for step in candidate["steps"]],
+                            len(members),
+                        )
+                    )
+        finally:
+            server.server_close()
+
+    assert checked > 0, "corpus had no hired candidates, so this checked nothing"
+    assert not missing, f"missing hire step on {len(missing)} hired candidates: {missing[:10]}"
+
+
 def test_construct_building_level2_draws_keys_for_all_eight_constructible_buildings() -> None:
     """Regression: this fixture offered eight construct moves while the page drew one key."""
     server = PlayServer(("127.0.0.1", 0), str(SCENARIOS / "construct_building_level2_001.json"))
@@ -914,8 +982,9 @@ def _seated(server) -> set[str]:
 
 def _key_values(candidates: list[dict], kind: str) -> list[str]:
     """Every distinct value of one kind of step, which is one key each on the page."""
+    asked_kinds = {"combination", "hire"} if kind == "combination" else {kind}
     return sorted(
-        {step["value"] for c in candidates for step in c["steps"] if step["kind"] == kind}
+        {step["value"] for c in candidates for step in c["steps"] if step["kind"] in asked_kinds}
     )
 
 
@@ -1098,6 +1167,8 @@ def _click_for(server, step: dict) -> dict:
         return _take(step["value"], _active_seat(server))
     if step["kind"] == "combination":
         return _pay(step["value"])
+    if step["kind"] == "hire":
+        return _pay(step["value"])
     if step["kind"] == "seat":
         return _name(step["value"])
     if step["kind"] == "building":
@@ -1117,7 +1188,16 @@ def _active_seat(server) -> int:
 ALMS_PAIR = ("alms_payment_silver", "alms_payment_wheat")
 
 
-def _engine_steps(action) -> list[dict]:
+def _hire_step_value(action: FullTurnAction) -> str:
+    if action.hired_building_id is None:
+        return "none"
+    for building_id, resource in tuple(action.hire_payments or ()):
+        if building_id == action.hired_building_id:
+            return f"{building_id}:{action.hired_building_source or 'unknown'}:{resource}"
+    return f"{action.hired_building_id}:{action.hired_building_source or 'unknown'}:unknown"
+
+
+def _engine_steps(action, *, offer_hire: bool = False) -> list[dict]:
     """One legal action as the sequence of decisions that reaches it, spelled out here by hand.
 
     Deliberately not `decision_steps`: comparing the page against the same function that fed it
@@ -1139,6 +1219,8 @@ def _engine_steps(action) -> list[dict]:
         return steps
     steps.append({"kind": "duty", "value": action.selected_duty})
     steps.append({"kind": "resolution", "value": action.resolution.value})
+    if offer_hire:
+        steps.append({"kind": "hire", "value": _hire_step_value(action)})
     for name in ("tithe_resource", "taxation_step1_resource"):
         # Read through the constant so that a test which takes a field off the page takes it off
         # this side too. Everywhere else the two are the same tuple, and this mirror is still built
@@ -1175,9 +1257,14 @@ def _engine_steps(action) -> list[dict]:
 
 def _engine_decisions(server) -> list[list[dict]]:
     """Every legal move as its sequence of decisions, with no two the same."""
+    actions = list(legal_actions(server.state, server.config))
+    hire_contexts = play_server._hire_contexts(actions)
     decisions: list[list[dict]] = []
-    for action in legal_actions(server.state, server.config):
-        steps = _engine_steps(action)
+    for action in actions:
+        offer_hire = isinstance(action, FullTurnAction) and (
+            play_server._resolution_context_key(action) in hire_contexts
+        )
+        steps = _engine_steps(action, offer_hire=offer_hire)
         if steps not in decisions:
             decisions.append(steps)
     return decisions
@@ -1566,6 +1653,20 @@ def _ordination_candidates(server) -> list[dict]:
     ]
 
 
+def _hire_candidates(server, resolution: str) -> list[dict]:
+    return [
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate["action_id"] is not None
+        and _resolves(candidate, resolution)
+        and any(step["kind"] == "hire" for step in candidate["steps"])
+    ]
+
+
+def _step_index(candidate: dict, kind: str) -> int:
+    return next(index for index, step in enumerate(candidate["steps"]) if step["kind"] == kind)
+
+
 def _arrangement_terms(value: str) -> list[tuple[str, int]]:
     if value == "none":
         return []
@@ -1922,6 +2023,61 @@ def test_ordination_candidates_no_longer_refuse_on_ordination_steps() -> None:
     assert all("ordination_steps" not in candidate["unresolved"] for candidate in candidates)
 
 
+def test_allocation_hire_step_precedes_arrangement_and_controls_move_count() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "allocation_hire_infirmary_market_001.json"
+    )
+    legal = {action_id(action): action for action in legal_actions(server.state, server.config)}
+    candidates = _hire_candidates(server, "allocation")
+    assert candidates, "fixture offered no allocation candidates with a hire step"
+    assert {"none", "infirmary:market:wheat"} <= {_answer(candidate, "hire") for candidate in candidates}
+    assert all(
+        _step_index(candidate, "hire") < _step_index(candidate, "arrangement")
+        for candidate in candidates
+    )
+
+    no_hire_moves = {
+        len(legal[candidate["action_id"]].allocation_moves)
+        for candidate in candidates
+        if _answer(candidate, "hire") == "none"
+    }
+    hired_moves = {
+        len(legal[candidate["action_id"]].allocation_moves)
+        for candidate in candidates
+        if _answer(candidate, "hire") != "none"
+    }
+    assert no_hire_moves == {1}
+    assert any(count >= 2 for count in hired_moves)
+
+
+def test_ordination_hire_step_precedes_ordination_and_controls_step_count() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "ordination_hire_mill_market_three_steps_001.json"
+    )
+    legal = {action_id(action): action for action in legal_actions(server.state, server.config)}
+    candidates = _hire_candidates(server, "ordination")
+    assert candidates, "fixture offered no ordination candidates with a hire step"
+    assert {"none", "mill:market:wheat"} <= {_answer(candidate, "hire") for candidate in candidates}
+    assert all(
+        _step_index(candidate, "hire") < _step_index(candidate, "ordination")
+        for candidate in candidates
+    )
+
+    no_hire_steps = {
+        len(legal[candidate["action_id"]].ordination_steps)
+        for candidate in candidates
+        if _answer(candidate, "hire") == "none"
+    }
+    hired_steps = {
+        len(legal[candidate["action_id"]].ordination_steps)
+        for candidate in candidates
+        if _answer(candidate, "hire") != "none"
+    }
+    assert no_hire_steps and hired_steps
+    assert 3 in hired_steps
+    assert 3 not in no_hire_steps
+
+
 @needs_node
 def test_a_cornucopia_tithe_is_playable_and_only_the_stock_that_was_picked_moves(
     tmp_path: Path,
@@ -2152,12 +2308,24 @@ def _offered_pairs(server) -> tuple[set, set]:
     """
     siblings = _alms_group(server)
     wanted = _values_except(siblings[0]["steps"], "combination")
+    actions = list(legal_actions(server.state, server.config))
+    hire_contexts = play_server._hire_contexts(actions)
 
     offered = {_pair(_answer(candidate, "combination")) for candidate in siblings}
     legal = {
         tuple(getattr(action, name) for name in ALMS_PAIR)
-        for action in legal_actions(server.state, server.config)
-        if _values_except(_engine_steps(action), "combination") == wanted
+        for action in actions
+        if _values_except(
+            _engine_steps(
+                action,
+                offer_hire=(
+                    isinstance(action, FullTurnAction)
+                    and play_server._resolution_context_key(action) in hire_contexts
+                ),
+            ),
+            "combination",
+        )
+        == wanted
     }
     return offered, legal
 
@@ -2288,9 +2456,17 @@ def _played_until_a_bonus_offers_a_choice(server, limit: int = 30):
 
 def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
+    actions = list(legal_actions(server.state, server.config))
+    hire_contexts = play_server._hire_contexts(actions)
     allowed = set()
-    for action in legal_actions(server.state, server.config):
-        steps = _engine_steps(action)
+    for action in actions:
+        steps = _engine_steps(
+            action,
+            offer_hire=(
+                isinstance(action, FullTurnAction)
+                and play_server._resolution_context_key(action) in hire_contexts
+            ),
+        )
         if getattr(action, "resolution", None) is None or action.resolution.value != "taxation":
             continue
         if tuple(_values_except(steps, "combination")) != prefix:
@@ -2448,12 +2624,26 @@ def _building_choices(server) -> dict[tuple, set[str]]:
 
 def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
+    actions = list(legal_actions(server.state, server.config))
+    hire_contexts = play_server._hire_contexts(actions)
     return sorted(
         {
             action.construct_building_id
-            for action in legal_actions(server.state, server.config)
+            for action in actions
             if getattr(action, "construct_building_id", None) is not None
-            and tuple(_values_except(_engine_steps(action), "building")) == prefix
+            and tuple(
+                _values_except(
+                    _engine_steps(
+                        action,
+                        offer_hire=(
+                            isinstance(action, FullTurnAction)
+                            and play_server._resolution_context_key(action) in hire_contexts
+                        ),
+                    ),
+                    "building",
+                )
+            )
+            == prefix
         }
     )
 
@@ -3029,10 +3219,21 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     # The fields named are really the ones the survivors differ on, checked against the actions.
     candidate = open_ended[0]
     wanted = [step["value"] for step in candidate["steps"]]
+    actions = list(legal_actions(server.state, server.config))
+    hire_contexts = play_server._hire_contexts(actions)
     members = [
         action
-        for action in legal_actions(server.state, server.config)
-        if _values(_engine_steps(action)) == wanted
+        for action in actions
+        if _values(
+            _engine_steps(
+                action,
+                offer_hire=(
+                    isinstance(action, FullTurnAction)
+                    and play_server._resolution_context_key(action) in hire_contexts
+                ),
+            )
+        )
+        == wanted
     ]
     assert len(members) == candidate["variants"]
     for name in candidate["unresolved"]:

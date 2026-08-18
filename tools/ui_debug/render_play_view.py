@@ -431,13 +431,17 @@ def _combination_keys(candidates: list[dict]) -> str:
     build a pairing the engine never offered, and the page would then have to know which pairings
     go together -- which is the rule it exists not to hold a copy of.
 
+    Hire choices use the same key shape: one scalar answer and one sentence, offered whole. A hire
+    is not "partly accepted", so splitting source from payment stock would ask two questions where
+    there is only one legal move.
+
     The words are the seam's, not this file's. What a combination amounts to is a fact about the
     action, and composing a sentence for it here would be a second description to keep in step.
     """
     seen: dict[str, str] = {}
     for candidate in candidates:
         for step in candidate["steps"]:
-            if step["kind"] == "combination":
+            if step["kind"] in {"combination", "hire"}:
                 seen.setdefault(step["value"], step.get("label", step["value"]))
     return "".join(
         f'<button type="button" class="turn-key" data-combination-key="{escape(value)}"'
@@ -1392,7 +1396,11 @@ _TURN_SCRIPT = """<script>
     board.setAttribute('data-turn-preview-overflow', preview.overflow ? 'true' : 'false');
     mark(prompts, 'data-turn-prompt', promptsOf(offered));
     mark(keys, 'data-resolution-key', shownResolutions);
-    mark(pairs, 'data-combination-key', offeredByKind(offered, 'combination'));
+    mark(
+      pairs,
+      'data-combination-key',
+      offeredByKind(offered, 'combination').concat(offeredByKind(offered, 'hire'))
+    );
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
     /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
        three are not merely unlit: their keys are marked unoffered too, so a key that something
@@ -1546,7 +1554,7 @@ _TURN_SCRIPT = """<script>
     });
   });
 
-  /* Five kinds of key, answered the same way: press one that is offered and it becomes the next
+  /* Five key surfaces are answered the same way: press one that is offered and it becomes the next
      answer. What the key stands for is the attribute it carries, and this does not read it. */
   function answers(elements, attribute) {
     Array.prototype.forEach.call(elements, function (key) {
