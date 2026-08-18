@@ -1675,7 +1675,8 @@ def turn_styles(route_color: str) -> str:
     Every affordance is drawn by the renderer and hidden here; the script flips an attribute
     between true and false and does nothing else. No position and no colour crosses into
     JavaScript -- the colour of the route is the active seat\'s own, written in by the page that
-    knows which seat that is.
+    knows which seat that is. So any highlight on THAT seat's own pieces cannot use `route_color`
+    to stand out: it paints their existing colour back onto them.
 
     The whole space and arrow are the targets rather than just their outlines, so a click in the
     painted area counts.
@@ -1785,14 +1786,12 @@ def turn_styles(route_color: str) -> str:
   [data-arrangement-choice="true"] [data-role-circle][data-arrangement-held="true"] {{
     stroke: {route_color}; stroke-width: 4;
   }}
-  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-place="true"],
-  [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-held="true"] {{
-    stroke: {route_color}; stroke-width: 2.2;
-  }}
+  /* No route-colour stroke on seat-owned cubes yet (allocation Abbey + ordination tokens):
+     `route_color` is the active seat's own colour, so stroking those cubes with it erases the
+     darker edge instead of standing out. */
   [data-ordination-choice="true"] [data-token="village"][data-ordination-can-ordain="true"][opacity="1"],
   [data-ordination-choice="true"] [data-token="abbey"][data-ordination-can-mission="true"][opacity="1"] {{
     pointer-events: all; cursor: pointer;
-    stroke: {route_color}; stroke-width: 2.2;
   }}
 
   /* One panel per candidate, all drawn, all hidden until its candidate is the one left. */
