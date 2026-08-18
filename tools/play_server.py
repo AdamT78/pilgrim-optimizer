@@ -54,12 +54,14 @@ from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType  # noqa: E40
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scenario  # noqa: E402
+from pilgrim.rules.ordination import ordination_outcome  # noqa: E402
 from pilgrim.rules.special_activities import allocation_outcome  # noqa: E402
 from pilgrim.model.actions import (  # noqa: E402
     SetupSowAction,
     StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
     action_id,
+    action_choice_summary_for_players,
     action_summary_for_players,
 )
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
@@ -386,6 +388,7 @@ SEAT_PROMPT = "choose first player for this round."
 ARRANGEMENT_PROMPT = (
     "move acolytes from the Abbey to Special Activity and/or between Special Activities."
 )
+ORDINATION_PROMPT = "ordain from Village and send from Abbey; City updates as a preview."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
@@ -436,6 +439,19 @@ def _arrangement_value(action: Any) -> str:
         f"{slot}={delta:+d}"
         for slot, delta in outcome
     )
+
+
+def _ordination_value(action: Any) -> str:
+    """Ordination answer encoded as one scalar, keyed by outcome and not by step order."""
+    counts = dict(ordination_outcome(action.ordination_steps))
+    ordain = int(counts.get("ordain", 0))
+    mission = int(counts.get("mission", 0))
+    parts: list[str] = []
+    if ordain:
+        parts.append(f"ordain={ordain}")
+    if mission:
+        parts.append(f"mission={mission}")
+    return ",".join(parts) if parts else "none"
 
 
 def _confession_in_words(action: Any) -> str:
@@ -539,6 +555,17 @@ def _presented(action: Any) -> list[tuple[dict, tuple[str, ...]]]:
                     "prompt": ARRANGEMENT_PROMPT,
                 },
                 ("allocation_moves",),
+            )
+        )
+    if action.resolution.value == "ordination":
+        presented.append(
+            (
+                {
+                    "kind": "ordination",
+                    "value": _ordination_value(action),
+                    "prompt": ORDINATION_PROMPT,
+                },
+                ("ordination_steps",),
             )
         )
     return presented
@@ -722,8 +749,12 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
                 # Nothing to submit while the choice is incomplete, so there is no id to quote and
                 # no summary to agree to. The page has to say so rather than send something.
                 "action_id": action_id(members[0]) if settled else None,
+                # Candidate summaries are shown BEFORE apply, when no event lines exist yet, so this
+                # carries the full player sentence for what confirming would commit.
                 "summary": (
-                    action_summary_for_players(members[0], config, actor=state.active_player)
+                    action_summary_for_players(
+                        members[0], config, actor=state.active_player, state=state
+                    )
                     if settled
                     else None
                 ),
@@ -893,7 +924,9 @@ class PlayServer(ThreadingHTTPServer):
             raise UnknownAction(f"no legal action with id {submitted_id!r} in this position")
 
         actor = self.state.active_player
-        summary_line = action_summary_for_players(chosen, self.config, actor=actor)
+        # Applied-log lead line sits directly above event lines that already name steps and costs,
+        # so it stays short and only says which duty action was chosen.
+        summary_line = action_choice_summary_for_players(chosen, self.config, actor=actor)
         result = apply_action(self.state, chosen, self.config)
         self.state = result.state
         has_taxation_event = any(event.event_type is EventType.TAXATION for event in result.events)

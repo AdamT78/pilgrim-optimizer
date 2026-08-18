@@ -811,6 +811,178 @@ def _duty_label_for_players(details: dict, config: GameConfig) -> str:
     return "Unknown Duty"
 
 
+def _resolution_label_for_bonus(action_name: str) -> str:
+    if action_name.startswith("produce_"):
+        return "Produce"
+    if action_name.startswith("construct"):
+        return "Construct"
+    if action_name.startswith("build_roads"):
+        return "Build Roads"
+    if action_name.startswith("give_alms"):
+        return "Give Alms"
+    if action_name.startswith("clerical_"):
+        return "Clerical"
+    return _title_words(action_name)
+
+
+def _times_word(value: int) -> str:
+    if value == 1:
+        return "once"
+    if value == 2:
+        return "twice"
+    return f"{value} times"
+
+
+def _resource_bonus_player_line(
+    *,
+    actor: str,
+    details: dict,
+    source_name: str,
+) -> str | None:
+    if bool(details.get("player_line_suppressed", False)):
+        return None
+
+    action_name = str(details.get("action", "")).strip()
+    at = _resolution_label_for_bonus(action_name) if action_name else "this action"
+    for key, resource in (
+        ("wheat_bonus", "wheat"),
+        ("stone_bonus", "stone"),
+        ("silver_bonus", "silver"),
+        ("piety_bonus", "piety"),
+    ):
+        amount = int(details.get(key, 0))
+        if amount == 0:
+            continue
+        total = int(details.get("total_amount", amount))
+        base = int(details.get("base_amount", max(total - amount, 0)))
+        source_ids = [
+            source.strip()
+            for source in str(details.get("player_bonus_sources", "")).split(",")
+            if source.strip()
+        ]
+        source_amount_tokens = [
+            token.strip()
+            for token in str(details.get("player_bonus_amounts", "")).split(",")
+            if token.strip()
+        ]
+        source_amounts: list[int] = []
+        for token in source_amount_tokens:
+            try:
+                source_amounts.append(int(token))
+            except ValueError:
+                source_amounts = []
+                break
+        source_clauses: list[str] = []
+        if source_ids and source_amounts and len(source_ids) == len(source_amounts):
+            source_clauses = [
+                f"{bonus} from the {_title_words(source_id)}"
+                for source_id, bonus in zip(source_ids, source_amounts, strict=True)
+                if bonus != 0
+            ]
+        else:
+            source_clauses = [f"{amount} from the {source_name}"]
+        clauses = ([f"{base} for the duty"] if base > 0 else []) + source_clauses
+        if not clauses:
+            return None
+        return f"{actor} gained {total} {resource} at {at} \u2014 {', '.join(clauses)}."
+    return None
+
+
+def _bonus_delta_is_zero(details: dict) -> bool:
+    keys = (
+        "wheat_bonus",
+        "stone_bonus",
+        "silver_bonus",
+        "piety_bonus",
+        "duty_value_bonus",
+        "wheat_waived",
+    )
+    seen = False
+    for key in keys:
+        if key not in details:
+            continue
+        seen = True
+        if int(details.get(key, 0)) != 0:
+            return False
+    return seen
+
+
+def _building_bonus_for_players(actor: str, details: dict) -> str | None:
+    if bool(details.get("player_line_suppressed", False)):
+        return None
+
+    building = str(details.get("building", "")).strip()
+    if not building:
+        return None
+    source_name = _title_words(building)
+    action_name = str(details.get("action", "")).strip()
+
+    if "enabled_route" in details or "skipped_location" in details:
+        return None
+
+    if building == "mill" and "wheat_waived" in details:
+        waived = int(details.get("wheat_waived", 0))
+        due = int(details.get("required_wheat", 0))
+        if due <= 0:
+            due = waived
+        spent = int(details.get("actual_wheat_spent", max(due - waived, 0)))
+        if action_name == "ordination":
+            if waived > 0:
+                return (
+                    f"{actor} paid {spent} wheat for Ordination "
+                    f"\u2014 {due} due, {waived} waived by the {source_name}."
+                )
+            return f"{actor} paid {spent} wheat for Ordination."
+        if waived == 0:
+            return None
+        at = _resolution_label_for_bonus(action_name) if action_name else "this action"
+        return (
+            f"{actor} paid {spent} wheat on {at} "
+            f"\u2014 {due} due, {waived} waived by the {source_name}."
+        )
+
+    resource_line = _resource_bonus_player_line(
+        actor=actor,
+        details=details,
+        source_name=source_name,
+    )
+    if resource_line is not None:
+        return resource_line
+
+    duty_bonus = int(details.get("duty_value_bonus", 0))
+    if duty_bonus == 0 and "duty_value_bonus" in details:
+        return None
+    if duty_bonus:
+        at = _resolution_label_for_bonus(action_name) if action_name else "this action"
+        return f"{actor} gained {duty_bonus} duty value at {at} from the {source_name}."
+    return None
+
+
+def _special_activity_bonus_for_players(actor: str, details: dict) -> str | None:
+    if bool(details.get("player_line_suppressed", False)):
+        return None
+
+    activity = str(details.get("activity", "")).strip()
+    source_name = _title_words(activity) if activity else "Special Activity"
+    action_name = str(details.get("action", "")).strip()
+
+    resource_line = _resource_bonus_player_line(
+        actor=actor,
+        details=details,
+        source_name=source_name,
+    )
+    if resource_line is not None:
+        return resource_line
+
+    duty_bonus = int(details.get("duty_value_bonus", 0))
+    if duty_bonus == 0 and "duty_value_bonus" in details:
+        return None
+    if duty_bonus:
+        at = _resolution_label_for_bonus(action_name) if action_name else "this action"
+        return f"{actor} gained {duty_bonus} duty value at {at} from the {source_name}."
+    return None
+
+
 _PLAYER_TURN_STEP_EVENT_TYPES: set[EventType] = {
     EventType.PIETY_DELTA,
     EventType.TAXATION,
@@ -819,6 +991,7 @@ _PLAYER_TURN_STEP_EVENT_TYPES: set[EventType] = {
     EventType.ALMS_PROGRESS,
     EventType.ALMS_THRESHOLD_REWARD,
     EventType.ACOLYTE_RECALL,
+    EventType.ORDINATION,
     EventType.START_PLAYER_SELECTION,
 }
 
@@ -852,6 +1025,8 @@ _PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
     EventType.BUILDING_DONATION,
     EventType.BUILDING_CONSTRUCTED,
     EventType.ALLOCATION,
+    EventType.BUILDING_BONUS,
+    EventType.SPECIAL_ACTIVITY_BONUS,
     *_PLAYER_ROUND_END_EVENT_TYPES,
 }
 
@@ -1020,6 +1195,17 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         noun = "acolyte" if recalled == 1 else "acolytes"
         return f"{actor} recalled {recalled} {noun} from {duty} to City."
 
+    if event_type is EventType.ORDINATION:
+        step = str(details.get("step", "")).strip()
+        amount = int(details.get("amount", 1))
+        if step == "ordain":
+            noun = "serf" if amount == 1 else "serfs"
+            return f"{actor} ordained {amount} {noun} into the Abbey."
+        if step == "mission":
+            noun = "acolyte" if amount == 1 else "acolytes"
+            return f"{actor} sent {amount} {noun} on mission to the City."
+        return None
+
     if event_type is EventType.SHIP_ADVANCE:
         from_position = int(details.get("from_position", 0))
         to_position = int(details.get("to_position", 0))
@@ -1066,8 +1252,26 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         return f"Round {round_number} ended."
 
     if event_type is EventType.BUILDING_BONUS:
+        if bool(details.get("player_line_suppressed", False)):
+            return None
+        line = _building_bonus_for_players(actor, details)
+        if line is not None:
+            return line
+        if _bonus_delta_is_zero(details):
+            return None
         if "enabled_route" in details or "skipped_location" in details:
             return None
+        return format_event(event, config)
+
+    if event_type is EventType.SPECIAL_ACTIVITY_BONUS:
+        if bool(details.get("player_line_suppressed", False)):
+            return None
+        line = _special_activity_bonus_for_players(actor, details)
+        if line is not None:
+            return line
+        if _bonus_delta_is_zero(details):
+            return None
+        return format_event(event, config)
 
     if event_type in PLAYER_EVENT_FALLBACK_TYPES:
         return format_event(event, config)

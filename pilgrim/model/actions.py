@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from pilgrim.model.config import GameConfig
 from pilgrim.model.duties import duty_category_at_position
 from pilgrim.model.enums import ActionType, DutyEffect, PlayerId, TurnResolutionType, position_name
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS
+
+if TYPE_CHECKING:
+    from pilgrim.model.state import GameState
 
 _ALLOCATION_SOURCE_PREFIX = "abbey"
 
@@ -427,10 +431,64 @@ def _board_label_for_position(config: GameConfig, position: int) -> str:
     return _player_wording(duty_category_at_position(config, position))
 
 
-def action_summary_for_players(
-    action: GameAction, config: GameConfig, *, actor: PlayerId | str | None = None
+def _actor_id(actor: PlayerId | str | None) -> PlayerId | None:
+    if isinstance(actor, PlayerId):
+        return actor
+    if isinstance(actor, str):
+        try:
+            return PlayerId.from_string(actor.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _active_buildings_for_actor(
+    state: GameState | None, actor: PlayerId | str | None
+) -> tuple[str, ...]:
+    if state is None:
+        return ()
+    player_id = _actor_id(actor)
+    if player_id is None or not hasattr(state, "player_state"):
+        return ()
+    try:
+        player_state = state.player_state(player_id)  # type: ignore[attr-defined]
+    except Exception:
+        return ()
+    slots = getattr(player_state, "player_board_slots", None)
+    if slots is None:
+        return ()
+    return tuple(getattr(slots, "active_buildings", ()) or ())
+
+
+def _ordination_cost_phrase(
+    action: FullTurnAction, *, state: GameState | None, actor: PlayerId | str | None
 ) -> str:
-    """Return one player-facing sentence describing what this action will do."""
+    due = len(action.ordination_steps)
+    has_mill = "mill" in _active_buildings_for_actor(state, actor) or action.hired_building_id == "mill"
+    waived = min(2, due) if has_mill else 0
+    after_mill = max(0, due - waived)
+    bank_wheat_replaced = (
+        action.bank_payment_silver_amount
+        if (
+            action.bank_payment_building_id == "bank"
+            and action.bank_payment_replaced_resource == "wheat"
+            and action.bank_payment_silver_amount is not None
+        )
+        else 0
+    )
+    paid = max(0, after_mill - bank_wheat_replaced)
+    if waived > 0:
+        return f"paid {paid} wheat ({due} due, {waived} waived by the Mill)"
+    return f"paid {paid} wheat"
+
+
+def action_choice_summary_for_players(
+    action: GameAction,
+    config: GameConfig,
+    *,
+    actor: PlayerId | str | None = None,
+) -> str:
+    """Return the short player-facing line naming only what was chosen."""
     speaker = _actor_name(actor)
 
     if isinstance(action, SetupSowAction):
@@ -468,6 +526,35 @@ def action_summary_for_players(
     if action.resolution is TurnResolutionType.PRODUCE_STONE:
         return f"{speaker} chose {action_name} at {duty} and gained stone."
     return f"{speaker} chose {action_name} at {duty}."
+
+
+def action_summary_for_players(
+    action: GameAction,
+    config: GameConfig,
+    *,
+    actor: PlayerId | str | None = None,
+    state: GameState | None = None,
+) -> str:
+    """Return the full player-facing sentence shown before confirming an action."""
+    summary = action_choice_summary_for_players(action, config, actor=actor)
+    if not isinstance(action, FullTurnAction):
+        return summary
+    if action.resolution is not TurnResolutionType.ORDINATION:
+        return summary
+
+    ordain_count = action.ordination_steps.count("ordain")
+    mission_count = action.ordination_steps.count("mission")
+    step_clauses: list[str] = []
+    if ordain_count > 0:
+        noun = "serf" if ordain_count == 1 else "serfs"
+        step_clauses.append(f"ordained {ordain_count} {noun} into the Abbey")
+    if mission_count > 0:
+        noun = "acolyte" if mission_count == 1 else "acolytes"
+        step_clauses.append(f"sent {mission_count} {noun} on mission to the City")
+    if not step_clauses:
+        step_clauses.append("made no ordination steps")
+    step_clauses.append(_ordination_cost_phrase(action, state=state, actor=actor))
+    return f"{summary[:-1]} \u2014 {'; '.join(step_clauses)}."
 
 
 def action_summary(action: GameAction, config: GameConfig) -> str:

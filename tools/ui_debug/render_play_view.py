@@ -612,6 +612,9 @@ _TURN_SCRIPT = """<script>
   var arrangementStartCounts = null;
   var arrangementHeldFrom = null;
   var arrangementEnvelope = null;
+  var ordinationBaseline = [];
+  var ordinationStartCounts = null;
+  var ordinationOffered = [];
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
       activePlayer = seat.getAttribute('data-player');
@@ -654,6 +657,28 @@ _TURN_SCRIPT = """<script>
     return tokens;
   }
 
+  function villageTokensOnActiveSeat() {
+    if (!activeSeat) { return []; }
+    var tokens = Array.prototype.slice.call(activeSeat.querySelectorAll('[data-token="village"]'));
+    tokens.sort(function (left, right) {
+      return Number(left.getAttribute('data-token-index')) - Number(right.getAttribute('data-token-index'));
+    });
+    return tokens;
+  }
+
+  function citySlotsForActiveSeat() {
+    if (!board || !activePlayer) { return []; }
+    var slots = Array.prototype.slice.call(
+      board.querySelectorAll(
+        '[data-city-column-player="' + activePlayer + '"][data-city-cube]'
+      )
+    );
+    slots.sort(function (left, right) {
+      return Number(left.getAttribute('data-city-cube')) - Number(right.getAttribute('data-city-cube'));
+    });
+    return slots;
+  }
+
   function roleTokensOnActiveSeat(roleId) {
     if (!activeSeat) { return []; }
     return Array.prototype.slice.call(
@@ -672,6 +697,14 @@ _TURN_SCRIPT = """<script>
 
   function abbeyCount() {
     return abbeyTokensOnActiveSeat().filter(tokenVisible).length;
+  }
+
+  function villageCount() {
+    return villageTokensOnActiveSeat().filter(tokenVisible).length;
+  }
+
+  function cityCount() {
+    return citySlotsForActiveSeat().filter(tokenVisible).length;
   }
 
   function currentArrangementCounts() {
@@ -704,6 +737,20 @@ _TURN_SCRIPT = """<script>
     var capped = Math.max(0, Math.min(abbeyTokensOnActiveSeat().length, Number(count) || 0));
     abbeyTokensOnActiveSeat().forEach(function (token, index) {
       token.setAttribute('opacity', index < capped ? '1' : '0');
+    });
+  }
+
+  function setVillageCount(count) {
+    var capped = Math.max(0, Math.min(villageTokensOnActiveSeat().length, Number(count) || 0));
+    villageTokensOnActiveSeat().forEach(function (token, index) {
+      token.setAttribute('opacity', index < capped ? '1' : '0');
+    });
+  }
+
+  function setCityCount(count) {
+    var capped = Math.max(0, Math.min(citySlotsForActiveSeat().length, Number(count) || 0));
+    citySlotsForActiveSeat().forEach(function (slot, index) {
+      slot.setAttribute('opacity', index < capped ? '1' : '0');
     });
   }
 
@@ -901,6 +948,169 @@ _TURN_SCRIPT = """<script>
       } else {
         return;
       }
+    }
+    autoAdvance = true;
+    render();
+  }
+
+  function parseOrdinationValue(value) {
+    var parsed = { ordain: 0, mission: 0 };
+    if (value === 'none' || value === '') { return parsed; }
+    String(value).split(',').forEach(function (part) {
+      var split = part.split('=');
+      if (split.length !== 2) { return; }
+      var key = split[0];
+      var amount = Number(split[1]);
+      if ((key !== 'ordain' && key !== 'mission') || Number.isNaN(amount)) { return; }
+      parsed[key] = amount;
+    });
+    return parsed;
+  }
+
+  function encodeOrdinationValue(ordain, mission) {
+    var parts = [];
+    if (ordain > 0) { parts.push('ordain=' + String(ordain)); }
+    if (mission > 0) { parts.push('mission=' + String(mission)); }
+    return parts.length ? parts.join(',') : 'none';
+  }
+
+  function currentOrdinationCounts() {
+    return {
+      village: villageCount(),
+      abbey: abbeyCount(),
+      city: cityCount()
+    };
+  }
+
+  function currentOrdinationProgress() {
+    if (!ordinationStartCounts) { return null; }
+    var counts = currentOrdinationCounts();
+    var ordain = ordinationStartCounts.village - counts.village;
+    var mission = ordinationStartCounts.abbey + ordain - counts.abbey;
+    return { ordain: ordain, mission: mission, counts: counts };
+  }
+
+  function clearOrdinationMarks() {
+    if (!activeSeat) { return; }
+    activeSeat.removeAttribute('data-ordination-choice');
+    Array.prototype.forEach.call(
+      activeSeat.querySelectorAll(
+        '[data-ordination-can-ordain],[data-ordination-can-mission]'
+      ),
+      function (node) {
+        node.removeAttribute('data-ordination-can-ordain');
+        node.removeAttribute('data-ordination-can-mission');
+      }
+    );
+  }
+
+  function ordinationCanAdvance(kind) {
+    var progress = currentOrdinationProgress();
+    if (!progress || !ordinationOffered.length) { return false; }
+    if (kind === 'ordain') {
+      if (progress.counts.village <= 0) { return false; }
+      if (progress.counts.abbey >= abbeyTokensOnActiveSeat().length) { return false; }
+    } else {
+      if (progress.counts.abbey <= 0) { return false; }
+      if (progress.counts.city >= citySlotsForActiveSeat().length) { return false; }
+    }
+    return ordinationOffered.some(function (encoded) {
+      var target = parseOrdinationValue(encoded);
+      if (target.ordain < progress.ordain || target.mission < progress.mission) {
+        return false;
+      }
+      return kind === 'ordain'
+        ? target.ordain > progress.ordain
+        : target.mission > progress.mission;
+    });
+  }
+
+  function ordinationSelection(values) {
+    if (!values.length || !activeSeat) { return null; }
+    if (!ordinationStartCounts) {
+      ordinationStartCounts = currentOrdinationCounts();
+    }
+    var progress = currentOrdinationProgress();
+    if (!progress) { return null; }
+    var encoded = encodeOrdinationValue(progress.ordain, progress.mission);
+    return values.indexOf(encoded) === -1 ? null : encoded;
+  }
+
+  function showOrdination(values) {
+    if (!activeSeat) { return; }
+    if (!values.length) {
+      ordinationStartCounts = null;
+      ordinationOffered = [];
+      clearOrdinationMarks();
+      return;
+    }
+    if (!ordinationStartCounts) {
+      ordinationStartCounts = currentOrdinationCounts();
+    }
+    ordinationOffered = values.slice();
+    activeSeat.setAttribute('data-ordination-choice', 'true');
+    var progress = currentOrdinationProgress();
+    var canOrdainNow = progress ? ordinationCanAdvance('ordain') : false;
+    var canMissionNow = progress ? ordinationCanAdvance('mission') : false;
+    villageTokensOnActiveSeat().forEach(function (token) {
+      token.setAttribute('data-ordination-can-ordain', canOrdainNow ? 'true' : 'false');
+      token.setAttribute('data-ordination-can-mission', 'false');
+    });
+    abbeyTokensOnActiveSeat().forEach(function (token) {
+      token.setAttribute('data-ordination-can-ordain', 'false');
+      token.setAttribute('data-ordination-can-mission', canMissionNow ? 'true' : 'false');
+    });
+    if (progress) {
+      setCityCount(ordinationStartCounts.city + progress.mission);
+    }
+  }
+
+  function captureOrdinationBaseline() {
+    ordinationBaseline = [];
+    if (!activeSeat) { return; }
+    Array.prototype.forEach.call(
+      activeSeat.querySelectorAll('[data-token="village"],[data-token="abbey"]'),
+      function (token) {
+        ordinationBaseline.push({
+          token: token,
+          opacity: token.getAttribute('opacity')
+        });
+      }
+    );
+    Array.prototype.forEach.call(citySlotsForActiveSeat(), function (slot) {
+      ordinationBaseline.push({
+        token: slot,
+        opacity: slot.getAttribute('opacity')
+      });
+    });
+  }
+
+  function restoreOrdinationBaseline() {
+    ordinationBaseline.forEach(function (entry) {
+      if (entry.opacity === null) {
+        entry.token.removeAttribute('opacity');
+      } else {
+        entry.token.setAttribute('opacity', entry.opacity);
+      }
+    });
+    ordinationStartCounts = null;
+    ordinationOffered = [];
+    clearOrdinationMarks();
+  }
+
+  function ordinationClick(kind) {
+    if (!activeSeat || !activeSeat.getAttribute('data-ordination-choice')) { return; }
+    var counts = currentOrdinationCounts();
+    if (kind === 'ordain') {
+      if (!ordinationCanAdvance('ordain')) { return; }
+      setVillageCount(counts.village - 1);
+      setAbbeyCount(counts.abbey + 1);
+    } else if (kind === 'mission') {
+      if (!ordinationCanAdvance('mission')) { return; }
+      setAbbeyCount(counts.abbey - 1);
+      setCityCount(counts.city + 1);
+    } else {
+      return;
     }
     autoAdvance = true;
     render();
@@ -1135,7 +1345,9 @@ _TURN_SCRIPT = """<script>
     };
   }
 
-  function show(offered, resolutionOptions, settled, confirmable, preview, arrangementValues) {
+  function show(
+    offered, resolutionOptions, settled, confirmable, preview, arrangementValues, ordinationValues
+  ) {
     var origins = offeredByKind(offered, 'origin');
     var duties = offeredByKind(offered, 'duty');
     var edges = offeredByKind(offered, 'edge');
@@ -1205,6 +1417,7 @@ _TURN_SCRIPT = """<script>
            offering ? boards : []);
     });
     showArrangement(arrangementValues || []);
+    showOrdination(ordinationValues || []);
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
@@ -1242,11 +1455,19 @@ _TURN_SCRIPT = """<script>
     var offered = stepsAt(chosen.length, live);
     var arrangements = offeredByKind(offered, 'arrangement');
     var arrangementPicked = arrangementSelection(arrangements);
+    var ordinations = offeredByKind(offered, 'ordination');
+    var ordinationPicked = ordinationSelection(ordinations);
     var narrowed = live;
     if (arrangements.length && arrangementPicked !== null) {
       narrowed = live.filter(function (candidate) {
         var step = candidate.steps[chosen.length];
         return step !== undefined && step.kind === 'arrangement' && step.value === arrangementPicked;
+      });
+    }
+    if (ordinations.length && ordinationPicked !== null) {
+      narrowed = narrowed.filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined && step.kind === 'ordination' && step.value === ordinationPicked;
       });
     }
     var resolutions = offeredByKind(offered, 'resolution');
@@ -1278,19 +1499,24 @@ _TURN_SCRIPT = """<script>
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
        would be committed as, or what is still undecided about
        it -- and the player says so. */
-    if (narrowed.length === 1 && (!arrangements.length || arrangementPicked !== null)) {
-      var shownOffered = arrangements.length ? offered : [];
+    if (
+      narrowed.length === 1
+      && (!arrangements.length || arrangementPicked !== null)
+      && (!ordinations.length || ordinationPicked !== null)
+    ) {
+      var shownOffered = (arrangements.length || ordinations.length) ? offered : [];
       show(
         shownOffered,
         [],
         CANDIDATES.indexOf(narrowed[0]),
         narrowed[0].action_id !== null,
         preview,
-        arrangements
+        arrangements,
+        ordinations
       );
       return;
     }
-    show(offered, resolutions, -1, false, preview, arrangements);
+    show(offered, resolutions, -1, false, preview, arrangements, ordinations);
   }
 
   Array.prototype.forEach.call(spaces, function (space) {
@@ -1344,9 +1570,15 @@ _TURN_SCRIPT = """<script>
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });
   if (activeSeat) {
+    Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="village"]'), function (token) {
+      token.addEventListener('click', function () {
+        ordinationClick('ordain');
+      });
+    });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="abbey"]'), function (token) {
       token.addEventListener('click', function () {
         arrangementClick('abbey', 'token');
+        ordinationClick('mission');
       });
     });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="role"]'), function (token) {
@@ -1376,6 +1608,15 @@ _TURN_SCRIPT = """<script>
           return step !== undefined && step.kind === 'arrangement' && step.value === picked;
         });
       }
+      var ordinations = offeredByKind(offered, 'ordination');
+      if (ordinations.length) {
+        var chosenOrdination = ordinationSelection(ordinations);
+        if (chosenOrdination === null) { return; }
+        live = live.filter(function (candidate) {
+          var step = candidate.steps[chosen.length];
+          return step !== undefined && step.kind === 'ordination' && step.value === chosenOrdination;
+        });
+      }
       if (live.length !== 1 || !live[0].action_id) { return; }
       submit(live[0].action_id);
     });
@@ -1386,6 +1627,7 @@ _TURN_SCRIPT = """<script>
     resetControl.addEventListener('click', function () {
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
       restoreArrangementBaseline();
+      restoreOrdinationBaseline();
       chosen = [];
       answered = [];
       resolutionSplit = null;
@@ -1421,6 +1663,7 @@ _TURN_SCRIPT = """<script>
 
   captureBaseline();
   captureArrangementBaseline();
+  captureOrdinationBaseline();
   render();
 })();
 </script>"""
@@ -1517,8 +1760,9 @@ def turn_styles(route_color: str) -> str:
     visibility: hidden; pointer-events: none;
   }}
 
-  /* Allocation is answered on the acting board itself. The renderer draws tags on every board,
-     but only the acting one is made live while this question is being asked. */
+  /* Allocation and Ordination are answered on the acting board itself. The renderer draws tags on
+     every board, but only the acting one is made live while this question is being asked. */
+  [data-component="player-board-v2"] [data-token="village"],
   [data-component="player-board-v2"] [data-token="abbey"],
   [data-component="player-board-v2"] [data-token="role"],
   [data-component="player-board-v2"] [data-role-circle] {{
@@ -1543,6 +1787,11 @@ def turn_styles(route_color: str) -> str:
   }}
   [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-can-place="true"],
   [data-arrangement-choice="true"] [data-token="abbey"][data-arrangement-held="true"] {{
+    stroke: {route_color}; stroke-width: 2.2;
+  }}
+  [data-ordination-choice="true"] [data-token="village"][data-ordination-can-ordain="true"][opacity="1"],
+  [data-ordination-choice="true"] [data-token="abbey"][data-ordination-can-mission="true"][opacity="1"] {{
+    pointer-events: all; cursor: pointer;
     stroke: {route_color}; stroke-width: 2.2;
   }}
 
