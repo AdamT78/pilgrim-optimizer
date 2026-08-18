@@ -195,6 +195,9 @@ def _topmost_descriptor_at(page, x: float, y: float) -> str | None:
             if (hit.matches('[data-token="abbey"]')) {
                 return 'abbey-token';
             }
+            if (hit.matches('[data-token="village"]')) {
+                return 'village-token';
+            }
             return hit.tagName.toLowerCase();
         }""",
         {"x": x, "y": y},
@@ -217,6 +220,33 @@ def _confirm_enabled(page) -> bool:
         page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled")
         == "true"
     )
+
+
+def _ordination_counts(value: str) -> tuple[int, int]:
+    if value == "none":
+        return (0, 0)
+    counts = {"ordain": 0, "mission": 0}
+    for part in value.split(","):
+        name, amount = part.split("=", 1)
+        counts[name] = int(amount)
+    return (counts["ordain"], counts["mission"])
+
+
+def _visible_active_token_count(page, token_name: str) -> int:
+    return int(
+        page.evaluate(
+            """tokenName => Array.from(document.querySelectorAll(
+                `[data-active-seat="true"] [data-token="${tokenName}"]`
+            )).filter(token => token.getAttribute('opacity') !== '0').length""",
+            token_name,
+        )
+    )
+
+
+def _lit_city_slots_for_player(page, player_id: str) -> int:
+    return page.locator(
+        f'[data-city-column-player="{player_id}"][data-city-cube][opacity="1"]'
+    ).count()
 
 
 def _turn_state_snapshot(page) -> dict[str, object]:
@@ -367,6 +397,98 @@ def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve
     assert stock_key is not None
     _click_handle_centre(page, stock_key, require_hit=True)
     assert page.locator(f'[data-player-seat="{seat_number}"][data-resource-choice="true"]').count() == 0
+
+
+def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page, serve) -> None:
+    """Catches ordination regressions where Village/Abbey looked live but a real click missed them."""
+    base_url, server = serve(SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json")
+    candidate = next(
+        (
+            c
+            for c in server.payload["turn_candidates"]
+            if any(step["kind"] == "ordination" for step in c["steps"])
+            and (counts := _ordination_counts(
+                next(step["value"] for step in c["steps"] if step["kind"] == "ordination")
+            ))[0] >= 1
+            and counts[1] >= 1
+        ),
+        None,
+    )
+    assert candidate is not None, "fixture had no ordination outcome with both ordain and mission"
+    ordination_value = next(
+        step["value"] for step in candidate["steps"] if step["kind"] == "ordination"
+    )
+    ordain_total, mission_total = _ordination_counts(ordination_value)
+
+    def ordination_is_live() -> bool:
+        return page.locator('[data-ordination-choice="true"]').count() == 1
+
+    page.goto(base_url, wait_until="networkidle")
+    _walk_live_dom_until(
+        page,
+        ordination_is_live,
+        target="ordination step",
+        preferred_resolution="ordination",
+    )
+
+    active_board = page.query_selector('[data-active-seat="true"]')
+    assert active_board is not None
+    active_player = active_board.get_attribute("data-player")
+    assert active_player is not None
+
+    village_before = _visible_active_token_count(page, "village")
+    abbey_before = _visible_active_token_count(page, "abbey")
+    city_before = _lit_city_slots_for_player(page, active_player)
+
+    village_token = page.query_selector(
+        '[data-active-seat="true"] [data-token="village"]'
+        '[opacity="1"][data-ordination-can-ordain="true"]'
+    )
+    assert village_token is not None
+    visibility = page.evaluate("node => getComputedStyle(node).visibility", village_token)
+    pointer_events = page.evaluate("node => getComputedStyle(node).pointerEvents", village_token)
+    assert visibility == "visible"
+    assert pointer_events == "all"
+    assert _is_hit_target(page, village_token, *_centre(page, village_token))
+
+    _click_handle_centre(page, village_token, require_hit=True)
+    page.wait_for_timeout(20)
+    assert _visible_active_token_count(page, "village") == village_before - 1
+    assert _visible_active_token_count(page, "abbey") == abbey_before + 1
+
+    abbey_token = page.query_selector(
+        '[data-active-seat="true"] [data-token="abbey"]'
+        '[opacity="1"][data-ordination-can-mission="true"]'
+    )
+    assert abbey_token is not None
+    visibility = page.evaluate("node => getComputedStyle(node).visibility", abbey_token)
+    pointer_events = page.evaluate("node => getComputedStyle(node).pointerEvents", abbey_token)
+    assert visibility == "visible"
+    assert pointer_events == "all"
+    assert _is_hit_target(page, abbey_token, *_centre(page, abbey_token))
+    _click_handle_centre(page, abbey_token, require_hit=True)
+    page.wait_for_timeout(20)
+    assert _lit_city_slots_for_player(page, active_player) == city_before + 1
+
+    for _ in range(max(0, ordain_total - 1)):
+        next_village = page.query_selector(
+            '[data-active-seat="true"] [data-token="village"]'
+            '[opacity="1"][data-ordination-can-ordain="true"]'
+        )
+        assert next_village is not None, "expected another live village token for ordain count"
+        _click_handle_centre(page, next_village, require_hit=True)
+        page.wait_for_timeout(20)
+
+    for _ in range(max(0, mission_total - 1)):
+        next_abbey = page.query_selector(
+            '[data-active-seat="true"] [data-token="abbey"]'
+            '[opacity="1"][data-ordination-can-mission="true"]'
+        )
+        assert next_abbey is not None, "expected another live abbey token for mission count"
+        _click_handle_centre(page, next_abbey, require_hit=True)
+        page.wait_for_timeout(20)
+
+    assert _confirm_enabled(page), f"confirm did not light for ordination outcome {ordination_value}"
 
 
 def test_seat_choice_keys_are_reachable_for_all_four_seats_and_light_confirm(page, serve) -> None:

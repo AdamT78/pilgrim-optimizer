@@ -39,6 +39,7 @@ from pilgrim.model.actions import (
     action_summary_for_players,
 )
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId, TurnResolutionType
+from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import apply_action, legal_actions
 from tools import play_server
@@ -969,8 +970,9 @@ def _seat_allocation_state(server, player_id: str) -> dict[str, object]:
     roles = ("fields", "road_engineer", "stone_mason", "alms_house", "engraver", "vestry")
     record = player_record(server.payload, player_id)
     if record is None:
-        return {"abbey": 0, "roles": {role: 0 for role in roles}}
+        return {"village": 0, "abbey": 0, "roles": {role: 0 for role in roles}}
     return {
+        "village": int(record["workforce"]["village"]),
         "abbey": int(record["workforce"]["abbey"]),
         "roles": {role: int(record["special_activities"].get(role, 0)) for role in roles},
     }
@@ -1023,6 +1025,14 @@ def _place_on(slot: str) -> dict[str, str]:
     return {"kind": "role", "value": slot, "target": "circle"}
 
 
+def _ordain_click() -> dict[str, str]:
+    return {"kind": "village", "value": "ordain"}
+
+
+def _mission_click() -> dict[str, str]:
+    return {"kind": "abbey", "value": "mission"}
+
+
 def _arrangement_clicks(value: str) -> list[dict[str, str]]:
     """Two-click moves rebuilt from an offered net delta vector."""
     if value == "none":
@@ -1039,6 +1049,43 @@ def _arrangement_clicks(value: str) -> list[dict[str, str]]:
         clicks.append(_lift_from(source))
         clicks.append(_place_on(destination))
     return clicks
+
+
+def _ordination_counts(value: str) -> tuple[int, int]:
+    if value == "none":
+        return (0, 0)
+    counts = {"ordain": 0, "mission": 0}
+    for part in value.split(","):
+        name, amount = part.split("=", 1)
+        counts[name] = int(amount)
+    return (counts["ordain"], counts["mission"])
+
+
+def _ordination_clicks(value: str) -> list[dict[str, str]]:
+    ordain, mission = _ordination_counts(value)
+    return [_ordain_click() for _ in range(ordain)] + [_mission_click() for _ in range(mission)]
+
+
+def _legal_ordination_orders(
+    *,
+    start_village: int,
+    start_abbey: int,
+    ordain_count: int,
+    mission_count: int,
+) -> list[tuple[str, ...]]:
+    orders: list[tuple[str, ...]] = []
+
+    def walk(village: int, abbey: int, ordains_left: int, missions_left: int, path: tuple[str, ...]) -> None:
+        if ordains_left == 0 and missions_left == 0:
+            orders.append(path)
+            return
+        if ordains_left > 0 and village > 0:
+            walk(village - 1, abbey + 1, ordains_left - 1, missions_left, (*path, "ordain"))
+        if missions_left > 0 and abbey > 0:
+            walk(village, abbey - 1, ordains_left, missions_left - 1, (*path, "mission"))
+
+    walk(start_village, start_abbey, ordain_count, mission_count, ())
+    return orders
 
 
 def _click_for(server, step: dict) -> dict:
@@ -1113,6 +1160,16 @@ def _engine_steps(action) -> list[dict]:
         outcome = allocation_outcome(action.allocation_moves)
         encoded = ",".join(f"{slot}={delta:+d}" for slot, delta in outcome) if outcome else "none"
         steps.append({"kind": "arrangement", "value": encoded})
+    if action.resolution.value == "ordination":
+        counts = dict(ordination_outcome(action.ordination_steps))
+        ordain = int(counts.get("ordain", 0))
+        mission = int(counts.get("mission", 0))
+        terms: list[str] = []
+        if ordain:
+            terms.append(f"ordain={ordain}")
+        if mission:
+            terms.append(f"mission={mission}")
+        steps.append({"kind": "ordination", "value": ",".join(terms) if terms else "none"})
     return steps
 
 
@@ -1179,6 +1236,10 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
         if step["kind"] == "arrangement":
             prefix.append(value)
             clicks += _arrangement_clicks(str(value))
+            continue
+        if step["kind"] == "ordination":
+            prefix.append(value)
+            clicks += _ordination_clicks(str(value))
             continue
         if step["kind"] == "resolution":
             options = [s for s in _next_steps(decisions, prefix) if s["kind"] == "resolution"]
@@ -1388,7 +1449,7 @@ def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: 
         if action_id(action) == candidate["action_id"]
     )
     assert candidate["summary"] == action_summary_for_players(
-        chosen, server.config, actor=server.state.active_player
+        chosen, server.config, actor=server.state.active_player, state=server.state
     )
 
     confirmed = _run_script(server, clicks, tmp_path, confirm=True)
@@ -1496,6 +1557,15 @@ def _allocation_candidates(server) -> list[dict]:
     ]
 
 
+def _ordination_candidates(server) -> list[dict]:
+    return [
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if _resolves(candidate, "ordination")
+        and any(step["kind"] == "ordination" for step in candidate["steps"])
+    ]
+
+
 def _arrangement_terms(value: str) -> list[tuple[str, int]]:
     if value == "none":
         return []
@@ -1507,6 +1577,16 @@ def _clicks_before_arrangement(server, candidate: dict) -> list[dict]:
     prefix: list = []
     for step in candidate["steps"]:
         if step["kind"] == "arrangement":
+            break
+        prefix.append(step["value"])
+    return _clicks_to(server, decisions, prefix)
+
+
+def _clicks_before_ordination(server, candidate: dict) -> list[dict]:
+    decisions = _engine_decisions(server)
+    prefix: list = []
+    for step in candidate["steps"]:
+        if step["kind"] == "ordination":
             break
         prefix.append(step["value"])
     return _clicks_to(server, decisions, prefix)
@@ -1547,6 +1627,98 @@ def test_allocation_arrangements_reached_in_two_orders_submit_one_canonical_acti
     posted_b = _run_script(second, second_then_first, tmp_path, confirm=True)["posted"]
     assert posted_b is not None
     assert posted_b["action_id"] == target["action_id"]
+
+
+@needs_node
+def test_ordination_counts_reached_in_two_orders_submit_one_canonical_action(tmp_path: Path) -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json"
+    )
+    try:
+        candidates = _ordination_candidates(server)
+        assert candidates, "fixture offered no ordination candidates"
+
+        active = server.payload["state"]["active_player"]
+        start = _seat_allocation_state(server, active)
+        start_village = int(start["village"])
+        start_abbey = int(start["abbey"])
+
+        for candidate in candidates:
+            ordain_count, mission_count = _ordination_counts(_answer(candidate, "ordination"))
+            if ordain_count <= 0 or mission_count <= 0:
+                continue
+            orders = _legal_ordination_orders(
+                start_village=start_village,
+                start_abbey=start_abbey,
+                ordain_count=ordain_count,
+                mission_count=mission_count,
+            )
+            if len(orders) < 2:
+                continue
+
+            for index, first_order in enumerate(orders[:-1]):
+                clicks_a = _clicks_before_ordination(server, candidate) + [
+                    _ordain_click() if step == "ordain" else _mission_click() for step in first_order
+                ]
+                try:
+                    posted_a = _run_script(server, clicks_a, tmp_path, confirm=True)["posted"]
+                except subprocess.CalledProcessError:
+                    continue
+                if posted_a is None or posted_a["action_id"] != candidate["action_id"]:
+                    continue
+
+                for second_order in orders[index + 1 :]:
+                    twin_server = PlayServer(
+                        ("127.0.0.1", 0),
+                        SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json",
+                    )
+                    try:
+                        twin = next(
+                            offered
+                            for offered in _ordination_candidates(twin_server)
+                            if offered["action_id"] == candidate["action_id"]
+                        )
+                        clicks_b = _clicks_before_ordination(twin_server, twin) + [
+                            _ordain_click() if step == "ordain" else _mission_click()
+                            for step in second_order
+                        ]
+                        try:
+                            posted_b = _run_script(twin_server, clicks_b, tmp_path, confirm=True)["posted"]
+                        except subprocess.CalledProcessError:
+                            continue
+                        if posted_b is not None and posted_b["action_id"] == candidate["action_id"]:
+                            return
+                    finally:
+                        twin_server.server_close()
+    finally:
+        server.server_close()
+
+    raise AssertionError("no ordination outcome was playable in two legal click orders")
+
+
+def test_ordination_candidate_summary_names_steps_and_cost() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json"
+    )
+    try:
+        candidate = next(
+            (
+                offered
+                for offered in _ordination_candidates(server)
+                if _answer(offered, "ordination") == "ordain=1,mission=1"
+            ),
+            None,
+        )
+        assert candidate is not None, "fixture offered no one-ordain one-mission ordination outcome"
+        assert (
+            candidate["summary"]
+            == "player_one chose Ordination at Ordination — ordained 1 serf into the Abbey; sent 1 acolyte on mission to the City; paid 0 wheat (2 due, 2 waived by the Mill)."
+        )
+        server.apply(candidate["action_id"], server.payload["state_token"])
+        block = server.payload["log_blocks"][-1]
+        assert block["lines"][0] == "player_one chose Ordination at Ordination."
+    finally:
+        server.server_close()
 
 
 @needs_node
@@ -1739,6 +1911,15 @@ def test_allocation_candidates_no_longer_refuse_on_allocation_moves() -> None:
     candidates = _allocation_candidates(server)
     assert candidates, "deep fixture offered no allocation turns to check"
     assert all("allocation_moves" not in candidate["unresolved"] for candidate in candidates)
+
+
+def test_ordination_candidates_no_longer_refuse_on_ordination_steps() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json"
+    )
+    candidates = _ordination_candidates(server)
+    assert candidates, "fixture offered no ordination candidates to check"
+    assert all("ordination_steps" not in candidate["unresolved"] for candidate in candidates)
 
 
 @needs_node
@@ -3108,6 +3289,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
         "chosen_start_player",
         "construct_building_id",
         "allocation_moves",
+        "ordination_steps",
         *ALMS_PAIR,
     ):
         assert field not in page, f"the page was told about the field {field!r}"

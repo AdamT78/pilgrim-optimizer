@@ -4050,20 +4050,6 @@ def _apply_full_turn_action(
                 selected_simple_source: BuildingAbilitySource | None = None
                 if action.resolution is TurnResolutionType.PRODUCE_WHEAT:
                     wheat_bonus = produce_wheat_fields_bonus(state_after_sow.player_state(player))
-                    produce_resource_bonus += wheat_bonus
-                    if wheat_bonus:
-                        special_bonus_events.append(
-                            GameEvent(
-                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
-                                actor=player,
-                                action_id=transition_action_id,
-                                details=make_event_details(
-                                    activity="fields",
-                                    action=action.resolution.value,
-                                    wheat_bonus=wheat_bonus,
-                                ),
-                            )
-                        )
                     selected_simple_source = _resolved_simple_bonus_source_for_action(
                         state=state_after_sow,
                         config=config,
@@ -4071,36 +4057,60 @@ def _apply_full_turn_action(
                         action=action,
                         building_key="well",
                     )
-                    if selected_simple_source is not None:
-                        produce_resource_bonus += 1
-                        building_bonus_events.append(
-                            GameEvent(
-                                event_type=EventType.BUILDING_BONUS,
-                                actor=player,
-                                action_id=transition_action_id,
-                                details=make_event_details(
-                                    building="well",
-                                    action=action.resolution.value,
-                                    wheat_bonus=1,
-                                ),
-                            )
-                        )
-                else:
-                    stone_bonus = produce_stone_mason_bonus(state_after_sow.player_state(player))
-                    produce_resource_bonus += stone_bonus
-                    if stone_bonus:
+                    well_bonus = 1 if selected_simple_source is not None else 0
+                    produce_resource_bonus = wheat_bonus + well_bonus
+                    total_wheat_gain = duty_value + produce_resource_bonus
+                    combined_wheat_sources = ",".join(
+                        source
+                        for source, amount in (("fields", wheat_bonus), ("well", well_bonus))
+                        if amount > 0
+                    )
+                    combined_wheat_amounts = ",".join(
+                        str(amount)
+                        for amount in (wheat_bonus, well_bonus)
+                        if amount > 0
+                    )
+                    if wheat_bonus:
+                        # The special-activity event carries the combined player sentence when both
+                        # modifiers apply, so one gain is spoken once with both clauses.
+                        fields_details: dict[str, int | str | bool] = {
+                            "activity": "fields",
+                            "action": action.resolution.value,
+                            "wheat_bonus": wheat_bonus,
+                            "base_amount": duty_value,
+                            "total_amount": total_wheat_gain,
+                        }
+                        if well_bonus:
+                            fields_details["player_bonus_sources"] = combined_wheat_sources
+                            fields_details["player_bonus_amounts"] = combined_wheat_amounts
                         special_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.SPECIAL_ACTIVITY_BONUS,
                                 actor=player,
                                 action_id=transition_action_id,
-                                details=make_event_details(
-                                    activity="stone_mason",
-                                    action=action.resolution.value,
-                                    stone_bonus=stone_bonus,
-                                ),
+                                details=make_event_details(**fields_details),
                             )
                         )
+                    if selected_simple_source is not None:
+                        well_details: dict[str, int | str | bool] = {
+                            "building": "well",
+                            "action": action.resolution.value,
+                            "wheat_bonus": 1,
+                            "base_amount": duty_value,
+                            "total_amount": total_wheat_gain,
+                        }
+                        if wheat_bonus:
+                            well_details["player_line_suppressed"] = True
+                        building_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.BUILDING_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(**well_details),
+                            )
+                        )
+                else:
+                    stone_bonus = produce_stone_mason_bonus(state_after_sow.player_state(player))
                     selected_simple_source = _resolved_simple_bonus_source_for_action(
                         state=state_after_sow,
                         config=config,
@@ -4108,18 +4118,54 @@ def _apply_full_turn_action(
                         action=action,
                         building_key="quarry",
                     )
+                    quarry_bonus = 1 if selected_simple_source is not None else 0
+                    produce_resource_bonus = stone_bonus + quarry_bonus
+                    total_stone_gain = duty_value + produce_resource_bonus
+                    combined_stone_sources = ",".join(
+                        source
+                        for source, amount in (("stone_mason", stone_bonus), ("quarry", quarry_bonus))
+                        if amount > 0
+                    )
+                    combined_stone_amounts = ",".join(
+                        str(amount)
+                        for amount in (stone_bonus, quarry_bonus)
+                        if amount > 0
+                    )
+                    if stone_bonus:
+                        stone_mason_details: dict[str, int | str | bool] = {
+                            "activity": "stone_mason",
+                            "action": action.resolution.value,
+                            "stone_bonus": stone_bonus,
+                            "base_amount": duty_value,
+                            "total_amount": total_stone_gain,
+                        }
+                        if quarry_bonus:
+                            stone_mason_details["player_bonus_sources"] = combined_stone_sources
+                            stone_mason_details["player_bonus_amounts"] = combined_stone_amounts
+                        special_bonus_events.append(
+                            GameEvent(
+                                event_type=EventType.SPECIAL_ACTIVITY_BONUS,
+                                actor=player,
+                                action_id=transition_action_id,
+                                details=make_event_details(**stone_mason_details),
+                            )
+                        )
                     if selected_simple_source is not None:
-                        produce_resource_bonus += 1
+                        quarry_details: dict[str, int | str | bool] = {
+                            "building": "quarry",
+                            "action": action.resolution.value,
+                            "stone_bonus": 1,
+                            "base_amount": duty_value,
+                            "total_amount": total_stone_gain,
+                        }
+                        if stone_bonus:
+                            quarry_details["player_line_suppressed"] = True
                         building_bonus_events.append(
                             GameEvent(
                                 event_type=EventType.BUILDING_BONUS,
                                 actor=player,
                                 action_id=transition_action_id,
-                                details=make_event_details(
-                                    building="quarry",
-                                    action=action.resolution.value,
-                                    stone_bonus=1,
-                                ),
+                                details=make_event_details(**quarry_details),
                             )
                         )
                 try:

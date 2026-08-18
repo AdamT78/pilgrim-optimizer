@@ -6,11 +6,12 @@
 // arrangementPointerRules }.
 //
 // A click is { kind: 'position'|'origin'|'duty'|'edge'|'resolution'|'combination'|'resource'
-// |'seat'|'building'|'control'|'abbey'|'role', value }; a resource click also carries { seat }, a
-// seat click names the player whose board is pressed, a building click names the building whose
-// hex on the round track is pressed, and a control click presses one board plaque by name.
-// `abbey` clicks one Abbey token on the active seat's board; `role` clicks either a role token or
-// the role circle (when click.target === 'circle') on the active seat's board.
+// |'seat'|'building'|'control'|'village'|'abbey'|'role', value }; a resource click also carries
+// { seat }, a seat click names the player whose board is pressed, a building click names the
+// building whose hex on the round track is pressed, and a control click presses one board plaque by
+// name. `village` clicks one Village token on the active seat's board, `abbey` clicks one Abbey
+// token there, and `role` clicks either a role token or the role circle
+// (when click.target === 'circle').
 //
 // Prints a JSON transcript: what was offered at each point, which seat was asked for a stock, which
 // boards were offered as an answer in themselves, what was marked as chosen, which panel was shown,
@@ -139,6 +140,32 @@ const spaces = boardPositions.map((space) => {
   );
 });
 
+const cityVisibleByPlayer = {};
+(((job.cubes || {}).city) || []).forEach((cube) => {
+  const player = cube.player || 'player_one';
+  if (!Object.prototype.hasOwnProperty.call(cityVisibleByPlayer, player)) {
+    cityVisibleByPlayer[player] = 0;
+  }
+  if ((cube.opacity === undefined || cube.opacity === null ? '1' : String(cube.opacity)) !== '0') {
+    cityVisibleByPlayer[player] += 1;
+  }
+});
+const cityColumns = (job.seats || []).map((seat) => {
+  const visible = Math.max(0, Math.min(6, Number(cityVisibleByPlayer[seat.player]) || 0));
+  const slots = Array.from({ length: 6 }, (_, index) =>
+    makeElement(
+      'rect',
+      {
+        'data-city-column-player': seat.player,
+        'data-city-cube': String(index),
+        opacity: index < visible ? '1' : '0',
+      },
+      []
+    )
+  );
+  return makeElement('g', { 'data-city-column-player': seat.player }, slots);
+});
+
 const arrows = (job.arrows || []).map((edge) =>
   makeElement('g', { 'data-arrow': edge, 'data-turn-offered': 'false' }, [])
 );
@@ -163,7 +190,7 @@ const controls = controlNames.map((name) =>
 const board = makeElement(
   'svg',
   { 'data-component': 'duty-wheel' },
-  [].concat(spaces, arrows, counters, controls)
+  [].concat(spaces, cityColumns, arrows, counters, controls)
 );
 
 const prompts = (job.prompts || []).map((sentence) =>
@@ -186,6 +213,21 @@ function abbeyTokensFor(count) {
       'rect',
       {
         'data-token': 'abbey',
+        'data-token-index': String(index),
+        opacity: index < visible ? '1' : '0',
+      },
+      []
+    )
+  );
+}
+
+function villageTokensFor(count) {
+  const visible = Math.max(0, Math.min(8, Number(count) || 0));
+  return Array.from({ length: 8 }, (_, index) =>
+    makeElement(
+      'rect',
+      {
+        'data-token': 'village',
         'data-token-index': String(index),
         opacity: index < visible ? '1' : '0',
       },
@@ -245,6 +287,7 @@ const seats = (job.seats || []).map((seat) => {
     .map((stock) => makeElement('g', { 'data-resource-choice-key': stock }, []))
     .concat([makeElement('rect', { 'data-seat-choice-key': seat.player }, [])]);
   const tokens = []
+    .concat(villageTokensFor(seat.village))
     .concat(abbeyTokensFor(seat.abbey))
     .concat(roleElementsFor(seat.roles));
   return makeElement(
@@ -440,7 +483,25 @@ function arrangementPointerEvents(element) {
   return pointer;
 }
 
+function ordinationPointerEvents(element) {
+  const token = element.getAttribute('data-token');
+  if (token !== 'village' && token !== 'abbey') return null;
+  const seat = boardOf(element);
+  if (!seat || seat.getAttribute('data-ordination-choice') !== 'true') {
+    return token === 'village' ? 'none' : null;
+  }
+  const visible = tokenIsVisible(element);
+  if (token === 'village') {
+    const canOrdain = element.getAttribute('data-ordination-can-ordain') === 'true';
+    return canOrdain && visible ? 'all' : 'none';
+  }
+  const canMission = element.getAttribute('data-ordination-can-mission') === 'true';
+  return canMission && visible ? 'all' : 'none';
+}
+
 function computedPointerEvents(element) {
+  const ordination = ordinationPointerEvents(element);
+  if (ordination !== null) return ordination;
   const arrangement = arrangementPointerEvents(element);
   if (arrangement !== null) return arrangement;
   const attr = element.getAttribute('pointer-events');
@@ -541,6 +602,9 @@ function arrangementSnapshot() {
   const bySeat = {};
   seats.forEach((seat) => {
     const seatId = seat.getAttribute('data-player-seat');
+    const village = seat
+      .querySelectorAll('[data-token="village"]')
+      .filter((token) => token.getAttribute('opacity') !== '0').length;
     const abbey = seat
       .querySelectorAll('[data-token="abbey"]')
       .filter((token) => token.getAttribute('opacity') !== '0').length;
@@ -553,6 +617,9 @@ function arrangementSnapshot() {
     const abbeyTokens = seat.querySelectorAll('[data-token="abbey"]');
     const firstAbbeyToken = abbeyTokens[0] || null;
     const visibleAbbeyToken = abbeyTokens.find((token) => tokenIsVisible(token)) || null;
+    const villageTokens = seat.querySelectorAll('[data-token="village"]');
+    const firstVillageToken = villageTokens[0] || null;
+    const visibleVillageToken = villageTokens.find((token) => tokenIsVisible(token)) || null;
     const firstRoleToken = seat.querySelectorAll('[data-token="role"]')[0] || null;
     const occupiedRole = occupiedRoleTokenFor(seat, roles);
     const emptyRole = emptyRoleCircleFor(seat, roles);
@@ -562,13 +629,17 @@ function arrangementSnapshot() {
     });
     bySeat[seatId] = {
       player: seat.getAttribute('data-player'),
+      village,
       abbey,
       roles,
       arrangementChoice: seat.getAttribute('data-arrangement-choice') === 'true',
+      ordinationChoice: seat.getAttribute('data-ordination-choice') === 'true',
       occupiedRoleId: occupiedRole ? occupiedRole.roleId : null,
       emptyRoleId: emptyRole ? emptyRole.roleId : null,
       roleCenterLayers,
       pointerEvents: {
+        firstVillageToken: firstVillageToken ? computedPointerEvents(firstVillageToken) : null,
+        visibleVillageToken: visibleVillageToken ? computedPointerEvents(visibleVillageToken) : null,
         firstAbbeyToken: firstAbbeyToken ? computedPointerEvents(firstAbbeyToken) : null,
         visibleAbbeyToken: visibleAbbeyToken ? computedPointerEvents(visibleAbbeyToken) : null,
         firstRoleToken: firstRoleToken ? computedPointerEvents(firstRoleToken) : null,
@@ -730,6 +801,14 @@ function activeSeat() {
   return seats.find((seat) => seat.getAttribute('data-active-seat') === 'true') || null;
 }
 
+function pressVillage() {
+  const seat = activeSeat();
+  if (!seat) throw new Error('no active seat for village click');
+  const tokens = seat.querySelectorAll('[data-token="village"]');
+  const target = tokens.find((token) => isReachable(token)) || null;
+  clickReachable(target, 'village token');
+}
+
 function pressAbbey() {
   const seat = activeSeat();
   if (!seat) throw new Error('no active seat for abbey click');
@@ -772,6 +851,8 @@ job.clicks.forEach((click) => {
   } else if (click.kind === 'building') {
     const target = buildings.find((key) => key.getAttribute('data-building-choice-key') === click.value);
     clickReachable(target, 'building ' + click.value);
+  } else if (click.kind === 'village') {
+    pressVillage();
   } else if (click.kind === 'abbey') {
     pressAbbey();
   } else if (click.kind === 'role') {
