@@ -1,7 +1,7 @@
 """Structured renderer for the duty wheel debug view.
 
 The duty wheel holds the duty tiles away from the map so the map stays readable: eight duty
-spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and four
+spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and six
 arrows running to and from the middle. Each space shows the cubes standing on it as one column per
 seat on a shared baseline, and most of the duties carry a capsule with a Tithe token icon.
 
@@ -62,8 +62,9 @@ LAYOUT_FILENAME = "duty_wheel_layout.json"
 # position is where it stands, and the arrows drawn between spaces are those edges. The wheel's own
 # ids -- `clerical`, `construct` and the rest -- are the prototype's default arrangement of the
 # tiles and say nothing about movement, because a tile can be turned round the ring and a position
-# cannot. Only the two data files are read here; no rules code is imported, and the Kogge and
-# Cloisters modifiers that add or skip edges are not part of this graph.
+# cannot. Only the two data files are read here; no rules code is imported. The two Kogge-only
+# city starts (city->east and city->west) are drawn explicitly in this renderer so the play view
+# can light them when they are legal; Cloisters skip choices are asked as steps and are not arrows.
 BOARD_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "board.json"
 
 # One space: a flat top with a round bottom, the arc centre acting as its anchor.
@@ -132,6 +133,11 @@ CITY_TALLY_OFFSET_Y = (
 ) / 2.0
 
 RING_ARROW_COUNT = 8
+# A spoke with two directional arrows is laid out as two lanes centred on the spoke axis: each
+# arrow is offset by half a lane pitch to the left of its own direction of travel, and opposite
+# directions therefore land on opposite sides of the axis. In screen coordinates (x right, y down),
+# "left of travel" for heading angle θ is (sin θ, -cos θ).
+MIDDLE_SPOKE_ARROW_LANE_PITCH = 48.0
 
 # Turn controls: small plaques standing in the black corners the hexagon leaves, drawn in the
 # board's own root units so they are part of the wheel rather than furniture around it -- the game
@@ -850,12 +856,13 @@ def _render_ring_arrows(layout: dict) -> str:
 
 
 def _render_middle_arrows(layout: dict) -> str:
-    """The four arrows across the middle, tagged with the pair of positions each one joins.
+    """The middle arrows, tagged with the pair of positions each one joins.
 
     The four spokes are fixed to north/east/south/west, exactly as the painted board is. Their
     legacy ids mention default duty categories (`produce`, `clerical`, `taxation`, `construct`);
     those names are interpreted as those fixed spokes and never as whichever tile currently carries
-    that category.
+    that category. Two extra arrows (city->east and city->west) are drawn beside the inward
+    east->city and west->city spokes so Kogge city starts have their own edge elements.
     """
     path = layout["artwork"]["middle_arrow_path"]
     board = load_board_config()
@@ -866,11 +873,30 @@ def _render_middle_arrows(layout: dict) -> str:
         "construct": "west",
     }
     arrows = []
+    middle_specs: list[dict[str, float | str]] = []
+    inbound_anchor_by_spoke: dict[str, tuple[float, float, float]] = {}
+
+    def append_arrow(
+        *,
+        arrow_id: str,
+        x: float,
+        y: float,
+        rotate: float,
+        origin: str,
+        destination: str,
+    ) -> None:
+        transform = f"translate({_num(x)} {_num(y)})"
+        if rotate:
+            transform += f" rotate({rotate:g})"
+        arrows.append(
+            f'<g transform="{transform}" data-middle-arrow="{arrow_id}"'
+            f"{_arrow_ends_markup(origin, destination, board)}>"
+            f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
+        )
+
     for arrow in layout["middle_arrows"]:
         x, y = arrow["at"]
-        transform = f"translate({_num(x)} {_num(y)})"
-        if arrow["rotate"]:
-            transform += f" rotate({arrow['rotate']:g})"
+        rotate = float(arrow["rotate"])
         fixed_spoke = spoke_by_default_tile[
             arrow["to"] if arrow["from"] == layout["city_id"] else arrow["from"]
         ]
@@ -878,11 +904,67 @@ def _render_middle_arrows(layout: dict) -> str:
             origin, destination = layout["city_id"], fixed_spoke
         else:
             origin, destination = fixed_spoke, layout["city_id"]
-        arrows.append(
-            f'<g transform="{transform}" data-middle-arrow="{arrow["id"]}"'
-            f"{_arrow_ends_markup(origin, destination, board)}>"
-            f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
+        middle_specs.append(
+            {
+                "arrow_id": str(arrow["id"]),
+                "x": float(x),
+                "y": float(y),
+                "rotate": rotate,
+                "origin": origin,
+                "destination": destination,
+                "spoke": fixed_spoke,
+            }
         )
+        if origin == "east" and destination == layout["city_id"]:
+            inbound_anchor_by_spoke["east"] = (float(x), float(y), rotate)
+        if origin == "west" and destination == layout["city_id"]:
+            inbound_anchor_by_spoke["west"] = (float(x), float(y), rotate)
+
+    if "east" not in inbound_anchor_by_spoke or "west" not in inbound_anchor_by_spoke:
+        raise ValueError("duty wheel layout must include east->city and west->city middle arrows")
+
+    # These must be separate arrow elements, not one double-headed shape: one route can travel
+    # both directions on the same axis, and each direction needs its own offered/taken state.
+    for spoke in ("east", "west"):
+        x, y, inbound_rotate = inbound_anchor_by_spoke[spoke]
+        middle_specs.append(
+            {
+                "arrow_id": f"city_to_{spoke}_kogge",
+                "x": x,
+                "y": y,
+                "rotate": (inbound_rotate + 180.0) % 360.0,
+                "origin": layout["city_id"],
+                "destination": spoke,
+                "spoke": spoke,
+            }
+        )
+
+    arrows_per_spoke: dict[str, int] = {}
+    for spec in middle_specs:
+        spoke = str(spec["spoke"])
+        arrows_per_spoke[spoke] = arrows_per_spoke.get(spoke, 0) + 1
+    if any(count > 2 for count in arrows_per_spoke.values()):
+        raise ValueError(f"middle spoke has more than two directional arrows: {arrows_per_spoke}")
+
+    half_pitch = MIDDLE_SPOKE_ARROW_LANE_PITCH / 2.0
+    for spec in middle_specs:
+        x = float(spec["x"])
+        y = float(spec["y"])
+        rotate = float(spec["rotate"])
+        spoke = str(spec["spoke"])
+        if arrows_per_spoke[spoke] == 2:
+            theta = math.radians(rotate)
+            x += math.sin(theta) * half_pitch
+            y += -math.cos(theta) * half_pitch
+        append_arrow(
+            arrow_id=str(spec["arrow_id"]),
+            x=x,
+            y=y,
+            rotate=rotate,
+            origin=str(spec["origin"]),
+            destination=str(spec["destination"]),
+        )
+
     return '<g aria-label="Middle directional arrows">' + "".join(arrows) + "</g>"
 
 

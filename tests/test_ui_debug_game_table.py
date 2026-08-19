@@ -1680,7 +1680,7 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
 
 
 def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
-    """The arrows drawn on the wheel are `configs/board.json`'s edges, and the flow reads them.
+    """The wheel draws the board graph plus Kogge's two city-start edges, and the flow reads them.
 
     Nothing lists which positions branch: a position with one arrow leaving it offers no choice,
     and the City, east and west are simply the three with more than one. That stays true however
@@ -1693,9 +1693,11 @@ def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
     ):
         leaving.setdefault(origin, set()).add(target)
 
-    assert leaving == {position: set(ways) for position, ways in board_edges().items()}
+    expected = {position: set(ways) for position, ways in board_edges().items()}
+    expected["city"] |= {"east", "west"}
+    assert leaving == expected
     assert {position: sorted(ways) for position, ways in leaving.items() if len(ways) > 1} == {
-        "city": ["north", "south"],
+        "city": ["east", "north", "south", "west"],
         "east": ["city", "south_east"],
         "west": ["city", "north_west"],
     }

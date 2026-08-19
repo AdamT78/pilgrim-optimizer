@@ -724,6 +724,34 @@ def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> No
         server.server_close()
 
 
+def test_play_view_draws_kogge_city_start_arrows() -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_active_city_to_east_001.json")
+    try:
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        assert {"city->east", "city->west"} <= drawn
+    finally:
+        server.server_close()
+
+
+def test_every_committed_turn_candidate_edge_is_drawn() -> None:
+    checked_candidates = 0
+    dead: list[tuple[str, list[tuple[str | None, list[str]]]]] = []
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+            candidates = server.payload["turn_candidates"]
+            checked_candidates += len(candidates)
+            missing = _dead_candidates_by_missing_edges(candidates, drawn)
+            if missing:
+                dead.append((scenario_path.name, missing[:5]))
+        finally:
+            server.server_close()
+
+    assert checked_candidates > 0, "committed corpus had no turn candidates"
+    assert not dead, f"{len(dead)} scenarios still have dead edge candidates: {dead[:5]}"
+
+
 def test_cloisters_loop_playtest_position_has_expected_action_and_candidate_totals() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP))
     actions = list(legal_actions(scenario.state, scenario.config))

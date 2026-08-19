@@ -597,6 +597,120 @@ def test_a_wheel_origin_space_and_then_route_arrow_really_receive_clicks(page, s
     )
 
 
+def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions(page, serve) -> None:
+    """Catches spoke-lane regressions: no overlap, keep-left signs, and still-clickable centres."""
+    base_url, server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
+    candidate = next(
+        (
+            offered
+            for offered in server.payload["turn_candidates"]
+            if any(step["kind"] == "edge" and step["value"] == "city->east" for step in offered["steps"])
+            and any(step["kind"] == "edge" and step["value"] == "east->city" for step in offered["steps"])
+        ),
+        None,
+    )
+    assert candidate is not None, "fixture offered no route using city->east and east->city"
+
+    page.goto(base_url, wait_until="networkidle")
+    city = page.query_selector('[data-board-position="city"]')
+    assert city is not None
+    city_box = city.bounding_box()
+    assert city_box is not None
+    city_center_y = float(city_box["y"] + city_box["height"] / 2.0)
+
+    def arrow_box(name: str) -> dict:
+        handle = page.query_selector(f'[data-arrow="{name}"]')
+        assert handle is not None, f"missing rendered arrow {name}"
+        box = handle.bounding_box()
+        assert box is not None, f"missing bounding box for {name}"
+        cx, cy = _centre(page, handle)
+        return {
+            "name": name,
+            "handle": handle,
+            "x": float(box["x"]),
+            "y": float(box["y"]),
+            "w": float(box["width"]),
+            "h": float(box["height"]),
+            "cx": float(cx),
+            "cy": float(cy),
+        }
+
+    def assert_pair_geometry(lower_name: str, upper_name: str) -> tuple[dict, dict]:
+        a = arrow_box(lower_name)
+        b = arrow_box(upper_name)
+        for arrow in (a, b):
+            assert _is_hit_target(page, arrow["handle"], arrow["cx"], arrow["cy"]), (
+                f"elementFromPoint missed {arrow['name']} at its own centre"
+            )
+
+        ax2, ay2 = a["x"] + a["w"], a["y"] + a["h"]
+        bx2, by2 = b["x"] + b["w"], b["y"] + b["h"]
+        overlap_x = min(ax2, bx2) - max(a["x"], b["x"])
+        overlap_y = min(ay2, by2) - max(a["y"], b["y"])
+        assert overlap_x <= 0 or overlap_y <= 0, (
+            f"{a['name']} and {b['name']} bounding boxes overlapped"
+        )
+
+        upper, lower = (a, b) if a["cy"] <= b["cy"] else (b, a)
+        clear = lower["y"] - (upper["y"] + upper["h"])
+        assert clear >= 4.0, (
+            f"{a['name']} and {b['name']} had only {clear:.2f}px vertical clearance"
+        )
+        midpoint_y = (a["cy"] + b["cy"]) / 2.0
+        assert abs(midpoint_y - city_center_y) <= 1.0, (
+            f"{a['name']} and {b['name']} were not symmetric about the spoke axis"
+        )
+        return a, b
+
+    east_out, east_in = assert_pair_geometry("city->east", "east->city")
+    west_out, west_in = assert_pair_geometry("city->west", "west->city")
+
+    # Keep-left on horizontal spokes: eastbound arrows sit above axis, westbound below.
+    assert east_out["cy"] < city_center_y, "city->east must sit above the east spoke axis"
+    assert east_in["cy"] > city_center_y, "east->city must sit below the east spoke axis"
+    assert west_out["cy"] > city_center_y, "city->west must sit below the west spoke axis"
+    assert west_in["cy"] < city_center_y, "west->city must sit above the west spoke axis"
+
+    first = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
+    assert first is not None, "city->east was not offered on the opening Kogge step"
+    _click_handle_centre(page, first, require_hit=True)
+    page.wait_for_timeout(20)
+
+    second = page.query_selector('[data-arrow="east->city"][data-turn-offered="true"]')
+    assert second is not None, "route did not continue with east->city after city->east"
+    _click_handle_centre(page, second, require_hit=True)
+    page.wait_for_timeout(20)
+    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
+        "route using both east-axis directions did not advance to a duty choice"
+    )
+
+
+def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) -> None:
+    """Catches Kogge city-start regressions where city->east looked offered but stayed dead."""
+    base_url, _server = serve(SCENARIOS / "kogge_hire_opponent_city_to_west_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    city = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    assert city is not None, "city origin was not offered"
+    _click_handle_centre(page, city, require_hit=True)
+    page.wait_for_timeout(20)
+
+    city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
+    assert city_east is not None, "city->east was not offered after lifting from city"
+    before = _turn_state_snapshot(page)
+    _click_handle_centre(page, city_east, require_hit=True)
+    page.wait_for_timeout(20)
+
+    after = _turn_state_snapshot(page)
+    assert after != before, "clicking city->east did not change the turn state"
+    assert (
+        after["duties"] > 0
+        or after["arrows"] > 0
+        or after["action_enabled"] == "true"
+        or after["tithe_enabled"] == "true"
+    ), "clicking city->east did not advance to a later turn question"
+
+
 def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> None:
     """Catches wheel skip-step regressions where the marked unsown-space target is not clickable."""
     base_url, _server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
