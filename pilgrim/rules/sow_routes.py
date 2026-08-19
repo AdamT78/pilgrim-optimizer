@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable
 
 from pilgrim.model.config import BoardConfig
@@ -29,25 +30,44 @@ def normal_sow_routes(
     return tuple(generate_routes(origin, picked_up, board))
 
 
-def kogge_city_start_routes(
+@lru_cache(maxsize=32)
+def _board_with_kogge_city_spokes(board: BoardConfig) -> BoardConfig:
+    """Board graph with Kogge's City-spoke reversals applied.
+
+    Kogge is a graph modifier, not a route-shape exception: while active, City spokes are passable
+    both ways. Only those spokes change; ring direction stays as-is.
+    """
+    city = board.index_for_name("city")
+    north = board.index_for_name("north")
+    east = board.index_for_name("east")
+    south = board.index_for_name("south")
+    west = board.index_for_name("west")
+
+    edges = [tuple(neighbors) for neighbors in board.edges]
+
+    def add_edge(origin: int, destination: int) -> None:
+        if destination in edges[origin]:
+            return
+        edges[origin] = (*edges[origin], destination)
+
+    add_edge(city, east)
+    add_edge(city, west)
+    add_edge(north, city)
+    add_edge(south, city)
+
+    return BoardConfig(positions=board.positions, edges=tuple(edges))
+
+
+def kogge_sow_routes(
     *,
     origin: int,
     picked_up: int,
     board: BoardConfig,
 ) -> tuple[tuple[int, ...], ...]:
-    """Return Kogge-enabled city-start routes for one origin."""
+    """Return Kogge-enabled routes for one origin on the Kogge-augmented graph."""
     if picked_up <= 0:
         return ()
-    city_position = board.index_for_name("city")
-    if origin != city_position:
-        return ()
-    east_position = board.index_for_name("east")
-    west_position = board.index_for_name("west")
-    routes: list[tuple[int, ...]] = []
-    for first_step in (east_position, west_position):
-        for suffix_route in generate_routes(first_step, picked_up - 1, board):
-            routes.append((first_step, *suffix_route))
-    return tuple(routes)
+    return tuple(generate_routes(origin, picked_up, _board_with_kogge_city_spokes(board)))
 
 
 def cloisters_candidate_placements(
@@ -173,7 +193,7 @@ def kogge_cloisters_candidate_placements(
     """Return Kogge-enabled candidate placements of length N+1 for Cloisters omission."""
     if picked_up <= 0:
         return ()
-    return kogge_city_start_routes(
+    return kogge_sow_routes(
         origin=origin,
         picked_up=picked_up + 1,
         board=board,
@@ -241,7 +261,7 @@ def sow_vector_with_optional_city_kogge(
     origin: int,
     route: tuple[int, ...],
     board: BoardConfig,
-    allows_kogge_city_step: bool,
+    allows_kogge_city_spokes: bool,
     cloisters_omitted_location: int | None = None,
     cloisters_with_kogge: bool = False,
 ) -> tuple[int, ...]:
@@ -262,7 +282,7 @@ def sow_vector_with_optional_city_kogge(
                 omitted_location=cloisters_omitted_location,
             ):
                 raise ValueError("Route is not legal for combined Kogge+Cloisters modifier.")
-        elif allows_kogge_city_step and route_requires_kogge(
+        elif allows_kogge_city_spokes and route_requires_kogge(
             origin=origin,
             route=route,
             board=board,
@@ -287,7 +307,7 @@ def sow_vector_with_optional_city_kogge(
         origin,
         route,
         board=board,
-        allows_kogge_city_step=allows_kogge_city_step,
+        allows_kogge_city_spokes=allows_kogge_city_spokes,
     ):
         raise ValueError("Route is not legal for the board graph.")
 
@@ -301,27 +321,15 @@ def is_legal_route_with_optional_city_kogge(
     route: tuple[int, ...],
     *,
     board: BoardConfig,
-    allows_kogge_city_step: bool,
+    allows_kogge_city_spokes: bool,
 ) -> bool:
-    """Validate route connectivity with optional first-step city Kogge edge."""
+    """Validate route connectivity with optional Kogge-reversed City spokes."""
+    route_board = _board_with_kogge_city_spokes(board) if allows_kogge_city_spokes else board
     current = origin
-    city_position = board.index_for_name("city")
-    east_position = board.index_for_name("east")
-    west_position = board.index_for_name("west")
-
-    for index, next_position in enumerate(route):
-        if next_position in board.neighbors(current):
-            current = next_position
-            continue
-        if (
-            allows_kogge_city_step
-            and index == 0
-            and current == city_position
-            and next_position in (east_position, west_position)
-        ):
-            current = next_position
-            continue
-        return False
+    for next_position in route:
+        if next_position not in route_board.neighbors(current):
+            return False
+        current = next_position
     return True
 
 
@@ -361,17 +369,20 @@ def is_legal_route_with_kogge_and_cloisters_skip(
     board: BoardConfig,
     omitted_location: int,
 ) -> bool:
-    """Validate combined Kogge-start candidate route with one Cloisters omission."""
+    """Validate combined Kogge+Cloisters candidate route with one Cloisters omission."""
     if omitted_location not in _allowed_cloisters_omission_locations(board):
         return False
 
-    candidate_length = len(route) + 1
-    for candidate_route in kogge_city_start_routes(
+    for candidate_route in kogge_cloisters_candidate_placements(
         origin=origin,
-        picked_up=candidate_length,
+        picked_up=len(route),
         board=board,
     ):
-        for omitted_index, candidate_location in enumerate(candidate_route):
+        for omitted_index, candidate_location in valid_cloisters_omissions(
+            origin=origin,
+            candidate_placements=candidate_route,
+            board=board,
+        ):
             if candidate_location != omitted_location:
                 continue
             actual_route = cloisters_actual_placements_after_omission(
@@ -389,18 +400,22 @@ def route_requires_kogge(
     route: tuple[int, ...],
     board: BoardConfig,
 ) -> bool:
-    """Return whether route requires Kogge's city -> east/west first edge."""
+    """Return whether route requires Kogge's reversed City spokes."""
     if not route:
         return False
-    city_position = board.index_for_name("city")
-    if origin != city_position:
+    if is_legal_route_with_optional_city_kogge(
+        origin,
+        route,
+        board=board,
+        allows_kogge_city_spokes=False,
+    ):
         return False
-    first_step = route[0]
-    east_position = board.index_for_name("east")
-    west_position = board.index_for_name("west")
-    if first_step in board.neighbors(city_position):
-        return False
-    return first_step in (east_position, west_position)
+    return is_legal_route_with_optional_city_kogge(
+        origin,
+        route,
+        board=board,
+        allows_kogge_city_spokes=True,
+    )
 
 
 def _allowed_cloisters_omission_locations(board: BoardConfig) -> frozenset[int]:
@@ -431,7 +446,7 @@ __all__ = [
     "is_legal_route_with_cloisters_skip",
     "is_legal_route_with_optional_city_kogge",
     "kogge_cloisters_candidate_placements",
-    "kogge_city_start_routes",
+    "kogge_sow_routes",
     "normal_sow_routes",
     "route_requires_kogge",
     "route_variant_key",

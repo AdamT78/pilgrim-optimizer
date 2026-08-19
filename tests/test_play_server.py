@@ -724,11 +724,11 @@ def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> No
         server.server_close()
 
 
-def test_play_view_draws_kogge_city_start_arrows() -> None:
+def test_play_view_draws_kogge_city_spoke_reversal_arrows() -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_active_city_to_east_001.json")
     try:
         drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
-        assert {"city->east", "city->west"} <= drawn
+        assert {"city->east", "city->west", "north->city", "south->city"} <= drawn
     finally:
         server.server_close()
 

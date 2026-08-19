@@ -147,7 +147,7 @@ def test_apply_rejects_forced_kogge_fields_from_non_city_origin() -> None:
 
     with pytest.raises(
         TransitionValidationError,
-        match="only legal when route uses city -> east/west",
+        match="only legal when route uses Kogge-reversed City spokes",
     ):
         apply_action(shifted_state, invalid_action, scenario.config)
 

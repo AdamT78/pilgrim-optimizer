@@ -6,6 +6,7 @@ Each check uses `elementFromPoint` at the intended click centre plus a real mous
 
 from __future__ import annotations
 
+from dataclasses import replace
 import threading
 from pathlib import Path
 
@@ -709,6 +710,48 @@ def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) ->
         or after["action_enabled"] == "true"
         or after["tithe_enabled"] == "true"
     ), "clicking city->east did not advance to a later turn question"
+
+
+def test_kogge_route_can_enter_city_against_arrows_from_ring_and_continue(page, serve) -> None:
+    """Catches regressions where north->city looked offered but could not be walked onward."""
+    base_url, server = serve(SCENARIOS / "kogge_active_city_to_east_001.json")
+    board = server.config.board
+    north_west = board.index_for_name("north_west")
+    player = server.state.active_player
+    player_state = server.state.player_state(player)
+    server.state = server.state.with_player_state(
+        player,
+        replace(
+            player_state,
+            workforce=replace(
+                player_state.workforce,
+                mancala=(1, 0, 0, 0, 0, 0, 0, 0, 3),
+            ),
+        ),
+    )
+    server._refresh()
+
+    page.goto(base_url, wait_until="networkidle")
+    origin = page.query_selector(
+        f'[data-board-position-index="{north_west}"][data-turn-start-candidate="true"]'
+    )
+    assert origin is not None, "north-west origin was not offered for the ring-start Kogge route"
+    _click_handle_centre(page, origin, require_hit=True)
+    page.wait_for_timeout(20)
+
+    north_to_city = page.query_selector('[data-arrow="north->city"][data-turn-offered="true"]')
+    assert north_to_city is not None, "north->city was not offered after reaching North"
+    _click_handle_centre(page, north_to_city, require_hit=True)
+    page.wait_for_timeout(20)
+
+    city_to_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
+    assert city_to_east is not None, "city->east was not offered after entering City from North"
+    _click_handle_centre(page, city_to_east, require_hit=True)
+    page.wait_for_timeout(20)
+
+    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
+        "route did not advance to duty selection after entering City against arrows"
+    )
 
 
 def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> None:

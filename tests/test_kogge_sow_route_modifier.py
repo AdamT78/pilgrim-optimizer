@@ -1,20 +1,95 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
+from pilgrim.model.actions import action_id
 from pilgrim.model.enums import EventType, PlayerId
 from pilgrim.rules.building_turn_modifiers import (
     implemented_turn_modifiers,
     scaffolded_turn_modifiers,
 )
+from pilgrim.rules.sow_routes import SowRouteVariant, cloisters_actual_placements_after_omission
+from pilgrim.rules import transition as transition_module
+from pilgrim.rules import sow_routes as sow_routes_module
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
 def _events_of_type(events, event_type: EventType):
     return [event for event in events if event.event_type is event_type]
+
+
+def _legacy_kogge_city_start_routes(*, origin: int, picked_up: int, board):
+    if picked_up <= 0:
+        return ()
+    city = board.index_for_name("city")
+    if origin != city:
+        return ()
+    east = board.index_for_name("east")
+    west = board.index_for_name("west")
+    routes = []
+    for first_step in (east, west):
+        for suffix in transition_module.generate_routes(first_step, picked_up - 1, board):
+            routes.append((first_step, *suffix))
+    return tuple(routes)
+
+
+def _legacy_route_requires_kogge(*, origin: int, route: tuple[int, ...], board) -> bool:
+    if not route:
+        return False
+    city = board.index_for_name("city")
+    if origin != city:
+        return False
+    first_step = route[0]
+    east = board.index_for_name("east")
+    west = board.index_for_name("west")
+    if first_step in board.neighbors(city):
+        return False
+    return first_step in (east, west)
+
+
+def _legacy_combined_kogge_cloisters_route_variants(*, origin: int, picked_up: int, board):
+    if picked_up <= 0:
+        return ()
+    allowed = sow_routes_module._allowed_cloisters_omission_locations(board)
+    variants: list[SowRouteVariant] = []
+    for candidate_route in _legacy_kogge_city_start_routes(
+        origin=origin,
+        picked_up=picked_up + 1,
+        board=board,
+    ):
+        for omitted_index, omitted_location in enumerate(candidate_route):
+            if omitted_location not in allowed:
+                continue
+            variants.append(
+                SowRouteVariant(
+                    route=cloisters_actual_placements_after_omission(
+                        candidate_route,
+                        omitted_index=omitted_index,
+                    ),
+                    omitted_location=omitted_location,
+                )
+            )
+    return sow_routes_module.dedupe_sow_route_variants(tuple(variants))
+
+
+def _legacy_legal_actions(state, config, monkeypatch) -> list:
+    with monkeypatch.context() as patched:
+        patched.setattr(transition_module, "kogge_sow_routes", _legacy_kogge_city_start_routes)
+        patched.setattr(
+            transition_module,
+            "combined_kogge_cloisters_route_variants",
+            _legacy_combined_kogge_cloisters_route_variants,
+        )
+        patched.setattr(
+            transition_module,
+            "_route_requires_kogge_for_origin_route",
+            _legacy_route_requires_kogge,
+        )
+        return list(legal_actions(state, config))
 
 
 def _city_route_actions(path: str):
@@ -146,8 +221,12 @@ def test_kogge_available_but_unused_route_emits_no_kogge_events() -> None:
     )
 
 
-def test_kogge_does_not_modify_non_city_sow_origins() -> None:
+def test_kogge_can_modify_non_city_sow_origins_when_route_uses_reversed_city_spokes() -> None:
     scenario = load_scenario("scenarios/kogge_active_city_to_east_001.json")
+    board = scenario.config.board
+    north = board.index_for_name("north")
+    city = board.index_for_name("city")
+    west = board.index_for_name("west")
     player = scenario.state.active_player
     player_state = scenario.state.player_state(player)
     shifted_state = scenario.state.with_player_state(
@@ -156,15 +235,20 @@ def test_kogge_does_not_modify_non_city_sow_origins() -> None:
             player_state,
             workforce=replace(
                 player_state.workforce,
-                mancala=(0, 1, 0, 0, 0, 0, 0, 0, 0),
+                mancala=(0, 2, 0, 0, 0, 0, 0, 0, 0),
             ),
         ),
     )
     actions = legal_actions(shifted_state, scenario.config)
 
     assert actions
-    assert all(action.origin != scenario.config.board.index_for_name("city") for action in actions)
-    assert all(action.sow_route_building_id is None for action in actions)
+    against_flow = [
+        action
+        for action in actions
+        if action.origin == north and len(action.route) == 2 and action.route == (city, west)
+    ]
+    assert against_flow
+    assert all(action.sow_route_building_id == "kogge" for action in against_flow)
 
 
 def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> None:
@@ -176,3 +260,41 @@ def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> Non
         "library",
     }
     assert scaffolded_turn_modifiers() == ()
+
+
+def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(monkeypatch) -> None:
+    scenario_paths = sorted((Path(__file__).resolve().parents[1] / "scenarios").glob("*.json"))
+    assert len(scenario_paths) == 309
+
+    moved_without_kogge_reach: list[str] = []
+    checked_without_kogge_reach = 0
+    for path in scenario_paths:
+        scenario = load_scenario(str(path))
+        current_actions = list(legal_actions(scenario.state, scenario.config))
+        legacy_actions = _legacy_legal_actions(scenario.state, scenario.config, monkeypatch)
+
+        current_ids = {action_id(action) for action in current_actions}
+        legacy_ids = {action_id(action) for action in legacy_actions}
+        if current_ids == legacy_ids:
+            continue
+
+        current_has_kogge = any(
+            getattr(action, "sow_route_building_id", None) == "kogge"
+            or getattr(action, "sow_route_secondary_building_id", None) == "kogge"
+            for action in current_actions
+        )
+        legacy_has_kogge = any(
+            getattr(action, "sow_route_building_id", None) == "kogge"
+            or getattr(action, "sow_route_secondary_building_id", None) == "kogge"
+            for action in legacy_actions
+        )
+        if not (current_has_kogge or legacy_has_kogge):
+            moved_without_kogge_reach.append(path.name)
+        else:
+            checked_without_kogge_reach += 1
+
+    assert not moved_without_kogge_reach, (
+        "scenarios changed without any Kogge-reachable legal action: "
+        f"{moved_without_kogge_reach[:10]}"
+    )
+    assert checked_without_kogge_reach > 0
