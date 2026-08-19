@@ -199,6 +199,19 @@ def _is_rule(body: str) -> bool:
     return 'stroke-opacity="0.55"' in body
 
 
+def _without_kogge_city_start_arrows(svg: str) -> str:
+    """Drop the two Kogge-only outbound middle arrows from a wheel SVG string.
+
+    The prototype baseline predates those two edges, so parity checks against it remove them and
+    compare the rest of the board element-for-element.
+    """
+    return re.sub(
+        r'<g[^>]*data-middle-arrow="city_to_(east|west)_kogge"[^>]*>.*?</g>',
+        "",
+        svg,
+    )
+
+
 def drawing_elements(svg: str, without_cubes: bool = False) -> list[tuple[str, tuple[float, ...]]]:
     """Every drawn element as its tag plus the numbers in its attributes, in document order.
 
@@ -433,15 +446,15 @@ def test_rendered_svg_names_the_city_every_duty_and_both_arrow_families() -> Non
     assert 'aria-label="Middle directional arrows"' in svg
 
 
-def test_rendered_svg_draws_nine_spaces_eight_ring_arrows_and_four_middle_arrows() -> None:
+def test_rendered_svg_draws_nine_spaces_eight_ring_arrows_and_six_middle_arrows() -> None:
     svg = generated_svg()
 
     assert svg.count('class="board-circle"') == 9
     assert len(re.findall(r'data-ring-arrow="', svg)) == 8
-    assert len(re.findall(r'data-middle-arrow="', svg)) == 4
+    assert len(re.findall(r'data-middle-arrow="', svg)) == 6
     # Each arrow is drawn twice: a black outline with the white interior on top.
-    assert svg.count('class="arrow-border"') == 12
-    assert svg.count('class="arrow-interior"') == 12
+    assert svg.count('class="arrow-border"') == 14
+    assert svg.count('class="arrow-interior"') == 14
 
 
 def test_rendered_svg_starts_the_merchant_on_taxation() -> None:
@@ -1004,7 +1017,8 @@ def test_the_arrows_drawn_on_the_board_are_the_moves_the_engine_allows() -> None
 
     The ring arrows are one shape turned around the board, so nothing in the markup said which
     pair each stood between; it is worked out from how far each has been turned and then named in
-    the engine's terms. Kogge and Cloisters add and drop edges of their own; neither is drawn here.
+    the engine's terms. Cloisters drops placements rather than drawing edges, and Kogge's two
+    city-start edges are drawn explicitly so they can be offered when legal.
     """
     svg = generated_svg()
     drawn: dict[str, set[str]] = {}
@@ -1013,7 +1027,9 @@ def test_the_arrows_drawn_on_the_board_are_the_moves_the_engine_allows() -> None
     ):
         drawn.setdefault(origin, set()).add(target)
 
-    assert drawn == {position: set(ways) for position, ways in board_edges().items()}
+    expected = {position: set(ways) for position, ways in board_edges().items()}
+    expected["city"] |= {"east", "west"}
+    assert drawn == expected
     assert sum(len(ways) for ways in drawn.values()) == len(
         re.findall(r"data-from-position=", svg)
     )
@@ -1028,7 +1044,7 @@ def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
         svg,
     )
 
-    assert len(indexed) == RING_ARROW_COUNT + len(layout()["middle_arrows"])
+    assert len(indexed) == RING_ARROW_COUNT + len(layout()["middle_arrows"]) + 2
     for origin, target, origin_index, target_index in indexed:
         assert BOARD_POSITIONS[int(origin_index)] == origin
         assert BOARD_POSITIONS[int(target_index)] == target
@@ -1045,6 +1061,42 @@ def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
             svg,
         )
     ]
+
+
+def test_ring_and_vertical_spoke_arrows_stay_on_the_layout_anchors() -> None:
+    """Horizontal spoke lanes can move; ring and north/south spokes stay exactly where laid out."""
+    svg = generated_svg()
+    data = layout()
+    cx, cy = data["board"]["center"]
+    step = 360 // RING_ARROW_COUNT
+
+    ring_transforms = {
+        int(index): transform
+        for transform, index in re.findall(
+            r'<g transform="([^"]+)" data-ring-arrow="(\d+)"',
+            svg,
+        )
+    }
+    assert ring_transforms == {
+        index: f"rotate({index * step:g} {cx:g} {cy:g})"
+        for index in range(RING_ARROW_COUNT)
+    }
+
+    middle_transforms = {
+        arrow_id: transform
+        for transform, arrow_id in re.findall(
+            r'<g transform="([^"]+)" data-middle-arrow="([^"]+)"',
+            svg,
+        )
+    }
+
+    for arrow_id in ("city_to_produce", "city_to_taxation"):
+        entry = next(arrow for arrow in data["middle_arrows"] if arrow["id"] == arrow_id)
+        x, y = entry["at"]
+        expected = f"translate({x:g} {y:g})"
+        if entry["rotate"]:
+            expected += f" rotate({entry['rotate']:g})"
+        assert middle_transforms[arrow_id] == expected
 
 
 def test_only_three_positions_have_more_than_one_way_out_of_them() -> None:
@@ -1068,7 +1120,7 @@ def test_only_three_positions_have_more_than_one_way_out_of_them() -> None:
         "west",
     ]
     assert {position: sorted(drawn[position]) for position in branching_positions()} == {
-        "city": ["north", "south"],
+        "city": ["east", "north", "south", "west"],
         "east": ["city", "south_east"],
         "west": ["city", "north_west"],
     }
@@ -1236,14 +1288,17 @@ def test_the_board_around_the_cubes_is_still_the_baseline_element_for_element() 
     """Coarse parity, with the cubes taken out of both sides.
 
     Asked for the board the prototype drew — static, Merchant on Produce — the renderer reproduces
-    everything the tally does not touch: the spaces, the arrows, the capsules, the titles and the
-    ornaments, the same shapes at the same coordinates in the same order. The one tolerated gap is
-    the Allocation title, which the baseline puts 0.1px above the offset its other eight titles
-    share; the renderer uses the shared offset instead.
+    everything the tally does not touch: the spaces, the baseline arrows, the capsules, the titles
+    and the ornaments, the same shapes at the same coordinates in the same order. The one tolerated
+    gap is the Allocation title, which the baseline puts 0.1px above the offset its other eight
+    titles share; the renderer uses the shared offset instead. Kogge's two city-start arrows are a
+    deliberate renderer extension and are removed for this baseline comparison.
     """
     data = layout()
     generated = drawing_elements(
-        render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"]),
+        _without_kogge_city_start_arrows(
+            render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"])
+        ),
         without_cubes=True,
     )
     baseline = drawing_elements(baseline_svg(), without_cubes=True)
