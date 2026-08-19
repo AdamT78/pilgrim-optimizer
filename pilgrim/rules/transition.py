@@ -87,7 +87,7 @@ from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_
 from pilgrim.rules.sow_routes import (
     cloisters_route_variants,
     combined_kogge_cloisters_route_variants,
-    kogge_city_start_routes,
+    kogge_sow_routes,
     normal_sow_routes,
 )
 from pilgrim.rules.sow_routes import (
@@ -800,7 +800,7 @@ def _legal_full_turn_actions_for_state(
                 origin=origin,
                 route=route,
                 board=config.board,
-                allows_kogge_city_step=uses_kogge,
+                allows_kogge_city_spokes=uses_kogge,
                 cloisters_omitted_location=(
                     route_option.omitted_location if uses_cloisters else None
                 ),
@@ -2233,7 +2233,7 @@ def _apply_full_turn_action(
             origin=action.origin,
             route=action.route,
             board=config.board,
-            allows_kogge_city_step=kogge_source is not None and kogge_source.usable,
+            allows_kogge_city_spokes=kogge_source is not None and kogge_source.usable,
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
@@ -5147,7 +5147,7 @@ def _city_acolytes_after_action_for_end_turn(
             origin=action.origin,
             route=action.route,
             board=config.board,
-            allows_kogge_city_step=kogge_source is not None and kogge_source.usable,
+            allows_kogge_city_spokes=kogge_source is not None and kogge_source.usable,
             cloisters_omitted_location=(
                 cloisters_route.omitted_location if cloisters_route is not None else None
             ),
@@ -5235,10 +5235,8 @@ def _legal_sow_routes_for_origin(
         acting_player=state.active_player,
         building_key="kogge",
     )
-    if (
-        origin == config.board.index_for_name("city")
-        and kogge_source.usable
-        and (kogge_source.source_type == "own_active" or _is_hired_source(kogge_source))
+    if kogge_source.usable and (
+        kogge_source.source_type == "own_active" or _is_hired_source(kogge_source)
     ):
         routes.extend(
             _SowRouteOption(
@@ -5249,9 +5247,14 @@ def _legal_sow_routes_for_origin(
             for hire_source in _hire_payment_source_variants(
                 kogge_source, state.player_state(state.active_player)
             )
-            for route in kogge_city_start_routes(
+            for route in kogge_sow_routes(
                 origin=origin,
                 picked_up=picked_up,
+                board=config.board,
+            )
+            if _route_requires_kogge_for_origin_route(
+                origin=origin,
+                route=route,
                 board=config.board,
             )
         )
@@ -7627,7 +7630,7 @@ def _resolved_kogge_source_for_action(
     if not route_uses_kogge:
         if action_has_kogge_fields:
             raise TransitionValidationError(
-                "Kogge sow-route fields are only legal when route uses city -> east/west."
+                "Kogge sow-route fields are only legal when route uses Kogge-reversed City spokes."
             )
         return None
 
@@ -7670,7 +7673,7 @@ def _resolved_kogge_source_for_action(
         return source
 
     raise TransitionValidationError(
-        "Route requires Kogge (city -> east/west), but Kogge is unavailable."
+        "Route requires Kogge-reversed City spokes, but Kogge is unavailable."
     )
 
 

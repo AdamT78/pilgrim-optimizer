@@ -62,9 +62,9 @@ LAYOUT_FILENAME = "duty_wheel_layout.json"
 # position is where it stands, and the arrows drawn between spaces are those edges. The wheel's own
 # ids -- `clerical`, `construct` and the rest -- are the prototype's default arrangement of the
 # tiles and say nothing about movement, because a tile can be turned round the ring and a position
-# cannot. Only the two data files are read here; no rules code is imported. The two Kogge-only
-# city starts (city->east and city->west) are drawn explicitly in this renderer so the play view
-# can light them when they are legal; Cloisters skip choices are asked as steps and are not arrows.
+# cannot. Only the two data files are read here; no rules code is imported. Kogge's City-spoke
+# reversals are drawn explicitly in this renderer so the play view can light them when legal;
+# Cloisters skip choices are asked as steps and are not arrows.
 BOARD_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "board.json"
 
 # One space: a flat top with a round bottom, the arc centre acting as its anchor.
@@ -861,8 +861,8 @@ def _render_middle_arrows(layout: dict) -> str:
     The four spokes are fixed to north/east/south/west, exactly as the painted board is. Their
     legacy ids mention default duty categories (`produce`, `clerical`, `taxation`, `construct`);
     those names are interpreted as those fixed spokes and never as whichever tile currently carries
-    that category. Two extra arrows (city->east and city->west) are drawn beside the inward
-    east->city and west->city spokes so Kogge city starts have their own edge elements.
+    that category. Kogge makes all four City spokes passable in both directions, so a companion
+    arrow is drawn for each spoke's opposite direction as its own edge element.
     """
     path = layout["artwork"]["middle_arrow_path"]
     board = load_board_config()
@@ -874,7 +874,6 @@ def _render_middle_arrows(layout: dict) -> str:
     }
     arrows = []
     middle_specs: list[dict[str, float | str]] = []
-    inbound_anchor_by_spoke: dict[str, tuple[float, float, float]] = {}
 
     def append_arrow(
         *,
@@ -915,26 +914,29 @@ def _render_middle_arrows(layout: dict) -> str:
                 "spoke": fixed_spoke,
             }
         )
-        if origin == "east" and destination == layout["city_id"]:
-            inbound_anchor_by_spoke["east"] = (float(x), float(y), rotate)
-        if origin == "west" and destination == layout["city_id"]:
-            inbound_anchor_by_spoke["west"] = (float(x), float(y), rotate)
-
-    if "east" not in inbound_anchor_by_spoke or "west" not in inbound_anchor_by_spoke:
-        raise ValueError("duty wheel layout must include east->city and west->city middle arrows")
+    specs_by_spoke: dict[str, list[dict[str, float | str]]] = {}
+    for spec in middle_specs:
+        spoke = str(spec["spoke"])
+        specs_by_spoke.setdefault(spoke, []).append(spec)
 
     # These must be separate arrow elements, not one double-headed shape: one route can travel
     # both directions on the same axis, and each direction needs its own offered/taken state.
-    for spoke in ("east", "west"):
-        x, y, inbound_rotate = inbound_anchor_by_spoke[spoke]
+    for spoke, spoke_specs in specs_by_spoke.items():
+        if len(spoke_specs) > 1:
+            continue
+        spec = spoke_specs[0]
+        origin = str(spec["origin"])
+        destination = str(spec["destination"])
+        counterpart_origin = destination
+        counterpart_destination = origin
         middle_specs.append(
             {
-                "arrow_id": f"city_to_{spoke}_kogge",
-                "x": x,
-                "y": y,
-                "rotate": (inbound_rotate + 180.0) % 360.0,
-                "origin": layout["city_id"],
-                "destination": spoke,
+                "arrow_id": f"{counterpart_origin}_to_{counterpart_destination}_kogge",
+                "x": float(spec["x"]),
+                "y": float(spec["y"]),
+                "rotate": (float(spec["rotate"]) + 180.0) % 360.0,
+                "origin": counterpart_origin,
+                "destination": counterpart_destination,
                 "spoke": spoke,
             }
         )

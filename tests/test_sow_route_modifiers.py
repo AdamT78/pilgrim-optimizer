@@ -12,7 +12,7 @@ from pilgrim.rules.sow_routes import (
     dedupe_sow_route_variants,
     is_legal_route_with_cloisters_skip,
     is_legal_route_with_optional_city_kogge,
-    kogge_city_start_routes,
+    kogge_sow_routes,
     normal_sow_routes,
     route_requires_kogge,
     selected_duty_is_actual_placement,
@@ -52,17 +52,24 @@ def test_normal_route_placement_count_matches_picked_up_acolytes() -> None:
         assert sum(updated) == sum(vector)
 
 
-def test_kogge_helpers_add_city_east_and_west_without_duplicates() -> None:
+def test_kogge_helpers_make_all_city_spokes_bidirectional_without_duplicates() -> None:
     scenario = load_scenario("scenarios/produce_wheat_001.json")
     board = scenario.config.board
     city = board.index_for_name("city")
     north = board.index_for_name("north")
-    kogge_routes = kogge_city_start_routes(origin=city, picked_up=1, board=board)
+    kogge_from_city = kogge_sow_routes(origin=city, picked_up=1, board=board)
+    kogge_from_north = kogge_sow_routes(origin=north, picked_up=1, board=board)
     normal_routes = normal_sow_routes(origin=city, picked_up=1, board=board)
 
-    assert {board.positions[route[0]] for route in kogge_routes} == {"east", "west"}
-    assert kogge_city_start_routes(origin=north, picked_up=1, board=board) == ()
-    assert set(kogge_routes).isdisjoint(set(normal_routes))
+    assert {board.positions[route[0]] for route in kogge_from_city} == {
+        "north",
+        "south",
+        "east",
+        "west",
+    }
+    assert {board.positions[route[0]] for route in kogge_from_north} == {"north_east", "city"}
+    assert set(normal_routes) < set(kogge_from_city)
+    assert len(kogge_from_city) == len(set(kogge_from_city))
 
 
 def test_kogge_route_validation_helper_preserves_behavior() -> None:
@@ -70,20 +77,47 @@ def test_kogge_route_validation_helper_preserves_behavior() -> None:
     board = scenario.config.board
     city = board.index_for_name("city")
     east = board.index_for_name("east")
+    north = board.index_for_name("north")
+    west = board.index_for_name("west")
 
     assert is_legal_route_with_optional_city_kogge(
         city,
         (east,),
         board=board,
-        allows_kogge_city_step=True,
+        allows_kogge_city_spokes=True,
     )
     assert not is_legal_route_with_optional_city_kogge(
         city,
         (east,),
         board=board,
-        allows_kogge_city_step=False,
+        allows_kogge_city_spokes=False,
+    )
+    assert is_legal_route_with_optional_city_kogge(
+        north,
+        (city,),
+        board=board,
+        allows_kogge_city_spokes=True,
+    )
+    assert not is_legal_route_with_optional_city_kogge(
+        north,
+        (city,),
+        board=board,
+        allows_kogge_city_spokes=False,
     )
     assert route_requires_kogge(origin=city, route=(east,), board=board)
+    assert route_requires_kogge(origin=north, route=(city,), board=board)
+    assert is_legal_route_with_optional_city_kogge(
+        city,
+        (east, city, west, city),
+        board=board,
+        allows_kogge_city_spokes=True,
+    )
+    assert not is_legal_route_with_optional_city_kogge(
+        city,
+        (east, city, west, city),
+        board=board,
+        allows_kogge_city_spokes=False,
+    )
 
 
 def test_cloisters_candidate_n_plus_one_and_actual_n_after_omission() -> None:

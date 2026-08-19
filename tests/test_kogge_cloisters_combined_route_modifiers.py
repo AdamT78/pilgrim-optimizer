@@ -34,7 +34,7 @@ def _first_action(actions, predicate):
     return next(action for action in actions if predicate(action))
 
 
-def test_combined_helper_routes_use_kogge_city_start_and_are_deduped() -> None:
+def test_combined_helper_routes_include_kogge_augmented_city_spokes_and_are_deduped() -> None:
     scenario = load_scenario("scenarios/kogge_cloisters_own_own_skip_duty_001.json")
     board = scenario.config.board
     city = board.index_for_name("city")
@@ -68,17 +68,19 @@ def test_combined_helper_allows_city_omission_when_city_is_in_candidate() -> Non
     assert any(variant.omitted_location == city for variant in variants)
 
 
-def test_non_city_origin_has_no_kogge_cloisters_combined_variants() -> None:
+def test_non_city_origin_can_generate_kogge_cloisters_combined_variants() -> None:
     scenario = load_scenario("scenarios/kogge_cloisters_own_own_skip_duty_001.json")
     board = scenario.config.board
     north = board.index_for_name("north")
+    city = board.index_for_name("city")
 
     variants = combined_kogge_cloisters_route_variants(
         origin=north,
         picked_up=2,
         board=board,
     )
-    assert variants == ()
+    assert variants
+    assert any(variant.route and variant.route[0] == city for variant in variants)
 
 
 def test_combined_helper_validates_kogge_and_cloisters_legality() -> None:
@@ -162,9 +164,11 @@ def test_combined_summary_hired_keeps_hire_details_at_end() -> None:
     )
 
     summary = action_summary(action, scenario.config)
-    assert (
-        summary
-        == "Turn: sow city -> west -> north | use building: kogge | use building: cloisters to skip city | selected duty: west (allocation) | action: allocation | moves: abbey -> stone_mason | hire building: kogge from market | hire building: cloisters from market"
+    assert summary.startswith("Turn: sow city -> ")
+    assert " | use building: kogge | use building: cloisters to skip city | " in summary
+    assert "selected duty: west (allocation) | action: allocation | moves: abbey -> stone_mason" in summary
+    assert summary.endswith(
+        "hire building: kogge from market | hire building: cloisters from market"
     )
 
 

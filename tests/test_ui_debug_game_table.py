@@ -1680,7 +1680,7 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
 
 
 def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
-    """The wheel draws the board graph plus Kogge's two city-start edges, and the flow reads them.
+    """The wheel draws the board graph plus Kogge's four City-spoke reversals, and reads them.
 
     Nothing lists which positions branch: a position with one arrow leaving it offers no choice,
     and the City, east and west are simply the three with more than one. That stays true however
@@ -1695,10 +1695,14 @@ def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
 
     expected = {position: set(ways) for position, ways in board_edges().items()}
     expected["city"] |= {"east", "west"}
+    expected["north"] |= {"city"}
+    expected["south"] |= {"city"}
     assert leaving == expected
     assert {position: sorted(ways) for position, ways in leaving.items() if len(ways) > 1} == {
         "city": ["east", "north", "south", "west"],
         "east": ["city", "south_east"],
+        "north": ["city", "north_east"],
+        "south": ["city", "south_west"],
         "west": ["city", "north_west"],
     }
     assert "dutyPanel.querySelectorAll('[data-from-position][data-to-position]')" in page
