@@ -292,11 +292,11 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
 
         actions = legal_actions(state, config)
         by_id = {action_id(action): action for action in actions}
-        hire_contexts = _hire_contexts(list(actions))
+        hire_contexts = _hire_contexts(list(actions), config)
         offer_hire_by_action_id = {
             action_id(action): (
                 isinstance(action, FullTurnAction)
-                and _resolution_context_key(action) in hire_contexts
+                and _resolution_context_key(action, config) in hire_contexts
             )
             for action in actions
         }

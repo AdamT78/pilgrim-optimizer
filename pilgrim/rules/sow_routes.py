@@ -67,11 +67,9 @@ def cloisters_candidate_omissions(
     origin: int,
     candidate_placements: tuple[int, ...],
 ) -> tuple[tuple[int, int], ...]:
-    """Return omission candidates as (index, location) excluding origin omissions."""
+    """Return omission candidates as (index, location)."""
     omissions: list[tuple[int, int]] = []
     for omitted_index, omitted_location in enumerate(candidate_placements):
-        if omitted_location == origin:
-            continue
         omissions.append((omitted_index, omitted_location))
     return tuple(omissions)
 
@@ -335,8 +333,6 @@ def is_legal_route_with_cloisters_skip(
     omitted_location: int,
 ) -> bool:
     """Validate that one omitted location can yield the provided actual route."""
-    if omitted_location == origin:
-        return False
     if omitted_location not in _allowed_cloisters_omission_locations(board):
         return False
 

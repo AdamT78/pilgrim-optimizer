@@ -16,6 +16,8 @@ from tools.play_server import PlayServer
 pytestmark = pytest.mark.slow
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
+PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
+PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 
 
 @pytest.fixture(scope="session")
@@ -179,6 +181,25 @@ def _walk_live_dom_until(
         assert offered is not None, f"no live offered target while walking to {target}"
         _click_handle_centre(page, offered, require_hit=True)
         page.wait_for_timeout(20)
+    raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
+
+
+def _walk_until_skip_step_by_preferring_edges(page, *, target: str, max_clicks: int = 80) -> None:
+    """Advance toward a Cloisters skip prompt without taking duty/resolution branches first."""
+    for _ in range(max_clicks):
+        if page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0:
+            return
+        origin = page.query_selector('[data-board-position-index][data-turn-start-candidate="true"]')
+        if origin is not None:
+            _click_handle_centre(page, origin, require_hit=True)
+            page.wait_for_timeout(20)
+            continue
+        edge = page.query_selector('[data-arrow][data-turn-offered="true"]')
+        if edge is not None:
+            _click_handle_centre(page, edge, require_hit=True)
+            page.wait_for_timeout(20)
+            continue
+        raise AssertionError(f"no origin/edge target while walking to {target}")
     raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
 
 
@@ -355,6 +376,200 @@ def test_setup_rows_three_and_four_compute_display_none_at_two_players(page, ser
     ) == "none"
 
 
+def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) -> None:
+    base_url, _server = serve(None)
+    page.goto(base_url, wait_until="networkidle")
+
+    dropdown = page.locator("#test_position")
+    assert dropdown.count() == 1, "setup page did not render test position dropdown"
+    option_values = page.eval_on_selector_all(
+        "#test_position option",
+        "nodes => nodes.map(node => ({ value: node.value, text: node.textContent || '' }))",
+    )
+    assert any(option["value"] == "" for option in option_values), "fresh-game blank option is missing"
+    assert any(option["value"] == PLAYTEST_CLOISTERS for option in option_values), (
+        "playtest scenario is missing from dropdown"
+    )
+    assert any(option["value"] == PLAYTEST_CLOISTERS_LOOP for option in option_values), (
+        "loop playtest scenario is missing from dropdown"
+    )
+
+    page.select_option("#test_position", PLAYTEST_CLOISTERS)
+    assert page.get_attribute("#player_count", "disabled") is not None
+    assert page.get_attribute("#seed", "disabled") is not None
+    assert page.eval_on_selector(
+        '[data-seat-row="3"]', "row => getComputedStyle(row).display"
+    ) == "none"
+
+    submit = page.query_selector('button[type="submit"]')
+    assert submit is not None, "setup form submit button missing"
+    _click_handle_centre(page, submit, require_hit=True)
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector('[data-component="play-log"]')
+    assert page.locator('[data-component="play-log"]').count() == 1, (
+        "submitting selected test position did not open the game board"
+    )
+    state = page.request.get(f"{base_url}/state.json").json()
+    assert len(state["state"]["players"]) == 2
+    assert state["state"]["players"][0]["piety"] == 4
+    assert state["state"]["players"][0]["resources"] == {"stone": 9, "silver": 9, "wheat": 9}
+    _walk_until_skip_step_by_preferring_edges(
+        page,
+        target="cloisters skip step from selected test position",
+    )
+    skip_target = page.query_selector('[data-board-position-index][data-turn-skip-candidate="true"]')
+    assert skip_target is not None, "loaded test position never offered a Cloisters skip target"
+    _click_handle_centre(page, skip_target, require_hit=True)
+    page.wait_for_timeout(20)
+    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0
+
+
+def test_cloisters_loop_opens_on_lift_question_and_city_click_enables_reset_with_five_in_hand(
+    page,
+    serve,
+) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS_LOOP)
+    page.goto(base_url, wait_until="networkidle")
+
+    opening = _turn_state_snapshot(page)
+    assert opening["origins"] == 2, opening
+    prompts = [str(prompt).lower() for prompt in opening["prompts"]]
+    assert any("choose a space to lift acolytes from." in prompt for prompt in prompts), prompts
+    assert all("follow an arrow." not in prompt for prompt in prompts), prompts
+
+    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    assert city_origin is not None, "city should be offered as a start-candidate origin"
+    _click_handle_centre(page, city_origin, require_hit=True)
+    page.wait_for_timeout(20)
+
+    counters = [
+        str(value)
+        for value in page.eval_on_selector_all(
+            '[data-turn-counter][data-turn-offered="true"]',
+            "nodes => nodes.map(node => node.getAttribute('data-turn-counter'))",
+        )
+        if value is not None
+    ]
+    assert "5" in counters, counters
+    assert (
+        page.get_attribute('[data-turn-control="reset"]', "data-turn-control-enabled") == "true"
+    ), "reset should enable once city is clicked"
+
+
+def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS_LOOP)
+    candidate = next(
+        (
+            offered
+            for offered in server.payload["turn_candidates"]
+            if offered.get("action_id") is not None
+            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"])
+            and any(step["kind"] == "skip" and int(step["value"]) == 0 for step in offered["steps"])
+        ),
+        None,
+    )
+    assert candidate is not None, "loop playtest offered no city-origin candidate skipping city"
+
+    edge_values = [str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"]
+    assert any(value.endswith("->city") for value in edge_values), (
+        "chosen city-origin candidate route never returns to city"
+    )
+
+    page.goto(base_url, wait_until="networkidle")
+    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    assert city_origin is not None, "city should be offered as a start origin"
+    _click_handle_centre(page, city_origin, require_hit=True)
+    page.wait_for_timeout(20)
+
+    for edge_value in edge_values:
+        edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
+        if edge is not None:
+            _click_handle_centre(page, edge, require_hit=True)
+            page.wait_for_timeout(20)
+
+    city_skip = page.query_selector('[data-board-position-index="0"][data-turn-skip-candidate="true"]')
+    assert city_skip is not None, "city revisit was not offered as a skip target"
+    _click_handle_centre(page, city_skip, require_hit=True)
+    page.wait_for_timeout(20)
+
+    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0, (
+        "city skip click did not settle the skip question"
+    )
+    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
+        "duty question did not follow city skip selection"
+    )
+
+
+def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(page, serve) -> None:
+    """A plain route completion must not eliminate Cloisters routes that extend the same prefix."""
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
+    candidates = server.payload["turn_candidates"]
+
+    def origin_of(candidate: dict) -> int | None:
+        for step in candidate["steps"]:
+            if step["kind"] == "origin":
+                return int(step["value"])
+        return None
+
+    def edges_of(candidate: dict) -> list[str]:
+        return [str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"]
+
+    chosen: tuple[int, list[str], list[str]] | None = None
+    for plain in candidates:
+        plain_edges = edges_of(plain)
+        if not plain_edges or any(step["kind"] == "skip" for step in plain["steps"]):
+            continue
+        plain_origin = origin_of(plain)
+        if plain_origin is None:
+            continue
+        for cloisters in candidates:
+            if not any(step["kind"] == "skip" for step in cloisters["steps"]):
+                continue
+            cloisters_origin = origin_of(cloisters)
+            cloisters_edges = edges_of(cloisters)
+            if cloisters_origin != plain_origin:
+                continue
+            if (
+                len(cloisters_edges) == len(plain_edges) + 1
+                and cloisters_edges[: len(plain_edges)] == plain_edges
+            ):
+                chosen = (plain_origin, plain_edges, cloisters_edges)
+                break
+        if chosen is not None:
+            break
+    assert chosen is not None, "fixture offered no plain/Cloisters prefix pair to exercise"
+    origin, plain_edges, cloisters_edges = chosen
+
+    page.goto(base_url, wait_until="networkidle")
+    origin_target = page.query_selector(
+        f'[data-board-position-index="{origin}"][data-turn-start-candidate="true"]'
+    )
+    assert origin_target is not None, f"origin {origin} is not offered"
+    _click_handle_centre(page, origin_target, require_hit=True)
+
+    for edge in plain_edges:
+        edge_target = page.query_selector(f'[data-arrow="{edge}"][data-turn-offered="true"]')
+        if edge_target is not None:
+            _click_handle_centre(page, edge_target, require_hit=True)
+            page.wait_for_timeout(20)
+
+    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
+        "plain route completion did not make any duty selectable"
+    )
+    extending_edge = cloisters_edges[-1]
+    extending_target = page.query_selector(
+        f'[data-arrow="{extending_edge}"][data-turn-offered="true"]'
+    )
+    assert extending_target is not None, (
+        "Cloisters extension edge disappeared when the plain route finished"
+    )
+    _click_handle_centre(page, extending_target, require_hit=True)
+    page.wait_for_timeout(20)
+    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0, (
+        "continuing the Cloisters extension edge did not reach the skip question"
+    )
+
+
 def test_a_wheel_origin_space_and_then_route_arrow_really_receive_clicks(page, serve) -> None:
     """Catches wheel hit-testing regressions where origin/edge affordances look live but are dead."""
     base_url, _server = serve(SCENARIOS / "tithe_counter_choice_001.json")
@@ -387,10 +602,7 @@ def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> No
     base_url, _server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
     page.goto(base_url, wait_until="networkidle")
 
-    def skip_choice_is_live() -> bool:
-        return page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0
-
-    _walk_live_dom_until(page, skip_choice_is_live, target="cloisters skip step")
+    _walk_until_skip_step_by_preferring_edges(page, target="cloisters skip step")
 
     skip_target = page.query_selector('[data-board-position-index][data-turn-skip-candidate="true"]')
     assert skip_target is not None, "no offered skip target on wheel"
