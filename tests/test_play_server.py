@@ -54,6 +54,7 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 PLAYTEST_SCENARIOS = SCENARIOS / "playtest"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
+PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 
 
 @pytest.fixture(scope="module")
@@ -472,8 +473,10 @@ def test_setup_page_lists_discovered_playtest_positions_with_blank_fresh_default
     assert '<option value="" selected>Deal a fresh game</option>' in page
     assert f'value="{PLAYTEST_CLOISTERS}"' in page
     assert f'value="{PLAYTEST_CLOISTERS_LOOP}"' in page
+    assert f'value="{PLAYTEST_KOGGE_AND_CLOISTERS}"' in page
     assert ">cloisters_reach_2p<" in page
     assert ">cloisters_loop_2p<" in page
+    assert ">kogge_and_cloisters_2p<" in page
 
 
 def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribute() -> None:
@@ -562,15 +565,17 @@ def test_start_rejects_an_unknown_test_position_name() -> None:
 
 
 @pytest.mark.parametrize(
-    "position_name,position_label",
+    "position_name,position_label,expected_active_buildings",
     [
-        (PLAYTEST_CLOISTERS, "cloisters_reach_2p"),
-        (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p"),
+        (PLAYTEST_CLOISTERS, "cloisters_reach_2p", ["cloisters"]),
+        (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p", ["cloisters"]),
+        (PLAYTEST_KOGGE_AND_CLOISTERS, "kogge_and_cloisters_2p", ["kogge", "cloisters"]),
     ],
 )
 def test_starting_from_test_position_uses_the_file_count_and_seed(
     position_name: str,
     position_label: str,
+    expected_active_buildings: list[str],
 ) -> None:
     server = PlayServer(("127.0.0.1", 0))
     with _running(server) as base:
@@ -590,7 +595,10 @@ def test_starting_from_test_position_uses_the_file_count_and_seed(
     assert len(state["state"]["players"]) == 2
     assert state["state"]["players"][0]["piety"] == 4
     assert state["state"]["players"][0]["resources"] == {"stone": 9, "silver": 9, "wheat": 9}
-    assert state["state"]["players"][0]["player_board_slots"]["active_buildings"] == ["cloisters"]
+    assert (
+        state["state"]["players"][0]["player_board_slots"]["active_buildings"]
+        == expected_active_buildings
+    )
     assert server.session.player_count == 2
     assert server.session.seed == 99
 
@@ -680,6 +688,7 @@ def test_file_argument_still_serves_the_board_directly(tmp_path: Path) -> None:
 
 def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
     checked = 0
+    seen: set[str] = set()
     for path in sorted(PLAYTEST_SCENARIOS.glob("*.json")):
         _ = load_scenario(str(path))
         server = PlayServer(("127.0.0.1", 0), path)
@@ -687,9 +696,15 @@ def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
             status, page = _get(base, "/")
         assert status == 200
         assert 'data-component="play-log"' in page
+        seen.add(path.name)
         checked += 1
 
-    assert checked > 0, "no playtest scenario files were discovered"
+    assert checked == 3
+    assert seen == {
+        PLAYTEST_CLOISTERS,
+        PLAYTEST_CLOISTERS_LOOP,
+        PLAYTEST_KOGGE_AND_CLOISTERS,
+    }
 
 
 def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:
@@ -729,6 +744,68 @@ def test_play_view_draws_kogge_city_spoke_reversal_arrows() -> None:
     try:
         drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
         assert {"city->east", "city->west", "north->city", "south->city"} <= drawn
+    finally:
+        server.server_close()
+
+
+def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS))
+    actions = list(legal_actions(scenario.state, scenario.config))
+    skipped = sum(
+        1
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None
+    )
+    board = scenario.config.board
+    city = board.index_for_name("city")
+    north = board.index_for_name("north")
+    south = board.index_for_name("south")
+    east = board.index_for_name("east")
+    west = board.index_for_name("west")
+    against_flow_spokes = {(north, city), (south, city), (city, east), (city, west)}
+    against_flow = 0
+    for action in actions:
+        if not isinstance(action, FullTurnAction):
+            continue
+        walked = (action.origin, *action.route)
+        if any((walked[index], walked[index + 1]) in against_flow_spokes for index in range(len(walked) - 1)):
+            against_flow += 1
+
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
+    try:
+        page = render_play_view_from_payload(server.payload)
+        assert len(server.payload["turn_candidates"]) == 988
+        assert len(page.encode("utf-8")) == 1_571_776
+    finally:
+        server.server_close()
+
+    max_on_any_duty_tile_after_turn = 0
+    for action in actions:
+        if not isinstance(action, FullTurnAction):
+            continue
+        result = apply_action(scenario.state, action, scenario.config)
+        player_one = result.state.player_state(PlayerId.PLAYER_ONE)
+        max_on_any_duty_tile_after_turn = max(
+            max_on_any_duty_tile_after_turn,
+            max(
+                int(value)
+                for position, value in enumerate(player_one.workforce.mancala)
+                if position != city
+            ),
+        )
+
+    assert len(actions) == 1184
+    assert skipped == 1049
+    assert against_flow == 543
+    assert max_on_any_duty_tile_after_turn <= 3
+
+
+def test_kogge_and_cloisters_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
+    try:
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        dead = _dead_candidates_by_missing_edges(server.payload["turn_candidates"], drawn)
+        assert not dead, f"kogge+cloisters playtest candidates still ask for undrawn arrows: {dead[:10]}"
     finally:
         server.server_close()
 
