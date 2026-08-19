@@ -19,6 +19,7 @@ pytestmark = pytest.mark.slow
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
+PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 
 
 @pytest.fixture(scope="session")
@@ -394,6 +395,9 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     assert any(option["value"] == PLAYTEST_CLOISTERS_LOOP for option in option_values), (
         "loop playtest scenario is missing from dropdown"
     )
+    assert any(option["value"] == PLAYTEST_KOGGE_AND_CLOISTERS for option in option_values), (
+        "kogge+cloisters playtest scenario is missing from dropdown"
+    )
 
     page.select_option("#test_position", PLAYTEST_CLOISTERS)
     assert page.get_attribute("#player_count", "disabled") is not None
@@ -423,6 +427,24 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     _click_handle_centre(page, skip_target, require_hit=True)
     page.wait_for_timeout(20)
     assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0
+
+
+@pytest.mark.parametrize(
+    "position_name",
+    [PLAYTEST_CLOISTERS, PLAYTEST_CLOISTERS_LOOP, PLAYTEST_KOGGE_AND_CLOISTERS],
+)
+def test_setup_test_position_dropdown_each_playtest_position_starts(page, serve, position_name: str) -> None:
+    base_url, _server = serve(None)
+    page.goto(base_url, wait_until="networkidle")
+    page.select_option("#test_position", position_name)
+    submit = page.query_selector('button[type="submit"]')
+    assert submit is not None, "setup form submit button missing"
+    _click_handle_centre(page, submit, require_hit=True)
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector('[data-component="play-log"]')
+    assert page.locator('[data-component="play-log"]').count() == 1, (
+        f"test position {position_name} did not open the game board"
+    )
 
 
 def test_cloisters_loop_opens_on_lift_question_and_city_click_enables_reset_with_five_in_hand(
@@ -499,6 +521,78 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
     assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
         "duty question did not follow city skip selection"
     )
+
+
+def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_then_skip_and_pick_duty(
+    page,
+    serve,
+) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    against_flow_edges = {"north->city", "south->city"}
+    candidate = next(
+        (
+            offered
+            for offered in server.payload["turn_candidates"]
+            if offered.get("action_id") is not None
+            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"])
+            and any(step["kind"] == "skip" for step in offered["steps"])
+            and any(
+                step["kind"] == "edge"
+                and str(step["value"]) in against_flow_edges
+                for step in offered["steps"]
+            )
+        ),
+        None,
+    )
+    assert candidate is not None, "playtest offered no settled city-origin candidate using north/south->city"
+    edge_values = [str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"]
+    against_indexes = [index for index, value in enumerate(edge_values) if value in against_flow_edges]
+    assert against_indexes, "chosen candidate did not include an against-flow City-entry edge"
+    assert min(against_indexes) > 0, "against-flow City-entry edge was not reached from the City route"
+    assert max(against_indexes) < len(edge_values) - 1, "route did not continue after entering City"
+    skip_value = next(
+        int(step["value"]) for step in candidate["steps"] if step["kind"] == "skip"
+    )
+    duty_value = next(
+        int(step["value"]) for step in candidate["steps"] if step["kind"] == "duty"
+    )
+
+    page.goto(base_url, wait_until="networkidle")
+    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    assert city_origin is not None, "city origin was not offered"
+    _click_handle_centre(page, city_origin, require_hit=True)
+    page.wait_for_timeout(20)
+
+    for edge_value in edge_values:
+        edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
+        assert edge is not None, f"edge {edge_value} was not offered while replaying settled route"
+        _click_handle_centre(page, edge, require_hit=True)
+        page.wait_for_timeout(20)
+
+    skip_target = page.query_selector(
+        f'[data-board-position-index="{skip_value}"][data-turn-skip-candidate="true"]'
+    )
+    assert skip_target is not None, "skip target from settled candidate was not offered"
+    _click_handle_centre(page, skip_target, require_hit=True)
+    page.wait_for_timeout(20)
+
+    duty_target = page.query_selector(
+        f'[data-board-position-index="{duty_value}"][data-turn-duty-candidate="true"]'
+    )
+    assert duty_target is not None, "duty target from settled candidate was not offered"
+    _click_handle_centre(page, duty_target, require_hit=True)
+    page.wait_for_timeout(20)
+
+    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() == 0, (
+        "duty choice did not settle after clicking the duty target"
+    )
+    after = _turn_state_snapshot(page)
+    assert (
+        after["action_enabled"] == "true"
+        or after["tithe_enabled"] == "true"
+        or len(after["resolution_keys"]) > 0
+        or _confirm_enabled(page)
+    ), "turn did not advance beyond the duty choice after route and skip"
 
 
 def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(page, serve) -> None:

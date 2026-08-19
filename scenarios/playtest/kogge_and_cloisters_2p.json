@@ -1,0 +1,247 @@
+{
+  "scenario_id": "kogge_and_cloisters_2p",
+  "root_player_id": "player_one",
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "board_file": "../../configs/board.json",
+  "duties_file": "../../configs/duties.json",
+  "piety_file": "../../configs/piety.json",
+  "alms_file": "../../configs/alms.json",
+  "timing_file": "../../configs/timing.json",
+  "merchant_file": "../../configs/merchant.json",
+  "ship_file": "../../configs/ship.json",
+  "buildings_file": "../../configs/buildings.json",
+  "duty_tiles": {
+    "north": "taxation",
+    "north_east": "give_alms",
+    "east": "produce",
+    "south_east": "construct",
+    "south": "build_roads",
+    "south_west": "clerical",
+    "west": "allocation",
+    "north_west": "ordination"
+  },
+  "tithe_counters": {
+    "north_east": "cornucopia",
+    "east": "silver",
+    "south_east": "silver",
+    "south": "wheat",
+    "south_west": "wheat",
+    "west": "stone",
+    "north_west": "stone"
+  },
+  "setup_metadata": {
+    "generated": true,
+    "seed": 99,
+    "player_count": 2,
+    "setup_sow_required": true,
+    "setup_sow_implemented": true,
+    "setup_timeline": {
+      "pilgrimage_rolls": {
+        "nw": 4,
+        "ne": 2,
+        "se": 3,
+        "sw": 5
+      },
+      "pilgrimage_rounds": {
+        "site_1": 1,
+        "site_2": 5,
+        "site_3": 13,
+        "site_4": 21
+      },
+      "building_live_rounds": {
+        "level_1": {
+          "confession_box": 3,
+          "chapter_house": 4,
+          "mint": 7,
+          "quarry": 8
+        },
+        "level_2": {
+          "indulgences": 10,
+          "library": 11,
+          "brewery": 12,
+          "dormitory": 15
+        },
+        "level_3": {
+          "customs_house": 17,
+          "mill": 18,
+          "pulpit": 19,
+          "scriptorium": 20
+        }
+      }
+    },
+    "note": "Generated setup is deterministic. Each real player must complete setup sow before normal play. Playtest keeps player_one start columns at <=2 because the duty wheel draws 3 slots per seat on a tile while engine legality does not cap standing cubes at 3; the tempting city=2 and allocation=2 split can reach four on one tile after a single turn and raise CubeOverflow."
+  },
+  "initial_state": {
+    "active_player": "player_one",
+    "first_player_marker": "player_one",
+    "phase": "sow",
+    "setup": {
+      "setup_sow_required": false,
+      "setup_sow_complete": true,
+      "setup_sow_completed_by": [
+        "player_one",
+        "player_two"
+      ]
+    },
+    "merchant_board_position": 1,
+    "ship_position": 0,
+    "completed_rounds": 0,
+    "game_over": false,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 1,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "dummy_acolytes": {
+      "north_group": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "south_group": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0
+      ]
+    },
+    "building_market": [
+      "confession_box",
+      "chapter_house",
+      "mint",
+      "quarry",
+      "indulgences",
+      "library",
+      "brewery",
+      "dormitory",
+      "customs_house",
+      "mill",
+      "pulpit",
+      "scriptorium"
+    ],
+    "building_availability": {
+      "confession_box": 3,
+      "chapter_house": 4,
+      "mint": 7,
+      "quarry": 8,
+      "indulgences": 10,
+      "library": 11,
+      "brewery": 12,
+      "dormitory": 15,
+      "customs_house": 17,
+      "mill": 18,
+      "pulpit": 19,
+      "scriptorium": 20
+    },
+    "players": {
+      "player_one": {
+        "victory_points": 0,
+        "piety": 4,
+        "alms_position": 0,
+        "resources": {
+          "stone": 9,
+          "silver": 9,
+          "wheat": 9
+        },
+        "workforce": {
+          "mancala": [
+            2,
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            1,
+            0
+          ],
+          "village": 8,
+          "abbey": 3,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        },
+        "special_activities": {
+          "fields": false,
+          "road_engineer": false,
+          "stone_mason": false,
+          "alms_house": false,
+          "engraver": false,
+          "vestry": false
+        },
+        "player_board_slots": {
+          "active_buildings": [
+            "kogge",
+            "cloisters"
+          ],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
+        }
+      },
+      "player_two": {
+        "victory_points": 0,
+        "piety": 0,
+        "alms_position": 0,
+        "resources": {
+          "stone": 1,
+          "silver": 1,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [
+            0,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          "village": 8,
+          "abbey": 3,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        },
+        "special_activities": {
+          "fields": false,
+          "road_engineer": false,
+          "stone_mason": false,
+          "alms_house": false,
+          "engraver": false,
+          "vestry": false
+        },
+        "player_board_slots": {
+          "active_buildings": [],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
+        }
+      }
+    }
+  }
+}
