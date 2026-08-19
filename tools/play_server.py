@@ -7,7 +7,7 @@ Standard library only. The repo declares no dependencies at all -- `pyproject.to
     GET  /              setup page (when no game loaded) or play view (when one is loaded)
     GET  /state.json    the payload the adapter was handed, verbatim
     GET  /actions.json  the legal actions, structured, with an id each and a token for the state
-    POST /start         generate a scenario from setup choices and load it into this session
+    POST /start         start from setup choices or a saved test position
     POST /new-game      clear the loaded game and return to setup
     POST /action        apply one of them, by id, quoting the token it was read from
 
@@ -40,6 +40,7 @@ import socketserver
 import sys
 import tempfile
 import threading
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from html import escape
 from pathlib import Path
@@ -56,6 +57,13 @@ from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scenario  # noqa: E402
 from pilgrim.rules.ordination import ordination_outcome  # noqa: E402
 from pilgrim.rules.special_activities import allocation_outcome  # noqa: E402
+from pilgrim.rules.sow_routes import (  # noqa: E402
+    _allowed_cloisters_omission_locations,
+    cloisters_actual_placements_after_omission,
+    cloisters_candidate_omissions,
+    cloisters_candidate_placements,
+    kogge_cloisters_candidate_placements,
+)
 from pilgrim.model.actions import (  # noqa: E402
     FullTurnAction,
     SetupSowAction,
@@ -86,6 +94,7 @@ SCENARIO_PATH_FIELDS: tuple[str, ...] = (
     "ship_file",
     "buildings_file",
 )
+PLAYTEST_SCENARIOS_DIR = Path(__file__).resolve().parents[1] / "scenarios" / "playtest"
 
 
 @dataclasses.dataclass(slots=True)
@@ -102,6 +111,17 @@ class SessionState:
     setup_mode: str = SETUP_MODE_RANDOM
     player_count: int = 4
     seed: int | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class PlaytestPosition:
+    """One saved local test position offered on the setup page."""
+
+    name: str
+    path: Path
+    label: str
+    player_count: int | None
+    seed: int | None
 
 
 def _plain(value: Any) -> Any:
@@ -171,6 +191,62 @@ def _prefill_seed() -> int:
     return random.SystemRandom().randint(1000, 9999)
 
 
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _available_playtest_positions() -> list[PlaytestPosition]:
+    """Saved test positions discovered from `scenarios/playtest/*.json`.
+
+    Discovery is by directory listing, not hard-coded names, so adding a new position is dropping a
+    file into that folder.
+    """
+    if not PLAYTEST_SCENARIOS_DIR.exists():
+        return []
+    positions: list[PlaytestPosition] = []
+    for path in sorted(PLAYTEST_SCENARIOS_DIR.glob("*.json")):
+        label = path.stem
+        player_count = None
+        seed = None
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                scenario_id = raw.get("scenario_id")
+                if isinstance(scenario_id, str) and scenario_id.strip():
+                    label = scenario_id
+                player_count = _optional_int(raw.get("player_count"))
+                setup_metadata = raw.get("setup_metadata")
+                if isinstance(setup_metadata, dict):
+                    seed = _optional_int(setup_metadata.get("seed"))
+        except Exception:
+            # The sweep test ensures every discovered file is valid. If one is malformed meanwhile,
+            # keep setup usable and fall back to stem label + no metadata.
+            pass
+        positions.append(
+            PlaytestPosition(
+                name=path.name,
+                path=path.resolve(),
+                label=label,
+                player_count=player_count,
+                seed=seed,
+            )
+        )
+    return positions
+
+
+def _playtest_position_by_name(
+    name: str,
+    positions: list[PlaytestPosition],
+) -> PlaytestPosition | None:
+    for position in positions:
+        if position.name == name:
+            return position
+    return None
+
+
 def _rewrite_generated_paths_absolute(generated: dict[str, Any]) -> None:
     """Make generated config file paths loadable from any temporary scenario location."""
     repo_root = Path(__file__).resolve().parents[1]
@@ -182,12 +258,32 @@ def _rewrite_generated_paths_absolute(generated: dict[str, Any]) -> None:
         generated[field_name] = str((path if path.is_absolute() else (repo_root / path)).resolve())
 
 
-def _render_setup_page(*, suggested_seed: int) -> str:
+def _render_setup_page(
+    *,
+    suggested_seed: int,
+    playtest_positions: list[PlaytestPosition],
+) -> str:
     """The pre-game setup form served when no game is loaded in this session."""
     count_options = "".join(
         f'<option value="{count}"{" selected" if count == 4 else ""}>{count}</option>'
         for count in SUPPORTED_PLAYER_COUNTS
     )
+    test_position_options = [
+        '<option value="" selected>Deal a fresh game</option>',
+    ]
+    for position in playtest_positions:
+        player_attr = (
+            f' data-player-count="{position.player_count}"'
+            if position.player_count is not None
+            else ""
+        )
+        seed_attr = f' data-seed="{position.seed}"' if position.seed is not None else ""
+        test_position_options.append(
+            f'<option value="{escape(position.name)}"{player_attr}{seed_attr}>'
+            f"{escape(position.label)}"
+            "</option>"
+        )
+    playtest_options = "".join(test_position_options)
     seat_rows = []
     for seat, player_id in enumerate(SEATED_PLAYERS, start=1):
         colour = SEAT_COLOURS[player_id]
@@ -224,6 +320,9 @@ def _render_setup_page(*, suggested_seed: int) -> str:
     font: inherit; border-radius: 8px; border: 1px solid #4A4A4A;
     background: #1D1D1D; color: #F2EEDF; padding: 8px 10px;
   }}
+  select:disabled, input:disabled {{
+    opacity: 0.65;
+  }}
   .seat-rows {{
     border: 1px solid #2F2F2F; border-radius: 8px; padding: 10px;
     display: flex; flex-direction: column; gap: 8px;
@@ -243,10 +342,14 @@ def _render_setup_page(*, suggested_seed: int) -> str:
 <body>
   <main class="setup-card">
     <h1>Start A New Game</h1>
-    <p>Choose seats and a seed, then deal a fresh setup.</p>
+    <p>Leave Test position blank to deal a fresh setup, or start from a saved position.</p>
     <form method="post" action="/start">
       <div class="field">
-        <label for="player_count">Player count</label>
+        <label for="test_position">Test position</label>
+        <select id="test_position" name="test_position">{playtest_options}</select>
+      </div>
+      <div class="field">
+        <label id="player_count_label" for="player_count">Player count</label>
         <select id="player_count" name="player_count">{count_options}</select>
       </div>
       <div class="field">
@@ -261,7 +364,7 @@ def _render_setup_page(*, suggested_seed: int) -> str:
         </select>
       </div>
       <div class="field">
-        <label for="seed">Seed</label>
+        <label id="seed_label" for="seed">Seed</label>
         <input id="seed" name="seed" type="number" required value="{suggested_seed}">
       </div>
       <div class="actions">
@@ -271,16 +374,56 @@ def _render_setup_page(*, suggested_seed: int) -> str:
   </main>
 <script>
   (function () {{
+    var testPosition = document.getElementById('test_position');
     var count = document.getElementById('player_count');
+    var seed = document.getElementById('seed');
+    var countLabel = document.getElementById('player_count_label');
+    var seedLabel = document.getElementById('seed_label');
     var rows = document.querySelectorAll('[data-seat-row]');
+    function selectedPosition() {{
+      var option = testPosition.options[testPosition.selectedIndex];
+      if (!option || option.value === '') {{ return null; }}
+      return option;
+    }}
+    function effectivePlayerCount() {{
+      var position = selectedPosition();
+      if (position) {{
+        var fromPosition = Number(position.getAttribute('data-player-count') || 0);
+        if (fromPosition > 0) {{ return fromPosition; }}
+      }}
+      return Number(count.value || 4);
+    }}
     function refreshRows() {{
-      var selected = Number(count.value || 4);
+      var selected = effectivePlayerCount();
       Array.prototype.forEach.call(rows, function (row) {{
         row.hidden = Number(row.getAttribute('data-seat-row')) > selected;
       }});
     }}
+    function refreshPositionOverrides() {{
+      var position = selectedPosition();
+      if (!position) {{
+        count.disabled = false;
+        seed.disabled = false;
+        countLabel.textContent = 'Player count';
+        seedLabel.textContent = 'Seed';
+        refreshRows();
+        return;
+      }}
+      count.disabled = true;
+      seed.disabled = true;
+      var positionCount = position.getAttribute('data-player-count');
+      var positionSeed = position.getAttribute('data-seed');
+      countLabel.textContent = positionCount
+        ? ('Player count (from selected test position: ' + positionCount + ')')
+        : 'Player count (from selected test position)';
+      seedLabel.textContent = positionSeed
+        ? ('Seed (from selected test position: ' + positionSeed + ')')
+        : 'Seed (from selected test position)';
+      refreshRows();
+    }}
     count.addEventListener('change', refreshRows);
-    refreshRows();
+    testPosition.addEventListener('change', refreshPositionOverrides);
+    refreshPositionOverrides();
   }})();
 </script>
 </body>
@@ -369,6 +512,8 @@ COUNTED_COMBINATION_STEPS: tuple[tuple[str, str, str], ...] = (
 # The order amounts are spoken and encoded in. A display order only -- what may be taken is the
 # engine's business, and every mix it offers is offered whichever way round this reads.
 COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
+_ROUTE_BUILDING_CLOISTERS = "cloisters"
+_ROUTE_BUILDING_KOGGE = "kogge"
 
 # WHAT EACH QUESTION IS ASKING, IN WORDS. One per construction site below, and each is written
 # beside the step it belongs to.
@@ -383,7 +528,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 ORIGIN_PROMPT = "choose a space to lift acolytes from."
 ROUTE_PROMPT = "follow an arrow."
 DUTY_PROMPT = "choose a duty to take."
-SKIP_PROMPT = "choose one City or Duty space to leave unsown."
+SKIP_PROMPT = "choose the City or Duty space on your route to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "choose a resource."
 BUILDING_PROMPT = "choose a building."
@@ -699,10 +844,96 @@ def _route_step_values(origin: int, route: tuple[int, ...]) -> tuple[str, ...]:
     )
 
 
-def _resolution_context_key(action: FullTurnAction) -> tuple[Any, ...]:
+@lru_cache(maxsize=4096)
+def _cloisters_candidate_walk_lookup(
+    *,
+    origin: int,
+    actual_route: tuple[int, ...],
+    omitted_location: int,
+    board: Any,
+    combined_with_kogge: bool,
+) -> tuple[tuple[int, ...], int]:
+    """Recover the N+1 candidate walk that produced one Cloisters action.
+
+    Keyed by exactly what the action carries (`origin`, actual route, omitted location). The key is
+    expected to map to one and only one candidate walk; this is asserted loudly rather than guessed.
+    """
+    picked_up = len(actual_route)
+    key = (origin, actual_route, omitted_location)
+    matches: set[tuple[tuple[int, ...], int]] = set()
+    if combined_with_kogge:
+        allowed_locations = _allowed_cloisters_omission_locations(board)
+        for candidate_walk in kogge_cloisters_candidate_placements(
+            origin=origin,
+            picked_up=picked_up,
+            board=board,
+        ):
+            for omitted_index, candidate_omission in enumerate(candidate_walk):
+                if candidate_omission not in allowed_locations:
+                    continue
+                actual = cloisters_actual_placements_after_omission(
+                    candidate_walk,
+                    omitted_index=omitted_index,
+                )
+                if (origin, actual, candidate_omission) == key:
+                    matches.add((candidate_walk, omitted_index))
+    else:
+        for candidate_walk in cloisters_candidate_placements(
+            origin=origin,
+            picked_up=picked_up,
+            board=board,
+        ):
+            for omitted_index, candidate_omission in cloisters_candidate_omissions(
+                origin=origin,
+                candidate_placements=candidate_walk,
+            ):
+                actual = cloisters_actual_placements_after_omission(
+                    candidate_walk,
+                    omitted_index=omitted_index,
+                )
+                if (origin, actual, candidate_omission) == key:
+                    matches.add((candidate_walk, omitted_index))
+    if not matches:
+        raise AssertionError(
+            "No candidate Cloisters walk matched action key "
+            f"(origin={origin}, route={actual_route}, omitted={omitted_location}, "
+            f"combined_with_kogge={combined_with_kogge})."
+        )
+    if len(matches) != 1:
+        raise AssertionError(
+            "Expected one candidate Cloisters walk per action key, found "
+            f"{len(matches)} for (origin={origin}, route={actual_route}, omitted={omitted_location}, "
+            f"combined_with_kogge={combined_with_kogge})."
+        )
+    return next(iter(matches))
+
+
+def _route_destinations_for_steps(action: Any, config: Any) -> tuple[tuple[int, ...], int | None]:
+    """Destinations for offered edge steps, plus omitted index where Cloisters skipped one."""
+    route = tuple(getattr(action, "route", ()) or ())
+    if not (
+        isinstance(action, FullTurnAction)
+        and action.sow_route_omitted_location is not None
+    ):
+        return route, None
+    combined_with_kogge = (
+        action.sow_route_building_id == _ROUTE_BUILDING_KOGGE
+        and action.sow_route_secondary_building_id == _ROUTE_BUILDING_CLOISTERS
+    )
+    return _cloisters_candidate_walk_lookup(
+        origin=action.origin,
+        actual_route=route,
+        omitted_location=action.sow_route_omitted_location,
+        board=config.board,
+        combined_with_kogge=combined_with_kogge,
+    )
+
+
+def _resolution_context_key(action: FullTurnAction, config: Any) -> tuple[Any, ...]:
+    edge_destinations, _omitted_index = _route_destinations_for_steps(action, config)
     return (
         action.origin,
-        *_route_step_values(action.origin, tuple(action.route)),
+        *_route_step_values(action.origin, edge_destinations),
         action.selected_duty,
         action.resolution.value,
     )
@@ -712,14 +943,14 @@ def _action_hires_building(action: FullTurnAction) -> bool:
     return action.hired_building_id is not None
 
 
-def _hire_contexts(actions: list[Any]) -> set[tuple[Any, ...]]:
+def _hire_contexts(actions: list[Any], config: Any) -> set[tuple[Any, ...]]:
     """Prefixes where at least one legal action hires a building.
 
     A cost is asked before it is paid, even where hire would otherwise be inferred from a single
     surviving branch. Context-level so "Don't hire" is available beside each hire option.
     """
     return {
-        _resolution_context_key(action)
+        _resolution_context_key(action, config)
         for action in actions
         if isinstance(action, FullTurnAction) and _action_hires_building(action)
     }
@@ -753,6 +984,27 @@ def _counter_start(action: Any) -> int:
     """How many cubes this route lifts before any edge is followed."""
     route = tuple(getattr(action, "route", ()) or ())
     return len(route)
+
+
+def _edge_counters(
+    action: Any,
+    *,
+    edge_destinations: tuple[int, ...],
+    omitted_edge_index: int | None = None,
+) -> tuple[int, ...]:
+    """Counter value after each offered edge step for this action."""
+    counter = _counter_start(action)
+    if omitted_edge_index is None:
+        return tuple(counter - (index + 1) for index in range(len(edge_destinations)))
+    values: list[int] = []
+    remaining = counter
+    for index, _destination in enumerate(edge_destinations):
+        # Before skip is answered several candidates can still stand, and they can genuinely
+        # disagree on cubes-in-hand at the same click because they are skipping different spaces.
+        if index != omitted_edge_index:
+            remaining -= 1
+        values.append(remaining)
+    return tuple(values)
 
 
 def _covered_fields(
@@ -837,7 +1089,13 @@ def decision_steps(
         )
     # The route still walks spaces by index. What changed is the kind names for the two space
     # questions around it: where to lift from (`origin`) and which duty to take (`duty`).
-    route = tuple(action.route)
+    edge_destinations, omitted_edge_index = _route_destinations_for_steps(action, config)
+    edge_values = _route_step_values(action.origin, edge_destinations)
+    edge_counters = _edge_counters(
+        action,
+        edge_destinations=edge_destinations,
+        omitted_edge_index=omitted_edge_index,
+    )
     counter = _counter_start(action)
     steps = [
         {
@@ -854,9 +1112,9 @@ def decision_steps(
             "value": value,
             "prompt": ROUTE_PROMPT,
             # Read by the page verbatim. No counting in JavaScript.
-            "counter": counter - (index + 1),
+            "counter": edge_counters[index],
         }
-        for index, value in enumerate(_route_step_values(action.origin, route))
+        for index, value in enumerate(edge_values)
     ]
     if isinstance(action, SetupSowAction):
         return _address_steps(steps, player_id)
@@ -931,12 +1189,12 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     grouped: dict[tuple[Any, ...], list[Any]] = {}
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config))
-    hire_contexts = _hire_contexts(actions)
+    hire_contexts = _hire_contexts(actions, config)
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
     for action in actions:
         offered_hire = isinstance(action, FullTurnAction) and (
-            _resolution_context_key(action) in hire_contexts
+            _resolution_context_key(action, config) in hire_contexts
         )
         steps = decision_steps(
             action,
@@ -1029,8 +1287,7 @@ class PlayServer(ThreadingHTTPServer):
         if scenario_path is not None:
             self._load_scenario_file(scenario_path)
 
-    def _load_scenario_file(self, scenario_path: Path, *, intro_line: str | None = None) -> None:
-        scenario = load_scenario(str(scenario_path))
+    def _load_loaded_scenario(self, scenario: Any, *, intro_line: str | None = None) -> None:
         self.state = scenario.state
         self.config = scenario.config
         player_count = len(tuple(getattr(self.state, "players", ()) or ()))
@@ -1049,6 +1306,9 @@ class PlayServer(ThreadingHTTPServer):
             self.log_blocks = []
         self.session.game_loaded = True
         self._refresh()
+
+    def _load_scenario_file(self, scenario_path: Path, *, intro_line: str | None = None) -> None:
+        self._load_loaded_scenario(load_scenario(str(scenario_path)), intro_line=intro_line)
 
     def _clear_game(self) -> None:
         self.state = None
@@ -1100,6 +1360,49 @@ class PlayServer(ThreadingHTTPServer):
         self._load_scenario_file(
             scenario_path,
             intro_line=f"New game - {player_count} players, seed {seed}.",
+        )
+
+    def _start_playtest_game(
+        self,
+        *,
+        position_name: str,
+        setup_mode: str,
+        seat_roles: dict[str, str],
+        playtest_positions: list[PlaytestPosition],
+    ) -> None:
+        if setup_mode != SETUP_MODE_RANDOM:
+            raise ValueError("Only Random setup is available in this build.")
+        position = _playtest_position_by_name(position_name, playtest_positions)
+        if position is None:
+            raise ValueError(
+                f"Unknown test position {position_name!r}. Choose one listed on the setup page."
+            )
+        scenario = load_scenario(str(position.path))
+        player_count = len(tuple(getattr(scenario.state, "players", ()) or ()))
+        if player_count not in SUPPORTED_PLAYER_COUNTS:
+            raise ValueError(
+                f"Unsupported player count {player_count}. Supported: {SUPPORTED_PLAYER_COUNTS}."
+            )
+        chosen_roles = {
+            SEATED_PLAYERS[index]: seat_roles.get(SEATED_PLAYERS[index], ROLE_HUMAN)
+            for index in range(player_count)
+        }
+        if any(role not in SEAT_ROLE_OPTIONS for role in chosen_roles.values()):
+            raise ValueError("Unknown seat role in request.")
+        if any(role != ROLE_HUMAN for role in chosen_roles.values()):
+            raise ValueError("Bot seats are not available in this build.")
+
+        self._latest_generated_scenario = None
+        self.session = SessionState(
+            game_loaded=True,
+            seat_roles=dict(chosen_roles),
+            setup_mode=setup_mode,
+            player_count=player_count,
+            seed=position.seed,
+        )
+        self._load_loaded_scenario(
+            scenario,
+            intro_line=f"Loaded test position - {position.label}.",
         )
 
     def has_game(self) -> bool:
@@ -1224,7 +1527,10 @@ class PlayHandler(BaseHTTPRequestHandler):
                     allow_reset_to_setup=self.server._setup_door_enabled,
                 )
             elif self.server._setup_door_enabled:
-                page = _render_setup_page(suggested_seed=_prefill_seed())
+                page = _render_setup_page(
+                    suggested_seed=_prefill_seed(),
+                    playtest_positions=_available_playtest_positions(),
+                )
             else:
                 # Scenario mode is expected to open straight to a board.
                 self._send(
@@ -1284,7 +1590,10 @@ class PlayHandler(BaseHTTPRequestHandler):
             self._send(
                 200,
                 "text/html; charset=utf-8",
-                _render_setup_page(suggested_seed=_prefill_seed()),
+                _render_setup_page(
+                    suggested_seed=_prefill_seed(),
+                    playtest_positions=_available_playtest_positions(),
+                ),
             )
             return
 
@@ -1304,19 +1613,32 @@ class PlayHandler(BaseHTTPRequestHandler):
                         key: values[-1]
                         for key, values in parse_qs(raw.decode("utf-8"), keep_blank_values=True).items()
                     }
-                player_count = int(source.get("player_count", "4"))
-                seed = int(source.get("seed", "0"))
+                test_position = source.get("test_position", "").strip()
                 setup_mode = source.get("setup_mode", SETUP_MODE_RANDOM)
                 seat_roles = {
                     SEATED_PLAYERS[index]: source.get(f"seat_{index + 1}_role", ROLE_HUMAN)
-                    for index in range(player_count)
+                    for index in range(len(SEATED_PLAYERS))
                 }
-                self.server._start_generated_game(
-                    player_count=player_count,
-                    seed=seed,
-                    setup_mode=setup_mode,
-                    seat_roles=seat_roles,
-                )
+                playtest_positions = _available_playtest_positions()
+                if test_position:
+                    self.server._start_playtest_game(
+                        position_name=test_position,
+                        setup_mode=setup_mode,
+                        seat_roles=seat_roles,
+                        playtest_positions=playtest_positions,
+                    )
+                else:
+                    player_count = int(source.get("player_count", "4"))
+                    seed = int(source.get("seed", "0"))
+                    self.server._start_generated_game(
+                        player_count=player_count,
+                        seed=seed,
+                        setup_mode=setup_mode,
+                        seat_roles={
+                            SEATED_PLAYERS[index]: seat_roles[SEATED_PLAYERS[index]]
+                            for index in range(player_count)
+                        },
+                    )
             except Exception as exc:
                 self._reject(422, str(exc))
                 return

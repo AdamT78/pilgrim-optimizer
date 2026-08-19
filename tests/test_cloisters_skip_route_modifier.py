@@ -31,7 +31,6 @@ def test_own_active_cloisters_generates_skip_duty_and_skip_city_variants() -> No
     assert duty_actions
     assert all(action.sow_route_building_source == "own_active" for action in duty_actions)
     assert any(action.sow_route_omitted_location == north_east for action in duty_actions)
-    assert all(action.sow_route_omitted_location != action.origin for action in duty_actions)
 
     city_scenario, city_actions = _cloisters_actions("scenarios/cloisters_active_skip_city_001.json")
     city = city_scenario.config.board.index_for_name("city")
@@ -164,13 +163,21 @@ def test_apply_rejects_cloisters_selected_duty_that_was_omitted() -> None:
         apply_action(scenario.state, invalid_action, scenario.config)
 
 
-def test_apply_rejects_cloisters_omitting_origin() -> None:
-    scenario, actions = _cloisters_actions("scenarios/cloisters_active_skip_duty_tile_001.json")
-    action = _first_action(actions, lambda candidate: candidate.origin != candidate.sow_route_omitted_location)
-    invalid_action = replace(action, sow_route_omitted_location=action.origin)
+def test_apply_accepts_cloisters_omitting_a_revisited_origin() -> None:
+    scenario, actions = _cloisters_actions("scenarios/playtest/cloisters_loop_2p.json")
+    city = scenario.config.board.index_for_name("city")
+    action = _first_action(
+        actions,
+        lambda candidate: (
+            candidate.origin == city
+            and candidate.sow_route_omitted_location == city
+            and candidate.resolution is TurnResolutionType.TITHE
+        ),
+    )
+    result = apply_action(scenario.state, action, scenario.config)
 
-    with pytest.raises(TransitionValidationError, match="cannot be the sow origin"):
-        apply_action(scenario.state, invalid_action, scenario.config)
+    sowing_details = dict(_events_of_type(result.events, EventType.SOWING)[0].details)
+    assert sowing_details["skipped"] == city
 
 
 def test_cloisters_event_order_and_bonus_for_own_active() -> None:

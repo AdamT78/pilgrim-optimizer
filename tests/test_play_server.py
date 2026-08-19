@@ -26,6 +26,7 @@ from contextlib import contextmanager
 from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -50,6 +51,9 @@ from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
+PLAYTEST_SCENARIOS = SCENARIOS / "playtest"
+PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
+PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 
 
 @pytest.fixture(scope="module")
@@ -260,12 +264,19 @@ def test_the_page_the_server_serves_is_the_page_the_file_writer_writes(tmp_path:
     assert written.read_text(encoding="utf-8") == render_play_view_from_payload(payload)
 
 
-def _start_fields(*, player_count: int, seed: int) -> dict[str, str]:
+def _start_fields(
+    *,
+    player_count: int,
+    seed: int,
+    test_position: str | None = None,
+) -> dict[str, str]:
     fields = {
         "player_count": str(player_count),
         "setup_mode": "random",
         "seed": str(seed),
     }
+    if test_position is not None:
+        fields["test_position"] = test_position
     for seat in range(1, player_count + 1):
         fields[f"seat_{seat}_role"] = "human"
     return fields
@@ -451,8 +462,25 @@ def test_no_argument_server_serves_a_setup_page_before_any_game_exists() -> None
     assert "Seat 4 (White)" in page
 
 
+def test_setup_page_lists_discovered_playtest_positions_with_blank_fresh_default() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _get(base, "/")
+
+    assert status == 200
+    assert 'id="test_position"' in page
+    assert '<option value="" selected>Deal a fresh game</option>' in page
+    assert f'value="{PLAYTEST_CLOISTERS}"' in page
+    assert f'value="{PLAYTEST_CLOISTERS_LOOP}"' in page
+    assert ">cloisters_reach_2p<" in page
+    assert ">cloisters_loop_2p<" in page
+
+
 def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribute() -> None:
-    page = play_server._render_setup_page(suggested_seed=4471)
+    page = play_server._render_setup_page(
+        suggested_seed=4471,
+        playtest_positions=play_server._available_playtest_positions(),
+    )
     styles = _style_block(page)
     for player_count, shown in ((2, (1, 2)), (3, (1, 2, 3))):
         for seat in (1, 2, 3, 4):
@@ -468,12 +496,18 @@ def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribu
 
 
 def test_setup_styles_pair_display_rules_with_hidden_overrides() -> None:
-    page = play_server._render_setup_page(suggested_seed=4471)
+    page = play_server._render_setup_page(
+        suggested_seed=4471,
+        playtest_positions=play_server._available_playtest_positions(),
+    )
     _assert_hidden_display_pairing(page)
 
 
 def test_removing_hidden_display_override_is_caught() -> None:
-    page = play_server._render_setup_page(suggested_seed=4471)
+    page = play_server._render_setup_page(
+        suggested_seed=4471,
+        playtest_positions=play_server._available_playtest_positions(),
+    )
     mutated = page.replace(".seat-row[hidden] { display: none; }", "", 1)
     assert mutated != page, "mutation matched nothing"
     with pytest.raises(AssertionError, match=r"\.seat-row\[hidden\]"):
@@ -493,6 +527,72 @@ def test_starting_counts_2_3_4_loads_matching_board_and_neutral_acolytes(
 
     assert len(state["state"]["players"]) == player_count
     assert sum(int(value) for value in state["state"]["dummy_acolytes"]["total"]) == expected_dummy
+
+
+def test_start_with_blank_test_position_still_deals_a_fresh_generated_game() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _post_form(
+            base,
+            "/start",
+            _start_fields(player_count=3, seed=4471, test_position=""),
+        )
+        state = _get_json(base, "/state.json")
+
+    assert status == 200
+    assert "New game - 3 players, seed 4471." in page
+    assert len(state["state"]["players"]) == 3
+
+
+def test_start_rejects_an_unknown_test_position_name() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, body = _post_form(
+            base,
+            "/start",
+            _start_fields(
+                player_count=4,
+                seed=99,
+                test_position="../../configs/board.json",
+            ),
+        )
+
+    assert status == 422
+    assert "Unknown test position" in json.loads(body)["error"]
+
+
+@pytest.mark.parametrize(
+    "position_name,position_label",
+    [
+        (PLAYTEST_CLOISTERS, "cloisters_reach_2p"),
+        (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p"),
+    ],
+)
+def test_starting_from_test_position_uses_the_file_count_and_seed(
+    position_name: str,
+    position_label: str,
+) -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, page = _post_form(
+            base,
+            "/start",
+            _start_fields(
+                player_count=4,
+                seed=1234,
+                test_position=position_name,
+            ),
+        )
+        state = _get_json(base, "/state.json")
+
+    assert status == 200
+    assert f"Loaded test position - {position_label}." in page
+    assert len(state["state"]["players"]) == 2
+    assert state["state"]["players"][0]["piety"] == 4
+    assert state["state"]["players"][0]["resources"] == {"stone": 9, "silver": 9, "wheat": 9}
+    assert state["state"]["players"][0]["player_board_slots"]["active_buildings"] == ["cloisters"]
+    assert server.session.player_count == 2
+    assert server.session.seed == 99
 
 
 def test_starting_with_the_same_count_and_seed_twice_reproduces_the_same_state() -> None:
@@ -576,6 +676,215 @@ def test_file_argument_still_serves_the_board_directly(tmp_path: Path) -> None:
     assert 'data-component="play-log"' in page
     assert '<form method="post" action="/start">' not in page
     assert "Start a new game (discard this game)" not in page
+
+
+def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
+    checked = 0
+    for path in sorted(PLAYTEST_SCENARIOS.glob("*.json")):
+        _ = load_scenario(str(path))
+        server = PlayServer(("127.0.0.1", 0), path)
+        with _running(server) as base:
+            status, page = _get(base, "/")
+        assert status == 200
+        assert 'data-component="play-log"' in page
+        checked += 1
+
+    assert checked > 0, "no playtest scenario files were discovered"
+
+
+def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS))
+    actions = list(legal_actions(scenario.state, scenario.config))
+    skipped = sum(
+        1
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None
+    )
+    assert len(actions) == 220
+    assert skipped == 165
+
+
+def test_cloisters_reach_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS)
+    try:
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        dead = _dead_candidates_by_missing_edges(server.payload["turn_candidates"], drawn)
+        assert not dead, f"playtest candidates still ask for undrawn arrows: {dead[:10]}"
+    finally:
+        server.server_close()
+
+
+def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
+    try:
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        dead = _dead_candidates_by_missing_edges(server.payload["turn_candidates"], drawn)
+        assert not dead, f"loop playtest candidates still ask for undrawn arrows: {dead[:10]}"
+    finally:
+        server.server_close()
+
+
+def test_cloisters_loop_playtest_position_has_expected_action_and_candidate_totals() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP))
+    actions = list(legal_actions(scenario.state, scenario.config))
+    skipped = sum(
+        1
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None
+    )
+    assert len(actions) == 870
+    assert skipped == 753
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
+    try:
+        assert len(server.payload["turn_candidates"]) == 801
+    finally:
+        server.server_close()
+
+
+def test_cloisters_loop_city_origin_offers_city_skip_candidates() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
+    try:
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        city_candidates = [
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if candidate["action_id"] is not None
+            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in candidate["steps"])
+            and any(step["kind"] == "skip" and int(step["value"]) == 0 for step in candidate["steps"])
+            and {
+                str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"
+            }
+            <= drawn
+        ]
+        assert city_candidates, "no reachable city-origin candidate offers city as the skipped space"
+    finally:
+        server.server_close()
+
+
+def test_cloisters_loop_every_legal_action_applies() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP))
+    unexpected: list[str] = []
+    for action in legal_actions(scenario.state, scenario.config):
+        try:
+            apply_action(scenario.state, action, scenario.config)
+        except Exception as exc:  # pragma: no cover - diagnostic path
+            unexpected.append(f"{action_id(action)} :: {exc}")
+    assert not unexpected, f"loop playtest exposed unappliable legal actions: {unexpected[:10]}"
+
+
+def test_cloisters_loop_playtest_keeps_player_one_stacks_at_two_or_less_after_one_turn() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
+    try:
+        settled = next(
+            candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] is not None
+        )
+        server.apply(str(settled["action_id"]), str(server.payload["state_token"]))
+        player_one = server.state.player_state(PlayerId.PLAYER_ONE)
+        assert max(int(value) for value in player_one.workforce.mancala) <= 2
+    finally:
+        server.server_close()
+
+
+def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP))
+    player_id = play_server._speaking_player_id(scenario.state)
+    revisits = 0
+    old_logic_last_not_zero = 0
+    fixed_last_not_zero = 0
+
+    for action in legal_actions(scenario.state, scenario.config):
+        if not isinstance(action, FullTurnAction) or action.sow_route_omitted_location is None:
+            continue
+        edge_destinations, omitted_edge_index = play_server._route_destinations_for_steps(
+            action, scenario.config
+        )
+        assert omitted_edge_index is not None
+        omitted_location = edge_destinations[omitted_edge_index]
+        if edge_destinations.count(omitted_location) > 1:
+            revisits += 1
+
+        # Pre-fix behavior: withheld decrements by destination value, so revisits under-counted.
+        old_remaining = len(action.route)
+        for destination in edge_destinations:
+            if destination != omitted_location:
+                old_remaining -= 1
+        if old_remaining != 0:
+            old_logic_last_not_zero += 1
+
+        steps = play_server.decision_steps(
+            action,
+            player_id,
+            state=scenario.state,
+            config=scenario.config,
+            offer_hire=False,
+        )
+        edge_steps = [step for step in steps if step["kind"] == "edge"]
+        assert edge_steps, "Cloisters action should always present at least one edge step"
+        if int(edge_steps[-1]["counter"]) != 0:
+            fixed_last_not_zero += 1
+
+    assert revisits > 0, "loop fixture no longer revisits an omitted space; bug guard lost its case"
+    assert revisits == 140
+    assert old_logic_last_not_zero == 140
+    assert fixed_last_not_zero == 0
+
+
+def test_cloisters_loop_candidate_edge_counters_are_non_negative_and_end_at_zero() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
+    try:
+        checked = 0
+        for candidate in server.payload["turn_candidates"]:
+            edge_steps = [step for step in candidate["steps"] if step["kind"] == "edge"]
+            if not edge_steps:
+                continue
+            checked += 1
+            counters = [step.get("counter") for step in edge_steps]
+            assert all(isinstance(counter, int) for counter in counters), (
+                candidate.get("action_id"),
+                counters,
+            )
+            assert all(int(counter) >= 0 for counter in counters), (
+                candidate.get("action_id"),
+                counters,
+            )
+            assert int(counters[-1]) == 0, (
+                candidate.get("action_id"),
+                counters,
+            )
+        assert checked > 0, "loop playtest had no edge-step candidates"
+    finally:
+        server.server_close()
+
+
+def test_every_candidate_edge_counter_is_non_negative_and_ends_at_zero_across_corpus() -> None:
+    checked = 0
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            for candidate in server.payload["turn_candidates"]:
+                edge_steps = [step for step in candidate["steps"] if step["kind"] == "edge"]
+                if not edge_steps:
+                    continue
+                checked += 1
+                counters = [step.get("counter") for step in edge_steps]
+                assert all(isinstance(counter, int) for counter in counters), (
+                    scenario_path.name,
+                    candidate.get("action_id"),
+                    counters,
+                )
+                assert all(int(counter) >= 0 for counter in counters), (
+                    scenario_path.name,
+                    candidate.get("action_id"),
+                    counters,
+                )
+                assert int(counters[-1]) == 0, (
+                    scenario_path.name,
+                    candidate.get("action_id"),
+                    counters,
+                )
+        finally:
+            server.server_close()
+    assert checked > 0, "corpus had no edge-step candidates, so this checked nothing"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -902,7 +1211,7 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
         server = PlayServer(("127.0.0.1", 0), scenario_path)
         try:
             actions = list(legal_actions(server.state, server.config))
-            hire_contexts = play_server._hire_contexts(actions)
+            hire_contexts = play_server._hire_contexts(actions, server.config)
             player_id = play_server._speaking_player_id(server.state)
 
             def key_for_steps(steps: list[dict]) -> tuple:
@@ -914,7 +1223,7 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
             by_key: dict[tuple, list[FullTurnAction]] = {}
             for action in actions:
                 offered_hire = isinstance(action, FullTurnAction) and (
-                    play_server._resolution_context_key(action) in hire_contexts
+                    play_server._resolution_context_key(action, server.config) in hire_contexts
                 )
                 steps = play_server.decision_steps(
                     action,
@@ -965,7 +1274,7 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step() -> No
         server = PlayServer(("127.0.0.1", 0), scenario_path)
         try:
             actions = list(legal_actions(server.state, server.config))
-            hire_contexts = play_server._hire_contexts(actions)
+            hire_contexts = play_server._hire_contexts(actions, server.config)
             player_id = play_server._speaking_player_id(server.state)
 
             def key_for_steps(steps: list[dict]) -> tuple:
@@ -977,7 +1286,7 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step() -> No
             by_key: dict[tuple, list[FullTurnAction]] = {}
             for action in actions:
                 offered_hire = isinstance(action, FullTurnAction) and (
-                    play_server._resolution_context_key(action) in hire_contexts
+                    play_server._resolution_context_key(action, server.config) in hire_contexts
                 )
                 steps = play_server.decision_steps(
                     action,
@@ -1064,6 +1373,41 @@ def _prompts_drawn(candidates: list[dict]) -> list[str]:
 
 def _arrows_drawn(page: str) -> list[str]:
     return sorted(set(re.findall(r'data-arrow="([^"]+)"', page)))
+
+
+def _dead_candidates_by_missing_edges(
+    candidates: list[dict],
+    drawn_edges: set[str],
+) -> list[tuple[str | None, list[str]]]:
+    dead: list[tuple[str | None, list[str]]] = []
+    for candidate in candidates:
+        missing = sorted(
+            {
+                str(step["value"])
+                for step in candidate["steps"]
+                if step["kind"] == "edge"
+            }
+            - drawn_edges
+        )
+        if missing:
+            dead.append((candidate.get("action_id"), missing))
+    return dead
+
+
+def _first_settled_skip_candidate(server: PlayServer) -> dict | None:
+    drawn_arrows = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+    return next(
+        (
+            offered
+            for offered in server.payload["turn_candidates"]
+            if offered["action_id"] is not None
+            and any(step["kind"] == "skip" for step in offered["steps"])
+            and {
+                str(step["value"]) for step in offered["steps"] if step["kind"] == "edge"
+            } <= drawn_arrows
+        ),
+        None,
+    )
 
 
 def _controls_drawn(page: str) -> dict[str, bool]:
@@ -1261,14 +1605,14 @@ def _hire_step_value(action: FullTurnAction) -> str:
     return f"{action.hired_building_id}:{action.hired_building_source or 'unknown'}:unknown"
 
 
-def _engine_steps(action, *, offer_hire: bool = False) -> list[dict]:
+def _engine_steps(action, *, config: Any, offer_hire: bool = False) -> list[dict]:
     """One legal action as the sequence of decisions that reaches it, spelled out here by hand.
 
     Deliberately not `decision_steps`: comparing the page against the same function that fed it
     would only show the page copied it faithfully. Every field is read off the action itself, so
     what the offers are checked against is the engine's own answer about what is legal.
     """
-    route = tuple(action.route)
+    route, _omitted_edge_index = play_server._route_destinations_for_steps(action, config)
     steps = [{"kind": "origin", "value": action.origin}]
     path = (action.origin, *route)
     steps += [
@@ -1324,13 +1668,13 @@ def _engine_steps(action, *, offer_hire: bool = False) -> list[dict]:
 def _engine_decisions(server) -> list[list[dict]]:
     """Every legal move as its sequence of decisions, with no two the same."""
     actions = list(legal_actions(server.state, server.config))
-    hire_contexts = play_server._hire_contexts(actions)
+    hire_contexts = play_server._hire_contexts(actions, server.config)
     decisions: list[list[dict]] = []
     for action in actions:
         offer_hire = isinstance(action, FullTurnAction) and (
-            play_server._resolution_context_key(action) in hire_contexts
+            play_server._resolution_context_key(action, server.config) in hire_contexts
         )
-        steps = _engine_steps(action, offer_hire=offer_hire)
+        steps = _engine_steps(action, config=server.config, offer_hire=offer_hire)
         if steps not in decisions:
             decisions.append(steps)
     return decisions
@@ -2147,25 +2491,43 @@ def test_ordination_hire_step_precedes_ordination_and_controls_step_count() -> N
 @needs_node
 def test_a_cloisters_turn_is_playable_end_to_end_with_skip_then_duty(tmp_path: Path) -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
-    drawn_arrows = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
-    candidate = next(
-        (
-            offered
-            for offered in server.payload["turn_candidates"]
-            if offered["action_id"] is not None
-            and any(step["kind"] == "skip" for step in offered["steps"])
-            and {
-                str(step["value"]) for step in offered["steps"] if step["kind"] == "edge"
-            } <= drawn_arrows
-        ),
-        None,
-    )
+    candidate = _first_settled_skip_candidate(server)
     assert candidate is not None, "fixture offered no settled Cloisters candidate with a skip step"
     assert _step_index(candidate, "skip") < _step_index(candidate, "duty")
 
     transcript = _played_from_the_page(server, candidate, tmp_path)
     assert transcript["posted"] is not None, "Cloisters turn did not submit"
     assert transcript["posted"]["action_id"] == candidate["action_id"]
+
+
+def test_starting_a_test_position_offers_clickable_cloisters_skip_candidates() -> None:
+    server = PlayServer(("127.0.0.1", 0))
+    with _running(server) as base:
+        status, _page = _post_form(
+            base,
+            "/start",
+            _start_fields(player_count=4, seed=1234, test_position=PLAYTEST_CLOISTERS),
+        )
+        assert status == 200
+
+        drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+        skip_candidates = [
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if any(step["kind"] == "skip" for step in candidate["steps"])
+        ]
+        assert skip_candidates, "selected test position offered no Cloisters skip candidates"
+        dead = [
+            candidate
+            for candidate in skip_candidates
+            if {
+                str(step["value"])
+                for step in candidate["steps"]
+                if step["kind"] == "edge"
+            }
+            - drawn
+        ]
+        assert not dead, "selected test position still offered Cloisters candidates with undrawn edges"
 
 
 @needs_node
@@ -2399,7 +2761,7 @@ def _offered_pairs(server) -> tuple[set, set]:
     siblings = _alms_group(server)
     wanted = _values_except(siblings[0]["steps"], "combination")
     actions = list(legal_actions(server.state, server.config))
-    hire_contexts = play_server._hire_contexts(actions)
+    hire_contexts = play_server._hire_contexts(actions, server.config)
 
     offered = {_pair(_answer(candidate, "combination")) for candidate in siblings}
     legal = {
@@ -2408,9 +2770,10 @@ def _offered_pairs(server) -> tuple[set, set]:
         if _values_except(
             _engine_steps(
                 action,
+                config=server.config,
                 offer_hire=(
                     isinstance(action, FullTurnAction)
-                    and play_server._resolution_context_key(action) in hire_contexts
+                    and play_server._resolution_context_key(action, server.config) in hire_contexts
                 ),
             ),
             "combination",
@@ -2547,14 +2910,15 @@ def _played_until_a_bonus_offers_a_choice(server, limit: int = 30):
 def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
     actions = list(legal_actions(server.state, server.config))
-    hire_contexts = play_server._hire_contexts(actions)
+    hire_contexts = play_server._hire_contexts(actions, server.config)
     allowed = set()
     for action in actions:
         steps = _engine_steps(
             action,
+            config=server.config,
             offer_hire=(
                 isinstance(action, FullTurnAction)
-                and play_server._resolution_context_key(action) in hire_contexts
+                and play_server._resolution_context_key(action, server.config) in hire_contexts
             ),
         )
         if getattr(action, "resolution", None) is None or action.resolution.value != "taxation":
@@ -2715,7 +3079,7 @@ def _building_choices(server) -> dict[tuple, set[str]]:
 def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
     actions = list(legal_actions(server.state, server.config))
-    hire_contexts = play_server._hire_contexts(actions)
+    hire_contexts = play_server._hire_contexts(actions, server.config)
     return sorted(
         {
             action.construct_building_id
@@ -2725,9 +3089,10 @@ def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
                 _values_except(
                     _engine_steps(
                         action,
+                        config=server.config,
                         offer_hire=(
                             isinstance(action, FullTurnAction)
-                            and play_server._resolution_context_key(action) in hire_contexts
+                            and play_server._resolution_context_key(action, server.config) in hire_contexts
                         ),
                     ),
                     "building",
@@ -3310,16 +3675,17 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     candidate = open_ended[0]
     wanted = [step["value"] for step in candidate["steps"]]
     actions = list(legal_actions(server.state, server.config))
-    hire_contexts = play_server._hire_contexts(actions)
+    hire_contexts = play_server._hire_contexts(actions, server.config)
     members = [
         action
         for action in actions
         if _values(
             _engine_steps(
                 action,
+                config=server.config,
                 offer_hire=(
                     isinstance(action, FullTurnAction)
-                    and play_server._resolution_context_key(action) in hire_contexts
+                    and play_server._resolution_context_key(action, server.config) in hire_contexts
                 ),
             )
         )

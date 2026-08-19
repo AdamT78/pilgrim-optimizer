@@ -187,29 +187,38 @@ def test_cloisters_selected_duty_membership_rules_are_explicit() -> None:
     assert selected_duty_is_actual_placement(actual, selected_duty=repeated_duty)
 
 
-def test_cloisters_origin_cannot_be_omitted_and_invalid_omission_is_rejected() -> None:
-    scenario = load_scenario("scenarios/cloisters_active_skip_duty_tile_001.json")
+def test_cloisters_origin_can_be_omitted_on_revisit_and_invalid_omission_is_rejected() -> None:
+    scenario = load_scenario("scenarios/playtest/cloisters_loop_2p.json")
     board = scenario.config.board
-    north = board.index_for_name("north")
-    east = board.index_for_name("east")
-    south_east = board.index_for_name("south_east")
+    city = board.index_for_name("city")
 
-    candidates = cloisters_candidate_placements(origin=north, picked_up=2, board=board)
+    candidates = cloisters_candidate_placements(origin=city, picked_up=5, board=board)
+    revisiting_candidate = next(
+        candidate_placements
+        for candidate_placements in candidates
+        if city in candidate_placements
+    )
     omissions = cloisters_candidate_omissions(
-        origin=north,
-        candidate_placements=candidates[0],
+        origin=city,
+        candidate_placements=revisiting_candidate,
     )
-    assert all(location != north for _index, location in omissions)
+    assert any(location == city for _index, location in omissions)
 
-    assert not is_legal_route_with_cloisters_skip(
-        origin=north,
-        route=(east, south_east),
+    omitted_index = next(index for index, location in omissions if location == city)
+    actual = cloisters_actual_placements_after_omission(
+        revisiting_candidate,
+        omitted_index=omitted_index,
+    )
+
+    assert is_legal_route_with_cloisters_skip(
+        origin=city,
+        route=actual,
         board=board,
-        omitted_location=north,
+        omitted_location=city,
     )
     assert not is_legal_route_with_cloisters_skip(
-        origin=north,
-        route=(east, south_east),
+        origin=city,
+        route=actual,
         board=board,
         omitted_location=999,
     )

@@ -7577,8 +7577,6 @@ def _resolved_cloisters_route_for_action(
         )
 
     action_uses_kogge = _action_has_route_building(action, _ROUTE_BUILDING_KOGGE)
-    if omitted_location == action.origin and not action_uses_kogge:
-        raise TransitionValidationError("Cloisters omitted placement cannot be the sow origin.")
     if action_uses_kogge:
         if not _is_legal_route_with_kogge_and_cloisters_skip(
             origin=action.origin,
