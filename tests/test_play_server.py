@@ -56,6 +56,9 @@ PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
+ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
+    {"sow_route_building_id", "sow_route_secondary_building_id", "sow_route_secondary_building_source"}
+)
 
 
 @pytest.fixture(scope="module")
@@ -795,7 +798,7 @@ def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
             if step["kind"] == "edge" and str(step["value"]) in CITY_REVERSAL_ARROWS
         )
         assert len(server.payload["turn_candidates"]) == 988
-        assert len(page.encode("utf-8")) == 1_571_776
+        assert len(page.encode("utf-8")) == 1_534_823
         assert reversal_occurrences == Counter(
             {
                 "north->city": 145,
@@ -822,8 +825,8 @@ def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
             ),
         )
 
-    assert len(actions) == 1184
-    assert skipped == 1049
+    assert len(actions) == 1044
+    assert skipped == 909
     assert against_flow == 543
     assert max_on_any_duty_tile_after_turn <= 3
 
@@ -877,6 +880,24 @@ def test_every_drawn_city_reversal_arrow_is_used_by_a_candidate() -> None:
 
     assert checked_reversal_arrows > 0, "committed corpus drew no City reversal arrows to verify"
     assert not orphaned, f"{len(orphaned)} scenarios drew unused City reversal arrows: {orphaned[:5]}"
+
+
+def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_fields() -> None:
+    blocked: list[tuple[str, tuple[str, ...], int]] = []
+    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
+    for scenario_path in scenario_paths:
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            for candidate in server.payload["turn_candidates"]:
+                if candidate.get("action_id") is not None:
+                    continue
+                unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", [])))
+                if ROUTE_BUILDING_REFUSAL_FIELDS <= set(unresolved):
+                    blocked.append((scenario_path.name, unresolved, int(candidate.get("variants", 0))))
+        finally:
+            server.server_close()
+
+    assert not blocked, f"route-building refusals remained in {len(blocked)} candidate groups: {blocked[:10]}"
 
 
 def test_cloisters_loop_playtest_position_has_expected_action_and_candidate_totals() -> None:

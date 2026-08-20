@@ -1,17 +1,35 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_summary
+from pilgrim.model.actions import FullTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules import transition as transition_module
 from pilgrim.rules.sow_routes import (
+    cloisters_actual_placements_after_omission,
     combined_kogge_cloisters_route_variants,
     is_legal_route_with_kogge_and_cloisters_skip,
+    kogge_cloisters_candidate_placements,
+    route_requires_kogge,
+    valid_cloisters_omissions,
 )
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+
+SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
+EXPECTED_MOVED_ACTION_DELTAS = {
+    "kogge_and_cloisters_2p.json": 140,
+    "kogge_cloisters_own_own_skip_city_001.json": 39,
+    "kogge_cloisters_own_own_skip_duty_001.json": 39,
+    "kogge_cloisters_hire_kogge_own_cloisters_001.json": 37,
+    "kogge_cloisters_own_kogge_hire_cloisters_001.json": 37,
+    "kogge_cloisters_hire_both_market_001.json": 35,
+    "kogge_cloisters_hire_both_opponent_001.json": 35,
+}
 
 
 def _events_of_type(events, event_type: EventType):
@@ -32,6 +50,104 @@ def _combined_actions(path: str):
 
 def _first_action(actions, predicate):
     return next(action for action in actions if predicate(action))
+
+
+def _combined_candidate_walk_for_action(action, board) -> tuple[int, ...]:
+    """The unique candidate walk (before Cloisters omission) represented by this combined action."""
+    assert action.sow_route_omitted_location is not None
+    matches: set[tuple[int, ...]] = set()
+    for candidate_route in kogge_cloisters_candidate_placements(
+        origin=action.origin,
+        picked_up=len(action.route),
+        board=board,
+    ):
+        for omitted_index, candidate_location in valid_cloisters_omissions(
+            origin=action.origin,
+            candidate_placements=candidate_route,
+            board=board,
+        ):
+            if candidate_location != action.sow_route_omitted_location:
+                continue
+            if (
+                cloisters_actual_placements_after_omission(
+                    candidate_route,
+                    omitted_index=omitted_index,
+                )
+                == tuple(action.route)
+            ):
+                matches.add(candidate_route)
+    assert len(matches) == 1, (
+        "combined action should map to one candidate walk "
+        f"(origin={action.origin}, route={action.route}, omitted={action.sow_route_omitted_location})"
+    )
+    return next(iter(matches))
+
+
+def _legacy_combined_kogge_cloisters_route_options_without_kogge_requirement(
+    state,
+    config,
+    *,
+    origin: int,
+    picked_up: int,
+):
+    if picked_up <= 0:
+        return ()
+    kogge_source = transition_module.building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=transition_module._ROUTE_BUILDING_KOGGE,
+    )
+    if not kogge_source.usable or (
+        kogge_source.source_type != "own_active" and not transition_module._is_hired_source(kogge_source)
+    ):
+        return ()
+
+    cloisters_source = transition_module.building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=transition_module._ROUTE_BUILDING_CLOISTERS,
+    )
+    if not cloisters_source.usable or (
+        cloisters_source.source_type != "own_active"
+        and not transition_module._is_hired_source(cloisters_source)
+    ):
+        return ()
+
+    return tuple(
+        transition_module._SowRouteOption(
+            route=variant.route,
+            building_id=transition_module._ROUTE_BUILDING_KOGGE,
+            source=kogge_hire,
+            secondary_building_id=transition_module._ROUTE_BUILDING_CLOISTERS,
+            secondary_source=cloisters_hire,
+            omitted_location=variant.omitted_location,
+        )
+        for kogge_hire in transition_module._hire_payment_source_variants(
+            kogge_source, state.player_state(state.active_player)
+        )
+        for cloisters_hire in transition_module._hire_payment_source_variants(
+            cloisters_source, state.player_state(state.active_player)
+        )
+        for variant in combined_kogge_cloisters_route_variants(
+            origin=origin,
+            picked_up=picked_up,
+            board=config.board,
+        )
+    )
+
+
+@contextmanager
+def _legacy_combined_mode():
+    original = transition_module._legal_combined_kogge_cloisters_route_options
+    transition_module._legal_combined_kogge_cloisters_route_options = (
+        _legacy_combined_kogge_cloisters_route_options_without_kogge_requirement
+    )
+    try:
+        yield
+    finally:
+        transition_module._legal_combined_kogge_cloisters_route_options = original
 
 
 def test_combined_helper_routes_include_kogge_augmented_city_spokes_and_are_deduped() -> None:
@@ -119,6 +235,118 @@ def test_legal_generation_own_own_includes_combined_plus_single_modifiers() -> N
     )
     assert any(action.sow_route_building_id == "cloisters" for action in actions)
     assert any(action.sow_route_building_id is None for action in actions)
+
+
+def test_kogge_and_cloisters_construct_skip_clerical_allocation_tithe_has_one_action() -> None:
+    scenario = load_scenario("scenarios/playtest/kogge_and_cloisters_2p.json")
+    board = scenario.config.board
+    construct = board.index_for_name("south_east")
+    build_roads = board.index_for_name("south")
+    clerical = board.index_for_name("south_west")
+    allocation = board.index_for_name("west")
+    matching = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.origin == construct
+        and tuple(action.route) == (build_roads, allocation)
+        and action.sow_route_omitted_location == clerical
+        and action.selected_duty == allocation
+        and action.resolution is TurnResolutionType.TITHE
+    ]
+
+    assert len(matching) == 1
+    action = matching[0]
+    assert action.sow_route_building_id == "cloisters"
+    assert action.sow_route_secondary_building_id is None
+    assert action.sow_route_building_source == "own_active"
+
+
+def test_combined_kogge_cloisters_actions_require_kogge_candidate_walk_across_corpus_and_playtests() -> None:
+    checked = 0
+    offenders: list[tuple[str, tuple[int, ...], tuple[int, ...], int]] = []
+    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted((SCENARIOS / "playtest").glob("*.json"))
+    for scenario_path in scenario_paths:
+        scenario = load_scenario(str(scenario_path))
+        board = scenario.config.board
+        for action in legal_actions(scenario.state, scenario.config):
+            if not isinstance(action, FullTurnAction):
+                continue
+            if not (
+                action.sow_route_building_id == "kogge"
+                and action.sow_route_secondary_building_id == "cloisters"
+            ):
+                continue
+            checked += 1
+            candidate_walk = _combined_candidate_walk_for_action(action, board)
+            if not route_requires_kogge(
+                origin=action.origin,
+                route=candidate_walk,
+                board=board,
+            ):
+                offenders.append(
+                    (
+                        scenario_path.name,
+                        tuple(action.route),
+                        candidate_walk,
+                        action.sow_route_omitted_location,
+                    )
+                )
+
+    assert checked > 0
+    assert not offenders, f"combined Kogge+Cloisters actions with non-Kogge walks: {offenders[:10]}"
+
+
+def test_only_known_scenarios_move_with_expected_action_deltas() -> None:
+    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted((SCENARIOS / "playtest").glob("*.json"))
+
+    current_counts: dict[str, int] = {}
+    for scenario_path in scenario_paths:
+        scenario = load_scenario(str(scenario_path))
+        current_counts[scenario_path.name] = len(list(legal_actions(scenario.state, scenario.config)))
+
+    with _legacy_combined_mode():
+        legacy_counts: dict[str, int] = {}
+        for scenario_path in scenario_paths:
+            scenario = load_scenario(str(scenario_path))
+            legacy_counts[scenario_path.name] = len(list(legal_actions(scenario.state, scenario.config)))
+
+    moved = {
+        name: legacy_counts[name] - current_counts[name]
+        for name in current_counts
+        if legacy_counts[name] != current_counts[name]
+    }
+    assert moved == EXPECTED_MOVED_ACTION_DELTAS
+    assert sum(legacy_counts.values()) == 93510
+    assert sum(current_counts.values()) == 93148
+
+
+def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:
+    scenario = load_scenario("scenarios/playtest/kogge_and_cloisters_2p.json")
+    board = scenario.config.board
+    actions = list(legal_actions(scenario.state, scenario.config))
+    kogge_only = [
+        action
+        for action in actions
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id is None
+    ]
+    combined = [
+        action
+        for action in actions
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
+
+    assert len(kogge_only) == 80
+    assert len(combined) == 769
+    assert all(
+        route_requires_kogge(
+            origin=action.origin,
+            route=_combined_candidate_walk_for_action(action, board),
+            board=board,
+        )
+        for action in combined
+    )
 
 
 def test_combined_summary_own_active_shows_parallel_modifier_wording() -> None:

@@ -85,10 +85,13 @@ from pilgrim.rules.round_end import (
 )
 from pilgrim.rules.ship import advance_ship_position, is_nw_pilgrimage_site, is_pilgrimage_site
 from pilgrim.rules.sow_routes import (
+    cloisters_actual_placements_after_omission,
     cloisters_route_variants,
     combined_kogge_cloisters_route_variants,
+    kogge_cloisters_candidate_placements,
     kogge_sow_routes,
     normal_sow_routes,
+    valid_cloisters_omissions,
 )
 from pilgrim.rules.sow_routes import (
     is_legal_route_with_cloisters_skip as _is_legal_route_with_cloisters_skip,
@@ -5378,7 +5381,57 @@ def _legal_combined_kogge_cloisters_route_options(
             picked_up=picked_up,
             board=config.board,
         )
+        if _combined_kogge_cloisters_variant_requires_kogge(
+            origin=origin,
+            route=variant.route,
+            omitted_location=variant.omitted_location,
+            board=config.board,
+        )
     )
+
+
+def _combined_kogge_cloisters_variant_requires_kogge(
+    *,
+    origin: int,
+    route: tuple[int, ...],
+    omitted_location: int | None,
+    board,
+) -> bool:
+    """Whether this combined variant's candidate walk necessarily includes a Kogge-reversed spoke.
+
+    The action stores Cloisters as the actual placements plus omitted location, but Kogge legality
+    is about the candidate walk before omission. Reconstruct that walk and apply the same
+    route_requires_kogge rule the Kogge-only path already uses.
+    """
+    if omitted_location is None:
+        return False
+    for candidate_route in kogge_cloisters_candidate_placements(
+        origin=origin,
+        picked_up=len(route),
+        board=board,
+    ):
+        if not _route_requires_kogge_for_origin_route(
+            origin=origin,
+            route=candidate_route,
+            board=board,
+        ):
+            continue
+        for omitted_index, candidate_location in valid_cloisters_omissions(
+            origin=origin,
+            candidate_placements=candidate_route,
+            board=board,
+        ):
+            if candidate_location != omitted_location:
+                continue
+            if (
+                cloisters_actual_placements_after_omission(
+                    candidate_route,
+                    omitted_index=omitted_index,
+                )
+                == route
+            ):
+                return True
+    return False
 
 
 def _with_kogge_route_fields(
