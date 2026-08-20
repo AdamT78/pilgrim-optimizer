@@ -12,6 +12,7 @@ from tools.ui_debug.generate_duty_wheel import (
 )
 from tools.ui_debug.render_duty_wheel import (
     BOARD_CONFIG_PATH,
+    CITY_SPOKE_REVERSAL_ARROWS,
     CITY_STACK_HEIGHT,
     CITY_TALLY_OFFSET_Y,
     CUBE_CELL_HEIGHT,
@@ -459,6 +460,20 @@ def test_rendered_svg_draws_nine_spaces_eight_ring_arrows_and_eight_middle_arrow
     # Each arrow is drawn twice: a black outline with the white interior on top.
     assert svg.count('class="arrow-border"') == 16
     assert svg.count('class="arrow-interior"') == 16
+
+
+def test_city_spoke_reversal_arrows_can_be_omitted_without_hiding_elements() -> None:
+    svg = render_duty_wheel_svg(layout(), city_spoke_reversals=())
+
+    assert len(re.findall(r'data-middle-arrow="', svg)) == 4
+    assert len(re.findall(r'data-arrow="', svg)) == 12
+    for edge in CITY_SPOKE_REVERSAL_ARROWS:
+        assert f'data-arrow="{edge}"' not in svg
+
+
+def test_unknown_city_spoke_reversal_arrow_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown City-spoke reversal arrow"):
+        render_duty_wheel_svg(layout(), city_spoke_reversals={"city->north"})
 
 
 def test_rendered_svg_starts_the_merchant_on_taxation() -> None:
