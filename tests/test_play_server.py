@@ -55,6 +55,11 @@ PLAYTEST_SCENARIOS = SCENARIOS / "playtest"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
+PLAYTEST_POSITION_NAMES = (
+    PLAYTEST_CLOISTERS,
+    PLAYTEST_CLOISTERS_LOOP,
+    PLAYTEST_KOGGE_AND_CLOISTERS,
+)
 CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
 ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
     {"sow_route_building_id", "sow_route_secondary_building_id", "sow_route_secondary_building_source"}
@@ -704,11 +709,7 @@ def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
         checked += 1
 
     assert checked == 3
-    assert seen == {
-        PLAYTEST_CLOISTERS,
-        PLAYTEST_CLOISTERS_LOOP,
-        PLAYTEST_KOGGE_AND_CLOISTERS,
-    }
+    assert seen == set(PLAYTEST_POSITION_NAMES)
 
 
 def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:
@@ -721,6 +722,11 @@ def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:
     )
     assert len(actions) == 220
     assert skipped == 165
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS)
+    try:
+        assert len(server.payload["turn_candidates"]) == 220
+    finally:
+        server.server_close()
 
 
 def test_cloisters_reach_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
@@ -898,6 +904,18 @@ def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_
             server.server_close()
 
     assert not blocked, f"route-building refusals remained in {len(blocked)} candidate groups: {blocked[:10]}"
+
+
+@pytest.mark.parametrize("position_name", PLAYTEST_POSITION_NAMES)
+def test_playtest_position_can_be_played_for_twelve_turns_and_advances_round(position_name: str) -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / position_name))
+    state = scenario.state
+    start_round = state.timing.round_number
+    for turn_index in range(12):
+        actions = list(legal_actions(state, scenario.config))
+        assert actions, f"{position_name} had no legal action at turn {turn_index + 1}"
+        state = apply_action(state, actions[0], scenario.config).state
+    assert state.timing.round_number > start_round
 
 
 def test_cloisters_loop_playtest_position_has_expected_action_and_candidate_totals() -> None:
