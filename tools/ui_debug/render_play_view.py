@@ -82,6 +82,7 @@ from tools.ui_debug.render_donated_buildings import (  # noqa: E402
     tiles_of,
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
+    CITY_SPOKE_REVERSAL_ARROWS,
     load_duty_wheel_layout,
     render_duty_wheel_svg,
 )
@@ -529,6 +530,21 @@ def _turn_counter_values(candidates: list[dict]) -> tuple[int, ...]:
             if isinstance(count, int):
                 seen.add(count)
     return tuple(sorted(seen, reverse=True))
+
+
+def _city_spoke_reversals_used(candidates: list[dict]) -> tuple[str, ...]:
+    """The Kogge reversals any candidate uses, from the full turn-candidate set.
+
+    Computed once at render time from the whole payload so arrows stay stable while the browser
+    narrows the same candidate set to one action.
+    """
+    used = {
+        str(step["value"])
+        for candidate in candidates
+        for step in candidate.get("steps", ())
+        if step.get("kind") == "edge" and str(step.get("value")) in CITY_SPOKE_REVERSAL_ARROWS
+    }
+    return tuple(sorted(used))
 
 
 def log_styles() -> str:
@@ -1867,6 +1883,8 @@ def render_play_view_html(
 ) -> str:
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
+    # One-time draw choice from the full candidate set; do not recalculate as the turn narrows.
+    city_spoke_reversals = _city_spoke_reversals_used(candidates)
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
     piety_variant = piety_variant_for(seated)
 
@@ -1904,6 +1922,7 @@ def render_play_view_html(
                 turn_controls=bool(candidates),
                 turn_counter_values=_turn_counter_values(candidates) if candidates else None,
                 turn_control_names=(),
+                city_spoke_reversals=city_spoke_reversals,
             ),
             hexagon,
         ),
