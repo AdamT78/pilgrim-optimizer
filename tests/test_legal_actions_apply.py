@@ -74,7 +74,6 @@ def _hired_sources(action) -> int:
         return 0
     labels = (
         (action.hired_building_id, action.hired_building_source),
-        (action.building_conversion_id, action.building_conversion_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
         (action.start_turn_building_id, action.start_turn_building_source),

@@ -2,8 +2,10 @@
 
 from pilgrim.model.actions import (
     AllocationMove,
+    BuildingConversionStep,
     FullTurnAction,
     GameAction,
+    TurnStep,
     action_id,
     action_summary,
     readable_route,
@@ -56,7 +58,7 @@ from pilgrim.model.enums import (
 from pilgrim.model.events import GameEvent
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS, SpecialActivities
-from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.state import GameState, PlayerState, TurnProgress
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import (
     CommittedAcolytes,
@@ -70,6 +72,7 @@ from pilgrim.model.workforce import (
 __all__ = [
     "ActionType",
     "AllocationMove",
+    "BuildingConversionStep",
     "AlmsConfig",
     "BUILDING_LEVELS",
     "BoardConfig",
@@ -102,6 +105,8 @@ __all__ = [
     "SPECIAL_ACTIVITY_IDS",
     "SpecialActivities",
     "TurnResolutionType",
+    "TurnProgress",
+    "TurnStep",
     "TurnPhase",
     "TimingConfig",
     "TimingState",

@@ -123,7 +123,14 @@ from pilgrim.rules.timing import (
     resolve_round_end,
     resolve_season_end,
 )
-from pilgrim.rules.transition import TransitionResult, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionResult,
+    apply_action,
+    apply_turn_step,
+    full_turn_actions,
+    legal_actions,
+    turn_steps,
+)
 from pilgrim.rules.validation import TransitionValidationError, validate_state_invariants
 
 __all__ = [
@@ -237,6 +244,9 @@ __all__ = [
     "TransitionResult",
     "TransitionValidationError",
     "apply_action",
+    "apply_turn_step",
+    "full_turn_actions",
     "legal_actions",
+    "turn_steps",
     "validate_state_invariants",
 ]

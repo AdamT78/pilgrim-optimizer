@@ -5,387 +5,181 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_summary
+from pilgrim.model.actions import BuildingConversionStep, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.buildings import building_ability_source
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
-def _events_of_type(events, event_type: EventType):
+def _scenario_steps(path: str):
+    scenario = load_scenario(path)
+    return scenario, tuple(turn_steps(scenario.state, scenario.config))
+
+
+def _step(steps, **values):
+    return next(step for step in steps if all(getattr(step, key) == value for key, value in values.items()))
+
+
+def _events(events, event_type):
     return [event for event in events if event.event_type is event_type]
 
 
-def _brewery_actions(path: str):
-    scenario = load_scenario(path)
-    actions = legal_actions(scenario.state, scenario.config)
-    conversions = [
-        action
-        for action in actions
-        if action.building_conversion_id == "brewery"
-    ]
-    return scenario, actions, conversions
-
-
-def _first_action(actions, predicate):
-    return next(action for action in actions if predicate(action))
-
-
-def test_own_active_brewery_generates_sell_variants_when_wheat_available() -> None:
-    _scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_active_sell_wheat_001.json"
-    )
-
-    assert conversions
-    assert all(action.building_conversion_source == "own_active" for action in conversions)
-    assert all(action.building_conversion_direction == "sell_wheat_for_silver" for action in conversions)
-    assert {action.building_conversion_amount for action in conversions} == {1}
-
-
-def test_own_active_brewery_generates_exactly_one_conversion_amount_even_with_many_wheat() -> None:
-    _scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_exactly_one_wheat_only_001.json"
-    )
-
-    assert conversions
-    assert {action.building_conversion_amount for action in conversions} == {1}
-    assert not any(
-        action.building_conversion_amount in (0, 2)
-        for action in conversions
-    )
-    assert not any(
-        action.building_conversion_direction.startswith("buy_")
-        for action in conversions
-        if action.building_conversion_direction is not None
-    )
+def test_brewery_offers_exactly_one_wheat_for_silver_step() -> None:
+    _scenario, steps = _scenario_steps("scenarios/brewery_active_sell_wheat_001.json")
+    assert steps
+    assert all((step.source, step.direction, step.amount) ==
+               ("own_active", "sell_wheat_for_silver", 1) for step in steps)
+    _scenario, many_wheat = _scenario_steps("scenarios/brewery_exactly_one_wheat_only_001.json")
+    assert {step.amount for step in many_wheat} == {1}
 
 
 def test_own_active_brewery_generates_no_variants_when_wheat_zero() -> None:
     scenario = load_scenario("scenarios/brewery_active_sell_wheat_001.json")
-    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    state_without_wheat = scenario.state.with_player_state(
+    player = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    state = scenario.state.with_player_state(
         PlayerId.PLAYER_ONE,
-        replace(
-            player_one,
-            resources=player_one.resources.add(wheat=-player_one.resources.wheat),
-        ),
+        replace(player, resources=replace(player.resources, wheat=0)),
     )
-
-    actions = legal_actions(state_without_wheat, scenario.config)
-    conversions = [action for action in actions if action.building_conversion_id == "brewery"]
-    assert conversions == []
+    assert turn_steps(state, scenario.config) == ()
 
 
-def test_hired_market_brewery_generates_variants_when_payable_and_wheat_remains() -> None:
-    _scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_hire_market_sell_wheat_001.json"
-    )
-
-    assert conversions
-    assert all(action.building_conversion_source == "market" for action in conversions)
-    assert all(action.building_conversion_direction == "sell_wheat_for_silver" for action in conversions)
-    assert {action.building_conversion_amount for action in conversions} == {1}
-
-
-def test_hired_opponent_brewery_generates_variants_when_payable_and_wheat_remains() -> None:
-    _scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_hire_opponent_sell_wheat_001.json"
-    )
-
-    assert conversions
-    assert all(action.building_conversion_source == "player_two" for action in conversions)
-    assert all(action.building_conversion_direction == "sell_wheat_for_silver" for action in conversions)
-    assert {action.building_conversion_amount for action in conversions} == {1}
-
-
-def test_own_active_brewery_source_priority_blocks_hired_variants() -> None:
-    scenario = load_scenario("scenarios/brewery_hire_market_sell_wheat_001.json")
-    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    state_with_own_brewery = scenario.state.with_player_state(
-        PlayerId.PLAYER_ONE,
-        replace(
-            player_one,
-            player_board_slots=replace(
-                player_one.player_board_slots,
-                active_buildings=("brewery",),
-            ),
-        ),
-    )
-    actions = legal_actions(state_with_own_brewery, scenario.config)
-    conversions = [
-        action
-        for action in actions
-        if action.building_conversion_id == "brewery"
-    ]
-
-    assert conversions
-    assert all(action.building_conversion_source == "own_active" for action in conversions)
-
-
-def test_merchant_none_insufficient_donated_and_not_live_block_hired_brewery() -> None:
-    blocked_paths = (
+def test_brewery_hired_sources_are_offered_and_unavailable_states_are_empty() -> None:
+    _scenario, market_steps = _scenario_steps("scenarios/brewery_hire_market_sell_wheat_001.json")
+    assert any(step.source == "market" for step in market_steps)
+    _scenario, opponent_steps = _scenario_steps("scenarios/brewery_hire_opponent_sell_wheat_001.json")
+    assert any(step.source == "player_two" for step in opponent_steps)
+    for path in (
         "scenarios/brewery_merchant_none_no_hire_001.json",
         "scenarios/brewery_insufficient_after_hire_001.json",
         "scenarios/brewery_hire_with_wheat_requires_two_wheat_001.json",
         "scenarios/brewery_donated_no_conversion_001.json",
         "scenarios/brewery_not_live_no_conversion_001.json",
-    )
-    for path in blocked_paths:
-        _scenario, actions, conversions = _brewery_actions(path)
-        assert conversions == []
-        assert any(action.building_conversion_id is None for action in actions)
+    ):
+        scenario = load_scenario(path)
+        assert turn_steps(scenario.state, scenario.config) == ()
 
 
-def test_apply_own_active_brewery_sell_one_emits_bonus_then_delta_before_sowing() -> None:
-    scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_active_sell_wheat_001.json"
-    )
-    north_east = scenario.config.board.index_for_name("north_east")
-    action = _first_action(
-        conversions,
-        lambda candidate: (
-            candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.selected_duty == north_east
-            and candidate.resolution is TurnResolutionType.TITHE
+def test_hired_market_brewery_generates_variants_when_payable_and_wheat_remains() -> None:
+    _scenario, steps = _scenario_steps("scenarios/brewery_hire_market_sell_wheat_001.json")
+    assert {step.amount for step in steps} == {1}
+    assert all(step.source == "market" and step.direction == "sell_wheat_for_silver" for step in steps)
+
+
+def test_hired_opponent_brewery_generates_variants_when_payable_and_wheat_remains() -> None:
+    _scenario, steps = _scenario_steps("scenarios/brewery_hire_opponent_sell_wheat_001.json")
+    assert {step.amount for step in steps} == {1}
+    assert all(step.source == "player_two" and step.direction == "sell_wheat_for_silver" for step in steps)
+
+
+def test_own_active_brewery_source_priority_blocks_hired_variants() -> None:
+    scenario = load_scenario("scenarios/brewery_hire_market_sell_wheat_001.json")
+    player = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    state = scenario.state.with_player_state(
+        PlayerId.PLAYER_ONE,
+        replace(
+            player,
+            player_board_slots=replace(
+                player.player_board_slots,
+                active_buildings=("brewery",),
+            ),
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    steps = turn_steps(state, scenario.config)
+    assert steps
+    assert all(step.source == "own_active" for step in steps)
 
-    bonus_event = _first_action(
-        _events_of_type(result.events, EventType.BUILDING_BONUS),
-        lambda event: dict(event.details).get("building") == "brewery",
-    )
-    delta_event = _events_of_type(result.events, EventType.RESOURCE_DELTA)[0]
-    sowing_event = _events_of_type(result.events, EventType.SOWING)[0]
-    delta_details = dict(delta_event.details)
 
-    assert _events_of_type(result.events, EventType.BUILDING_HIRED) == []
-    assert delta_details["stone"] == 0
-    assert delta_details["silver"] == 2
-    assert delta_details["wheat"] == -1
-    assert result.events.index(bonus_event) < result.events.index(delta_event)
-    assert result.events.index(delta_event) < result.events.index(sowing_event)
-    # Two silver from the conversion and a third from the tithe this conversion rides on. Tithe was
-    # the inert resolution to hang a building test off until it started paying its counter out.
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
-    invariant_event = _events_of_type(result.events, EventType.INVARIANT_CHECK)[-1]
-    assert dict(invariant_event.details)["acolytes_conserved"] is True
+def test_brewery_step_events_precede_sowing() -> None:
+    scenario, steps = _scenario_steps("scenarios/brewery_active_sell_wheat_001.json")
+    state = apply_turn_step(scenario.state, scenario.config, _step(steps, amount=1))
+    north_east = scenario.config.board.index_for_name("north_east")
+    action = next(action for action in legal_actions(state, scenario.config)
+                  if action.selected_duty == north_east and action.resolution is TurnResolutionType.TITHE)
+    result = apply_action(state, action, scenario.config)
+    bonus = _events(result.events, EventType.BUILDING_BONUS)[0]
+    delta = _events(result.events, EventType.RESOURCE_DELTA)[0]
+    sowing = _events(result.events, EventType.SOWING)[0]
+    assert dict(delta.details) == {"stone": 0, "silver": 2, "wheat": -1}
+    assert result.events.index(bonus) < result.events.index(delta) < result.events.index(sowing)
 
 
 def test_hired_market_brewery_pays_bank_before_conversion() -> None:
-    scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_hire_market_sell_wheat_001.json"
-    )
-    action = _first_action(
-        conversions,
-        lambda candidate: (
-            candidate.building_conversion_source == "market"
-            and candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.TITHE
-        ),
-    )
-    result = apply_action(scenario.state, action, scenario.config)
-
-    hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
-    bonus_event = _first_action(
-        _events_of_type(result.events, EventType.BUILDING_BONUS),
-        lambda event: dict(event.details).get("building") == "brewery",
-    )
-    delta_event = _events_of_type(result.events, EventType.RESOURCE_DELTA)[0]
-    hired_details = dict(hired_event.details)
-
-    assert hired_details["building_id"] == "brewery"
-    assert hired_details["source"] == "market"
-    assert hired_details["payee"] == "bank"
-    assert result.events.index(hired_event) < result.events.index(bonus_event)
-    assert result.events.index(bonus_event) < result.events.index(delta_event)
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
+    scenario, steps = _scenario_steps("scenarios/brewery_hire_market_sell_wheat_001.json")
+    state = apply_turn_step(scenario.state, scenario.config, steps[0])
+    hired = _events(state.events, EventType.BUILDING_HIRED)[0]
+    bonus = _events(state.events, EventType.BUILDING_BONUS)[0]
+    delta = _events(state.events, EventType.RESOURCE_DELTA)[0]
+    assert dict(hired.details)["payee"] == "bank"
+    assert state.events.index(hired) < state.events.index(bonus) < state.events.index(delta)
+    assert state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
 
 
 def test_hired_opponent_brewery_pays_owner_before_conversion() -> None:
-    scenario, _actions, conversions = _brewery_actions(
-        "scenarios/brewery_hire_opponent_sell_wheat_001.json"
-    )
-    action = _first_action(
-        conversions,
-        lambda candidate: (
-            candidate.building_conversion_source == "player_two"
-            and candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.TITHE
-        ),
-    )
-    result = apply_action(scenario.state, action, scenario.config)
-    hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
+    scenario, steps = _scenario_steps("scenarios/brewery_hire_opponent_sell_wheat_001.json")
+    state = apply_turn_step(scenario.state, scenario.config, steps[0])
+    hired = _events(state.events, EventType.BUILDING_HIRED)[0]
+    assert dict(hired.details)["payee"] == "player_two"
+    assert state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
 
-    assert hired_details["source"] == "player_two"
-    assert hired_details["payee"] == "player_two"
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.silver == 3
-    assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 0
-    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
+
+def test_brewery_step_rejects_invalid_amount_and_direction() -> None:
+    scenario = load_scenario("scenarios/brewery_active_sell_wheat_001.json")
+    for step, message in (
+        (BuildingConversionStep("brewery", "own_active", "sell_wheat_for_silver", 2), "amount"),
+        (BuildingConversionStep("brewery", "own_active", "buy_wheat", 1), "direction"),
+    ):
+        with pytest.raises(TransitionValidationError, match=message):
+            apply_turn_step(scenario.state, scenario.config, step)
 
 
 def test_apply_rejects_conversion_that_cannot_keep_wheat_after_hire() -> None:
     scenario = load_scenario("scenarios/brewery_insufficient_after_hire_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    base_action = _first_action(actions, lambda candidate: candidate.resolution is TurnResolutionType.TITHE)
-    source = building_ability_source(
-        scenario.state,
-        scenario.config,
-        acting_player=scenario.state.active_player,
-        building_key="brewery",
-    )
-    assert source.hire_resource == "wheat"
-    invalid_action = replace(
-        base_action,
-        building_conversion_id="brewery",
-        building_conversion_source="market",
-        building_conversion_direction="sell_wheat_for_silver",
-        building_conversion_amount=1,
-        hire_payments=(("brewery", "wheat"),),
-    )
-
     with pytest.raises(
         TransitionValidationError,
         match="Brewery conversion requires at least 1 wheat after hire payment",
     ):
-        apply_action(scenario.state, invalid_action, scenario.config)
+        apply_turn_step(
+            scenario.state,
+            scenario.config,
+            BuildingConversionStep("brewery", "market", "sell_wheat_for_silver", 1, "wheat"),
+        )
 
 
-def test_apply_rejects_invalid_brewery_amount_two() -> None:
-    scenario = load_scenario("scenarios/brewery_active_sell_wheat_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    base_action = _first_action(actions, lambda candidate: candidate.resolution is TurnResolutionType.TITHE)
-    invalid_action = replace(
-        base_action,
-        building_conversion_id="brewery",
-        building_conversion_source="own_active",
-        building_conversion_direction="sell_wheat_for_silver",
-        building_conversion_amount=2,
-    )
-
-    with pytest.raises(
-        TransitionValidationError,
-        match="Brewery conversion amount must be exactly 1",
-    ):
-        apply_action(scenario.state, invalid_action, scenario.config)
-
-
-def test_apply_rejects_invalid_brewery_buy_direction() -> None:
-    scenario = load_scenario("scenarios/brewery_active_sell_wheat_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    base_action = _first_action(actions, lambda candidate: candidate.resolution is TurnResolutionType.TITHE)
-    invalid_action = replace(
-        base_action,
-        building_conversion_id="brewery",
-        building_conversion_source="own_active",
-        building_conversion_direction="buy_wheat",
-        building_conversion_amount=1,
-    )
-
-    with pytest.raises(
-        TransitionValidationError,
-        match="Brewery conversion direction must be sell_wheat_for_silver",
-    ):
-        apply_action(scenario.state, invalid_action, scenario.config)
-
-
-def test_converted_silver_can_enable_later_give_alms_paid_costs() -> None:
-    scenario, actions, conversions = _brewery_actions(
-        "scenarios/brewery_sell_then_give_alms_paid_001.json"
-    )
-    paid_alms_with_conversion = _first_action(
-        conversions,
-        lambda candidate: (
-            candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
-            and candidate.alms_payment_silver + candidate.alms_payment_wheat == 2
-        ),
-    )
-
-    assert not any(
-        action.resolution is TurnResolutionType.GIVE_ALMS_PAID
-        and action.building_conversion_id is None
-        and action.alms_payment_silver + action.alms_payment_wheat == 2
-        for action in actions
-    )
-
-    result = apply_action(scenario.state, paid_alms_with_conversion, scenario.config)
-    resource_delta_events = _events_of_type(result.events, EventType.RESOURCE_DELTA)
-    assert len(resource_delta_events) == 2
-    conversion_delta = dict(resource_delta_events[0].details)
-    alms_delta = dict(resource_delta_events[1].details)
-    assert conversion_delta == {"stone": 0, "silver": 2, "wheat": -1}
-    assert int(alms_delta["silver"]) < 0 or int(alms_delta["wheat"]) < 0
+def test_brewery_step_can_enable_later_paid_alms() -> None:
+    scenario, steps = _scenario_steps("scenarios/brewery_sell_then_give_alms_paid_001.json")
+    state = apply_turn_step(scenario.state, scenario.config, _step(steps, amount=1))
+    action = next(action for action in legal_actions(state, scenario.config)
+                  if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
+                  and action.alms_payment_silver + action.alms_payment_wheat == 2)
+    result = apply_action(state, action, scenario.config)
+    assert len(_events(result.events, EventType.RESOURCE_DELTA)) >= 2
     assert result.state.player_state(PlayerId.PLAYER_ONE).alms_position == 2
 
 
 def test_action_summary_includes_brewery_conversion_and_hire_suffix() -> None:
-    own_scenario, _own_actions, own_conversions = _brewery_actions(
-        "scenarios/brewery_active_sell_wheat_001.json"
+    own_scenario, own_steps = _scenario_steps("scenarios/brewery_active_sell_wheat_001.json")
+    own = own_steps[0]
+    assert "use building: brewery to sell 1 wheat for 2 silver" in action_summary(
+        own, own_scenario.config
     )
-    own_action = _first_action(
-        own_conversions,
-        lambda candidate: (
-            candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.TITHE
-        ),
-    )
-    own_summary = action_summary(own_action, own_scenario.config)
-    assert "use building: brewery to sell 1 wheat for 2 silver" in own_summary
-    assert "hire building: brewery" not in own_summary
-
-    hired_scenario, _hired_actions, hired_conversions = _brewery_actions(
-        "scenarios/brewery_hire_market_sell_wheat_001.json"
-    )
-    hired_action = _first_action(
-        hired_conversions,
-        lambda candidate: (
-            candidate.building_conversion_source == "market"
-            and candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.TITHE
-        ),
-    )
-    hired_summary = action_summary(hired_action, hired_scenario.config)
-    assert "use building: brewery to sell 1 wheat for 2 silver" in hired_summary
-    assert "hire building: brewery from market" in hired_summary
+    hired_scenario, hired_steps = _scenario_steps("scenarios/brewery_hire_market_sell_wheat_001.json")
+    summary = action_summary(hired_steps[0], hired_scenario.config)
+    assert "hire building: brewery from market" in summary
 
 
-def test_brewery_can_compose_with_kogge_route_modifier_when_both_are_active() -> None:
+def test_brewery_can_follow_a_kogge_route() -> None:
     scenario = load_scenario("scenarios/kogge_active_city_to_east_001.json")
-    player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
-    composed_state = scenario.state.with_player_state(
+    player = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    state = scenario.state.with_player_state(
         PlayerId.PLAYER_ONE,
-        replace(
-            player_one,
-            resources=player_one.resources.add(wheat=1),
-            player_board_slots=replace(
-                player_one.player_board_slots,
-                active_buildings=(
-                    *player_one.player_board_slots.active_buildings,
-                    "brewery",
-                ),
-            ),
-        ),
+        replace(player, resources=player.resources.add(wheat=1), player_board_slots=replace(
+            player.player_board_slots, active_buildings=(*player.player_board_slots.active_buildings, "brewery")
+        )),
     )
-    actions = legal_actions(composed_state, scenario.config)
-    combined_action = _first_action(
-        actions,
-        lambda candidate: (
-            candidate.sow_route_building_id == "kogge"
-            and candidate.building_conversion_id == "brewery"
-            and candidate.building_conversion_direction == "sell_wheat_for_silver"
-            and candidate.building_conversion_amount == 1
-            and candidate.resolution is TurnResolutionType.TITHE
-        ),
-    )
-    summary = action_summary(combined_action, scenario.config)
-
-    assert "use building: kogge" in summary
-    assert "use building: brewery to sell 1 wheat for 2 silver" in summary
+    state = apply_turn_step(state, scenario.config, _step(turn_steps(state, scenario.config), amount=1))
+    assert any(action.sow_route_building_id == "kogge" for action in legal_actions(state, scenario.config))

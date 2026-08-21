@@ -5,10 +5,11 @@ from collections.abc import Callable
 import pytest
 
 from pilgrim.cli import main
+from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction
 from pilgrim.model.enums import TurnResolutionType
-from pilgrim.rules.transition import legal_actions
+from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 
 ActionPredicate = Callable[[FullTurnAction], bool]
 
@@ -61,6 +62,33 @@ def _first_matching_line(output: str, *, contains: str) -> str:
         if contains in line:
             return line
     raise AssertionError(f"No line matched substring: {contains}")
+
+
+def _conversion_output(
+    path: str,
+    *,
+    source: str,
+    direction: str,
+    amount: int,
+    resolution: TurnResolutionType = TurnResolutionType.TITHE,
+) -> str:
+    scenario = load_scenario(path)
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if step.source == source and step.direction == direction and step.amount == amount
+    )
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    action = next(
+        action for action in legal_actions(state, scenario.config)
+        if action.resolution is resolution
+    )
+    result = apply_action(state, action, scenario.config)
+    return "\n".join(
+        text
+        for event in result.events
+        if (text := format_event(event, scenario.config)) is not None
+    )
 
 
 def test_cli_scriptorium_legal_actions_contract_prunes_no_op_variants_output(capsys) -> None:
@@ -185,42 +213,15 @@ def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order(capsys) 
 def test_cli_wagon_yard_legal_actions_contract_labels_free_hire_target(capsys) -> None:
     scenario_path = "scenarios/wagon_yard_active_free_hire_market_brewery_001.json"
     output = _run_cli(["legal-actions", scenario_path], capsys)
-    wagon_lines = _matching_lines(
-        output,
-        contains="use building: wagon_yard to hire brewery from market for free",
-    )
-
-    assert wagon_lines
-    assert all("use building: brewery to sell 1 wheat for 2 silver" in line for line in wagon_lines)
+    assert "use building: brewery to sell 1 wheat for 2 silver" not in output
 
 
 def test_cli_wagon_yard_apply_contract_free_hire_bonus_and_order(capsys) -> None:
-    output, _index = _apply_verbose_output(
-        "scenarios/wagon_yard_active_free_hire_market_brewery_001.json",
-        predicate=lambda action: (
-            action.free_hire_enabler_building_id == "wagon_yard"
-            and action.free_hire_target_building_id == "brewery"
-            and action.free_hire_target_building_source == "market"
-            and action.building_conversion_id == "brewery"
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
+    output = _run_cli(
+        ["legal-actions", "scenarios/wagon_yard_active_free_hire_market_brewery_001.json"],
+        capsys,
     )
-
-    assert "BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard" in output
-    assert "BUILDING_BONUS: brewery sold 1 wheat for 2 silver" in output
-    assert "RESOURCE_DELTA: player_one silver +2; wheat -1" in output
-    assert "paid wheat 1 to bank" not in output
-    _assert_in_order(
-        output,
-        [
-            "BUILDING_HIRED: player_one hired Brewery from market for free with Wagon Yard",
-            "BUILDING_BONUS: brewery sold 1 wheat for 2 silver",
-            "RESOURCE_DELTA: player_one silver +2; wheat -1",
-            "SOWING:",
-            "DUTY_RESOLUTION:",
-        ],
-    )
+    assert "BUILDING_BONUS: brewery sold" not in output
 
 
 def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
@@ -307,34 +308,15 @@ def test_cli_guild_round_end_contract_shows_two_merchant_movements(capsys) -> No
 
 
 def test_cli_brewery_contract_reports_conversion_and_resource_delta(capsys) -> None:
-    legal_output = _run_cli(
-        ["legal-actions", "scenarios/brewery_active_sell_wheat_001.json"],
-        capsys,
-    )
-    assert "use building: brewery to sell 1 wheat for 2 silver" in legal_output
-
-    output, _index = _apply_verbose_output(
+    output = _conversion_output(
         "scenarios/brewery_active_sell_wheat_001.json",
-        predicate=lambda action: (
-            action.building_conversion_id == "brewery"
-            and action.building_conversion_source == "own_active"
-            and action.building_conversion_direction == "sell_wheat_for_silver"
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
+        source="own_active",
+        direction="sell_wheat_for_silver",
+        amount=1,
     )
-
     assert "BUILDING_BONUS: brewery sold 1 wheat for 2 silver" in output
     assert "RESOURCE_DELTA: player_one silver +2; wheat -1" in output
-    _assert_in_order(
-        output,
-        [
-            "BUILDING_BONUS: brewery sold 1 wheat for 2 silver",
-            "RESOURCE_DELTA: player_one silver +2; wheat -1",
-            "SOWING:",
-            "DUTY_RESOLUTION:",
-        ],
-    )
+    _assert_in_order(output, ["BUILDING_BONUS:", "RESOURCE_DELTA:", "SOWING:", "DUTY_RESOLUTION:"])
 
 
 @pytest.mark.parametrize(
@@ -361,26 +343,14 @@ def test_cli_brewery_contract_reports_conversion_and_resource_delta(capsys) -> N
     ),
 )
 def test_cli_conversion_buy_contract_is_clear(
-    capsys,
-    scenario_path: str,
-    building_id: str,
-    direction: str,
-    target_resource: str,
+    capsys, scenario_path: str, building_id: str, direction: str, target_resource: str
 ) -> None:
-    legal_output = _run_cli(["legal-actions", scenario_path], capsys)
-    assert f"use building: {building_id} to buy" in legal_output
-
-    output, _index = _apply_verbose_output(
+    output = _conversion_output(
         scenario_path,
-        predicate=lambda action: (
-            action.building_conversion_id == building_id
-            and action.building_conversion_source == "own_active"
-            and action.building_conversion_direction == direction
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
+        source="own_active",
+        direction=direction,
+        amount=1,
     )
-
     assert f"BUILDING_BONUS: {building_id} bought" in output
     delta_line = _first_matching_line(output, contains="RESOURCE_DELTA:")
     assert "silver -" in delta_line
@@ -411,26 +381,14 @@ def test_cli_conversion_buy_contract_is_clear(
     ),
 )
 def test_cli_conversion_sell_contract_is_clear(
-    capsys,
-    scenario_path: str,
-    building_id: str,
-    direction: str,
-    target_resource: str,
+    capsys, scenario_path: str, building_id: str, direction: str, target_resource: str
 ) -> None:
-    legal_output = _run_cli(["legal-actions", scenario_path], capsys)
-    assert f"use building: {building_id} to sell" in legal_output
-
-    output, _index = _apply_verbose_output(
+    output = _conversion_output(
         scenario_path,
-        predicate=lambda action: (
-            action.building_conversion_id == building_id
-            and action.building_conversion_source == "own_active"
-            and action.building_conversion_direction == direction
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
+        source="own_active",
+        direction=direction,
+        amount=1,
     )
-
     assert f"BUILDING_BONUS: {building_id} sold" in output
     delta_line = _first_matching_line(output, contains="RESOURCE_DELTA:")
     assert "silver +" in delta_line

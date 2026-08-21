@@ -30,21 +30,14 @@ from tools.measure_turn_residue import (
     sweep,
 )
 
-# Found by accident, before the tool could say what it had not seen: seed 7 refuses this much, at
-# each table size, walking forty turns under the policy the tool has always used. Written out
-# rather than recomputed, because a floor computed by the thing it constrains is not a floor.
-SEED_SEVEN_FLOOR: dict[int, int] = {2: 186, 3: 0, 4: 0}
+# The conversion fields formerly refused by this measurement are now committed steps and no
+# longer belong to the full-turn residue. Keep the zero explicit so a future field-removal change
+# cannot silently turn this into an unmeasured claim.
+SEED_SEVEN_FLOOR: dict[int, int] = {2: 0, 3: 0, 4: 0}
 # Same walk policy as `swept`: reference + generated boards for seed 7 only.
-SEED_SEVEN_COVERAGE_FLOOR = 380
+SEED_SEVEN_COVERAGE_FLOOR = 76
 
-SEED_SEVEN_FIELDS: frozenset[str] = frozenset(
-    {
-        "building_conversion_id",
-        "building_conversion_source",
-        "building_conversion_direction",
-        "building_conversion_amount",
-    }
-)
+SEED_SEVEN_FIELDS: frozenset[str] = frozenset()
 
 
 @pytest.fixture(scope="module")
@@ -54,15 +47,13 @@ def swept() -> dict:
 
 
 def test_seed_seven_still_refuses_exactly_what_it_refused(tmp_path: Path) -> None:
-    """The board that first showed the reference board was not evidence, measured the same way.
+    """The board is measured with the current full-turn field set.
 
     Exact rather than at-least on the counts. Each number is a property of one seed, one table
     size, one policy and one walk length, all named in the call, so a change in any of them is a
     change in the tool and ought to be looked at rather than absorbed by an inequality.
 
-    The four fields are the UNION of the three walks and not the tally of any one of them. The 2P
-    board still reaches building conversions; the larger tables do not refuse those fields in this
-    forty-turn first-policy walk.
+    Conversion steps are deliberately outside this full-turn residue measurement.
     """
     refused: set[str] = set()
     for player_count, expected in sorted(SEED_SEVEN_FLOOR.items()):

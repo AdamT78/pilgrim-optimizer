@@ -71,10 +71,6 @@ class FullTurnAction:
     sow_route_secondary_building_id: str | None = None
     sow_route_secondary_building_source: str | None = None
     sow_route_omitted_location: int | None = None
-    building_conversion_id: str | None = None
-    building_conversion_source: str | None = None
-    building_conversion_direction: str | None = None
-    building_conversion_amount: int | None = None
     bank_payment_building_id: str | None = None
     bank_payment_building_source: str | None = None
     bank_payment_replaced_resource: str | None = None
@@ -106,6 +102,37 @@ class FullTurnAction:
     # tile; they are two decisions that happen to have the same three answers.
     tithe_resource: str | None = None
     action_type: ActionType = field(default=ActionType.FULL_TURN, init=False)
+
+    def __getattr__(self, name: str):
+        # The play-server residue sweep still names the retired fields while this engine-only
+        # branch deliberately leaves that server file unchanged. They are not dataclass fields and
+        # never carry a value; the compatibility read keeps old residue inspection harmless.
+        if name in {
+            "building_conversion_id",
+            "building_conversion_source",
+            "building_conversion_direction",
+            "building_conversion_amount",
+        }:
+            return None
+        raise AttributeError(name)
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingConversionStep:
+    """One committed use of a building conversion during the active turn.
+
+    ``hire_payment`` records the resource paid for a hired source. It is ``None`` only for an
+    own-active source; a Cornucopia choice is resolved before the step is committed.
+    """
+
+    building_id: str
+    source: str
+    direction: str
+    amount: int
+    hire_payment: str | None = None
+
+
+TurnStep = BuildingConversionStep
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,19 +299,6 @@ def action_id(action: GameAction) -> str:
             )
         if action.sow_route_omitted_location is not None:
             sow_route_suffix += f":skip:{action.sow_route_omitted_location}"
-    conversion_suffix = ""
-    if (
-        action.building_conversion_id is not None
-        or action.building_conversion_source is not None
-        or action.building_conversion_direction is not None
-        or action.building_conversion_amount is not None
-    ):
-        conversion_suffix = (
-            f":building_conversion:{action.building_conversion_id or 'none'}"
-            f":from:{action.building_conversion_source or 'unknown'}"
-            f":direction:{action.building_conversion_direction or 'unknown'}"
-            f":amount:{action.building_conversion_amount if action.building_conversion_amount is not None else 'none'}"
-        )
     bank_payment_suffix = ""
     if (
         action.bank_payment_building_id is not None
@@ -371,7 +385,7 @@ def action_id(action: GameAction) -> str:
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
         f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
         f"{end_turn_suffix}"
-        f"{sow_route_suffix}{conversion_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
+        f"{sow_route_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
         f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
         f"{tithe_suffix}"
@@ -559,6 +573,22 @@ def action_summary_for_players(
 
 def action_summary(action: GameAction, config: GameConfig) -> str:
     """Return a human-readable action summary for CLI/debug output."""
+    if isinstance(action, BuildingConversionStep):
+        if action.direction == "sell_wheat_for_silver":
+            conversion = f"sell {action.amount} wheat for {action.amount * 2} silver"
+        elif action.direction.startswith("buy_"):
+            resource = action.direction.removeprefix("buy_")
+            conversion = f"buy {action.amount} {resource} for {action.amount} silver"
+        elif action.direction.startswith("sell_"):
+            resource = action.direction.removeprefix("sell_")
+            conversion = f"sell {action.amount} {resource} for {action.amount} silver"
+        else:
+            conversion = f"{action.direction} {action.amount}"
+        summary = f"use building: {action.building_id} to {conversion}"
+        if action.source != "own_active":
+            summary += f" | hire building: {action.building_id} from {action.source}"
+        return summary
+
     positions = config.board.positions
     if isinstance(action, SetupSowAction):
         return f"Setup sow: sow {readable_route(action.origin, action.route, positions=positions)}"
@@ -618,55 +648,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             f"{action.free_hire_target_building_id} "
             f"from {action.free_hire_target_building_source} for free"
         )
-    if (
-        action.building_conversion_id == "grain_store"
-        and action.building_conversion_direction is not None
-        and action.building_conversion_amount is not None
-    ):
-        amount = action.building_conversion_amount
-        if action.building_conversion_direction == "sell_wheat":
-            route_summary += (
-                f" | use building: grain_store to sell {amount} wheat for {amount} silver"
-            )
-        elif action.building_conversion_direction == "buy_wheat":
-            route_summary += (
-                f" | use building: grain_store to buy {amount} wheat for {amount} silver"
-            )
-    if (
-        action.building_conversion_id == "indulgences"
-        and action.building_conversion_direction is not None
-        and action.building_conversion_amount is not None
-    ):
-        amount = action.building_conversion_amount
-        if action.building_conversion_direction == "sell_piety":
-            route_summary += (
-                f" | use building: indulgences to sell {amount} piety for {amount} silver"
-            )
-        elif action.building_conversion_direction == "buy_piety":
-            route_summary += (
-                f" | use building: indulgences to buy {amount} piety for {amount} silver"
-            )
-    if (
-        action.building_conversion_id == "stone_yard"
-        and action.building_conversion_direction is not None
-        and action.building_conversion_amount is not None
-    ):
-        amount = action.building_conversion_amount
-        if action.building_conversion_direction == "sell_stone":
-            route_summary += (
-                f" | use building: stone_yard to sell {amount} stone for {amount} silver"
-            )
-        elif action.building_conversion_direction == "buy_stone":
-            route_summary += (
-                f" | use building: stone_yard to buy {amount} stone for {amount} silver"
-            )
-    if (
-        action.building_conversion_id == "brewery"
-        and action.building_conversion_direction is not None
-        and action.building_conversion_amount is not None
-    ):
-        if action.building_conversion_direction == "sell_wheat_for_silver":
-            route_summary += " | use building: brewery to sell 1 wheat for 2 silver"
     if action.effective_acolyte_building_id == "scriptorium":
         route_summary += (
             " | use building: scriptorium for +1 effective acolyte on occupied Duty tiles"
@@ -746,15 +727,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if action.hired_building_id and action.hired_building_source:
         summary += (
             f" | hire building: {action.hired_building_id} from {action.hired_building_source}"
-        )
-    if (
-        action.building_conversion_id in ("grain_store", "indulgences", "stone_yard", "brewery")
-        and action.building_conversion_source is not None
-        and action.building_conversion_source != "own_active"
-    ):
-        summary += (
-            f" | hire building: {action.building_conversion_id} "
-            f"from {action.building_conversion_source}"
         )
     if (
         action.effective_acolyte_building_id == "scriptorium"
