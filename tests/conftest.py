@@ -9,18 +9,46 @@ from pilgrim.rules.transition import legal_actions
 
 REPO = Path(__file__).resolve().parents[1]
 DEEP_FIXTURE_PATH = REPO / "scenarios" / "deep_round_eighteen_seed_seven_two_player_001.json"
+SCENARIO_PATHS = tuple(sorted((REPO / "scenarios").glob("*.json")))
+PLAYTEST_PATHS = tuple(sorted((REPO / "scenarios" / "playtest").glob("*.json")))
 
 
 @pytest.fixture(scope="session")
-def deep_actions():
+def corpus_actions():
+    """The committed corpus, loaded and enumerated once for the whole test session.
+
+    Under pytest-xdist this is once per WORKER, not once per entire run; workers do not share
+    session fixtures. That trades repeated setup for parallel wall-clock time when xdist is used.
+    """
+    return tuple(
+        (path, scenario, tuple(legal_actions(scenario.state, scenario.config)))
+        for path in SCENARIO_PATHS
+        for scenario in (load_scenario(path),)
+    )
+
+
+@pytest.fixture(scope="session")
+def playtest_actions():
+    """The small playtest corpus, loaded and enumerated once for the whole test session."""
+    return tuple(
+        (path, scenario, tuple(legal_actions(scenario.state, scenario.config)))
+        for path in PLAYTEST_PATHS
+        for scenario in (load_scenario(path),)
+    )
+
+
+@pytest.fixture(scope="session")
+def deep_actions(corpus_actions):
     """The deep fixture, loaded and enumerated once for the whole test session.
 
-    Under pytest-xdist this is once per WORKER, not once per entire run; if xdist is added later,
-    keep deep-fixture tests on one worker (`--dist=loadfile` or an xdist_group) or this saving is
-    lost.
+    The corpus_actions fixture owns the load and enumeration, so the deep position is not
+    generated a second time. Under pytest-xdist the parent fixture is once per worker, not once
+    per entire run.
     """
-    scenario = load_scenario(DEEP_FIXTURE_PATH)
-    return scenario, tuple(legal_actions(scenario.state, scenario.config))
+    for path, scenario, actions in corpus_actions:
+        if path == DEEP_FIXTURE_PATH:
+            return scenario, actions
+    raise AssertionError(f"missing deep fixture: {DEEP_FIXTURE_PATH}")
 
 
 @pytest.hookimpl(tryfirst=True)

@@ -93,6 +93,26 @@ def scenario():
     return load_scenario(str(SCENARIOS / "alms_sandbox_001.json"))
 
 
+def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
+    """Build one uncached page payload from a shared state/action load."""
+    state_payload = view_payload(scenario.state, scenario.config)
+    return dict(
+        state_payload,
+        state_token=state_token(state_payload),
+        turn_candidates=play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+        ),
+        log=[],
+        log_blocks=[],
+    )
+
+
+def _all_corpus_actions(corpus_actions, playtest_actions):
+    return (*corpus_actions, *playtest_actions)
+
+
 # ---------------------------------------------------------------------------------------------
 # What the state record carries
 # ---------------------------------------------------------------------------------------------
@@ -869,106 +889,92 @@ def test_kogge_and_cloisters_playtest_turn_candidates_have_no_dead_edge_steps() 
         server.server_close()
 
 
-def test_every_committed_turn_candidate_edge_is_drawn() -> None:
+def test_every_committed_turn_candidate_edge_is_drawn(corpus_actions) -> None:
     checked_candidates = 0
     dead: list[tuple[str, list[tuple[str | None, list[str]]]]] = []
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
-            candidates = server.payload["turn_candidates"]
-            checked_candidates += len(candidates)
-            # Structural now for City reversals (they are drawn from candidate edges), still a real
-            # corpus guard for the always-drawn map arrows.
-            missing = _dead_candidates_by_missing_edges(candidates, drawn)
-            if missing:
-                dead.append((scenario_path.name, missing[:5]))
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        drawn = set(_arrows_drawn(render_play_view_from_payload(payload)))
+        candidates = payload["turn_candidates"]
+        checked_candidates += len(candidates)
+        # Structural now for City reversals (they are drawn from candidate edges), still a real
+        # corpus guard for the always-drawn map arrows.
+        missing = _dead_candidates_by_missing_edges(candidates, drawn)
+        if missing:
+            dead.append((scenario_path.name, missing[:5]))
 
     assert checked_candidates > 0, "committed corpus had no turn candidates"
     assert not dead, f"{len(dead)} scenarios still have dead edge candidates: {dead[:5]}"
 
 
-def test_every_drawn_city_reversal_arrow_is_used_by_a_candidate() -> None:
+def test_every_drawn_city_reversal_arrow_is_used_by_a_candidate(corpus_actions) -> None:
     checked_reversal_arrows = 0
     orphaned: list[tuple[str, list[str]]] = []
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
-            drawn_reversals = drawn & CITY_REVERSAL_ARROWS
-            checked_reversal_arrows += len(drawn_reversals)
-            candidate_edges = _candidate_edges(server.payload["turn_candidates"])
-            unused = sorted(drawn_reversals - candidate_edges)
-            if unused:
-                orphaned.append((scenario_path.name, unused))
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        drawn = set(_arrows_drawn(render_play_view_from_payload(payload)))
+        drawn_reversals = drawn & CITY_REVERSAL_ARROWS
+        checked_reversal_arrows += len(drawn_reversals)
+        candidate_edges = _candidate_edges(payload["turn_candidates"])
+        unused = sorted(drawn_reversals - candidate_edges)
+        if unused:
+            orphaned.append((scenario_path.name, unused))
 
     assert checked_reversal_arrows > 0, "committed corpus drew no City reversal arrows to verify"
     assert not orphaned, f"{len(orphaned)} scenarios drew unused City reversal arrows: {orphaned[:5]}"
 
 
-def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_fields() -> None:
+def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_fields(
+    corpus_actions, playtest_actions
+) -> None:
     blocked: list[tuple[str, tuple[str, ...], int]] = []
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for candidate in server.payload["turn_candidates"]:
-                if candidate.get("action_id") is not None:
-                    continue
-                unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", [])))
-                if ROUTE_BUILDING_REFUSAL_FIELDS <= set(unresolved):
-                    blocked.append((scenario_path.name, unresolved, int(candidate.get("variants", 0))))
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            if candidate.get("action_id") is not None:
+                continue
+            unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", [])))
+            if ROUTE_BUILDING_REFUSAL_FIELDS <= set(unresolved):
+                blocked.append((scenario_path.name, unresolved, int(candidate.get("variants", 0))))
 
     assert not blocked, f"route-building refusals remained in {len(blocked)} candidate groups: {blocked[:10]}"
 
 
-def test_space_questions_never_overlap_on_one_reachable_prefix() -> None:
+def test_space_questions_never_overlap_on_one_reachable_prefix(corpus_actions, playtest_actions) -> None:
     """One ring family is safe only while at most one wheel question is live at once."""
     overlaps: list[tuple[str, tuple[str, ...], tuple[Any, ...]]] = []
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for prefix, kinds in _offered_kinds_by_prefix(server.payload["turn_candidates"]).items():
-                simultaneous = tuple(sorted(SPACE_QUESTION_KINDS & kinds))
-                if len(simultaneous) > 1:
-                    overlaps.append((scenario_path.name, simultaneous, prefix))
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        payload = _payload_from_corpus(scenario, actions)
+        for prefix, kinds in _offered_kinds_by_prefix(payload["turn_candidates"]).items():
+            simultaneous = tuple(sorted(SPACE_QUESTION_KINDS & kinds))
+            if len(simultaneous) > 1:
+                overlaps.append((scenario_path.name, simultaneous, prefix))
 
     assert not overlaps, f"wheel question kinds overlapped on {len(overlaps)} prefixes: {overlaps[:10]}"
 
 
-def test_relocation_fields_and_hire_payments_are_not_in_refusals() -> None:
+def test_relocation_fields_and_hire_payments_are_not_in_refusals(
+    corpus_actions, playtest_actions
+) -> None:
     relocation_blocked: list[tuple[str, tuple[str, ...], int]] = []
     hire_payment_blocked: list[tuple[str, tuple[str, ...], int]] = []
     refused = 0
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for candidate in server.payload["turn_candidates"]:
-                if candidate.get("action_id") is not None:
-                    continue
-                refused += 1
-                unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", ())))
-                unresolved_set = set(unresolved)
-                if unresolved_set & RELOCATION_REFUSAL_FIELDS:
-                    relocation_blocked.append(
-                        (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
-                    )
-                if "hire_payments" in unresolved_set:
-                    hire_payment_blocked.append(
-                        (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
-                    )
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            if candidate.get("action_id") is not None:
+                continue
+            refused += 1
+            unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", ())))
+            unresolved_set = set(unresolved)
+            if unresolved_set & RELOCATION_REFUSAL_FIELDS:
+                relocation_blocked.append(
+                    (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
+                )
+            if "hire_payments" in unresolved_set:
+                hire_payment_blocked.append(
+                    (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
+                )
 
     assert refused > 0, "corpus had no refused groups, so this checked nothing"
     assert not relocation_blocked, (
@@ -981,22 +987,18 @@ def test_relocation_fields_and_hire_payments_are_not_in_refusals() -> None:
     )
 
 
-def test_no_refused_candidate_names_a_decided_field() -> None:
+def test_no_refused_candidate_names_a_decided_field(corpus_actions, playtest_actions) -> None:
     decided_field_blocked: list[tuple[str, tuple[str, ...], int]] = []
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for candidate in server.payload["turn_candidates"]:
-                if candidate.get("action_id") is not None:
-                    continue
-                unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", ())))
-                if set(unresolved) & set(play_server.DECIDED_FIELDS):
-                    decided_field_blocked.append(
-                        (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
-                    )
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            if candidate.get("action_id") is not None:
+                continue
+            unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", ())))
+            if set(unresolved) & set(play_server.DECIDED_FIELDS):
+                decided_field_blocked.append(
+                    (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
+                )
 
     assert not decided_field_blocked, (
         f"decided fields still block {len(decided_field_blocked)} candidate groups: "
@@ -1020,15 +1022,15 @@ def test_playtest_positions_have_expected_refused_counts(position_name: str, exp
         server.server_close()
 
 
-def test_cloisters_route_permutation_spellings_land_in_the_same_state_record() -> None:
+def test_cloisters_route_permutation_spellings_land_in_the_same_state_record(
+    corpus_actions, playtest_actions
+) -> None:
     compared = 0
     mismatches: list[tuple[str, str, str, tuple[int, ...], tuple[int, ...]]] = []
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        scenario = load_scenario(str(scenario_path))
+    for scenario_path, scenario, all_actions in _all_corpus_actions(corpus_actions, playtest_actions):
         actions = [
             action
-            for action in legal_actions(scenario.state, scenario.config)
+            for action in all_actions
             if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None
         ]
         grouped: dict[tuple[Any, ...], list[FullTurnAction]] = {}
@@ -1083,33 +1085,29 @@ def test_hire_payments_stays_in_residue_for_full_turn_actions() -> None:
     assert "hire_payments" in play_server._residue_fields(action)
 
 
-def test_settled_candidates_never_alias_more_than_one_legal_action() -> None:
+def test_settled_candidates_never_alias_more_than_one_legal_action(corpus_actions, playtest_actions) -> None:
     aliased: list[tuple[str, str, int, list[str]]] = []
     settled = 0
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted(PLAYTEST_SCENARIOS.glob("*.json"))
-    for scenario_path in scenario_paths:
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for candidate in server.payload["turn_candidates"]:
-                if candidate.get("action_id") is None:
-                    continue
-                settled += 1
-                variants = int(candidate.get("variants", 0))
-                if variants == 1:
-                    continue
-                aliased.append(
-                    (
-                        scenario_path.name,
-                        str(candidate["action_id"]),
-                        variants,
-                        [
-                            f"{step.get('kind')}={step.get('value')}"
-                            for step in candidate.get("steps", ())[:8]
-                        ],
-                    )
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            if candidate.get("action_id") is None:
+                continue
+            settled += 1
+            variants = int(candidate.get("variants", 0))
+            if variants == 1:
+                continue
+            aliased.append(
+                (
+                    scenario_path.name,
+                    str(candidate["action_id"]),
+                    variants,
+                    [
+                        f"{step.get('kind')}={step.get('value')}"
+                        for step in candidate.get("steps", ())[:8]
+                    ],
                 )
-        finally:
-            server.server_close()
+            )
 
     assert settled > 0, "corpus had no settled candidates, so this checked nothing"
     assert not aliased, (
@@ -1275,34 +1273,33 @@ def test_cloisters_loop_candidate_edge_counters_are_non_negative_and_end_at_zero
         server.server_close()
 
 
-def test_every_candidate_edge_counter_is_non_negative_and_ends_at_zero_across_corpus() -> None:
+def test_every_candidate_edge_counter_is_non_negative_and_ends_at_zero_across_corpus(
+    corpus_actions,
+) -> None:
     checked = 0
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            for candidate in server.payload["turn_candidates"]:
-                edge_steps = [step for step in candidate["steps"] if step["kind"] == "edge"]
-                if not edge_steps:
-                    continue
-                checked += 1
-                counters = [step.get("counter") for step in edge_steps]
-                assert all(isinstance(counter, int) for counter in counters), (
-                    scenario_path.name,
-                    candidate.get("action_id"),
-                    counters,
-                )
-                assert all(int(counter) >= 0 for counter in counters), (
-                    scenario_path.name,
-                    candidate.get("action_id"),
-                    counters,
-                )
-                assert int(counters[-1]) == 0, (
-                    scenario_path.name,
-                    candidate.get("action_id"),
-                    counters,
-                )
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            edge_steps = [step for step in candidate["steps"] if step["kind"] == "edge"]
+            if not edge_steps:
+                continue
+            checked += 1
+            counters = [step.get("counter") for step in edge_steps]
+            assert all(isinstance(counter, int) for counter in counters), (
+                scenario_path.name,
+                candidate.get("action_id"),
+                counters,
+            )
+            assert all(int(counter) >= 0 for counter in counters), (
+                scenario_path.name,
+                candidate.get("action_id"),
+                counters,
+            )
+            assert int(counters[-1]) == 0, (
+                scenario_path.name,
+                candidate.get("action_id"),
+                counters,
+            )
     assert checked > 0, "corpus had no edge-step candidates, so this checked nothing"
 
 
@@ -1592,21 +1589,22 @@ def _run_script(
 
 def _buildings_on_the_track(server) -> list[str]:
     """Read off the page, which is where the keys really are, rather than off the state."""
-    page = render_play_view_from_payload(server.payload)
+    return _buildings_on_payload(server.payload)
+
+
+def _buildings_on_payload(payload: dict) -> list[str]:
+    page = render_play_view_from_payload(payload)
     return re.findall(r'data-building-choice-key="([a-z_]+)"', page)
 
 
 @pytest.mark.slow
-def test_every_scenario_draws_a_choice_key_for_every_market_building() -> None:
+def test_every_scenario_draws_a_choice_key_for_every_market_building(corpus_actions) -> None:
     missing_by_scenario: dict[str, list[str]] = {}
     extra_by_scenario: dict[str, list[str]] = {}
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), str(scenario_path))
-        try:
-            drawn = set(_buildings_on_the_track(server))
-            market = set(server.payload["state"]["building_market"])
-        finally:
-            server.server_close()
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        drawn = set(_buildings_on_payload(payload))
+        market = set(payload["state"]["building_market"])
         missing = sorted(market - drawn)
         extra = sorted(drawn - market)
         if missing:
@@ -1618,7 +1616,7 @@ def test_every_scenario_draws_a_choice_key_for_every_market_building() -> None:
     assert not extra_by_scenario, f"unexpected building choice keys: {extra_by_scenario}"
 
 
-def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
+def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) -> None:
     """Every candidate that commits a hired building must ask for that hire explicitly.
 
     This guards against silent cost consent: unambiguous branches still need the explicit hire
@@ -1626,143 +1624,133 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step() -> None:
     """
     checked = 0
     missing: list[tuple[str, tuple, list[str], int]] = []
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            actions = list(legal_actions(server.state, server.config))
-            player_id = play_server._speaking_player_id(server.state)
-            (
-                offer_start_turn_relocation,
-                offer_hire_by_action_id,
-                hire_payment_buildings_by_action_id,
-                offer_end_turn_by_action_id,
-            ) = _offer_flags_by_action_id(
-                actions,
-                state=server.state,
-                config=server.config,
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        player_id = play_server._speaking_player_id(scenario.state)
+        (
+            offer_start_turn_relocation,
+            offer_hire_by_action_id,
+            hire_payment_buildings_by_action_id,
+            offer_end_turn_by_action_id,
+        ) = _offer_flags_by_action_id(
+            actions,
+            state=scenario.state,
+            config=scenario.config,
+        )
+
+        def key_for_steps(steps: list[dict]) -> tuple:
+            return tuple(
+                tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
+                for step in steps
             )
 
-            def key_for_steps(steps: list[dict]) -> tuple:
-                return tuple(
-                    tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-                    for step in steps
-                )
+        by_key: dict[tuple, list[FullTurnAction]] = {}
+        for action in actions:
+            steps = play_server.decision_steps(
+                action,
+                player_id,
+                state=scenario.state,
+                config=scenario.config,
+                offer_hire=offer_hire_by_action_id[action_id(action)],
+                hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
+                offer_start_turn_relocation=offer_start_turn_relocation,
+                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
+            )
+            by_key.setdefault(key_for_steps(steps), []).append(action)
 
-            by_key: dict[tuple, list[FullTurnAction]] = {}
-            for action in actions:
-                steps = play_server.decision_steps(
-                    action,
-                    player_id,
-                    state=server.state,
-                    config=server.config,
-                    offer_hire=offer_hire_by_action_id[action_id(action)],
-                    hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                    offer_start_turn_relocation=offer_start_turn_relocation,
-                    offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
-                )
-                by_key.setdefault(key_for_steps(steps), []).append(action)
+        candidates_by_key = {
+            key_for_steps(candidate["steps"]): candidate
+            for candidate in payload["turn_candidates"]
+        }
 
-            candidates_by_key = {
-                key_for_steps(candidate["steps"]): candidate
-                for candidate in server.payload["turn_candidates"]
-            }
-
-            for key, members in by_key.items():
-                if not any(
-                    isinstance(member, FullTurnAction) and member.hired_building_id is not None
-                    for member in members
-                ):
-                    continue
-                checked += 1
-                candidate = candidates_by_key.get(key)
-                if candidate is None:
-                    missing.append((scenario_path.name, key, [], len(members)))
-                    continue
-                if not any(step["kind"] == "hire" for step in candidate["steps"]):
-                    missing.append(
-                        (
-                            scenario_path.name,
-                            key,
-                            [str(step["kind"]) for step in candidate["steps"]],
-                            len(members),
-                        )
+        for key, members in by_key.items():
+            if not any(
+                isinstance(member, FullTurnAction) and member.hired_building_id is not None
+                for member in members
+            ):
+                continue
+            checked += 1
+            candidate = candidates_by_key.get(key)
+            if candidate is None:
+                missing.append((scenario_path.name, key, [], len(members)))
+                continue
+            if not any(step["kind"] == "hire" for step in candidate["steps"]):
+                missing.append(
+                    (
+                        scenario_path.name,
+                        key,
+                        [str(step["kind"]) for step in candidate["steps"]],
+                        len(members),
                     )
-        finally:
-            server.server_close()
-
+                )
     assert checked > 0, "corpus had no hired candidates, so this checked nothing"
     assert not missing, f"missing hire step on {len(missing)} hired candidates: {missing[:10]}"
 
 
-def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step() -> None:
+def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_actions) -> None:
     """Every candidate that commits a Cloisters skip must ask for that skipped space."""
     checked = 0
     missing: list[tuple[str, tuple, list[str], int]] = []
-    for scenario_path in sorted(SCENARIOS.glob("*.json")):
-        server = PlayServer(("127.0.0.1", 0), scenario_path)
-        try:
-            actions = list(legal_actions(server.state, server.config))
-            player_id = play_server._speaking_player_id(server.state)
-            (
-                offer_start_turn_relocation,
-                offer_hire_by_action_id,
-                hire_payment_buildings_by_action_id,
-                offer_end_turn_by_action_id,
-            ) = _offer_flags_by_action_id(
-                actions,
-                state=server.state,
-                config=server.config,
+    for scenario_path, scenario, actions in corpus_actions:
+        payload = _payload_from_corpus(scenario, actions)
+        player_id = play_server._speaking_player_id(scenario.state)
+        (
+            offer_start_turn_relocation,
+            offer_hire_by_action_id,
+            hire_payment_buildings_by_action_id,
+            offer_end_turn_by_action_id,
+        ) = _offer_flags_by_action_id(
+            actions,
+            state=scenario.state,
+            config=scenario.config,
+        )
+
+        def key_for_steps(steps: list[dict]) -> tuple:
+            return tuple(
+                tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
+                for step in steps
             )
 
-            def key_for_steps(steps: list[dict]) -> tuple:
-                return tuple(
-                    tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-                    for step in steps
-                )
+        by_key: dict[tuple, list[FullTurnAction]] = {}
+        for action in actions:
+            steps = play_server.decision_steps(
+                action,
+                player_id,
+                state=scenario.state,
+                config=scenario.config,
+                offer_hire=offer_hire_by_action_id[action_id(action)],
+                hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
+                offer_start_turn_relocation=offer_start_turn_relocation,
+                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
+            )
+            by_key.setdefault(key_for_steps(steps), []).append(action)
 
-            by_key: dict[tuple, list[FullTurnAction]] = {}
-            for action in actions:
-                steps = play_server.decision_steps(
-                    action,
-                    player_id,
-                    state=server.state,
-                    config=server.config,
-                    offer_hire=offer_hire_by_action_id[action_id(action)],
-                    hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                    offer_start_turn_relocation=offer_start_turn_relocation,
-                    offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
-                )
-                by_key.setdefault(key_for_steps(steps), []).append(action)
+        candidates_by_key = {
+            key_for_steps(candidate["steps"]): candidate
+            for candidate in payload["turn_candidates"]
+        }
 
-            candidates_by_key = {
-                key_for_steps(candidate["steps"]): candidate
-                for candidate in server.payload["turn_candidates"]
-            }
-
-            for key, members in by_key.items():
-                if not any(
-                    isinstance(member, FullTurnAction)
-                    and member.sow_route_omitted_location is not None
-                    for member in members
-                ):
-                    continue
-                checked += 1
-                candidate = candidates_by_key.get(key)
-                if candidate is None:
-                    missing.append((scenario_path.name, key, [], len(members)))
-                    continue
-                if not any(step["kind"] == "skip" for step in candidate["steps"]):
-                    missing.append(
-                        (
-                            scenario_path.name,
-                            key,
-                            [str(step["kind"]) for step in candidate["steps"]],
-                            len(members),
-                        )
+        for key, members in by_key.items():
+            if not any(
+                isinstance(member, FullTurnAction)
+                and member.sow_route_omitted_location is not None
+                for member in members
+            ):
+                continue
+            checked += 1
+            candidate = candidates_by_key.get(key)
+            if candidate is None:
+                missing.append((scenario_path.name, key, [], len(members)))
+                continue
+            if not any(step["kind"] == "skip" for step in candidate["steps"]):
+                missing.append(
+                    (
+                        scenario_path.name,
+                        key,
+                        [str(step["kind"]) for step in candidate["steps"]],
+                        len(members),
                     )
-        finally:
-            server.server_close()
-
+                )
     assert checked > 0, "corpus had no skip candidates, so this checked nothing"
     assert not missing, f"missing skip step on {len(missing)} Cloisters candidates: {missing[:10]}"
 

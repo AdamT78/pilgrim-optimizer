@@ -1695,7 +1695,12 @@ def _unresolved_fields(
     return unresolved
 
 
-def turn_candidates(state: Any, config: Any) -> list[dict]:
+def turn_candidates(
+    state: Any,
+    config: Any,
+    *,
+    actions: tuple[Any, ...] | list[Any] | None = None,
+) -> list[dict]:
     """The moves on offer, grouped by the decisions the page can actually put to a player.
 
     One candidate per distinct answer to the currently askable questions, which is not one per legal
@@ -1708,7 +1713,7 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     """
     grouped: dict[tuple[Any, ...], list[Any]] = {}
     player_id = _speaking_player_id(state)
-    actions = list(legal_actions(state, config))
+    actions = list(legal_actions(state, config) if actions is None else actions)
     hire_contexts = _hire_contexts(actions, config)
     offer_start_turn_relocation = any(
         isinstance(action, FullTurnAction) and _action_uses_start_turn_relocation(action)

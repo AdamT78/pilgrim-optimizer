@@ -151,15 +151,13 @@ def landing(state, action, config):
 
 
 @pytest.fixture(scope="module")
-def generations():
+def generations(corpus_actions):
     """Every corpus position generated twice: exhaustively, and as the engine now does it."""
     monkeypatch = pytest.MonkeyPatch()
     built = []
-    for path in sorted(REPO.joinpath("scenarios").glob("*.json")):
+    for path, scenario, after in corpus_actions:
         if path.stem in EXCLUDED_FROM_EXHAUSTIVE:
             continue
-        scenario = load_scenario(path)
-        after = legal_actions(scenario.state, scenario.config)
         if not any(sequenced(action) for action in after):
             continue
         with monkeypatch.context() as patched:

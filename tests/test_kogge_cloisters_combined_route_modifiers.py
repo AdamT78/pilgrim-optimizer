@@ -261,14 +261,14 @@ def test_kogge_and_cloisters_construct_skip_clerical_allocation_tithe_has_one_ac
     assert action.sow_route_building_source == "own_active"
 
 
-def test_combined_kogge_cloisters_actions_require_kogge_candidate_walk_across_corpus_and_playtests() -> None:
+def test_combined_kogge_cloisters_actions_require_kogge_candidate_walk_across_corpus_and_playtests(
+    corpus_actions, playtest_actions
+) -> None:
     checked = 0
     offenders: list[tuple[str, tuple[int, ...], tuple[int, ...], int]] = []
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted((SCENARIOS / "playtest").glob("*.json"))
-    for scenario_path in scenario_paths:
-        scenario = load_scenario(str(scenario_path))
+    for scenario_path, scenario, actions in (*corpus_actions, *playtest_actions):
         board = scenario.config.board
-        for action in legal_actions(scenario.state, scenario.config):
+        for action in actions:
             if not isinstance(action, FullTurnAction):
                 continue
             if not (
@@ -296,18 +296,16 @@ def test_combined_kogge_cloisters_actions_require_kogge_candidate_walk_across_co
     assert not offenders, f"combined Kogge+Cloisters actions with non-Kogge walks: {offenders[:10]}"
 
 
-def test_only_known_scenarios_move_with_expected_action_deltas() -> None:
-    scenario_paths = sorted(SCENARIOS.glob("*.json")) + sorted((SCENARIOS / "playtest").glob("*.json"))
+def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, playtest_actions) -> None:
+    all_actions = (*corpus_actions, *playtest_actions)
 
     current_counts: dict[str, int] = {}
-    for scenario_path in scenario_paths:
-        scenario = load_scenario(str(scenario_path))
-        current_counts[scenario_path.name] = len(list(legal_actions(scenario.state, scenario.config)))
+    for scenario_path, _scenario, actions in all_actions:
+        current_counts[scenario_path.name] = len(actions)
 
     with _legacy_combined_mode():
         legacy_counts: dict[str, int] = {}
-        for scenario_path in scenario_paths:
-            scenario = load_scenario(str(scenario_path))
+        for scenario_path, scenario, _actions in all_actions:
             legacy_counts[scenario_path.name] = len(list(legal_actions(scenario.state, scenario.config)))
 
     moved = {
