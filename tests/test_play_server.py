@@ -45,6 +45,7 @@ from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId, TurnResoluti
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import apply_turn_step, turn_steps
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug import render_play_view
@@ -56,10 +57,12 @@ PLAYTEST_SCENARIOS = SCENARIOS / "playtest"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
+PLAYTEST_CONVERSIONS = "conversions_2p.json"
 PLAYTEST_POSITION_NAMES = (
     PLAYTEST_CLOISTERS,
     PLAYTEST_CLOISTERS_LOOP,
     PLAYTEST_KOGGE_AND_CLOISTERS,
+    PLAYTEST_CONVERSIONS,
 )
 CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
 ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
@@ -525,6 +528,7 @@ def test_setup_page_lists_discovered_playtest_positions_with_blank_fresh_default
     assert f'value="{PLAYTEST_CLOISTERS}"' in page
     assert f'value="{PLAYTEST_CLOISTERS_LOOP}"' in page
     assert f'value="{PLAYTEST_KOGGE_AND_CLOISTERS}"' in page
+    assert f'value="{PLAYTEST_CONVERSIONS}"' in page
     assert ">cloisters_reach_2p<" in page
     assert ">cloisters_loop_2p<" in page
     assert ">kogge_and_cloisters_2p<" in page
@@ -621,6 +625,7 @@ def test_start_rejects_an_unknown_test_position_name() -> None:
         (PLAYTEST_CLOISTERS, "cloisters_reach_2p", ["cloisters"]),
         (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p", ["cloisters"]),
         (PLAYTEST_KOGGE_AND_CLOISTERS, "kogge_and_cloisters_2p", ["kogge", "cloisters"]),
+        (PLAYTEST_CONVERSIONS, "conversions_2p", ["stone_yard", "grain_store"]),
     ],
 )
 def test_starting_from_test_position_uses_the_file_count_and_seed(
@@ -750,7 +755,7 @@ def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
         seen.add(path.name)
         checked += 1
 
-    assert checked == 3
+    assert checked == 4
     assert seen == set(PLAYTEST_POSITION_NAMES)
 
 
@@ -887,6 +892,40 @@ def test_kogge_and_cloisters_playtest_turn_candidates_have_no_dead_edge_steps() 
         assert not dead, f"kogge+cloisters playtest candidates still ask for undrawn arrows: {dead[:10]}"
     finally:
         server.server_close()
+
+
+def test_conversions_playtest_exposes_and_applies_all_conversion_paths() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    actions = list(legal_actions(scenario.state, scenario.config))
+    candidates = play_server.turn_candidates(scenario.state, scenario.config, actions=actions)
+    steps = list(turn_steps(scenario.state, scenario.config))
+
+    assert len(actions) == 63
+    assert len(candidates) == 62
+    assert sum(candidate["action_id"] is None for candidate in candidates) == 1
+    assert {step.building_id for step in steps} == {
+        "stone_yard", "grain_store", "brewery", "indulgences"
+    }
+    hired = [step for step in steps if step.hire_payment is not None]
+    assert hired and {step.hire_payment for step in hired} == {"wheat", "stone", "silver"}
+
+    after_grain_store = apply_turn_step(
+        scenario.state,
+        scenario.config,
+        next(step for step in steps if step.building_id == "grain_store"),
+    )
+    assert {step.building_id for step in turn_steps(after_grain_store, scenario.config)} == {
+        "stone_yard", "brewery", "indulgences"
+    }
+
+
+def test_conversions_playtest_runs_for_twenty_turns() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    state = scenario.state
+    for turn_index in range(20):
+        actions = list(legal_actions(state, scenario.config))
+        assert actions, f"{PLAYTEST_CONVERSIONS} had no legal action at turn {turn_index + 1}"
+        state = apply_action(state, actions[0], scenario.config).state
 
 
 def test_every_committed_turn_candidate_edge_is_drawn(corpus_actions) -> None:

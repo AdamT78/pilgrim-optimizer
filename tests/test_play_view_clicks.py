@@ -20,6 +20,7 @@ SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
+PLAYTEST_CONVERSIONS = "conversions_2p.json"
 
 
 @pytest.fixture(scope="session")
@@ -430,6 +431,9 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     )
     assert any(option["value"] == PLAYTEST_KOGGE_AND_CLOISTERS for option in option_values), (
         "kogge+cloisters playtest scenario is missing from dropdown"
+    )
+    assert any(option["value"] == PLAYTEST_CONVERSIONS for option in option_values), (
+        "conversion playtest scenario is missing from dropdown"
     )
 
     page.select_option("#test_position", PLAYTEST_CLOISTERS)
@@ -1265,6 +1269,28 @@ def test_two_active_conversions_commit_from_building_direction_and_amount_clicks
 
     assert server.state != before, "committing a conversion did not change the position"
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+
+
+def test_conversion_playtest_starts_from_setup_and_commits_from_player_board(page, serve) -> None:
+    base_url, server = serve(None)
+    page.goto(base_url, wait_until="networkidle")
+    page.select_option("#test_position", PLAYTEST_CONVERSIONS)
+    submit = page.query_selector('button[type="submit"]')
+    assert submit is not None
+    _click_handle_centre(page, submit, require_hit=True)
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector('[data-component="play-log"]')
+
+    _choose_conversion(page, "grain_store", "sell_wheat", 1)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+
+    assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+    assert page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
+        '[data-turn-step-offered="true"]'
+    ).count() == 1
 
 
 def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:
