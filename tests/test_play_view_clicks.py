@@ -137,8 +137,11 @@ def _next_offered_from_dom(
 
     selectors = (
         '[data-board-position-index][data-turn-start-candidate="true"]',
+        '[data-board-position-index][data-turn-start-relocation-candidate="true"]',
         '[data-board-position-index][data-turn-skip-candidate="true"]',
+        '[data-board-position-index][data-turn-end-relocation-candidate="true"]',
         '[data-board-position-index][data-turn-duty-candidate="true"]',
+        '[data-active-seat="true"][data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"]',
         '[data-arrow][data-turn-offered="true"]',
         '[data-resolution-key][data-turn-offered="true"]',
         '[data-combination-key][data-turn-offered="true"]',
@@ -277,7 +280,16 @@ def _turn_state_snapshot(page) -> dict[str, object]:
     """A compact view of what the page currently offers and enables in the turn UI."""
     return {
         "origins": page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count(),
+        "start_relocation_spaces": page.locator(
+            '[data-board-position-index][data-turn-start-relocation-candidate="true"]'
+        ).count(),
         "skips": page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count(),
+        "end_relocation_spaces": page.locator(
+            '[data-board-position-index][data-turn-end-relocation-candidate="true"]'
+        ).count(),
+        "end_relocation_abbey": page.locator(
+            '[data-active-seat="true"][data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"]'
+        ).count(),
         "duties": page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count(),
         "arrows": page.locator('[data-arrow][data-turn-offered="true"]').count(),
         "resolution_keys": page.locator('[data-resolution-key][data-turn-offered="true"]').all_inner_texts(),
@@ -521,6 +533,51 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
     assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
         "duty question did not follow city skip selection"
     )
+
+
+def test_inquisition_start_turn_move_is_asked_before_origin_and_unlocks_more_origins(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "inquisition_active_city_to_duty_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    opening = _turn_state_snapshot(page)
+    prompts = [str(prompt).lower() for prompt in opening["prompts"]]
+    assert opening["origins"] == 0, opening
+    assert any("before-sow move" in prompt for prompt in prompts), prompts
+
+    inquisition_locator = page.locator(
+        '[data-combination-key][data-turn-offered="true"]'
+    ).filter(has_text="Inquisition")
+    assert inquisition_locator.count() >= 1, "Inquisition option was not offered first"
+    inquisition = inquisition_locator.first.element_handle()
+    assert inquisition is not None
+    _click_handle_centre(page, inquisition, require_hit=True)
+    page.wait_for_timeout(20)
+
+    before_target = _turn_state_snapshot(page)
+    assert before_target["origins"] == 0, before_target
+
+    relocation_targets = page.locator(
+        '[data-board-position-index][data-turn-start-relocation-candidate="true"]'
+    )
+    assert relocation_targets.count() == 8, "Inquisition did not offer all duty-space relocation targets"
+    relocation_target = relocation_targets.first.element_handle()
+    assert relocation_target is not None
+    chosen_target = int(relocation_target.get_attribute("data-board-position-index"))
+    _click_handle_centre(page, relocation_target, require_hit=True)
+    page.wait_for_timeout(20)
+
+    after_move = _turn_state_snapshot(page)
+    assert after_move["start_relocation_spaces"] == 0, after_move
+    assert after_move["origins"] == 2, after_move
+    offered_origins = {
+        int(value)
+        for value in page.eval_on_selector_all(
+            '[data-board-position-index][data-turn-start-candidate="true"]',
+            "nodes => nodes.map(node => node.getAttribute('data-board-position-index'))",
+        )
+        if value is not None
+    }
+    assert offered_origins == {0, chosen_target}, offered_origins
 
 
 def test_cloisters_reach_play_view_does_not_draw_city_east_reversal_arrow(page, serve) -> None:
@@ -819,6 +876,16 @@ def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) ->
     base_url, _server = serve(SCENARIOS / "kogge_hire_opponent_city_to_west_001.json")
     page.goto(base_url, wait_until="networkidle")
 
+    if page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count() == 0:
+        move_none = page.locator('[data-combination-key][data-turn-offered="true"]').filter(
+            has_text="Move no one"
+        )
+        if move_none.count() == 1:
+            move_none_handle = move_none.first.element_handle()
+            assert move_none_handle is not None
+            _click_handle_centre(page, move_none_handle, require_hit=True)
+            page.wait_for_timeout(20)
+
     city = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
     assert city is not None, "city origin was not offered"
     _click_handle_centre(page, city, require_hit=True)
@@ -1031,8 +1098,8 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
 @pytest.mark.parametrize(
     ("scenario_name", "resolution", "hire_key"),
     [
-        ("allocation_hire_infirmary_market_001.json", "allocation", "infirmary:market:wheat"),
-        ("ordination_hire_mill_market_three_steps_001.json", "ordination", "mill:market:wheat"),
+        ("allocation_hire_infirmary_market_001.json", "allocation", "infirmary:market"),
+        ("ordination_hire_mill_market_three_steps_001.json", "ordination", "mill:market"),
     ],
 )
 def test_bonus_building_hire_options_are_mouse_reachable(

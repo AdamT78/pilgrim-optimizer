@@ -31,6 +31,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import argparse
+import collections
 import dataclasses
 import enum
 import hashlib
@@ -476,6 +477,37 @@ RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_res
 # Construct that only lays road carries no building at all.
 BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
 HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
+HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
+# Action fields that identify one potentially hired building and where it is sourced from.
+HIRE_PAYMENT_OWNER_FIELDS: tuple[tuple[str, str], ...] = (
+    ("hired_building_id", "hired_building_source"),
+    ("start_turn_building_id", "start_turn_building_source"),
+    ("end_turn_building_id", "end_turn_building_source"),
+    ("sow_route_building_id", "sow_route_building_source"),
+    ("sow_route_secondary_building_id", "sow_route_secondary_building_source"),
+    ("building_conversion_id", "building_conversion_source"),
+    ("bank_payment_building_id", "bank_payment_building_source"),
+    ("merchant_advance_building_id", "merchant_advance_building_source"),
+    ("workforce_move_building_id", "workforce_move_building_source"),
+    ("free_hire_target_building_id", "free_hire_target_building_source"),
+    ("effective_acolyte_building_id", "effective_acolyte_building_source"),
+)
+START_TURN_RELOCATION_CHOICE_FIELDS: tuple[str, ...] = (
+    "start_turn_building_id",
+    "start_turn_building_source",
+)
+START_TURN_RELOCATION_TARGET_FIELDS: tuple[str, ...] = (
+    "start_turn_relocation_from",
+    "start_turn_relocation_to",
+)
+END_TURN_RELOCATION_CHOICE_FIELDS: tuple[str, ...] = (
+    "end_turn_building_id",
+    "end_turn_building_source",
+)
+END_TURN_RELOCATION_TARGET_FIELDS: tuple[str, ...] = (
+    "end_turn_relocation_from",
+    "end_turn_relocation_to",
+)
 
 # Fields that are only legal in certain COMBINATIONS, offered whole rather than one at a time.
 # Setting one number and then the other would walk through states the engine never offered, and
@@ -538,6 +570,10 @@ ARRANGEMENT_PROMPT = (
     "move acolytes from the Abbey to Special Activity and/or between Special Activities."
 )
 ORDINATION_PROMPT = "choose a serf to ordain, or an acolyte to send on mission."
+START_RELOCATION_CHOICE_PROMPT = "choose a before-sow move, or move no one."
+START_RELOCATION_SPACE_PROMPT = "choose the duty space for that move."
+END_RELOCATION_CHOICE_PROMPT = "choose an after-turn move, or move no one."
+END_RELOCATION_SPACE_PROMPT = "choose a duty space, or the Abbey, for that move."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
@@ -587,13 +623,6 @@ def _hire_source_phrase(source: str) -> str:
     return source
 
 
-def _hire_payment_resource(action: FullTurnAction, building_id: str) -> str | None:
-    for paid_building, paid_resource in tuple(action.hire_payments or ()):
-        if paid_building == building_id:
-            return paid_resource
-    return None
-
-
 def _hire_step(
     action: FullTurnAction,
     state: Any,
@@ -618,13 +647,13 @@ def _hire_step(
         acting_player=state.active_player,
         building_key=building_id,
     )
-    payment_resource = _hire_payment_resource(action, building_id) or source.hire_resource or "unknown"
+    payment_resource = source.hire_resource or "unknown"
     building_name = building_by_id(config.buildings, building_id).name
     return (
         {
             "kind": "hire",
             # One scalar so the page can match with `===`.
-            "value": f"{building_id}:{source_label}:{payment_resource}",
+            "value": f"{building_id}:{source_label}",
             "label": (
                 f"Hire the {building_name} from {_hire_source_phrase(source_label)}"
                 f" - {source.hire_cost} {payment_resource}"
@@ -632,6 +661,205 @@ def _hire_step(
             "prompt": COMBINATION_PROMPT,
         },
         HIRE_FIELDS,
+    )
+
+
+def _hire_payment_map(action: FullTurnAction) -> dict[str, str]:
+    """Hire payment resources keyed by hired building id for one action."""
+    return {
+        building_id: resource
+        for building_id, resource in tuple(action.hire_payments or ())
+    }
+
+
+def _hire_payment_resource_steps(
+    action: FullTurnAction,
+    *,
+    asked_buildings: tuple[str, ...],
+) -> list[tuple[dict, tuple[str, ...]]]:
+    """One stock-choice step per open hire payment resource question."""
+    payments = _hire_payment_map(action)
+    steps: list[tuple[dict, tuple[str, ...]]] = []
+    for building_id in asked_buildings:
+        resource = payments.get(building_id)
+        if resource is None:
+            raise ValueError(
+                f"Missing hire payment for asked building {building_id!r} on action {action_id(action)}."
+            )
+        steps.append(
+            (
+                {"kind": "resource", "value": resource, "prompt": RESOURCE_PROMPT},
+                HIRE_PAYMENT_FIELDS,
+            )
+        )
+    return steps
+
+
+def _start_relocation_phrase(building_id: str) -> str:
+    if building_id == "dormitory":
+        return "bring an acolyte into the City"
+    if building_id == "inquisition":
+        return "send an acolyte out of the City"
+    return "move one acolyte along a City spoke"
+
+
+def _end_relocation_phrase(building_id: str) -> str:
+    if building_id == "library":
+        return "send an acolyte out of the City after this turn resolves"
+    return "move one acolyte along a City spoke after this turn resolves"
+
+
+def _relocation_choice_value(
+    action: FullTurnAction,
+    *,
+    building_id: str,
+    source_label: str,
+) -> str:
+    return f"{building_id}:{source_label}"
+
+
+def _relocation_choice_label(
+    action: FullTurnAction,
+    state: Any,
+    config: Any,
+    *,
+    building_id: str,
+    source_label: str,
+    phrase: str,
+) -> str:
+    building_name = building_by_id(config.buildings, building_id).name
+    if source_label == "own_active":
+        return f"{building_name}, your board: {phrase}"
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=building_id,
+    )
+    paid_resource = source.hire_resource or "unknown"
+    return (
+        f"{building_name}, hire from {_hire_source_phrase(source_label)}"
+        f" for {source.hire_cost} {paid_resource}: {phrase}"
+    )
+
+
+def _start_turn_relocation_choice_step(
+    action: FullTurnAction,
+    state: Any,
+    config: Any,
+) -> tuple[dict, tuple[str, ...]]:
+    if action.start_turn_building_id is None:
+        return (
+            {
+                "kind": "start_relocation_choice",
+                "value": "none",
+                "label": "Move no one",
+                "prompt": START_RELOCATION_CHOICE_PROMPT,
+            },
+            START_TURN_RELOCATION_CHOICE_FIELDS,
+        )
+    building_id = action.start_turn_building_id
+    source_label = action.start_turn_building_source or "unknown"
+    return (
+        {
+            "kind": "start_relocation_choice",
+            "value": _relocation_choice_value(
+                action,
+                building_id=building_id,
+                source_label=source_label,
+            ),
+            "label": _relocation_choice_label(
+                action,
+                state,
+                config,
+                building_id=building_id,
+                source_label=source_label,
+                phrase=_start_relocation_phrase(building_id),
+            ),
+            "prompt": START_RELOCATION_CHOICE_PROMPT,
+        },
+        START_TURN_RELOCATION_CHOICE_FIELDS,
+    )
+
+
+def _start_turn_relocation_target_step(
+    action: FullTurnAction,
+) -> tuple[dict, tuple[str, ...]] | None:
+    if action.start_turn_building_id is None:
+        return None
+    building_id = action.start_turn_building_id
+    if building_id == "dormitory":
+        value = action.start_turn_relocation_from
+    elif building_id == "inquisition":
+        value = action.start_turn_relocation_to
+    else:
+        raise ValueError(f"Unsupported start-turn relocation building {building_id!r}.")
+    if value is None:
+        raise ValueError("Start-turn relocation target is missing.")
+    return (
+        {
+            "kind": "start_relocation_space",
+            "value": value,
+            "prompt": START_RELOCATION_SPACE_PROMPT,
+        },
+        START_TURN_RELOCATION_TARGET_FIELDS,
+    )
+
+
+def _end_turn_relocation_choice_step(
+    action: FullTurnAction,
+    state: Any,
+    config: Any,
+) -> tuple[dict, tuple[str, ...]]:
+    if action.end_turn_building_id is None:
+        return (
+            {
+                "kind": "end_relocation_choice",
+                "value": "none",
+                "label": "Move no one",
+                "prompt": END_RELOCATION_CHOICE_PROMPT,
+            },
+            END_TURN_RELOCATION_CHOICE_FIELDS,
+        )
+    building_id = action.end_turn_building_id
+    source_label = action.end_turn_building_source or "unknown"
+    return (
+        {
+            "kind": "end_relocation_choice",
+            "value": _relocation_choice_value(
+                action,
+                building_id=building_id,
+                source_label=source_label,
+            ),
+            "label": _relocation_choice_label(
+                action,
+                state,
+                config,
+                building_id=building_id,
+                source_label=source_label,
+                phrase=_end_relocation_phrase(building_id),
+            ),
+            "prompt": END_RELOCATION_CHOICE_PROMPT,
+        },
+        END_TURN_RELOCATION_CHOICE_FIELDS,
+    )
+
+
+def _end_turn_relocation_target_step(
+    action: FullTurnAction,
+) -> tuple[dict, tuple[str, ...]] | None:
+    if action.end_turn_building_id is None:
+        return None
+    value = action.end_turn_relocation_to
+    if value is None:
+        raise ValueError("End-turn relocation target is missing.")
+    return (
+        {
+            "kind": "end_relocation_space",
+            "value": value,
+            "prompt": END_RELOCATION_SPACE_PROMPT,
+        },
+        END_TURN_RELOCATION_TARGET_FIELDS,
     )
 
 
@@ -685,6 +913,7 @@ def _presented(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Each further question this page can put about one action, with the fields it answers.
 
@@ -744,6 +973,15 @@ def _presented(
         # decision ahead of the outcome question; for counted/composed effects (alms payments) it
         # keeps "pay this cost" ahead of "spend these stocks".
         presented.append(_hire_step(action, state, config))
+    if isinstance(action, FullTurnAction) and hire_payment_buildings:
+        # Wildcard hires (Cornucopia) are paid from a chosen stock. Ask that stock before any
+        # resolution-specific effect steps spend or award resources.
+        presented.extend(
+            _hire_payment_resource_steps(
+                action,
+                asked_buildings=hire_payment_buildings,
+            )
+        )
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
@@ -798,6 +1036,7 @@ def _presented_rows(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Call `_presented`, while still allowing tests to monkeypatch the old one-arg shape."""
     try:
@@ -806,6 +1045,7 @@ def _presented_rows(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            hire_payment_buildings=hire_payment_buildings,
         )
     except TypeError as exc:
         if "unexpected keyword argument" not in str(exc):
@@ -819,6 +1059,7 @@ def _presented_steps(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
 ) -> list[dict]:
     return [
         step
@@ -827,6 +1068,7 @@ def _presented_steps(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            hire_payment_buildings=hire_payment_buildings,
         )
     ]
 
@@ -943,6 +1185,61 @@ def _action_hires_building(action: FullTurnAction) -> bool:
     return action.hired_building_id is not None
 
 
+def _action_uses_start_turn_relocation(action: FullTurnAction) -> bool:
+    return action.start_turn_building_id is not None
+
+
+def _action_uses_end_turn_relocation(action: FullTurnAction) -> bool:
+    return action.end_turn_building_id is not None
+
+
+def _steps_key(steps: list[dict]) -> tuple[Any, ...]:
+    return tuple(
+        tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"] for step in steps
+    )
+
+
+_FULL_TURN_FIELDS_EXCEPT_ROUTE: tuple[str, ...] = tuple(
+    field.name for field in dataclasses.fields(FullTurnAction) if field.name != "route"
+)
+
+
+def _cloisters_route_outcome_key(action: FullTurnAction) -> tuple[Any, ...] | None:
+    """Outcome key for Cloisters spellings where route order can be presentation-only."""
+    if action.sow_route_omitted_location is None:
+        return None
+    route = tuple(action.route or ())
+    return (
+        tuple(sorted(route)),
+        *(getattr(action, name) for name in _FULL_TURN_FIELDS_EXCEPT_ROUTE),
+    )
+
+
+def _dedupe_cloisters_route_spellings(members: list[Any]) -> list[Any]:
+    """Drop duplicate Cloisters spellings that differ only by route-order permutation.
+
+    Candidate groups are already partitioned by asked step values, so this runs within one decision
+    frontier and keeps first-seen order. Non-Cloisters actions are returned untouched.
+    """
+    if len(members) < 2:
+        return members
+    deduped: list[Any] = []
+    seen: set[tuple[Any, ...]] = set()
+    for member in members:
+        if not isinstance(member, FullTurnAction):
+            deduped.append(member)
+            continue
+        key = _cloisters_route_outcome_key(member)
+        if key is None:
+            deduped.append(member)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(member)
+    return deduped
+
+
 def _hire_contexts(actions: list[Any], config: Any) -> set[tuple[Any, ...]]:
     """Prefixes where at least one legal action hires a building.
 
@@ -954,6 +1251,163 @@ def _hire_contexts(actions: list[Any], config: Any) -> set[tuple[Any, ...]]:
         for action in actions
         if isinstance(action, FullTurnAction) and _action_hires_building(action)
     }
+
+
+def _steps_before_hire_payment_questions(
+    action: Any,
+    player_id: str,
+    *,
+    state: Any,
+    config: Any,
+    offer_hire: bool = False,
+    offer_start_turn_relocation: bool = False,
+) -> list[dict]:
+    """Decision steps through the hire choice, stopping before any hire-payment stock choice."""
+    if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
+        return _address_steps(
+            _presented_steps(
+                action,
+                state=state,
+                config=config,
+                offer_hire=offer_hire,
+            ),
+            player_id,
+        )
+
+    edge_destinations, omitted_edge_index = _route_destinations_for_steps(action, config)
+    edge_values = _route_step_values(action.origin, edge_destinations)
+    edge_counters = _edge_counters(
+        action,
+        edge_destinations=edge_destinations,
+        omitted_edge_index=omitted_edge_index,
+    )
+    counter = _counter_start(action)
+    steps: list[dict] = []
+    if isinstance(action, FullTurnAction) and offer_start_turn_relocation:
+        start_choice, _fields = _start_turn_relocation_choice_step(action, state, config)
+        steps.append(start_choice)
+        start_target = _start_turn_relocation_target_step(action)
+        if start_target is not None:
+            steps.append(start_target[0])
+    steps.append(
+        {
+            "kind": "origin",
+            "value": action.origin,
+            "prompt": ORIGIN_PROMPT,
+            "counter": counter,
+        }
+    )
+    steps += [
+        {
+            "kind": "edge",
+            "value": value,
+            "prompt": ROUTE_PROMPT,
+            "counter": edge_counters[index],
+        }
+        for index, value in enumerate(edge_values)
+    ]
+    if isinstance(action, SetupSowAction):
+        return _address_steps(steps, player_id)
+    if action.sow_route_omitted_location is not None:
+        steps.append(
+            {
+                "kind": "skip",
+                "value": action.sow_route_omitted_location,
+                "prompt": SKIP_PROMPT,
+            }
+        )
+    steps.append({"kind": "duty", "value": action.selected_duty, "prompt": DUTY_PROMPT})
+    steps.append(
+        {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
+    )
+    if offer_hire and isinstance(action, FullTurnAction):
+        hire_step, _fields = _hire_step(action, state, config)
+        steps.append(hire_step)
+    return _address_steps(steps, player_id)
+
+
+def _hire_payment_question_buildings_by_action_id(
+    actions: list[Any],
+    *,
+    player_id: str,
+    state: Any,
+    config: Any,
+    offer_hire_by_action_id: dict[str, bool],
+    offer_start_turn_relocation: bool,
+) -> dict[str, tuple[str, ...]]:
+    """Per action, which hired buildings still need a stock-choice question."""
+    action_with_ids = [(action, action_id(action)) for action in actions]
+    by_action_id: dict[str, tuple[str, ...]] = {
+        move_id: tuple()
+        for _action, move_id in action_with_ids
+    }
+    members_by_context: dict[tuple[Any, ...], list[tuple[FullTurnAction, str]]] = {}
+    for action, move_id in action_with_ids:
+        key = _steps_key(
+            _steps_before_hire_payment_questions(
+                action,
+                player_id,
+                state=state,
+                config=config,
+                offer_hire=offer_hire_by_action_id[move_id],
+                offer_start_turn_relocation=offer_start_turn_relocation,
+            )
+        )
+        if isinstance(action, FullTurnAction):
+            members_by_context.setdefault(key, []).append((action, move_id))
+
+    for members in members_by_context.values():
+        if not members:
+            continue
+        payment_map_by_action_id = {
+            move_id: _hire_payment_map(member)
+            for member, move_id in members
+        }
+
+        shared_open: set[str] = set()
+        shared_buildings = set(payment_map_by_action_id[members[0][1]])
+        for _member, move_id in members[1:]:
+            shared_buildings &= set(payment_map_by_action_id[move_id])
+        for building_id in shared_buildings:
+            if len(
+                {
+                    payment_map_by_action_id[move_id][building_id]
+                    for _member, move_id in members
+                }
+            ) > 1:
+                shared_open.add(building_id)
+
+        resources_by_key: collections.defaultdict[tuple[str, str, Any], set[str]] = (
+            collections.defaultdict(set)
+        )
+        for other, other_id in members:
+            payments = payment_map_by_action_id[other_id]
+            for id_field, source_field in HIRE_PAYMENT_OWNER_FIELDS:
+                building_id = getattr(other, id_field)
+                if building_id is None or building_id not in payments:
+                    continue
+                key = (id_field, building_id, getattr(other, source_field))
+                resources_by_key[key].add(payments[building_id])
+
+        for member, move_id in members:
+            asked: set[str] = set(shared_open)
+            payments = payment_map_by_action_id[move_id]
+            for id_field, source_field in HIRE_PAYMENT_OWNER_FIELDS:
+                building_id = getattr(member, id_field)
+                if building_id is None or building_id not in payments:
+                    continue
+                source = getattr(member, source_field)
+                if len(resources_by_key[(id_field, building_id, source)]) > 1:
+                    asked.add(building_id)
+
+            ordered = tuple(
+                building_id
+                for building_id, _resource in tuple(member.hire_payments or ())
+                if building_id in asked
+            )
+            by_action_id[move_id] = ordered
+
+    return by_action_id
 
 
 def _speaking_player_id(state: Any) -> str:
@@ -1013,6 +1467,9 @@ def _covered_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
+    offer_start_turn_relocation: bool = False,
+    offer_end_turn_relocation: bool = False,
 ) -> set[str]:
     """Which residue fields this action's steps actually answer.
 
@@ -1026,9 +1483,18 @@ def _covered_fields(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            hire_payment_buildings=hire_payment_buildings,
         )
         for name in fields
     }
+    if isinstance(action, FullTurnAction) and offer_start_turn_relocation:
+        covered.update(START_TURN_RELOCATION_CHOICE_FIELDS)
+        if action.start_turn_building_id is not None:
+            covered.update(START_TURN_RELOCATION_TARGET_FIELDS)
+    if isinstance(action, FullTurnAction) and offer_end_turn_relocation:
+        covered.update(END_TURN_RELOCATION_CHOICE_FIELDS)
+        if action.end_turn_building_id is not None:
+            covered.update(END_TURN_RELOCATION_TARGET_FIELDS)
     if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None:
         covered.add("sow_route_omitted_location")
     return covered
@@ -1044,7 +1510,8 @@ def _residue_fields(action: Any) -> tuple[str, ...]:
     return tuple(
         field.name
         for field in dataclasses.fields(action)
-        if field.name not in DECIDED_FIELDS and field.name != "action_type"
+        if field.name not in DECIDED_FIELDS
+        and field.name != "action_type"
     )
 
 
@@ -1055,21 +1522,27 @@ def decision_steps(
     state: Any,
     config: Any,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
+    offer_start_turn_relocation: bool = False,
+    offer_end_turn_relocation: bool = False,
 ) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
-    Origin, then the route one space at a time, then (for Cloisters walks) which City/Duty space
-    is left unsown, then which duty was selected, then what to do with it, then whatever that
-    resolution goes on to ask. A setup sow stops after the route because that is all it has.
+    A start-turn relocation choice (where offered), then origin, then the route one space at a
+    time, then (for Cloisters walks) which City/Duty space is left unsown, then which duty was
+    selected, then what to do with it, then any explicit hire and wildcard-hire stock choices, then
+    whatever that resolution goes on to ask, then the Library relocation choice (where offered). A
+    setup sow stops after the route because that is all it has.
 
     Each step says what KIND of thing it is, because they are not answered in the same place -- and
-    three of them now share one surface and still have to stay distinct on it. `origin`, `skip`
-    and `duty` are all answered by pointing at a wheel space, and are distinct kinds so the page
-    can mark "where to lift from", "which space goes unsown" and "which duty to take" differently
-    without consulting field names or writing a second copy of what any one means. The others are
-    still separated by where they are answered: a resolution is beside the board, a stock is on the
-    asking seat's own board, a seat is a whole board, a building is a hex on the round track, and
-    a combination is a set of amounts that only go together one way.
+    five of them now share one surface and still have to stay distinct on it. `origin`, `skip`,
+    `duty`, `start_relocation_space` and `end_relocation_space` are all answered by pointing at a
+    wheel space (with `end_relocation_space=abbey` answered on an Abbey token), and are distinct
+    kinds so the page can mark each question differently without consulting field names or writing a
+    second copy of what any one means. The others are still separated by where they are answered: a
+    resolution is beside the board, a stock is on the asking seat's own board, a seat is a whole
+    board, a building is a hex on the round track, and a combination is a set of amounts that only
+    go together one way.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
@@ -1084,6 +1557,7 @@ def decision_steps(
                 state=state,
                 config=config,
                 offer_hire=offer_hire,
+                hire_payment_buildings=hire_payment_buildings,
             ),
             player_id,
         )
@@ -1097,7 +1571,14 @@ def decision_steps(
         omitted_edge_index=omitted_edge_index,
     )
     counter = _counter_start(action)
-    steps = [
+    steps: list[dict] = []
+    if isinstance(action, FullTurnAction) and offer_start_turn_relocation:
+        start_choice, _fields = _start_turn_relocation_choice_step(action, state, config)
+        steps.append(start_choice)
+        start_target = _start_turn_relocation_target_step(action)
+        if start_target is not None:
+            steps.append(start_target[0])
+    steps += [
         {
             "kind": "origin",
             "value": action.origin,
@@ -1139,7 +1620,14 @@ def decision_steps(
         state=state,
         config=config,
         offer_hire=offer_hire,
+        hire_payment_buildings=hire_payment_buildings,
     )
+    if isinstance(action, FullTurnAction) and offer_end_turn_relocation:
+        end_choice, _fields = _end_turn_relocation_choice_step(action, state, config)
+        steps.append(end_choice)
+        end_target = _end_turn_relocation_target_step(action)
+        if end_target is not None:
+            steps.append(end_target[0])
     return _address_steps(steps, player_id)
 
 
@@ -1149,6 +1637,9 @@ def _unresolved_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    hire_payment_buildings: tuple[str, ...] = (),
+    offer_start_turn_relocation: bool = False,
+    offer_end_turn_relocation: bool = False,
 ) -> list[str]:
     """Which fields the actions in one group still disagree about.
 
@@ -1168,19 +1659,48 @@ def _unresolved_fields(
         state,
         config,
         offer_hire=offer_hire,
+        hire_payment_buildings=hire_payment_buildings,
+        offer_start_turn_relocation=offer_start_turn_relocation,
+        offer_end_turn_relocation=offer_end_turn_relocation,
     )
-    return [
+    unresolved = [
         name
         for name in _residue_fields(members[0])
         if name not in covered and len({getattr(member, name) for member in members}) > 1
     ]
+    # A decided field is ordinarily absent here because the page asked it earlier. If actions in the
+    # same candidate still disagree in one, the earlier answers did not separate them and this
+    # candidate is not genuinely settled.
+    unresolved.extend(
+        name
+        for name in DECIDED_FIELDS
+        if len({getattr(member, name) for member in members}) > 1
+    )
+    if "hire_payments" in unresolved:
+        other_unresolved = [name for name in unresolved if name != "hire_payments"]
+        if other_unresolved:
+            hire_payments_is_independent = False
+            seen_hire_payments_by_other_values: dict[tuple[Any, ...], Any] = {}
+            missing = object()
+            for member in members:
+                key = tuple(getattr(member, name) for name in other_unresolved)
+                hire_payments = getattr(member, "hire_payments")
+                previous = seen_hire_payments_by_other_values.get(key, missing)
+                if previous is not missing and previous != hire_payments:
+                    hire_payments_is_independent = True
+                    break
+                seen_hire_payments_by_other_values[key] = hire_payments
+            if not hire_payments_is_independent:
+                unresolved = [name for name in unresolved if name != "hire_payments"]
+    return unresolved
 
 
 def turn_candidates(state: Any, config: Any) -> list[dict]:
     """The moves on offer, grouped by the decisions the page can actually put to a player.
 
-    One candidate per distinct answer to the four questions above, which is not one per legal
-    action: several actions can share all four and differ only further down. Those arrive here as
+    One candidate per distinct answer to the currently askable questions, which is not one per legal
+    action: several actions can share the same asked answers and differ only further down. Those
+    arrive here as
     one candidate carrying the count and the disagreement, so the page can refuse it honestly
     instead of picking one of them on the player's behalf.
 
@@ -1190,34 +1710,75 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config))
     hire_contexts = _hire_contexts(actions, config)
+    offer_start_turn_relocation = any(
+        isinstance(action, FullTurnAction) and _action_uses_start_turn_relocation(action)
+        for action in actions
+    )
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
+    hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
+    offer_end_turn_relocation_by_action_id: dict[str, bool] = {}
+    pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
     for action in actions:
+        move_id = action_id(action)
         offered_hire = isinstance(action, FullTurnAction) and (
             _resolution_context_key(action, config) in hire_contexts
+        )
+        offer_hire_by_action_id[move_id] = offered_hire
+    hire_payment_buildings_by_action_id = _hire_payment_question_buildings_by_action_id(
+        actions,
+        player_id=player_id,
+        state=state,
+        config=config,
+        offer_hire_by_action_id=offer_hire_by_action_id,
+        offer_start_turn_relocation=offer_start_turn_relocation,
+    )
+    for action in actions:
+        move_id = action_id(action)
+        pre_end_turn_key_by_action_id[move_id] = _steps_key(
+            decision_steps(
+                action,
+                player_id,
+                state=state,
+                config=config,
+                offer_hire=offer_hire_by_action_id[move_id],
+                hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
+                offer_start_turn_relocation=offer_start_turn_relocation,
+                offer_end_turn_relocation=False,
+            )
+        )
+    end_turn_contexts = {
+        pre_end_turn_key_by_action_id[action_id(action)]
+        for action in actions
+        if isinstance(action, FullTurnAction) and _action_uses_end_turn_relocation(action)
+    }
+    for action in actions:
+        move_id = action_id(action)
+        offered_end_turn_relocation = isinstance(action, FullTurnAction) and (
+            pre_end_turn_key_by_action_id[move_id] in end_turn_contexts
         )
         steps = decision_steps(
             action,
             player_id,
             state=state,
             config=config,
-            offer_hire=offered_hire,
+            offer_hire=offer_hire_by_action_id[move_id],
+            hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
+            offer_start_turn_relocation=offer_start_turn_relocation,
+            offer_end_turn_relocation=offered_end_turn_relocation,
         )
-        move_id = action_id(action)
         steps_by_action_id[move_id] = steps
-        offer_hire_by_action_id[move_id] = offered_hire
+        offer_end_turn_relocation_by_action_id[move_id] = offered_end_turn_relocation
         # THE KEY IS THE STEP VALUES AND STAYS THE STEP VALUES. A step carries words to read as
         # well as a value to match, and the words must not get in here: two spellings of one
         # question would then be two candidates, and a player would be shown the same choice twice
         # because the sentence above it differed.
-        key = tuple(
-            tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-            for step in steps
-        )
+        key = _steps_key(steps)
         grouped.setdefault(key, []).append(action)
 
     candidates = []
     for members in grouped.values():
+        members = _dedupe_cloisters_route_spellings(members)
         move_id = action_id(members[0])
         unresolved = (
             _unresolved_fields(
@@ -1225,6 +1786,9 @@ def turn_candidates(state: Any, config: Any) -> list[dict]:
                 state,
                 config,
                 offer_hire=offer_hire_by_action_id[move_id],
+                hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
+                offer_start_turn_relocation=offer_start_turn_relocation,
+                offer_end_turn_relocation=offer_end_turn_relocation_by_action_id[move_id],
             )
             if len(members) > 1
             else []
