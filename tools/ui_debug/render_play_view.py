@@ -456,6 +456,44 @@ def _combination_keys(candidates: list[dict]) -> str:
     )
 
 
+def _turn_step_direction_label(direction: str) -> str:
+    return direction.replace("_", " ").capitalize()
+
+
+def _turn_step_controls(steps: list[dict]) -> str:
+    """The client-side narrowing controls for the engine's committed conversion steps."""
+    directions = []
+    amounts = []
+    for step in steps:
+        direction = str(step["direction"])
+        amount = int(step["amount"])
+        if direction not in directions:
+            directions.append(direction)
+        if amount not in amounts:
+            amounts.append(amount)
+    direction_buttons = "".join(
+        f'<button type="button" class="turn-step-direction"'
+        f' data-turn-step-direction="{escape(direction)}" data-turn-step-offered="false"'
+        f' data-turn-step-selected="false">{say(_turn_step_direction_label(direction))}</button>'
+        for direction in directions
+    )
+    amount_buttons = "".join(
+        f'<button type="button" class="turn-step-amount"'
+        f' data-turn-step-amount="{amount}" data-turn-step-offered="false"'
+        f' data-turn-step-selected="false">{amount}</button>'
+        for amount in sorted(amounts)
+    )
+    return (
+        '<div class="turn-step-controls" data-component="turn-step-controls">'
+        '<div class="turn-step-direction-row"><span class="turn-step-label">Conversion</span>'
+        f"{direction_buttons}</div>"
+        '<div class="turn-step-amount-row"><span class="turn-step-label">Amount</span>'
+        '<span class="turn-step-amount-total" data-turn-step-amount-total="true">0</span>'
+        f"{amount_buttons}</div>"
+        "</div>"
+    )
+
+
 def _turn_panels(candidates: list[dict]) -> str:
     """What each candidate would say if it were the one left standing, written out in advance.
 
@@ -510,13 +548,15 @@ def _box_turn_controls() -> str:
 def render_turn_panel(payload: dict) -> str:
     """Where a turn is answered and agreed to, beside the log rather than on the board."""
     candidates = payload.get("turn_candidates") or []
-    if not candidates:
+    turn_steps = payload.get("turn_steps") or []
+    if not candidates and not turn_steps:
         return ""
     return (
         '<div class="play-turn" data-component="play-turn">'
         f"{_prompt_lines(candidates)}"
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}</div>"
+        f"{_turn_step_controls(turn_steps)}"
         f"{_turn_panels(candidates)}"
         f"{_box_turn_controls()}"
         "</div>"
@@ -604,8 +644,10 @@ _TURN_SCRIPT = """<script>
      a step is allowed, and never derives the hand count: each count is read off a step the seam
      already provided. */
   var CANDIDATES = __CANDIDATES__;
+  var TURN_STEPS = __TURN_STEPS__;
+  var USED_BUILDINGS = __USED_BUILDINGS__;
   var TOKEN = __TOKEN__;
-  if (!CANDIDATES.length) { return; }
+  if (!CANDIDATES.length && !TURN_STEPS.length) { return; }
 
   var board = document.querySelector('[data-component="duty-wheel"]');
   var aside = document.querySelector('[data-component="play-turn"]');
@@ -617,6 +659,9 @@ _TURN_SCRIPT = """<script>
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
+  var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
+  var turnStepAmounts = aside.querySelectorAll('[data-turn-step-amount]');
+  var turnStepAmountTotal = aside.querySelector('[data-turn-step-amount-total="true"]');
   var panels = aside.querySelectorAll('[data-turn-panel]');
   /* Every seat's board, so the one being asked can be picked out of them and the rest left alone.
      Which seat that is is read off the page, where it is already written down, rather than worked
@@ -640,6 +685,8 @@ _TURN_SCRIPT = """<script>
   var ordinationBaseline = [];
   var ordinationStartCounts = null;
   var ordinationOffered = [];
+  var conversionChosen = [];
+  var conversionBuildings = document.querySelectorAll('[data-turn-step-building-id]');
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
       activePlayer = seat.getAttribute('data-player');
@@ -655,6 +702,78 @@ _TURN_SCRIPT = """<script>
         return step !== undefined && step.value === answer;
       });
     });
+  }
+
+  function turnStepField(step, index) {
+    if (index === 0) { return step.building_id; }
+    if (index === 1) { return step.direction; }
+    return String(step.amount);
+  }
+
+  function survivingTurnSteps(prefix) {
+    var answers = prefix || conversionChosen;
+    return TURN_STEPS.filter(function (step) {
+      return answers.every(function (answer, index) {
+        return String(turnStepField(step, index)) === String(answer);
+      });
+    });
+  }
+
+  function offeredTurnStepValues(index, live) {
+    var values = [];
+    live.forEach(function (step) {
+      var value = String(turnStepField(step, index));
+      if (values.indexOf(value) === -1) { values.push(value); }
+    });
+    return values;
+  }
+
+  function conversionReady() {
+    var live = survivingTurnSteps();
+    return conversionChosen.length === 3 && live.length === 1;
+  }
+
+  function renderTurnSteps() {
+    var live = survivingTurnSteps();
+    var availableBuildings = offeredTurnStepValues(0, TURN_STEPS);
+    var directions = conversionChosen.length >= 1
+      ? offeredTurnStepValues(1, live)
+      : [];
+    var amounts = conversionChosen.length >= 2
+      ? offeredTurnStepValues(2, live)
+      : [];
+
+    Array.prototype.forEach.call(conversionBuildings, function (building) {
+      var buildingId = building.getAttribute('data-turn-step-building-id');
+      var active = activeSeat && activeSeat.contains(building);
+      var used = USED_BUILDINGS.indexOf(buildingId) !== -1;
+      var offered = active && !used && availableBuildings.indexOf(buildingId) !== -1;
+      building.setAttribute('data-turn-step-offered', offered ? 'true' : 'false');
+      building.setAttribute(
+        'data-turn-step-selected',
+        conversionChosen.length > 0 && conversionChosen[0] === buildingId ? 'true' : 'false'
+      );
+      building.setAttribute('data-turn-step-used', used ? 'true' : 'false');
+    });
+    Array.prototype.forEach.call(turnStepDirections, function (button) {
+      var value = button.getAttribute('data-turn-step-direction');
+      button.setAttribute('data-turn-step-offered', directions.indexOf(value) === -1 ? 'false' : 'true');
+      button.setAttribute(
+        'data-turn-step-selected',
+        conversionChosen.length > 1 && conversionChosen[1] === value ? 'true' : 'false'
+      );
+    });
+    Array.prototype.forEach.call(turnStepAmounts, function (button) {
+      var value = button.getAttribute('data-turn-step-amount');
+      button.setAttribute('data-turn-step-offered', amounts.indexOf(value) === -1 ? 'false' : 'true');
+      button.setAttribute(
+        'data-turn-step-selected',
+        conversionChosen.length > 2 && conversionChosen[2] === value ? 'true' : 'false'
+      );
+    });
+    if (turnStepAmountTotal) {
+      turnStepAmountTotal.textContent = conversionChosen.length > 2 ? conversionChosen[2] : '0';
+    }
   }
 
   function tokenVisible(token) {
@@ -1154,19 +1273,33 @@ _TURN_SCRIPT = """<script>
     return seen;
   }
 
-  function submit(actionId) {
+  function replacePage(request) {
+    /* The server sends the whole page back, drawn from the state it now holds. Swapping it in
+       is the only way anything on this board changes: nothing here draws a piece. */
+    if (request.status !== 200) { window.alert('refused: ' + request.responseText); return; }
+    document.open();
+    document.write(request.responseText);
+    document.close();
+  }
+
+  function postPage(path, body) {
     var request = new XMLHttpRequest();
-    request.open('POST', '/action', true);
+    request.open('POST', path, true);
     request.setRequestHeader('Content-Type', 'application/json');
-    request.onload = function () {
-      /* The server sends the whole page back, drawn from the state it now holds. Swapping it in
-         is the only way anything on this board changes: nothing here draws a piece. */
-      if (request.status !== 200) { window.alert('refused: ' + request.responseText); return; }
-      document.open();
-      document.write(request.responseText);
-      document.close();
-    };
-    request.send(JSON.stringify({ action_id: actionId, state_token: TOKEN }));
+    request.onload = function () { replacePage(request); };
+    request.send(JSON.stringify(body));
+  }
+
+  function submit(actionId) {
+    postPage('/action', { action_id: actionId, state_token: TOKEN });
+  }
+
+  function submitTurnStep(stepId) {
+    postPage('/turn-step', { step_id: stepId, state_token: TOKEN });
+  }
+
+  function submitReset() {
+    postPage('/reset-turn', { state_token: TOKEN });
   }
 
   /* A step says how it is answered and this sorts them by that, so a new
@@ -1501,13 +1634,21 @@ _TURN_SCRIPT = """<script>
     }
     showArrangement(arrangementValues || []);
     showOrdination(ordinationValues || []);
+    renderTurnSteps();
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
       panel.setAttribute('data-turn-shown', index === settled ? 'true' : 'false');
     });
     setControl('sow', false, preview.started && preview.duty === null);
     setControl('reset', preview.resettable, false);
-    setControl('confirm', confirmable && !preview.overflow, false);
+    if (USED_BUILDINGS.length > 0 || conversionChosen.length > 0) {
+      setControl('reset', true, false);
+    }
+    setControl(
+      'confirm',
+      (conversionReady() || (conversionChosen.length === 0 && confirmable)) && !preview.overflow,
+      false
+    );
     setControl(
       'action',
       actionResolutions.length > 0 && preview.resolution === null && resolutionSplit !== 'tithe',
@@ -1524,6 +1665,12 @@ _TURN_SCRIPT = """<script>
   }
 
   function render() {
+    if (!CANDIDATES.length) {
+      renderTurnSteps();
+      setControl('reset', USED_BUILDINGS.length > 0 || conversionChosen.length > 0, false);
+      setControl('confirm', conversionReady(), false);
+      return;
+    }
     var live = surviving(chosen);
     /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
        Which steps those are is not written down anywhere; it falls out of the candidates. */
@@ -1601,6 +1748,37 @@ _TURN_SCRIPT = """<script>
     }
     show(offered, resolutions, -1, false, preview, arrangements, ordinations);
   }
+
+  Array.prototype.forEach.call(conversionBuildings, function (building) {
+    building.addEventListener('click', function () {
+      if (building.getAttribute('data-turn-step-offered') !== 'true') { return; }
+      conversionChosen = [building.getAttribute('data-turn-step-building-id')];
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(turnStepDirections, function (button) {
+    button.addEventListener('click', function () {
+      if (button.getAttribute('data-turn-step-offered') !== 'true') { return; }
+      conversionChosen = [
+        conversionChosen[0],
+        button.getAttribute('data-turn-step-direction')
+      ];
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(turnStepAmounts, function (button) {
+    button.addEventListener('click', function () {
+      if (button.getAttribute('data-turn-step-offered') !== 'true') { return; }
+      conversionChosen = [
+        conversionChosen[0],
+        conversionChosen[1],
+        button.getAttribute('data-turn-step-amount')
+      ];
+      render();
+    });
+  });
 
   Array.prototype.forEach.call(spaces, function (space) {
     space.addEventListener('click', function () {
@@ -1691,6 +1869,11 @@ _TURN_SCRIPT = """<script>
   if (confirmControl) {
     confirmControl.addEventListener('click', function () {
       if (confirmControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      if (conversionReady()) {
+        submitTurnStep(survivingTurnSteps()[0].step_id);
+        return;
+      }
+      if (conversionChosen.length > 0) { return; }
       var live = surviving(chosen);
       var offered = stepsAt(chosen.length, live);
       var arrangements = offeredByKind(offered, 'arrangement');
@@ -1720,10 +1903,15 @@ _TURN_SCRIPT = """<script>
   if (resetControl) {
     resetControl.addEventListener('click', function () {
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+      if (USED_BUILDINGS.length > 0) {
+        submitReset();
+        return;
+      }
       restoreArrangementBaseline();
       restoreOrdinationBaseline();
       chosen = [];
       answered = [];
+      conversionChosen = [];
       resolutionSplit = null;
       autoAdvance = true;
       render();
@@ -1841,6 +2029,29 @@ def turn_styles(route_color: str) -> str:
   .turn-control-row-bottom [data-turn-control="confirm"] {{
     min-width: 0;
   }}
+  .turn-step-controls {{ margin: 8px 0; color: #C9C4B4; }}
+  .turn-step-direction-row, .turn-step-amount-row {{
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  }}
+  .turn-step-label {{ min-width: 72px; color: #E0C36A; }}
+  .turn-step-direction, .turn-step-amount {{
+    color: #F2F0E6; background: #262626; border: 1px solid #555; border-radius: 999px;
+    padding: 4px 9px; font: 12px/1.2 Helvetica, Arial, sans-serif; cursor: pointer;
+  }}
+  .turn-step-amount-total {{
+    min-width: 24px; color: #F2F0E6; font-weight: 700; text-align: center;
+  }}
+  [data-turn-step-direction][data-turn-step-offered="false"],
+  [data-turn-step-amount][data-turn-step-offered="false"] {{
+    display: none;
+  }}
+  [data-turn-step-direction][data-turn-step-selected="true"],
+  [data-turn-step-amount][data-turn-step-selected="true"] {{
+    background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
+  }}
+  [data-turn-step-building-id][data-turn-step-offered="true"] {{ cursor: pointer; }}
+  [data-turn-step-building-id][data-turn-step-offered="false"] {{ pointer-events: none; }}
+  [data-turn-step-building-id][data-turn-step-used="true"] {{ opacity: 0.42; }}
 
 {resource_choice_styles()}
   /* The board renderer draws all three stock keys and the rule above shows them together. A stock
@@ -1939,6 +2150,8 @@ def render_play_view_html(
 ) -> str:
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
+    turn_steps = payload.get("turn_steps") or []
+    turn_surface = bool(candidates or turn_steps)
     # One-time draw choice from the full candidate set; do not recalculate as the turn narrows.
     city_spoke_reversals = _city_spoke_reversals_used(candidates)
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
@@ -2013,7 +2226,7 @@ def render_play_view_html(
             _board_layout_for(payload, board_layout, player_id),
             player,
             board_state=_board_state_for(payload, board_layout, player_id, catalog, donated_data),
-            interactive=bool(candidates),
+            interactive=turn_surface,
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
         )
@@ -2033,13 +2246,17 @@ def render_play_view_html(
     # decide is a page with nothing to press, and it should not be carrying the styles for
     # affordances that can never appear on it.
     script = (
-        _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates)).replace(
-            "__TOKEN__", json.dumps(payload.get("state_token", ""))
+        _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
+        .replace("__TURN_STEPS__", json.dumps(turn_steps))
+        .replace(
+            "__USED_BUILDINGS__",
+            json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
         )
-        if candidates
+        .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+        if turn_surface
         else ""
     )
-    turn_css = turn_styles(active_color) if candidates else ""
+    turn_css = turn_styles(active_color) if turn_surface else ""
     stage = render_table_stage(
         alms_svg=alms_svg,
         piety_svg=piety_svg,

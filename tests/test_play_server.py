@@ -4552,7 +4552,7 @@ def _script_carried_by(page: str) -> str:
     return found.group(0)
 
 
-def _the_script_is_the_template_with_only_its_two_values_filled_in(
+def _the_script_is_the_template_with_only_its_values_filled_in(
     page: str, payload: dict
 ) -> None:
     """What lets the greps below read the template instead of the page.
@@ -4562,11 +4562,20 @@ def _the_script_is_the_template_with_only_its_two_values_filled_in(
     only sound while the template IS the whole of the code, and this is what says so: the script on
     the page has to be the template with its two placeholders filled in and nothing else done to
     it. Anything injected by a second route breaks this equality, and the guard reports that its
-    own coverage has stopped being what it claims rather than quietly checking less.
+    own coverage has stopped being what it claims rather than quietly checking less. The template
+    carries the action candidates, committed turn steps and used-building set as separate data.
     """
-    expected = render_play_view._TURN_SCRIPT.replace(
-        "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
-    ).replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+    expected = (
+        render_play_view._TURN_SCRIPT.replace(
+            "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
+        )
+        .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
+        .replace(
+            "__USED_BUILDINGS__",
+            json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
+        )
+        .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+    )
     assert _script_carried_by(page) == expected, (
         "the page's script is not the template with its two placeholders filled in, so grepping "
         "the template no longer covers everything that reaches the browser"
@@ -4701,11 +4710,13 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     server = _played_through_setup(_served(tmp_path))
     page = render_play_view_from_payload(server.payload)
 
-    # The template is the whole of the code, and these two assertions are what make that a fact
+    # The template is the whole of the code, and these assertions are what make that a fact
     # rather than an assumption the greps rest on.
     assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TOKEN__") == 1
-    _the_script_is_the_template_with_only_its_two_values_filled_in(page, server.payload)
+    _the_script_is_the_template_with_only_its_values_filled_in(page, server.payload)
 
     # Comments are stripped: prose about what the code does not do is not the code doing it, and a
     # grep that cannot tell them apart would be satisfied by deleting the explanation.
@@ -4782,7 +4793,7 @@ def test_a_second_thing_injected_into_the_script_is_caught(tmp_path: Path, monke
     assert 'var SEAT = "player_one";' in page, "the mutation reached nothing, so nothing is tested"
 
     with pytest.raises(AssertionError, match="no longer covers everything that reaches"):
-        _the_script_is_the_template_with_only_its_two_values_filled_in(page, server.payload)
+        _the_script_is_the_template_with_only_its_values_filled_in(page, server.payload)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -4948,6 +4959,10 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
 
     unreachable = []
     for attribute in _queried_attributes():
+        if attribute in {"data-turn-step-direction", "data-turn-step-amount"} and not server.payload.get(
+            "turn_steps"
+        ):
+            continue
         carrying = [node for node in _every_element(tree.root) if attribute in node["attrs"]]
         # Every one of them has to be ON the page as well as reachable. An attribute the script
         # asks for and the renderer never draws would otherwise pass this test by being absent,
