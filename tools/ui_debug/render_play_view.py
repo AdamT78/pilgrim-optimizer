@@ -432,9 +432,9 @@ def _combination_keys(candidates: list[dict]) -> str:
     build a pairing the engine never offered, and the page would then have to know which pairings
     go together -- which is the rule it exists not to hold a copy of.
 
-    Hire choices use the same key shape: one scalar answer and one sentence, offered whole. A hire
-    is not "partly accepted", so splitting source from payment stock would ask two questions where
-    there is only one legal move.
+    Hire and relocation choices use the same key shape: one scalar answer and one sentence, offered
+    whole. A hire is not "partly accepted", so splitting source from payment stock would ask two
+    questions where there is only one legal move.
 
     The words are the seam's, not this file's. What a combination amounts to is a fact about the
     action, and composing a sentence for it here would be a second description to keep in step.
@@ -442,7 +442,12 @@ def _combination_keys(candidates: list[dict]) -> str:
     seen: dict[str, str] = {}
     for candidate in candidates:
         for step in candidate["steps"]:
-            if step["kind"] in {"combination", "hire"}:
+            if step["kind"] in {
+                "combination",
+                "hire",
+                "start_relocation_choice",
+                "end_relocation_choice",
+            }:
                 seen.setdefault(step["value"], step.get("label", step["value"]))
     return "".join(
         f'<button type="button" class="turn-key" data-combination-key="{escape(value)}"'
@@ -1166,11 +1171,12 @@ _TURN_SCRIPT = """<script>
 
   /* A step says how it is answered and this sorts them by that, so a new
      kind of question is a new bucket here and nothing else. That now
-     includes three kinds answered on the same wheel: `origin`, `skip`
-     and `duty`, split so they can be marked differently without naming
-     fields. No step is recognised by what it is ABOUT: there is no field
-     name anywhere in this file, and a page that told a tithe's stock from
-     a taxation's would be one that had to be taught about the next one. */
+     includes five kinds answered on the wheel: `origin`, `skip`, `duty`,
+     `start_relocation_space` and `end_relocation_space`, split so they can
+     be marked differently without naming fields. No step is recognised by
+     what it is ABOUT: there is no field name anywhere in this file, and a
+     page that told a tithe's stock from a taxation's would be one that had
+     to be taught about the next one. */
   function offeredByKind(offered, kind) {
     var values = [];
     offered.forEach(function (step) {
@@ -1287,6 +1293,7 @@ _TURN_SCRIPT = """<script>
 
   function applyPreview() {
     var started = false;
+    var askedStartRelocation = false;
     var overflow = false;
     var count = null;
     var origin = null;
@@ -1332,6 +1339,10 @@ _TURN_SCRIPT = """<script>
         }
         continue;
       }
+      if (step.kind === 'start_relocation_choice' || step.kind === 'start_relocation_space') {
+        askedStartRelocation = true;
+        continue;
+      }
       if (step.kind === 'skip') {
         skip = step.value;
         var skipped = positionName(Number(step.value));
@@ -1369,7 +1380,7 @@ _TURN_SCRIPT = """<script>
     }
     return {
       started: started,
-      resettable: started && answered.length > 0,
+      resettable: (started && answered.length > 0) || askedStartRelocation,
       overflow: overflow,
       count: count,
       origin: origin,
@@ -1385,6 +1396,12 @@ _TURN_SCRIPT = """<script>
     var origins = offeredByKind(offered, 'origin');
     var skips = offeredByKind(offered, 'skip');
     var duties = offeredByKind(offered, 'duty');
+    var startRelocationSpaces = offeredByKind(offered, 'start_relocation_space');
+    var endRelocationValues = offeredByKind(offered, 'end_relocation_space');
+    var endRelocationSpaces = endRelocationValues
+      .map(function (value) { return Number(value); })
+      .filter(function (value) { return !Number.isNaN(value); });
+    var endRelocationAbbey = endRelocationValues.indexOf('abbey') !== -1;
     var edges = offeredByKind(offered, 'edge');
     var resolutions = resolutionOptions || [];
     var actionResolutions = resolutions.filter(function (value) {
@@ -1410,6 +1427,16 @@ _TURN_SCRIPT = """<script>
         space.removeAttribute('data-turn-duty-candidate');
       } else {
         space.setAttribute('data-turn-duty-candidate', 'true');
+      }
+      if (startRelocationSpaces.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-start-relocation-candidate');
+      } else {
+        space.setAttribute('data-turn-start-relocation-candidate', 'true');
+      }
+      if (endRelocationSpaces.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-end-relocation-candidate');
+      } else {
+        space.setAttribute('data-turn-end-relocation-candidate', 'true');
       }
       /* Offered and taken are different marks. Once origin is taken, it is no longer offered and
          carries no ring of its own. */
@@ -1440,7 +1467,10 @@ _TURN_SCRIPT = """<script>
     mark(
       pairs,
       'data-combination-key',
-      offeredByKind(offered, 'combination').concat(offeredByKind(offered, 'hire'))
+      offeredByKind(offered, 'combination')
+        .concat(offeredByKind(offered, 'hire'))
+        .concat(offeredByKind(offered, 'start_relocation_choice'))
+        .concat(offeredByKind(offered, 'end_relocation_choice'))
     );
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
     /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
@@ -1465,6 +1495,10 @@ _TURN_SCRIPT = """<script>
       mark(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key',
            offering ? boards : []);
     });
+    if (activeSeat) {
+      if (endRelocationAbbey) { activeSeat.setAttribute('data-end-relocation-choice', 'true'); }
+      else { activeSeat.removeAttribute('data-end-relocation-choice'); }
+    }
     showArrangement(arrangementValues || []);
     showOrdination(ordinationValues || []);
     Array.prototype.forEach.call(panels, function (panel) {
@@ -1572,7 +1606,9 @@ _TURN_SCRIPT = """<script>
     space.addEventListener('click', function () {
       if (
         space.getAttribute('data-turn-start-candidate') !== 'true'
+        && space.getAttribute('data-turn-start-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-skip-candidate') !== 'true'
+        && space.getAttribute('data-turn-end-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-duty-candidate') !== 'true'
       ) { return; }
       var value = Number(space.getAttribute('data-board-position-index'));
@@ -1627,6 +1663,14 @@ _TURN_SCRIPT = """<script>
     });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="abbey"]'), function (token) {
       token.addEventListener('click', function () {
+        if (activeSeat.getAttribute('data-end-relocation-choice') === 'true') {
+          chosen.push('abbey');
+          answered.push('abbey');
+          resolutionSplit = null;
+          autoAdvance = true;
+          render();
+          return;
+        }
         arrangementClick('abbey', 'token');
         ordinationClick('mission');
       });
@@ -1732,15 +1776,24 @@ def turn_styles(route_color: str) -> str:
     painted area counts.
     """
     return f"""  /* One offered-ring language: dashed means "offered now", solid means "taken".
-     Origin, skip and duty candidates intentionally use the same seat-colour ring family. That is
-     safe because only one of those three questions is live at a time, and the prompt says which. */
+     Origin, skip, duty and relocation-space candidates intentionally use the same seat-colour ring
+     family. That is safe because only one of those questions is live at a time, and the prompt
+     says which; the play-server sweep holds that invariant across corpus and playtests. */
   [data-turn-start-candidate="true"] {{ cursor: pointer; }}
   [data-turn-start-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
   }}
+  [data-turn-start-relocation-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-start-relocation-candidate="true"] .board-circle {{
+    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 6 3;
+  }}
   [data-turn-skip-candidate="true"] {{ cursor: pointer; }}
   [data-turn-skip-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 5 3;
+  }}
+  [data-turn-end-relocation-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-end-relocation-candidate="true"] .board-circle {{
+    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 10 4;
   }}
   [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
   [data-turn-duty-candidate="true"] .board-circle {{
@@ -1825,6 +1878,9 @@ def turn_styles(route_color: str) -> str:
   [data-component="player-board-v2"] [data-token="role"],
   [data-component="player-board-v2"] [data-role-circle] {{
     pointer-events: none;
+  }}
+  [data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"] {{
+    pointer-events: all; cursor: pointer;
   }}
   /* `pointer-events` on an SVG element is a presentation attribute and loses to author CSS.
      Liveness is stated once in this stylesheet, keyed by data-arrangement-* attributes. */
