@@ -21,33 +21,26 @@ once, which is what it takes to hire more than one in a turn.
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
-from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction, action_id
 from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, current_merchant_resource
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import apply_action
 
-REPO = Path(__file__).resolve().parents[1]
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
 
-def scenario_paths():
-    return sorted(REPO.joinpath("scenarios").glob("*.json"))
-
-
-def test_every_legal_action_applies(deep_actions) -> None:
+def test_every_legal_action_applies(deep_actions, corpus_actions) -> None:
     """The contract itself, over every committed position including the deep one."""
     deep_scenario, deep_legal_actions = deep_actions
     unexpected: list[tuple[str, str, str]] = []
     total = 0
 
-    for path in scenario_paths():
+    for path, loaded_scenario, loaded_actions in corpus_actions:
         if path.stem == DEEP_FIXTURE:
             scenario = deep_scenario
             actions = deep_legal_actions
         else:
-            scenario = load_scenario(path)
-            actions = legal_actions(scenario.state, scenario.config)
+            scenario = loaded_scenario
+            actions = loaded_actions
         total += len(actions)
         for action in actions:
             try:

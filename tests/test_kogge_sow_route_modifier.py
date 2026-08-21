@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_id
 from pilgrim.model.enums import EventType, PlayerId
+from pilgrim.rules import sow_routes as sow_routes_module
+from pilgrim.rules import transition as transition_module
 from pilgrim.rules.building_turn_modifiers import (
     implemented_turn_modifiers,
     scaffolded_turn_modifiers,
 )
 from pilgrim.rules.sow_routes import SowRouteVariant, cloisters_actual_placements_after_omission
-from pilgrim.rules import transition as transition_module
-from pilgrim.rules import sow_routes as sow_routes_module
 from pilgrim.rules.transition import apply_action, legal_actions
 
 
@@ -262,15 +261,14 @@ def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> Non
     assert scaffolded_turn_modifiers() == ()
 
 
-def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(monkeypatch) -> None:
-    scenario_paths = sorted((Path(__file__).resolve().parents[1] / "scenarios").glob("*.json"))
-    assert len(scenario_paths) == 309
+def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(
+    monkeypatch, corpus_actions
+) -> None:
+    assert len(corpus_actions) == 309
 
     moved_without_kogge_reach: list[str] = []
     checked_without_kogge_reach = 0
-    for path in scenario_paths:
-        scenario = load_scenario(str(path))
-        current_actions = list(legal_actions(scenario.state, scenario.config))
+    for path, scenario, current_actions in corpus_actions:
         legacy_actions = _legacy_legal_actions(scenario.state, scenario.config, monkeypatch)
 
         current_ids = {action_id(action) for action in current_actions}
