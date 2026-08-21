@@ -28,7 +28,13 @@ from pilgrim.model.actions import FullTurnAction, action_id
 from pilgrim.model.enums import EventType, TurnResolutionType
 from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.merchant import current_merchant_resource
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 HIRE_SCENARIO = "scenarios/building_hire_opponent_owned_001.json"
 DEEP_SCENARIO = "scenarios/deep_round_eighteen_seed_seven_two_player_001.json"
@@ -316,19 +322,37 @@ def test_the_ordinary_counters_are_unaffected_by_the_wildcard_branch(resource: s
     assert {_payment_for_hired_building(action) for action in hires} <= {resource}
 
 
-def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -> None:
-    scenario, actions = deep_actions
+def test_a_conversion_step_records_its_cornucopia_payment(deep_actions) -> None:
+    scenario, _actions = deep_actions
     assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
+    step = next(
+        step for step in turn_steps(scenario.state, scenario.config)
+        if step.building_id == "grain_store"
+    )
+    assert step.hire_payment == "stone"
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    assert _hire_event_resources(state.events) == Counter({"stone": 1})
+
+
+def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -> None:
+    scenario, _actions = deep_actions
+    assert current_merchant_resource(scenario.state, scenario.config) == "cornucopia"
+    conversion = next(
+        step for step in turn_steps(scenario.state, scenario.config)
+        if step.building_id == "grain_store"
+    )
+    state = apply_turn_step(scenario.state, scenario.config, conversion)
     action = next(
         action
-        for action in actions
+        for action in legal_actions(state, scenario.config)
         if isinstance(action, FullTurnAction)
         and Counter(resource for _building, resource in action.hire_payments)
         == Counter({"wheat": 1, "stone": 1})
     )
 
-    result = apply_action(scenario.state, action, scenario.config)
-    assert _hire_event_resources(result.events) == Counter({"wheat": 1, "stone": 1})
+    result = apply_action(state, action, scenario.config)
+    action_events = [event for event in result.events if event.action_id == action_id(action)]
+    assert _hire_event_resources(action_events) == Counter({"wheat": 1, "stone": 1})
 
 
 @pytest.mark.slow

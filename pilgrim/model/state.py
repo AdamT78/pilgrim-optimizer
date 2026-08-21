@@ -8,6 +8,7 @@ from pilgrim.model.buildings import PlayerBoardSlots
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.duties import DEFAULT_TAXATION_BOARD_POSITION, DUTY_POSITIONS
 from pilgrim.model.enums import PlayerId, TurnPhase
+from pilgrim.model.events import GameEvent
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SpecialActivities
 from pilgrim.model.timing import TimingState
@@ -47,6 +48,20 @@ class PlayerState:
     def mancala_acolytes(self) -> PlayerVector:
         """Backward-compatible access to mancala pools."""
         return self.workforce.mancala
+
+
+@dataclass(frozen=True, slots=True)
+class TurnProgress:
+    """Immutable progress and events accumulated inside one active turn."""
+
+    used_buildings: frozenset[str] = frozenset()
+    events: tuple[GameEvent, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.used_buildings, frozenset):
+            object.__setattr__(self, "used_buildings", frozenset(self.used_buildings))
+        if not isinstance(self.events, tuple):
+            object.__setattr__(self, "events", tuple(self.events))
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +109,7 @@ class GameState:
     building_availability: tuple[tuple[str, int], ...] = ()
     pilgrimage_rounds: tuple[int, ...] = ()
     turn: int = 0
+    turn_progress: TurnProgress = field(default_factory=TurnProgress)
 
     def __post_init__(self) -> None:
         if len(self.players) < 2 or len(self.players) > 4:
@@ -203,6 +219,26 @@ class GameState:
     def dummy_at_position(self, position: int) -> int:
         return self.dummy_acolytes.dummy_at_position(position)
 
+    @property
+    def used_buildings_this_turn(self) -> frozenset[str]:
+        """Building ids already committed during this turn."""
+        return self.turn_progress.used_buildings
+
+    @property
+    def used_buildings(self) -> frozenset[str]:
+        """Short alias for the immutable per-turn building-use set."""
+        return self.turn_progress.used_buildings
+
+    @property
+    def turn_events(self) -> tuple[GameEvent, ...]:
+        """Events emitted by committed steps in the active turn."""
+        return self.turn_progress.events
+
+    @property
+    def events(self) -> tuple[GameEvent, ...]:
+        """The committed-step portion of the normal event log."""
+        return self.turn_progress.events
+
     def with_timing(self, timing: TimingState) -> GameState:
         return replace(self, timing=timing, turn=timing.absolute_turn)
 
@@ -306,4 +342,5 @@ class GameState:
             phase=TurnPhase.SOW,
             timing=next_timing,
             turn=next_timing.absolute_turn,
+            turn_progress=TurnProgress(),
         )

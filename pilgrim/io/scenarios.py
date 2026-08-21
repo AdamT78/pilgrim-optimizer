@@ -12,10 +12,11 @@ from pilgrim.model.buildings import BuildingsConfig, PlayerBoardSlots
 from pilgrim.model.config import GameConfig, game_config_from_dict
 from pilgrim.model.dummy import DummyAcolyteGroups
 from pilgrim.model.duties import DUTY_POSITIONS
-from pilgrim.model.enums import PlayerId, TurnPhase
+from pilgrim.model.enums import EventType, PlayerId, TurnPhase
+from pilgrim.model.events import GameEvent, make_event_details
 from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import SPECIAL_ACTIVITY_IDS, SpecialActivities
-from pilgrim.model.state import GameState, PlayerState
+from pilgrim.model.state import GameState, PlayerState, TurnProgress
 from pilgrim.model.timing import TimingState
 from pilgrim.model.workforce import MANCALA_POSITION_COUNT, CommittedAcolytes, Workforce
 from pilgrim.opponents import OpponentModel, opponent_model_from_dict
@@ -168,6 +169,7 @@ def _game_state_from_dict(
         building_market,
         pilgrimage_rounds=pilgrimage_rounds,
     )
+    turn_progress = _turn_progress_from_dict(raw)
     if ship_position < 0 or ship_position >= ship_path_length:
         raise ValueError(
             "Scenario ship_position must be within Ship path bounds: "
@@ -194,6 +196,40 @@ def _game_state_from_dict(
         building_market=building_market,
         building_availability=building_availability,
         pilgrimage_rounds=pilgrimage_rounds,
+        turn_progress=turn_progress,
+    )
+
+
+def _turn_progress_from_dict(raw: Mapping[str, Any]) -> TurnProgress:
+    progress_raw = raw.get("turn_progress")
+    if progress_raw is None:
+        return TurnProgress()
+    if not isinstance(progress_raw, Mapping):
+        raise ValueError("initial_state.turn_progress must be an object.")
+    used_raw = progress_raw.get("used_buildings", ())
+    if not isinstance(used_raw, (list, tuple)):
+        raise ValueError("initial_state.turn_progress.used_buildings must be a list.")
+    events_raw = progress_raw.get("events", ())
+    if not isinstance(events_raw, (list, tuple)):
+        raise ValueError("initial_state.turn_progress.events must be a list.")
+    events: list[GameEvent] = []
+    for event_raw in events_raw:
+        if not isinstance(event_raw, Mapping):
+            raise ValueError("initial_state.turn_progress.events entries must be objects.")
+        details_raw = event_raw.get("details", {})
+        if not isinstance(details_raw, Mapping):
+            raise ValueError("turn progress event details must be an object.")
+        events.append(
+            GameEvent(
+                event_type=EventType(str(event_raw["event_type"])),
+                actor=PlayerId.from_string(str(event_raw["actor"])),
+                action_id=str(event_raw.get("action_id", "")),
+                details=make_event_details(**dict(details_raw)),
+            )
+        )
+    return TurnProgress(
+        used_buildings=frozenset(str(building_id) for building_id in used_raw),
+        events=tuple(events),
     )
 
 

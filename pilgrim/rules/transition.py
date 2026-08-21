@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from itertools import combinations_with_replacement
 
 from pilgrim.model.actions import (
     AllocationMove,
+    BuildingConversionStep,
     FullTurnAction,
     GameAction,
     SetupSowAction,
@@ -434,6 +435,165 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
     return _legal_full_turn_actions(state, config)
 
 
+def turn_steps(state: GameState, config: GameConfig) -> tuple[BuildingConversionStep, ...]:
+    """Return the committed conversion steps legal in the current state.
+
+    Conversion options are derived from the same building ability and payment rules used by the
+    action generator. The state carries the per-turn used-building set, so a building disappears
+    after its first committed use while the other buildings remain available.
+    """
+    if state.game_over or state.phase is not TurnPhase.SOW:
+        return ()
+
+    options = _legal_building_conversion_options(state, config)
+    used = state.turn_progress.used_buildings
+    return tuple(
+        BuildingConversionStep(
+            building_id=option.building_id,
+            source=_hired_building_source_label(option.source),
+            direction=option.direction,
+            amount=option.amount,
+            hire_payment=(
+                option.source.hire_resource
+                if _is_hired_source(option.source)
+                else None
+            ),
+        )
+        for option in options
+        if option.building_id not in used
+    )
+
+
+def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameAction]:
+    """Lazily compose each reachable conversion-step sequence with legal full-turn actions."""
+
+    visited: set[GameState] = set()
+    yielded: set[GameAction] = set()
+
+    def walk(current: GameState) -> Iterator[GameAction]:
+        if current in visited:
+            return
+        visited.add(current)
+        for action in legal_actions(current, config):
+            if action in yielded:
+                continue
+            yielded.add(action)
+            yield action
+        for step in turn_steps(current, config):
+            yield from walk(apply_turn_step(current, config, step))
+
+    yield from walk(state)
+
+
+def _legal_building_conversion_options(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[_BuildingConversionOption, ...]:
+    """Collect the engine's per-building conversion derivations in their stable order."""
+    generators = (
+        _legal_grain_store_conversion_options,
+        _legal_indulgences_conversion_options,
+        _legal_stone_yard_conversion_options,
+        _legal_brewery_conversion_options,
+    )
+    return tuple(
+        option
+        for generator in generators
+        for option in generator(state, config)
+    )
+
+
+def apply_turn_step(
+    state: GameState,
+    config: GameConfig,
+    step: BuildingConversionStep,
+) -> GameState:
+    """Apply one committed conversion without mutating the input state."""
+    if state.game_over:
+        raise TransitionValidationError("Cannot apply turn step: game is already over.")
+    ensure_phase(state, expected=TurnPhase.SOW, action_name="Turn step")
+    if not isinstance(step, BuildingConversionStep):
+        raise TypeError(f"Unsupported turn step type: {type(step)!r}")
+    if step.building_id in state.turn_progress.used_buildings:
+        raise TransitionValidationError(
+            f"Building already used this turn: {step.building_id}."
+        )
+
+    conversion = _resolved_conversion_for_step(state, config, step)
+    player = state.active_player
+    next_state = state
+    events = list(state.turn_progress.events)
+    if _is_hired_source(conversion.source):
+        try:
+            next_state, payment = apply_building_hire_payment(
+                next_state,
+                acting_player=player,
+                source=conversion.source,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        events.append(
+            _building_hired_event(
+                source=conversion.source,
+                payment=payment,
+                actor=player,
+                action_id=_turn_step_id(step),
+                config=config,
+            )
+        )
+    try:
+        next_state, conversion_delta = _apply_grain_store_conversion_to_state(
+            next_state,
+            player=player,
+            config=config,
+            conversion=conversion,
+        )
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
+    transition_action_id = _turn_step_id(step)
+    events.append(
+        _grain_store_conversion_bonus_event(
+            actor=player,
+            action_id=transition_action_id,
+            conversion=conversion,
+        )
+    )
+    events.append(
+        GameEvent(
+            event_type=EventType.RESOURCE_DELTA,
+            actor=player,
+            action_id=transition_action_id,
+            details=make_event_details(
+                **(
+                    {
+                        "stone": conversion_delta[0],
+                        "silver": conversion_delta[1],
+                        "wheat": conversion_delta[2],
+                    }
+                    | ({"piety": conversion_delta[3]} if conversion_delta[3] != 0 else {})
+                )
+            ),
+        )
+    )
+    progress = replace(
+        next_state.turn_progress,
+        used_buildings=next_state.turn_progress.used_buildings | {step.building_id},
+        # Conversion outcomes commute, so the state value must not remember which independent
+        # conversion was committed first. Keep each step's events together, but canonicalise the
+        # groups by their stable step id before storing them.
+        events=tuple(sorted(events, key=lambda event: event.action_id)),
+    )
+    return replace(next_state, turn_progress=progress)
+
+
+def _turn_step_id(step: BuildingConversionStep) -> str:
+    payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
+    return (
+        f"turn_step:building_conversion:{step.building_id}:from:{step.source}"
+        f":direction:{step.direction}:amount:{step.amount}{payment}"
+    )
+
+
 def apply_action(state: GameState, action: GameAction, config: GameConfig) -> TransitionResult:
     """Apply one full-turn action with invariant checks."""
     if isinstance(action, SetupSowAction):
@@ -809,24 +969,12 @@ def _legal_full_turn_actions_for_state(
                 ),
                 cloisters_with_kogge=uses_kogge and uses_cloisters,
             )
-            conversion_options: tuple[_BuildingConversionOption | None, ...] = (
-                None,
-                *_legal_grain_store_conversion_options(route_state, config),
-                *_legal_indulgences_conversion_options(route_state, config),
-                *_legal_stone_yard_conversion_options(route_state, config),
-                *_legal_brewery_conversion_options(route_state, config),
-            )
-            for conversion_option in conversion_options:
-                state_for_turn = (
-                    route_state if conversion_option is None else conversion_option.state
-                )
-                player_state = state_for_turn.player_state(state.active_player)
-                player_resources = player_state.resources
-                bank_modifier_allowed_for_turn = (
-                    route_option.building_id is None and conversion_option is None
-                )
+            state_for_turn = route_state
+            player_state = state_for_turn.player_state(state.active_player)
+            player_resources = player_state.resources
+            bank_modifier_allowed_for_turn = route_option.building_id is None
 
-                for duty_position in config.duty_positions():
+            for duty_position in config.duty_positions():
                     if sowed_vector[duty_position] <= 0:
                         continue
                     actions_before_duty = len(actions)
@@ -1494,21 +1642,15 @@ def _legal_full_turn_actions_for_state(
                                 tithe_resource=tithe_resource,
                             )
                         )
-                    if route_option.building_id is not None or conversion_option is not None:
+                    if route_option.building_id is not None:
                         for index in range(actions_before_duty, len(actions)):
                             action = actions[index]
                             if not isinstance(action, FullTurnAction):
                                 continue
-                            if route_option.building_id is not None:
-                                action = _with_route_option_fields(
-                                    action,
-                                    option=route_option,
-                                )
-                            if conversion_option is not None:
-                                action = _with_grain_store_conversion_fields(
-                                    action,
-                                    option=conversion_option,
-                                )
+                            action = _with_route_option_fields(
+                                action,
+                                option=route_option,
+                            )
                             actions[index] = action
     if allow_scriptorium_modifier:
         scriptorium_options = _legal_scriptorium_effective_acolyte_options(state, config)
@@ -1836,7 +1978,7 @@ def _apply_full_turn_action(
     )
     state_for_sow = state
     duty_relation_context = _DutyRelationModifierContext(acting_player=player)
-    pre_sowing_events: list[GameEvent] = []
+    pre_sowing_events: list[GameEvent] = list(state.turn_progress.events)
     if start_turn_relocation is not None:
         if _is_hired_source(start_turn_relocation.source):
             try:
@@ -1971,66 +2113,6 @@ def _apply_full_turn_action(
                 config=config,
             )
         )
-    grain_store_conversion = _resolved_grain_store_conversion_for_action(
-        state=state_for_sow,
-        config=config,
-        player=player,
-        action=action,
-    )
-    if grain_store_conversion is not None:
-        if _is_hired_source(grain_store_conversion.source):
-            try:
-                state_for_sow, grain_store_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=grain_store_conversion.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=grain_store_conversion.source,
-                    payment=grain_store_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
-        try:
-            state_for_sow, conversion_delta = _apply_grain_store_conversion_to_state(
-                state_for_sow,
-                player=player,
-                config=config,
-                conversion=grain_store_conversion,
-            )
-        except ValueError as exc:
-            raise TransitionValidationError(str(exc)) from exc
-        pre_sowing_events.append(
-            _grain_store_conversion_bonus_event(
-                actor=player,
-                action_id=transition_action_id,
-                conversion=grain_store_conversion,
-            )
-        )
-        pre_sowing_events.append(
-            GameEvent(
-                event_type=EventType.RESOURCE_DELTA,
-                actor=player,
-                action_id=transition_action_id,
-                details=make_event_details(
-                    **(
-                        {
-                            "stone": conversion_delta[0],
-                            "silver": conversion_delta[1],
-                            "wheat": conversion_delta[2],
-                        }
-                        | ({"piety": conversion_delta[3]} if conversion_delta[3] != 0 else {})
-                    )
-                ),
-            )
-        )
-        resolution_resource_delta_baseline = state_for_sow.player_state(player).resources
-
     guild_merchant_advance = _resolved_guild_merchant_advance_for_action(
         state=state_for_sow,
         config=config,
@@ -2499,70 +2581,6 @@ def _apply_full_turn_action(
             and action.sow_route_secondary_building_id != _ROUTE_BUILDING_CLOISTERS
         ):
             raise TransitionValidationError("Kogge actions may not set sow_route_omitted_location.")
-        conversion_fields = (
-            action.building_conversion_id,
-            action.building_conversion_source,
-            action.building_conversion_direction,
-            action.building_conversion_amount,
-        )
-        conversion_field_count = sum(field is not None for field in conversion_fields)
-        if conversion_field_count not in (0, len(conversion_fields)):
-            raise TransitionValidationError("building_conversion fields must be set together.")
-        if conversion_field_count == len(conversion_fields):
-            conversion_building_id = action.building_conversion_id
-            if conversion_building_id not in (
-                _BUILDING_GRAIN_STORE,
-                _BUILDING_INDULGENCES,
-                _BUILDING_STONE_YARD,
-                _BUILDING_BREWERY,
-            ):
-                raise TransitionValidationError(
-                    "Only Grain Store, Indulgences, Stone Yard, and Brewery are supported for building_conversion fields."
-                )
-            conversion_direction = action.building_conversion_direction
-            if conversion_building_id == _BUILDING_GRAIN_STORE:
-                if conversion_direction not in (
-                    _GRAIN_STORE_BUY_WHEAT,
-                    _GRAIN_STORE_SELL_WHEAT,
-                ):
-                    raise TransitionValidationError(
-                        "Grain Store conversion direction must be buy_wheat or sell_wheat."
-                    )
-            elif conversion_building_id == _BUILDING_INDULGENCES and conversion_direction not in (
-                _INDULGENCES_BUY_PIETY,
-                _INDULGENCES_SELL_PIETY,
-            ):
-                raise TransitionValidationError(
-                    "Indulgences conversion direction must be buy_piety or sell_piety."
-                )
-            elif conversion_building_id == _BUILDING_STONE_YARD and conversion_direction not in (
-                _STONE_YARD_BUY_STONE,
-                _STONE_YARD_SELL_STONE,
-            ):
-                raise TransitionValidationError(
-                    "Stone Yard conversion direction must be buy_stone or sell_stone."
-                )
-            elif conversion_building_id == _BUILDING_BREWERY and conversion_direction != (
-                _BREWERY_SELL_WHEAT_FOR_SILVER
-            ):
-                raise TransitionValidationError(
-                    "Brewery conversion direction must be sell_wheat_for_silver."
-                )
-            amount = action.building_conversion_amount
-            if amount is None or amount <= 0:
-                if conversion_building_id == _BUILDING_GRAIN_STORE:
-                    raise TransitionValidationError(
-                        "Grain Store conversion amount must be at least 1."
-                    )
-                if conversion_building_id == _BUILDING_INDULGENCES:
-                    raise TransitionValidationError(
-                        "Indulgences conversion amount must be at least 1."
-                    )
-                if conversion_building_id == _BUILDING_BREWERY:
-                    raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
-                raise TransitionValidationError("Stone Yard conversion amount must be at least 1.")
-            if conversion_building_id == _BUILDING_BREWERY and amount != 1:
-                raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
         bank_payment_fields = (
             action.bank_payment_building_id,
             action.bank_payment_building_source,
@@ -2598,10 +2616,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Bank payment substitution is only supported for Ordination and Construct building actions."
                 )
-            if conversion_field_count == len(conversion_fields):
-                raise TransitionValidationError(
-                    "Combining Bank payment substitution with building conversion modifiers is deferred."
-                )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
                     "Combining Bank payment substitution with sow-route modifiers is deferred."
@@ -2624,10 +2638,6 @@ def _apply_full_turn_action(
             if action.merchant_advance_building_id != _BUILDING_GUILD:
                 raise TransitionValidationError(
                     "Only Guild is supported for merchant_advance_building fields."
-                )
-            if conversion_field_count == len(conversion_fields):
-                raise TransitionValidationError(
-                    "Combining Guild Merchant movement with building conversion modifiers is deferred."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -2657,10 +2667,6 @@ def _apply_full_turn_action(
             if action.effective_acolyte_building_id != _BUILDING_SCRIPTORIUM:
                 raise TransitionValidationError(
                     "Only Scriptorium is supported for effective_acolyte_building fields."
-                )
-            if conversion_field_count == len(conversion_fields):
-                raise TransitionValidationError(
-                    "Combining Scriptorium effective-acolyte modifier with building conversion modifiers is deferred."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -2698,10 +2704,6 @@ def _apply_full_turn_action(
             if action.resolution is not TurnResolutionType.TAXATION:
                 raise TransitionValidationError(
                     "Customs House Taxation modifier can only be used with taxation actions."
-                )
-            if conversion_field_count == len(conversion_fields):
-                raise TransitionValidationError(
-                    "Combining Customs House Taxation modifier with building conversion modifiers is deferred."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -2804,10 +2806,6 @@ def _apply_full_turn_action(
             if action.workforce_move_building_id != _BUILDING_PULPIT:
                 raise TransitionValidationError(
                     "Only Pulpit is supported for workforce_move_building fields."
-                )
-            if conversion_field_count == len(conversion_fields):
-                raise TransitionValidationError(
-                    "Combining Pulpit free serf movement with building conversion modifiers is deferred."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -3025,32 +3023,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=building_key,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            action.building_conversion_id
-            in (
-                _BUILDING_GRAIN_STORE,
-                _BUILDING_INDULGENCES,
-                _BUILDING_STONE_YARD,
-                _BUILDING_BREWERY,
-            )
-            and action.building_conversion_source is not None
-            and action.building_conversion_source != "own_active"
-        ):
-            assert action.building_conversion_id is not None
-            if not can_hire_building_this_turn(
-                hire_context,
-                building_key=action.building_conversion_id,
-            ):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=action.building_conversion_id,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -5988,7 +5960,6 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
         (action.end_turn_building_id, action.end_turn_building_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
-        (action.building_conversion_id, action.building_conversion_source),
         (action.merchant_advance_building_id, action.merchant_advance_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
@@ -6395,7 +6366,6 @@ def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.building_conversion_id is None
         and action.hired_building_id is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
@@ -6422,7 +6392,6 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.building_conversion_id is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.merchant_advance_building_id is None
@@ -6448,7 +6417,6 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.building_conversion_id is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.merchant_advance_building_id is None
@@ -6474,7 +6442,6 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.building_conversion_id is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.merchant_advance_building_id is None
@@ -6500,7 +6467,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.building_conversion_id is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.hired_building_id is None
@@ -6547,10 +6513,7 @@ def _wagon_yard_action_uses_target_building(
         _BUILDING_STONE_YARD,
         _BUILDING_BREWERY,
     ):
-        return (
-            action.building_conversion_id == target_building_id
-            and action.building_conversion_source == "own_active"
-        )
+        return False
     if target_building_id == _BUILDING_GUILD:
         return (
             action.merchant_advance_building_id == _BUILDING_GUILD
@@ -6609,19 +6572,6 @@ def _wagon_yard_action_is_supported_composition(
     ):
         return False
     if target_building_id != _BUILDING_BANK and action.bank_payment_building_id is not None:
-        return False
-    if (
-        target_building_id
-        not in (
-            _BUILDING_GRAIN_STORE,
-            _BUILDING_INDULGENCES,
-            _BUILDING_STONE_YARD,
-            _BUILDING_BREWERY,
-        )
-        and action.building_conversion_id is not None
-    ):
-        return False
-    if target_building_id == _BUILDING_BANK and action.building_conversion_id is not None:
         return False
     if (
         target_building_id == _BUILDING_BANK
@@ -6716,26 +6666,6 @@ def _with_pulpit_workforce_move_fields(
         action,
         workforce_move_building_id=option.building_id,
         workforce_move_building_source=source_label,
-    )
-    return _with_hire_payment_for_source(updated, source=option.source)
-
-
-def _with_grain_store_conversion_fields(
-    action: FullTurnAction,
-    *,
-    option: _BuildingConversionOption,
-) -> FullTurnAction:
-    source_label = (
-        "own_active"
-        if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
-    )
-    updated = replace(
-        action,
-        building_conversion_id=option.building_id,
-        building_conversion_source=source_label,
-        building_conversion_direction=option.direction,
-        building_conversion_amount=option.amount,
     )
     return _with_hire_payment_for_source(updated, source=option.source)
 
@@ -7484,106 +7414,68 @@ def _resolved_pulpit_workforce_move_for_action(
     )
 
 
-def _resolved_grain_store_conversion_for_action(
-    *,
+def _resolved_conversion_for_step(
     state: GameState,
     config: GameConfig,
-    player: PlayerId,
-    action: FullTurnAction,
-) -> _ResolvedGrainStoreConversion | None:
-    fields = (
-        action.building_conversion_id,
-        action.building_conversion_source,
-        action.building_conversion_direction,
-        action.building_conversion_amount,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError("building_conversion fields must be set together.")
-
-    building_id = action.building_conversion_id
-    source_label = action.building_conversion_source
-    direction = action.building_conversion_direction
-    amount = action.building_conversion_amount
-    assert building_id is not None
-    assert source_label is not None
-    assert direction is not None
-    assert amount is not None
-
-    building_name: str
-    valid_directions: tuple[str, ...]
-    if building_id == _BUILDING_GRAIN_STORE:
-        building_name = "Grain Store"
-        valid_directions = (_GRAIN_STORE_BUY_WHEAT, _GRAIN_STORE_SELL_WHEAT)
-    elif building_id == _BUILDING_INDULGENCES:
-        building_name = "Indulgences"
-        valid_directions = (_INDULGENCES_BUY_PIETY, _INDULGENCES_SELL_PIETY)
-    elif building_id == _BUILDING_STONE_YARD:
-        building_name = "Stone Yard"
-        valid_directions = (_STONE_YARD_BUY_STONE, _STONE_YARD_SELL_STONE)
-    elif building_id == _BUILDING_BREWERY:
-        building_name = "Brewery"
-        valid_directions = (_BREWERY_SELL_WHEAT_FOR_SILVER,)
-    else:
+    step: BuildingConversionStep,
+) -> _ResolvedGrainStoreConversion:
+    valid_directions = {
+        _BUILDING_GRAIN_STORE: (_GRAIN_STORE_BUY_WHEAT, _GRAIN_STORE_SELL_WHEAT),
+        _BUILDING_INDULGENCES: (_INDULGENCES_BUY_PIETY, _INDULGENCES_SELL_PIETY),
+        _BUILDING_STONE_YARD: (_STONE_YARD_BUY_STONE, _STONE_YARD_SELL_STONE),
+        _BUILDING_BREWERY: (_BREWERY_SELL_WHEAT_FOR_SILVER,),
+    }
+    directions = valid_directions.get(step.building_id)
+    if directions is None:
         raise TransitionValidationError(
-            "Only Grain Store, Indulgences, Stone Yard, and Brewery are supported for building_conversion fields."
+            f"Unsupported building conversion step: {step.building_id}."
         )
-    if direction not in valid_directions:
-        if building_id == _BUILDING_GRAIN_STORE:
-            raise TransitionValidationError(
-                "Grain Store conversion direction must be buy_wheat or sell_wheat."
-            )
-        if building_id == _BUILDING_INDULGENCES:
-            raise TransitionValidationError(
-                "Indulgences conversion direction must be buy_piety or sell_piety."
-            )
-        if building_id == _BUILDING_BREWERY:
-            raise TransitionValidationError(
-                "Brewery conversion direction must be sell_wheat_for_silver."
-            )
+    if step.direction not in directions:
         raise TransitionValidationError(
-            "Stone Yard conversion direction must be buy_stone or sell_stone."
+            f"Invalid {step.building_id} conversion direction: {step.direction}."
         )
-    if building_id == _BUILDING_BREWERY and amount != 1:
-        raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
-    if amount <= 0:
-        if building_id == _BUILDING_GRAIN_STORE:
-            raise TransitionValidationError("Grain Store conversion amount must be at least 1.")
-        if building_id == _BUILDING_INDULGENCES:
-            raise TransitionValidationError("Indulgences conversion amount must be at least 1.")
-        if building_id == _BUILDING_BREWERY:
-            raise TransitionValidationError("Brewery conversion amount must be exactly 1.")
-        raise TransitionValidationError("Stone Yard conversion amount must be at least 1.")
+    if step.amount <= 0 or (step.building_id == _BUILDING_BREWERY and step.amount != 1):
+        raise TransitionValidationError(
+            f"Invalid {step.building_id} conversion amount: {step.amount}."
+        )
 
     source = building_ability_source(
         state,
         config,
-        acting_player=player,
-        building_key=building_id,
+        acting_player=state.active_player,
+        building_key=step.building_id,
     )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                f"Own-active {building_name} conversion must set source=own_active."
+    if _is_hired_source(source):
+        if source.hire_resource == CORNUCOPIA_COUNTER:
+            if step.hire_payment not in CORNUCOPIA_HIRE_RESOURCES:
+                raise TransitionValidationError(
+                    f"Turn step must choose a hire payment for {step.building_id}."
+                )
+            source = replace(
+                source,
+                hire_resource=step.hire_payment,
+                hire_resource_chosen=True,
             )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
+        elif step.hire_payment is not None and step.hire_payment != source.hire_resource:
             raise TransitionValidationError(
-                f"{building_name} conversion source does not match resolved source: "
-                f"expected {expected_source_label}."
+                f"Turn step hire payment does not match {step.building_id} source."
             )
-    else:
-        raise TransitionValidationError(f"{building_name} is unavailable in current state.")
+    elif step.hire_payment is not None:
+        raise TransitionValidationError("Own-active conversion steps cannot name a hire payment.")
 
+    if not source.usable:
+        raise TransitionValidationError(f"{step.building_id} is unavailable in current state.")
+    expected_source = _hired_building_source_label(source)
+    if step.source != expected_source:
+        raise TransitionValidationError(
+            f"{step.building_id} conversion source does not match resolved source: "
+            f"expected {expected_source}."
+        )
     return _ResolvedGrainStoreConversion(
-        building_id=building_id,
+        building_id=step.building_id,
         source=source,
-        direction=direction,
-        amount=amount,
+        direction=step.direction,
+        amount=step.amount,
     )
 
 

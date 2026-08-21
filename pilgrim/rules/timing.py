@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pilgrim.model.config import TimingConfig
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase
 from pilgrim.model.events import GameEvent, make_event_details
-from pilgrim.model.state import GameState
+from pilgrim.model.state import GameState, TurnProgress
 from pilgrim.model.timing import TimingState
 
 
@@ -120,6 +120,7 @@ def advance_timing(
         active_player=state.active_player if round_ended else next_player,
         phase=TurnPhase.SOW,
         timing=base_timing,
+        turn_progress=TurnProgress(),
     )
     if round_ended:
         completed_round_number = state.timing.round_number

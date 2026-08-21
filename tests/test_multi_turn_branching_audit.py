@@ -3,7 +3,7 @@ from __future__ import annotations
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import FullTurnAction
 from pilgrim.model.enums import TurnResolutionType
-from pilgrim.rules.transition import legal_actions
+from pilgrim.rules.transition import legal_actions, turn_steps
 from tools.audits import multi_turn_branching_audit as audit
 
 
@@ -40,18 +40,12 @@ def test_classification_helpers_flag_expected_action_features() -> None:
     assert audit.action_has_hire(combined_action) is True
 
     grain_scenario = load_scenario("scenarios/grain_store_hire_market_sell_wheat_001.json")
-    grain_action = _find_action(
-        legal_actions(grain_scenario.state, grain_scenario.config),
-        lambda action: (
-            isinstance(action, FullTurnAction)
-            and action.building_conversion_id == "grain_store"
-            and action.building_conversion_source == "market"
-        ),
+    grain_steps = turn_steps(grain_scenario.state, grain_scenario.config)
+    assert any(
+        step.building_id == "grain_store"
+        and step.source == "market"
+        for step in grain_steps
     )
-    assert audit.action_has_building_conversion(grain_action) is True
-    assert audit.action_has_grain_store_conversion(grain_action) is True
-    assert audit.action_hired_building_count(grain_action) >= 1
-    assert audit.action_has_hire(grain_action) is True
 
     plain_scenario = load_scenario("scenarios/alms_sandbox_001.json")
     plain_action = _find_action(
