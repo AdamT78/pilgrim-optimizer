@@ -309,7 +309,7 @@ def test_the_numbers_are_set_the_way_the_alms_table_sets_its_steps() -> None:
     assert STEP_NUMBER_FONT_SIZE > BASELINE_LABEL_FONT_SIZE
     for index in range(POSITION_COUNT):
         assert (
-            f'<text x="{position_center_x(layout(), index):.1f}"'
+                f'<text data-piety-position-label="{index}" x="{position_center_x(layout(), index):.1f}"'
             f' y="{geometry["number_baseline_y"]:.1f}" text-anchor="middle"'
             f' font-family="{INK_FONT}" font-size="{STEP_NUMBER_FONT_SIZE:g}"'
             f' font-weight="{LABEL_FONT_WEIGHT}" fill="{fill}">{index}</text>' in content
@@ -588,6 +588,8 @@ def test_the_data_hooks_are_the_only_difference_from_the_baseline() -> None:
         "data-player",
         "data-player-disc",
         "data-player-color",
+        "data-piety-position-label",
+        "data-piety-score-row",
     }
 
 
@@ -973,3 +975,31 @@ def test_the_marker_is_the_only_thing_the_seat_changes_about_the_panel() -> None
 
     assert without.replace(' data-first-player-seat="1"', "") == plain
     assert marked.count("data-player-disc") == plain.count("data-player-disc") == 4
+
+
+def test_destination_variants_share_one_pill_and_always_show_conversion_silver() -> None:
+    panel = render_piety_track_v2_svg(
+        layout(),
+        config(),
+        "2_player",
+        piety_choice_steps=[
+            {"piety_destination": 2, "silver_delta": 2, "hire_payment": "stone"},
+            {"piety_destination": 2, "silver_delta": 2, "hire_payment": "silver"},
+            {"piety_destination": 1, "silver_delta": 1, "hire_payment": None},
+        ],
+    )
+
+    assert panel.count('data-piety-choice-template="true"') == 2
+    assert panel.count('data-piety-choice-pill="true"') == 0
+    destination_two = re.search(
+        r'data-piety-choice-destination="2".*?data-piety-choice-silver="true"[^>]*>(.*?)</text>',
+        panel,
+    )
+    destination_one = re.search(
+        r'data-piety-choice-destination="1".*?data-piety-choice-silver="true"[^>]*>(.*?)</text>',
+        panel,
+    )
+    assert destination_two and destination_two.group(1) == "+2"
+    assert destination_one and destination_one.group(1) == "+1"
+    assert "data-piety-choice-piety" not in panel
+    assert "data-piety-choice-silver-settled" not in panel

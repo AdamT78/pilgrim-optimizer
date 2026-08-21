@@ -195,6 +195,7 @@ def board_measurements(
     duty_layout: dict,
     map_layout: dict,
     piety_variant_id: str = PIETY_VARIANT_ID,
+    piety_choice_lane: bool = False,
 ) -> tuple[dict, dict, dict]:
     """The content box, hexagon box and cube size of every board, in each board's own units.
 
@@ -204,7 +205,9 @@ def board_measurements(
     """
     alms_board = alms_layout["board"]
     piety_variant = variant_by_id(piety_layout, piety_variant_id)
-    piety_panel = track_geometry(piety_layout, piety_variant["disc_rows"])
+    piety_panel = track_geometry(
+        piety_layout, piety_variant["disc_rows"], choice_lane=piety_choice_lane
+    )
     player_panel = board_geometry(len(board_layout["worker_roles"]))
     hexagon = duty_hexagon(duty_layout)
 

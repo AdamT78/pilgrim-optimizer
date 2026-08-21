@@ -183,17 +183,33 @@ def actions_document(state: Any, config: Any, payload: dict) -> dict:
 
 def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
     """The committed conversions currently legal, each with the id the client may quote back."""
-    return [
-        {
+    payload = []
+    player = state.active_player
+    before = state.player_state(player)
+    for step in turn_steps(state, config):
+        result = apply_engine_turn_step(state, config, step)
+        after_step = result.player_state(player)
+        total_silver_delta = after_step.resources.silver - before.resources.silver
+        hire_silver_delta = sum(
+            -int(dict(event.details).get("amount", 0))
+            for event in result.events
+            if event.event_type is EventType.BUILDING_HIRED
+            and event.action_id == _turn_step_id(step)
+            and dict(event.details).get("resource") == "silver"
+        )
+        payload.append({
             "step_id": _turn_step_id(step),
             "building_id": step.building_id,
             "source": step.source,
             "direction": step.direction,
             "amount": step.amount,
             "hire_payment": step.hire_payment,
-        }
-        for step in turn_steps(state, config)
-    ]
+            "piety_destination": after_step.piety,
+            # Describe the conversion separately from the optional building hire fee. Both values
+            # come from the engine: the total state delta and the BUILDING_HIRED event details.
+            "silver_delta": total_silver_delta - hire_silver_delta,
+        })
+    return payload
 
 
 class StaleStateToken(Exception):
