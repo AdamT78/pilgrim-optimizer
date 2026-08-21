@@ -191,8 +191,6 @@ RESOURCE_CHOICE_WIDTH = 66.0
 RESOURCE_CHOICE_HEIGHT = 61.0
 RESOURCE_CHOICE_TOP = 45.0
 RESOURCE_CHOICE_RADIUS = 9.0
-RESOURCE_CHOICE_FILL = "#F3EAD2"
-RESOURCE_CHOICE_STROKE = "#B8952F"
 RESOURCE_CHOICE_STROKE_WIDTH = 1.6
 
 # The one key a page shows when the whole BOARD is the answer -- naming a start player is the
@@ -731,19 +729,28 @@ def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> s
     )
 
 
-def _render_resource_choice_keys(block: dict, resources: list[dict]) -> str:
+def _darker_surface_colour(colour: str, factor: float = 0.72) -> str:
+    bare = colour.lstrip("#")
+    channels = [int(bare[index : index + 2], 16) for index in (0, 2, 4)]
+    return "#" + "".join(f"{round(channel * factor):02X}" for channel in channels)
+
+
+def _render_resource_choice_keys(
+    block: dict, resources: list[dict], *, surface_background: str
+) -> str:
     """One key per stock, drawn hidden, for a page that has to ask this seat which one it wants.
 
     Struck here rather than in the page's script for the same reason the first player seal is: the
     script reveals and hides, and never assigns a fill. A key carries the id of the stock it stands
     for, so a page can tell which was pressed without knowing where any of them sit.
     """
+    surface_border = _darker_surface_colour(surface_background)
     return "".join(
         f'<rect data-resource-choice-key="{escape(str(resource["id"]))}"'
         f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
         f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
-        f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{RESOURCE_CHOICE_FILL}"'
-        f' stroke="{RESOURCE_CHOICE_STROKE}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
+        f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{surface_background}"'
+        f' stroke="{surface_border}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
         ' visibility="hidden"/>'
         for cx, resource in zip(block["cell_x"], resources, strict=True)
     )
@@ -768,7 +775,11 @@ def _render_resource_block(
         for x in block["divider_x"]
     ]
     if choice_keys:
-        parts.append(_render_resource_choice_keys(block, resources))
+        parts.append(
+            _render_resource_choice_keys(
+                block, resources, surface_background=palette["panel_background"]
+            )
+        )
     parts += [
         _render_resource(block, cx, resource, palette)
         for cx, resource in zip(block["cell_x"], resources, strict=True)

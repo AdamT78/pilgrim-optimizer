@@ -41,7 +41,7 @@ from pilgrim.model.actions import (
     action_id,
     action_summary_for_players,
 )
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES, PlayerId, TurnResolutionType
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -919,6 +919,39 @@ def test_conversions_playtest_exposes_and_applies_all_conversion_paths() -> None
     }
 
 
+def test_sell_piety_payload_silver_is_the_engine_conversion_delta_across_the_corpus() -> None:
+    observations = 0
+    for scenario_path in sorted(SCENARIOS.rglob("*.json")):
+        try:
+            scenario = load_scenario(str(scenario_path))
+        except Exception:
+            continue
+        steps = list(turn_steps(scenario.state, scenario.config))
+        payload_by_id = {
+            entry["step_id"]: entry
+            for entry in play_server.turn_steps_payload(scenario.state, scenario.config)
+        }
+        for step in steps:
+            if step.direction != "sell_piety":
+                continue
+            observations += 1
+            before = scenario.state.player_state(scenario.state.active_player)
+            result = apply_turn_step(scenario.state, scenario.config, step)
+            after = result.player_state(scenario.state.active_player)
+            total_silver = after.resources.silver - before.resources.silver
+            hire_silver = sum(
+                -int(dict(event.details).get("amount", 0))
+                for event in result.events
+                if event.event_type is EventType.BUILDING_HIRED
+                and event.action_id == play_server._turn_step_id(step)
+                and dict(event.details).get("resource") == "silver"
+            )
+            conversion_silver = total_silver - hire_silver
+            assert conversion_silver == abs(after.piety - before.piety)
+            assert payload_by_id[play_server._turn_step_id(step)]["silver_delta"] == conversion_silver
+    assert observations > 0
+
+
 def test_conversions_playtest_runs_for_twenty_turns() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
     state = scenario.state
@@ -926,6 +959,32 @@ def test_conversions_playtest_runs_for_twenty_turns() -> None:
         actions = list(legal_actions(state, scenario.config))
         assert actions, f"{PLAYTEST_CONVERSIONS} had no legal action at turn {turn_index + 1}"
         state = apply_action(state, actions[0], scenario.config).state
+
+
+def test_conversions_playtest_reaches_metadata_driven_alms_season_end() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    state = scenario.state
+    season_end_turn = None
+    season_end_events: list[str] = []
+    for turn_index in range(1, 100):
+        actions = list(legal_actions(state, scenario.config))
+        assert actions, "conversion playtest ended before its first season end"
+        result = apply_action(state, actions[0], scenario.config)
+        event_types = [event.event_type.value for event in result.events]
+        if EventType.ALMS_SEASON_END.value in event_types:
+            season_end_turn = turn_index
+            season_end_events = event_types
+            state = result.state
+            break
+        state = result.state
+
+    assert season_end_turn == 10
+    assert state.timing.round_number == 5
+    assert {
+        EventType.ALMS_SEASON_END.value,
+        EventType.ALMS_SEASON_REWARD.value,
+        EventType.ALMS_RESET.value,
+    } <= set(season_end_events)
 
 
 def test_every_committed_turn_candidate_edge_is_drawn(corpus_actions) -> None:
@@ -4998,9 +5057,11 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
 
     unreachable = []
     for attribute in _queried_attributes():
-        if attribute in {"data-turn-step-direction", "data-turn-step-amount"} and not server.payload.get(
-            "turn_steps"
-        ):
+        if (
+            attribute in {"data-turn-step-direction", "data-turn-step-amount"}
+            or attribute.startswith("data-piety-choice-")
+            or attribute.startswith("data-turn-step-hire-")
+        ) and not server.payload.get("turn_steps"):
             continue
         carrying = [node for node in _every_element(tree.root) if attribute in node["attrs"]]
         # Every one of them has to be ON the page as well as reachable. An attribute the script

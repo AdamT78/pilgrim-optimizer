@@ -26,7 +26,43 @@
   "setup_metadata": {
     "generated": true,
     "seed": 99,
-    "player_count": 2
+    "player_count": 2,
+    "setup_sow_required": true,
+    "setup_sow_implemented": true,
+    "setup_timeline": {
+      "pilgrimage_rolls": {
+        "nw": 4,
+        "ne": 2,
+        "se": 3,
+        "sw": 5
+      },
+      "pilgrimage_rounds": {
+        "site_1": 1,
+        "site_2": 5,
+        "site_3": 13,
+        "site_4": 21
+      },
+      "building_live_rounds": {
+        "level_1": {
+          "confession_box": 3,
+          "chapter_house": 4,
+          "mint": 7,
+          "quarry": 8
+        },
+        "level_2": {
+          "indulgences": 10,
+          "library": 11,
+          "brewery": 2,
+          "dormitory": 15
+        },
+        "level_3": {
+          "customs_house": 17,
+          "mill": 18,
+          "pulpit": 19,
+          "scriptorium": 20
+        }
+      }
+    }
   },
   "initial_state": {
     "active_player": "player_one",

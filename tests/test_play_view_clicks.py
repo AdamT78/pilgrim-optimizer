@@ -264,11 +264,20 @@ def _choose_conversion(page, building_id: str, direction: str, amount: int) -> N
     assert direction_key is not None, f"{direction} was not offered for {building_id}"
     _click_handle_centre(page, direction_key, require_hit=True)
 
-    amount_key = page.query_selector(
-        f'[data-turn-step-amount="{amount}"][data-turn-step-offered="true"]'
-    )
-    assert amount_key is not None, f"amount {amount} was not offered for {direction}"
-    _click_handle_centre(page, amount_key, require_hit=True)
+    if building_id == "indulgences":
+        destination = page.query_selector(
+            '[data-piety-choice-pill][data-piety-choice-offered="true"]'
+        )
+        assert destination is not None, f"no piety destination was offered for {direction}"
+        _click_handle_centre(page, destination, require_hit=True)
+        return
+    resource = "stone" if building_id == "stone_yard" else "wheat"
+    for _ in range(amount):
+        resource_key = page.query_selector(
+            f'[data-resource-choice-key="{resource}"][data-turn-offered="true"]'
+        )
+        assert resource_key is not None, f"{resource} pill was not offered for {direction}"
+        _click_handle_centre(page, resource_key, require_hit=True)
 
 
 def _ordination_counts(value: str) -> tuple[int, int]:
@@ -1271,6 +1280,362 @@ def test_two_active_conversions_commit_from_building_direction_and_amount_clicks
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
 
 
+def test_conversion_resource_pill_reaches_amount_above_six_without_prompt_overflow(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+    _choose_conversion(page, "stone_yard", "sell_stone", 7)
+
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "7"
+    assert _confirm_enabled(page)
+    assert page.locator('[data-component="play-turn"]').evaluate(
+        "node => node.scrollWidth <= node.clientWidth"
+    )
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+    assert server.state.turn_progress.used_buildings == frozenset({"stone_yard"})
+
+
+def test_indulgences_destination_pill_commits_one_click_at_track_distance(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before = server.state.player_state(server.state.active_player).piety
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    direction = page.locator(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+    target = 2
+    destination = page.locator(
+        f'[data-piety-choice-pill][data-piety-choice-destination="{target}"]'
+    )
+    expected_silver = next(
+        step["silver_delta"]
+        for step in server.payload["turn_steps"]
+        if step["building_id"] == "indulgences"
+        and step["direction"] == "sell_piety"
+        and step["piety_destination"] == target
+    )
+    assert destination.locator('[data-piety-choice-silver]').text_content() == f"{expected_silver:+d}"
+    assert destination.locator('[data-piety-choice-piety-change]').count() == 0
+    _click_handle_centre(page, destination.element_handle(), require_hit=True)
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+    assert before - server.state.player_state(server.state.active_player).piety == before - target
+
+
+def test_illegal_indulgences_destination_has_no_live_pill(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    _choose_conversion(page, "indulgences", "sell_piety", 1)
+    assert page.locator(
+        '[data-piety-choice-pill][data-piety-choice-destination="12"]'
+    ).count() == 0
+
+
+def test_piety_pill_silver_delta_is_engine_derived_without_hire_fee(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "indulgences_hire_opponent_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    direction = page.locator(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+    offered = page.locator(
+        '[data-piety-choice-pill][data-piety-choice-offered="true"]'
+    )
+    assert offered.count() == 2
+    destination = page.locator(
+        '[data-piety-choice-pill][data-piety-choice-destination="1"]'
+    )
+    assert destination.locator('[data-piety-choice-silver]').text_content() == "+1"
+    assert destination.locator('[data-piety-choice-piety-change]').count() == 0
+    _click_handle_centre(page, destination.element_handle(), require_hit=True)
+
+
+def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(page, serve) -> None:
+    from tools.ui_debug.render_play_view import render_play_view_from_payload
+
+    base_url, server = serve(SCENARIOS / "indulgences_hire_opponent_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    panel = page.locator('[data-component="piety-track-v2"]')
+    main_page = page.context.new_page()
+    main_payload = dict(server.payload, turn_steps=[])
+    main_page.set_content(render_play_view_from_payload(main_payload), wait_until="networkidle")
+    main_height = main_page.locator('[data-component="piety-track-v2"]').bounding_box()["height"]
+    assert page.locator('[data-piety-choice-pill]').count() == 0
+    assert panel.bounding_box()["height"] == pytest.approx(main_height, abs=0.1)
+    assert page.locator('[data-piety-score-row]').count() == 13
+
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    direction = page.locator(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+
+    lane = page.locator('[data-piety-choice-lane="true"]')
+    lane_box = lane.bounding_box()
+    pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
+    pill_boxes = [pills.nth(index).bounding_box() for index in range(pills.count())]
+    assert lane_box is not None and len(pill_boxes) == 2
+    for left, right in zip(pill_boxes, pill_boxes[1:]):
+        assert left["x"] + left["width"] <= right["x"] + 1
+
+    def intersects(first, second) -> bool:
+        return not (
+            first["x"] + first["width"] <= second["x"]
+            or second["x"] + second["width"] <= first["x"]
+            or first["y"] + first["height"] <= second["y"]
+            or second["y"] + second["height"] <= first["y"]
+        )
+
+    obstacles = page.locator('[data-piety-position-label], [data-piety-score-row]')
+    obstacle_boxes = [obstacles.nth(index).bounding_box() for index in range(obstacles.count())]
+    assert all(not intersects(pill, obstacle) for pill in pill_boxes for obstacle in obstacle_boxes)
+
+    board_url, _board_server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    board_page = page.context.new_page()
+    board_page.goto(board_url, wait_until="networkidle")
+    board = board_page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(board_page, board.element_handle(), require_hit=True)
+    board_direction = board_page.locator(
+        '[data-turn-step-direction="sell_stone"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(board_page, board_direction.element_handle(), require_hit=True)
+    board_frame = board_page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+    ).bounding_box()
+    board_frame_style = board_page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+    ).evaluate(
+        "e => { const s = getComputedStyle(e); return {fill:s.fill, stroke:s.stroke, "
+        "strokeWidth:s.strokeWidth, cursor:s.cursor, visibility:s.visibility}; }"
+    )
+    board_surface_style = board_page.locator(
+        '[data-component="player-board-v2"] rect'
+    ).first.evaluate("e => getComputedStyle(e).fill")
+    piety_frame = page.locator(
+        '[data-piety-choice-pill][data-piety-choice-offered="true"] [data-resource-choice-key]'
+    ).first
+    piety_frame_box = piety_frame.bounding_box()
+    piety_frame_style = piety_frame.evaluate(
+        "e => { const s = getComputedStyle(e); return {fill:s.fill, stroke:s.stroke, "
+        "strokeWidth:s.strokeWidth, cursor:s.cursor, visibility:s.visibility}; }"
+    )
+    piety_surface_style = page.evaluate(
+        """() => Array.from(document.querySelectorAll('[data-component="piety-track-v2"] rect'))
+        .map(node => getComputedStyle(node).fill)
+        .find(fill => fill !== 'rgb(0, 0, 0)' && fill !== 'none')"""
+    )
+    assert board_frame is not None and piety_frame_box is not None
+    assert abs(piety_frame_box["width"] - board_frame["width"]) <= 2
+    assert abs(piety_frame_box["height"] - board_frame["height"]) <= 2
+    assert board_frame_style["fill"] == board_surface_style
+    assert piety_frame_style["fill"] == piety_surface_style
+    assert board_frame_style["stroke"] != board_frame_style["fill"]
+    assert piety_frame_style["stroke"] != piety_frame_style["fill"]
+
+    def rgb(value: str) -> tuple[int, int, int]:
+        return tuple(int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", "))
+
+    board_fill = rgb(board_frame_style["fill"])
+    board_stroke = rgb(board_frame_style["stroke"])
+    piety_fill = rgb(piety_frame_style["fill"])
+    piety_stroke = rgb(piety_frame_style["stroke"])
+    assert all(border < fill for border, fill in zip(board_stroke, board_fill))
+    assert all(border < fill for border, fill in zip(piety_stroke, piety_fill))
+    board_ratio = sum(border / fill for border, fill in zip(board_stroke, board_fill)) / 3
+    piety_ratio = sum(border / fill for border, fill in zip(piety_stroke, piety_fill)) / 3
+    assert abs(board_ratio - piety_ratio) <= 0.03
+    board_page.close()
+
+    def union(boxes):
+        return {
+            "x": min(box["x"] for box in boxes),
+            "y": min(box["y"] for box in boxes),
+            "width": max(box["x"] + box["width"] for box in boxes)
+            - min(box["x"] for box in boxes),
+            "height": max(box["y"] + box["height"] for box in boxes)
+            - min(box["y"] for box in boxes),
+        }
+
+    discs = page.locator('[data-player-disc]')
+    stars = page.locator('[data-piety-score-row]')
+    assert stars.count() == 13
+    disc_row = union([discs.nth(index).bounding_box() for index in range(discs.count())])
+    assert all(
+        disc_row["y"] - 1 <= box["y"]
+        and box["y"] + box["height"] <= disc_row["y"] + disc_row["height"] + 1
+        for box in pill_boxes
+    )
+    assert panel.bounding_box()["height"] == pytest.approx(main_height, abs=0.1)
+    main_page.close()
+
+
+def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+
+    sell = page.locator(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, sell.element_handle(), require_hit=True)
+    sell_pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
+    expected_sell = {
+        step["piety_destination"]
+        for step in server.payload["turn_steps"]
+        if step["building_id"] == "indulgences" and step["direction"] == "sell_piety"
+    }
+    assert sell_pills.count() == len(expected_sell)
+    assert {
+        int(sell_pills.nth(index).get_attribute("data-piety-choice-destination"))
+        for index in range(sell_pills.count())
+    } == expected_sell
+    disc_boxes = [
+        page.locator('[data-player-disc]').nth(index).bounding_box()
+        for index in range(page.locator('[data-player-disc]').count())
+    ]
+    disc_top = min(box["y"] for box in disc_boxes)
+    disc_bottom = max(box["y"] + box["height"] for box in disc_boxes)
+    assert all(
+        disc_top - 1 <= sell_pills.nth(index).bounding_box()["y"]
+        and sell_pills.nth(index).bounding_box()["y"]
+        + sell_pills.nth(index).bounding_box()["height"] <= disc_bottom + 1
+        for index in range(sell_pills.count())
+    )
+    assert all(
+        sell_pills.nth(index).locator('[data-piety-choice-silver]').text_content()
+        for index in range(sell_pills.count())
+    )
+
+    page.locator('[data-turn-control="reset"]').click()
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    buy = page.locator(
+        '[data-turn-step-direction="buy_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, buy.element_handle(), require_hit=True)
+    buy_pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
+    expected_buy = {
+        step["piety_destination"]
+        for step in server.payload["turn_steps"]
+        if step["building_id"] == "indulgences" and step["direction"] == "buy_piety"
+    }
+    assert buy_pills.count() == len(expected_buy)
+    assert {
+        int(buy_pills.nth(index).get_attribute("data-piety-choice-destination"))
+        for index in range(buy_pills.count())
+    } == expected_buy
+    assert all(
+        disc_top - 1 <= buy_pills.nth(index).bounding_box()["y"]
+        and buy_pills.nth(index).bounding_box()["y"]
+        + buy_pills.nth(index).bounding_box()["height"] <= disc_bottom + 1
+        for index in range(buy_pills.count())
+    )
+    assert all(
+        buy_pills.nth(index).locator('[data-piety-choice-silver]').text_content()
+        for index in range(buy_pills.count())
+    )
+
+
+def test_piety_destination_number_matches_board_typography_and_contrast(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    direction = page.locator(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+
+    styles = page.evaluate(
+        """() => {
+          const piety = document.querySelector(
+            '[data-piety-choice-pill][data-piety-choice-offered="true"] [data-piety-choice-silver]'
+          );
+          const board = document.querySelector(
+            '[data-component="player-board-v2"] [data-resource="silver"] text'
+          );
+          const background = Array.from(
+            document.querySelectorAll('[data-component="piety-track-v2"] rect')
+          ).find(node => getComputedStyle(node).fill === 'rgb(185, 185, 180)');
+          const css = node => {
+            const style = getComputedStyle(node);
+            return {fontSize: style.fontSize, fontWeight: style.fontWeight, fill: style.fill};
+          };
+          return {piety: css(piety), board: css(board), background: css(background).fill};
+        }"""
+    )
+    assert styles["piety"] == styles["board"]
+
+    def rgb(value: str) -> tuple[int, int, int]:
+        return tuple(int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", "))
+
+    foreground = rgb(styles["piety"]["fill"])
+    background = rgb(styles["background"])
+
+    def relative_luminance(colour: tuple[int, int, int]) -> float:
+        channels = [channel / 255 for channel in colour]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    light = relative_luminance(foreground)
+    dark = relative_luminance(background)
+    contrast = (max(light, dark) + 0.05) / (min(light, dark) + 0.05)
+    assert contrast >= 4.5
+
+
+def test_conversion_prompt_height_is_reserved_before_and_after_activation(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "two_active_conversions_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    height_before = page.locator('[data-component="play-turn"]').bounding_box()["height"]
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    height_after = page.locator('[data-component="play-turn"]').bounding_box()["height"]
+    assert height_after == height_before
+
+
+def test_conversion_does_not_render_zero_before_first_resource_click(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "two_active_conversions_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    building = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    direction = page.locator(
+        '[data-turn-step-direction="sell_wheat"][data-turn-step-offered="true"]'
+    )
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
+
+
 def test_conversion_playtest_starts_from_setup_and_commits_from_player_board(page, serve) -> None:
     base_url, server = serve(None)
     page.goto(base_url, wait_until="networkidle")
@@ -1332,8 +1697,19 @@ def test_two_active_conversions_do_not_offer_an_absent_amount(page, serve) -> No
     assert direction is not None
     _click_handle_centre(page, direction, require_hit=True)
 
-    assert page.locator('[data-turn-step-amount="2"][data-turn-step-offered="true"]').count() == 0
-    assert not _confirm_enabled(page), "Confirm guessed an amount absent from the surviving steps"
+    resource_key = page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+        '[data-turn-offered="true"]'
+    )
+    assert resource_key.count() == 1
+    _click_handle_centre(page, resource_key.element_handle(), require_hit=True)
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+        '[data-turn-offered="true"]'
+    ).count() == 0
+    assert page.locator('[data-turn-step-amount="2"]').count() == 0
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
+    assert _confirm_enabled(page), "Confirm did not accept the only engine-offered amount"
 
 
 def test_two_active_conversions_reset_restores_the_turn_start_position(page, serve) -> None:

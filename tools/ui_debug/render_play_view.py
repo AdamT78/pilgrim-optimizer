@@ -463,33 +463,44 @@ def _turn_step_direction_label(direction: str) -> str:
 def _turn_step_controls(steps: list[dict]) -> str:
     """The client-side narrowing controls for the engine's committed conversion steps."""
     directions = []
-    amounts = []
     for step in steps:
         direction = str(step["direction"])
-        amount = int(step["amount"])
         if direction not in directions:
             directions.append(direction)
-        if amount not in amounts:
-            amounts.append(amount)
     direction_buttons = "".join(
         f'<button type="button" class="turn-step-direction"'
         f' data-turn-step-direction="{escape(direction)}" data-turn-step-offered="false"'
         f' data-turn-step-selected="false">{say(_turn_step_direction_label(direction))}</button>'
         for direction in directions
     )
-    amount_buttons = "".join(
-        f'<button type="button" class="turn-step-amount"'
-        f' data-turn-step-amount="{amount}" data-turn-step-offered="false"'
-        f' data-turn-step-selected="false">{amount}</button>'
-        for amount in sorted(amounts)
+    hire_payments = []
+    for step in steps:
+        payment = step.get("hire_payment")
+        if payment is not None and payment not in hire_payments:
+            hire_payments.append(payment)
+    hire_buttons = "".join(
+        f'<button type="button" class="turn-step-hire"'
+        f' data-turn-step-hire-payment="{escape(str(payment))}"'
+        ' data-turn-step-hire-offered="false" data-turn-step-hire-selected="false">'
+        f'{say(str(payment))}</button>'
+        for payment in hire_payments
     )
     return (
         '<div class="turn-step-controls" data-component="turn-step-controls">'
-        '<div class="turn-step-direction-row"><span class="turn-step-label">Conversion</span>'
+        '<div class="turn-step-direction-row" data-turn-step-direction-row="true"'
+        ' data-turn-step-row-active="false">'
+        '<span class="turn-step-label">Conversion</span>'
         f"{direction_buttons}</div>"
-        '<div class="turn-step-amount-row"><span class="turn-step-label">Amount</span>'
-        '<span class="turn-step-amount-total" data-turn-step-amount-total="true">0</span>'
-        f"{amount_buttons}</div>"
+        '<div class="turn-step-resource-row" data-turn-step-resource-row="true"'
+        ' data-turn-step-row-active="false">'
+        '<span class="turn-step-label" data-turn-step-answer-label="true">Amount</span>'
+        '<span class="turn-step-amount-total" data-turn-step-amount-total="true"></span>'
+        '<span class="turn-step-resource-hint" data-turn-step-resource-hint="true">'
+        'click the live resource pill</span></div>'
+        '<div class="turn-step-hire-row" data-turn-step-hire-row="true"'
+        ' data-turn-step-row-active="false">'
+        '<span class="turn-step-label">Hire payment</span>'
+        f"{hire_buttons}</div>"
         "</div>"
     )
 
@@ -660,8 +671,15 @@ _TURN_SCRIPT = """<script>
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
-  var turnStepAmounts = aside.querySelectorAll('[data-turn-step-amount]');
+  var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
+  var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
+  var turnStepHireButtons = aside.querySelectorAll('[data-turn-step-hire-payment]');
+  var turnStepDirectionRow = aside.querySelector('[data-turn-step-direction-row]');
+  var turnStepResourceKeys = document.querySelectorAll('[data-resource-choice-key]');
+  var pietyChoicePills = document.querySelectorAll('[data-piety-choice-template]');
   var turnStepAmountTotal = aside.querySelector('[data-turn-step-amount-total="true"]');
+  var turnStepAnswerLabel = aside.querySelector('[data-turn-step-answer-label="true"]');
+  var turnStepResourceHint = aside.querySelector('[data-turn-step-resource-hint="true"]');
   var panels = aside.querySelectorAll('[data-turn-panel]');
   /* Every seat's board, so the one being asked can be picked out of them and the rest left alone.
      Which seat that is is read off the page, where it is already written down, rather than worked
@@ -686,6 +704,7 @@ _TURN_SCRIPT = """<script>
   var ordinationStartCounts = null;
   var ordinationOffered = [];
   var conversionChosen = [];
+  var conversionStepId = null;
   var conversionBuildings = document.querySelectorAll('[data-turn-step-building-id]');
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
@@ -707,6 +726,7 @@ _TURN_SCRIPT = """<script>
   function turnStepField(step, index) {
     if (index === 0) { return step.building_id; }
     if (index === 1) { return step.direction; }
+    if (step.building_id === 'indulgences') { return step.piety_destination; }
     return String(step.amount);
   }
 
@@ -728,9 +748,33 @@ _TURN_SCRIPT = """<script>
     return values;
   }
 
+  function pietyHirePayment(step) {
+    return step.hire_payment === undefined || step.hire_payment === null
+      ? null : String(step.hire_payment);
+  }
+
+  function pietySilverFor(destination, live) {
+    var values = [];
+    live.forEach(function (step) {
+      if (String(step.piety_destination) !== String(destination)) { return; }
+      var value = Number(step.silver_delta);
+      if (values.indexOf(value) === -1) { values.push(value); }
+    });
+    if (values.length > 1) {
+      throw new Error('piety destination has inconsistent conversion silver deltas');
+    }
+    return values.length === 1 ? values[0] : null;
+  }
+
   function conversionReady() {
     var live = survivingTurnSteps();
-    return conversionChosen.length === 3 && live.length === 1;
+    if (conversionChosen.length !== 3) { return false; }
+    if (conversionChosen[0] === 'indulgences') {
+      return conversionStepId !== null
+        && live.some(function (step) { return step.step_id === conversionStepId; })
+        && live.filter(function (step) { return step.step_id === conversionStepId; }).length === 1;
+    }
+    return live.length === 1;
   }
 
   function renderTurnSteps() {
@@ -739,9 +783,21 @@ _TURN_SCRIPT = """<script>
     var directions = conversionChosen.length >= 1
       ? offeredTurnStepValues(1, live)
       : [];
-    var amounts = conversionChosen.length >= 2
-      ? offeredTurnStepValues(2, live)
-      : [];
+    var piety = conversionChosen.length >= 2 && conversionChosen[0] === 'indulgences';
+    var resource = conversionChosen.length >= 2 && !piety;
+    var resourceId = null;
+    if (resource) {
+      resourceId = conversionChosen[0] === 'stone_yard' ? 'stone' : 'wheat';
+    }
+    if (resource) {
+      Array.prototype.forEach.call(seats, function (seat) {
+        if (seat.getAttribute('data-active-seat') === 'true') {
+          seat.setAttribute('data-resource-choice', 'true');
+        } else {
+          seat.removeAttribute('data-resource-choice');
+        }
+      });
+    }
 
     Array.prototype.forEach.call(conversionBuildings, function (building) {
       var buildingId = building.getAttribute('data-turn-step-building-id');
@@ -763,16 +819,90 @@ _TURN_SCRIPT = """<script>
         conversionChosen.length > 1 && conversionChosen[1] === value ? 'true' : 'false'
       );
     });
-    Array.prototype.forEach.call(turnStepAmounts, function (button) {
-      var value = button.getAttribute('data-turn-step-amount');
-      button.setAttribute('data-turn-step-offered', amounts.indexOf(value) === -1 ? 'false' : 'true');
+    if (turnStepDirectionRow) {
+      turnStepDirectionRow.setAttribute(
+        'data-turn-step-row-active',
+        conversionChosen.length >= 1 ? 'true' : 'false'
+      );
+    }
+    if (turnStepResourceRow) {
+      turnStepResourceRow.setAttribute(
+        'data-turn-step-row-active',
+        conversionChosen.length >= 2 ? 'true' : 'false'
+      );
+    }
+    if (turnStepAnswerLabel) {
+      turnStepAnswerLabel.textContent = piety ? 'Destination' : 'Amount';
+    }
+    if (turnStepResourceHint) {
+      turnStepResourceHint.textContent = piety
+        ? 'choose a destination on the piety track'
+        : 'click the live resource pill';
+    }
+    var hirePayments = [];
+    if (piety && conversionChosen.length >= 3) {
+      live.forEach(function (step) {
+        var payment = pietyHirePayment(step);
+        if (payment !== null && hirePayments.indexOf(payment) === -1) {
+          hirePayments.push(payment);
+        }
+      });
+    }
+    if (turnStepHireRow) {
+      turnStepHireRow.setAttribute(
+        'data-turn-step-row-active',
+        piety && conversionChosen.length >= 3 && hirePayments.length > 1 ? 'true' : 'false'
+      );
+    }
+    Array.prototype.forEach.call(turnStepHireButtons, function (button) {
+      var payment = button.getAttribute('data-turn-step-hire-payment');
+      var offered = hirePayments.length > 1 && hirePayments.indexOf(payment) !== -1;
+      button.setAttribute('data-turn-step-hire-offered', offered ? 'true' : 'false');
       button.setAttribute(
-        'data-turn-step-selected',
-        conversionChosen.length > 2 && conversionChosen[2] === value ? 'true' : 'false'
+        'data-turn-step-hire-selected',
+        conversionStepId !== null && live.some(function (step) {
+          return step.step_id === conversionStepId && pietyHirePayment(step) === payment;
+        }) ? 'true' : 'false'
       );
     });
+    if (conversionChosen.length >= 2) {
+      Array.prototype.forEach.call(turnStepResourceKeys, function (key) {
+        var offered = resource && key.getAttribute('data-resource-choice-key') === resourceId
+          && survivingTurnSteps(conversionChosen.slice(0, 2)).some(function (step) {
+            return Number(step.amount) > Number(conversionChosen[2] || 0);
+          });
+        key.setAttribute('data-turn-offered', offered ? 'true' : 'false');
+      });
+    }
+    Array.prototype.forEach.call(pietyChoicePills, function (choice) {
+      var destination = choice.getAttribute('data-piety-choice-destination');
+      var offered = piety && live.some(function (step) {
+        return String(step.piety_destination) === String(destination);
+      });
+      if (offered) {
+        choice.setAttribute('data-piety-choice-pill', 'true');
+      } else {
+        choice.removeAttribute('data-piety-choice-pill');
+      }
+      choice.setAttribute('data-piety-choice-offered', offered ? 'true' : 'false');
+      choice.setAttribute('visibility', offered ? 'visible' : 'hidden');
+      choice.setAttribute(
+        'data-piety-choice-selected',
+        conversionChosen.length >= 3 && String(conversionChosen[2]) === String(destination)
+          ? 'true' : 'false'
+      );
+      if (offered) {
+        var silver = pietySilverFor(destination, live);
+        if (silver === null) {
+          throw new Error('offered piety destination has no conversion silver figure');
+        }
+        var silverText = choice.querySelector('[data-piety-choice-silver]');
+        if (silverText) { silverText.textContent = silver >= 0 ? '+' + silver : String(silver); }
+      }
+    });
     if (turnStepAmountTotal) {
-      turnStepAmountTotal.textContent = conversionChosen.length > 2 ? conversionChosen[2] : '0';
+      turnStepAmountTotal.textContent = resource && conversionChosen.length > 2
+        ? conversionChosen[2] : '';
     }
   }
 
@@ -1610,7 +1740,10 @@ _TURN_SCRIPT = """<script>
        three are not merely unlit: their keys are marked unoffered too, so a key that something
        else revealed still cannot be pressed. Nobody reaches across the table. */
     Array.prototype.forEach.call(seats, function (seat) {
-      var asking = stocks.length && seat.getAttribute('data-active-seat') === 'true';
+      var conversionResourceChoice = conversionChosen.length >= 2
+        && conversionChosen[0] !== 'indulgences';
+      var asking = (stocks.length || conversionResourceChoice)
+        && seat.getAttribute('data-active-seat') === 'true';
       if (asking) { seat.setAttribute('data-resource-choice', 'true'); }
       else { seat.removeAttribute('data-resource-choice'); }
       mark(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key',
@@ -1753,6 +1886,7 @@ _TURN_SCRIPT = """<script>
     building.addEventListener('click', function () {
       if (building.getAttribute('data-turn-step-offered') !== 'true') { return; }
       conversionChosen = [building.getAttribute('data-turn-step-building-id')];
+      conversionStepId = null;
       render();
     });
   });
@@ -1764,18 +1898,62 @@ _TURN_SCRIPT = """<script>
         conversionChosen[0],
         button.getAttribute('data-turn-step-direction')
       ];
+      conversionStepId = null;
       render();
     });
   });
 
-  Array.prototype.forEach.call(turnStepAmounts, function (button) {
-    button.addEventListener('click', function () {
-      if (button.getAttribute('data-turn-step-offered') !== 'true') { return; }
+  Array.prototype.forEach.call(turnStepResourceKeys, function (key) {
+    key.addEventListener('click', function () {
+      if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+      if (conversionChosen.length === 0) {
+        var value = key.getAttribute('data-resource-choice-key');
+        chosen.push(value);
+        answered.push(value);
+        resolutionSplit = null;
+        autoAdvance = true;
+        render();
+        return;
+      }
+      var live = survivingTurnSteps(conversionChosen.slice(0, 2));
+      var current = Number(conversionChosen[2] || 0);
+      var next = live
+        .map(function (step) { return Number(step.amount); })
+        .filter(function (amount) { return amount > current; })
+        .sort(function (left, right) { return left - right; })[0];
+      if (next === undefined) { return; }
       conversionChosen = [
         conversionChosen[0],
         conversionChosen[1],
-        button.getAttribute('data-turn-step-amount')
+        String(next)
       ];
+      conversionStepId = null;
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(pietyChoicePills, function (choice) {
+    choice.addEventListener('click', function () {
+      if (choice.getAttribute('data-piety-choice-offered') !== 'true') { return; }
+      conversionChosen = [
+        conversionChosen[0],
+        conversionChosen[1],
+        String(choice.getAttribute('data-piety-choice-destination'))
+      ];
+      var live = survivingTurnSteps(conversionChosen);
+      conversionStepId = live.length === 1 ? live[0].step_id : null;
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(turnStepHireButtons, function (button) {
+    button.addEventListener('click', function () {
+      if (button.getAttribute('data-turn-step-hire-offered') !== 'true') { return; }
+      var payment = button.getAttribute('data-turn-step-hire-payment');
+      var live = survivingTurnSteps(conversionChosen).filter(function (step) {
+        return pietyHirePayment(step) === payment;
+      });
+      conversionStepId = live.length === 1 ? live[0].step_id : null;
       render();
     });
   });
@@ -1830,7 +2008,6 @@ _TURN_SCRIPT = """<script>
   answers(pairs, 'data-combination-key');
   answers(buildings, 'data-building-choice-key');
   Array.prototype.forEach.call(seats, function (seat) {
-    answers(seat.querySelectorAll('[data-resource-choice-key]'), 'data-resource-choice-key');
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });
   if (activeSeat) {
@@ -1912,6 +2089,7 @@ _TURN_SCRIPT = """<script>
       chosen = [];
       answered = [];
       conversionChosen = [];
+      conversionStepId = null;
       resolutionSplit = null;
       autoAdvance = true;
       render();
@@ -1998,6 +2176,7 @@ def turn_styles(route_color: str) -> str:
   [data-arrow][data-turn-offered="true"] .arrow-interior {{ fill: rgb(30, 122, 52); }}
 
   .play-turn {{
+    position: relative; z-index: 20;
     width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px; padding: 10px 12px;
   }}
@@ -2029,24 +2208,33 @@ def turn_styles(route_color: str) -> str:
   .turn-control-row-bottom [data-turn-control="confirm"] {{
     min-width: 0;
   }}
-  .turn-step-controls {{ margin: 8px 0; color: #C9C4B4; }}
-  .turn-step-direction-row, .turn-step-amount-row {{
-    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  .turn-step-controls {{ position: relative; z-index: 2; margin: 8px 0; color: #C9C4B4; }}
+  .turn-step-direction-row, .turn-step-resource-row, .turn-step-hire-row {{
+    display: flex; align-items: center; gap: 6px; margin-top: 5px; height: 24px;
+    box-sizing: border-box; overflow: visible;
   }}
+  [data-turn-step-row-active="false"] {{ visibility: hidden; }}
   .turn-step-label {{ min-width: 72px; color: #E0C36A; }}
-  .turn-step-direction, .turn-step-amount {{
+  .turn-step-direction {{
     color: #F2F0E6; background: #262626; border: 1px solid #555; border-radius: 999px;
     padding: 4px 9px; font: 12px/1.2 Helvetica, Arial, sans-serif; cursor: pointer;
+    position: relative; z-index: 3; pointer-events: auto;
   }}
   .turn-step-amount-total {{
     min-width: 24px; color: #F2F0E6; font-weight: 700; text-align: center;
   }}
-  [data-turn-step-direction][data-turn-step-offered="false"],
-  [data-turn-step-amount][data-turn-step-offered="false"] {{
+  .turn-step-hire {{
+    color: #F2F0E6; background: #262626; border: 1px solid #555; border-radius: 999px;
+    padding: 4px 9px; font: 12px/1.2 Helvetica, Arial, sans-serif; cursor: pointer;
+  }}
+  [data-turn-step-hire-offered="false"] {{ display: none; }}
+  [data-turn-step-hire-selected="true"] {{
+    background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
+  }}
+  [data-turn-step-direction][data-turn-step-offered="false"] {{
     display: none;
   }}
-  [data-turn-step-direction][data-turn-step-selected="true"],
-  [data-turn-step-amount][data-turn-step-selected="true"] {{
+  [data-turn-step-direction][data-turn-step-selected="true"] {{
     background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
   }}
   [data-turn-step-building-id][data-turn-step-offered="true"] {{ cursor: pointer; }}
@@ -2059,6 +2247,31 @@ def turn_styles(route_color: str) -> str:
      key it cannot press. Visibility only: the pill, the keyline and where it sits are the
      renderer's, as they are for the seals. */
   [data-resource-choice-key][data-turn-offered="false"] {{ visibility: hidden; }}
+  [data-piety-choice-pill] {{ visibility: hidden; }}
+  [data-piety-choice-pill][data-piety-choice-offered="true"] {{
+    visibility: visible !important; pointer-events: all; cursor: pointer;
+  }}
+  [data-piety-choice-pill][data-piety-choice-offered="false"] {{
+    pointer-events: none;
+  }}
+  [data-piety-choice-pill][data-piety-choice-offered="true"] [data-resource-choice-key] {{
+    visibility: visible !important; pointer-events: all; cursor: pointer;
+  }}
+  [data-piety-choice-pill][data-piety-choice-offered="false"] [data-resource-choice-key] {{
+    visibility: hidden !important; pointer-events: none;
+  }}
+  [data-piety-choice-pill] [data-piety-choice-hit="true"] {{
+    fill: transparent; stroke: none;
+  }}
+  [data-piety-choice-pill] text {{
+    font: 8px Helvetica, Arial, sans-serif; fill: #F2F0E6; pointer-events: none;
+  }}
+  /* The resource renderer supplies the number, but this surface rule must not wash it out. Keep
+     its computed typography identical to the player-board resource readout. */
+  [data-piety-choice-pill] [data-piety-choice-silver="true"] {{
+    font-family: Helvetica, Arial, sans-serif; font-size: 16px; font-weight: 700;
+    fill: #3A2F1E;
+  }}
 
   /* Every building on the round track carries a key, and the rule below shows the offered ones --
      so the map says which buildings may be constructed by ringing the ones that may, in the same
@@ -2158,7 +2371,13 @@ def render_play_view_html(
     piety_variant = piety_variant_for(seated)
 
     content, hexes, cubes = board_measurements(
-        alms_layout, piety_layout, board_layout, duty_wheel_layout, map_layout, piety_variant
+        alms_layout,
+        piety_layout,
+        board_layout,
+        duty_wheel_layout,
+        map_layout,
+        piety_variant,
+        piety_choice_lane=any(step.get("building_id") == "indulgences" for step in turn_steps),
     )
     scale = solve_table_scale(content, hexes, cubes)
     hexagon = duty_hexagon(duty_wheel_layout)
@@ -2178,6 +2397,11 @@ def render_play_view_html(
             piety_variant,
             first_player_seat(payload),
             piety_positions_by_player=piety_by_player(payload),
+            piety_choice_steps=[
+                dict(step, choice_index=index)
+                for index, step in enumerate(turn_steps)
+                if step.get("building_id") == "indulgences"
+            ],
         ),
         scale.crop["piety"],
     )
@@ -2225,7 +2449,13 @@ def render_play_view_html(
         board = render_player_board_v2_svg(
             _board_layout_for(payload, board_layout, player_id),
             player,
-            board_state=_board_state_for(payload, board_layout, player_id, catalog, donated_data),
+            board_state=_board_state_for(
+                payload,
+                board_layout,
+                player_id,
+                catalog,
+                donated_data,
+            ),
             interactive=turn_surface,
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
@@ -2345,11 +2575,21 @@ def _board_state_for(
             role["id"]: int(record["special_activities"].get(role["id"], 0))
             for role in board_layout["worker_roles"]
         },
-        "slots": _slot_contents(record, catalog, donated_data),
+        "slots": _slot_contents(
+            record,
+            catalog,
+            donated_data,
+            sorted({step["building_id"] for step in payload.get("turn_steps") or []}),
+        ),
     }
 
 
-def _slot_contents(record: dict, catalog: dict, donated_data: dict | list) -> tuple[dict, ...]:
+def _slot_contents(
+    record: dict,
+    catalog: dict,
+    donated_data: dict | list,
+    conversion_building_ids: list[str],
+) -> tuple[dict, ...]:
     """This seat's buildings, drawn ready to be dropped into the slots that hold them.
 
     Bought first and then donated, which is the order the engine keeps them in and the only order
@@ -2385,6 +2625,21 @@ def _slot_contents(record: dict, catalog: dict, donated_data: dict | list) -> tu
                     "content": render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE),
                 }
             )
+    existing = {slot["id"] for slot in slots}
+    for building_id in conversion_building_ids:
+        if building_id in existing or len(slots) >= 6:
+            continue
+        building = by_id.get(building_id)
+        if building is None:
+            continue
+        slots.append(
+            {
+                "id": building_id,
+                "state": "hired",
+                "content": render_board_slot_building(building, BUILDING_SLOT_HEX_SIZE),
+            }
+        )
+        existing.add(building_id)
     return tuple(slots)
 
 

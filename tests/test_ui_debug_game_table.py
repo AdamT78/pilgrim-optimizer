@@ -92,6 +92,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     MARKER_CUBE,
     ROLE_FONT_SIZE,
     TOKEN_RADIUS,
+    _darker_surface_colour,
     board_geometry,
     load_player_boards_v2_layout,
     player_by_id,
@@ -952,9 +953,12 @@ def test_the_board_draws_the_keys_and_the_script_only_shows_them(page: str) -> N
 
     assert boards == ["wheat", "stone", "silver"] * len(SEATED_PLAYERS)
     assert page.count('data-resource-choice-key="wheat" x="453.5" y="45"') == len(SEATED_PLAYERS)
+    board_background = load_player_boards_v2_layout()["palette"]["panel_background"]
+    board_border = _darker_surface_colour(board_background)
     for key in re.findall(r"<rect data-resource-choice-key=[^>]*>", page):
         assert 'visibility="hidden"' in key
-        assert 'fill="#F3EAD2"' in key and 'stroke="#B8952F"' in key
+        assert f'fill="{board_background}"' in key
+        assert f'stroke="{board_border}"' in key
     assert '[data-resource-choice="true"] [data-resource-choice-key] {' in page
     assert '[data-resource-choice="true"] [data-resource-divider] {' in page
 

@@ -35,6 +35,8 @@ it is read, never imported or executed.
 
 from __future__ import annotations
 
+from html import escape
+
 import json
 import math
 from pathlib import Path
@@ -61,6 +63,14 @@ from tools.ui_debug.render_alms_table import (
     TITLE_FONT_WEIGHT,
 )
 from tools.ui_debug.render_donated_buildings import render_star_path, star_points
+from tools.ui_debug.render_player_boards_v2 import (
+    _render_resource,
+    _render_resource_choice_keys,
+    RESOURCE_CHOICE_TOP,
+    board_geometry,
+    load_player_boards_v2_layout,
+    resource_block,
+)
 from tools.ui_debug.render_seal import WOBBLE, darken, render_seal
 
 COMPONENT_NAME = "piety-track-v2"
@@ -182,7 +192,7 @@ def _star_extent(outer_r: float, inner_r: float) -> tuple[float, float]:
     return min(ys), max(ys)
 
 
-def track_geometry(layout: dict, disc_rows: int) -> dict:
+def track_geometry(layout: dict, disc_rows: int, *, choice_lane: bool = False) -> dict:
     """Vertical layout of one panel: title, then the numbers, the discs and the stars beneath.
 
     The numbers hang `title_to_numbers` below the title's baseline, which is the drop the Alms
@@ -215,6 +225,11 @@ def track_geometry(layout: dict, disc_rows: int) -> dict:
     discs_cy = top_row_cy + (disc_rows - 1) * row_step / 2
     discs_bottom = top_row_cy + (disc_rows - 1) * row_step + radius
 
+    # Destination choices use the disc band itself.  The choice group is an overlay, so it must
+    # never become another vertical row or change the panel's measured height.
+    choice_lane_top = top_row_cy - radius if choice_lane else discs_bottom
+    choice_lane_height = 2 * radius if choice_lane else 0
+    choice_lane_bottom = choice_lane_top + choice_lane_height
     star_min_y, star_max_y = _star_extent(STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
     star_cy = discs_bottom + track["discs_to_stars"] - star_min_y
 
@@ -226,6 +241,9 @@ def track_geometry(layout: dict, disc_rows: int) -> dict:
         "panel_height": star_cy + star_max_y + track["bottom_margin"] + panel["pad_bottom"],
         "title_baseline_y": title_baseline_y,
         "number_baseline_y": number_baseline_y,
+        "choice_lane_top": choice_lane_top,
+        "choice_lane_height": choice_lane_height,
+        "choice_lane_bottom": choice_lane_bottom,
         "discs_cy": discs_cy,
         "discs_bottom": discs_bottom,
         "disc_offset": row_step / 2,
@@ -313,7 +331,7 @@ def disc_positions_by_player(
 def render_position_label(layout: dict, geometry: dict, index: int) -> str:
     fill = layout["track"]["position_label"]["fill"]
     return (
-        f'<text x="{position_center_x(layout, index):.1f}"'
+        f'<text data-piety-position-label="{index}" x="{position_center_x(layout, index):.1f}"'
         f' y="{geometry["number_baseline_y"]:.1f}" text-anchor="middle" {NUMBER_FONT}'
         f' fill="{fill}">{index}</text>'
     )
@@ -363,11 +381,84 @@ def render_vp_star(layout: dict, geometry: dict, index: int, vp: int) -> str:
     center_x = position_center_x(layout, index)
     star_cy = geometry["star_cy"]
     return (
-        render_star_path(center_x, star_cy, STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
+        f'<g data-piety-score-row="true">'
+        + render_star_path(center_x, star_cy, STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
         + f'<text x="{center_x:.1f}" y="{star_cy + STAR_LABEL_OFFSET:.1f}"'
         f' text-anchor="middle" {STAR_LABEL_FONT}'
         f' fill="{layout["palette"]["star_label_fill"]}">{escape(str(vp))}</text>'
+        + '</g>'
     )
+
+
+def render_piety_choice_pills(
+    layout: dict,
+    geometry: dict,
+    choices: list[dict],
+) -> str:
+    """Hidden destination pills for an active Indulgences conversion.
+
+    The server supplies the destination and the silver delta after applying the engine step to a
+    throwaway state. Steps with the same destination are grouped: a silver figure is painted only
+    when every step in that group agrees. Hire payment remains a separate prompt answer.
+    """
+    grouped: dict[int, list[dict]] = {}
+    for choice in choices:
+        grouped.setdefault(int(choice["piety_destination"]), []).append(choice)
+
+    track = layout["track"]
+    left = position_center_x(layout, 0) - track["box_width"] / 2
+    width = track["position_count"] * track["box_width"]
+    top = geometry["choice_lane_top"]
+    height = geometry["choice_lane_height"]
+    board_layout = load_player_boards_v2_layout()
+    board_geometry_values = board_geometry(len(board_layout["worker_roles"]))
+    board_resource = resource_block(board_geometry_values["panel_width"])
+    board_palette = board_layout["palette"]
+    icon_offset = board_resource["icon_cy"] - board_resource["top"]
+    value_offset = board_resource["value_baseline"] - board_resource["top"]
+    parts = [
+        f'<g data-piety-choice-lane="true" data-piety-choice-lane-top="{top:.1f}"'
+        f' data-piety-choice-lane-height="{height:.1f}">'
+        f'<rect x="{left:.1f}" y="{top:.1f}" width="{width:.1f}" height="{height:.1f}"'
+        ' fill="none" pointer-events="none"/>'
+    ]
+    for destination, destination_choices in sorted(grouped.items()):
+        cx = position_center_x(layout, destination)
+        silver_values = {int(choice["silver_delta"]) for choice in destination_choices}
+        # The static template can contain both directions, whose destinations may overlap. It is
+        # hidden until the direction is answered; the page replaces this seed with the selected
+        # direction's engine-provided delta before revealing the pill.
+        figure = f"{next(iter(silver_values)):+d}"
+        frame_markup = _render_resource_choice_keys(
+            {"cell_x": [cx]}, [{"id": "silver"}],
+            surface_background=layout["palette"]["panel_fill"],
+        )
+        frame_markup = (
+            f'<g transform="translate({cx:.1f} {top:.1f}) scale(.9) '
+            f'translate({-cx:.1f} {-RESOURCE_CHOICE_TOP:.1f})">'
+            f'{frame_markup}</g>'
+        )
+        silver_markup = _render_resource(
+            {"icon_cy": top + icon_offset, "value_baseline": top + value_offset},
+            cx,
+            {"id": "silver", "icon": "coin", "count": figure},
+            board_palette,
+        ).replace('<text ', '<text data-piety-choice-silver="true" ', 1)
+        resource_markup = (
+            f'<g transform="translate({cx:.1f} {top:.1f}) scale(.7) translate({-cx:.1f} {-top:.1f})">'
+            f'<rect data-piety-choice-hit="true" x="{cx - 11.6:.1f}" y="{top + 2.4:.1f}"'
+            f' width="23.2" height="45.7"'
+            f' fill="transparent" pointer-events="all"/>{frame_markup}'
+            f'{silver_markup}</g>'
+        )
+        parts.append(
+            f'<g data-piety-choice-template="true" data-piety-choice-destination="{destination}"'
+            ' data-piety-choice-offered="false" data-piety-choice-selected="false"'
+            ' pointer-events="all">'
+            f'{resource_markup}</g>'
+        )
+    parts.append("</g>")
+    return "".join(parts)
 
 
 def render_panel_inset(layout: dict, geometry: dict) -> str:
@@ -559,6 +650,7 @@ def render_piety_track_v2_svg(
     first_player_seat: int | None = None,
     interactive: bool = False,
     piety_positions_by_player: dict[str, int] | None = None,
+    piety_choice_steps: list[dict] | None = None,
 ) -> str:
     """One ornamented panel: the grey rounded rect, the ornament, then the track inside it.
 
@@ -591,7 +683,9 @@ def render_piety_track_v2_svg(
         )
 
     panel = layout["panel"]
-    geometry = track_geometry(layout, variant["disc_rows"])
+    geometry = track_geometry(
+        layout, variant["disc_rows"], choice_lane=bool(piety_choice_steps)
+    )
     panel_width = geometry["panel_width"]
     panel_height = geometry["panel_height"]
     corner_r = panel["corner_radius"]
@@ -617,6 +711,9 @@ def render_piety_track_v2_svg(
             if positions.get(player["id"]) == index
         ]
         parts.append(render_vp_star(layout, geometry, index, vp))
+
+    if piety_choice_steps:
+        parts.append(render_piety_choice_pills(layout, geometry, piety_choice_steps))
 
     # Struck last, because wax goes on top of what it is pressed onto.
     seal = "" if first_player_seat is None else f' data-first-player-seat="{first_player_seat}"'
