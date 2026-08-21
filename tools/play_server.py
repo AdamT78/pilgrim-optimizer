@@ -75,7 +75,13 @@ from pilgrim.model.actions import (  # noqa: E402
     action_summary_for_players,
 )
 from pilgrim.rules.buildings import building_ability_source, building_by_id  # noqa: E402
-from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
+from pilgrim.rules.transition import (  # noqa: E402
+    _turn_step_id,
+    apply_action,
+    apply_turn_step as apply_engine_turn_step,
+    legal_actions,
+    turn_steps,
+)
 from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload  # noqa: E402
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS  # noqa: E402
 
@@ -175,12 +181,31 @@ def actions_document(state: Any, config: Any, payload: dict) -> dict:
     }
 
 
+def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
+    """The committed conversions currently legal, each with the id the client may quote back."""
+    return [
+        {
+            "step_id": _turn_step_id(step),
+            "building_id": step.building_id,
+            "source": step.source,
+            "direction": step.direction,
+            "amount": step.amount,
+            "hire_payment": step.hire_payment,
+        }
+        for step in turn_steps(state, config)
+    ]
+
+
 class StaleStateToken(Exception):
     """The submission quoted a list that is no longer the one on offer."""
 
 
 class UnknownAction(Exception):
     """The submission named an action that is not legal in the position now held."""
+
+
+class UnknownTurnStep(Exception):
+    """The submission named a conversion step that is not legal in the position now held."""
 
 
 def _default_seat_roles(player_count: int) -> dict[str, str]:
@@ -1849,6 +1874,9 @@ class PlayServer(ThreadingHTTPServer):
         self.payload: dict[str, Any] = {}
         self.log_lines: list[str] = []
         self.log_blocks: list[dict[str, Any]] = []
+        self._turn_start_state: Any | None = None
+        self._turn_start_log_lines: list[str] = []
+        self._turn_start_log_blocks: list[dict[str, Any]] = []
         # Threaded, so two submissions can arrive at once even from one browser. Reading the legal
         # set and replacing the state have to be one step, or the loser of the race applies a move
         # chosen against a board the winner has already moved.
@@ -1875,6 +1903,7 @@ class PlayServer(ThreadingHTTPServer):
             self.log_blocks = []
         self.session.game_loaded = True
         self._refresh()
+        self._capture_turn_start()
 
     def _load_scenario_file(self, scenario_path: Path, *, intro_line: str | None = None) -> None:
         self._load_loaded_scenario(load_scenario(str(scenario_path)), intro_line=intro_line)
@@ -1887,6 +1916,9 @@ class PlayServer(ThreadingHTTPServer):
         self.payload = {}
         self.log_lines = []
         self.log_blocks = []
+        self._turn_start_state = None
+        self._turn_start_log_lines = []
+        self._turn_start_log_blocks = []
         self.session = SessionState(
             game_loaded=False,
             seat_roles=_default_seat_roles(4),
@@ -1977,6 +2009,13 @@ class PlayServer(ThreadingHTTPServer):
     def has_game(self) -> bool:
         return self.session.game_loaded and self.state is not None and self.config is not None
 
+    def _capture_turn_start(self) -> None:
+        self._turn_start_state = self.state
+        self._turn_start_log_lines = list(self.log_lines)
+        self._turn_start_log_blocks = [
+            dict(block, lines=list(block["lines"])) for block in self.log_blocks
+        ]
+
     def _refresh(self) -> None:
         """Re-read everything the page is drawn from, after the position has changed."""
         if not self.has_game():
@@ -1990,6 +2029,7 @@ class PlayServer(ThreadingHTTPServer):
             self.state_payload,
             state_token=self.token,
             turn_candidates=turn_candidates(self.state, self.config),
+            turn_steps=turn_steps_payload(self.state, self.config),
             log=list(self.log_lines),
             log_blocks=[dict(block, lines=list(block["lines"])) for block in self.log_blocks],
         )
@@ -2057,6 +2097,52 @@ class PlayServer(ThreadingHTTPServer):
             self.log_lines.extend(player_lines)
             self.log_blocks.append({"lines": player_lines, "round_end": round_end})
         self._refresh()
+        self._capture_turn_start()
+
+    def apply_turn_step(self, submitted_id: str, submitted_token: str) -> None:
+        """Apply one currently legal committed conversion, named by its stable step id."""
+        with self._applying:
+            if not self.has_game():
+                raise UnknownTurnStep("no game is loaded; start a game first")
+            if submitted_token != self.token:
+                raise StaleStateToken(
+                    f"state token {submitted_token!r} is not the current {self.token!r}; "
+                    "the position moved after that list was read"
+                )
+            chosen = next(
+                (
+                    step
+                    for step in turn_steps(self.state, self.config)
+                    if _turn_step_id(step) == submitted_id
+                ),
+                None,
+            )
+            if chosen is None:
+                raise UnknownTurnStep(
+                    f"no legal turn step with id {submitted_id!r} in this position"
+                )
+            self.state = apply_engine_turn_step(self.state, self.config, chosen)
+            self._refresh()
+
+    def reset_turn(self, submitted_token: str) -> None:
+        """Restore the immutable snapshot captured at the beginning of the active turn."""
+        with self._applying:
+            if not self.has_game():
+                raise UnknownAction("no game is loaded; start a game first")
+            if submitted_token != self.token:
+                raise StaleStateToken(
+                    f"state token {submitted_token!r} is not the current {self.token!r}; "
+                    "the position moved after that list was read"
+                )
+            if self._turn_start_state is None:
+                raise UnknownAction("no turn-start snapshot is available")
+            self.state = self._turn_start_state
+            self.log_lines = list(self._turn_start_log_lines)
+            self.log_blocks = [
+                dict(block, lines=list(block["lines"]))
+                for block in self._turn_start_log_blocks
+            ]
+            self._refresh()
 
     def server_bind(self) -> None:
         """Bind without asking the network what this machine is called.
@@ -2144,7 +2230,7 @@ class PlayHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 -- BaseHTTPRequestHandler's own spelling
         route = self.path.split("?", 1)[0]
-        if route not in {"/action", "/start", "/new-game"}:
+        if route not in {"/action", "/turn-step", "/reset-turn", "/start", "/new-game"}:
             self._send(404, "text/plain; charset=utf-8", f"no route {route}\n")
             return
 
@@ -2231,12 +2317,18 @@ class PlayHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            self.server.apply(str(body.get("action_id", "")), str(body.get("state_token", "")))
+            submitted_token = str(body.get("state_token", ""))
+            if route == "/action":
+                self.server.apply(str(body.get("action_id", "")), submitted_token)
+            elif route == "/turn-step":
+                self.server.apply_turn_step(str(body.get("step_id", "")), submitted_token)
+            else:
+                self.server.reset_turn(submitted_token)
         except StaleStateToken as stale:
             # 409, not 400: the request was well formed and would have been fine a moment ago.
             self._reject(409, str(stale))
             return
-        except UnknownAction as unknown:
+        except (UnknownAction, UnknownTurnStep) as unknown:
             self._reject(422, str(unknown))
             return
 

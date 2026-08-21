@@ -249,6 +249,27 @@ def _confirm_enabled(page) -> bool:
     )
 
 
+def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:
+    building = page.query_selector(
+        f'[data-active-seat="true"] [data-turn-step-building-id="{building_id}"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert building is not None, f"{building_id} conversion building was not offered"
+    _click_handle_centre(page, building, require_hit=True)
+
+    direction_key = page.query_selector(
+        f'[data-turn-step-direction="{direction}"][data-turn-step-offered="true"]'
+    )
+    assert direction_key is not None, f"{direction} was not offered for {building_id}"
+    _click_handle_centre(page, direction_key, require_hit=True)
+
+    amount_key = page.query_selector(
+        f'[data-turn-step-amount="{amount}"][data-turn-step-offered="true"]'
+    )
+    assert amount_key is not None, f"amount {amount} was not offered for {direction}"
+    _click_handle_centre(page, amount_key, require_hit=True)
+
+
 def _ordination_counts(value: str) -> tuple[int, int]:
     if value == "none":
         return (0, 0)
@@ -1229,3 +1250,86 @@ def test_allocation_overlap_guard_is_load_bearing(page, serve, monkeypatch) -> N
         AssertionError, match="topmost live at Vestry centre while holding should be the circle"
     ):
         _assert_allocation_vestry_overlap_behaviour(page, base_url, server)
+
+
+def test_two_active_conversions_commit_from_building_direction_and_amount_clicks(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "two_active_conversions_001.json")
+    before = server.state
+    page.goto(base_url, wait_until="networkidle")
+
+    _choose_conversion(page, "grain_store", "sell_wheat", 1)
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
+    assert _confirm_enabled(page), "a fully narrowed conversion did not enable Confirm"
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+
+    assert server.state != before, "committing a conversion did not change the position"
+    assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+
+
+def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "two_active_conversions_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    _choose_conversion(page, "grain_store", "sell_wheat", 1)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+
+    assert page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-offered="true"]'
+    ).count() == 0
+    assert page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-used="true"]'
+    ).count() == 1
+    assert page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
+        '[data-turn-step-offered="true"]'
+    ).count() == 1
+    assert "grain_store" in server.state.turn_progress.used_buildings
+
+
+def test_two_active_conversions_do_not_offer_an_absent_amount(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "two_active_conversions_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    building = page.query_selector(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_wheat"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+
+    assert page.locator('[data-turn-step-amount="2"][data-turn-step-offered="true"]').count() == 0
+    assert not _confirm_enabled(page), "Confirm guessed an amount absent from the surviving steps"
+
+
+def test_two_active_conversions_reset_restores_the_turn_start_position(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "two_active_conversions_001.json")
+    initial = server.state
+    page.goto(base_url, wait_until="networkidle")
+
+    _choose_conversion(page, "grain_store", "sell_wheat", 1)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+    assert server.state != initial
+    assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+    assert page.get_attribute(
+        '[data-turn-control="reset"]', "data-turn-control-enabled"
+    ) == "true"
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+
+    assert server.state == initial
+    assert server.state.turn_progress.used_buildings == frozenset()
+    assert page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+        '[data-turn-step-offered="true"]'
+    ).count() == 1
