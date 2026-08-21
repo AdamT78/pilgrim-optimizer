@@ -251,10 +251,15 @@ def _confirm_enabled(page) -> bool:
 
 
 def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:
-    building = page.query_selector(
+    selector = (
         f'[data-active-seat="true"] [data-turn-step-building-id="{building_id}"]'
         '[data-turn-step-offered="true"]'
     )
+    building = page.query_selector(selector)
+    if building is None:
+        building = page.query_selector(
+            f'[data-turn-step-building-id="{building_id}"][data-turn-step-offered="true"]'
+        )
     assert building is not None, f"{building_id} conversion building was not offered"
     _click_handle_centre(page, building, require_hit=True)
 
@@ -1342,8 +1347,7 @@ def test_piety_pill_silver_delta_is_engine_derived_without_hire_fee(page, serve)
     base_url, _server = serve(SCENARIOS / "indulgences_hire_opponent_sell_piety_001.json")
     page.goto(base_url, wait_until="networkidle")
     building = page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
-        '[data-turn-step-offered="true"]'
+        '[data-turn-step-building-id="indulgences"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, building.element_handle(), require_hit=True)
     direction = page.locator(
@@ -1375,16 +1379,21 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     assert page.locator('[data-piety-choice-pill]').count() == 0
     assert panel.bounding_box()["height"] == pytest.approx(main_height, abs=0.1)
     assert page.locator('[data-piety-score-row]').count() == 13
+    turn_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
 
     building = page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
-        '[data-turn-step-offered="true"]'
+        '[data-turn-step-building-id="indulgences"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, building.element_handle(), require_hit=True)
     direction = page.locator(
         '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, direction.element_handle(), require_hit=True)
+    assert page.locator('[data-turn-step-answer-label="true"]').inner_text() == "Destination"
+    assert page.locator('[data-turn-step-resource-hint="true"]').inner_text() == ""
+    assert page.locator('[data-component="play-turn"]').bounding_box()["height"] == pytest.approx(
+        turn_height, abs=0.1
+    )
 
     lane = page.locator('[data-piety-choice-lane="true"]')
     lane_box = lane.bounding_box()
@@ -1492,8 +1501,7 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
     base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
     page.goto(base_url, wait_until="networkidle")
     building = page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
-        '[data-turn-step-offered="true"]'
+        '[data-turn-step-building-id="indulgences"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, building.element_handle(), require_hit=True)
 
@@ -1656,6 +1664,37 @@ def test_conversion_playtest_starts_from_setup_and_commits_from_player_board(pag
         '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
         '[data-turn-step-offered="true"]'
     ).count() == 1
+
+
+def test_conversion_playtest_draws_only_owned_buildings_in_player_slots(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+
+    player_ids = ("player_one", "player_two")
+    owned = {
+        player_id: set(
+            server.payload["state"]["players"][index]["player_board_slots"]["active_buildings"]
+        )
+        for index, player_id in enumerate(player_ids)
+    }
+    rendered = {}
+    for player_id in player_ids:
+        rendered[player_id] = set(
+            page.locator(
+                f'[data-component="player-board-v2"][data-player="{player_id}"] '
+                '[data-player-board-slot][data-building-id]:not([data-building-id=""])'
+            ).evaluate_all("nodes => nodes.map(node => node.getAttribute('data-building-id'))")
+        )
+    assert rendered == owned
+
+    conversion_ids = {step["building_id"] for step in server.payload["turn_steps"]}
+    market_only = set(server.payload["state"]["building_market"]) - set().union(*owned.values())
+    market_only &= conversion_ids
+    assert market_only
+    for building_id in market_only:
+        assert page.locator(
+            f'[data-component="player-board-v2"] [data-building-id="{building_id}"]'
+        ).count() == 0
 
 
 def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:

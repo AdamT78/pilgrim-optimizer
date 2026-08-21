@@ -495,8 +495,7 @@ def _turn_step_controls(steps: list[dict]) -> str:
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label" data-turn-step-answer-label="true">Amount</span>'
         '<span class="turn-step-amount-total" data-turn-step-amount-total="true"></span>'
-        '<span class="turn-step-resource-hint" data-turn-step-resource-hint="true">'
-        'click the live resource pill</span></div>'
+        '<span class="turn-step-resource-hint" data-turn-step-resource-hint="true"></span></div>'
         '<div class="turn-step-hire-row" data-turn-step-hire-row="true"'
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label">Hire payment</span>'
@@ -801,9 +800,8 @@ _TURN_SCRIPT = """<script>
 
     Array.prototype.forEach.call(conversionBuildings, function (building) {
       var buildingId = building.getAttribute('data-turn-step-building-id');
-      var active = activeSeat && activeSeat.contains(building);
       var used = USED_BUILDINGS.indexOf(buildingId) !== -1;
-      var offered = active && !used && availableBuildings.indexOf(buildingId) !== -1;
+      var offered = !used && availableBuildings.indexOf(buildingId) !== -1;
       building.setAttribute('data-turn-step-offered', offered ? 'true' : 'false');
       building.setAttribute(
         'data-turn-step-selected',
@@ -836,7 +834,7 @@ _TURN_SCRIPT = """<script>
     }
     if (turnStepResourceHint) {
       turnStepResourceHint.textContent = piety
-        ? 'choose a destination on the piety track'
+        ? ''
         : 'click the live resource pill';
     }
     var hirePayments = [];
@@ -1883,8 +1881,11 @@ _TURN_SCRIPT = """<script>
   }
 
   Array.prototype.forEach.call(conversionBuildings, function (building) {
-    building.addEventListener('click', function () {
+    building.addEventListener('click', function (event) {
       if (building.getAttribute('data-turn-step-offered') !== 'true') { return; }
+      if (building.getAttribute('data-turn-step-market') === 'true') {
+        event.stopImmediatePropagation();
+      }
       conversionChosen = [building.getAttribute('data-turn-step-building-id')];
       conversionStepId = null;
       render();
@@ -2239,6 +2240,10 @@ def turn_styles(route_color: str) -> str:
   }}
   [data-turn-step-building-id][data-turn-step-offered="true"] {{ cursor: pointer; }}
   [data-turn-step-building-id][data-turn-step-offered="false"] {{ pointer-events: none; }}
+  [data-turn-step-building-id][data-turn-step-market="true"] {{ visibility: hidden; }}
+  [data-turn-step-building-id][data-turn-step-market="true"][data-turn-step-offered="true"] {{
+    visibility: visible !important; pointer-events: all; cursor: pointer;
+  }}
   [data-turn-step-building-id][data-turn-step-used="true"] {{ opacity: 0.42; }}
 
 {resource_choice_styles()}
@@ -2430,6 +2435,9 @@ def render_play_view_html(
             map_placements_for(payload, catalog, site_data),
             choice_keys=bool(candidates),
             ship_hex=ship_hex_for(payload),
+            conversion_building_ids={
+                step["building_id"] for step in turn_steps if step.get("building_id")
+            },
         ),
         scale.crop["map"],
     )
@@ -2579,7 +2587,6 @@ def _board_state_for(
             record,
             catalog,
             donated_data,
-            sorted({step["building_id"] for step in payload.get("turn_steps") or []}),
         ),
     }
 
@@ -2588,14 +2595,14 @@ def _slot_contents(
     record: dict,
     catalog: dict,
     donated_data: dict | list,
-    conversion_building_ids: list[str],
 ) -> tuple[dict, ...]:
     """This seat's buildings, drawn ready to be dropped into the slots that hold them.
 
     Bought first and then donated, which is the order the engine keeps them in and the only order
     available: the state records two lists and not which of the six slots anything went into, so
     a building's slot is where this page put it rather than something being read back. Nothing
-    here depends on which slot that is.
+    here depends on which slot that is. Hired abilities are deliberately absent: hiring gives a
+    seat temporary use of a building, not ownership of a slot on its board.
 
     The drawing is `generate_game_setup`'s, unchanged -- the same content the composed table points
     its slots at, called directly instead of through a `defs` and a script, because this page knows
@@ -2625,21 +2632,6 @@ def _slot_contents(
                     "content": render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE),
                 }
             )
-    existing = {slot["id"] for slot in slots}
-    for building_id in conversion_building_ids:
-        if building_id in existing or len(slots) >= 6:
-            continue
-        building = by_id.get(building_id)
-        if building is None:
-            continue
-        slots.append(
-            {
-                "id": building_id,
-                "state": "hired",
-                "content": render_board_slot_building(building, BUILDING_SLOT_HEX_SIZE),
-            }
-        )
-        existing.add(building_id)
     return tuple(slots)
 
 

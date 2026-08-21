@@ -387,7 +387,11 @@ def render_setup_label_layer(map_layout: dict, placements: list[dict]) -> str:
     return f'<g id="setup-labels">{"".join(groups)}</g>'
 
 
-def render_setup_choice_layer(map_layout: dict, placements: list[dict]) -> str:
+def render_setup_choice_layer(
+    map_layout: dict,
+    placements: list[dict],
+    conversion_building_ids: Sequence[str] = (),
+) -> str:
     """One key per building on the track, drawn hidden, for a page that has to ask WHICH BUILDING.
 
     On the map, because that is where a building already is. The market is not a list anywhere in
@@ -421,7 +425,23 @@ def render_setup_choice_layer(map_layout: dict, placements: list[dict]) -> str:
             f' fill="none" pointer-events="all" stroke="{BUILDING_CHOICE_STROKE}"'
             f' stroke-width="{BUILDING_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
         )
-    return f'<g id="setup-choice-keys">{"".join(keys)}</g>'
+    conversion_ids = set(conversion_building_ids)
+    conversion_keys = []
+    for placement in placements:
+        building = placement["building"]
+        if building is None or building["id"] not in conversion_ids:
+            continue
+        center_x, center_y = centers[placement["hex"]]
+        conversion_keys.append(
+            f'<polygon data-turn-step-building-id="{escape(str(building["id"]))}"'
+            ' data-turn-step-market="true" data-turn-step-offered="false"'
+            f' points="{points}" transform="translate({center_x:.1f},{center_y:.1f})"'
+            ' fill="none" pointer-events="all" visibility="hidden"/>'
+        )
+    return (
+        f'<g id="setup-choice-keys">{"".join(keys)}</g>'
+        f'<g id="conversion-choice-keys">{"".join(conversion_keys)}</g>'
+    )
 
 
 def building_choice_styles() -> str:
@@ -469,6 +489,7 @@ def render_setup_map_svg(
     placements: list[dict],
     choice_keys: bool = False,
     ship_hex: str | None = None,
+    conversion_building_ids: Sequence[str] = (),
 ) -> str:
     """The map with a round's setup on it: the fills under the map, the names and ship over it.
 
@@ -493,7 +514,14 @@ def render_setup_map_svg(
         render_ship_overlay(map_layout, placements[0]["hex"] if ship_hex is None else ship_hex),
     )
     if choice_keys:
-        map_svg = _with_overlay(map_svg, render_setup_choice_layer(map_layout, placements))
+        map_svg = _with_overlay(
+            map_svg,
+            render_setup_choice_layer(
+                map_layout,
+                placements,
+                conversion_building_ids=conversion_building_ids,
+            ),
+        )
     return map_svg
 
 
