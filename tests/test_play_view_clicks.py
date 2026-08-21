@@ -877,19 +877,21 @@ def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) ->
     page.goto(base_url, wait_until="networkidle")
 
     if page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count() == 0:
-        move_none = page.locator('[data-combination-key][data-turn-offered="true"]').filter(
-            has_text="Move no one"
+        move_none = page.locator(
+            '[data-combination-key="none"][data-turn-offered="true"]'
         )
-        if move_none.count() == 1:
-            move_none_handle = move_none.first.element_handle()
-            assert move_none_handle is not None
-            _click_handle_centre(page, move_none_handle, require_hit=True)
-            page.wait_for_timeout(20)
+        assert move_none.count() == 1, "the relocation choice was not offered as Move no one"
+        move_none_handle = move_none.first.element_handle()
+        assert move_none_handle is not None
+        _click_handle_centre(page, move_none_handle, require_hit=True)
+        page.wait_for_timeout(20)
 
+    # The relocation answer can force the city origin; agreed steps are then
+    # auto-advanced, so there may be no origin control left to click.
     city = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
-    assert city is not None, "city origin was not offered"
-    _click_handle_centre(page, city, require_hit=True)
-    page.wait_for_timeout(20)
+    if city is not None:
+        _click_handle_centre(page, city, require_hit=True)
+        page.wait_for_timeout(20)
 
     city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
     assert city_east is not None, "city->east was not offered after lifting from city"
