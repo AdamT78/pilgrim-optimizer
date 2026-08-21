@@ -17,7 +17,16 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
+      - name: Use the canonical Ubuntu mirror
+        run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/* || true
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+      - run: python -m playwright install --with-deps chromium
       - run: pytest -m "not slow"
+      - name: Run browser click guards
+        run: pytest -q -p no:cacheprovider tests/test_play_view_clicks.py
 
   browser:
     runs-on: ubuntu-latest
