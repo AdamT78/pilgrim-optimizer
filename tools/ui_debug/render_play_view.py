@@ -394,13 +394,38 @@ def building_tooltip_script() -> str:
       tooltip.innerHTML = '';
     }
 
+    function findBuilding(container, selector, id) {
+      var matches = (container || document).querySelectorAll(selector);
+      for (var index = 0; index < matches.length; index += 1) {
+        if (matches[index].getAttribute('data-building-id') === id) {
+          return matches[index];
+        }
+      }
+      return null;
+    }
+
+    function canonicalAnchor(target, id) {
+      var board = target.closest('[data-component="player-board-v2"]');
+      if (board) {
+        return findBuilding(board, '[data-player-board-slot][data-building-id]', id) || target;
+      }
+      var map = target.closest(
+        '#setup-fills, #setup-labels, #setup-choice-keys, #conversion-choice-keys'
+      );
+      if (map) {
+        return findBuilding(document, '#setup-fills g[data-building-id]', id) || target;
+      }
+      return target;
+    }
+
     function show(target) {
-      var template = templateFor(target.getAttribute('data-building-id'));
+      var id = target.getAttribute('data-building-id');
+      var template = templateFor(id);
       if (!template) { return; }
       tooltip.innerHTML = template.innerHTML;
       tooltip.setAttribute('data-building-tooltip-visible', 'true');
       tooltip.setAttribute('aria-hidden', 'false');
-      var targetBox = target.getBoundingClientRect();
+      var targetBox = canonicalAnchor(target, id).getBoundingClientRect();
       var tooltipBox = tooltip.getBoundingClientRect();
       var left = targetBox.left + (targetBox.width - tooltipBox.width) / 2;
       var top = targetBox.top - tooltipBox.height - 10;
