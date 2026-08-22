@@ -2066,6 +2066,131 @@ def test_building_tooltip_halo_lifts_a_player_board_as_well_as_the_map(page, ser
     )
 
 
+def test_building_tooltip_uses_one_anchor_for_map_hex_and_board_slot(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+    tooltip = page.locator('[data-building-tooltip="true"]')
+
+    def hover_point(x: float, y: float) -> tuple[float, float]:
+        page.mouse.move(0, 0)
+        page.mouse.move(x, y)
+        page.wait_for_timeout(60)
+        assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
+        box = tooltip.bounding_box()
+        assert box is not None
+        return (box["x"], box["y"])
+
+    mill_fill = page.locator('#setup-fills g[data-building-id="mill"]').first
+    mill_label = page.locator('#setup-labels g[data-building-id="mill"]').first
+    brewery_fill = page.locator('#setup-fills g[data-building-id="brewery"]').first
+    brewery_label = page.locator('#setup-labels g[data-building-id="brewery"]').first
+    brewery_overlay = page.locator(
+        '#conversion-choice-keys [data-turn-step-building-id="brewery"]'
+    ).first
+    mill_fill_box = mill_fill.bounding_box()
+    mill_label_box = mill_label.bounding_box()
+    brewery_fill_box = brewery_fill.bounding_box()
+    brewery_label_box = brewery_label.bounding_box()
+    brewery_overlay_box = brewery_overlay.bounding_box()
+    assert (
+        mill_fill_box is not None
+        and mill_label_box is not None
+        and brewery_fill_box is not None
+        and brewery_label_box is not None
+        and brewery_overlay_box is not None
+    )
+    mill_points = (
+        (mill_fill_box["x"] + mill_fill_box["width"] / 2, mill_fill_box["y"] + mill_fill_box["height"] * 0.22),
+        (mill_fill_box["x"] + mill_fill_box["width"] / 2, mill_fill_box["y"] + mill_fill_box["height"] * 0.78),
+        (mill_label_box["x"] + mill_label_box["width"] / 2, mill_label_box["y"] + mill_label_box["height"] / 2),
+    )
+    mill_positions = [hover_point(*point) for point in mill_points]
+    assert all(
+        abs(position[0] - mill_positions[0][0]) <= 1
+        and abs(position[1] - mill_positions[0][1]) <= 1
+        for position in mill_positions
+    ), mill_positions
+
+    brewery_points = (
+        (brewery_fill_box["x"] + brewery_fill_box["width"] / 2, brewery_fill_box["y"] + brewery_fill_box["height"] * 0.22),
+        (brewery_fill_box["x"] + brewery_fill_box["width"] / 2, brewery_fill_box["y"] + brewery_fill_box["height"] * 0.78),
+        (brewery_label_box["x"] + brewery_label_box["width"] / 2, brewery_label_box["y"] + brewery_label_box["height"] / 2),
+        (brewery_overlay_box["x"] + brewery_overlay_box["width"] / 2, brewery_overlay_box["y"] + brewery_overlay_box["height"] / 2),
+    )
+    brewery_positions = [hover_point(*point) for point in brewery_points]
+    assert all(
+        abs(position[0] - brewery_positions[0][0]) <= 1
+        and abs(position[1] - brewery_positions[0][1]) <= 1
+        for position in brewery_positions
+    ), brewery_positions
+
+    board_slot = page.locator(
+        '[data-component="player-board-v2"][data-player="player_one"] '
+        '[data-player-board-slot][data-building-id="stone_yard"]'
+    ).first
+    board_box = board_slot.bounding_box()
+    assert board_box is not None
+    board_points = (
+        (board_box["x"] + board_box["width"] * 0.25, board_box["y"] + board_box["height"] * 0.25),
+        (board_box["x"] + board_box["width"] * 0.75, board_box["y"] + board_box["height"] * 0.75),
+        (board_box["x"] + board_box["width"] / 2, board_box["y"] + board_box["height"] / 2),
+        (board_box["x"] + board_box["width"] * 0.5, board_box["y"] + board_box["height"] * 0.4),
+    )
+    board_positions = [hover_point(*point) for point in board_points]
+    assert all(
+        abs(position[0] - board_positions[0][0]) <= 1
+        and abs(position[1] - board_positions[0][1]) <= 1
+        for position in board_positions
+    ), board_positions
+
+
+def test_every_map_building_has_a_real_hover_tooltip(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+    tooltip = page.locator('[data-building-tooltip="true"]')
+    map_building_ids = page.locator("#setup-fills g[data-building-id]").evaluate_all(
+        "nodes => nodes.map(node => node.getAttribute('data-building-id'))"
+    )
+    assert map_building_ids
+    for building_id in map_building_ids:
+        fill = page.locator(f'#setup-fills g[data-building-id="{building_id}"]').first
+        box = fill.bounding_box()
+        assert box is not None
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(60)
+        assert tooltip.get_attribute("data-building-tooltip-visible") == "true", building_id
+
+
+def test_brewery_hire_and_convert_click_still_selects_conversion(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+
+    brewery = page.locator(
+        '[data-turn-step-building-id="brewery"][data-turn-step-offered="true"]'
+    ).first
+    assert brewery.count() == 1
+    _click_handle_centre(page, brewery.element_handle(), require_hit=True)
+    assert brewery.get_attribute("data-turn-step-selected") == "true"
+
+    direction = page.locator(
+        '[data-turn-step-direction="sell_wheat_for_silver"][data-turn-step-offered="true"]'
+    ).first
+    assert direction.count() == 1
+    _click_handle_centre(page, direction.element_handle(), require_hit=True)
+    resource = page.locator(
+        '[data-resource-choice-key="wheat"][data-turn-offered="true"]'
+    ).first
+    assert resource.count() == 1
+    _click_handle_centre(page, resource.element_handle(), require_hit=True)
+    # Brewery is a market hire with three legal hire-payment variants.  The
+    # building and conversion are selected, but confirmation correctly waits
+    # for the separate hire-payment answer.
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
+    assert brewery.get_attribute("data-turn-step-selected") == "true"
+
+
 def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:
     base_url, server = serve(SCENARIOS / "two_active_conversions_001.json")
     page.goto(base_url, wait_until="networkidle")

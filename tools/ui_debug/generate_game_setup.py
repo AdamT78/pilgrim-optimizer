@@ -421,6 +421,7 @@ def render_setup_choice_layer(
         center_x, center_y = centers[placement["hex"]]
         keys.append(
             f'<polygon data-building-choice-key="{escape(str(building["id"]))}"'
+            f' data-building-id="{escape(str(building["id"]))}"'
             f' points="{points}" transform="translate({center_x:.1f},{center_y:.1f})"'
             f' fill="none" pointer-events="all" stroke="{BUILDING_CHOICE_STROKE}"'
             f' stroke-width="{BUILDING_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
@@ -434,6 +435,7 @@ def render_setup_choice_layer(
         center_x, center_y = centers[placement["hex"]]
         conversion_keys.append(
             f'<polygon data-turn-step-building-id="{escape(str(building["id"]))}"'
+            f' data-building-id="{escape(str(building["id"]))}"'
             ' data-turn-step-market="true" data-turn-step-offered="false"'
             f' points="{points}" transform="translate({center_x:.1f},{center_y:.1f})"'
             ' fill="none" pointer-events="all" visibility="hidden"/>'
