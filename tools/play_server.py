@@ -640,7 +640,12 @@ def _amounts_in_words(verb: str, amounts: list[tuple[str, int]]) -> str:
     return f"{verb} {' and '.join(spoken)}" if spoken else f"{verb} nothing"
 
 
-def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
+def _combination_step(
+    verb: str,
+    amounts: list[tuple[str, int]],
+    *,
+    prompt: str = COMBINATION_PROMPT,
+) -> dict:
     """One whole combination as a step: a scalar to match it by and a sentence to read."""
     return {
         "kind": "combination",
@@ -651,8 +656,79 @@ def _combination_step(verb: str, amounts: list[tuple[str, int]]) -> dict:
         "label": _amounts_in_words(verb, amounts),
         # The label already says what each option does, so the prompt only has to say that one of
         # them is what is wanted. Naming the resolution here would be a second description of the
-        # thing the labels are describing, kept in step by hand.
-        "prompt": COMBINATION_PROMPT,
+        # thing the labels are describing, kept in step by hand. Taxation's pill question is the
+        # exception: its pills have no labels, so its prompt names the resource count instead.
+        "prompt": prompt,
+    }
+
+
+def _resource_delta(before: Any, after: Any) -> dict[str, int]:
+    return {
+        resource: getattr(after.resources, resource) - getattr(before.resources, resource)
+        for resource in COMBINATION_STOCKS
+    }
+
+
+def _resource_step_metadata(
+    action: Any, state: Any | None, config: Any | None
+) -> dict[str, dict[str, Any]]:
+    """Attach engine-derived resource effects to the steps that expose them to the page.
+
+    The action is applied and its player-resource state is diffed here, as with conversion silver.
+    Taxation's engine events then separate that total into Step I and Step II gains; the page gets
+    those maps and, for a partial Step II allocation, the one-unit maps it may replay per pill.
+    """
+    if state is None or config is None:
+        return {}
+    if not (
+        getattr(action, "tithe_resource", None) is not None
+        or getattr(action, "resolution", None) is not None
+        and getattr(action.resolution, "value", None) == "taxation"
+    ):
+        return {}
+
+    player = state.active_player
+    before = state.player_state(player)
+    result = apply_action(state, action, config)
+    after = result.state.player_state(player)
+    applied_delta = _resource_delta(before, after)
+
+    if action.resolution.value == "tithe":
+        return {"tithe_resource": {"resource_delta": applied_delta}}
+
+    taxation_events = [
+        dict(event.details)
+        for event in result.events
+        if event.event_type is EventType.TAXATION and event.actor is player
+    ]
+    step_1 = next(
+        details["resource"]
+        for details in taxation_events
+        if details.get("step") == "step_1"
+    )
+    step_2_text = next(
+        details.get("resources", "")
+        for details in taxation_events
+        if details.get("step") == "step_2"
+    )
+    step_2 = tuple(resource for resource in step_2_text.split(",") if resource)
+
+    def one_unit(resource: str) -> dict[str, int]:
+        return {
+            name: int(name == resource)
+            for name in COMBINATION_STOCKS
+        }
+
+    return {
+        "taxation_step1_resource": {"resource_delta": one_unit(step_1)},
+        "taxation_step2_resources": {
+            "resource_delta": {
+                resource: step_2.count(resource) for resource in COMBINATION_STOCKS
+            },
+            "resource_unit_deltas": {
+                resource: one_unit(resource) for resource in COMBINATION_STOCKS
+            },
+        },
     }
 
 
@@ -966,6 +1042,7 @@ def _presented(
     the refusal knows what has been asked -- and a page holding the name of a field would be a page
     that could come to depend on it, which is how the next one ends up being a special case.
     """
+    resource_step_metadata = _resource_step_metadata(action, state, config)
     if isinstance(action, StartPlayerConfessionBoxAction):
         # A `combination` and not a kind of its own, because the shape is the one the alms pair and
         # the taxation mix already have: several fields that only go together one way, offered whole
@@ -1026,9 +1103,9 @@ def _presented(
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
-            presented.append(
-                ({"kind": "resource", "value": value, "prompt": RESOURCE_PROMPT}, (name,))
-            )
+            step = {"kind": "resource", "value": value, "prompt": RESOURCE_PROMPT}
+            step.update(resource_step_metadata.get(name, {}))
+            presented.append((step, (name,)))
     for name in BUILDING_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
@@ -1045,7 +1122,15 @@ def _presented(
             continue
         taken = tuple(getattr(action, name, ()) or ())
         amounts = [(noun, taken.count(noun)) for noun in COMBINATION_STOCKS]
-        presented.append((_combination_step(verb, amounts), (name,)))
+        step = _combination_step(
+            verb,
+            amounts,
+            prompt=f"choose {len(taken)} resources.",
+        )
+        step["resource_allocation"] = True
+        step["resource_total"] = len(taken)
+        step.update(resource_step_metadata.get(name, {}))
+        presented.append((step, (name,)))
     if action.resolution.value == "allocation":
         presented.append(
             (

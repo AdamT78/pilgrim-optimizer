@@ -599,11 +599,14 @@ def test_the_resource_icons_are_the_size_the_duty_wheel_draws_the_same_things(la
 def _readouts(svg: str) -> list[tuple[str, str, float, str]]:
     """Each readout: its id, its artwork, where its amount is centred, and what the amount says."""
     rows = []
-    for row in re.findall(r'<g data-resource="\w+"[^>]*>.*?</g>', svg, re.S):
+    for resource in re.finditer(r'<g data-resource="(\w+)"[^>]*>', svg):
+        amount_start = svg.index('<text x="', resource.end())
+        row_end = svg.index('</g>', amount_start) + len('</g>')
+        row = svg[resource.start() : row_end]
         amount = re.search(r'<text x="(-?[\d.]+)"[^>]*>(\d+)</text>', row)
         rows.append(
             (
-                re.match(r'<g data-resource="(\w+)"', row).group(1),
+                resource.group(1),
                 row[: row.index("<text")],
                 float(amount.group(1)),
                 amount.group(2),
@@ -740,7 +743,9 @@ def test_a_board_that_will_never_be_asked_does_not_carry_the_keys(layout: dict) 
     assert "data-resource-choice-key" not in plain
     # And nothing else moves when they are asked for: the keys are the whole of the difference.
     asked = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
-    assert re.sub(r"<rect data-resource-choice-key=[^>]*/>", "", asked) == plain
+    stripped = re.sub(r"<rect data-resource-choice-key=[^>]*/>", "", asked)
+    stripped = re.sub(r' data-resource-choice-glyph="\w+"', "", stripped)
+    assert stripped == plain
 
 
 def test_the_page_that_shows_the_board_shows_it_being_asked(layout: dict) -> None:

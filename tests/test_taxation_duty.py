@@ -59,6 +59,51 @@ def test_taxation_majority_bonus_allows_repeated_or_mixed_step2_resources() -> N
     assert all(1 + len(action.taxation_step2_resources) <= 3 for action in taxation_actions)
 
 
+def test_taxation_three_bonus_types_exposes_six_step2_multisets() -> None:
+    scenario = load_scenario("scenarios/taxation_three_bonus_types_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    taxation_actions = [
+        action for action in actions if action.resolution is TurnResolutionType.TAXATION
+    ]
+    step2_choices = {action.taxation_step2_resources for action in taxation_actions}
+
+    assert len(actions) == 52
+    assert len(step2_choices) == 6
+    assert all(len(choice) == 2 for choice in step2_choices)
+
+
+def test_taxation_cornucopia_majority_widens_step2_to_all_three_resources() -> None:
+    scenario = load_scenario("scenarios/taxation_majority_bonus_001.json")
+    counters = tuple(
+        (position, "cornucopia" if position == "west" else resource)
+        for position, resource in scenario.config.tithe_counters.counters_by_position
+    )
+    config = replace(
+        scenario.config,
+        tithe_counters=replace(
+            scenario.config.tithe_counters,
+            counters_by_position=counters,
+        ),
+    )
+    taxation_actions = [
+        action
+        for action in legal_actions(scenario.state, config)
+        if action.resolution is TurnResolutionType.TAXATION
+        and action.taxation_step1_resource == "stone"
+    ]
+
+    assert {
+        action.taxation_step2_resources for action in taxation_actions
+    } == {
+        ("stone", "stone"),
+        ("stone", "silver"),
+        ("stone", "wheat"),
+        ("silver", "silver"),
+        ("silver", "wheat"),
+        ("wheat", "wheat"),
+    }
+
+
 def test_taxation_single_bonus_type_generates_double_same_resource() -> None:
     scenario = load_scenario("scenarios/taxation_single_bonus_type_001.json")
     actions = legal_actions(scenario.state, scenario.config)

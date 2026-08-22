@@ -970,6 +970,7 @@ _TURN_SCRIPT = """<script>
   var autoAdvance = true;
   var resolutionSplit = null;
   var baseline = [];
+  var resourceBaseline = [];
   var activePlayer = null;
   var activeSeat = null;
   var arrangementBaseline = [];
@@ -981,6 +982,8 @@ _TURN_SCRIPT = """<script>
   var ordinationOffered = [];
   var conversionChosen = [];
   var conversionStepId = null;
+  var resourceAllocation = {};
+  var resourceAllocationTotal = null;
   var conversionBuildings = document.querySelectorAll('[data-turn-step-building-id]');
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
@@ -1678,6 +1681,42 @@ _TURN_SCRIPT = """<script>
     return seen;
   }
 
+  function resourceCounts(value) {
+    var counts = { stone: 0, silver: 0, wheat: 0 };
+    String(value).split(',').forEach(function (part) {
+      var pieces = part.split('=');
+      if (pieces.length === 2 && counts[pieces[0]] !== undefined) {
+        counts[pieces[0]] = Number(pieces[1]) || 0;
+      }
+    });
+    return counts;
+  }
+
+  function resourceAllocationSteps(offered) {
+    return offered.filter(function (step) { return step.resource_allocation === true; });
+  }
+
+  function resourceAllocationAmount(counts) {
+    return ['stone', 'silver', 'wheat'].reduce(function (total, resource) {
+      return total + Number(counts[resource] || 0);
+    }, 0);
+  }
+
+  function allocationMatches(value, counts) {
+    var option = resourceCounts(value);
+    return ['stone', 'silver', 'wheat'].every(function (resource) {
+      return Number(counts[resource] || 0) <= option[resource];
+    });
+  }
+
+  function allocationMaximum(resource, options) {
+    var maximum = 0;
+    options.forEach(function (step) {
+      maximum = Math.max(maximum, resourceCounts(step.value)[resource]);
+    });
+    return maximum;
+  }
+
   function replacePage(request) {
     /* The server sends the whole page back, drawn from the state it now holds. Swapping it in
        is the only way anything on this board changes: nothing here draws a piece. */
@@ -1823,10 +1862,52 @@ _TURN_SCRIPT = """<script>
         baseline.push({ cube: cube, opacity: cube.getAttribute('opacity') });
       }
     );
+    resourceBaseline = [];
+    if (activeSeat) {
+      Array.prototype.forEach.call(
+        activeSeat.querySelectorAll('g'),
+        function (group) {
+          if (!group.getAttribute('data-resource')) { return; }
+          var text = group.querySelector('text');
+          if (text) { resourceBaseline.push({ text: text, value: text.textContent }); }
+        }
+      );
+    }
   }
 
   function restoreBaseline() {
     restore(baseline);
+    resourceBaseline.forEach(function (entry) {
+      entry.text.textContent = entry.value;
+    });
+  }
+
+  function applyResourceDelta(delta) {
+    if (!activeSeat || !delta) { return; }
+    ['stone', 'silver', 'wheat'].forEach(function (resource) {
+      var amount = Number(delta[resource] || 0);
+      if (!amount) { return; }
+      var text = null;
+      Array.prototype.some.call(activeSeat.querySelectorAll('g'), function (group) {
+        if (group.getAttribute('data-resource') !== resource) { return false; }
+        text = group.querySelector('text');
+        return true;
+      });
+      if (text) { text.textContent = String(Number(text.textContent || 0) + amount); }
+    });
+  }
+
+  function applyPartialResourceAllocation() {
+    var live = surviving(chosen);
+    var allocationSteps = resourceAllocationSteps(stepsAt(chosen.length, live));
+    if (!allocationSteps.length) { return; }
+    var unitDeltas = allocationSteps[0].resource_unit_deltas || {};
+    ['stone', 'silver', 'wheat'].forEach(function (resource) {
+      var count = Number(resourceAllocation[resource] || 0);
+      for (var index = 0; index < count; index += 1) {
+        applyResourceDelta(unitDeltas[resource]);
+      }
+    });
   }
 
   function applyPreview() {
@@ -1897,6 +1978,10 @@ _TURN_SCRIPT = """<script>
         resolution = step.value;
         continue;
       }
+      if (step.kind === 'resource' && step.resource_delta) {
+        applyResourceDelta(step.resource_delta);
+        continue;
+      }
       if (step.kind !== 'edge') { continue; }
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
@@ -1916,6 +2001,7 @@ _TURN_SCRIPT = """<script>
         count = step.counter;
       }
     }
+    applyPartialResourceAllocation();
     return {
       started: started,
       resettable: (started && answered.length > 0) || askedStartRelocation,
@@ -1929,7 +2015,8 @@ _TURN_SCRIPT = """<script>
   }
 
   function show(
-    offered, resolutionOptions, settled, confirmable, preview, arrangementValues, ordinationValues
+    offered, resolutionOptions, settled, confirmable, preview, arrangementValues, ordinationValues,
+    allocationOptions
   ) {
     var origins = offeredByKind(offered, 'origin');
     var skips = offeredByKind(offered, 'skip');
@@ -1947,7 +2034,24 @@ _TURN_SCRIPT = """<script>
     });
     var shownResolutions = resolutionSplit === 'action' ? actionResolutions : [];
     var dutyName = preview.duty === null ? null : positionName(preview.duty);
+    var allocationSteps = resourceAllocationSteps(offered);
+    var allocationActive = allocationSteps.length > 0;
+    var allocationChoices = allocationOptions || allocationSteps;
+    var allocationComplete = allocationActive
+      && resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal;
     var stocks = offeredByKind(offered, 'resource');
+    if (allocationActive) {
+      stocks = ['stone', 'silver', 'wheat'].filter(function (resource) {
+        var selected = Number(resourceAllocation[resource] || 0);
+        var needs_more = allocationChoices.some(function (step) {
+          return resourceCounts(step.value)[resource] > selected;
+        });
+        var can_reset = !allocationComplete
+          && selected > 0
+          && selected >= allocationMaximum(resource, allocationChoices);
+        return needs_more || can_reset;
+      });
+    }
     var boards = offeredByKind(offered, 'seat');
     Array.prototype.forEach.call(spaces, function (space) {
       var index = Number(space.getAttribute('data-board-position-index'));
@@ -2006,6 +2110,13 @@ _TURN_SCRIPT = """<script>
       pairs,
       'data-combination-key',
       offeredByKind(offered, 'combination')
+        .filter(function (value) {
+          return !offered.some(function (step) {
+            return step.kind === 'combination'
+              && step.value === value
+              && step.resource_allocation === true;
+          });
+        })
         .concat(offeredByKind(offered, 'hire'))
         .concat(offeredByKind(offered, 'start_relocation_choice'))
         .concat(offeredByKind(offered, 'end_relocation_choice'))
@@ -2052,6 +2163,9 @@ _TURN_SCRIPT = """<script>
     if (USED_BUILDINGS.length > 0 || conversionChosen.length > 0) {
       setControl('reset', true, false);
     }
+    if (resourceAllocationAmount(resourceAllocation) > 0) {
+      setControl('reset', true, false);
+    }
     setControl(
       'confirm',
       (conversionReady() || (conversionChosen.length === 0 && confirmable)) && !preview.overflow,
@@ -2085,17 +2199,38 @@ _TURN_SCRIPT = """<script>
     if (autoAdvance) {
       while (stepsAt(chosen.length, live).length === 1) {
         var forced = stepsAt(chosen.length, live)[0];
+        if (forced.resource_allocation && Number(forced.resource_total || 0) > 0) { break; }
         if (forced.kind === 'resolution') { break; }
         chosen.push(forced.value);
         live = surviving(chosen);
       }
     }
     var offered = stepsAt(chosen.length, live);
+    var allocationSteps = resourceAllocationSteps(offered);
+    if (!allocationSteps.length) {
+      resourceAllocation = {};
+      resourceAllocationTotal = null;
+    } else if (resourceAllocationTotal === null) {
+      resourceAllocationTotal = Number(allocationSteps[0].resource_total || 0);
+    }
+    var allocationActive = allocationSteps.length > 0;
+    var allocationLive = live;
+    if (allocationActive) {
+      allocationLive = live.filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined && allocationMatches(step.value, resourceAllocation);
+      });
+    }
+    var allocationComplete = allocationActive
+      && resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal;
     var arrangements = offeredByKind(offered, 'arrangement');
     var arrangementPicked = arrangementSelection(arrangements);
     var ordinations = offeredByKind(offered, 'ordination');
     var ordinationPicked = ordinationSelection(ordinations);
     var narrowed = live;
+    if (allocationActive) {
+      narrowed = allocationLive;
+    }
     if (arrangements.length && arrangementPicked !== null) {
       narrowed = live.filter(function (candidate) {
         var step = candidate.steps[chosen.length];
@@ -2139,6 +2274,7 @@ _TURN_SCRIPT = """<script>
        it -- and the player says so. */
     if (
       narrowed.length === 1
+      && !allocationActive
       && (!arrangements.length || arrangementPicked !== null)
       && (!ordinations.length || ordinationPicked !== null)
     ) {
@@ -2154,7 +2290,18 @@ _TURN_SCRIPT = """<script>
       );
       return;
     }
-    show(offered, resolutions, -1, false, preview, arrangements, ordinations);
+    show(
+      offered,
+      resolutions,
+      -1,
+      allocationActive
+        ? allocationComplete && narrowed.length === 1 && narrowed[0].action_id !== null
+        : false,
+      preview,
+      arrangements,
+      ordinations,
+      allocationActive ? stepsAt(chosen.length, allocationLive) : []
+    );
   }
 
   Array.prototype.forEach.call(conversionBuildings, function (building) {
@@ -2184,6 +2331,25 @@ _TURN_SCRIPT = """<script>
   Array.prototype.forEach.call(turnStepResourceKeys, function (key) {
     key.addEventListener('click', function () {
       if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+      var allocationCandidates = surviving(chosen).filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined && allocationMatches(step.value, resourceAllocation);
+      });
+      var allocationOffered = resourceAllocationSteps(
+        stepsAt(chosen.length, allocationCandidates)
+      );
+      if (allocationOffered.length > 0) {
+        var resource = key.getAttribute('data-resource-choice-key');
+        var selected = Number(resourceAllocation[resource] || 0);
+        var maximum = allocationMaximum(resource, allocationOffered);
+        if (selected > 0 && selected >= maximum) {
+          resourceAllocation[resource] = 0;
+        } else {
+          resourceAllocation[resource] = selected + 1;
+        }
+        render();
+        return;
+      }
       if (conversionChosen.length === 0) {
         var value = key.getAttribute('data-resource-choice-key');
         chosen.push(value);
@@ -2330,6 +2496,23 @@ _TURN_SCRIPT = """<script>
       }
       if (conversionChosen.length > 0) { return; }
       var live = surviving(chosen);
+      var allocationCandidates = live.filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined && allocationMatches(step.value, resourceAllocation);
+      });
+      var allocationSteps = resourceAllocationSteps(
+        stepsAt(chosen.length, allocationCandidates)
+      );
+      if (allocationSteps.length > 0) {
+        if (
+          resourceAllocationTotal === null
+          || resourceAllocationAmount(resourceAllocation) !== resourceAllocationTotal
+          || allocationCandidates.length !== 1
+          || !allocationCandidates[0].action_id
+        ) { return; }
+        submit(allocationCandidates[0].action_id);
+        return;
+      }
       var offered = stepsAt(chosen.length, live);
       var arrangements = offeredByKind(offered, 'arrangement');
       if (arrangements.length) {
@@ -2366,6 +2549,8 @@ _TURN_SCRIPT = """<script>
       restoreOrdinationBaseline();
       chosen = [];
       answered = [];
+      resourceAllocation = {};
+      resourceAllocationTotal = null;
       conversionChosen = [];
       conversionStepId = null;
       resolutionSplit = null;

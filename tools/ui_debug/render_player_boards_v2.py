@@ -703,7 +703,9 @@ def resource_icon_center_y(icon: str) -> float:
     return (ICON_RISE_RATIO[icon] - ICON_FOOT_RATIO[icon]) * size / 2
 
 
-def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> str:
+def _render_resource(
+    block: dict, cx: float, resource: dict, palette: dict, choice_keys: bool = False
+) -> str:
     """One readout: the icon, and its amount centred under it.
 
     The key behind this readout is the clickable thing. The icon and numeral painted over it are
@@ -713,8 +715,12 @@ def _render_resource(block: dict, cx: float, resource: dict, palette: dict) -> s
     icon = resource["icon"]
     if icon not in _ICON_RENDERERS:
         raise KeyError(f"unknown resource icon: {icon}")
+    resource_id = escape(str(resource["id"]))
+    glyph_attribute = (
+        f' data-resource-choice-glyph="{resource_id}"' if choice_keys else ""
+    )
     return (
-        f'<g data-resource="{escape(str(resource["id"]))}" pointer-events="none">'
+        f'<g data-resource="{resource_id}"{glyph_attribute} pointer-events="none">'
         + _ICON_RENDERERS[icon](
             cx,
             block["icon_cy"] + resource_icon_center_y(icon),
@@ -745,15 +751,18 @@ def _render_resource_choice_keys(
     for, so a page can tell which was pressed without knowing where any of them sit.
     """
     surface_border = _darker_surface_colour(surface_background)
-    return "".join(
-        f'<rect data-resource-choice-key="{escape(str(resource["id"]))}"'
-        f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
-        f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
-        f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{surface_background}"'
-        f' stroke="{surface_border}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
-        ' visibility="hidden"/>'
-        for cx, resource in zip(block["cell_x"], resources, strict=True)
-    )
+    parts = []
+    for cx, resource in zip(block["cell_x"], resources, strict=True):
+        resource_id = escape(str(resource["id"]))
+        parts.append(
+            f'<rect data-resource-choice-key="{resource_id}"'
+            f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
+            f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
+            f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{surface_background}"'
+            f' stroke="{surface_border}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
+            ' visibility="hidden"/>'
+        )
+    return "".join(parts)
 
 
 def _render_resource_block(
@@ -781,7 +790,7 @@ def _render_resource_block(
             )
         )
     parts += [
-        _render_resource(block, cx, resource, palette)
+        _render_resource(block, cx, resource, palette, choice_keys)
         for cx, resource in zip(block["cell_x"], resources, strict=True)
     ]
     return "".join(parts)
