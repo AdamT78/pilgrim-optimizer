@@ -49,7 +49,11 @@ from pilgrim.rules.transition import apply_turn_step, turn_steps
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug import render_play_view
-from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload
+from tools.ui_debug.render_play_view import (
+    SEAT_COLOURS,
+    building_tooltip_script,
+    render_play_view_from_payload,
+)
 from tools.ui_debug.render_table_layout import SEATED_PLAYERS
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
@@ -5714,8 +5718,9 @@ def test_the_page_written_to_a_file_stays_read_only(tmp_path: Path) -> None:
     page = generate_play_view_from_scenario(output_path=tmp_path / "play_view.html").read_text(
         encoding="utf-8"
     )
+    page_without_tooltip_behavior = page.replace(building_tooltip_script(), "")
     for affordance in ("<script>", "data-sow-abandon", "data-sow-candidate", "data-sow-on-route"):
-        assert affordance not in page, f"the static page offers {affordance}"
+        assert affordance not in page_without_tooltip_behavior, f"the static page offers {affordance}"
 
 
 def test_the_reference_scenario_is_the_position_the_play_view_is_for() -> None:

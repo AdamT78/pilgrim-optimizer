@@ -12,6 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
+  "pillow",
   "playwright",
   "pytest>=8.0.0",
   "ruff>=0.5.0",

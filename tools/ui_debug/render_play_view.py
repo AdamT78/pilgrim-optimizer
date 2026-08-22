@@ -42,6 +42,7 @@ import re
 import sys
 from html import escape
 from pathlib import Path
+from string import Template
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -95,9 +96,11 @@ from tools.ui_debug.render_piety_track_v2 import (  # noqa: E402
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites  # noqa: E402
 from tools.ui_debug.render_player_boards_v2 import (  # noqa: E402
     BUILDING_SLOT_HEX_SIZE,
+    _ICON_RENDERERS,
     default_player_board_v2_state,
     load_player_boards_v2_layout,
     player_by_id,
+    resource_icon_size,
     render_player_board_v2_svg,
     resource_choice_styles,
     seat_choice_styles,
@@ -117,6 +120,18 @@ from tools.ui_debug.render_table_layout import (  # noqa: E402
 GENERATED_DIRNAME = "generated"
 OUTPUT_FILENAME = "play_view.html"
 PAGE_TITLE = "Pilgrim — Play View"
+
+ENGINE_BUILDINGS_PATH = Path(__file__).resolve().parents[2] / "configs" / "buildings.json"
+RESOURCE_TOKEN_ICONS = {"wheat": "wheat", "stone": "cube", "silver": "coin"}
+TOOLTIP_DECKLE_POINTS = (
+    (0, 13), (6, 7), (16, 11), (30, 6), (46, 11), (62, 6), (78, 11), (91, 7),
+    (100, 13), (98, 38), (100, 78), (96, 100), (84, 96), (70, 100), (55, 96),
+    (39, 100), (25, 96), (9, 100), (1, 94), (3, 55),
+)
+TOOLTIP_CLIP_PATH = "polygon(" + ", ".join(
+    f"{x}% {y}%" for x, y in TOOLTIP_DECKLE_POINTS
+) + ")"
+TOOLTIP_DECKLE_SVG_POINTS = " ".join(f"{x},{y}" for x, y in TOOLTIP_DECKLE_POINTS)
 
 CITY_POSITION = 0
 TWO_PLAYER_VARIANT = "2_player"
@@ -167,6 +182,243 @@ def say(value: object) -> str:
     the seat colours because that is what the rulebook names and what a player can point at.
     """
     return escape(_SEAT_NAMED.sub(lambda found: SEAT_COLOURS[found.group(1)], str(value)))
+
+
+def _catalog_with_engine_metadata(catalog: dict) -> dict:
+    """Add tooltip metadata from the engine catalogue to the visual building catalogue.
+
+    The visual catalogue owns palette and tile geometry. The engine catalogue owns the words that
+    explain a building, so the page joins the two by id instead of copying rule text into a
+    renderer.
+    """
+    engine_catalogue = json.loads(ENGINE_BUILDINGS_PATH.read_text(encoding="utf-8"))["catalogue"]
+    metadata = {entry["id"]: entry for entry in engine_catalogue}
+    visual_ids = {building["id"] for building in catalog["buildings"]}
+    if visual_ids != set(metadata):
+        raise ValueError("Building visual and engine catalogues do not contain the same ids.")
+    return {
+        **catalog,
+        "buildings": [
+            {
+                **building,
+                "category": metadata[building["id"]]["category"],
+                "description": metadata[building["id"]]["description"],
+            }
+            for building in catalog["buildings"]
+        ],
+    }
+
+
+def _resource_glyph_for_tooltip(resource: str) -> str:
+    """Render one inline glyph with the player-board resource renderer."""
+    icon = RESOURCE_TOKEN_ICONS.get(resource)
+    if icon is None or icon not in _ICON_RENDERERS:
+        raise KeyError(f"unknown tooltip resource token: {resource}")
+    size = resource_icon_size(icon) * 0.72
+    return (
+        f'<svg class="building-tooltip-resource" data-tooltip-resource="{resource}"'
+        ' viewBox="0 0 20 30" aria-label="'
+        f'{resource} resource" role="img"><g data-resource="{resource}" pointer-events="none">'
+        f'{_ICON_RENDERERS[icon](10, 17, size, "#3A2F1E")}</g></svg>'
+    )
+
+
+def _description_html(description: str) -> str:
+    """Replace only explicit resource tokens, rejecting unknown or malformed braces."""
+    pieces: list[str] = []
+    cursor = 0
+    while cursor < len(description):
+        opening = description.find("{", cursor)
+        closing = description.find("}", cursor)
+        if closing != -1 and (opening == -1 or closing < opening):
+            raise ValueError(f"malformed resource token in description: {description!r}")
+        if opening == -1:
+            pieces.append(escape(description[cursor:]))
+            break
+        pieces.append(escape(description[cursor:opening]))
+        ending = description.find("}", opening + 1)
+        if ending == -1:
+            raise ValueError(f"unterminated resource token in description: {description!r}")
+        token = description[opening + 1 : ending]
+        if token not in RESOURCE_TOKEN_ICONS:
+            raise ValueError(f"unknown resource token {{{token}}} in description")
+        pieces.append(_resource_glyph_for_tooltip(token))
+        cursor = ending + 1
+    return "".join(pieces)
+
+
+def _tooltip_deckle_layer(class_name: str) -> str:
+    """One dark layer behind the parchment, cut to the outline the parchment itself is cut to."""
+    return (
+        f'<svg class="{class_name}" aria-hidden="true" viewBox="0 0 100 100" '
+        f'preserveAspectRatio="none"><polygon points="{TOOLTIP_DECKLE_SVG_POINTS}"/></svg>'
+    )
+
+
+def _building_tooltip_templates(catalog: dict) -> str:
+    """One hidden template per building, plus the empty tooltip the script fills and moves.
+
+    Each template is three layers of one outline: the parchment clipped to `TOOLTIP_DECKLE_POINTS`,
+    a tight shadow under it so it lies on the board rather than floats, and the wide soft halo that
+    lifts it off whatever is behind. All three are cut from the same points, so the pool can never
+    be a rectangle under a torn shape.
+
+    The two dark layers are separate elements rather than `drop-shadow()` on the parchment because
+    `clip-path` clips what a filter produced: a shadow cast by the card is cut away at the very
+    outline it was meant to follow, and nothing is painted outside. This is also why removing the
+    card's border appeared to flatten the silhouette -- the border was never what made the shape.
+
+    Their blur is a CSS `blur()` on the `<svg>` rather than an `feGaussianBlur` inside it, for two
+    reasons that both come from the tooltip being content-sized. A deviation given in user units is
+    scaled by the viewBox, and `preserveAspectRatio="none"` on a wide, short tooltip scales x and y
+    by different amounts -- an 11 unit blur became roughly 43px sideways and 11px down, a smear
+    rather than a pool. And an SVG filter paints only inside its filter region, so the tail of the
+    blur was cut off square where the region ended. A CSS filter works in painted pixels, is the
+    same in both directions whatever the tooltip's proportions, and has no region to fall out of.
+    """
+    templates = []
+    for building in catalog["buildings"]:
+        description = _description_html(str(building["description"]))
+        templates.append(
+            f'<template data-building-tooltip-template="{escape(str(building["id"]))}">'
+            '<div class="building-tooltip-frame">'
+            '<div class="building-tooltip-card">'
+            '<div class="building-tooltip-heading">'
+            f'<span class="building-tooltip-name">{escape(str(building["name"]))}</span>'
+            f'<span class="building-tooltip-category">{escape(str(building["category"]))}</span>'
+            '</div>'
+            f'<div class="building-tooltip-description">{description}</div>'
+            '</div>'
+            + _tooltip_deckle_layer("building-tooltip-shadow")
+            + _tooltip_deckle_layer("building-tooltip-halo")
+            + '</div></template>'
+        )
+    return (
+        '<svg class="building-tooltip-filters" aria-hidden="true" width="0" height="0">'
+        '<defs><filter id="building-tooltip-aged" x="-10%" y="-20%" width="120%" height="150%">'
+        '<feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" result="noise"/>'
+        '<feColorMatrix in="noise" type="saturate" values="0" result="gray-noise"/>'
+        '<feComponentTransfer in="gray-noise" result="aged-noise">'
+        '<feFuncA type="linear" slope="0.10"/></feComponentTransfer>'
+        '<feComposite in="aged-noise" in2="SourceGraphic" operator="atop"/>'
+        '</filter></defs></svg>'
+        '<div data-building-tooltip-templates="true">'
+        + "".join(templates)
+        + '</div><div class="building-tooltip" data-building-tooltip="true"'
+        ' aria-hidden="true"></div>'
+    )
+
+
+def building_tooltip_styles() -> str:
+    """The tooltip's own styles, with the deckled outline substituted in by name.
+
+    CSS is nothing but braces, so this block cannot be an f-string and cannot be `.format`-ed: the
+    one time the outline needs to be interpolated would cost every rule in the sheet a doubled
+    brace. `Template` takes `$deckle` instead, which CSS never uses, and `substitute` raises if the
+    name is ever misspelled -- the failure that produced a rectangular tooltip was a `{...}`
+    placeholder reaching the browser as literal text, where an invalid declaration is dropped in
+    silence and the silhouette simply goes away.
+    """
+    return Template("""  [data-building-tooltip-templates="true"], .building-tooltip-filters {
+    display: none;
+  }
+  .building-tooltip {
+    position: fixed; z-index: 1000; display: none; pointer-events: none;
+    color: #3A2F1E; font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  .building-tooltip[data-building-tooltip-visible="true"] { display: block; }
+  .building-tooltip-frame {
+    position: relative; width: max-content; max-width: min(380px, calc(100vw - 24px));
+  }
+  .building-tooltip-halo, .building-tooltip-shadow {
+    position: absolute; overflow: visible; pointer-events: none; z-index: 0;
+  }
+  .building-tooltip-halo {
+    inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); filter: blur(11px);
+  }
+  .building-tooltip-halo polygon { fill: #000000; opacity: .38; }
+  .building-tooltip-shadow {
+    left: 0; top: 2px; width: 100%; height: 100%; filter: blur(2.5px);
+  }
+  .building-tooltip-shadow polygon { fill: #000000; opacity: .22; }
+  .building-tooltip-card {
+    box-sizing: border-box; width: max-content; max-width: min(380px, calc(100vw - 24px));
+    padding: 15px 20px 16px; background-color: #E6D7B8;
+    background-image: linear-gradient(#F1E7CD, #DBCAA4);
+    border: 1px solid transparent;
+    clip-path: $deckle;
+    filter: url(#building-tooltip-aged);
+    position: relative; z-index: 1;
+  }
+  .building-tooltip-heading {
+    display: flex; align-items: baseline; gap: 12px; min-width: 220px; margin: 0 0 5px;
+  }
+  .building-tooltip-name {
+    color: #8F2222; font-size: 14px; line-height: 1.15; font-weight: 700; white-space: nowrap;
+  }
+  .building-tooltip-category {
+    margin-left: auto; color: #8A7550; font-size: 9px; line-height: 1.15;
+    font-weight: 700; letter-spacing: .13em; text-transform: uppercase; white-space: nowrap;
+  }
+  .building-tooltip-description {
+    max-width: 340px; font-size: 11px; line-height: 1.38; overflow-wrap: break-word;
+  }
+  .building-tooltip-resource {
+    display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .04em;
+    vertical-align: -.22em; overflow: visible;
+  }
+""").substitute(deckle=TOOLTIP_CLIP_PATH)
+
+
+def building_tooltip_script() -> str:
+    return """<script>
+  (function () {
+    'use strict';
+    var tooltip = document.querySelector('[data-building-tooltip="true"]');
+    var templates = document.querySelectorAll('[data-building-tooltip-template]');
+    var targets = document.querySelectorAll('[data-building-id]');
+    if (!tooltip || !targets.length) { return; }
+
+    function templateFor(id) {
+      for (var index = 0; index < templates.length; index += 1) {
+        if (templates[index].getAttribute('data-building-tooltip-template') === id) {
+          return templates[index];
+        }
+      }
+      return null;
+    }
+
+    function hide() {
+      tooltip.removeAttribute('data-building-tooltip-visible');
+      tooltip.setAttribute('aria-hidden', 'true');
+      tooltip.innerHTML = '';
+    }
+
+    function show(target) {
+      var template = templateFor(target.getAttribute('data-building-id'));
+      if (!template) { return; }
+      tooltip.innerHTML = template.innerHTML;
+      tooltip.setAttribute('data-building-tooltip-visible', 'true');
+      tooltip.setAttribute('aria-hidden', 'false');
+      var targetBox = target.getBoundingClientRect();
+      var tooltipBox = tooltip.getBoundingClientRect();
+      var left = targetBox.left + (targetBox.width - tooltipBox.width) / 2;
+      var top = targetBox.top - tooltipBox.height - 10;
+      left = Math.max(8, Math.min(left, window.innerWidth - tooltipBox.width - 8));
+      if (top < 8) { top = targetBox.bottom + 10; }
+      top = Math.max(8, Math.min(top, window.innerHeight - tooltipBox.height - 8));
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    }
+
+    Array.prototype.forEach.call(targets, function (target) {
+      target.addEventListener('mouseenter', function () { show(target); });
+      target.addEventListener('mouseleave', hide);
+      target.addEventListener('focus', function () { show(target); });
+      target.addEventListener('blur', hide);
+    });
+  }());
+</script>"""
 
 
 def duty_layout_for(payload: dict, duty_layout: dict) -> dict:
@@ -2366,6 +2618,7 @@ def render_play_view_html(
     alms_layout: dict,
     alms_config: dict,
 ) -> str:
+    catalog = _catalog_with_engine_metadata(catalog)
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
@@ -2520,12 +2773,16 @@ def render_play_view_html(
 
 {turn_css}
 
+{building_tooltip_styles()}
+
 {table_stacking_styles(scale)}
 </style>
 </head>
 <body>
 {stage}
-{script}</body>
+{_building_tooltip_templates(catalog)}
+{script}
+{building_tooltip_script()}</body>
 </html>
 """
 
