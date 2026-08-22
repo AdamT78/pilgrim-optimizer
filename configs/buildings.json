@@ -19,6 +19,8 @@
     {
       "id": "confession_box",
       "name": "Confession Box",
+      "category": "Utility",
+      "description": "Assumes +2 piety when assessing the start player.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -27,6 +29,8 @@
     {
       "id": "chapel",
       "name": "Chapel",
+      "category": "Duty Bonus",
+      "description": "Generates +1 piety when Clerical Duty and Devotion is selected.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -35,6 +39,8 @@
     {
       "id": "chapter_house",
       "name": "Chapter House",
+      "category": "Duty Bonus",
+      "description": "May add a 2nd acolyte to a single special activity (via Allocation) for an additional +1 bonus. Maximum 2/ Activity.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -43,6 +49,8 @@
     {
       "id": "guild",
       "name": "Guild",
+      "category": "Utility",
+      "description": "May move the Merchant clockwise +1 Duty tile.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -51,6 +59,8 @@
     {
       "id": "infirmary",
       "name": "Infirmary",
+      "category": "Duty Bonus",
+      "description": "Gives a +1 to Allocation and Ordination Duties ({wheat} required for Ordination).",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -59,6 +69,8 @@
     {
       "id": "mint",
       "name": "Mint",
+      "category": "Duty Bonus",
+      "description": "Generates +1 {silver} when Clerical Duty and Silversmith is selected.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -67,6 +79,8 @@
     {
       "id": "quarry",
       "name": "Quarry",
+      "category": "Duty Bonus",
+      "description": "Generates +1 {stone} when Produce (stone) Duty is selected.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -75,6 +89,8 @@
     {
       "id": "well",
       "name": "Well",
+      "category": "Duty Bonus",
+      "description": "Generates +1 {wheat} when Produce (wheat) Duty is selected.",
       "level": 1,
       "stone_cost": 1,
       "donation_vp": 2,
@@ -83,6 +99,8 @@
     {
       "id": "brewery",
       "name": "Brewery",
+      "category": "Conversion",
+      "description": "A single {wheat} may be sold for 2 {silver}.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -91,6 +109,8 @@
     {
       "id": "cloisters",
       "name": "Cloisters",
+      "category": "Movement",
+      "description": "When moving acolytes to Duty actions, a player may skip one Duty tile or the city.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -99,6 +119,8 @@
     {
       "id": "dormitory",
       "name": "Dormitory",
+      "category": "Movement",
+      "description": "At the start of a player's turn an acolyte may be returned from any Duty action to the City.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -107,6 +129,8 @@
     {
       "id": "grain_store",
       "name": "Grain Store",
+      "category": "Conversion",
+      "description": "Buy or sell one or more {wheat} for 1 {silver} each.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -115,6 +139,8 @@
     {
       "id": "indulgences",
       "name": "Indulgences",
+      "category": "Conversion",
+      "description": "Buy or sell one or more piety for 1 {silver} each.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -123,6 +149,8 @@
     {
       "id": "library",
       "name": "Library",
+      "category": "Movement",
+      "description": "At the end of a player's turn move 1 acolyte from the city directly to a Duty action or back to the abbey.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -131,6 +159,8 @@
     {
       "id": "reliquary",
       "name": "Reliquary",
+      "category": "Utility",
+      "description": "-1 piety point discount when building a Shrine or on Pilgrimage Site costs.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -139,6 +169,8 @@
     {
       "id": "stone_yard",
       "name": "Stone Yard",
+      "category": "Conversion",
+      "description": "Buy or sell one or more {stone} for 1 {silver} each.",
       "level": 2,
       "stone_cost": 2,
       "donation_vp": 4,
@@ -147,6 +179,8 @@
     {
       "id": "bank",
       "name": "Bank",
+      "category": "Utility",
+      "description": "{silver} can be used instead of any single resource (including Piety) for one transaction.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -155,6 +189,8 @@
     {
       "id": "customs_house",
       "name": "Customs House",
+      "category": "Duty Bonus",
+      "description": "When taking the Taxation Duty a majority is claimed on any Duty the active player's acolytes occupy, including the Taxation Duty.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -163,6 +199,8 @@
     {
       "id": "inquisition",
       "name": "Inquisition",
+      "category": "Movement",
+      "description": "At the start of their turn, a player may move one of their acolytes from the city to any Duty.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -171,6 +209,8 @@
     {
       "id": "kogge",
       "name": "Kogge",
+      "category": "Movement",
+      "description": "Acolytes may now move against the flow of the map board rivers to enter or leave the City.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -179,6 +219,8 @@
     {
       "id": "mill",
       "name": "Mill",
+      "category": "Duty Bonus",
+      "description": "Alms and Ordination Duties do not expend {wheat} if the player holds up to 2 {wheat}. A 3rd {wheat} must be held and spent if a 3rd action is taken.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -187,6 +229,8 @@
     {
       "id": "pulpit",
       "name": "Pulpit",
+      "category": "Utility",
+      "description": "Ordain one serf from the village and move them to the abbey with no {wheat} cost. The Infirmary bonus may not be applied.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -195,6 +239,8 @@
     {
       "id": "scriptorium",
       "name": "Scriptorium",
+      "category": "Duty Bonus",
+      "description": "On the player's turn, add +1 to the acolyte total on all Duty tiles that player occupies.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,
@@ -203,6 +249,8 @@
     {
       "id": "wagon_yard",
       "name": "Wagon Yard",
+      "category": "Utility",
+      "description": "Hire any live building for no fee. This may be used by the owning player when the Merchant is visiting the Taxation Duty.",
       "level": 3,
       "stone_cost": 3,
       "donation_vp": 6,

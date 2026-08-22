@@ -6,11 +6,14 @@ Each check uses `elementFromPoint` at the intended click centre plus a real mous
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from io import BytesIO
 import threading
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from tools.play_server import PlayServer
 
@@ -1695,6 +1698,372 @@ def test_conversion_playtest_draws_only_owned_buildings_in_player_slots(page, se
         assert page.locator(
             f'[data-component="player-board-v2"] [data-building-id="{building_id}"]'
         ).count() == 0
+
+
+def test_building_tooltips_use_catalogue_text_glyphs_and_no_layout_space(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+    catalogue = {
+        entry["id"]: entry
+        for entry in json.loads(
+            (SCENARIOS.parent / "configs" / "buildings.json").read_text(encoding="utf-8")
+        )["catalogue"]
+    }
+    panel_heights = page.locator(".panel").evaluate_all(
+        "nodes => nodes.map(node => node.getBoundingClientRect().height)"
+    )
+    tooltip = page.locator('[data-building-tooltip="true"]')
+
+    def contrast_ratio(foreground: str, background: str) -> float:
+        def channels(value: str) -> tuple[float, float, float]:
+            return tuple(
+                float(channel) / 255
+                for channel in value.removeprefix("rgb(").removesuffix(")").split(", ")
+            )
+
+        def luminance(value: tuple[float, float, float]) -> float:
+            linear = [
+                channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in value
+            ]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        first, second = luminance(channels(foreground)), luminance(channels(background))
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+    def assert_halo_darkens_map_around_tooltip() -> None:
+        target = page.locator('.setup-building-label[data-building-id="mill"]').first
+        if target.count() == 0:
+            target = page.locator('[data-building-id="mill"]').first
+        target.hover()
+        page.wait_for_timeout(25)
+        tooltip_box = tooltip.bounding_box()
+        assert tooltip_box is not None
+        margin = 24
+        clip = {
+            "x": max(0, tooltip_box["x"] - margin),
+            "y": max(0, tooltip_box["y"] - margin),
+            "width": min(page.viewport_size["width"], tooltip_box["width"] + margin * 2),
+            "height": min(page.viewport_size["height"], tooltip_box["height"] + margin * 2),
+        }
+        shown = Image.open(BytesIO(page.screenshot(clip=clip))).convert("RGB")
+        page.mouse.move(5, 5)
+        page.wait_for_timeout(25)
+        hidden = Image.open(BytesIO(page.screenshot(clip=clip))).convert("RGB")
+
+        def luminance(pixel: tuple[int, int, int]) -> float:
+            red, green, blue = pixel
+            return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+        def patch_luminance(image: Image.Image, x: int, y: int) -> float:
+            pixels = [
+                luminance(image.getpixel((column, row)))
+                for column in range(max(0, x - 2), min(image.width, x + 3))
+                for row in range(max(0, y - 2), min(image.height, y + 3))
+            ]
+            return sum(pixels) / len(pixels)
+
+        local_x = tooltip_box["x"] - clip["x"]
+        local_y = tooltip_box["y"] - clip["y"]
+        sample_points = {
+            "top": (round(local_x + tooltip_box["width"] / 2), round(local_y - 4)),
+            "bottom": (
+                round(local_x + tooltip_box["width"] / 2),
+                round(local_y + tooltip_box["height"] + 4),
+            ),
+            "left": (round(local_x - 4), round(local_y + tooltip_box["height"] / 2)),
+            "right": (
+                round(local_x + tooltip_box["width"] + 4),
+                round(local_y + tooltip_box["height"] / 2),
+            ),
+        }
+        differences = {
+            side: patch_luminance(hidden, *point) - patch_luminance(shown, *point)
+            for side, point in sample_points.items()
+        }
+        assert all(difference >= 4.0 for difference in differences.values()), differences
+
+    for building_id in ("stone_yard", "confession_box", "mill", "chapter_house"):
+        target = page.locator(f'.setup-building-label[data-building-id="{building_id}"]').first
+        if target.count() == 0:
+            target = page.locator(f'[data-building-id="{building_id}"]').first
+        target.hover()
+        page.wait_for_timeout(25)
+        entry = catalogue[building_id]
+        assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
+        assert tooltip.locator(".building-tooltip-name").inner_text() == entry["name"]
+        assert tooltip.locator(".building-tooltip-category").text_content() == entry["category"]
+        expected_description_text = entry["description"]
+        for token in ("{wheat}", "{stone}", "{silver}"):
+            expected_description_text = expected_description_text.replace(token, "")
+        assert (
+            tooltip.locator(".building-tooltip-description").text_content()
+            == expected_description_text
+        )
+        assert tooltip.locator(".building-tooltip-name [data-tooltip-resource]").count() == 0
+
+        tooltip_box = tooltip.bounding_box()
+        assert tooltip_box is not None
+        viewport = page.evaluate("({width: innerWidth, height: innerHeight})")
+        assert tooltip_box["x"] >= 0
+        assert tooltip_box["y"] >= 0
+        assert tooltip_box["x"] + tooltip_box["width"] <= viewport["width"]
+        assert tooltip_box["y"] + tooltip_box["height"] <= viewport["height"]
+        assert tooltip.evaluate("node => getComputedStyle(node).position") == "fixed"
+        assert tooltip.evaluate("node => node.parentElement === document.body")
+
+        card = tooltip.locator(".building-tooltip-card")
+        description = tooltip.locator(".building-tooltip-description")
+        card_box = card.bounding_box()
+        description_box = description.bounding_box()
+        assert card_box is not None and description_box is not None
+        assert description_box["x"] >= card_box["x"] + 12
+        assert (
+            description_box["x"] + description_box["width"]
+            <= card_box["x"] + card_box["width"] - 12
+        )
+        assert description_box["y"] >= card_box["y"] + 12
+        assert (
+            description_box["y"] + description_box["height"]
+            <= card_box["y"] + card_box["height"] - 12
+        )
+        line_boxes = description.evaluate(
+            """node => {
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              return Array.from(range.getClientRects()).map(box => ({
+                x: box.x, y: box.y, right: box.right, bottom: box.bottom
+              }));
+            }"""
+        )
+        assert line_boxes
+        assert all(
+            box["x"] >= card_box["x"] + 12
+            and box["right"] <= card_box["x"] + card_box["width"] - 12
+            and box["y"] >= card_box["y"] + 12
+            and box["bottom"] <= card_box["y"] + card_box["height"] - 12
+            for box in line_boxes
+        )
+
+        name_box = tooltip.locator(".building-tooltip-name").bounding_box()
+        category_box = tooltip.locator(".building-tooltip-category").bounding_box()
+        assert name_box is not None and category_box is not None
+        assert name_box["x"] + name_box["width"] <= category_box["x"]
+        assert (
+            tooltip.locator(".building-tooltip-category").evaluate(
+                "node => getComputedStyle(node).textTransform"
+            )
+            == "uppercase"
+        )
+        foreground = description.evaluate("node => getComputedStyle(node).color")
+        background = card.evaluate("node => getComputedStyle(node).backgroundColor")
+        assert contrast_ratio(foreground, background) >= 4.5
+
+        if building_id == "stone_yard":
+            tooltip_glyph = tooltip.locator('[data-tooltip-resource="stone"]')
+            board_glyph = page.locator(
+                '[data-component="player-board-v2"] [data-resource="stone"]'
+            ).first
+            assert tooltip_glyph.count() == 1
+            assert tooltip_glyph.locator('[data-resource="stone"]').count() == 1
+            assert tooltip_glyph.locator('[data-resource="stone"]').evaluate(
+                "node => node.firstElementChild.tagName"
+            ) == board_glyph.evaluate("node => node.firstElementChild.tagName")
+        elif building_id == "confession_box":
+            assert tooltip.locator("[data-tooltip-resource]").count() == 0
+
+        assert page.locator(".panel").evaluate_all(
+            "nodes => nodes.map(node => node.getBoundingClientRect().height)"
+        ) == panel_heights
+        page.mouse.move(5, 5)
+
+    assert_halo_darkens_map_around_tooltip()
+
+
+TOOLTIP_MAP_BUILDING = '.setup-building-label[data-building-id="mill"]'
+TOOLTIP_BOARD_BUILDING = '[data-component="player-board-v2"] [data-building-id="grain_store"]'
+# A flat colour laid over the whole page, under the tooltip's own z-index of 1000. The tooltip is
+# untouched; the backdrop only removes the question of what counts as background, so "where does
+# the parchment end" is a fact about one channel rather than a guess about hexes and board cream.
+TOOLTIP_SILHOUETTE_BACKDROP = """
+  const backdrop = document.createElement('div');
+  backdrop.id = 'silhouette-backdrop';
+  backdrop.style.cssText =
+    'position:fixed;inset:0;background:#FF00FF;z-index:999;pointer-events:none';
+  document.body.appendChild(backdrop);
+"""
+
+
+def _luminance(pixel: tuple[int, int, int]) -> float:
+    red, green, blue = pixel
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def _crop_around(page, box: dict, margin: int) -> dict:
+    """A screenshot clip around the tooltip, kept inside the viewport so its origin stays known."""
+    viewport = page.viewport_size
+    x = max(0.0, box["x"] - margin)
+    y = max(0.0, box["y"] - margin)
+    return {
+        "x": x,
+        "y": y,
+        "width": min(box["x"] + box["width"] + margin, float(viewport["width"])) - x,
+        "height": min(box["y"] + box["height"] + margin, float(viewport["height"])) - y,
+    }
+
+
+def _hover_tooltip(page, selector: str):
+    """Hover a building wherever it is drawn and hand back the tooltip and its box."""
+    assert page.locator(selector).count() >= 1, selector
+    target = page.locator(selector).first
+    target.scroll_into_view_if_needed()
+    target.hover()
+    page.wait_for_timeout(60)
+    tooltip = page.locator('[data-building-tooltip="true"]')
+    assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
+    box = tooltip.bounding_box()
+    assert box is not None
+    return tooltip, box
+
+
+def _parchment_edges(page, selector: str) -> tuple[list[int], list[int]]:
+    """Where the painted parchment starts and stops in every column across the tooltip.
+
+    Against the flat backdrop the parchment is the only thing on the page with green in it, so the
+    first and last row carrying green in a column are its top and bottom edge at that x.
+    """
+    _tooltip, box = _hover_tooltip(page, selector)
+    page.evaluate(TOOLTIP_SILHOUETTE_BACKDROP)
+    clip = _crop_around(page, box, 8)
+    shot = Image.open(BytesIO(page.screenshot(clip=clip))).convert("RGB")
+    page.evaluate("document.getElementById('silhouette-backdrop').remove()")
+
+    left = round(box["x"] - clip["x"])
+    top = round(box["y"] - clip["y"])
+    width, height = round(box["width"]), round(box["height"])
+    tops: list[int] = []
+    bottoms: list[int] = []
+    for step in range(round(width * 0.02), round(width * 0.98)):
+        column = left + step
+        painted = [
+            row
+            for row in range(max(0, top - 6), min(shot.height, top + height + 6))
+            if shot.getpixel((column, row))[1] > 100
+        ]
+        if painted:
+            tops.append(painted[0] - top)
+            bottoms.append(painted[-1] - top)
+    assert len(tops) > round(width * 0.9), "the parchment was not found across the tooltip"
+    return tops, bottoms
+
+
+def _halo_darkening(page, selector: str, side: str, depth: int = 32) -> tuple[list[float], float]:
+    """How much luminance the tooltip takes out of the background, pixel by pixel outward.
+
+    Measured against the page as it really is, by screenshotting the same clip with the tooltip up
+    and with it gone: differencing the two cancels whatever is behind, so a hex border or a board
+    edge cannot be mistaken for the halo. Averaging each step over the middle band of rows keeps a
+    single dark line in the background from showing up as a notch in the profile.
+    """
+    _tooltip, box = _hover_tooltip(page, selector)
+    clip = _crop_around(page, box, depth + 12)
+    shown = Image.open(BytesIO(page.screenshot(clip=clip))).convert("RGB")
+    page.mouse.move(5, 5)
+    page.wait_for_timeout(60)
+    hidden = Image.open(BytesIO(page.screenshot(clip=clip))).convert("RGB")
+
+    left = round(box["x"] - clip["x"])
+    right = round(box["x"] + box["width"] - clip["x"])
+    top = round(box["y"] - clip["y"])
+    height = round(box["height"])
+    rows = range(top + round(height * 0.25), top + round(height * 0.75))
+
+    darkening: list[float] = []
+    background: list[float] = []
+    for distance in range(1, depth + 1):
+        column = left - distance if side == "left" else right + distance
+        assert 0 <= column < shown.width, "the walk outward left the screenshot"
+        behind = [_luminance(hidden.getpixel((column, row))) for row in rows]
+        lit = [_luminance(shown.getpixel((column, row))) for row in rows]
+        darkening.append(sum(behind) / len(behind) - sum(lit) / len(lit))
+        background.append(sum(behind) / len(behind))
+    return darkening, sum(background) / len(background)
+
+
+def test_building_tooltip_parchment_has_torn_top_and_bottom_edges(page, serve) -> None:
+    """The parchment is a scrap of vellum, so neither long edge may be a straight line."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+
+    for where, selector in (
+        ("map", TOOLTIP_MAP_BUILDING),
+        ("player board", TOOLTIP_BOARD_BUILDING),
+    ):
+        tops, bottoms = _parchment_edges(page, selector)
+        for edge, found in (("top", tops), ("bottom", bottoms)):
+            spread = max(found) - min(found)
+            assert spread > 2, f"the {edge} edge over the {where} is straight to {spread}px"
+
+        sampled = [tops[round(place * (len(tops) - 1) / 8)] for place in range(9)]
+        assert len(set(sampled)) >= 4, f"the top edge over the {where} repeats: {sampled}"
+        page.mouse.move(5, 5)
+
+
+def test_building_tooltip_halo_fades_gradually_outward(page, serve) -> None:
+    """The lift is a soft pool that finishes falling off, not a slab that stops somewhere."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+
+    for where, selector, side in (
+        ("map", TOOLTIP_MAP_BUILDING, "left"),
+        ("player board", TOOLTIP_BOARD_BUILDING, "right"),
+    ):
+        darkening, background = _halo_darkening(page, selector, side)
+        assert background > 120, (
+            f"the walk outward over the {where} runs across page chrome at {background:.0f},"
+            " which no darkening could show up against"
+        )
+        assert darkening[0] >= 10, f"nothing darkens the {where} beside the parchment: {darkening}"
+
+        steps = list(zip(darkening, darkening[1:], strict=False))
+        assert all(nearer - further > -2.0 for nearer, further in steps), (
+            f"the darkening over the {where} deepens again further out: {darkening}"
+        )
+        assert max(nearer - further for nearer, further in steps) <= darkening[0] / 2, (
+            f"the darkening over the {where} falls off a cliff: {darkening}"
+        )
+        assert darkening[len(darkening) // 3] >= 4.0, (
+            f"the darkening over the {where} is an edge, not a gradient: {darkening}"
+        )
+        assert darkening[-1] <= 2.0, (
+            f"the darkening over the {where} is still {darkening[-1]:.1f} where the walk ends,"
+            f" so the blur never finished falling off: {darkening}"
+        )
+
+
+def test_building_tooltip_halo_lifts_a_player_board_as_well_as_the_map(page, serve) -> None:
+    """Cream board and yellow hex both need the lift; a halo drawn on only one of them is a bug."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+
+    over_map, map_background = _halo_darkening(page, TOOLTIP_MAP_BUILDING, "left")
+    over_board, board_background = _halo_darkening(page, TOOLTIP_BOARD_BUILDING, "right")
+
+    assert map_background > 120 and board_background > 120, (
+        f"map {map_background:.0f} and board {board_background:.0f} must both be lit surfaces"
+    )
+    assert over_board[0] >= 10, f"the halo does not darken a player board at all: {over_board}"
+    assert sum(over_board[:8]) / 8 >= 10, (
+        f"the halo barely marks a player board: {over_board[:8]}"
+    )
+    assert sum(over_board[:8]) / 8 >= sum(over_map[:8]) / 8 * 0.6, (
+        f"a player board gets far less lift than the map: board {over_board[:8]},"
+        f" map {over_map[:8]}"
+    )
 
 
 def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:

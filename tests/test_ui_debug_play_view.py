@@ -39,6 +39,7 @@ from tools.ui_debug.render_piety_track_v2 import (
 from tools.ui_debug.render_pilgrimage_sites import load_pilgrimage_sites
 from tools.ui_debug.render_play_view import (
     _board_state_for,
+    building_tooltip_script,
     duty_board_state_for,
     duty_layout_for,
     map_placements_for,
@@ -867,8 +868,9 @@ def test_offer_ring_colour_follows_the_active_seat_for_two_different_seats() -> 
 def test_the_page_offers_nothing_to_press() -> None:
     """Read-only is the design, so it is asserted rather than left to whoever edits next."""
     page = render_play_view_from_payload(_payload([_player([5] + [0] * 8) for _ in range(4)]))
+    page_without_tooltip_behavior = page.replace(building_tooltip_script(), "")
     for control in ("<button", "<select", "<input", "<script", "onclick"):
-        assert control not in page
+        assert control not in page_without_tooltip_behavior
 
 
 def test_the_log_stands_where_the_debug_tables_controls_do() -> None:
