@@ -314,8 +314,8 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    assert sum(legacy_counts.values()) == 68759
-    assert sum(current_counts.values()) == 68397
+    assert sum(legacy_counts.values()) == 68811
+    assert sum(current_counts.values()) == 68449
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:

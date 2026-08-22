@@ -2295,7 +2295,14 @@ def _engine_steps(
     if action.resolution.value == "taxation":
         taken = tuple(action.taxation_step2_resources or ())
         counted = ",".join(f"{noun}={taken.count(noun)}" for noun in ("stone", "silver", "wheat"))
-        steps.append({"kind": "combination", "value": counted})
+        steps.append(
+            {
+                "kind": "combination",
+                "value": counted,
+                "resource_allocation": True,
+                "resource_total": len(taken),
+            }
+        )
     if action.resolution.value == "allocation":
         outcome = allocation_outcome(action.allocation_moves)
         encoded = ",".join(f"{slot}={delta:+d}" for slot, delta in outcome) if outcome else "none"
@@ -2387,7 +2394,11 @@ def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
     prefix = list(prefix)
     while len(_next_steps(decisions, prefix)) == 1:
         step = _next_steps(decisions, prefix)[0]
-        if step["kind"] == "resolution":
+        if step["kind"] == "resolution" or (
+            step["kind"] == "combination"
+            and step.get("resource_allocation")
+            and int(step.get("resource_total", 0)) > 0
+        ):
             break
         prefix.append(step["value"])
     return prefix
@@ -2418,6 +2429,14 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             prefix.append(value)
             clicks += _ordination_clicks(str(value))
             continue
+        if step["kind"] == "combination" and step.get("resource_allocation"):
+            counts = _counts(value)
+            for resource in ("stone", "silver", "wheat"):
+                clicks.extend(
+                    _take(resource, _active_seat(server))
+                    for _ in range(counts[resource])
+                )
+            return clicks
         if step["kind"] == "resolution":
             options = [s for s in _next_steps(decisions, prefix) if s["kind"] == "resolution"]
             if value == "tithe":
@@ -3862,16 +3881,22 @@ def test_the_mixes_offered_are_the_ones_the_engine_allows(tmp_path: Path) -> Non
 
     decisions = _engine_decisions(server)
     transcript = _run_script(server, _clicks_to(server, decisions, list(prefix)), tmp_path)
-    assert sorted(value for value in transcript["offered"][-1] if "=" in value) == sorted(offered)
+    eligible = {
+        resource
+        for value in offered
+        for resource, amount in _counts(value).items()
+        if amount > 0
+    }
+    assert set(transcript["offered"][-1]) & {"stone", "silver", "wheat"} == eligible
+    assert not [value for value in transcript["offered"][-1] if "=" in value]
+    assert transcript["asking"][-1] == [
+        f'{server.payload["state"]["active_player"]}: choose 2 resources.'
+    ]
 
 
 @needs_node
-def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -> None:
-    """Most Taxation turns here have a single legal mix, and none of them may ask about it.
-
-    Including the empty one. A seat holding no majority anywhere takes no bonus at all, which is
-    still a mix -- "take nothing" -- and is still not a choice.
-    """
+def test_a_taxation_bonus_with_one_mix_still_uses_the_resource_pills(tmp_path: Path) -> None:
+    """A single non-empty mix is still answered through the Step II pill question."""
     server = _reference_server()
     while not any(
         _resolves(candidate, "taxation")
@@ -3881,7 +3906,6 @@ def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
         server.apply(settled["action_id"], server.payload["state_token"])
 
-    assert _mix_groups(server) == {}, "this position had a choice of mix, so it tests nothing"
     candidate = next(
         c
         for c in server.payload["turn_candidates"]
@@ -3890,11 +3914,11 @@ def test_a_taxation_bonus_with_one_mix_never_puts_the_question(tmp_path: Path) -
     forced = _answer(candidate, "combination")
 
     decisions = _engine_decisions(server)
-    prefix = _values_except(candidate["steps"], "combination")
-    transcript = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path, confirm=True)
+    clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+    transcript = _run_script(server, clicks, tmp_path, confirm=True)
 
-    assert forced not in transcript["offered"][-1], "the only legal mix was still asked for"
     assert transcript["posted"]["action_id"] == candidate["action_id"]
+    assert forced not in transcript["offered"][-1]
 
 
 def test_a_mix_is_offered_in_english_and_never_as_a_tuple() -> None:
@@ -3908,6 +3932,93 @@ def test_a_mix_is_offered_in_english_and_never_as_a_tuple() -> None:
     labels = _the_mixes_read_as_english(server)
     assert "take two stone" in labels
     assert "take stone and silver" in labels
+
+
+def test_taxation_step_two_prompt_names_the_position_duty_value() -> None:
+    scenario = load_scenario("scenarios/taxation_three_bonus_types_001.json")
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=tuple(legal_actions(scenario.state, scenario.config)),
+    )
+    taxation_steps = [
+        step
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and step.get("resource_allocation")
+    ]
+
+    assert taxation_steps
+    assert {step["prompt"] for step in taxation_steps} == {"player_one: choose 2 resources."}
+    step_two = taxation_steps[0]
+    assert step_two["resource_delta"] == {"stone": 2, "silver": 0, "wheat": 0}
+    assert step_two["resource_unit_deltas"]["wheat"] == {
+        "stone": 0,
+        "silver": 0,
+        "wheat": 1,
+    }
+    assert play_server.COMBINATION_PROMPT == "choose one."
+    assert play_server._combination_step(
+        "pay", [("silver", 1), ("wheat", 1)]
+    )["prompt"] == play_server.COMBINATION_PROMPT
+
+
+def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
+    server = _reference_server()
+    tithe_steps = [
+        step
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "resolution" and step["value"] == "tithe"
+            for step in candidate["steps"]
+        )
+        for step in candidate["steps"]
+        if step["kind"] == "resource"
+    ]
+    assert {step["value"] for step in tithe_steps} >= {"stone", "silver", "wheat"}
+    for step in tithe_steps:
+        assert step["resource_delta"] == {
+            resource: int(resource == step["value"])
+            for resource in ("stone", "silver", "wheat")
+        }
+
+
+@needs_node
+def test_six_taxation_multisets_are_reachable_by_pill_clicks(tmp_path: Path) -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "taxation_three_bonus_types_001.json"
+    )
+    try:
+        candidates = [
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if _resolves(candidate, "taxation")
+            and _answer(candidate, "resource") == "stone"
+        ]
+        assert len({_answer(candidate, "combination") for candidate in candidates}) == 6
+        decisions = _engine_decisions(server)
+        outcomes = {}
+        for candidate in candidates:
+            clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
+            transcript = _run_script(server, clicks, tmp_path, confirm=True)
+            assert transcript["posted"]["action_id"] == candidate["action_id"]
+            action = next(
+                action
+                for action in legal_actions(server.state, server.config)
+                if action_id(action) == candidate["action_id"]
+            )
+            result = apply_action(server.state, action, server.config)
+            before = server.state.player_state(server.state.active_player).resources
+            after = result.state.player_state(server.state.active_player).resources
+            outcomes[_answer(candidate, "combination")] = (
+                after.stone - before.stone,
+                after.silver - before.silver,
+                after.wheat - before.wheat,
+            )
+        assert len(outcomes) == 6
+        assert len(set(outcomes.values())) == 6
+    finally:
+        server.server_close()
 
 
 # ---------------------------------------------------------------------------------------------

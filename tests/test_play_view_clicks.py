@@ -20,6 +20,7 @@ from tools.play_server import PlayServer
 pytestmark = pytest.mark.slow
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
+SCREENSHOTS = Path(__file__).resolve().parents[1] / "screenshots"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
@@ -251,6 +252,251 @@ def _confirm_enabled(page) -> bool:
         page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled")
         == "true"
     )
+
+
+def _reach_taxation_step_two(page, *, step_one: str = "stone") -> None:
+    """Walk the direct Taxation fixture to its separate Step II pill question."""
+    for selector in (
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]',
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+        '[data-board-position-index="1"][data-turn-duty-candidate="true"]',
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        f'[data-active-seat="true"] [data-resource-choice-key="{step_one}"]'
+        '[data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing Taxation target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+
+
+def _click_taxation_resource(page, resource: str) -> None:
+    handle = page.query_selector(
+        f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+        '[data-turn-offered="true"]'
+    )
+    assert handle is not None, f"resource {resource} was not offered"
+    _click_handle_centre(page, handle, require_hit=True)
+    page.wait_for_timeout(40)
+
+
+def _screenshot_taxation_pills(page, path: Path) -> None:
+    keys = page.locator('[data-active-seat="true"] [data-resource-choice-key]')
+    boxes = [keys.nth(index).bounding_box() for index in range(keys.count())]
+    assert boxes and all(box is not None for box in boxes)
+    left = min(box["x"] for box in boxes if box is not None)
+    top = min(box["y"] for box in boxes if box is not None)
+    right = max(box["x"] + box["width"] for box in boxes if box is not None)
+    bottom = max(box["y"] + box["height"] for box in boxes if box is not None)
+    page.screenshot(
+        path=str(path),
+        clip={"x": left - 10, "y": top - 10, "width": right - left + 20, "height": bottom - top + 20},
+    )
+
+
+def _player_holdings(page, selector: str = '[data-active-seat="true"]') -> dict[str, int]:
+    return {
+        resource: int(page.locator(f'{selector} [data-resource="{resource}"] text').text_content())
+        for resource in ("stone", "silver", "wheat")
+    }
+
+
+def _all_player_holdings(page) -> dict[str, dict[str, int]]:
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll('[data-component="player-board-v2"][data-player-seat]')
+        ).map(board => [
+          board.getAttribute('data-player'),
+          Object.fromEntries(['stone', 'silver', 'wheat'].map(resource => [
+            resource,
+            Number(board.querySelector(`[data-resource="${resource}"] text`).textContent)
+          ]))
+        ]))"""
+    )
+
+
+def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
+    page, serve
+) -> None:
+    """The six engine combinations remain reachable through the resource pills."""
+    outcomes = {}
+    for combination in (
+        ("stone", "stone"),
+        ("stone", "silver"),
+        ("stone", "wheat"),
+        ("silver", "silver"),
+        ("silver", "wheat"),
+        ("wheat", "wheat"),
+    ):
+        base_url, server = serve(SCENARIOS / "taxation_three_bonus_types_001.json")
+        page.goto(base_url, wait_until="networkidle")
+        _reach_taxation_step_two(page)
+
+        assert page.locator('[data-turn-prompt*="choose 2 resources."]'
+                            '[data-turn-offered="true"]').count() == 1
+        assert page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count() == 3
+        if combination == ("stone", "stone"):
+            page.screenshot(path=str(SCREENSHOTS / "taxation-six-option-position.png"), full_page=True)
+
+        before_step_two = _player_holdings(page)
+        other_players_before = _all_player_holdings(page)
+        active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+        if combination == ("stone", "stone"):
+            _screenshot_taxation_pills(page, SCREENSHOTS / "taxation-step2-before.png")
+        _click_taxation_resource(page, combination[0])
+        after_one = _player_holdings(page)
+        assert after_one[combination[0]] == before_step_two[combination[0]] + 1
+        assert all(
+            after_one[resource] == before_step_two[resource]
+            for resource in before_step_two
+            if resource != combination[0]
+        )
+        assert page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count() > 0
+        assert {
+            player: holdings
+            for player, holdings in _all_player_holdings(page).items()
+            if player != active_player_id
+        } == {
+            player: holdings
+            for player, holdings in other_players_before.items()
+            if player != active_player_id
+        }
+        if combination == ("stone", "stone"):
+            _screenshot_taxation_pills(page, SCREENSHOTS / "taxation-step2-after-one.png")
+        _click_taxation_resource(page, combination[1])
+
+        preview = _player_holdings(page)
+        expected = dict(before_step_two)
+        for resource in combination:
+            expected[resource] += 1
+        assert preview == expected
+        assert page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count() == 0
+        assert {
+            player: holdings
+            for player, holdings in _all_player_holdings(page).items()
+            if player != active_player_id
+        } == {
+            player: holdings
+            for player, holdings in other_players_before.items()
+            if player != active_player_id
+        }
+        if combination == ("stone", "stone"):
+            _screenshot_taxation_pills(page, SCREENSHOTS / "taxation-step2-after-two.png")
+        assert _confirm_enabled(page)
+        acting_engine_player = server.state.active_player
+        page.locator('[data-turn-control="confirm"]').click()
+        page.wait_for_timeout(120)
+        acting_board = f'[data-player="{active_player_id}"]'
+        assert _player_holdings(page, acting_board) == preview
+        actual = server.state.player_state(acting_engine_player).resources
+        assert preview == {
+            "stone": actual.stone,
+            "silver": actual.silver,
+            "wheat": actual.wheat,
+        }
+        outcomes[combination] = tuple(
+            preview[resource] for resource in ("stone", "silver", "wheat")
+        )
+
+    assert len(outcomes) == 6
+    assert len(set(outcomes.values())) == 6
+
+
+def test_taxation_step_two_darkens_step_one_only_resources(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "taxation_majority_bonus_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    _reach_taxation_step_two(page, step_one="wheat")
+
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+        '[data-turn-offered="true"]'
+    ).count() == 0
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+        '[data-turn-offered="true"]'
+    ).count() == 1
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    ).count() == 1
+    assert not _confirm_enabled(page)
+
+
+def test_tithe_cornucopia_previews_the_picked_holding_and_confirm_changes_nothing(
+    page, serve
+) -> None:
+    base_url, server = serve(SCENARIOS / "tithe_counter_choice_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    for selector in (
+        '[data-board-position-index="7"][data-turn-start-candidate="true"]',
+        '[data-arrow="west->north_west"][data-turn-offered="true"]',
+        '[data-board-position-index="8"][data-turn-duty-candidate="true"]',
+        '[data-turn-control="tithe"][data-turn-control-enabled="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing Cornucopia tithe target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+    ).count() == 3
+
+    before = _player_holdings(page)
+    others_before = _all_player_holdings(page)
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    _click_taxation_resource(page, "stone")
+    after_click = _player_holdings(page)
+    assert after_click["stone"] == before["stone"] + 1
+    assert after_click["silver"] == before["silver"]
+    assert after_click["wheat"] == before["wheat"]
+    assert {
+        player: holdings
+        for player, holdings in _all_player_holdings(page).items()
+        if player != active_player_id
+    } == {
+        player: holdings
+        for player, holdings in others_before.items()
+        if player != active_player_id
+    }
+
+    assert _confirm_enabled(page)
+    acting_engine_player = server.state.active_player
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert _player_holdings(page, f'[data-player="{active_player_id}"]') == after_click
+    actual = server.state.player_state(acting_engine_player).resources
+    assert after_click == {
+        "stone": actual.stone,
+        "silver": actual.silver,
+        "wheat": actual.wheat,
+    }
+
+
+def test_resource_preview_reset_restores_pre_click_holdings(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "tithe_counter_choice_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    for selector in (
+        '[data-board-position-index="7"][data-turn-start-candidate="true"]',
+        '[data-arrow="west->north_west"][data-turn-offered="true"]',
+        '[data-board-position-index="8"][data-turn-duty-candidate="true"]',
+        '[data-turn-control="tithe"][data-turn-control-enabled="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing Cornucopia tithe target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    before = _player_holdings(page)
+    _click_taxation_resource(page, "stone")
+    assert _player_holdings(page)["stone"] == before["stone"] + 1
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(80)
+    assert _player_holdings(page) == before
 
 
 def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:
@@ -1863,7 +2109,7 @@ def test_building_tooltips_use_catalogue_text_glyphs_and_no_layout_space(page, s
         if building_id == "stone_yard":
             tooltip_glyph = tooltip.locator('[data-tooltip-resource="stone"]')
             board_glyph = page.locator(
-                '[data-component="player-board-v2"] [data-resource="stone"]'
+                '[data-component="player-board-v2"] [data-resource-choice-glyph="stone"]'
             ).first
             assert tooltip_glyph.count() == 1
             assert tooltip_glyph.locator('[data-resource="stone"]').count() == 1
