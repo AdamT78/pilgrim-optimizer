@@ -110,6 +110,7 @@ def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
             scenario.state,
             scenario.config,
             actions=actions,
+            include_preview_effects=False,
         ),
         log=[],
         log_blocks=[],

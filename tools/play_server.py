@@ -676,11 +676,76 @@ _PREVIEW_EFFECT_FIELDS: tuple[str, ...] = (
     "merchant_advance",
 )
 
+# These are the action values that can change the effects previewed on a turn step. The values that
+# do affect a payment or bonus stay here even when their own question is not currently shown by the
+# page. The full route is summarized separately below: sowing moves acolytes, and only its settled
+# effect on the selected duty can alter a resource diff.
+_PREVIEW_EFFECT_ACTION_FIELDS: tuple[str, ...] = (
+    "selected_duty",
+    "resolution",
+    "alms_payment_silver",
+    "alms_payment_wheat",
+    "alms_house_extra_silver",
+    "alms_house_extra_wheat",
+    "donate_building_id",
+    "ordination_steps",
+    "taxation_step1_resource",
+    "taxation_step2_resources",
+    "construct_building_id",
+    "start_turn_building_id",
+    "start_turn_building_source",
+    "end_turn_building_id",
+    "end_turn_building_source",
+    "sow_route_building_id",
+    "sow_route_building_source",
+    "sow_route_secondary_building_id",
+    "sow_route_secondary_building_source",
+    "bank_payment_building_id",
+    "bank_payment_building_source",
+    "bank_payment_replaced_resource",
+    "bank_payment_silver_amount",
+    "taxation_majority_building_id",
+    "taxation_majority_building_source",
+    "free_hire_enabler_building_id",
+    "free_hire_target_building_id",
+    "free_hire_target_building_source",
+    "merchant_advance_building_id",
+    "merchant_advance_building_source",
+    "effective_acolyte_building_id",
+    "effective_acolyte_building_source",
+    "workforce_move_building_id",
+    "workforce_move_building_source",
+    "hired_building_id",
+    "hired_building_source",
+    "hire_payments",
+    "tithe_resource",
+)
+
+
+def _preview_effect_action_key(action: Any) -> tuple[Any, ...] | None:
+    if not isinstance(action, FullTurnAction):
+        return None
+    route = tuple(action.route or ())
+    selected_duty = action.selected_duty
+    return (
+        *(getattr(action, field) for field in _PREVIEW_EFFECT_ACTION_FIELDS),
+        # The route itself is a sequence of visible steps, but only its effect on the selected
+        # duty can affect this diff. Keep that compact fact in the cache key so different route
+        # spellings with the same settled duty value still share the engine application.
+        len(route),
+        action.origin == selected_duty,
+        route.count(selected_duty),
+        action.start_turn_relocation_from,
+        action.start_turn_relocation_to,
+    )
+
 
 def _turn_action_preview_effects(
     action: Any,
     state: Any,
     config: Any,
+    *,
+    cache: dict[tuple[Any, ...], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The state changes this complete action can expose on one of its steps.
 
@@ -688,6 +753,10 @@ def _turn_action_preview_effects(
     started from. Round-end consequences are deliberately removed: they happen after the turn's
     choice has resolved and are not part of the preview surface.
     """
+    cache_key = _preview_effect_action_key(action)
+    if cache is not None and cache_key is not None and cache_key in cache:
+        return dict(cache[cache_key])
+
     player = state.active_player
     before_player = state.player_state(player)
     try:
@@ -730,6 +799,8 @@ def _turn_action_preview_effects(
             to_position = dict(guild_event.details).get("to_position")
             if to_position in config.board.positions:
                 effects["merchant_advance"] = config.board.positions.index(to_position)
+    if cache is not None and cache_key is not None:
+        cache[cache_key] = dict(effects)
     return effects
 
 
@@ -1190,6 +1261,7 @@ def _presented(
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Each further question this page can put about one action, with the fields it answers.
 
@@ -1201,7 +1273,11 @@ def _presented(
     the refusal knows what has been asked -- and a page holding the name of a field would be a page
     that could come to depend on it, which is how the next one ends up being a special case.
     """
-    resource_step_metadata = _resource_step_metadata(action, state, config)
+    resource_step_metadata = (
+        _resource_step_metadata(action, state, config)
+        if include_preview_effects
+        else {}
+    )
     if isinstance(action, StartPlayerConfessionBoxAction):
         # A `combination` and not a kind of its own, because the shape is the one the alms pair and
         # the taxation mix already have: several fields that only go together one way, offered whole
@@ -1325,6 +1401,7 @@ def _presented_rows(
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Call `_presented`, while still allowing tests to monkeypatch the old one-arg shape."""
     try:
@@ -1335,6 +1412,7 @@ def _presented_rows(
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
             offer_merchant_advance=offer_merchant_advance,
+            include_preview_effects=include_preview_effects,
         )
     except TypeError as exc:
         if "unexpected keyword argument" not in str(exc):
@@ -1350,6 +1428,7 @@ def _presented_steps(
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> list[dict]:
     return [
         step
@@ -1360,6 +1439,7 @@ def _presented_steps(
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
             offer_merchant_advance=offer_merchant_advance,
+            include_preview_effects=include_preview_effects,
         )
     ]
 
@@ -1553,6 +1633,7 @@ def _steps_before_hire_payment_questions(
     offer_hire: bool = False,
     offer_start_turn_relocation: bool = False,
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> list[dict]:
     """Decision steps through the hire choice, stopping before any hire-payment stock choice."""
     if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
@@ -1563,6 +1644,7 @@ def _steps_before_hire_payment_questions(
                 config=config,
                 offer_hire=offer_hire,
                 offer_merchant_advance=offer_merchant_advance,
+                include_preview_effects=include_preview_effects,
             ),
             player_id,
         )
@@ -1631,6 +1713,7 @@ def _hire_payment_question_buildings_by_action_id(
     offer_hire_by_action_id: dict[str, bool],
     offer_start_turn_relocation: bool,
     offer_merchant_advance_by_action_id: dict[str, bool] | None = None,
+    include_preview_effects: bool = True,
 ) -> dict[str, tuple[str, ...]]:
     """Per action, which hired buildings still need a stock-choice question."""
     action_with_ids = [(action, action_id(action)) for action in actions]
@@ -1650,6 +1733,7 @@ def _hire_payment_question_buildings_by_action_id(
                 offer_hire=offer_hire_by_action_id[move_id],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_merchant_advance=offer_merchant_advance_by_action_id.get(move_id, False),
+                include_preview_effects=include_preview_effects,
             )
         )
         if isinstance(action, FullTurnAction):
@@ -1770,6 +1854,7 @@ def _covered_fields(
     offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> set[str]:
     """Which residue fields this action's steps actually answer.
 
@@ -1785,6 +1870,7 @@ def _covered_fields(
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
             offer_merchant_advance=offer_merchant_advance,
+            include_preview_effects=include_preview_effects,
         )
         for name in fields
     }
@@ -1828,6 +1914,7 @@ def decision_steps(
     offer_end_turn_relocation: bool = False,
     offer_merchant_advance: bool = False,
     preview_effects: dict[str, Any] | None = None,
+    include_preview_effects: bool = True,
 ) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
 
@@ -1862,6 +1949,7 @@ def decision_steps(
                 offer_hire=offer_hire,
                 hire_payment_buildings=hire_payment_buildings,
                 offer_merchant_advance=offer_merchant_advance,
+                include_preview_effects=include_preview_effects,
             ),
             player_id,
         )
@@ -1926,6 +2014,7 @@ def decision_steps(
         offer_hire=offer_hire,
         hire_payment_buildings=hire_payment_buildings,
         offer_merchant_advance=offer_merchant_advance,
+        include_preview_effects=include_preview_effects,
     )
     if isinstance(action, FullTurnAction) and offer_end_turn_relocation:
         end_choice, _fields = _end_turn_relocation_choice_step(action, state, config)
@@ -1933,8 +2022,10 @@ def decision_steps(
         end_target = _end_turn_relocation_target_step(action)
         if end_target is not None:
             steps.append(end_target[0])
-    if preview_effects is None:
+    if preview_effects is None and include_preview_effects:
         preview_effects = _turn_action_preview_effects(action, state, config)
+    if preview_effects is None:
+        preview_effects = {}
     _attach_turn_action_preview_effects(steps, preview_effects)
     return _address_steps(steps, player_id)
 
@@ -1949,6 +2040,7 @@ def _unresolved_fields(
     offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
     offer_merchant_advance: bool = False,
+    include_preview_effects: bool = True,
 ) -> list[str]:
     """Which fields the actions in one group still disagree about.
 
@@ -1972,6 +2064,7 @@ def _unresolved_fields(
         offer_start_turn_relocation=offer_start_turn_relocation,
         offer_end_turn_relocation=offer_end_turn_relocation,
         offer_merchant_advance=offer_merchant_advance,
+        include_preview_effects=include_preview_effects,
     )
     unresolved = [
         name
@@ -2010,6 +2103,7 @@ def turn_candidates(
     config: Any,
     *,
     actions: tuple[Any, ...] | list[Any] | None = None,
+    include_preview_effects: bool = True,
 ) -> list[dict]:
     """The moves on offer, grouped by the decisions the page can actually put to a player.
 
@@ -2020,6 +2114,10 @@ def turn_candidates(
     instead of picking one of them on the player's behalf.
 
     The summary is player-facing. It is the same sentence the transcript writes for this action.
+
+    Effect fields are included by default for the play page. Structural corpus callers can leave
+    them out: they still get the same candidate grouping and step values, without replaying every
+    complete turn merely to inspect those values.
     """
     grouped: dict[tuple[Any, ...], list[Any]] = {}
     player_id = _speaking_player_id(state)
@@ -2039,6 +2137,7 @@ def turn_candidates(
     offer_hire_by_action_id: dict[str, bool] = {}
     offer_merchant_advance_by_action_id: dict[str, bool] = {}
     preview_effects_by_action_id: dict[str, dict[str, Any]] = {}
+    preview_effect_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     offer_end_turn_relocation_by_action_id: dict[str, bool] = {}
     pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
@@ -2052,8 +2151,8 @@ def turn_candidates(
             _resolution_context_key(action, config) in merchant_advance_contexts
         )
         preview_effects_by_action_id[move_id] = (
-            _turn_action_preview_effects(action, state, config)
-            if isinstance(action, FullTurnAction)
+            _turn_action_preview_effects(action, state, config, cache=preview_effect_cache)
+            if include_preview_effects and isinstance(action, FullTurnAction)
             else {}
         )
     hire_payment_buildings_by_action_id = _hire_payment_question_buildings_by_action_id(
@@ -2064,6 +2163,7 @@ def turn_candidates(
         offer_hire_by_action_id=offer_hire_by_action_id,
         offer_start_turn_relocation=offer_start_turn_relocation,
         offer_merchant_advance_by_action_id=offer_merchant_advance_by_action_id,
+        include_preview_effects=include_preview_effects,
     )
     for action in actions:
         move_id = action_id(action)
@@ -2078,6 +2178,8 @@ def turn_candidates(
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=False,
                 offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
+                preview_effects={},
+                include_preview_effects=include_preview_effects,
             )
         )
     end_turn_contexts = {
@@ -2101,6 +2203,7 @@ def turn_candidates(
             offer_end_turn_relocation=offered_end_turn_relocation,
             offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
             preview_effects=preview_effects_by_action_id[move_id],
+            include_preview_effects=include_preview_effects,
         )
         steps_by_action_id[move_id] = steps
         offer_end_turn_relocation_by_action_id[move_id] = offered_end_turn_relocation
@@ -2120,11 +2223,12 @@ def turn_candidates(
                 members,
                 state,
                 config,
-                offer_hire=offer_hire_by_action_id[move_id],
-                hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
-                offer_start_turn_relocation=offer_start_turn_relocation,
+            offer_hire=offer_hire_by_action_id[move_id],
+            hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
+            offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_relocation_by_action_id[move_id],
                 offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
+                include_preview_effects=include_preview_effects,
             )
             if len(members) > 1
             else []

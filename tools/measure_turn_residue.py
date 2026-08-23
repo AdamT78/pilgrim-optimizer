@@ -283,7 +283,7 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
             field_state[name] = worse
 
     for _turn in range(turns):
-        candidates = turn_candidates(state, config)
+        candidates = turn_candidates(state, config, include_preview_effects=False)
         if not candidates:
             stopped = "the game ended"
             break
@@ -325,6 +325,7 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
                     state,
                     config,
                     offer_hire=offer_hire_by_action_id[answered],
+                    include_preview_effects=False,
                 ):
                     worsen(name, ASKED)
             # The four the page opens with -- origin, route, duty, resolution -- are asked of every
