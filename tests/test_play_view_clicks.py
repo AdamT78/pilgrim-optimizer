@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from pilgrim.model.actions import action_id
+from pilgrim.rules.transition import apply_action, legal_actions
 from tools.play_server import PlayServer
 
 pytestmark = pytest.mark.slow
@@ -315,6 +317,42 @@ def _all_player_holdings(page) -> dict[str, dict[str, int]]:
     )
 
 
+def _screenshot_active_board(page, path: Path) -> None:
+    original_viewport = page.viewport_size
+    assert original_viewport is not None
+    original_zoom = page.evaluate("document.body.style.zoom")
+    page.set_viewport_size(
+        {
+            "width": original_viewport["width"] * 2,
+            "height": original_viewport["height"] * 2,
+        }
+    )
+    page.evaluate("document.body.style.zoom = '2'")
+    try:
+        box = page.locator('[data-active-seat="true"]').bounding_box()
+        assert box is not None
+        image = Image.open(BytesIO(page.screenshot(full_page=True))).convert("RGB")
+        crop = image.crop(
+            (
+                round(box["x"]),
+                round(box["y"]),
+                round(box["x"] + box["width"]),
+                round(box["y"] + box["height"]),
+            )
+        )
+        crop.save(path)
+    finally:
+        page.evaluate("zoom => { document.body.style.zoom = zoom; }", original_zoom)
+        page.set_viewport_size(original_viewport)
+
+
+def _click_if_offered(page, selector: str) -> None:
+    handle = page.query_selector(selector)
+    if handle is not None:
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+
+
 def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
     page, serve
 ) -> None:
@@ -497,6 +535,296 @@ def test_resource_preview_reset_restores_pre_click_holdings(page, serve) -> None
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(80)
     assert _player_holdings(page) == before
+
+
+def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "produce_wheat_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before = _player_holdings(page)
+    other_players_before = _all_player_holdings(page)
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    acting_player = server.state.active_player
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "resolution" and step["value"] == "produce_wheat"
+            for step in candidate["steps"]
+        )
+    )
+    action = next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+    expected_state = apply_action(server.state, action, server.config).state
+    expected = expected_state.player_state(acting_player).resources
+
+    for selector in (
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing produce target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+
+    _screenshot_active_board(page, SCREENSHOTS / "produce-preview-before.png")
+    resolution = page.query_selector(
+        '[data-resolution-key="produce_wheat"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(60)
+    _screenshot_active_board(page, SCREENSHOTS / "produce-preview-after.png")
+
+    preview = _player_holdings(page)
+    assert preview == {
+        "stone": expected.stone,
+        "silver": expected.silver,
+        "wheat": expected.wheat,
+    }
+    assert {
+        player: holdings
+        for player, holdings in _all_player_holdings(page).items()
+        if player != active_player_id
+    } == {
+        player: holdings
+        for player, holdings in other_players_before.items()
+        if player != active_player_id
+    }
+    assert _confirm_enabled(page)
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert _player_holdings(page) == before
+
+    for selector in (
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="produce_wheat"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(60)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert _player_holdings(page, f'[data-player="{active_player_id}"]') == preview
+    assert server.state.player_state(acting_player).resources == expected
+
+
+def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "construct_building_level1_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before = _player_holdings(page)
+    other_players_before = _all_player_holdings(page)
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    acting_player = server.state.active_player
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step.get("building_constructed") == "well" for step in candidate["steps"])
+    )
+    action = next(
+        action for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+    expected_state = apply_action(server.state, action, server.config).state
+    expected_player = expected_state.player_state(acting_player)
+
+    _click_if_offered(
+        page, '[data-board-position-index="3"][data-turn-start-candidate="true"]'
+    )
+    _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="construct_building"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
+
+    _screenshot_active_board(page, SCREENSHOTS / "construction-preview-before.png")
+    building = page.query_selector(
+        '[data-building-choice-key="well"][data-turn-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    page.wait_for_timeout(60)
+    _screenshot_active_board(page, SCREENSHOTS / "construction-preview-after.png")
+
+    preview = _player_holdings(page)
+    assert preview == {
+        "stone": expected_player.resources.stone,
+        "silver": expected_player.resources.silver,
+        "wheat": expected_player.resources.wheat,
+    }
+    assert page.locator(
+        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+    ).count() == 1
+    assert {
+        player: holdings
+        for player, holdings in _all_player_holdings(page).items()
+        if player != active_player_id
+    } == {
+        player: holdings
+        for player, holdings in other_players_before.items()
+        if player != active_player_id
+    }
+    assert _confirm_enabled(page)
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert _player_holdings(page) == before
+    assert page.locator(
+        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+    ).count() == 0
+
+    # The first pass already proves reset restored the preview; Confirm must commit exactly that
+    # same state, with no arithmetic in the browser to reconstruct it.
+    _click_if_offered(
+        page, '[data-board-position-index="3"][data-turn-start-candidate="true"]'
+    )
+    _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="construct_building"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
+    building = page.query_selector(
+        '[data-building-choice-key="well"][data-turn-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    page.wait_for_timeout(60)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert _player_holdings(page, f'[data-player="{active_player_id}"]') == preview
+    assert page.locator(
+        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+    ).count() == 1
+    assert "well" in server.state.player_state(acting_player).player_board_slots.active_buildings
+
+
+def test_guild_merchant_preview_waits_for_agreement_and_matches_confirm(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    acting_player = server.state.active_player
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    before_position = server.state.merchant_board_position
+    after_action = next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action.merchant_advance_building_id == "guild"
+    )
+    expected_position = apply_action(server.state, after_action, server.config).state.merchant_board_position
+    before_others = _all_player_holdings(page)
+
+    def merchant_visible_at(position: int) -> bool:
+        return bool(page.evaluate(
+            """
+            position => Array.from(document.querySelectorAll(
+              '[data-component=\"duty-wheel\"] [data-token=\"merchant\"]'
+            )).some(token => {
+              const space = token.closest('[data-board-position-index]');
+              return space && Number(space.getAttribute('data-board-position-index')) === position
+                && token.getAttribute('opacity') !== '0';
+            })
+            """,
+            position,
+        ))
+
+    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
+
+    # The surviving no-Guild and Guild actions disagree, so no Merchant move is shown yet.
+    assert merchant_visible_at(before_position)
+    guild = page.query_selector(
+        '[data-combination-key="guild:own_active"][data-turn-offered="true"]'
+    )
+    assert guild is not None
+    _click_handle_centre(page, guild, require_hit=True)
+    page.wait_for_timeout(60)
+    assert merchant_visible_at(expected_position)
+    assert {
+        player: holdings
+        for player, holdings in _all_player_holdings(page).items()
+        if player != active_player_id
+    } == {
+        player: holdings
+        for player, holdings in before_others.items()
+        if player != active_player_id
+    }
+    assert _confirm_enabled(page)
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert merchant_visible_at(before_position)
+
+    # Pick Guild again and confirm; the committed state must be the same state the marker previewed.
+    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
+    guild = page.query_selector(
+        '[data-combination-key="guild:own_active"][data-turn-offered="true"]'
+    )
+    assert guild is not None
+    _click_handle_centre(page, guild, require_hit=True)
+    page.wait_for_timeout(60)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert server.state.merchant_board_position == expected_position
+    assert merchant_visible_at(expected_position)
+    assert server.state.active_player != acting_player
 
 
 def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:

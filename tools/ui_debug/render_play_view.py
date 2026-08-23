@@ -722,6 +722,7 @@ def _combination_keys(candidates: list[dict]) -> str:
             if step["kind"] in {
                 "combination",
                 "hire",
+                "merchant_advance",
                 "start_relocation_choice",
                 "end_relocation_choice",
             }:
@@ -943,6 +944,7 @@ _TURN_SCRIPT = """<script>
   var ornaments = board.querySelectorAll('.ornament-header g');
   var arrows = board.querySelectorAll('[data-arrow]');
   var counters = board.querySelectorAll('[data-turn-counter]');
+  var merchantTokens = board.querySelectorAll('[data-token="merchant"]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
@@ -971,6 +973,9 @@ _TURN_SCRIPT = """<script>
   var resolutionSplit = null;
   var baseline = [];
   var resourceBaseline = [];
+  var merchantBaseline = [];
+  var buildingSlotBaseline = [];
+  var merchantBoardBaseline = board.getAttribute('data-merchant-token');
   var activePlayer = null;
   var activeSeat = null;
   var arrangementBaseline = [];
@@ -1873,12 +1878,55 @@ _TURN_SCRIPT = """<script>
         }
       );
     }
+    merchantBaseline = [];
+    Array.prototype.forEach.call(merchantTokens, function (token) {
+      merchantBaseline.push({ token: token, opacity: token.getAttribute('opacity') });
+    });
+    buildingSlotBaseline = [];
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-player-board-slot]'),
+      function (slot) {
+        var use = slot.querySelector('use');
+        buildingSlotBaseline.push({
+          slot: slot,
+          use: use,
+          attributes: {
+            'data-building-slot-state': slot.getAttribute('data-building-slot-state'),
+            'data-building-id': slot.getAttribute('data-building-id'),
+            'data-donated': slot.getAttribute('data-donated')
+          },
+          href: use ? use.getAttribute('href') : null,
+          useOpacity: use ? use.getAttribute('opacity') : null
+        });
+      }
+    );
   }
 
   function restoreBaseline() {
     restore(baseline);
+    if (merchantBoardBaseline === null) { board.removeAttribute('data-merchant-token'); }
+    else { board.setAttribute('data-merchant-token', merchantBoardBaseline); }
     resourceBaseline.forEach(function (entry) {
       entry.text.textContent = entry.value;
+    });
+    merchantBaseline.forEach(function (entry) {
+      if (entry.opacity === null) { entry.token.removeAttribute('opacity'); }
+      else { entry.token.setAttribute('opacity', entry.opacity); }
+    });
+    buildingSlotBaseline.forEach(function (entry) {
+      var slot = entry.slot;
+      var use = entry.use;
+      ['data-building-slot-state', 'data-building-id', 'data-donated'].forEach(function (name) {
+        var value = entry.attributes[name];
+        if (value === null) { slot.removeAttribute(name); }
+        else { slot.setAttribute(name, value); }
+      });
+      if (use) {
+        if (entry.href === null) { use.removeAttribute('href'); }
+        else { use.setAttribute('href', entry.href); }
+        if (entry.useOpacity === null) { use.removeAttribute('opacity'); }
+        else { use.setAttribute('opacity', entry.useOpacity); }
+      }
     });
   }
 
@@ -1895,6 +1943,57 @@ _TURN_SCRIPT = """<script>
       });
       if (text) { text.textContent = String(Number(text.textContent || 0) + amount); }
     });
+  }
+
+  function applyMerchantAdvance(position) {
+    var target = Number(position);
+    if (Number.isNaN(target)) { return; }
+    var targetDuty = null;
+    Array.prototype.forEach.call(merchantTokens, function (token) {
+      var space = token.closest('[data-board-position-index]');
+      var visible = space && Number(space.getAttribute('data-board-position-index')) === target;
+      token.setAttribute('opacity', visible ? '1' : '0');
+      if (visible) {
+        targetDuty = space ? space.getAttribute('data-duty') : null;
+      }
+    });
+    if (targetDuty) { board.setAttribute('data-merchant-token', targetDuty); }
+  }
+
+  function applyBuildingConstructed(buildingId) {
+    if (!activeSeat || !buildingId) { return; }
+    var empty = Array.prototype.filter.call(
+      activeSeat.querySelectorAll('[data-player-board-slot]'),
+      function (slot) { return slot.getAttribute('data-building-id') === ''; }
+    )[0] || null;
+    if (!empty) { return; }
+    var use = empty.querySelector('use');
+    if (!use) { return; }
+    empty.setAttribute('data-building-slot-state', 'bought');
+    empty.setAttribute('data-building-id', buildingId);
+    empty.setAttribute('data-donated', 'false');
+    use.setAttribute('href', '#preview-building-' + buildingId);
+    use.setAttribute('opacity', '1');
+  }
+
+  function agreedStepEffect(live, index, answer, field) {
+    var found = false;
+    var value = null;
+    var agreed = true;
+    live.forEach(function (candidate) {
+      var offered = candidate.steps[index];
+      if (!offered || offered.value !== answer) { return; }
+      var current = offered && offered.value === answer
+        && Object.prototype.hasOwnProperty.call(offered, field)
+        ? offered[field] : null;
+      if (!found) {
+        found = true;
+        value = current;
+      } else if (JSON.stringify(value) !== JSON.stringify(current)) {
+        agreed = false;
+      }
+    });
+    return found && agreed ? value : null;
   }
 
   function applyPartialResourceAllocation() {
@@ -1944,6 +2043,14 @@ _TURN_SCRIPT = """<script>
       });
       prefix.push(answer);
       if (!step) { continue; }
+      var resourceEffect = agreedStepEffect(live, stepIndex, answer, 'resource_delta');
+      if (resourceEffect && !step.resource_allocation) {
+        applyResourceDelta(resourceEffect);
+      }
+      var buildingEffect = agreedStepEffect(live, stepIndex, answer, 'building_constructed');
+      if (buildingEffect !== null) { applyBuildingConstructed(buildingEffect); }
+      var merchantEffect = agreedStepEffect(live, stepIndex, answer, 'merchant_advance');
+      if (merchantEffect !== null) { applyMerchantAdvance(merchantEffect); }
       if (step.kind === 'origin') {
         origin = step.value;
         var start = positionName(step.value);
@@ -1978,10 +2085,7 @@ _TURN_SCRIPT = """<script>
         resolution = step.value;
         continue;
       }
-      if (step.kind === 'resource' && step.resource_delta) {
-        applyResourceDelta(step.resource_delta);
-        continue;
-      }
+      if (step.kind === 'resource' && step.resource_delta) { continue; }
       if (step.kind !== 'edge') { continue; }
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
@@ -2118,6 +2222,7 @@ _TURN_SCRIPT = """<script>
           });
         })
         .concat(offeredByKind(offered, 'hire'))
+        .concat(offeredByKind(offered, 'merchant_advance'))
         .concat(offeredByKind(offered, 'start_relocation_choice'))
         .concat(offeredByKind(offered, 'end_relocation_choice'))
     );
@@ -2990,6 +3095,7 @@ def render_play_view_html(
 </head>
 <body>
 {stage}
+{_building_preview_content_defs(catalog, candidates)}
 {_building_tooltip_templates(catalog)}
 {script}
 {building_tooltip_script()}</body>
@@ -3100,6 +3206,29 @@ def _slot_contents(
                 }
             )
     return tuple(slots)
+
+
+def _building_preview_content_defs(catalog: dict, candidates: list[dict]) -> str:
+    """Reusable bought-building drawings for construction previews."""
+    ids = {
+        str(step["building_constructed"])
+        for candidate in candidates
+        for step in candidate.get("steps", ())
+        if step.get("building_constructed") is not None
+    }
+    if not ids:
+        return ""
+    by_id = {str(building["id"]): building for building in catalog["buildings"]}
+    fragments = "".join(
+        f'<g id="preview-building-{escape(building_id)}">'
+        f"{render_board_slot_building(by_id[building_id], BUILDING_SLOT_HEX_SIZE)}</g>"
+        for building_id in sorted(ids)
+        if building_id in by_id
+    )
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="content-defs" width="0" height="0"'
+        f' aria-hidden="true"><defs>{fragments}</defs></svg>'
+    )
 
 
 def render_play_view_from_payload(payload: dict) -> str:

@@ -1304,6 +1304,9 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
         state=scenario.state,
         config=scenario.config,
     )
+    offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
+        actions, scenario.config
+    )
     revisits = 0
     old_logic_last_not_zero = 0
     fixed_last_not_zero = 0
@@ -1336,6 +1339,7 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
             offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
+            offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
         )
         edge_steps = [step for step in steps if step["kind"] == "edge"]
         assert edge_steps, "Cloisters action should always present at least one edge step"
@@ -1739,6 +1743,9 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
             state=scenario.state,
             config=scenario.config,
         )
+        offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
+            actions, scenario.config
+        )
 
         def key_for_steps(steps: list[dict]) -> tuple:
             return tuple(
@@ -1757,6 +1764,7 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
+                offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -1806,6 +1814,9 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
             state=scenario.state,
             config=scenario.config,
         )
+        offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
+            actions, scenario.config
+        )
 
         def key_for_steps(steps: list[dict]) -> tuple:
             return tuple(
@@ -1824,6 +1835,7 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
+                offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -2167,6 +2179,7 @@ def _offer_flags_by_action_id(
         for action in actions
     )
     offer_hire_by_action_id: dict[str, bool] = {}
+    offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(actions, config)
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
     for action in actions:
@@ -2193,6 +2206,7 @@ def _offer_flags_by_action_id(
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=False,
+            offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
         )
         pre_end_turn_key_by_action_id[move_id] = tuple(
             tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
@@ -2216,6 +2230,21 @@ def _offer_flags_by_action_id(
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
     )
+
+
+def _merchant_offer_flags_by_action_id(
+    actions: list[Any], config: Any
+) -> dict[str, bool]:
+    contexts = {
+        play_server._resolution_context_key(action, config)
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.merchant_advance_building_id is not None
+    }
+    return {
+        action_id(action): isinstance(action, FullTurnAction)
+        and play_server._resolution_context_key(action, config) in contexts
+        for action in actions
+    }
 
 
 def _engine_steps(
@@ -3981,6 +4010,71 @@ def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
             resource: int(resource == step["value"])
             for resource in ("stone", "silver", "wheat")
         }
+
+
+def _candidate_action(scenario, candidate: dict):
+    assert candidate["action_id"] is not None
+    return next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action_id(action) == candidate["action_id"]
+    )
+
+
+def test_resource_preview_step_matches_engine_after_produce() -> None:
+    scenario = load_scenario("scenarios/produce_wheat_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step["kind"] == "resolution" and step["value"] == "produce_wheat" for step in candidate["steps"])
+    )
+    action = _candidate_action(scenario, candidate)
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    after = apply_action(scenario.state, action, scenario.config).state.player_state(
+        scenario.state.active_player
+    ).resources
+    step = next(step for step in candidate["steps"] if step["value"] == "produce_wheat")
+    assert step["resource_delta"] == {
+        resource: getattr(after, resource) - getattr(before, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+
+
+def test_construction_preview_step_carries_engine_building_and_cost() -> None:
+    scenario = load_scenario("scenarios/construct_building_level1_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step["kind"] == "building" and step["value"] == "well" for step in candidate["steps"])
+    )
+    action = _candidate_action(scenario, candidate)
+    before_player = scenario.state.player_state(scenario.state.active_player)
+    after_player = apply_action(scenario.state, action, scenario.config).state.player_state(
+        scenario.state.active_player
+    )
+    step = next(step for step in candidate["steps"] if step["kind"] == "building")
+    assert step["building_constructed"] in after_player.player_board_slots.active_buildings
+    assert step["resource_delta"] == {
+        resource: getattr(after_player.resources, resource) - getattr(before_player.resources, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+
+
+def test_guild_preview_step_matches_engine_merchant_position() -> None:
+    scenario = load_scenario("scenarios/guild_active_move_merchant_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step.get("merchant_advance") is not None for step in candidate["steps"])
+    )
+    action = _candidate_action(scenario, candidate)
+    after = apply_action(scenario.state, action, scenario.config).state
+    step = next(step for step in candidate["steps"] if step.get("merchant_advance") is not None)
+    assert step["merchant_advance"] == after.merchant_board_position
+    assert candidate["unresolved"] == []
 
 
 @needs_node
