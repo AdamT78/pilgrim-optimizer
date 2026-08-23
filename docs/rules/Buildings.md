@@ -224,7 +224,6 @@ Scope details:
 
 - waived wheat includes:
   - `give_alms_paid` wheat payment
-  - `give_alms_paid` Alms House extra wheat payment
   - Ordination step wheat costs
 - not waived:
   - minority silver

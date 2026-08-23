@@ -72,7 +72,7 @@ def test_cli_apply_give_alms_active_mill_shows_waiver_and_net_wheat_delta(capsys
 
     assert exit_code == 0
     assert "BUILDING_BONUS: mill waived wheat cost 2 for give_alms_paid" in output
-    assert "RESOURCE_DELTA: player_one silver -1; wheat -1" in output
+    assert "RESOURCE_DELTA: player_one wheat -1" in output
     assert (
         "ALMS_PAYMENT: player_one credited silver=0, wheat=3 toward Give Alms; "
         "actual paid silver=0, wheat=1"
@@ -99,7 +99,7 @@ def test_cli_apply_give_alms_hired_mill_shows_credited_vs_actual_payment(capsys)
 
     assert exit_code == 0
     assert "BUILDING_HIRED: player_one hired Mill from market; paid wheat 1 to bank" in output
-    assert "RESOURCE_DELTA: player_one silver -1; wheat -2" in output
+    assert "RESOURCE_DELTA: player_one wheat -2" in output
     assert (
         "ALMS_PAYMENT: player_one credited silver=0, wheat=3 toward Give Alms; "
         "actual paid silver=0, wheat=1"

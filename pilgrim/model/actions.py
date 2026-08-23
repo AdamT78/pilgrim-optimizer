@@ -49,8 +49,6 @@ class FullTurnAction:
     resolution: TurnResolutionType
     alms_payment_silver: int = 0
     alms_payment_wheat: int = 0
-    alms_house_extra_silver: int = 0
-    alms_house_extra_wheat: int = 0
     donate_building_id: str | None = None
     ordination_steps: tuple[str, ...] = ()
     taxation_step1_resource: str | None = None
@@ -210,11 +208,6 @@ def action_id(action: GameAction) -> str:
         payment_suffix = (
             f":pay_silver:{action.alms_payment_silver}:pay_wheat:{action.alms_payment_wheat}"
         )
-        if action.alms_house_extra_silver or action.alms_house_extra_wheat:
-            payment_suffix += (
-                f":alms_house_extra_silver:{action.alms_house_extra_silver}"
-                f":alms_house_extra_wheat:{action.alms_house_extra_wheat}"
-            )
     donation_suffix = ""
     if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
         donation_suffix = f":building:{action.donate_building_id or 'none'}"
@@ -681,12 +674,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += f" | gain {action.tithe_resource}"
     if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
         summary += f" | pay silver={action.alms_payment_silver}, wheat={action.alms_payment_wheat}"
-        if action.alms_house_extra_silver or action.alms_house_extra_wheat:
-            summary += (
-                " | alms_house extra "
-                f"silver={action.alms_house_extra_silver}, "
-                f"wheat={action.alms_house_extra_wheat}"
-            )
     if action.resolution is TurnResolutionType.GIVE_ALMS_DONATE_BUILDING:
         summary += f" | building: {action.donate_building_id or 'unknown'}"
     if action.resolution is TurnResolutionType.ORDINATION:
@@ -763,7 +750,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if action.hired_building_id == "mill":
         required_wheat = 0
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
-            required_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
+            required_wheat = action.alms_payment_wheat
         elif action.resolution is TurnResolutionType.ORDINATION:
             required_wheat = len(action.ordination_steps)
         summary += f" | mill wheat spent={max(0, required_wheat - 2)}"

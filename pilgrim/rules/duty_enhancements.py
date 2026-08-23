@@ -74,9 +74,12 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         action_key="give_alms_paid",
         source_type="special_activity",
         source_key="alms_house",
-        effect="optional +1 effective Duty Value with extra payment",
+        effect="optional +1 effective Duty Value ceiling",
         status="implemented",
-        notes="Bonus requires paying exactly 1 extra silver or wheat.",
+        notes=(
+            "Bonus is free and scales with occupied Alms House acolytes "
+            "(up to +2 with Chapter House)."
+        ),
     ),
     DutyEnhancement(
         duty="build_roads",

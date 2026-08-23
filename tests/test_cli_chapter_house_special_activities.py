@@ -27,7 +27,7 @@ def _action_index(
         if plan is not None and action.construct_plan != plan:
             continue
         if alms_house_bonus is not None:
-            if action.alms_house_extra_silver + action.alms_house_extra_wheat != alms_house_bonus:
+            if action.alms_payment_silver + action.alms_payment_wheat != alms_house_bonus:
                 continue
         return index
     raise AssertionError(f"Action not found for {path}: {resolution.value}")
@@ -128,7 +128,7 @@ def test_cli_apply_give_alms_two_alms_house_shows_plus_two_bonus(capsys) -> None
     action_index = _action_index(
         "scenarios/give_alms_chapter_house_two_alms_house_001.json",
         resolution=TurnResolutionType.GIVE_ALMS_PAID,
-        alms_house_bonus=2,
+        alms_house_bonus=4,
     )
     exit_code = main(
         [

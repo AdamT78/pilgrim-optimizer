@@ -530,12 +530,6 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
         if activity == "alms_house" and "duty_value_bonus" in details:
             text = f"{event_name}: {activity} applied to {action_name}"
             text += f"; duty value +{int(details['duty_value_bonus'])}"
-            if "extra_silver" in details or "extra_wheat" in details:
-                text += (
-                    "; paid extra "
-                    f"silver={int(details.get('extra_silver', 0))}, "
-                    f"wheat={int(details.get('extra_wheat', 0))}"
-                )
             return text
         if activity == "road_engineer" and (
             details.get("construct_extra_road") is True or "construct_extra_roads" in details
@@ -565,12 +559,6 @@ def format_event(event: GameEvent, config: GameConfig) -> str | None:
             text = f"{event_name}: {activity} added {', '.join(bonuses)} to {action_name}"
         else:
             text = f"{event_name}: {activity} applied to {action_name}"
-        if "extra_silver" in details or "extra_wheat" in details:
-            text += (
-                "; paid extra "
-                f"silver={int(details.get('extra_silver', 0))}, "
-                f"wheat={int(details.get('extra_wheat', 0))}"
-            )
         return text
 
     if event.event_type is EventType.EXCESS_CHECK:

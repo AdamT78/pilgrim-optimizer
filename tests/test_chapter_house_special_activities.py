@@ -395,19 +395,19 @@ def test_build_roads_two_road_engineers_scales_duty_value_bonus_to_plus_two() ->
     assert bonus_details["duty_value_bonus"] == 2
 
 
-def test_give_alms_two_alms_house_supports_plus_two_bonus_with_extra_payments() -> None:
+def test_give_alms_two_alms_house_supports_plus_two_payment_ceiling_for_free() -> None:
     scenario, give_alms_actions = _actions_for_resolution(
         "scenarios/give_alms_chapter_house_two_alms_house_001.json",
         TurnResolutionType.GIVE_ALMS_PAID,
     )
     assert any(
-        action.alms_house_extra_silver + action.alms_house_extra_wheat == 2
+        action.alms_payment_silver + action.alms_payment_wheat == 4
         for action in give_alms_actions
     )
     action = next(
         action
         for action in give_alms_actions
-        if action.alms_house_extra_silver + action.alms_house_extra_wheat == 2
+        if action.alms_payment_silver + action.alms_payment_wheat == 4
     )
     result = apply_action(scenario.state, action, scenario.config)
 

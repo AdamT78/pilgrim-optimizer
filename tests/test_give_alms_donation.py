@@ -85,8 +85,6 @@ def test_give_alms_legal_actions_include_paid_and_donate_building_options() -> N
     }
     assert all(action.alms_payment_silver == 0 for action in donate_actions)
     assert all(action.alms_payment_wheat == 0 for action in donate_actions)
-    assert all(action.alms_house_extra_silver == 0 for action in donate_actions)
-    assert all(action.alms_house_extra_wheat == 0 for action in donate_actions)
     assert all(action.resolution.value != "give_alms" for action in actions)
     assert all(action.resolution.value != "donate_building" for action in actions)
 
@@ -265,7 +263,7 @@ def test_alms_house_bonus_does_not_apply_to_donate_building() -> None:
     alms_progress_details = dict(alms_progress_event.details)
 
     assert any(
-        action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
+        action.alms_payment_silver + action.alms_payment_wheat == 2
         for action in give_alms_actions
     )
     assert alms_progress_details["old_row"] == 0

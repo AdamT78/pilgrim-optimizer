@@ -420,7 +420,7 @@ Confession Box start-player notes:
   - `stone_mason` (`produce_stone`)
   - `engraver` (`clerical_silversmith`)
   - `vestry` (`clerical_devotion`)
-  - `alms_house` (`give_alms` duty-value boost + extra payment; scales by occupancy with Chapter House)
+  - `alms_house` (`give_alms` payment-ceiling boost; scales by occupancy with Chapter House)
 - `road_engineer` now boosts `build_roads_deferred` effective duty value by occupied acolyte count
   (up to `+2` with active Chapter House).
 
@@ -511,7 +511,7 @@ Confession Box start-player notes:
 - Mill wheat transform:
   - `mill_waiver = min(2, required_wheat)`
   - `actual_wheat_spent = max(0, required_wheat - 2)`
-  - applies only to action wheat costs (`give_alms_paid` wheat + Alms House extra wheat, and
+  - applies only to action wheat costs (`give_alms_paid` wheat, and
     Ordination step wheat)
   - does not waive silver costs, minority silver, tithe, or Mill hire payment
 - Verbose apply output now includes Mill-specific bonus text:

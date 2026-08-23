@@ -172,11 +172,10 @@ For a central Duty-action enhancement index (Special Activities plus known build
 
 ### Alms House
 
-- optional Give Alms bonus path
-- raises Give Alms duty value by `+N` when the extra payment is made
+- optional Give Alms payment-ceiling bonus path
+- raises the Give Alms payment ceiling by `+N` for an occupied Alms House
 - `N` is capped by occupied Alms House acolytes (`N<=1` normally, `N<=2` with active Chapter House)
-- each `+1` requires extra payment of `1 silver` or `1 wheat`
-- extra payment is encoded in the action fields and validated
+- payment remains one freely mixed silver or wheat unit per Alms Table row
 - emits `SPECIAL_ACTIVITY_BONUS`
 - does not enhance `give_alms_donate_building` in the current milestone
 

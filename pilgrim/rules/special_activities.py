@@ -6,7 +6,6 @@ from collections import Counter
 from dataclasses import replace
 
 from pilgrim.model.actions import AllocationMove
-from pilgrim.model.resources import Resources
 from pilgrim.model.special_activities import MAX_SPECIAL_ACTIVITY_ACOLYTES, SPECIAL_ACTIVITY_IDS
 from pilgrim.model.state import PlayerState
 
@@ -236,11 +235,6 @@ def road_engineer_duty_value_bonus_hook(player_state: PlayerState, *, action_key
     return 0
 
 
-def can_use_alms_house_bonus(player_state: PlayerState) -> bool:
-    """Return True when Alms House special activity is occupied."""
-    return special_activity_count(player_state, "alms_house") > 0
-
-
 def alms_house_duty_value_bonus_capacity(player_state: PlayerState) -> int:
     """Return maximum +duty-value bonus available from Alms House occupancy."""
     return special_activity_count(player_state, "alms_house")
@@ -249,28 +243,6 @@ def alms_house_duty_value_bonus_capacity(player_state: PlayerState) -> int:
 def road_engineer_construct_extra_roads_bonus(player_state: PlayerState) -> int:
     """Return max additional deferred construct roads from Road Engineer occupancy."""
     return special_activity_count(player_state, "road_engineer")
-
-
-def alms_house_extra_payment_options(
-    resources: Resources,
-    *,
-    max_bonus: int,
-) -> tuple[tuple[int, int], ...]:
-    """
-    Return legal Alms House extra payment options as (extra_silver, extra_wheat).
-
-    Each extra +1 duty value requires paying one silver or one wheat.
-    Supports all bonus levels from +1 up to max_bonus.
-    """
-    options: list[tuple[int, int]] = []
-    if max_bonus <= 0:
-        return ()
-    for duty_value_bonus in range(max_bonus, 0, -1):
-        for extra_silver in range(duty_value_bonus, -1, -1):
-            extra_wheat = duty_value_bonus - extra_silver
-            if extra_silver <= resources.silver and extra_wheat <= resources.wheat:
-                options.append((extra_silver, extra_wheat))
-    return tuple(options)
 
 
 def all_special_activity_ids() -> tuple[str, ...]:

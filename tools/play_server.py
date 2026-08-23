@@ -685,8 +685,6 @@ _PREVIEW_EFFECT_ACTION_FIELDS: tuple[str, ...] = (
     "resolution",
     "alms_payment_silver",
     "alms_payment_wheat",
-    "alms_house_extra_silver",
-    "alms_house_extra_wheat",
     "donate_building_id",
     "ordination_steps",
     "taxation_step1_resource",

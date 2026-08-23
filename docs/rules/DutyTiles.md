@@ -132,7 +132,7 @@ Duty tile categories are not action names. Use the following concrete action nam
   - source may be own-active, live-market hire, or opponent-active hire
   - `mill_waiver = min(2, required_wheat)`
   - `actual_wheat_spent = max(0, required_wheat - 2)`
-  - required wheat includes both declared `give_alms_paid` wheat and Alms House extra wheat
+  - required wheat is the declared `give_alms_paid` wheat payment
   - Merchant on Taxation (`resource: none`) blocks hired Mill variants
   - Mill does not waive silver costs or Mill hire payment
 - `give_alms_donate_building` always donates exactly one active building and advances Alms by
@@ -140,7 +140,7 @@ Duty tile categories are not action names. Use the following concrete action nam
   row.
 - On majority `give_alms`, `give_alms_donate_building` still resolves as one deterministic
   action; it does not chain into a second paid Give Alms step.
-- Alms House currently enhances only paid `give_alms_paid`, not
+- Alms House currently raises only the ceiling for paid `give_alms_paid`, not
   `give_alms_donate_building`.
 - For `ordination`, each action contains `1..duty_value` ordered steps chosen from:
   - `ordain`: pay 1 wheat, move 1 worker village -> abbey

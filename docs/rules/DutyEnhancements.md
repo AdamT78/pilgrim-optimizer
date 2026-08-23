@@ -111,7 +111,7 @@ Format:
 
 ### Give Alms
 
-- `give_alms | give_alms_paid | special_activity | alms_house | optional +1 effective Duty Value with extra payment | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); each +1 still requires one extra paid silver/wheat.`
+- `give_alms | give_alms_paid | special_activity | alms_house | optional +1 effective Duty Value ceiling | implemented | Bonus scales by occupied Alms House acolytes (max +2 with active Chapter House); it raises the payment ceiling and does not itself cost silver or wheat.`
 - `give_alms | give_alms_paid | building | mill | waive up to first 2 wheat costs | implemented | Applied in transition from own-active or usable hired Mill source; does not waive silver or hire payment.`
 
 ### Build Roads
