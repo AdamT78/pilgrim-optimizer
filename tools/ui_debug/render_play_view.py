@@ -2805,6 +2805,9 @@ def turn_styles(route_color: str) -> str:
   [data-turn-step-direction][data-turn-step-selected="true"] {{
     background: #F2EEDF; border-color: #F2EEDF; color: #1C1C1C;
   }}
+  /* A player-board slot remains the tooltip target. Its transparent conversion hit target carries
+     data-turn-step-click-target, so this gate can stop a non-offered conversion without removing
+     the slot itself from hover hit testing. Map choice keys keep the same rule below. */
   [data-turn-step-building-id][data-turn-step-offered="true"] {{ cursor: pointer; }}
   [data-turn-step-building-id][data-turn-step-offered="false"] {{ pointer-events: none; }}
   [data-turn-step-building-id][data-turn-step-market="true"] {{ visibility: hidden; }}
@@ -3035,6 +3038,7 @@ def render_play_view_html(
             interactive=turn_surface,
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
+            turn_step_hit=turn_surface,
         )
         active = taken and player_id == payload["state"]["active_player"]
         panels.append(

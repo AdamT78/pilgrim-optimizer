@@ -2737,6 +2737,92 @@ def test_every_map_building_has_a_real_hover_tooltip(page, serve) -> None:
         assert tooltip.get_attribute("data-building-tooltip-visible") == "true", building_id
 
 
+@pytest.mark.parametrize(
+    "scenario",
+    [PLAYTEST_CONVERSIONS, PLAYTEST_CLOISTERS, PLAYTEST_KOGGE_AND_CLOISTERS],
+    ids=["conversions", "cloisters-reach", "kogge-and-cloisters"],
+)
+def test_every_player_board_building_has_a_real_hover_tooltip(page, serve, scenario: str) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / scenario)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+    tooltip = page.locator('[data-building-tooltip="true"]')
+    slots = page.locator(
+        '[data-component="player-board-v2"][data-seat-taken="true"] '
+        '[data-player-board-slot][data-building-id]:not([data-building-id=""])'
+    )
+    assert slots.count() > 0
+
+    for index in range(slots.count()):
+        slot = slots.nth(index)
+        building_id = slot.get_attribute("data-building-id")
+        box = slot.bounding_box()
+        assert building_id and box is not None
+        page.mouse.move(0, 0)
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(60)
+        assert tooltip.get_attribute("data-building-tooltip-visible") == "true", building_id
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [PLAYTEST_CLOISTERS, PLAYTEST_KOGGE_AND_CLOISTERS],
+    ids=["cloisters-reach", "kogge-and-cloisters"],
+)
+def test_an_unoffered_player_board_building_is_hoverable_but_not_clickable(
+    page, serve, scenario: str
+) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / scenario)
+    page.set_viewport_size({"width": 1600, "height": 1100})
+    page.goto(base_url, wait_until="networkidle")
+    tooltip = page.locator('[data-building-tooltip="true"]')
+    slots = page.locator(
+        '[data-component="player-board-v2"][data-seat-taken="true"] '
+        '[data-player-board-slot][data-building-id]:not([data-building-id=""])'
+    )
+
+    unoffered_slot = None
+    unoffered_target = None
+    for index in range(slots.count()):
+        slot = slots.nth(index)
+        target = slot.locator('[data-turn-step-building-id][data-turn-step-click-target="true"]')
+        if target.count() and target.get_attribute("data-turn-step-offered") == "false":
+            unoffered_slot = slot
+            unoffered_target = target
+            break
+    assert unoffered_slot is not None and unoffered_target is not None
+
+    box = unoffered_slot.bounding_box()
+    handle = unoffered_target.element_handle()
+    assert box is not None and handle is not None
+    page.mouse.move(0, 0)
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(60)
+    assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
+
+    before = unoffered_target.get_attribute("data-turn-step-selected")
+    x, y = _centre(page, handle)
+    assert not _is_hit_target(page, handle, x, y)
+    page.mouse.click(x, y)
+    page.wait_for_timeout(60)
+    assert before == "false"
+    assert unoffered_target.get_attribute("data-turn-step-selected") == before
+
+
+def test_an_offered_player_board_building_still_selects_a_conversion(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+    offered = page.locator(
+        '[data-active-seat="true"] [data-turn-step-building-id]'
+        '[data-turn-step-click-target="true"][data-turn-step-offered="true"]'
+    ).first
+    assert offered.count() == 1
+    handle = offered.element_handle()
+    assert handle is not None
+    _click_handle_centre(page, handle, require_hit=True)
+    assert offered.get_attribute("data-turn-step-selected") == "true"
+
+
 def test_brewery_hire_and_convert_click_still_selects_conversion(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
     page.goto(base_url, wait_until="networkidle")
