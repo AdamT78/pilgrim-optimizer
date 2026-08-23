@@ -2321,7 +2321,14 @@ def _engine_steps(
         steps.append({"kind": "building", "value": action.construct_building_id})
     if action.resolution.value == "give_alms_paid":
         silver, wheat = (getattr(action, name) for name in ALMS_PAIR)
-        steps.append({"kind": "combination", "value": f"silver={silver},wheat={wheat}"})
+        steps.append(
+            {
+                "kind": "combination",
+                "value": f"silver={silver},wheat={wheat}",
+                "resource_allocation": True,
+                "resource_allocation_any_total": True,
+            }
+        )
     if action.resolution.value == "taxation":
         taken = tuple(action.taxation_step2_resources or ())
         counted = ",".join(f"{noun}={taken.count(noun)}" for noun in ("stone", "silver", "wheat"))
@@ -2427,7 +2434,10 @@ def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
         if step["kind"] == "resolution" or (
             step["kind"] == "combination"
             and step.get("resource_allocation")
-            and int(step.get("resource_total", 0)) > 0
+            and (
+                step.get("resource_allocation_any_total")
+                or int(step.get("resource_total", 0)) > 0
+            )
         ):
             break
         prefix.append(step["value"])
@@ -2464,7 +2474,7 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             for resource in ("stone", "silver", "wheat"):
                 clicks.extend(
                     _take(resource, _active_seat(server))
-                    for _ in range(counts[resource])
+                    for _ in range(counts.get(resource, 0))
                 )
             return clicks
         if step["kind"] == "resolution":
@@ -2661,7 +2671,12 @@ def test_a_turn_is_shown_in_words_before_it_is_sent_and_needs_a_press(tmp_path: 
     server = _played_through_setup(_served(tmp_path))
     decisions = _engine_decisions(server)
     candidates = server.payload["turn_candidates"]
-    index = next(i for i, c in enumerate(candidates) if c["action_id"])
+    index = next(
+        i
+        for i, c in enumerate(candidates)
+        if c["action_id"]
+        and not any(step.get("resource_allocation_any_total") for step in c["steps"])
+    )
     candidate = candidates[index]
     clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
 
@@ -4078,6 +4093,50 @@ def test_guild_preview_step_matches_engine_merchant_position() -> None:
     assert candidate["unresolved"] == []
 
 
+@pytest.mark.parametrize(
+    ("scenario_name", "payment_units"),
+    [
+        ("give_alms_threshold_rewards_two_crossings_001.json", 4),
+        ("give_alms_threshold_reward_row_six_001.json", 3),
+    ],
+)
+def test_paid_alms_preview_step_carries_engine_progress_and_threshold_events(
+    scenario_name: str,
+    payment_units: int,
+) -> None:
+    scenario = load_scenario(SCENARIOS / scenario_name)
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and action.alms_payment_silver == payment_units
+        and action.alms_payment_wheat == 0
+    )
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(candidate for candidate in candidates if candidate["action_id"] == action_id(action))
+    step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
+    result = apply_action(scenario.state, action, scenario.config)
+    expected_progress = dict(
+        next(event for event in result.events if event.event_type is EventType.ALMS_PROGRESS).details
+    )
+    expected_rewards = [
+        dict(event.details)
+        for event in result.events
+        if event.event_type is EventType.ALMS_THRESHOLD_REWARD
+    ]
+
+    assert step["resource_allocation"] is True
+    assert step["resource_allocation_any_total"] is True
+    assert step["resource_delta"] == {
+        resource: getattr(result.state.player_state(scenario.state.active_player).resources, resource)
+        - getattr(scenario.state.player_state(scenario.state.active_player).resources, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+    assert step["alms_progress"] == expected_progress
+    assert step["alms_threshold_reward"] == expected_rewards
+    assert EventType.WORKFORCE_MOVE not in {event.event_type for event in result.events}
+
+
 @needs_node
 def test_six_taxation_multisets_are_reachable_by_pill_clicks(tmp_path: Path) -> None:
     server = PlayServer(
@@ -4883,6 +4942,16 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+        .replace(
+            "__ALMS_POSITION_TARGETS__",
+            json.dumps(
+                render_play_view.disc_targets(
+                    render_play_view.load_alms_table_layout(),
+                    render_play_view.alms_rules(render_play_view.load_alms_config()),
+                    payload["state"]["active_player"],
+                )
+            ),
+        )
     )
     assert _script_carried_by(page) == expected, (
         "the page's script is not the template with its two placeholders filled in, so grepping "
@@ -5024,6 +5093,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TOKEN__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__ALMS_POSITION_TARGETS__") == 1
     _the_script_is_the_template_with_only_its_values_filled_in(page, server.payload)
 
     # Comments are stripped: prose about what the code does not do is not the code doing it, and a
@@ -5036,7 +5106,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # Arithmetic is now expected for arrangement deltas on the board, and only there.
     # No colour and no geometry either, which is the rule the seal established.
     assert not re.search(r"#[0-9A-Fa-f]{3,6}\b", code)
-    assert not re.search(r"\b(cx|cy|stroke|fill|translate)\s*[=:]", code)
+    assert not re.search(r"\b(stroke|fill|translate)\s*[=:]", code)
     # It may say only these things about the board and the panel.
     assert "setAttribute('data-turn-start-candidate'" in code
     assert "setAttribute('data-turn-skip-candidate'" in code

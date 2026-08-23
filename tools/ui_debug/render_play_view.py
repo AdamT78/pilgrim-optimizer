@@ -73,6 +73,8 @@ from tools.ui_debug.play_view_adapter import (  # noqa: E402
     tithe_by_position_name,
 )
 from tools.ui_debug.render_alms_table import (  # noqa: E402
+    alms_rules,
+    disc_targets,
     load_alms_config,
     load_alms_table_layout,
     render_alms_table_svg,
@@ -935,6 +937,7 @@ _TURN_SCRIPT = """<script>
   var TURN_STEPS = __TURN_STEPS__;
   var USED_BUILDINGS = __USED_BUILDINGS__;
   var TOKEN = __TOKEN__;
+  var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
   if (!CANDIDATES.length && !TURN_STEPS.length) { return; }
 
   var board = document.querySelector('[data-component="duty-wheel"]');
@@ -975,6 +978,8 @@ _TURN_SCRIPT = """<script>
   var resourceBaseline = [];
   var merchantBaseline = [];
   var buildingSlotBaseline = [];
+  var almsDiscBaseline = null;
+  var almsWorkforceBaseline = [];
   var merchantBoardBaseline = board.getAttribute('data-merchant-token');
   var activePlayer = null;
   var activeSeat = null;
@@ -1714,6 +1719,19 @@ _TURN_SCRIPT = """<script>
     });
   }
 
+  function allocationEquals(value, counts) {
+    var option = resourceCounts(value);
+    return ['stone', 'silver', 'wheat'].every(function (resource) {
+      return Number(counts[resource] || 0) === option[resource];
+    });
+  }
+
+  function resourceAllocationAnyTotal(steps) {
+    return steps.some(function (step) {
+      return step.resource_allocation_any_total === true;
+    });
+  }
+
   function allocationMaximum(resource, options) {
     var maximum = 0;
     options.forEach(function (step) {
@@ -1900,6 +1918,45 @@ _TURN_SCRIPT = """<script>
         });
       }
     );
+    almsDiscBaseline = null;
+    if (activePlayer) {
+      var almsDisc = document.querySelector(
+        '[data-player-disc="true"][data-player="' + activePlayer + '"]'
+      );
+      if (almsDisc) {
+        almsDiscBaseline = {
+          disc: almsDisc,
+          cx: almsDisc.getAttribute('cx'),
+          cy: almsDisc.getAttribute('cy'),
+          position: almsDisc.getAttribute('data-alms-position')
+        };
+      }
+    }
+    almsWorkforceBaseline = [];
+    if (activeSeat) {
+      Array.prototype.forEach.call(
+        activeSeat.querySelectorAll('[data-token="village"],[data-token="abbey"]'),
+        function (token) {
+          almsWorkforceBaseline.push({
+            token: token,
+            opacity: token.getAttribute('opacity')
+          });
+        }
+      );
+    }
+    if (activePlayer) {
+      Array.prototype.forEach.call(
+        board.querySelectorAll(
+          '[data-city-column-player="' + activePlayer + '"][data-city-cube]'
+        ),
+        function (slot) {
+          almsWorkforceBaseline.push({
+            token: slot,
+            opacity: slot.getAttribute('opacity')
+          });
+        }
+      );
+    }
   }
 
   function restoreBaseline() {
@@ -1928,6 +1985,11 @@ _TURN_SCRIPT = """<script>
         else { use.setAttribute('opacity', entry.useOpacity); }
       }
     });
+    if (almsDiscBaseline) {
+      almsDiscBaseline.disc.setAttribute('cx', almsDiscBaseline.cx);
+      almsDiscBaseline.disc.setAttribute('cy', almsDiscBaseline.cy);
+      almsDiscBaseline.disc.setAttribute('data-alms-position', almsDiscBaseline.position);
+    }
   }
 
   function applyResourceDelta(delta) {
@@ -1976,6 +2038,65 @@ _TURN_SCRIPT = """<script>
     use.setAttribute('opacity', '1');
   }
 
+  function applyAlmsProgress(progress) {
+    if (!activePlayer || !progress || progress.new_row === undefined) { return; }
+    var disc = document.querySelector(
+      '[data-player-disc="true"][data-player="' + activePlayer + '"]'
+    );
+    var target = ALMS_POSITION_TARGETS[String(progress.new_row)];
+    if (!disc || !target) { return; }
+    disc.setAttribute('cx', target[0]);
+    disc.setAttribute('cy', target[1]);
+    disc.setAttribute('data-alms-position', String(progress.new_row));
+  }
+
+  function applyAlmsThresholdRewards(rewards) {
+    if (!Array.isArray(rewards)) { return; }
+    rewards.forEach(function (reward) {
+      if (!reward || reward.moved !== true) { return; }
+      var name = reward.reward;
+      if (name === 'village_to_abbey') {
+        setVillageCount(villageCount() - 1);
+        setAbbeyCount(abbeyCount() + 1);
+      } else if (name === 'abbey_to_city') {
+        setAbbeyCount(abbeyCount() - 1);
+        setCityCount(cityCount() + 1);
+      } else if (name === 'village_to_city') {
+        setVillageCount(villageCount() - 1);
+        setCityCount(cityCount() + 1);
+      }
+    });
+  }
+
+  function applyStepEffects(step) {
+    if (!step) { return; }
+    if (
+      step.resource_delta
+      && (!step.resource_allocation || step.resource_allocation_any_total === true)
+    ) {
+      applyResourceDelta(step.resource_delta);
+    }
+    if (step.building_constructed !== undefined) {
+      applyBuildingConstructed(step.building_constructed);
+    }
+    if (step.merchant_advance !== undefined) {
+      applyMerchantAdvance(step.merchant_advance);
+    }
+    if (step.alms_progress) {
+      applyAlmsProgress(step.alms_progress);
+    }
+    if (step.alms_threshold_reward) {
+      applyAlmsThresholdRewards(step.alms_threshold_reward);
+    }
+  }
+
+  function restoreAlmsWorkforceBaseline() {
+    almsWorkforceBaseline.forEach(function (entry) {
+      if (entry.opacity === null) { entry.token.removeAttribute('opacity'); }
+      else { entry.token.setAttribute('opacity', entry.opacity); }
+    });
+  }
+
   function agreedStepEffect(live, index, answer, field) {
     var found = false;
     var value = null;
@@ -2000,6 +2121,19 @@ _TURN_SCRIPT = """<script>
     var live = surviving(chosen);
     var allocationSteps = resourceAllocationSteps(stepsAt(chosen.length, live));
     if (!allocationSteps.length) { return; }
+    if (resourceAllocationAnyTotal(allocationSteps)) {
+      restoreAlmsWorkforceBaseline();
+      var exact = live.filter(function (candidate) {
+        var step = candidate.steps[chosen.length];
+        return step !== undefined
+          && step.resource_allocation === true
+          && allocationEquals(step.value, resourceAllocation);
+      });
+      if (exact.length === 1) {
+        applyStepEffects(exact[0].steps[chosen.length]);
+      }
+      return;
+    }
     var unitDeltas = allocationSteps[0].resource_unit_deltas || {};
     ['stone', 'silver', 'wheat'].forEach(function (resource) {
       var count = Number(resourceAllocation[resource] || 0);
@@ -2043,14 +2177,7 @@ _TURN_SCRIPT = """<script>
       });
       prefix.push(answer);
       if (!step) { continue; }
-      var resourceEffect = agreedStepEffect(live, stepIndex, answer, 'resource_delta');
-      if (resourceEffect && !step.resource_allocation) {
-        applyResourceDelta(resourceEffect);
-      }
-      var buildingEffect = agreedStepEffect(live, stepIndex, answer, 'building_constructed');
-      if (buildingEffect !== null) { applyBuildingConstructed(buildingEffect); }
-      var merchantEffect = agreedStepEffect(live, stepIndex, answer, 'merchant_advance');
-      if (merchantEffect !== null) { applyMerchantAdvance(merchantEffect); }
+      applyStepEffects(step);
       if (step.kind === 'origin') {
         origin = step.value;
         var start = positionName(step.value);
@@ -2141,8 +2268,14 @@ _TURN_SCRIPT = """<script>
     var allocationSteps = resourceAllocationSteps(offered);
     var allocationActive = allocationSteps.length > 0;
     var allocationChoices = allocationOptions || allocationSteps;
-    var allocationComplete = allocationActive
-      && resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal;
+    var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
+    var allocationComplete = allocationActive && (
+      allocationAnyTotal
+        ? allocationChoices.some(function (step) {
+            return allocationEquals(step.value, resourceAllocation);
+          })
+        : resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal
+    );
     var stocks = offeredByKind(offered, 'resource');
     if (allocationActive) {
       stocks = ['stone', 'silver', 'wheat'].filter(function (resource) {
@@ -2150,7 +2283,7 @@ _TURN_SCRIPT = """<script>
         var needs_more = allocationChoices.some(function (step) {
           return resourceCounts(step.value)[resource] > selected;
         });
-        var can_reset = !allocationComplete
+        var can_reset = !allocationAnyTotal && !allocationComplete
           && selected > 0
           && selected >= allocationMaximum(resource, allocationChoices);
         return needs_more || can_reset;
@@ -2304,7 +2437,13 @@ _TURN_SCRIPT = """<script>
     if (autoAdvance) {
       while (stepsAt(chosen.length, live).length === 1) {
         var forced = stepsAt(chosen.length, live)[0];
-        if (forced.resource_allocation && Number(forced.resource_total || 0) > 0) { break; }
+        if (
+          forced.resource_allocation
+          && (
+            forced.resource_allocation_any_total === true
+            || Number(forced.resource_total || 0) > 0
+          )
+        ) { break; }
         if (forced.kind === 'resolution') { break; }
         chosen.push(forced.value);
         live = surviving(chosen);
@@ -2312,8 +2451,11 @@ _TURN_SCRIPT = """<script>
     }
     var offered = stepsAt(chosen.length, live);
     var allocationSteps = resourceAllocationSteps(offered);
+    var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
     if (!allocationSteps.length) {
       resourceAllocation = {};
+      resourceAllocationTotal = null;
+    } else if (allocationAnyTotal) {
       resourceAllocationTotal = null;
     } else if (resourceAllocationTotal === null) {
       resourceAllocationTotal = Number(allocationSteps[0].resource_total || 0);
@@ -2326,8 +2468,17 @@ _TURN_SCRIPT = """<script>
         return step !== undefined && allocationMatches(step.value, resourceAllocation);
       });
     }
-    var allocationComplete = allocationActive
-      && resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal;
+    var allocationExactLive = allocationAnyTotal
+      ? allocationLive.filter(function (candidate) {
+          var step = candidate.steps[chosen.length];
+          return step !== undefined && allocationEquals(step.value, resourceAllocation);
+        })
+      : [];
+    var allocationComplete = allocationActive && (
+      allocationAnyTotal
+        ? allocationExactLive.length > 0
+        : resourceAllocationAmount(resourceAllocation) === resourceAllocationTotal
+    );
     var arrangements = offeredByKind(offered, 'arrangement');
     var arrangementPicked = arrangementSelection(arrangements);
     var ordinations = offeredByKind(offered, 'ordination');
@@ -2400,7 +2551,12 @@ _TURN_SCRIPT = """<script>
       resolutions,
       -1,
       allocationActive
-        ? allocationComplete && narrowed.length === 1 && narrowed[0].action_id !== null
+        ? allocationComplete
+          && (
+            allocationAnyTotal
+              ? allocationExactLive.length === 1 && allocationExactLive[0].action_id !== null
+              : narrowed.length === 1 && narrowed[0].action_id !== null
+          )
         : false,
       preview,
       arrangements,
@@ -2446,6 +2602,15 @@ _TURN_SCRIPT = """<script>
       if (allocationOffered.length > 0) {
         var resource = key.getAttribute('data-resource-choice-key');
         var selected = Number(resourceAllocation[resource] || 0);
+        if (resourceAllocationAnyTotal(allocationOffered)) {
+          var canAdd = allocationOffered.some(function (step) {
+            return resourceCounts(step.value)[resource] > selected;
+          });
+          if (!canAdd) { return; }
+          resourceAllocation[resource] = selected + 1;
+          render();
+          return;
+        }
         var maximum = allocationMaximum(resource, allocationOffered);
         if (selected > 0 && selected >= maximum) {
           resourceAllocation[resource] = 0;
@@ -2609,6 +2774,15 @@ _TURN_SCRIPT = """<script>
         stepsAt(chosen.length, allocationCandidates)
       );
       if (allocationSteps.length > 0) {
+        if (resourceAllocationAnyTotal(allocationSteps)) {
+          var exactCandidates = allocationCandidates.filter(function (candidate) {
+            var step = candidate.steps[chosen.length];
+            return step !== undefined && allocationEquals(step.value, resourceAllocation);
+          });
+          if (exactCandidates.length !== 1 || !exactCandidates[0].action_id) { return; }
+          submit(exactCandidates[0].action_id);
+          return;
+        }
         if (
           resourceAllocationTotal === null
           || resourceAllocationAmount(resourceAllocation) !== resourceAllocationTotal
@@ -2963,6 +3137,7 @@ def render_play_view_html(
             alms_layout,
             alms_config,
             {player_id: _alms_row(payload, player_id) for player_id in seated},
+            interactive=turn_surface,
         ),
         scale.crop["alms"],
     )
@@ -3063,6 +3238,16 @@ def render_play_view_html(
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
+        .replace(
+            "__ALMS_POSITION_TARGETS__",
+            json.dumps(
+                disc_targets(
+                    alms_layout,
+                    alms_rules(alms_config),
+                    payload["state"]["active_player"],
+                )
+            ),
+        )
         if turn_surface
         else ""
     )
