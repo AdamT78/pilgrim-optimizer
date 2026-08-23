@@ -674,6 +674,8 @@ _PREVIEW_EFFECT_FIELDS: tuple[str, ...] = (
     "resource_delta",
     "building_constructed",
     "merchant_advance",
+    "alms_progress",
+    "alms_threshold_reward",
 )
 
 # These are the action values that can change the effects previewed on a turn step. The values that
@@ -797,6 +799,24 @@ def _turn_action_preview_effects(
             to_position = dict(guild_event.details).get("to_position")
             if to_position in config.board.positions:
                 effects["merchant_advance"] = config.board.positions.index(to_position)
+    if getattr(action, "resolution", None) is not None and action.resolution.value == "give_alms_paid":
+        progress_event = next(
+            (
+                event
+                for event in result.events
+                if event.event_type is EventType.ALMS_PROGRESS
+            ),
+            None,
+        )
+        if progress_event is not None:
+            effects["alms_progress"] = dict(progress_event.details)
+        threshold_rewards = [
+            dict(event.details)
+            for event in result.events
+            if event.event_type is EventType.ALMS_THRESHOLD_REWARD
+        ]
+        if threshold_rewards:
+            effects["alms_threshold_reward"] = threshold_rewards
     if cache is not None and cache_key is not None:
         cache[cache_key] = dict(effects)
     return effects
@@ -862,6 +882,21 @@ def _attach_turn_action_preview_effects(
             if step["kind"] == "merchant_advance":
                 step["merchant_advance"] = merchant_position
                 break
+    alms_step = next(
+        (
+            step
+            for step in steps
+            if step["kind"] == "combination"
+            and step.get("resource_allocation")
+            and step.get("resource_allocation_any_total")
+        ),
+        None,
+    )
+    if alms_step is not None:
+        if effects.get("alms_progress") is not None:
+            alms_step["alms_progress"] = effects["alms_progress"]
+        if effects.get("alms_threshold_reward") is not None:
+            alms_step["alms_threshold_reward"] = effects["alms_threshold_reward"]
     return steps
 
 
@@ -1351,7 +1386,15 @@ def _presented(
         if action.resolution.value != resolution:
             continue
         amounts = [(noun, getattr(action, name)) for name, noun in fields]
-        presented.append((_combination_step(verb, amounts), tuple(name for name, _noun in fields)))
+        step = _combination_step(
+            verb,
+            amounts,
+            prompt=("choose payment." if resolution == "give_alms_paid" else COMBINATION_PROMPT),
+        )
+        if resolution == "give_alms_paid":
+            step["resource_allocation"] = True
+            step["resource_allocation_any_total"] = True
+        presented.append((step, tuple(name for name, _noun in fields)))
     for resolution, verb, name in COUNTED_COMBINATION_STEPS:
         if action.resolution.value != resolution:
             continue

@@ -2928,3 +2928,318 @@ def test_two_active_conversions_reset_restores_the_turn_start_position(page, ser
         '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
         '[data-turn-step-offered="true"]'
     ).count() == 1
+
+
+def _reach_paid_alms(page) -> None:
+    _click_if_offered(
+        page, '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
+    _click_if_offered(page, '[data-arrow="city->south"][data-turn-offered="true"]')
+    _click_if_offered(
+        page, '[data-board-position-index="5"][data-turn-duty-candidate="true"]'
+    )
+    for selector in (
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        '[data-resolution-key="give_alms_paid"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing Give Alms target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+
+
+def _active_board_snapshot(page) -> dict:
+    player = page.get_attribute('[data-active-seat="true"]', "data-player")
+    assert player is not None
+    return _all_board_snapshots(page)[player]
+
+
+def _all_board_snapshots(page) -> dict[str, dict]:
+    return page.evaluate(
+        """() => {
+          const visible = node => node && node.getAttribute('opacity') !== '0'
+            && node.getAttribute('visibility') !== 'hidden';
+          const cityCount = player => Array.from(document.querySelectorAll(
+            `[data-city-column-player="${player}"][data-city-cube]`
+          )).filter(visible).length;
+          const result = {};
+          document.querySelectorAll('[data-component="player-board-v2"][data-player]').forEach(board => {
+            const player = board.getAttribute('data-player');
+            const stock = resource => Number(
+              board.querySelector(`[data-resource="${resource}"] text`).textContent
+            );
+            result[player] = {
+              resources: Object.fromEntries(['stone', 'silver', 'wheat'].map(resource => [
+                resource, stock(resource)
+              ])),
+              village: Array.from(board.querySelectorAll('[data-token="village"]')).filter(visible).length,
+              abbey: Array.from(board.querySelectorAll('[data-token="abbey"]')).filter(visible).length,
+              city: cityCount(player)
+            };
+          });
+          return result;
+        }"""
+    )
+
+
+def _all_alms_positions(page) -> dict[str, str]:
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll('[data-player-disc="true"][data-player]')
+        ).filter(disc => disc.getAttribute('data-alms-position') !== null).map(disc => [
+          disc.getAttribute('data-player'), disc.getAttribute('data-alms-position')
+        ]))"""
+    )
+
+
+def _expected_board_snapshot(state, player) -> dict:
+    record = state.player_state(player)
+    return {
+        "resources": {
+            resource: getattr(record.resources, resource)
+            for resource in ("stone", "silver", "wheat")
+        },
+        "village": record.workforce.village,
+        "abbey": record.workforce.abbey,
+        "city": record.workforce.mancala[0],
+    }
+
+
+def _alms_board_snapshot(snapshot: dict) -> dict:
+    """The player-board fields settled by an Alms payment, excluding route sowing cubes."""
+    return {key: value for key, value in snapshot.items() if key != "city"}
+
+
+def _alms_payment_action(server: PlayServer, units: int):
+    value = f"silver={units},wheat=0"
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if [step["value"] for step in candidate["steps"][:4]]
+        == [0, "city->south", 5, "give_alms_paid"]
+        and any(
+            step.get("resource_allocation_any_total") and step["value"] == value
+            for step in candidate["steps"]
+        )
+    )
+    return next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+
+
+def _click_alms_silver(page) -> None:
+    handle = page.query_selector(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    )
+    assert handle is not None, "silver was not offered as an Alms payment pill"
+    _click_handle_centre(page, handle, require_hit=True)
+    page.wait_for_timeout(50)
+
+
+def _screenshot_alms_and_active_board(page, path: Path) -> None:
+    boxes = [
+        page.locator('.p-alms > svg').bounding_box(),
+        page.locator(
+            '[data-component="player-board-v2"][data-active-seat="true"] > svg'
+        ).bounding_box(),
+    ]
+    assert all(box is not None for box in boxes)
+    valid = [box for box in boxes if box is not None]
+    left = min(box["x"] for box in valid)
+    top = min(box["y"] for box in valid)
+    right = max(box["x"] + box["width"] for box in valid)
+    bottom = max(box["y"] + box["height"] for box in valid)
+    page.screenshot(
+        path=str(path),
+        clip={
+            "x": max(0, left - 12),
+            "y": max(0, top - 12),
+            "width": right - max(0, left - 12) + 24,
+            "height": bottom - max(0, top - 12) + 24,
+        },
+    )
+
+
+def test_give_alms_pills_build_any_payment_preview_reset_and_confirm(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "give_alms_threshold_rewards_two_crossings_001.json")
+    initial_state = server.state
+    acting_player = initial_state.active_player
+    page.goto(base_url, wait_until="networkidle")
+    page.locator('[data-component="play-turn"]').screenshot(
+        path=str(SCREENSHOTS / "give-alms-payment-prompt-before.png")
+    )
+    initial_boards = _all_board_snapshots(page)
+    initial_positions = _all_alms_positions(page)
+
+    _reach_paid_alms(page)
+    assert page.locator('[data-combination-key][data-turn-offered="true"]').count() == 0
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+    ).count() == 2
+    max_units = max(
+        action.alms_payment_silver + action.alms_payment_wheat
+        for action in legal_actions(server.state, server.config)
+        if action.resolution.value == "give_alms_paid"
+    )
+    assert max_units > 2
+
+    for units in range(1, max_units + 1):
+        _click_alms_silver(page)
+        action = _alms_payment_action(server, units)
+        expected_state = apply_action(initial_state, action, server.config).state
+        assert _alms_board_snapshot(_active_board_snapshot(page)) == _alms_board_snapshot(
+            _expected_board_snapshot(expected_state, acting_player)
+        ), f"preview mismatch at {units} Alms unit(s)"
+        if units == max_units:
+            assert _active_board_snapshot(page) == _expected_board_snapshot(
+                expected_state, acting_player
+            )
+        assert page.get_attribute(
+            f'[data-player-disc="true"][data-player="{acting_player.name.lower()}"]',
+            "data-alms-position",
+        ) == str(expected_state.player_state(acting_player).alms_position)
+        assert _confirm_enabled(page), f"Confirm did not light after {units} Alms unit(s)"
+        if units == 1:
+            _screenshot_alms_and_active_board(
+                page, SCREENSHOTS / "give-alms-payment-after-one.png"
+            )
+        if units == 2:
+            _screenshot_alms_and_active_board(
+                page, SCREENSHOTS / "give-alms-payment-after-two.png"
+            )
+
+    assert page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+    ).count() == 0
+    assert server.state == initial_state
+    assert {
+        player: snapshot
+        for player, snapshot in _all_board_snapshots(page).items()
+        if player != acting_player.name.lower()
+    } == {
+        player: snapshot
+        for player, snapshot in initial_boards.items()
+        if player != acting_player.name.lower()
+    }
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert _all_board_snapshots(page) == initial_boards
+    assert _all_alms_positions(page) == initial_positions
+    assert server.state == initial_state
+
+    _reach_paid_alms(page)
+    _click_alms_silver(page)
+    _click_alms_silver(page)
+    expected_state = apply_action(initial_state, _alms_payment_action(server, 2), server.config).state
+    assert _alms_board_snapshot(_active_board_snapshot(page)) == _alms_board_snapshot(
+        _expected_board_snapshot(expected_state, acting_player)
+    )
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(140)
+    assert server.state == expected_state
+    assert _all_alms_positions(page)[acting_player.name.lower()] == str(
+        expected_state.player_state(acting_player).alms_position
+    )
+
+
+def test_give_alms_threshold_rewards_preview_in_order_and_match_confirm(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "give_alms_threshold_rewards_two_crossings_001.json")
+    initial_state = server.state
+    acting_player = initial_state.active_player
+    page.goto(base_url, wait_until="networkidle")
+    initial_boards = _all_board_snapshots(page)
+    _reach_paid_alms(page)
+
+    action = _alms_payment_action(server, 4)
+    expected_state = apply_action(initial_state, action, server.config).state
+    candidate = next(
+        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] == action_id(action)
+    )
+    step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
+    rewards = step["alms_threshold_reward"]
+    assert [reward["threshold"] for reward in rewards] == [2, 4]
+    assert [reward["reward"] for reward in rewards] == [
+        server.config.alms.threshold_reward_for_row(reward["threshold"])
+        for reward in rewards
+    ]
+    assert all(reward["moved"] is True for reward in rewards)
+    assert all(event.event_type.value != "workforce_move" for event in apply_action(
+        initial_state, action, server.config
+    ).events)
+
+    for _ in range(4):
+        _click_alms_silver(page)
+    assert _active_board_snapshot(page) == _expected_board_snapshot(expected_state, acting_player)
+    assert _all_alms_positions(page)[acting_player.name.lower()] == str(
+        expected_state.player_state(acting_player).alms_position
+    )
+    assert _confirm_enabled(page)
+    assert {
+        player: snapshot
+        for player, snapshot in _all_board_snapshots(page).items()
+        if player != acting_player.name.lower()
+    } == {
+        player: snapshot
+        for player, snapshot in initial_boards.items()
+        if player != acting_player.name.lower()
+    }
+
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(140)
+    assert server.state == expected_state
+    assert _all_alms_positions(page)[acting_player.name.lower()] == str(
+        expected_state.player_state(acting_player).alms_position
+    )
+
+
+def test_give_alms_row_six_preview_keeps_unavailable_reward_and_matches_confirm(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "give_alms_threshold_reward_row_six_001.json")
+    initial_state = server.state
+    acting_player = initial_state.active_player
+    page.goto(base_url, wait_until="networkidle")
+    initial_boards = _all_board_snapshots(page)
+    _reach_paid_alms(page)
+
+    action = _alms_payment_action(server, 3)
+    expected_state = apply_action(initial_state, action, server.config).state
+    result = apply_action(initial_state, action, server.config)
+    candidate = next(
+        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] == action_id(action)
+    )
+    step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
+    rewards = step["alms_threshold_reward"]
+    assert [reward["threshold"] for reward in rewards] == [4, 6]
+    assert rewards[0]["moved"] is False
+    assert rewards[1]["moved"] is True
+    assert all(event.event_type.value != "workforce_move" for event in result.events)
+
+    for _ in range(3):
+        _click_alms_silver(page)
+    assert _active_board_snapshot(page) == _expected_board_snapshot(expected_state, acting_player)
+    assert _all_alms_positions(page)[acting_player.name.lower()] == str(
+        expected_state.player_state(acting_player).alms_position
+    )
+    before = _expected_board_snapshot(initial_state, acting_player)
+    preview = _active_board_snapshot(page)
+    assert preview["abbey"] == before["abbey"], "the unavailable row-four reward moved an acolyte"
+    assert _confirm_enabled(page)
+    assert {
+        player: snapshot
+        for player, snapshot in _all_board_snapshots(page).items()
+        if player != acting_player.name.lower()
+    } == {
+        player: snapshot
+        for player, snapshot in initial_boards.items()
+        if player != acting_player.name.lower()
+    }
+
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(140)
+    assert server.state == expected_state
+    assert _all_alms_positions(page)[acting_player.name.lower()] == str(
+        expected_state.player_state(acting_player).alms_position
+    )
