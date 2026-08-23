@@ -165,7 +165,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `allocation` duty resolution
   - `ALLOCATION` events
   - `SPECIAL_ACTIVITY_BONUS` events for active effects
-  - optional Alms House give-alms boost with explicit extra payment fields
+  - optional Alms House give-alms payment-ceiling boost
 - Search remains decoupled from these details and still consumes `legal_actions()` + `apply_action()`.
 
 ## Duty Tile Identity Framework (v1.3)
@@ -287,7 +287,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - source counts decrement by 1; destination counts increment by 1
 - Special Activity bonuses now scale by occupancy count:
   - Fields / Stone Mason / Engraver / Vestry output bonuses
-  - Alms House paid Give Alms duty-value bonus (`+1`/`+2` by paid extras)
+  - Alms House paid Give Alms payment-ceiling bonus (`+1`/`+2` by occupancy)
   - Road Engineer Build Roads duty-value bonus (`+1`/`+2`)
   - Road Engineer Construct deferred extra-road scaffold count (`+1`/`+2`)
 
@@ -423,7 +423,7 @@ Current default opponent model is `sandbox_active_player_max`: each active playe
   - `mill_waiver = min(2, required_wheat)`
   - `actual_wheat_spent = max(0, required_wheat - 2)`
 - Scope behavior:
-  - waives only action wheat costs (`give_alms_paid` wheat + Alms House extra wheat, Ordination step
+  - waives only action wheat costs (`give_alms_paid` wheat, Ordination step
     wheat)
   - does not waive silver costs, minority silver, tithe, or Mill hire payment
 - Apply-time ordering for hired Mill paths:

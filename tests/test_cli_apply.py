@@ -351,7 +351,7 @@ def test_cli_apply_alms_house_bonus_event_is_visible(capsys) -> None:
     assert "SPECIAL_ACTIVITY_BONUS:" in output
     assert "alms_house applied to give_alms" in output
     assert "effective duty value 2" in output
-    assert "paid extra silver=1, wheat=0" in output
+    assert "paid extra" not in output
     assert "Special Activities: 1" in output
 
 

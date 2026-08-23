@@ -41,7 +41,7 @@ def test_registry_contains_all_required_entries() -> None:
             "give_alms_paid",
             "special_activity",
             "alms_house",
-            "optional +1 effective Duty Value with extra payment",
+            "optional +1 effective Duty Value ceiling",
             "implemented",
         ),
         (

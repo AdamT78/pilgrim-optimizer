@@ -471,6 +471,24 @@ def test_give_alms_payment_options_for_duty_value_two() -> None:
     assert len(options) == len(set(options))
 
 
+@pytest.mark.parametrize("units_paid", (1, 2, 3, 4))
+def test_give_alms_moves_one_row_per_unit_up_to_alms_house_ceiling(units_paid: int) -> None:
+    scenario = load_scenario("scenarios/give_alms_chapter_house_two_alms_house_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == units_paid
+    )
+
+    result = apply_action(scenario.state, action, scenario.config)
+    progress_details = dict(
+        next(event for event in result.events if event.event_type is EventType.ALMS_PROGRESS).details
+    )
+
+    assert progress_details["new_row"] - progress_details["old_row"] == units_paid
+
+
 def test_give_alms_majority_may_pay_below_ceiling_and_move_by_paid_total() -> None:
     """A majority payer may choose a smaller legal payment and advance one row per resource paid."""
     scenario = load_scenario("scenarios/give_alms_paid_001.json")
@@ -507,8 +525,6 @@ def test_mill_waiver_applies_against_reduced_give_alms_payment() -> None:
         for candidate in legal_actions(scenario.state, scenario.config)
         if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
         and candidate.hired_building_id == "mill"
-        and candidate.alms_house_extra_silver == 0
-        and candidate.alms_house_extra_wheat == 0
         and candidate.alms_payment_silver == 0
         and candidate.alms_payment_wheat == 1
     )
@@ -528,15 +544,14 @@ def test_mill_waiver_applies_against_reduced_give_alms_payment() -> None:
     assert progress_details["new_row"] - progress_details["old_row"] == 1
 
 
-def test_alms_house_extra_still_extends_a_reduced_base_payment() -> None:
-    """Alms House extra bonus still stacks on a reduced base payment ceiling."""
+def test_alms_house_raises_the_payment_ceiling_for_free() -> None:
+    """Two Alms House acolytes add two rows of payment capacity without a surcharge."""
     scenario = load_scenario("scenarios/give_alms_chapter_house_two_alms_house_001.json")
     action = next(
         candidate
         for candidate in legal_actions(scenario.state, scenario.config)
         if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
-        and candidate.alms_house_extra_silver + candidate.alms_house_extra_wheat == 2
-        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 3
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 4
     )
 
     result = apply_action(scenario.state, action, scenario.config)
@@ -555,4 +570,4 @@ def test_alms_house_extra_still_extends_a_reduced_base_payment() -> None:
     )
 
     assert alms_house_bonus["duty_value_bonus"] == 2
-    assert progress_details["new_row"] - progress_details["old_row"] == 3
+    assert progress_details["new_row"] - progress_details["old_row"] == 4

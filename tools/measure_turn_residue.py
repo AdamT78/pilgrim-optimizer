@@ -109,11 +109,6 @@ PLAYER_COUNTS: tuple[int, ...] = (2, 3, 4)
 # with the condition that would open it.
 WHY_NOT_REACHED: tuple[tuple[tuple[str, ...], str], ...] = (
     (
-        ("alms_house_extra_silver", "alms_house_extra_wheat"),
-        "acolytes allocated to the alms_house abbey slot -- a special activity, not a building --"
-        " and then a paid give_alms",
-    ),
-    (
         (
             "sow_route_building_id",
             "sow_route_building_source",

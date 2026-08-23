@@ -110,9 +110,7 @@ from pilgrim.rules.special_activities import (
     AllocationOutcome,
     allocation_outcome,
     alms_house_duty_value_bonus_capacity,
-    alms_house_extra_payment_options,
     apply_allocation_move_with_capacity,
-    can_use_alms_house_bonus,
     clerical_devotion_bonus,
     clerical_silversmith_bonus,
     legal_allocation_moves,
@@ -1018,92 +1016,77 @@ def _legal_full_turn_actions_for_state(
                                 acting_player=state.active_player,
                                 building_key="mill",
                             )
-                            extra_payment_options: list[tuple[int, int]] = []
-                            if can_use_alms_house_bonus(player_state):
-                                alms_house_bonus_cap = alms_house_duty_value_bonus_capacity(
-                                    player_state
+                            alms_house_bonus_capacity = alms_house_duty_value_bonus_capacity(
+                                player_state
+                            )
+                            effective_alms_value = duty_value + alms_house_bonus_capacity
+                            for payment in _alms_payment_options(
+                                duty_value=effective_alms_value,
+                                available_silver=effective_alms_value,
+                                available_wheat=effective_alms_value,
+                            ):
+                                required_silver = silver_cost + payment.silver
+                                required_wheat = payment.wheat
+                                base_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                    alms_payment_silver=payment.silver,
+                                    alms_payment_wheat=payment.wheat,
                                 )
-                                extra_payment_options.extend(
-                                    _all_alms_house_extra_payment_options(
-                                        max_bonus=alms_house_bonus_cap
-                                    )
-                                )
-                            extra_payment_options.append((0, 0))
 
-                            for extra_silver, extra_wheat in extra_payment_options:
-                                alms_house_bonus = extra_silver + extra_wheat
-                                effective_alms_value = duty_value + alms_house_bonus
-                                for payment in _alms_payment_options(
-                                    duty_value=effective_alms_value,
-                                    available_silver=effective_alms_value,
-                                    available_wheat=effective_alms_value,
+                                if _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=required_silver,
+                                    required_wheat=required_wheat,
                                 ):
-                                    required_silver = silver_cost + extra_silver + payment.silver
-                                    required_wheat = extra_wheat + payment.wheat
-                                    base_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                        alms_payment_silver=payment.silver,
-                                        alms_payment_wheat=payment.wheat,
-                                        alms_house_extra_silver=extra_silver,
-                                        alms_house_extra_wheat=extra_wheat,
-                                    )
+                                    actions.add_if_new(base_action)
 
+                                if required_wheat <= 0:
+                                    continue
+
+                                mill_wheat_spent = mill_actual_wheat_cost(required_wheat)
+                                if (
+                                    mill_source.source_type == "own_active"
+                                    and mill_source.usable
+                                ):
                                     if _can_afford_resolution_costs(
                                         player_state,
                                         required_silver=required_silver,
-                                        required_wheat=required_wheat,
+                                        required_wheat=mill_wheat_spent,
                                     ):
                                         actions.add_if_new(base_action)
-
-                                    if required_wheat <= 0:
-                                        continue
-
-                                    mill_wheat_spent = mill_actual_wheat_cost(required_wheat)
-                                    if (
-                                        mill_source.source_type == "own_active"
-                                        and mill_source.usable
+                                elif _is_hired_source(mill_source) and mill_source.usable:
+                                    for hire_option in _legal_hire_payment_options(
+                                        source=mill_source,
+                                        player_state=player_state,
                                     ):
-                                        if _can_afford_resolution_costs(
+                                        if not _can_afford_resolution_costs(
                                             player_state,
                                             required_silver=required_silver,
                                             required_wheat=mill_wheat_spent,
+                                            hired_source=hire_option.source,
                                         ):
-                                            actions.add_if_new(base_action)
-                                    elif _is_hired_source(mill_source) and mill_source.usable:
-                                        for hire_option in _legal_hire_payment_options(
-                                            source=mill_source,
-                                            player_state=player_state,
-                                        ):
-                                            if not _can_afford_resolution_costs(
-                                                player_state,
-                                                required_silver=required_silver,
-                                                required_wheat=mill_wheat_spent,
-                                                hired_source=hire_option.source,
-                                            ):
-                                                continue
-                                            hired_action = _with_hire_payment_fields(
-                                                FullTurnAction(
-                                                    origin=origin,
-                                                    route=route,
-                                                    selected_duty=duty_position,
-                                                    resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                                    alms_payment_silver=payment.silver,
-                                                    alms_payment_wheat=payment.wheat,
-                                                    alms_house_extra_silver=extra_silver,
-                                                    alms_house_extra_wheat=extra_wheat,
-                                                    hired_building_id="mill",
-                                                    hired_building_source=(
-                                                        _hired_building_source_label(
-                                                            hire_option.source
-                                                        )
-                                                    ),
+                                            continue
+                                        hired_action = _with_hire_payment_fields(
+                                            FullTurnAction(
+                                                origin=origin,
+                                                route=route,
+                                                selected_duty=duty_position,
+                                                resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                                alms_payment_silver=payment.silver,
+                                                alms_payment_wheat=payment.wheat,
+                                                hired_building_id="mill",
+                                                hired_building_source=(
+                                                    _hired_building_source_label(
+                                                        hire_option.source
+                                                    )
                                                 ),
-                                                option=hire_option,
-                                            )
-                                            actions.add_if_new(hired_action)
+                                            ),
+                                            option=hire_option,
+                                        )
+                                        actions.add_if_new(hired_action)
                             if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
                                 for building_id in _legal_give_alms_donation_buildings(
                                     player_state,
@@ -2436,6 +2419,12 @@ def _apply_full_turn_action(
         building_hired_events: list[GameEvent] = []
         construct_events: list[GameEvent] = []
         effective_duty_value = duty_value
+        alms_house_bonus = 0
+        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
+            alms_house_bonus = alms_house_duty_value_bonus_capacity(
+                state_after_sow.player_state(player)
+            )
+            effective_duty_value += alms_house_bonus
         give_alms_resolution = None
         donate_building_alms_resolution = None
         alms_payment_actual_silver: int | None = None
@@ -2473,8 +2462,6 @@ def _apply_full_turn_action(
         if action.resolution is not TurnResolutionType.GIVE_ALMS_PAID and (
             action.alms_payment_silver != 0
             or action.alms_payment_wheat != 0
-            or action.alms_house_extra_silver != 0
-            or action.alms_house_extra_wheat != 0
         ):
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
@@ -3069,7 +3056,7 @@ def _apply_full_turn_action(
         )
 
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
-            required_mill_wheat = action.alms_payment_wheat + action.alms_house_extra_wheat
+            required_mill_wheat = action.alms_payment_wheat
             mill_source = _resolved_mill_source_for_action(
                 state=state_after_sow,
                 config=config,
@@ -3077,7 +3064,7 @@ def _apply_full_turn_action(
                 action=action,
                 required_wheat=required_mill_wheat,
                 silver_cost=silver_cost,
-                additional_silver_cost=action.alms_payment_silver + action.alms_house_extra_silver,
+                additional_silver_cost=action.alms_payment_silver,
             )
             mill_waiver = mill_wheat_waiver(required_mill_wheat) if mill_source is not None else 0
             mill_actual_wheat_spent = (
@@ -3109,51 +3096,6 @@ def _apply_full_turn_action(
                         config=config,
                     )
                 )
-            alms_house_bonus = action.alms_house_extra_silver + action.alms_house_extra_wheat
-            use_alms_house = (
-                action.alms_house_extra_silver != 0 or action.alms_house_extra_wheat != 0
-            )
-            if use_alms_house:
-                if not can_use_alms_house_bonus(state_after_sow.player_state(player)):
-                    raise TransitionValidationError("Alms House is not occupied for this player.")
-                alms_house_bonus_cap = alms_house_duty_value_bonus_capacity(
-                    state_after_sow.player_state(player)
-                )
-                if alms_house_bonus <= 0 or alms_house_bonus > alms_house_bonus_cap:
-                    raise TransitionValidationError(
-                        "Alms House extra payment exceeds occupied Alms House capacity."
-                    )
-                current_resources = state_for_give_alms.player_state(player).resources
-                resources_for_extra_validation = current_resources
-                if mill_waiver:
-                    resources_for_extra_validation = resources_for_extra_validation.add(
-                        wheat=mill_waiver
-                    )
-                valid_extra_options = alms_house_extra_payment_options(
-                    resources_for_extra_validation,
-                    max_bonus=alms_house_bonus_cap,
-                )
-                if (action.alms_house_extra_silver, action.alms_house_extra_wheat) not in (
-                    valid_extra_options
-                ):
-                    raise TransitionValidationError(
-                        "Alms House extra payment does not match a legal payment combination."
-                    )
-                effective_duty_value += alms_house_bonus
-                if (
-                    current_resources.silver
-                    < silver_cost + action.alms_payment_silver + action.alms_house_extra_silver
-                ):
-                    raise TransitionValidationError(
-                        "Insufficient silver for minority/alms payment plus Alms House cost."
-                    )
-                if (
-                    current_resources.wheat + mill_waiver
-                    < action.alms_payment_wheat + action.alms_house_extra_wheat
-                ):
-                    raise TransitionValidationError(
-                        "Insufficient wheat for alms payment plus Alms House cost."
-                    )
             give_alms_player_state = state_for_give_alms.player_state(player)
             if mill_waiver:
                 give_alms_player_state = replace(
@@ -3174,16 +3116,7 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
             new_player_state = give_alms_resolution.player_state
-            if use_alms_house:
-                new_resources = new_player_state.resources.add(
-                    silver=-action.alms_house_extra_silver,
-                    wheat=-action.alms_house_extra_wheat,
-                )
-                if new_resources.silver < 0 or new_resources.wheat < 0:
-                    raise TransitionValidationError(
-                        "Alms House extra payment would overdraw resources."
-                    )
-                new_player_state = replace(new_player_state, resources=new_resources)
+            if alms_house_bonus:
                 special_bonus_events.append(
                     GameEvent(
                         event_type=EventType.SPECIAL_ACTIVITY_BONUS,
@@ -3193,8 +3126,6 @@ def _apply_full_turn_action(
                             activity="alms_house",
                             action=action.resolution.value,
                             duty_value_bonus=alms_house_bonus,
-                            extra_silver=action.alms_house_extra_silver,
-                            extra_wheat=action.alms_house_extra_wheat,
                         ),
                     )
                 )
@@ -8386,17 +8317,6 @@ def _resource_delta_between(before, after) -> tuple[int, int, int]:
         after.silver - before.silver,
         after.wheat - before.wheat,
     )
-
-
-def _all_alms_house_extra_payment_options(*, max_bonus: int) -> tuple[tuple[int, int], ...]:
-    options: list[tuple[int, int]] = []
-    if max_bonus <= 0:
-        return ()
-    for duty_value_bonus in range(max_bonus, 0, -1):
-        for extra_silver in range(duty_value_bonus, -1, -1):
-            extra_wheat = duty_value_bonus - extra_silver
-            options.append((extra_silver, extra_wheat))
-    return tuple(options)
 
 
 def _ordination_wheat_cost(step_count: int, *, mill_active: bool) -> int:

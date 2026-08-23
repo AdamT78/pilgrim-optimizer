@@ -121,7 +121,7 @@ def test_vestry_bonus_adds_piety_to_clerical_devotion() -> None:
     )
 
 
-def test_alms_house_bonus_actions_require_extra_payment() -> None:
+def test_alms_house_raises_payment_ceiling_without_surcharge() -> None:
     scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
     give_alms_actions = [
         action
@@ -131,27 +131,30 @@ def test_alms_house_bonus_actions_require_extra_payment() -> None:
 
     assert give_alms_actions
     assert any(
-        action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
+        action.alms_payment_silver + action.alms_payment_wheat == 2
         for action in give_alms_actions
     )
 
 
 def test_alms_house_bonus_applies_and_emits_event() -> None:
     scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
-    action = legal_actions(scenario.state, scenario.config)[0]
-    assert action.resolution is TurnResolutionType.GIVE_ALMS_PAID
-    assert action.alms_house_extra_silver == 1 or action.alms_house_extra_wheat == 1
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 2
+    )
 
     before = scenario.state.player_state(PlayerId.PLAYER_ONE)
     result = apply_action(scenario.state, action, scenario.config)
     after = result.state.player_state(PlayerId.PLAYER_ONE)
 
-    assert after.alms_position >= before.alms_position + 2
+    assert after.alms_position == before.alms_position + 2
     assert after.resources.silver == (
-        before.resources.silver - action.alms_payment_silver - action.alms_house_extra_silver
+        before.resources.silver - action.alms_payment_silver
     )
     assert after.resources.wheat == (
-        before.resources.wheat - action.alms_payment_wheat - action.alms_house_extra_wheat
+        before.resources.wheat - action.alms_payment_wheat
     )
     assert any(
         event.event_type is EventType.SPECIAL_ACTIVITY_BONUS
@@ -160,7 +163,7 @@ def test_alms_house_bonus_applies_and_emits_event() -> None:
     )
 
 
-def test_alms_house_not_used_without_extra_resource() -> None:
+def test_alms_house_ceiling_still_requires_the_declared_payment() -> None:
     scenario = load_scenario("scenarios/special_activity_alms_house_001.json")
     player_one = scenario.state.player_state(PlayerId.PLAYER_ONE)
     reduced_resources_state = scenario.state.with_player_state(
@@ -174,10 +177,9 @@ def test_alms_house_not_used_without_extra_resource() -> None:
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
     ]
     assert give_alms_actions
-    assert all(
-        action.alms_house_extra_silver == 0 and action.alms_house_extra_wheat == 0
-        for action in give_alms_actions
-    )
+    assert {
+        action.alms_payment_silver + action.alms_payment_wheat for action in give_alms_actions
+    } == {1}
 
 
 def test_special_activity_hooks_exist() -> None:

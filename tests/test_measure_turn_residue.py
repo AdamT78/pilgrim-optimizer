@@ -34,8 +34,10 @@ from tools.measure_turn_residue import (
 # longer belong to the full-turn residue. Keep the zero explicit so a future field-removal change
 # cannot silently turn this into an unmeasured claim.
 SEED_SEVEN_FLOOR: dict[int, int] = {2: 0, 3: 0, 4: 0}
-# Same walk policy as `swept`: reference + generated boards for seed 7 only.
-SEED_SEVEN_COVERAGE_FLOOR = 76
+# Same walk policy as `swept`: reference + generated boards for seed 7 only. The former floor was
+# entirely Alms House surcharge residue; the single-payment action no longer leaves that split for
+# the page to refuse.
+SEED_SEVEN_COVERAGE_FLOOR = 0
 
 SEED_SEVEN_FIELDS: frozenset[str] = frozenset()
 
@@ -70,7 +72,7 @@ def test_the_sweep_finds_at_least_what_one_seed_found_by_accident(swept: dict) -
     refused = {name for name, state in swept["field_state"].items() if state == REFUSED}
     missing = SEED_SEVEN_FIELDS - refused
     assert not missing, f"the sweep lost sight of fields seed 7 refused: {sorted(missing)}"
-    assert swept["ambiguous"] >= SEED_SEVEN_COVERAGE_FLOOR
+    assert swept["ambiguous"] == SEED_SEVEN_COVERAGE_FLOOR
 
 
 def test_a_zero_cannot_be_read_as_coverage(swept: dict) -> None:

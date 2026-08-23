@@ -317,14 +317,14 @@ def test_give_alms_donate_building_is_not_modified_by_mill() -> None:
     assert progress_details["new_row"] == 1
 
 
-def test_give_alms_alms_house_extra_wheat_counts_toward_mill_waiver() -> None:
+def test_give_alms_mill_waiver_uses_the_single_wheat_payment() -> None:
     scenario = load_scenario("scenarios/give_alms_mill_active_wheat3_spend1_001.json")
     action = next(
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.resolution is TurnResolutionType.GIVE_ALMS_PAID
-        and action.alms_house_extra_wheat == 1
-        and action.alms_payment_wheat == 2
+        and action.alms_payment_silver == 0
+        and action.alms_payment_wheat == 3
     )
     result = apply_action(scenario.state, action, scenario.config)
     bonus_details = dict(
@@ -335,6 +335,6 @@ def test_give_alms_alms_house_extra_wheat_counts_toward_mill_waiver() -> None:
         ).details
     )
 
-    assert bonus_details["required_wheat"] == 3
+    assert bonus_details["required_wheat"] == action.alms_payment_wheat
     assert bonus_details["wheat_waived"] == 2
     assert bonus_details["actual_wheat_spent"] == 1
