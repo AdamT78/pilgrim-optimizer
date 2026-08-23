@@ -673,7 +673,9 @@ def _resource_delta(before: Any, after: Any) -> dict[str, int]:
 _PREVIEW_EFFECT_FIELDS: tuple[str, ...] = (
     "resource_delta",
     "building_constructed",
+    "building_donation",
     "merchant_advance",
+    "piety_delta",
     "alms_progress",
     "alms_threshold_reward",
 )
@@ -785,6 +787,24 @@ def _turn_action_preview_effects(
     if len(constructed) == 1 and getattr(action, "construct_building_id", None) == constructed[0]:
         effects["building_constructed"] = constructed[0]
 
+    piety_event = next(
+        (
+            event
+            for event in result.events
+            if event.event_type is EventType.PIETY_DELTA
+            and event.actor is player
+        ),
+        None,
+    )
+    if piety_event is not None:
+        effects["piety_delta"] = dict(piety_event.details)
+
+    before_donated = before_player.player_board_slots.donated_buildings
+    after_donated = after_player.player_board_slots.donated_buildings
+    donated = [building_id for building_id in after_donated if building_id not in before_donated]
+    if len(donated) == 1 and getattr(action, "donate_building_id", None) == donated[0]:
+        effects["building_donation"] = donated[0]
+
     if getattr(action, "merchant_advance_building_id", None) == "guild":
         guild_event = next(
             (
@@ -875,6 +895,25 @@ def _attach_turn_action_preview_effects(
         for step in steps:
             if step["kind"] == "building" and step["value"] == building_id:
                 step["building_constructed"] = building_id
+                break
+    donated_building_id = effects.get("building_donation")
+    if donated_building_id is not None:
+        attached = False
+        for step in steps:
+            if step["kind"] == "building" and step["value"] == donated_building_id:
+                step["building_donation"] = donated_building_id
+                attached = True
+                break
+        if not attached:
+            for step in steps:
+                if step["kind"] == "resolution":
+                    step["building_donation"] = donated_building_id
+                    break
+    piety_delta = effects.get("piety_delta")
+    if piety_delta is not None:
+        for step in steps:
+            if step["kind"] == "resolution":
+                step["piety_delta"] = piety_delta
                 break
     merchant_position = effects.get("merchant_advance")
     if merchant_position is not None:
@@ -2326,6 +2365,7 @@ class PlayServer(ThreadingHTTPServer):
         self._session_workspace = tempfile.TemporaryDirectory(prefix="play-server-session-")
         self._workspace_path = Path(self._session_workspace.name)
         self._latest_generated_scenario: dict[str, Any] | None = None
+        self._setup_metadata: dict[str, Any] | None = None
         self.session = SessionState(
             game_loaded=False,
             seat_roles=_default_seat_roles(4),
@@ -2372,11 +2412,22 @@ class PlayServer(ThreadingHTTPServer):
         self._capture_turn_start()
 
     def _load_scenario_file(self, scenario_path: Path, *, intro_line: str | None = None) -> None:
+        scenario_path = Path(scenario_path)
+        try:
+            raw = json.loads(scenario_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = None
+        self._setup_metadata = (
+            raw.get("setup_metadata")
+            if isinstance(raw, dict) and isinstance(raw.get("setup_metadata"), dict)
+            else None
+        )
         self._load_loaded_scenario(load_scenario(str(scenario_path)), intro_line=intro_line)
 
     def _clear_game(self) -> None:
         self.state = None
         self.config = None
+        self._setup_metadata = None
         self.state_payload = {}
         self.token = ""
         self.payload = {}
@@ -2460,6 +2511,13 @@ class PlayServer(ThreadingHTTPServer):
             raise ValueError("Bot seats are not available in this build.")
 
         self._latest_generated_scenario = None
+        self._setup_metadata = None
+        try:
+            raw = json.loads(position.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = None
+        if isinstance(raw, dict) and isinstance(raw.get("setup_metadata"), dict):
+            self._setup_metadata = raw["setup_metadata"]
         self.session = SessionState(
             game_loaded=True,
             seat_roles=dict(chosen_roles),
@@ -2499,6 +2557,8 @@ class PlayServer(ThreadingHTTPServer):
             log=list(self.log_lines),
             log_blocks=[dict(block, lines=list(block["lines"])) for block in self.log_blocks],
         )
+        if self._setup_metadata is not None:
+            self.payload["setup_metadata"] = self._setup_metadata
 
     def apply(self, submitted_id: str, submitted_token: str) -> None:
         """Apply one action, named by id and vouched for by the token it was read from.

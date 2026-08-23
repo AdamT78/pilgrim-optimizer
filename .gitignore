@@ -18,3 +18,4 @@ benchmarks/
 tools/ui_debug/generated/*.html
 _to_delete/
 pilgrim_optimizer.egg-info/
+*.tar.gz

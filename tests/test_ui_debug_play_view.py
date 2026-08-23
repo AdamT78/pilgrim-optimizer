@@ -47,7 +47,9 @@ from tools.ui_debug.render_play_view import (
     render_play_view_from_payload,
     seat_of,
     ship_hex_for,
+    start_roll_for,
 )
+from tools.ui_debug.generate_game_setup import DEFAULT_START_ROLL, START_HEX_BY_ROLL
 from tools.ui_debug.render_player_boards_v2 import (
     default_player_board_v2_state,
     load_player_boards_v2_layout,
@@ -978,6 +980,66 @@ def test_the_map_places_what_the_scenario_deals_on_the_round_it_is_live_on() -> 
     assert placements[1]["site"] is not None
 
 
+MAP_QUADRANTS = {
+    "NW": {"E1", "D1", "D2", "C3", "C4", "B5"},
+    "NE": {"B7", "C8", "C9", "D10", "D11", "E11", "F11"},
+    "SE": {"H11", "I11", "J10", "J9", "K8", "K7"},
+    "SW": {"K5", "K4", "J3", "J2", "I1", "H1", "G1"},
+}
+
+
+def _quadrant(hex_label: str) -> str:
+    return next(name for name, labels in MAP_QUADRANTS.items() if hex_label in labels)
+
+
+def test_generated_pilgrimage_sites_stay_one_per_physical_quadrant(tmp_path: Path) -> None:
+    for seed in range(1, 25):
+        payload = _generated_payload(tmp_path, seed)
+        metadata = payload["setup_metadata"]["setup_timeline"]
+        nw_roll = int(metadata["pilgrimage_rolls"]["nw"])
+        placements = [
+            placement
+            for placement in map_placements_for(
+                payload, load_building_catalog(), load_pilgrimage_sites()
+            )
+            if placement["site"] is not None
+        ]
+        assert len(placements) == 4
+        quadrants = [_quadrant(placement["hex"]) for placement in placements]
+        assert set(quadrants) == set(MAP_QUADRANTS)
+        assert len(quadrants) == len(set(quadrants))
+        site_one = next(
+            placement
+            for placement in placements
+            if placement["site"]["id"] == "pilgrimage_site_1"
+        )
+        assert site_one["hex"] == START_HEX_BY_ROLL[nw_roll]
+        assert start_roll_for(payload) == nw_roll
+
+
+def test_ship_and_timeline_use_the_same_setup_rotation(tmp_path: Path) -> None:
+    payload = _generated_payload(tmp_path, 367)
+    placements = {
+        placement["round"]: placement["hex"]
+        for placement in map_placements_for(
+            payload, load_building_catalog(), load_pilgrimage_sites()
+        )
+    }
+    for position in (0, 5, 10, 15, 20):
+        payload["state"]["ship_position"] = position
+        assert ship_hex_for(payload) == placements[position + 1]
+
+
+def test_payload_without_setup_metadata_keeps_the_default_map_rotation() -> None:
+    payload = _payload(
+        [_player([5] + [0] * 8)],
+        pilgrimage_rounds=[1],
+    )
+    placement = map_placements_for(payload, load_building_catalog(), load_pilgrimage_sites())[0]
+    assert start_roll_for(payload) == DEFAULT_START_ROLL
+    assert placement["hex"] == START_HEX_BY_ROLL[DEFAULT_START_ROLL]
+
+
 def _seat_panel(page: str, seat: int) -> str:
     start = page.index(f'data-player-seat="{seat}"')
     return page[start : page.index("</div>", start)]
@@ -1034,7 +1096,9 @@ def _generated_payload(tmp_path: Path, seed: int) -> dict:
         capture_output=True,
     )
     scenario = load_scenario(destination)
-    return view_payload(scenario.state, scenario.config)
+    payload = view_payload(scenario.state, scenario.config)
+    payload["setup_metadata"] = json.loads(destination.read_text(encoding="utf-8"))["setup_metadata"]
+    return payload
 
 
 def test_the_merchant_is_drawn_on_the_space_the_engine_put_it_on(tmp_path: Path) -> None:
