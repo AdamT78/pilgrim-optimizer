@@ -1080,6 +1080,18 @@ _TURN_SCRIPT = """<script>
     return values.length === 1 ? values[0] : null;
   }
 
+  function pietyAmountFor(live) {
+    var values = [];
+    live.forEach(function (step) {
+      var value = Number(step.amount);
+      if (values.indexOf(value) === -1) { values.push(value); }
+    });
+    if (values.length > 1) {
+      throw new Error('piety conversion has inconsistent amounts');
+    }
+    return values.length === 1 ? values[0] : null;
+  }
+
   function conversionReady() {
     var live = survivingTurnSteps();
     if (conversionChosen.length !== 3) { return false; }
@@ -1104,6 +1116,8 @@ _TURN_SCRIPT = """<script>
       : [];
     var piety = conversionChosen.length >= 2 && conversionChosen[0] === 'indulgences';
     var resource = conversionChosen.length >= 2 && !piety;
+    var pietyAmount = piety && conversionChosen.length > 2
+      ? pietyAmountFor(live) : null;
     var resourceId = null;
     if (resource) {
       resourceId = conversionChosen[0] === 'stone_yard' ? 'stone' : 'wheat';
@@ -1152,11 +1166,14 @@ _TURN_SCRIPT = """<script>
     var pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
     var pietyPreviewed = pietyTrack
       && pietyTrack.getAttribute('data-piety-preview-position') !== null;
-    var pietyHasOffer = piety && !pietyPreviewed && live.some(function (step) {
-      return step.piety_destination !== undefined && step.piety_destination !== null;
-    });
+    var pietyHasOffer = piety && (
+      conversionChosen.length > 2
+      || (!pietyPreviewed && live.some(function (step) {
+        return step.piety_destination !== undefined && step.piety_destination !== null;
+      }))
+    );
     if (turnStepAnswerLabel) {
-      turnStepAnswerLabel.textContent = piety ? 'Destination' : 'Amount';
+      turnStepAnswerLabel.textContent = 'Amount';
       turnStepAnswerLabel.setAttribute(
         'data-turn-step-answer-label-visible',
         piety ? (pietyHasOffer ? 'true' : 'false') : (resource ? 'true' : 'false')
@@ -1164,7 +1181,7 @@ _TURN_SCRIPT = """<script>
     }
     if (turnStepResourceHint) {
       turnStepResourceHint.textContent = piety
-        ? ''
+        ? (conversionChosen.length > 2 ? '' : 'click a piety position on the track')
         : 'click the live resource pill';
     }
     var hirePayments = [];
@@ -1230,7 +1247,8 @@ _TURN_SCRIPT = """<script>
     });
     if (turnStepAmountTotal) {
       turnStepAmountTotal.textContent = resource && conversionChosen.length > 2
-        ? conversionChosen[2] : '';
+        ? conversionChosen[2]
+        : pietyAmount === null ? '' : pietyAmount;
     }
   }
 

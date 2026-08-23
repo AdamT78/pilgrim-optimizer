@@ -803,13 +803,31 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert direction is not None
     _click_handle_centre(page, direction, require_hit=True)
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() > 0
-    assert page.locator('[data-turn-step-answer-label="true"]').is_visible()
-    assert page.get_attribute(
-        '[data-turn-step-answer-label="true"]',
-        "data-turn-step-answer-label-visible",
-    ) == "true"
+    label = page.locator('[data-turn-step-answer-label="true"]')
+    slot = page.locator('[data-turn-step-amount-total="true"]')
+    hint = page.locator('[data-turn-step-resource-hint="true"]')
+    answer_row = page.locator('[data-turn-step-resource-row="true"]')
+    assert label.is_visible()
+    assert hint.is_visible()
+    assert hint.inner_text().strip()
+    assert slot.inner_text() == ""
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
-    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-prompt-mid.png")
+    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-piety-answer-pending.png")
+
+    destination = page.locator(
+        '[data-piety-choice-pill][data-piety-choice-offered="true"]'
+        '[data-piety-choice-destination="1"]'
+    )
+    assert destination.count() == 1
+    target = int(destination.get_attribute("data-piety-choice-destination"))
+    expected_amount_by_destination = {2: 1, 1: 2, 0: 3}
+    _click_handle_centre(page, destination.element_handle(), require_hit=True)
+    assert label.is_visible()
+    assert slot.is_visible()
+    assert slot.inner_text() == str(expected_amount_by_destination[target])
+    assert hint.inner_text() == ""
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-piety-answer-chosen.png")
 
     page.locator('[data-turn-control="action"][data-turn-control-enabled="true"]').click()
     page.wait_for_timeout(40)
@@ -822,17 +840,16 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     direction_row = page.locator('[data-turn-step-direction-row="true"]')
     assert direction_row.get_attribute("data-turn-step-row-active") == "false"
     assert not direction_row.is_visible()
+    assert not answer_row.is_visible()
+    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-prompt-after-resolution.png")
     assert page.locator('[data-turn-step-direction][data-turn-step-selected="true"]').count() == 0
-    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
-    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
-    assert page.get_attribute(
-        '[data-turn-step-answer-label="true"]',
-        "data-turn-step-answer-label-visible",
-    ) == "false"
+    assert not label.is_visible()
+    assert slot.inner_text() == ""
+    assert not hint.is_visible()
+    assert hint.inner_text() == ""
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
     assert server.state == before_state
-    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-prompt-after-resolution.png")
 
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(80)
@@ -852,10 +869,14 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     _click_handle_centre(page, direction, require_hit=True)
     destination = page.locator(
         '[data-piety-choice-pill][data-piety-choice-offered="true"]'
-    ).first
+        '[data-piety-choice-destination="0"]'
+    )
     assert destination.count() == 1
     target = int(destination.get_attribute("data-piety-choice-destination"))
     _click_handle_centre(page, destination.element_handle(), require_hit=True)
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == str(
+        expected_amount_by_destination[target]
+    )
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
@@ -863,6 +884,70 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
         before_state.active_player
     ).piety
     assert server.state.player_state(server.state.active_player).piety == target
+
+
+@pytest.mark.parametrize(
+    "scenario_path",
+    [
+        SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS,
+        SCENARIOS / "indulgences_active_sell_piety_001.json",
+    ],
+    ids=lambda path: path.name,
+)
+def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(page, serve, scenario_path) -> None:
+    base_url, _server = serve(scenario_path)
+    page.goto(base_url, wait_until="networkidle")
+    pairs = sorted({
+        (step["building_id"], step["direction"])
+        for step in _server.payload["turn_steps"]
+    })
+    assert pairs
+
+    prompt = page.locator('[data-component="play-turn"]')
+    initial_height = prompt.bounding_box()["height"]
+    for building_id, direction in pairs:
+        building = page.query_selector(
+            f'[data-active-seat="true"] [data-turn-step-building-id="{building_id}"]'
+            '[data-turn-step-offered="true"]'
+        )
+        if building is None:
+            building = page.query_selector(
+                f'[data-turn-step-building-id="{building_id}"][data-turn-step-offered="true"]'
+            )
+        assert building is not None, f"missing conversion pair {building_id}/{direction}"
+        _click_handle_centre(page, building, require_hit=True)
+        direction_key = page.query_selector(
+            f'[data-turn-step-direction="{direction}"][data-turn-step-offered="true"]'
+        )
+        assert direction_key is not None, f"missing conversion pair {building_id}/{direction}"
+        _click_handle_centre(page, direction_key, require_hit=True)
+
+        row = page.locator('[data-turn-step-resource-row="true"]')
+        label = page.locator('[data-turn-step-answer-label="true"]')
+        slot = page.locator('[data-turn-step-amount-total="true"]')
+        hint = page.locator('[data-turn-step-resource-hint="true"]')
+        assert row.is_visible(), f"answer row disappeared for {building_id}/{direction}"
+        assert label.is_visible(), f"answer label disappeared for {building_id}/{direction}"
+        assert slot.inner_text().strip() or hint.inner_text().strip(), (
+            f"bare answer label for {building_id}/{direction}"
+        )
+        assert prompt.bounding_box()["height"] == pytest.approx(initial_height, abs=0.1)
+
+        answer = page.query_selector('[data-resource-choice-key][data-turn-offered="true"]')
+        if answer is None:
+            answer = page.query_selector(
+                '[data-piety-choice-pill][data-piety-choice-offered="true"]'
+            )
+        assert answer is not None, f"no live answer control for {building_id}/{direction}"
+        _click_handle_centre(page, answer, require_hit=True)
+        page.wait_for_timeout(40)
+        assert slot.inner_text().strip(), f"empty answered slot for {building_id}/{direction}"
+        assert prompt.bounding_box()["height"] == pytest.approx(initial_height, abs=0.1)
+
+        page.locator('[data-turn-control="reset"]').click()
+        page.wait_for_timeout(80)
+        assert not row.is_visible(), f"answer row remained after reset for {building_id}/{direction}"
+        assert prompt.bounding_box()["height"] == pytest.approx(initial_height, abs=0.1)
 
 
 def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page, serve) -> None:
@@ -2279,7 +2364,7 @@ def test_indulgences_destination_pill_commits_one_click_at_track_distance(page, 
     assert destination.locator('[data-piety-choice-silver]').text_content() == f"{expected_silver:+d}"
     assert destination.locator('[data-piety-choice-piety-change]').count() == 0
     _click_handle_centre(page, destination.element_handle(), require_hit=True)
-    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(100)
@@ -2341,8 +2426,10 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
         '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, direction.element_handle(), require_hit=True)
-    assert page.locator('[data-turn-step-answer-label="true"]').inner_text() == "Destination"
-    assert page.locator('[data-turn-step-resource-hint="true"]').inner_text() == ""
+    assert page.locator('[data-turn-step-answer-label="true"]').inner_text() == "Amount"
+    hint = page.locator('[data-turn-step-resource-hint="true"]')
+    assert hint.is_visible()
+    assert hint.inner_text() == "click a piety position on the track"
     assert page.locator('[data-component="play-turn"]').bounding_box()["height"] == pytest.approx(
         turn_height, abs=0.1
     )
