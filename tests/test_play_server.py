@@ -4078,6 +4078,68 @@ def test_construction_preview_step_carries_engine_building_and_cost() -> None:
     }
 
 
+def test_devotion_preview_step_matches_engine_piety_destination() -> None:
+    scenario = load_scenario("scenarios/clerical_devotion_chapel_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step.get("piety_delta") is not None for step in candidate["steps"])
+    )
+    action = _candidate_action(scenario, candidate)
+    result = apply_action(scenario.state, action, scenario.config)
+    step = next(step for step in candidate["steps"] if step.get("piety_delta") is not None)
+    event = next(event for event in result.events if event.event_type is EventType.PIETY_DELTA)
+
+    assert step["piety_delta"] == dict(event.details)
+    assert step["piety_delta"]["new_piety_position"] == result.state.player_state(
+        scenario.state.active_player
+    ).piety
+
+
+def test_devotion_preview_uses_the_engine_cap_at_twelve() -> None:
+    scenario = load_scenario("scenarios/clerical_devotion_chapel_001.json")
+    active = scenario.state.player_state(scenario.state.active_player)
+    state = replace(
+        scenario.state,
+        players=(replace(active, piety=11), *scenario.state.players[1:]),
+    )
+    candidates = play_server.turn_candidates(state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step.get("piety_delta") is not None for step in candidate["steps"])
+    )
+    action = next(
+        action for action in legal_actions(state, scenario.config) if action_id(action) == candidate["action_id"]
+    )
+    after = apply_action(state, action, scenario.config).state.player_state(state.active_player)
+    step = next(step for step in candidate["steps"] if step.get("piety_delta") is not None)
+
+    assert step["piety_delta"]["new_piety_position"] == after.piety
+    assert after.piety == scenario.config.piety.max_position
+
+
+def test_building_donation_preview_step_matches_engine_slot_state() -> None:
+    scenario = load_scenario("scenarios/give_alms_donate_building_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if any(step.get("building_donation") is not None for step in candidate["steps"])
+    )
+    action = _candidate_action(scenario, candidate)
+    before = scenario.state.player_state(scenario.state.active_player)
+    after = apply_action(scenario.state, action, scenario.config).state.player_state(
+        scenario.state.active_player
+    )
+    step = next(step for step in candidate["steps"] if step.get("building_donation") is not None)
+
+    assert step["building_donation"] == action.donate_building_id
+    assert step["building_donation"] in after.player_board_slots.donated_buildings
+    assert step["building_donation"] in before.player_board_slots.active_buildings
+
+
 def test_guild_preview_step_matches_engine_merchant_position() -> None:
     scenario = load_scenario("scenarios/guild_active_move_merchant_001.json")
     candidates = play_server.turn_candidates(scenario.state, scenario.config)

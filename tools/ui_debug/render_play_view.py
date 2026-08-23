@@ -19,8 +19,9 @@ obviously is not, so the split is written down rather than left to a screenshot:
                             six role circles -- the buildings standing in each seat's slots and
                             which of them were donated, how far around the ring the ship has come,
                             and every line of the log
-  still the layout's sample which map hex round 1 starts on -- which is also what pins the ring
-                            the ship is counted around
+  still the layout's sample which map hex round 1 starts on for payloads without setup metadata;
+                            generated setups carry the NW roll that pins the physical ring and the
+                            ship is counted around it
   in the state, with        committed acolytes, which stand on roads, shrines, market ports and
   nowhere to draw it        pilgrimage sites -- none of which this page draws at all; cardinal
                             favour tiles, which have no area on the player board; victory points,
@@ -49,6 +50,7 @@ if __package__ in (None, ""):
 
 from tools.ui_debug.generate_game_setup import (  # noqa: E402  # noqa: E402
     DEFAULT_START_ROLL,
+    START_HEX_BY_ROLL,
     building_choice_styles,
     render_board_slot_building,
     render_board_slot_donated,
@@ -548,14 +550,38 @@ def duty_board_state_for(payload: dict, duty_layout: dict) -> dict:
     }
 
 
+def start_roll_for(payload: dict) -> int:
+    """The physical ring rotation carried by generated setup metadata, if present.
+
+    The engine's pilgrimage rounds are normalized by the NW roll, so round 1 is the NW roll's
+    physical hex. Hand-written and older payloads have no setup metadata; they retain the debug
+    view's original E1/default rotation.
+    """
+    metadata = payload.get("setup_metadata")
+    if not isinstance(metadata, dict):
+        return DEFAULT_START_ROLL
+    timeline = metadata.get("setup_timeline")
+    if not isinstance(timeline, dict):
+        return DEFAULT_START_ROLL
+    rolls = timeline.get("pilgrimage_rolls")
+    if not isinstance(rolls, dict):
+        return DEFAULT_START_ROLL
+    try:
+        roll = int(rolls["nw"])
+    except (KeyError, TypeError, ValueError):
+        return DEFAULT_START_ROLL
+    return roll if roll in START_HEX_BY_ROLL else DEFAULT_START_ROLL
+
+
 def map_placements_for(payload: dict, catalog: dict, site_data: dict | list) -> list[dict]:
     """The border track: what is standing on each round of it in this scenario.
 
-    Which hex round 1 lands on is still the sample. The engine's timeline is 26 abstract rounds
-    and carries no start hex, so the rotation is the map's own and only the CONTENTS are real.
+    Generated setup metadata carries the NW roll that normalized the engine's abstract rounds. It
+    is also the physical roll that pins round 1 to the NW quadrant, so the same rotation must be
+    used for sites, buildings, and the ship.
     """
     by_id = {building["id"]: building for building in catalog["buildings"]}
-    path = rotated_edge_path(start_hex_for_roll(DEFAULT_START_ROLL))
+    path = rotated_edge_path(start_hex_for_roll(start_roll_for(payload)))
     placements = []
     for slot in timeline_slots(payload):
         building = by_id[slot["building_id"]] if slot["building_id"] else None
@@ -580,12 +606,10 @@ def ship_hex_for(payload: dict) -> str:
     round 1 sits on, so it needs no arithmetic beyond looking it up: the engine's path and the
     map's are both twenty-six steps and step 0 is the same step.
 
-    WHICH hex that index lands on is still the sample -- the rotation comes from the start roll,
-    which the engine does not carry -- so what is real here is how far around the ring the ship has
-    come, and what is not is where the ring is pinned. Those are different claims and only the
-    first was ever missing.
+    The NW setup roll supplies the physical pin for both this path and the timeline placements.
+    Payloads without that metadata retain the default debug rotation.
     """
-    path = rotated_edge_path(start_hex_for_roll(DEFAULT_START_ROLL))
+    path = rotated_edge_path(start_hex_for_roll(start_roll_for(payload)))
     return path[int(payload["state"]["ship_position"]) % len(path)]
 
 
@@ -978,6 +1002,7 @@ _TURN_SCRIPT = """<script>
   var resourceBaseline = [];
   var merchantBaseline = [];
   var buildingSlotBaseline = [];
+  var pietyDiscBaseline = [];
   var almsDiscBaseline = null;
   var almsWorkforceBaseline = [];
   var merchantBoardBaseline = board.getAttribute('data-merchant-token');
@@ -1066,6 +1091,11 @@ _TURN_SCRIPT = """<script>
     return live.length === 1;
   }
 
+  function abandonConversion() {
+    conversionChosen = [];
+    conversionStepId = null;
+  }
+
   function renderTurnSteps() {
     var live = survivingTurnSteps();
     var availableBuildings = offeredTurnStepValues(0, TURN_STEPS);
@@ -1119,8 +1149,18 @@ _TURN_SCRIPT = """<script>
         conversionChosen.length >= 2 ? 'true' : 'false'
       );
     }
+    var pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
+    var pietyPreviewed = pietyTrack
+      && pietyTrack.getAttribute('data-piety-preview-position') !== null;
+    var pietyHasOffer = piety && !pietyPreviewed && live.some(function (step) {
+      return step.piety_destination !== undefined && step.piety_destination !== null;
+    });
     if (turnStepAnswerLabel) {
       turnStepAnswerLabel.textContent = piety ? 'Destination' : 'Amount';
+      turnStepAnswerLabel.setAttribute(
+        'data-turn-step-answer-label-visible',
+        piety ? (pietyHasOffer ? 'true' : 'false') : (resource ? 'true' : 'false')
+      );
     }
     if (turnStepResourceHint) {
       turnStepResourceHint.textContent = piety
@@ -1164,7 +1204,7 @@ _TURN_SCRIPT = """<script>
     }
     Array.prototype.forEach.call(pietyChoicePills, function (choice) {
       var destination = choice.getAttribute('data-piety-choice-destination');
-      var offered = piety && live.some(function (step) {
+      var offered = piety && !pietyPreviewed && live.some(function (step) {
         return String(step.piety_destination) === String(destination);
       });
       if (offered) {
@@ -1905,6 +1945,7 @@ _TURN_SCRIPT = """<script>
       document.querySelectorAll('[data-player-board-slot]'),
       function (slot) {
         var use = slot.querySelector('use');
+        var content = slot.querySelector('g[transform]');
         buildingSlotBaseline.push({
           slot: slot,
           use: use,
@@ -1913,8 +1954,24 @@ _TURN_SCRIPT = """<script>
             'data-building-id': slot.getAttribute('data-building-id'),
             'data-donated': slot.getAttribute('data-donated')
           },
+          content: content,
+          contentHTML: content ? content.innerHTML : null,
           href: use ? use.getAttribute('href') : null,
           useOpacity: use ? use.getAttribute('opacity') : null
+        });
+      }
+    );
+    pietyDiscBaseline = [];
+    Array.prototype.forEach.call(
+      document.querySelectorAll(
+        '[data-component="piety-track-v2"] [data-player-disc="true"]'
+      ),
+      function (disc) {
+        pietyDiscBaseline.push({
+          disc: disc,
+          cx: disc.getAttribute('cx'),
+          cy: disc.getAttribute('cy'),
+          position: disc.getAttribute('data-piety-position')
         });
       }
     );
@@ -1984,12 +2041,22 @@ _TURN_SCRIPT = """<script>
         if (entry.useOpacity === null) { use.removeAttribute('opacity'); }
         else { use.setAttribute('opacity', entry.useOpacity); }
       }
+      if (entry.content && entry.contentHTML !== null) {
+        entry.content.innerHTML = entry.contentHTML;
+      }
+    });
+    pietyDiscBaseline.forEach(function (entry) {
+      entry.disc.setAttribute('cx', entry.cx);
+      entry.disc.setAttribute('cy', entry.cy);
+      entry.disc.setAttribute('data-piety-position', entry.position);
     });
     if (almsDiscBaseline) {
       almsDiscBaseline.disc.setAttribute('cx', almsDiscBaseline.cx);
       almsDiscBaseline.disc.setAttribute('cy', almsDiscBaseline.cy);
       almsDiscBaseline.disc.setAttribute('data-alms-position', almsDiscBaseline.position);
     }
+    var pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
+    if (pietyTrack) { pietyTrack.removeAttribute('data-piety-preview-position'); }
   }
 
   function applyResourceDelta(delta) {
@@ -2038,9 +2105,47 @@ _TURN_SCRIPT = """<script>
     use.setAttribute('opacity', '1');
   }
 
+  function applyBuildingDonation(buildingId) {
+    if (!activeSeat || !buildingId) { return; }
+    var slot = Array.prototype.filter.call(
+      activeSeat.querySelectorAll('[data-player-board-slot]'),
+      function (candidate) {
+        return candidate.getAttribute('data-building-id') === buildingId;
+      }
+    )[0] || null;
+    if (!slot) { return; }
+    var content = slot.querySelector('g[transform]');
+    if (!content) { return; }
+    slot.setAttribute('data-building-slot-state', 'donated');
+    slot.setAttribute('data-donated', 'true');
+    content.innerHTML = '<use href="#preview-donated-building-' + buildingId + '"></use>';
+  }
+
+  function applyPietyDelta(delta) {
+    if (!activePlayer || !delta || delta.new_piety_position === undefined) { return; }
+    var track = document.querySelector('[data-component="piety-track-v2"]');
+    var disc = track && track.querySelector(
+      '[data-player-disc="true"][data-player="' + activePlayer + '"]'
+    );
+    if (!disc) { return; }
+    var targetPosition = String(delta.new_piety_position);
+    var targetLabel = track.querySelector(
+      '[data-piety-position-label="' + targetPosition + '"]'
+    );
+    var currentLabel = track.querySelector(
+      '[data-piety-position-label="' + disc.getAttribute('data-piety-position') + '"]'
+    );
+    if (!targetLabel || !currentLabel) { return; }
+    var offset = Number(disc.getAttribute('cx')) - Number(currentLabel.getAttribute('x'));
+    disc.setAttribute('cx', String(Number(targetLabel.getAttribute('x')) + offset));
+    disc.setAttribute('data-piety-position', targetPosition);
+    track.setAttribute('data-piety-preview-position', targetPosition);
+  }
+
   function applyAlmsProgress(progress) {
     if (!activePlayer || !progress || progress.new_row === undefined) { return; }
-    var disc = document.querySelector(
+    var alms = document.querySelector('[data-component="alms-table"]');
+    var disc = alms && alms.querySelector(
       '[data-player-disc="true"][data-player="' + activePlayer + '"]'
     );
     var target = ALMS_POSITION_TARGETS[String(progress.new_row)];
@@ -2078,6 +2183,12 @@ _TURN_SCRIPT = """<script>
     }
     if (step.building_constructed !== undefined) {
       applyBuildingConstructed(step.building_constructed);
+    }
+    if (step.building_donation !== undefined) {
+      applyBuildingDonation(step.building_donation);
+    }
+    if (step.piety_delta) {
+      applyPietyDelta(step.piety_delta);
     }
     if (step.merchant_advance !== undefined) {
       applyMerchantAdvance(step.merchant_advance);
@@ -2503,6 +2614,7 @@ _TURN_SCRIPT = """<script>
     if (!resolutions.length) {
       resolutionSplit = null;
     } else if (resolutionSplit === 'tithe' && resolutions.indexOf('tithe') !== -1) {
+      abandonConversion();
       chosen.push('tithe');
       answered.push('tithe');
       resolutionSplit = null;
@@ -2516,6 +2628,7 @@ _TURN_SCRIPT = """<script>
       if (!actionResolutions.length) {
         resolutionSplit = null;
       } else if (actionResolutions.length === 1) {
+        abandonConversion();
         chosen.push(actionResolutions[0]);
         answered.push(actionResolutions[0]);
         resolutionSplit = null;
@@ -2709,6 +2822,9 @@ _TURN_SCRIPT = """<script>
       key.addEventListener('click', function () {
         if (key.getAttribute('data-turn-offered') !== 'true') { return; }
         var value = key.getAttribute(attribute);
+        if (attribute === 'data-resolution-key') {
+          abandonConversion();
+        }
         chosen.push(value);
         answered.push(value);
         resolutionSplit = null;
@@ -2956,6 +3072,7 @@ def turn_styles(route_color: str) -> str:
     box-sizing: border-box; overflow: visible;
   }}
   [data-turn-step-row-active="false"] {{ visibility: hidden; }}
+  [data-turn-step-answer-label-visible="false"] {{ visibility: hidden; }}
   .turn-step-label {{ min-width: 72px; color: #E0C36A; }}
   .turn-step-direction {{
     color: #F2F0E6; background: #262626; border: 1px solid #555; border-radius: 999px;
@@ -3285,6 +3402,7 @@ def render_play_view_html(
 <body>
 {stage}
 {_building_preview_content_defs(catalog, candidates)}
+{_building_donation_preview_content_defs(catalog, donated_data, candidates)}
 {_building_tooltip_templates(catalog)}
 {script}
 {building_tooltip_script()}</body>
@@ -3417,6 +3535,36 @@ def _building_preview_content_defs(catalog: dict, candidates: list[dict]) -> str
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" class="content-defs" width="0" height="0"'
         f' aria-hidden="true"><defs>{fragments}</defs></svg>'
+    )
+
+
+def _building_donation_preview_content_defs(
+    catalog: dict, donated_data: dict | list, candidates: list[dict]
+) -> str:
+    """Reusable donated-side drawings for building donation previews."""
+    ids = {
+        str(step["building_donation"])
+        for candidate in candidates
+        for step in candidate.get("steps", ())
+        if step.get("building_donation") is not None
+    }
+    by_id = {str(building["id"]): building for building in catalog["buildings"]}
+    by_level = {int(tile["level"]): tile for tile in tiles_of(donated_data)}
+    fragments = []
+    for building_id in sorted(ids):
+        building = by_id.get(building_id)
+        tile = by_level.get(int(building["level"])) if building is not None else None
+        if tile is None:
+            continue
+        fragments.append(
+            f'<g id="preview-donated-building-{escape(building_id)}">'
+            f'{render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE)}</g>'
+        )
+    if not fragments:
+        return ""
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="content-defs" width="0" height="0"'
+        f' aria-hidden="true"><defs>{"".join(fragments)}</defs></svg>'
     )
 
 

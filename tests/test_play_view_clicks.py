@@ -317,6 +317,51 @@ def _all_player_holdings(page) -> dict[str, dict[str, int]]:
     )
 
 
+def _all_player_slots(page) -> dict[str, list[tuple[str, str, str]]]:
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll('[data-component="player-board-v2"][data-player-seat]')
+        ).map(board => [
+          board.getAttribute('data-player'),
+          Array.from(board.querySelectorAll('[data-player-board-slot]')).map(slot => [
+            slot.getAttribute('data-building-slot-state'),
+            slot.getAttribute('data-building-id'),
+            slot.getAttribute('data-donated')
+          ])
+        ]))"""
+    )
+
+
+def _all_piety_positions(page) -> dict[str, int]:
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll(
+            '[data-component="piety-track-v2"] [data-player-disc="true"]'
+          )
+        ).map(disc => [disc.getAttribute('data-player'), Number(
+          disc.getAttribute('data-piety-position')
+        )]))"""
+    )
+
+
+def _screenshot_piety_track(page, path: Path) -> None:
+    box = page.locator('[data-component="piety-track-v2"]').bounding_box()
+    assert box is not None
+    page.screenshot(
+        path=str(path),
+        clip={
+            "x": box["x"] - 8,
+            "y": box["y"] - 8,
+            "width": box["width"] + 16,
+            "height": box["height"] + 16,
+        },
+    )
+
+
+def _screenshot_turn_prompt(page, path: Path) -> None:
+    page.locator('[data-component="play-turn"]').screenshot(path=str(path))
+
+
 def _screenshot_active_board(page, path: Path) -> None:
     original_viewport = page.viewport_size
     assert original_viewport is not None
@@ -627,6 +672,336 @@ def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None
     page.wait_for_timeout(120)
     assert _player_holdings(page, f'[data-player="{active_player_id}"]') == preview
     assert server.state.player_state(acting_player).resources == expected
+
+
+def test_devotion_previews_piety_cap_and_confirm_matches_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "clerical_devotion_chapel_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    acting_player = server.state.active_player
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    before_positions = _all_piety_positions(page)
+    other_positions = {
+        player: position
+        for player, position in before_positions.items()
+        if player != active_player_id
+    }
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step.get("piety_delta") is not None for step in candidate["steps"])
+    )
+    action = next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+    expected_player = apply_action(server.state, action, server.config).state.player_state(
+        acting_player
+    )
+
+    for selector in (
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing devotion target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+
+    _screenshot_piety_track(page, SCREENSHOTS / "devotion-piety-before.png")
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(60)
+    _screenshot_piety_track(page, SCREENSHOTS / "devotion-piety-after.png")
+
+    preview_positions = _all_piety_positions(page)
+    assert preview_positions[active_player_id] == expected_player.piety
+    assert {
+        player: position
+        for player, position in preview_positions.items()
+        if player != active_player_id
+    } == other_positions
+    assert _confirm_enabled(page)
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert _all_piety_positions(page) == before_positions
+
+    for selector in (
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing devotion target after reset {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert server.state.player_state(acting_player).piety == expected_player.piety
+    assert _all_piety_positions(page)[active_player_id] == expected_player.piety
+    assert {
+        player: position
+        for player, position in _all_piety_positions(page).items()
+        if player != active_player_id
+    } == other_positions
+
+
+def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(
+    page, serve
+) -> None:
+    base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    building = page.query_selector(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+    assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() > 0
+
+    for selector in (
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing devotion target while conversion pills are live: {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+
+    assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
+    assert page.get_attribute(
+        '[data-component="piety-track-v2"]', 'data-piety-preview-position'
+    ) is not None
+
+
+def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before_state = server.state
+    prompt = page.locator('[data-component="play-turn"]')
+    height_before = prompt.bounding_box()["height"]
+
+    building = page.query_selector(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+    assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() > 0
+    assert page.locator('[data-turn-step-answer-label="true"]').is_visible()
+    assert page.get_attribute(
+        '[data-turn-step-answer-label="true"]',
+        "data-turn-step-answer-label-visible",
+    ) == "true"
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-prompt-mid.png")
+
+    page.locator('[data-turn-control="action"][data-turn-control-enabled="true"]').click()
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+
+    direction_row = page.locator('[data-turn-step-direction-row="true"]')
+    assert direction_row.get_attribute("data-turn-step-row-active") == "false"
+    assert not direction_row.is_visible()
+    assert page.locator('[data-turn-step-direction][data-turn-step-selected="true"]').count() == 0
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
+    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
+    assert page.get_attribute(
+        '[data-turn-step-answer-label="true"]',
+        "data-turn-step-answer-label-visible",
+    ) == "false"
+    assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    assert server.state == before_state
+    _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-prompt-after-resolution.png")
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(80)
+    assert server.state == before_state
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+
+    building = page.query_selector(
+        '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+    destination = page.locator(
+        '[data-piety-choice-pill][data-piety-choice-offered="true"]'
+    ).first
+    assert destination.count() == 1
+    target = int(destination.get_attribute("data-piety-choice-destination"))
+    _click_handle_centre(page, destination.element_handle(), require_hit=True)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert server.state.player_state(server.state.active_player).piety != before_state.player_state(
+        before_state.active_player
+    ).piety
+    assert server.state.player_state(server.state.active_player).piety == target
+
+
+def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+    before_state = server.state
+    prompt = page.locator('[data-component="play-turn"]')
+    height_before = prompt.bounding_box()["height"]
+
+    building = page.query_selector(
+        '[data-turn-step-building-id="stone_yard"][data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_stone"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+    stone = page.query_selector(
+        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+        '[data-turn-offered="true"]'
+    )
+    assert stone is not None
+    _click_handle_centre(page, stone, require_hit=True)
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+
+    for selector in (
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]',
+        '[data-arrow="city->south"][data-turn-offered="true"]',
+        '[data-board-position-index="6"][data-turn-duty-candidate="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing resource-conversion resolution prefix {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    page.locator('[data-turn-control="action"][data-turn-control-enabled="true"]').click()
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    assert page.locator('[data-turn-step-direction-row="true"]').get_attribute(
+        "data-turn-step-row-active"
+    ) == "false"
+    assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
+    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
+    assert server.state == before_state
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(80)
+    assert server.state == before_state
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+
+    building = page.query_selector(
+        '[data-turn-step-building-id="stone_yard"][data-turn-step-offered="true"]'
+    )
+    assert building is not None
+    _click_handle_centre(page, building, require_hit=True)
+    direction = page.query_selector(
+        '[data-turn-step-direction="sell_stone"][data-turn-step-offered="true"]'
+    )
+    assert direction is not None
+    _click_handle_centre(page, direction, require_hit=True)
+    stone = page.query_selector(
+        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+        '[data-turn-offered="true"]'
+    )
+    assert stone is not None
+    _click_handle_centre(page, stone, require_hit=True)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert server.state != before_state
+
+
+def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "give_alms_donate_building_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    acting_player = server.state.active_player
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    before_slots = _all_player_slots(page)
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step.get("building_donation") is not None for step in candidate["steps"])
+    )
+    action = next(
+        action
+        for action in legal_actions(server.state, server.config)
+        if action_id(action) == candidate["action_id"]
+    )
+    expected_player = apply_action(server.state, action, server.config).state.player_state(
+        acting_player
+    )
+
+    _screenshot_active_board(page, SCREENSHOTS / "donation-board-before.png")
+    for selector in (
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing donation target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    _screenshot_active_board(page, SCREENSHOTS / "donation-board-after.png")
+
+    preview_slots = _all_player_slots(page)
+    assert preview_slots[active_player_id][0] == [
+        "donated", action.donate_building_id, "true"
+    ]
+    assert {
+        player: slots for player, slots in preview_slots.items() if player != active_player_id
+    } == {
+        player: slots for player, slots in before_slots.items() if player != active_player_id
+    }
+    assert _confirm_enabled(page)
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(100)
+    assert _all_player_slots(page) == before_slots
+
+    for selector in (
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing donation target after reset {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    assert (
+        action.donate_building_id
+        in server.state.player_state(acting_player).player_board_slots.donated_buildings
+    )
+    assert _all_player_slots(page)[active_player_id][0] == [
+        "donated", action.donate_building_id, "true"
+    ]
 
 
 def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
@@ -2592,7 +2967,7 @@ def test_building_tooltip_halo_fades_gradually_outward(page, serve) -> None:
     page.goto(base_url, wait_until="networkidle")
 
     for where, selector, side in (
-        ("map", TOOLTIP_MAP_BUILDING, "left"),
+        ("map", TOOLTIP_MAP_BUILDING, "right"),
         ("player board", TOOLTIP_BOARD_BUILDING, "right"),
     ):
         darkening, background = _halo_darkening(page, selector, side)
@@ -2624,7 +2999,7 @@ def test_building_tooltip_halo_lifts_a_player_board_as_well_as_the_map(page, ser
     page.set_viewport_size({"width": 1600, "height": 1100})
     page.goto(base_url, wait_until="networkidle")
 
-    over_map, map_background = _halo_darkening(page, TOOLTIP_MAP_BUILDING, "left")
+    over_map, map_background = _halo_darkening(page, TOOLTIP_MAP_BUILDING, "right")
     over_board, board_background = _halo_darkening(page, TOOLTIP_BOARD_BUILDING, "right")
 
     assert map_background > 120 and board_background > 120, (
