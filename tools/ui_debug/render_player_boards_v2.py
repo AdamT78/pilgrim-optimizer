@@ -853,6 +853,7 @@ def _render_building_slot(
     number: int,
     tagged: bool = False,
     holding: dict | None = None,
+    turn_step_hit: bool = False,
 ) -> str:
     """One of the six bottom slots, empty unless it is holding something.
 
@@ -876,28 +877,45 @@ def _render_building_slot(
         f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
         f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/>'
     )
+
+    def turn_step_target(building_id: str) -> str:
+        if not turn_step_hit:
+            return ""
+        return (
+            f'<path data-turn-step-building-id="{escape(building_id)}"'
+            ' data-turn-step-click-target="true"'
+            f' d="{path}" fill="transparent" stroke="none" pointer-events="all"/>'
+        )
+
+    def turn_step_attribute(building_id: str) -> str:
+        if turn_step_hit:
+            return ""
+        return f' data-turn-step-building-id="{escape(building_id)}"'
+
     if holding is not None:
         return (
             f'<g data-player-board-slot="{number}"'
             f' data-building-slot-state="{escape(str(holding["state"]))}"'
             f' data-building-id="{escape(str(holding["id"]))}"'
-            f' data-turn-step-building-id="{escape(str(holding["id"]))}"'
+            f'{turn_step_attribute(str(holding["id"]))}'
             f' data-donated="{"true" if holding["state"] == "donated" else "false"}"'
             ' pointer-events="all">'
             f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
             f'<g transform="translate({cx:.2f},{cy:.2f})">{holding["content"]}</g>'
             f'<path data-slot-outline="true" d="{path}" fill="none"{dashes}'
+            f'{turn_step_target(str(holding["id"]))}'
             "</g>"
         )
     if not tagged:
         return f'<path d="{path}" fill="{palette["slot_fill"]}"{dashes}'
     return (
         f'<g data-player-board-slot="{number}" data-building-slot-state="empty"'
-        ' data-building-id="" data-turn-step-building-id="" data-setup-slot=""'
+        f' data-building-id=""{turn_step_attribute("")} data-setup-slot=""'
         ' data-donated="false" pointer-events="all">'
         f'<path d="{path}" fill="{palette["slot_fill"]}" stroke="none"/>'
         f'<use data-building-content="true" x="{cx:.2f}" y="{cy:.2f}" opacity="0"/>'
         f'<path data-slot-outline="true" d="{path}" fill="none"{dashes}'
+        f'{turn_step_target("")}'
         "</g>"
     )
 
@@ -928,6 +946,7 @@ def render_player_board_v2_svg(
     interactive: bool = False,
     choice_keys: bool = False,
     seat_key: bool = False,
+    turn_step_hit: bool = False,
 ) -> str:
     """One player's board, holding `board_state` (the layout's sample when none is given).
 
@@ -937,6 +956,10 @@ def render_player_board_v2_svg(
 
     `interactive` tags the cubes and draws every slot they can occupy, hidden where the state does
     not need them, so a page can move a cube by flipping opacity.
+
+    `turn_step_hit` moves the conversion-step attribute from the slot to a transparent hit target
+    on top of it. The slot remains available to the building tooltip when the conversion is not
+    offered, while the existing turn-step pointer gate still controls the hit target.
 
     `choice_keys` adds the three hidden keys a page needs to ask this seat which stock it wants.
     Opt in, because a page that will never ask should not carry three rects a board it has no way
@@ -994,7 +1017,11 @@ def render_player_board_v2_svg(
         zip(geometry["building_x"], geometry["building_y"], strict=True), start=1
     ):
         holding = held[number - 1] if number <= len(held) else None
-        parts.append(_render_building_slot(cx, cy, palette, number, interactive, holding))
+        parts.append(
+            _render_building_slot(
+                cx, cy, palette, number, interactive, holding, turn_step_hit=turn_step_hit
+            )
+        )
     parts.append(_render_corner_tag(geometry, player))
     # Last, so the outline lies over everything it encloses rather than under the panel's own edge.
     if seat_key:

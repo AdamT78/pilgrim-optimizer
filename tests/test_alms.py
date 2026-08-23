@@ -154,6 +154,75 @@ def test_give_alms_transition_pays_advances_rewards_and_recalls() -> None:
     assert EventType.PIETY_DELTA not in event_types
 
 
+def test_scenario_payment_crossing_rows_two_and_four_moves_both_rewards() -> None:
+    scenario = load_scenario("scenarios/give_alms_threshold_rewards_two_crossings_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 4
+    )
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    progress = dict(
+        next(event for event in result.events if event.event_type is EventType.ALMS_PROGRESS).details
+    )
+    crossed = crossed_alms_thresholds(
+        progress["old_row"], progress["new_row"], scenario.config.alms
+    )
+    reward_events = [
+        event for event in result.events if event.event_type is EventType.ALMS_THRESHOLD_REWARD
+    ]
+    reward_details = [dict(event.details) for event in reward_events]
+
+    assert len(crossed) == 2
+    assert [details["threshold"] for details in reward_details] == list(crossed)
+    assert [
+        details["reward"] for details in reward_details
+    ] == [scenario.config.alms.threshold_reward_for_row(row) for row in crossed]
+    assert [details["moved"] for details in reward_details] == [True, True]
+    assert after.workforce.village == before.workforce.village - 1
+    assert after.workforce.abbey == before.workforce.abbey
+    assert after.workforce.mancala[0] == before.workforce.mancala[0] + 1
+
+
+def test_scenario_mid_table_payment_reaches_row_six_and_moves_village_serf() -> None:
+    scenario = load_scenario("scenarios/give_alms_threshold_reward_row_six_001.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+        and candidate.alms_payment_silver + candidate.alms_payment_wheat == 3
+    )
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE)
+    result = apply_action(scenario.state, action, scenario.config)
+    after = result.state.player_state(PlayerId.PLAYER_ONE)
+
+    progress = dict(
+        next(event for event in result.events if event.event_type is EventType.ALMS_PROGRESS).details
+    )
+    crossed = crossed_alms_thresholds(
+        progress["old_row"], progress["new_row"], scenario.config.alms
+    )
+    reward_events = [
+        event for event in result.events if event.event_type is EventType.ALMS_THRESHOLD_REWARD
+    ]
+    reward_details = [dict(event.details) for event in reward_events]
+    unavailable = next(details for details in reward_details if not details["moved"])
+    moved = next(details for details in reward_details if details["moved"])
+
+    assert len(reward_events) == len(crossed) == 2
+    assert [details["threshold"] for details in reward_details] == list(crossed)
+    assert moved["reward"] == scenario.config.alms.threshold_reward_for_row(moved["threshold"])
+    assert unavailable["moved"] is False
+    assert "no abbey acolyte available" in unavailable["description"]
+    assert after.workforce.village == before.workforce.village - 1
+    assert after.workforce.abbey == before.workforce.abbey
+    assert after.workforce.mancala[0] == before.workforce.mancala[0] + 1
+
+
 def test_give_alms_transition_fails_when_payment_is_insufficient() -> None:
     scenario = load_scenario("scenarios/mancala_sandbox_001.json")
     state = GameState(
