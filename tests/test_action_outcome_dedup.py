@@ -50,7 +50,7 @@ from pilgrim.search.exact import solve_exact
 REPO = Path(__file__).resolve().parents[1]
 
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
-MIN_SEARCHABLE_GENERATIONS = 74
+MIN_SEARCHABLE_GENERATIONS = 71
 
 # The corpus is every committed position that offers one of these sequences, found rather than
 # listed so that a scenario added later is covered without anyone remembering to add it here. The
@@ -86,7 +86,8 @@ def every_allocation_spelling(
             return
         for move in legal_allocation_moves(state, capacity=special_activity_capacity):
             next_second_placements = used_second_placements + int(
-                move.destination != "abbey" and state.special_activities.count_for(move.destination) == 1
+                move.destination != "abbey"
+                and state.special_activities.count_for(move.destination) == 1
             )
             if next_second_placements > 1:
                 continue
@@ -430,7 +431,8 @@ def test_the_search_lands_on_the_same_line(generations) -> None:
         )
 
     assert searched > 0
-    # Library, Pulpit, and hired buildings will become committed steps, shrinking this population.
+    # Dormitory and Inquisition are committed now; Library, Pulpit, and hired buildings will shrink
+    # this population further when their effects become steps too.
     assert searched >= MIN_SEARCHABLE_GENERATIONS, (
         f"only {searched} search-safe generations remain; {skipped} have committed turn steps"
     )
@@ -504,7 +506,9 @@ def test_the_late_position_still_reaches_everything_it_used_to(
 
     assert set(reachable_after) == set(reachable_before)
     assert reachable_after == reachable_before
-    assert sum(len(v) for v in reachable_after.values()) > 10_000, (
+    # Start-turn relocation is now committed separately, so it no longer multiplies this full-turn
+    # decision population. Keep the dense-fixture guard at its new post-step scale.
+    assert sum(len(v) for v in reachable_after.values()) > 3_800, (
         "this fixture is here to be dense; something has shrunk it"
     )
 

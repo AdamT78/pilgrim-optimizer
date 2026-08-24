@@ -5,8 +5,8 @@
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
 // arrangementPointerRules }.
 //
-// A click is { kind: 'position'|'origin'|'skip'|'duty'|'start_relocation_space'
-// |'end_relocation_space'|'edge'|'resolution'|'combination'|'resource'|'seat'|'building'
+// A click is { kind: 'position'|'origin'|'skip'|'duty'|'end_relocation_space'|'edge'|'resolution'
+// |'combination'|'resource'|'seat'|'building'
 // |'control'|'village'|'abbey'|'role', value }; a resource click also carries { seat }, a seat
 // click names the player whose board is pressed, a building click names the building whose hex on
 // the round track is pressed, and a control click presses one board plaque by name. `village` clicks
@@ -874,7 +874,6 @@ job.clicks.forEach((click) => {
   } else if (
     click.kind === 'position'
     || click.kind === 'origin'
-    || click.kind === 'start_relocation_space'
     || click.kind === 'skip'
     || click.kind === 'end_relocation_space'
     || click.kind === 'duty'

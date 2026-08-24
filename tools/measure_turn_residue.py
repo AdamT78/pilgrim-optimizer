@@ -152,15 +152,6 @@ WHY_NOT_REACHED: tuple[tuple[tuple[str, ...], str], ...] = (
     ),
     (
         (
-            "start_turn_building_id",
-            "start_turn_building_source",
-            "start_turn_relocation_from",
-            "start_turn_relocation_to",
-        ),
-        "dormitory or inquisition in reach, and an acolyte standing on the side the move starts",
-    ),
-    (
-        (
             "end_turn_building_id",
             "end_turn_building_source",
             "end_turn_relocation_from",

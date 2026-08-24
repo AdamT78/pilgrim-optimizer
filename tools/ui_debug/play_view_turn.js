@@ -105,6 +105,9 @@
   function turnStepField(step, index) {
     if (index === 0) { return step.building_id; }
     if (step.kind === 'activation') { return null; }
+    if (step.kind === 'relocation') {
+      return index === 1 ? step.selected_position : null;
+    }
     if (index === 1) { return step.direction; }
     if (step.building_id === 'indulgences') { return step.piety_destination; }
     return String(step.amount);
@@ -163,6 +166,9 @@
     if (conversionChosen.length === 1 && live.length === 1 && live[0].kind === 'activation') {
       return true;
     }
+    if (conversionChosen.length === 2 && live.length === 1 && live[0].kind === 'relocation') {
+      return true;
+    }
     if (conversionChosen.length !== 3) { return false; }
     if (conversionChosen[0] === 'indulgences') {
       return conversionStepId !== null
@@ -182,11 +188,15 @@
     var availableBuildings = offeredTurnStepValues(0, TURN_STEPS);
     var activation = conversionChosen.length === 1
       && live.length === 1 && live[0].kind === 'activation';
+    var relocation = conversionChosen.length >= 1
+      && live.some(function (step) { return step.kind === 'relocation'; });
     var directions = conversionChosen.length >= 1
-      && !activation ? offeredTurnStepValues(1, live)
+      && !activation && !relocation ? offeredTurnStepValues(1, live)
       : [];
-    var piety = !activation && conversionChosen.length >= 2 && conversionChosen[0] === 'indulgences';
-    var resource = !activation && conversionChosen.length >= 2 && !piety;
+    var relocationTargets = relocation ? offeredTurnStepValues(1, live) : [];
+    var piety = !activation && !relocation && conversionChosen.length >= 2
+      && conversionChosen[0] === 'indulgences';
+    var resource = !activation && !relocation && conversionChosen.length >= 2 && !piety;
     var pietyAmount = piety && conversionChosen.length > 2
       ? pietyAmountFor(live) : null;
     var resourceId = null;
@@ -225,19 +235,27 @@
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        conversionChosen.length >= 1 && !activation ? 'true' : 'false'
+        conversionChosen.length >= 1 && !activation && !relocation ? 'true' : 'false'
       );
     }
     if (turnStepActivationPrompt) {
-      turnStepActivationPrompt.textContent = activation ? live[0].prompt : '';
+      turnStepActivationPrompt.textContent = activation && live.length ? live[0].prompt : '';
       turnStepActivationPrompt.setAttribute(
         'data-turn-step-activation-active', activation ? 'true' : 'false'
       );
     }
+    Array.prototype.forEach.call(spaces, function (space) {
+      var index = String(space.getAttribute('data-board-position-index'));
+      if (relocationTargets.indexOf(index) === -1) {
+        space.removeAttribute('data-turn-step-relocation-candidate');
+      } else {
+        space.setAttribute('data-turn-step-relocation-candidate', 'true');
+      }
+    });
     if (turnStepResourceRow) {
       turnStepResourceRow.setAttribute(
         'data-turn-step-row-active',
-        conversionChosen.length >= 2 ? 'true' : 'false'
+        piety || resource || relocation ? 'true' : 'false'
       );
     }
     var pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
@@ -257,9 +275,11 @@
       );
     }
     if (turnStepResourceHint) {
-      turnStepResourceHint.textContent = piety
+      turnStepResourceHint.textContent = relocation
+        ? (live.length ? live[0].prompt : '')
+        : piety
         ? (conversionChosen.length > 2 ? '' : 'click a piety position on the track')
-        : 'click the live resource pill';
+        : resource ? 'click the live resource pill' : '';
     }
     var hirePayments = [];
     if (piety && conversionChosen.length >= 3) {
@@ -905,9 +925,9 @@
   }
 
   /* A step says how it is answered and this sorts them by that, so a new
-     kind of question is a new bucket here and nothing else. That now
-     includes five kinds answered on the wheel: `origin`, `skip`, `duty`,
-     `start_relocation_space` and `end_relocation_space`, split so they can
+     kind of question is a new bucket here and nothing else. That includes
+     four kinds answered on the wheel: `origin`, `skip`, `duty`, and
+     `end_relocation_space`, split so they can
      be marked differently without naming fields. No step is recognised by
      what it is ABOUT: there is no field name anywhere in this file, and a
      page that told a tithe's stock from a taxation's would be one that had
@@ -1349,9 +1369,31 @@
     });
   }
 
+  function applyTurnStepRelocationPreview() {
+    var live = survivingTurnSteps();
+    if (
+      conversionChosen.length !== 2
+      || live.length !== 1
+      || live[0].kind !== 'relocation'
+      || !activePlayer
+    ) { return; }
+    var step = live[0];
+    if (step.building_id !== 'dormitory' && step.building_id !== 'inquisition') { return; }
+    var selected = positionName(Number(step.selected_position));
+    if (!selected) { return; }
+    var source = step.building_id === 'dormitory' ? selected : 'city';
+    var destination = step.building_id === 'dormitory' ? 'city' : selected;
+    var moved = visibleColumnAt(source, activePlayer)[0];
+    var placed = placeOneCubeAt(destination, activePlayer);
+    if (!moved || !placed) {
+      if (placed) { placed.setAttribute('opacity', '0'); }
+      return;
+    }
+    moved.setAttribute('opacity', '0');
+  }
+
   function applyPreview() {
     var started = false;
-    var askedStartRelocation = false;
     var overflow = false;
     var count = null;
     var origin = null;
@@ -1398,10 +1440,6 @@
         }
         continue;
       }
-      if (step.kind === 'start_relocation_choice' || step.kind === 'start_relocation_space') {
-        askedStartRelocation = true;
-        continue;
-      }
       if (step.kind === 'skip') {
         skip = step.value;
         var skipped = positionName(Number(step.value));
@@ -1439,9 +1477,10 @@
       }
     }
     applyPartialResourceAllocation();
+    applyTurnStepRelocationPreview();
     return {
       started: started,
-      resettable: (started && answered.length > 0) || askedStartRelocation,
+      resettable: started && answered.length > 0,
       overflow: overflow,
       count: count,
       origin: origin,
@@ -1458,7 +1497,6 @@
     var origins = offeredByKind(offered, 'origin');
     var skips = offeredByKind(offered, 'skip');
     var duties = offeredByKind(offered, 'duty');
-    var startRelocationSpaces = offeredByKind(offered, 'start_relocation_space');
     var endRelocationValues = offeredByKind(offered, 'end_relocation_space');
     var endRelocationSpaces = endRelocationValues
       .map(function (value) { return Number(value); })
@@ -1513,11 +1551,6 @@
       } else {
         space.setAttribute('data-turn-duty-candidate', 'true');
       }
-      if (startRelocationSpaces.indexOf(index) === -1) {
-        space.removeAttribute('data-turn-start-relocation-candidate');
-      } else {
-        space.setAttribute('data-turn-start-relocation-candidate', 'true');
-      }
       if (endRelocationSpaces.indexOf(index) === -1) {
         space.removeAttribute('data-turn-end-relocation-candidate');
       } else {
@@ -1562,7 +1595,6 @@
         })
         .concat(offeredByKind(offered, 'hire'))
         .concat(offeredByKind(offered, 'merchant_advance'))
-        .concat(offeredByKind(offered, 'start_relocation_choice'))
         .concat(offeredByKind(offered, 'end_relocation_choice'))
     );
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
@@ -1633,6 +1665,8 @@
   function render() {
     renderPhase();
     if (!CANDIDATES.length) {
+      restoreBaseline();
+      applyTurnStepRelocationPreview();
       renderTurnSteps();
       setControl(
         'reset',
@@ -1889,12 +1923,18 @@
     space.addEventListener('click', function () {
       if (
         space.getAttribute('data-turn-start-candidate') !== 'true'
-        && space.getAttribute('data-turn-start-relocation-candidate') !== 'true'
+        && space.getAttribute('data-turn-step-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-skip-candidate') !== 'true'
         && space.getAttribute('data-turn-end-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-duty-candidate') !== 'true'
       ) { return; }
       var value = Number(space.getAttribute('data-board-position-index'));
+      if (space.getAttribute('data-turn-step-relocation-candidate') === 'true') {
+        conversionChosen = [conversionChosen[0], String(value)];
+        conversionStepId = null;
+        render();
+        return;
+      }
       chosen.push(value);
       answered.push(value);
       resolutionSplit = null;
@@ -1976,11 +2016,13 @@
   if (confirmControl) {
     confirmControl.addEventListener('click', function () {
       if (confirmControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
-      if (conversionReady()) {
+      if (conversionChosen.length > 0) {
+        if (!conversionReady()) {
+          throw new Error('enabled Confirm has no ready committed building step');
+        }
         submitTurnStep(survivingTurnSteps()[0].step_id);
         return;
       }
-      if (conversionChosen.length > 0) { return; }
       var live = surviving(chosen);
       var allocationCandidates = live.filter(function (candidate) {
         var step = candidate.steps[chosen.length];

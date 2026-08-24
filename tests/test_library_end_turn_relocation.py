@@ -7,7 +7,13 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import EndTurnAction
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -109,21 +115,29 @@ def test_library_hire_market_city_to_abbey_moves_acolyte_to_abbey() -> None:
 
 
 def test_library_hire_blocked_for_merchant_none_insufficient_donated_and_not_live() -> None:
-    _scenario, merchant_none_actions = _library_actions("scenarios/library_merchant_none_no_hire_001.json")
+    _scenario, merchant_none_actions = _library_actions(
+        "scenarios/library_merchant_none_no_hire_001.json"
+    )
     assert merchant_none_actions == []
 
-    _scenario, insufficient_actions = _library_actions("scenarios/library_insufficient_resource_no_hire_001.json")
+    _scenario, insufficient_actions = _library_actions(
+        "scenarios/library_insufficient_resource_no_hire_001.json"
+    )
     assert insufficient_actions == []
 
     _scenario, donated_actions = _library_actions("scenarios/library_donated_no_modifier_001.json")
     assert donated_actions == []
 
-    _scenario, not_live_actions = _library_actions("scenarios/library_not_live_no_modifier_001.json")
+    _scenario, not_live_actions = _library_actions(
+        "scenarios/library_not_live_no_modifier_001.json"
+    )
     assert not_live_actions == []
 
 
 def test_library_no_city_acolyte_after_turn_generates_no_suffix_variants() -> None:
-    _scenario, actions = _library_actions("scenarios/library_no_city_acolyte_after_turn_no_modifier_001.json")
+    _scenario, actions = _library_actions(
+        "scenarios/library_no_city_acolyte_after_turn_no_modifier_001.json"
+    )
     assert actions == []
 
 
@@ -191,7 +205,7 @@ def test_apply_rejects_invalid_library_source_or_target_fields() -> None:
         apply_action(scenario.state, invalid_target, scenario.config)
 
 
-def test_library_can_combine_with_start_turn_relocation() -> None:
+def test_library_can_follow_a_committed_start_turn_relocation() -> None:
     scenario = load_scenario("scenarios/dormitory_active_return_duty_to_city_001.json")
     player = scenario.state.active_player
     player_state = scenario.state.player_state(player)
@@ -209,9 +223,11 @@ def test_library_can_combine_with_start_turn_relocation() -> None:
         ),
     )
 
-    actions = legal_actions(combined_state, scenario.config)
-    assert any(
-        action.start_turn_building_id in {"dormitory", "inquisition"}
-        and action.end_turn_building_id == "library"
-        for action in actions
+    dormitory_step = next(
+        step
+        for step in turn_steps(combined_state, scenario.config)
+        if step.building_id == "dormitory"
     )
+    after_step = apply_turn_step(combined_state, scenario.config, dormitory_step)
+    actions = legal_actions(after_step, scenario.config)
+    assert any(action.end_turn_building_id == "library" for action in actions)

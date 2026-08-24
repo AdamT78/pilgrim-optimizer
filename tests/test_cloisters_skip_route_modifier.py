@@ -7,7 +7,13 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -25,21 +31,27 @@ def _first_action(actions, predicate):
 
 
 def test_own_active_cloisters_generates_skip_duty_and_skip_city_variants() -> None:
-    duty_scenario, duty_actions = _cloisters_actions("scenarios/cloisters_active_skip_duty_tile_001.json")
+    duty_scenario, duty_actions = _cloisters_actions(
+        "scenarios/cloisters_active_skip_duty_tile_001.json"
+    )
     north_east = duty_scenario.config.board.index_for_name("north_east")
 
     assert duty_actions
     assert all(action.sow_route_building_source == "own_active" for action in duty_actions)
     assert any(action.sow_route_omitted_location == north_east for action in duty_actions)
 
-    city_scenario, city_actions = _cloisters_actions("scenarios/cloisters_active_skip_city_001.json")
+    city_scenario, city_actions = _cloisters_actions(
+        "scenarios/cloisters_active_skip_city_001.json"
+    )
     city = city_scenario.config.board.index_for_name("city")
     assert city_actions
     assert any(action.sow_route_omitted_location == city for action in city_actions)
 
 
 def test_cloisters_market_hire_generates_variants_when_payable() -> None:
-    _scenario, actions = _cloisters_actions("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
+    _scenario, actions = _cloisters_actions(
+        "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
+    )
 
     assert actions
     assert all(action.sow_route_building_source == "market" for action in actions)
@@ -85,7 +97,9 @@ def test_cloisters_opponent_hire_pays_owner_and_skips_city_before_sowing() -> No
 
 
 def test_cloisters_hire_market_pays_bank() -> None:
-    scenario, actions = _cloisters_actions("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
+    scenario, actions = _cloisters_actions(
+        "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
+    )
     north_east = scenario.config.board.index_for_name("north_east")
     east = scenario.config.board.index_for_name("east")
     action = _first_action(
@@ -107,7 +121,9 @@ def test_cloisters_hire_market_pays_bank() -> None:
 
 
 def test_cloisters_hire_blocked_for_merchant_none_insufficient_donated_and_not_live() -> None:
-    _scenario, merchant_none_actions = _cloisters_actions("scenarios/cloisters_merchant_none_no_hire_001.json")
+    _scenario, merchant_none_actions = _cloisters_actions(
+        "scenarios/cloisters_merchant_none_no_hire_001.json"
+    )
     assert merchant_none_actions == []
 
     _scenario, insufficient_actions = _cloisters_actions(
@@ -115,10 +131,14 @@ def test_cloisters_hire_blocked_for_merchant_none_insufficient_donated_and_not_l
     )
     assert insufficient_actions == []
 
-    _scenario, donated_actions = _cloisters_actions("scenarios/cloisters_donated_no_modifier_001.json")
+    _scenario, donated_actions = _cloisters_actions(
+        "scenarios/cloisters_donated_no_modifier_001.json"
+    )
     assert donated_actions == []
 
-    _scenario, not_live_actions = _cloisters_actions("scenarios/cloisters_not_live_no_modifier_001.json")
+    _scenario, not_live_actions = _cloisters_actions(
+        "scenarios/cloisters_not_live_no_modifier_001.json"
+    )
     assert not_live_actions == []
 
 
@@ -220,7 +240,9 @@ def test_cloisters_events_not_emitted_when_modifier_not_used() -> None:
 def test_normal_non_cloisters_actions_remain_legal_and_cloisters_actions_dedupe() -> None:
     scenario = load_scenario("scenarios/cloisters_active_skip_duty_tile_001.json")
     actions = legal_actions(scenario.state, scenario.config)
-    cloisters_actions = [action for action in actions if action.sow_route_building_id == "cloisters"]
+    cloisters_actions = [
+        action for action in actions if action.sow_route_building_id == "cloisters"
+    ]
 
     assert any(action.sow_route_building_id is None for action in actions)
     assert cloisters_actions
@@ -245,9 +267,12 @@ def test_cloisters_can_combine_with_start_turn_prefix_when_both_are_active() -> 
         ),
     )
 
-    actions = legal_actions(combined_state, scenario.config)
-    assert any(
-        action.start_turn_building_id in {"dormitory", "inquisition"}
-        and action.sow_route_building_id == "cloisters"
-        for action in actions
+    dormitory_step = next(
+        step
+        for step in turn_steps(combined_state, scenario.config)
+        if step.building_id == "dormitory"
     )
+    actions = legal_actions(
+        apply_turn_step(combined_state, scenario.config, dormitory_step), scenario.config
+    )
+    assert any(action.sow_route_building_id == "cloisters" for action in actions)

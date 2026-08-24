@@ -7,7 +7,13 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -86,7 +92,9 @@ def test_cloisters_different_omissions_produce_distinct_action_ids() -> None:
     first_action = actions[0]
     second_action = _first_action(
         actions,
-        lambda candidate: candidate.sow_route_omitted_location != first_action.sow_route_omitted_location,
+        lambda candidate: (
+            candidate.sow_route_omitted_location != first_action.sow_route_omitted_location
+        ),
     )
     assert first_action.sow_route_omitted_location is not None
     assert second_action.sow_route_omitted_location is not None
@@ -233,7 +241,9 @@ def test_apply_rejects_hired_cloisters_when_hire_source_is_unavailable() -> None
     with pytest.raises(TransitionValidationError, match="Cloisters is unavailable"):
         apply_action(merchant_none_scenario.state, hired_action, merchant_none_scenario.config)
 
-    insufficient_scenario = load_scenario("scenarios/cloisters_insufficient_resource_no_hire_001.json")
+    insufficient_scenario = load_scenario(
+        "scenarios/cloisters_insufficient_resource_no_hire_001.json"
+    )
     with pytest.raises(TransitionValidationError, match="Cloisters is unavailable"):
         apply_action(insufficient_scenario.state, hired_action, insufficient_scenario.config)
 
@@ -282,16 +292,18 @@ def test_dormitory_plus_kogge_uses_post_relocation_city_pickup() -> None:
             ),
         ),
     )
-    action = _first_action(
-        legal_actions(composed_state, scenario.config),
+    step = _first_action(
+        turn_steps(composed_state, scenario.config),
         lambda candidate: (
-            candidate.start_turn_building_id == "dormitory"
-            and candidate.start_turn_relocation_from == east
-            and candidate.origin == city
-            and candidate.sow_route_building_id == "kogge"
+            candidate.building_id == "dormitory" and candidate.selected_position == east
         ),
     )
-    result = apply_action(composed_state, action, scenario.config)
+    after_step = apply_turn_step(composed_state, scenario.config, step)
+    action = _first_action(
+        legal_actions(after_step, scenario.config),
+        lambda candidate: candidate.origin == city and candidate.sow_route_building_id == "kogge",
+    )
+    result = apply_action(after_step, action, scenario.config)
     sowing_details = dict(_events_of_type(result.events, EventType.SOWING)[0].details)
 
     _assert_event_type_before(result.events, EventType.START_TURN_RELOCATION, EventType.SOWING)
@@ -317,15 +329,16 @@ def test_inquisition_plus_kogge_uses_post_relocation_city_pickup() -> None:
             ),
         ),
     )
-    action = _first_action(
-        legal_actions(composed_state, scenario.config),
-        lambda candidate: (
-            candidate.start_turn_building_id == "inquisition"
-            and candidate.origin == city
-            and candidate.sow_route_building_id == "kogge"
-        ),
+    step = _first_action(
+        turn_steps(composed_state, scenario.config),
+        lambda candidate: candidate.building_id == "inquisition",
     )
-    result = apply_action(composed_state, action, scenario.config)
+    after_step = apply_turn_step(composed_state, scenario.config, step)
+    action = _first_action(
+        legal_actions(after_step, scenario.config),
+        lambda candidate: candidate.origin == city and candidate.sow_route_building_id == "kogge",
+    )
+    result = apply_action(after_step, action, scenario.config)
     sowing_details = dict(_events_of_type(result.events, EventType.SOWING)[0].details)
 
     _assert_event_type_before(result.events, EventType.START_TURN_RELOCATION, EventType.SOWING)

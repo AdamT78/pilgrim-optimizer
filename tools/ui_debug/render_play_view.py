@@ -128,13 +128,28 @@ PAGE_TITLE = "Pilgrim — Play View"
 ENGINE_BUILDINGS_PATH = Path(__file__).resolve().parents[2] / "configs" / "buildings.json"
 RESOURCE_TOKEN_ICONS = {"wheat": "wheat", "stone": "cube", "silver": "coin"}
 TOOLTIP_DECKLE_POINTS = (
-    (0, 13), (6, 7), (16, 11), (30, 6), (46, 11), (62, 6), (78, 11), (91, 7),
-    (100, 13), (98, 38), (100, 78), (96, 100), (84, 96), (70, 100), (55, 96),
-    (39, 100), (25, 96), (9, 100), (1, 94), (3, 55),
+    (0, 13),
+    (6, 7),
+    (16, 11),
+    (30, 6),
+    (46, 11),
+    (62, 6),
+    (78, 11),
+    (91, 7),
+    (100, 13),
+    (98, 38),
+    (100, 78),
+    (96, 100),
+    (84, 96),
+    (70, 100),
+    (55, 96),
+    (39, 100),
+    (25, 96),
+    (9, 100),
+    (1, 94),
+    (3, 55),
 )
-TOOLTIP_CLIP_PATH = "polygon(" + ", ".join(
-    f"{x}% {y}%" for x, y in TOOLTIP_DECKLE_POINTS
-) + ")"
+TOOLTIP_CLIP_PATH = "polygon(" + ", ".join(f"{x}% {y}%" for x, y in TOOLTIP_DECKLE_POINTS) + ")"
 TOOLTIP_DECKLE_SVG_POINTS = " ".join(f"{x},{y}" for x, y in TOOLTIP_DECKLE_POINTS)
 
 CITY_POSITION = 0
@@ -225,7 +240,7 @@ def _resource_glyph_for_tooltip(resource: str) -> str:
         f'<svg class="building-tooltip-resource" data-tooltip-resource="{resource}"'
         ' viewBox="0 0 20 30" aria-label="'
         f'{resource} resource" role="img"><g data-resource="{resource}" pointer-events="none">'
-        f'{_ICON_RENDERERS[icon](10, 17, size, "#3A2F1E")}</g></svg>'
+        f"{_ICON_RENDERERS[icon](10, 17, size, '#3A2F1E')}</g></svg>"
     )
 
 
@@ -292,12 +307,12 @@ def _building_tooltip_templates(catalog: dict) -> str:
             '<div class="building-tooltip-heading">'
             f'<span class="building-tooltip-name">{escape(str(building["name"]))}</span>'
             f'<span class="building-tooltip-category">{escape(str(building["category"]))}</span>'
-            '</div>'
+            "</div>"
             f'<div class="building-tooltip-description">{description}</div>'
-            '</div>'
+            "</div>"
             + _tooltip_deckle_layer("building-tooltip-shadow")
             + _tooltip_deckle_layer("building-tooltip-halo")
-            + '</div></template>'
+            + "</div></template>"
         )
     return (
         '<svg class="building-tooltip-filters" aria-hidden="true" width="0" height="0">'
@@ -307,7 +322,7 @@ def _building_tooltip_templates(catalog: dict) -> str:
         '<feComponentTransfer in="gray-noise" result="aged-noise">'
         '<feFuncA type="linear" slope="0.10"/></feComponentTransfer>'
         '<feComposite in="aged-noise" in2="SourceGraphic" operator="atop"/>'
-        '</filter></defs></svg>'
+        "</filter></defs></svg>"
         '<div data-building-tooltip-templates="true">'
         + "".join(templates)
         + '</div><div class="building-tooltip" data-building-tooltip="true"'
@@ -750,7 +765,6 @@ def _combination_keys(candidates: list[dict]) -> str:
             if step["kind"] in {
                 "combination",
                 "hire",
-                "start_relocation_choice",
                 "end_relocation_choice",
             }:
                 seen.setdefault(step["value"], step.get("label", step["value"]))
@@ -789,7 +803,7 @@ def _turn_step_controls(steps: list[dict]) -> str:
         f'<button type="button" class="turn-step-hire"'
         f' data-turn-step-hire-payment="{escape(str(payment))}"'
         ' data-turn-step-hire-offered="false" data-turn-step-hire-selected="false">'
-        f'{say(str(payment))}</button>'
+        f"{say(str(payment))}</button>"
         for payment in hire_payments
     )
     return (
@@ -855,10 +869,10 @@ def _box_turn_controls() -> str:
     return (
         '<div class="turn-controls" data-component="turn-controls">'
         '<div class="turn-control-row turn-control-row-top">'
-        f'{button("Action", "action")}{button("Tithe", "tithe")}'
+        f"{button('Action', 'action')}{button('Tithe', 'tithe')}"
         "</div>"
         '<div class="turn-control-row turn-control-row-bottom">'
-        f'{button("Reset", "reset")}{button("Confirm", "confirm")}'
+        f"{button('Reset', 'reset')}{button('Confirm', 'confirm')}"
         "</div>"
         "</div>"
     )
@@ -879,7 +893,7 @@ def _turn_phase_column(payload: dict) -> str:
         + "".join(
             f'<div class="phase-row" {attribute}="{escape(str(row["key"]))}"'
             + (' data-phase-current="true"' if row.get("current") else "")
-            + f">{escape(str(row["label"]))}</div>"
+            + f">{escape(str(row['label']))}</div>"
             for row in rows
         )
         + "</div>"
@@ -892,9 +906,7 @@ def render_turn_panel(payload: dict) -> str:
     turn_steps = payload.get("turn_steps") or []
     if not candidates and not turn_steps:
         return (
-            '<div class="play-turn" data-component="play-turn">'
-            f"{_turn_phase_column(payload)}"
-            "</div>"
+            f'<div class="play-turn" data-component="play-turn">{_turn_phase_column(payload)}</div>'
         )
     return (
         '<div class="play-turn" data-component="play-turn">'
@@ -1000,15 +1012,15 @@ def turn_styles(route_color: str) -> str:
     painted area counts.
     """
     return f"""  /* One offered-ring language: dashed means "offered now", solid means "taken".
-     Origin, skip, duty and relocation-space candidates intentionally use the same seat-colour ring
+     Origin, skip, duty and relocation candidates intentionally use the same seat-colour ring
      family. That is safe because only one of those questions is live at a time, and the prompt
      says which; the play-server sweep holds that invariant across corpus and playtests. */
   [data-turn-start-candidate="true"] {{ cursor: pointer; }}
   [data-turn-start-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 8 4;
   }}
-  [data-turn-start-relocation-candidate="true"] {{ cursor: pointer; }}
-  [data-turn-start-relocation-candidate="true"] .board-circle {{
+  [data-turn-step-relocation-candidate="true"] {{ cursor: pointer; }}
+  [data-turn-step-relocation-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 6 3;
   }}
   [data-turn-skip-candidate="true"] {{ cursor: pointer; }}
@@ -1368,9 +1380,7 @@ def render_play_view_html(
         .replace(
             "__RESOLUTION_COMMITTED__",
             json.dumps(
-                payload.get("state", {}).get("turn_progress", {}).get(
-                    "resolution_committed", False
-                )
+                payload.get("state", {}).get("turn_progress", {}).get("resolution_committed", False)
             ),
         )
         .replace(
@@ -1581,7 +1591,7 @@ def _building_donation_preview_content_defs(
             continue
         fragments.append(
             f'<g id="preview-donated-building-{escape(building_id)}">'
-            f'{render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE)}</g>'
+            f"{render_board_slot_donated(tile, BUILDING_SLOT_HEX_SIZE)}</g>"
         )
     if not fragments:
         return ""
