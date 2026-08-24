@@ -87,6 +87,7 @@ def state_to_record(state: GameState) -> dict[str, Any]:
         "turn_progress": {
             "used_buildings": sorted(state.turn_progress.used_buildings),
             "events": events_to_json_records(state.turn_progress.events),
+            "resolution_committed": state.turn_progress.resolution_committed,
         },
         "dummy_acolytes": {
             "north_group": list(state.dummy_acolytes.north_group),

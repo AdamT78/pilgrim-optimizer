@@ -3,6 +3,7 @@
 from pilgrim.model.actions import (
     AllocationMove,
     BuildingConversionStep,
+    EndTurnAction,
     FullTurnAction,
     GameAction,
     TurnStep,
@@ -89,6 +90,7 @@ __all__ = [
     "DummyAcolyteGroups",
     "DutyTilesLayout",
     "EventType",
+    "EndTurnAction",
     "FullTurnAction",
     "GameAction",
     "GameConfig",

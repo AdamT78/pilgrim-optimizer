@@ -15,8 +15,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from pilgrim.model.actions import action_id
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.model.actions import EndTurnAction, action_id
+from pilgrim.model.enums import TurnResolutionType
+from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 from tools.play_server import PlayServer
 
 pytestmark = pytest.mark.slow
@@ -782,6 +783,124 @@ def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(
     assert page.get_attribute(
         '[data-component="piety-track-v2"]', 'data-piety-preview-position'
     ) is not None
+
+
+def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before_state = server.state
+    initial_candidate_ids = tuple(
+        candidate["action_id"] for candidate in server.payload["turn_candidates"]
+    )
+    acting_player = before_state.active_player
+    devotion = next(
+        action
+        for action in legal_actions(before_state, server.config)
+        if action.resolution is TurnResolutionType.CLERICAL_DEVOTION
+    )
+    committed = apply_action(before_state, devotion, server.config)
+    sell_gained_piety = next(
+        step
+        for step in turn_steps(committed.state, server.config)
+        if step.direction == "sell_piety" and step.amount == 1
+    )
+    after_conversion = apply_turn_step(
+        committed.state,
+        server.config,
+        sell_gained_piety,
+    )
+    expected = apply_action(after_conversion, EndTurnAction(), server.config).state
+
+    def click_devotion(*, choose_action: bool = True) -> None:
+        selectors = []
+        if choose_action:
+            selectors.append('[data-turn-control="action"][data-turn-control-enabled="true"]')
+        selectors.append('[data-resolution-key="clerical_devotion"][data-turn-offered="true"]')
+        for selector in selectors:
+            handle = page.query_selector(selector)
+            assert handle is not None, f"missing devotion target {selector}"
+            _click_handle_centre(page, handle, require_hit=True)
+            page.wait_for_timeout(40)
+        assert _confirm_enabled(page)
+        page.locator('[data-turn-control="confirm"]').click()
+        page.wait_for_timeout(120)
+
+    def click_sell_and_confirm() -> None:
+        building = page.query_selector(
+            '[data-active-seat="true"] [data-turn-step-building-id="indulgences"]'
+            '[data-turn-step-offered="true"]'
+        )
+        assert building is not None
+        _click_handle_centre(page, building, require_hit=True)
+        direction = page.query_selector(
+            '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
+        )
+        assert direction is not None
+        _click_handle_centre(page, direction, require_hit=True)
+        destination = page.query_selector(
+            f'[data-piety-choice-pill][data-piety-choice-destination="{before_state.player_state(acting_player).piety}"]'
+            '[data-piety-choice-offered="true"]'
+        )
+        assert destination is not None
+        _click_handle_centre(page, destination, require_hit=True)
+        assert _confirm_enabled(page)
+        page.locator('[data-turn-control="confirm"]').click()
+        page.wait_for_timeout(120)
+
+    click_devotion()
+    assert server.state == committed.state
+    assert server.state.active_player is acting_player
+    assert server.state.turn_progress.resolution_committed is True
+    reset = page.locator('[data-turn-control="reset"]')
+    assert reset.is_visible()
+    assert reset.get_attribute("data-turn-control-enabled") == "true"
+    _screenshot_turn_prompt(page, SCREENSHOTS / "post-resolution-conversion-window.png")
+
+    reset_handle = reset.element_handle()
+    assert reset_handle is not None
+    _click_handle_centre(page, reset_handle, require_hit=True)
+    page.wait_for_timeout(100)
+    assert server.state == before_state
+    assert tuple(
+        candidate["action_id"] for candidate in server.payload["turn_candidates"]
+    ) == initial_candidate_ids
+    initial_resolution_keys = {
+        step["value"]
+        for candidate in server.payload["turn_candidates"]
+        for step in candidate["steps"]
+        if step["kind"] == "resolution"
+    }
+    assert len(initial_resolution_keys) > 1
+    action_control = page.locator('[data-turn-control="action"]')
+    assert action_control.is_visible()
+    assert action_control.get_attribute("data-turn-control-enabled") == "true"
+    tithe_control = page.locator('[data-turn-control="tithe"]')
+    assert tithe_control.is_visible()
+    assert tithe_control.get_attribute("data-turn-control-enabled") == "true"
+    action_handle = action_control.element_handle()
+    assert action_handle is not None
+    _click_handle_centre(page, action_handle, require_hit=True)
+    page.wait_for_timeout(40)
+    for resolution_key in initial_resolution_keys - {"tithe"}:
+        assert page.locator(
+            f'[data-resolution-key="{resolution_key}"][data-turn-offered="true"]'
+        ).count() == 1
+
+    click_devotion(choose_action=False)
+    click_sell_and_confirm()
+    assert server.state == after_conversion
+    assert "ended the turn." in page.locator('[data-component="play-turn"]').inner_text()
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+
+    assert server.state == expected
+    assert server.state.player_state(acting_player).piety == expected.player_state(
+        acting_player
+    ).piety
+    assert server.state.player_state(acting_player).resources.silver == expected.player_state(
+        acting_player
+    ).resources.silver
 
 
 def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serve) -> None:

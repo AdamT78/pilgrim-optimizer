@@ -230,6 +230,7 @@ def _turn_progress_from_dict(raw: Mapping[str, Any]) -> TurnProgress:
     return TurnProgress(
         used_buildings=frozenset(str(building_id) for building_id in used_raw),
         events=tuple(events),
+        resolution_committed=bool(progress_raw.get("resolution_committed", False)),
     )
 
 

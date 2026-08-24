@@ -147,6 +147,7 @@ class ActionType(Enum):
     START_PLAYER_CONFESSION = "start_player_confession"
     START_PLAYER_SELECTION = "start_player_selection"
     FULL_TURN = "full_turn"
+    END_TURN = "end_turn"
     SOW = "sow"
     RESOLVE_DUTY = "resolve_duty"
     TITHE = "tithe"

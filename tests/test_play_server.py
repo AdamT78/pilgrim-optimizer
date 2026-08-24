@@ -35,6 +35,7 @@ from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
 from pilgrim.model.actions import (
+    EndTurnAction,
     FullTurnAction,
     SetupSowAction,
     StartPlayerSelectionAction,
@@ -969,21 +970,26 @@ def test_conversions_playtest_runs_for_twenty_turns() -> None:
 def test_conversions_playtest_reaches_metadata_driven_alms_season_end() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
     state = scenario.state
-    season_end_turn = None
+    season_end_action_count = None
+    season_end_game_turn = None
     season_end_events: list[str] = []
     for turn_index in range(1, 100):
         actions = list(legal_actions(state, scenario.config))
         assert actions, "conversion playtest ended before its first season end"
+        if state.turn_progress.resolution_committed:
+            assert actions == [EndTurnAction()]
         result = apply_action(state, actions[0], scenario.config)
         event_types = [event.event_type.value for event in result.events]
         if EventType.ALMS_SEASON_END.value in event_types:
-            season_end_turn = turn_index
+            season_end_action_count = turn_index
+            season_end_game_turn = result.state.turn
             season_end_events = event_types
             state = result.state
             break
         state = result.state
 
-    assert season_end_turn == 10
+    assert season_end_action_count == 14
+    assert season_end_game_turn == 6
     assert state.timing.round_number == 5
     assert {
         EventType.ALMS_SEASON_END.value,
@@ -4989,10 +4995,11 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
     They grep `_TURN_SCRIPT`, which is the code as written, with no data in it at all -- so nothing
     has to be subtracted before searching and nothing can be over-subtracted by accident. That is
     only sound while the template IS the whole of the code, and this is what says so: the script on
-    the page has to be the template with its two placeholders filled in and nothing else done to
+    the page has to be the template with its data placeholders filled in and nothing else done to
     it. Anything injected by a second route breaks this equality, and the guard reports that its
     own coverage has stopped being what it claims rather than quietly checking less. The template
-    carries the action candidates, committed turn steps and used-building set as separate data.
+    carries the action candidates, committed turn steps, used-building set, and resolution-window
+    flag as separate data.
     """
     expected = (
         render_play_view._TURN_SCRIPT.replace(
@@ -5002,6 +5009,14 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
+        )
+        .replace(
+            "__RESOLUTION_COMMITTED__",
+            json.dumps(
+                payload.get("state", {}).get("turn_progress", {}).get(
+                    "resolution_committed", False
+                )
+            ),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
         .replace(
@@ -5016,7 +5031,7 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
         )
     )
     assert _script_carried_by(page) == expected, (
-        "the page's script is not the template with its two placeholders filled in, so grepping "
+        "the page's script is not the template with its data placeholders filled in, so grepping "
         "the template no longer covers everything that reaches the browser"
     )
 
@@ -5154,6 +5169,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__RESOLUTION_COMMITTED__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TOKEN__") == 1
     assert render_play_view._TURN_SCRIPT.count("__ALMS_POSITION_TARGETS__") == 1
     _the_script_is_the_template_with_only_its_values_filled_in(page, server.payload)

@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import BuildingConversionStep, action_summary
+from pilgrim.model.actions import BuildingConversionStep, EndTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import TransitionValidationError, apply_action, apply_turn_step, legal_actions, turn_steps
 
@@ -198,6 +198,11 @@ def test_converted_piety_can_change_who_takes_the_first_player_marker() -> None:
     )
     with_conversion = apply_action(conversion_state, with_conversion_action, scenario.config)
     without_conversion = apply_action(scenario.state, without_conversion_action, scenario.config)
+    without_conversion = apply_action(
+        without_conversion.state,
+        EndTurnAction(),
+        scenario.config,
+    )
     assert with_conversion.state.active_player is PlayerId.PLAYER_TWO
     assert without_conversion.state.active_player is PlayerId.PLAYER_ONE
     marker = _events(with_conversion.events, EventType.START_PLAYER_MARKER)[0]

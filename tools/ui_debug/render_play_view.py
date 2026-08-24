@@ -960,6 +960,7 @@ _TURN_SCRIPT = """<script>
   var CANDIDATES = __CANDIDATES__;
   var TURN_STEPS = __TURN_STEPS__;
   var USED_BUILDINGS = __USED_BUILDINGS__;
+  var RESOLUTION_COMMITTED = __RESOLUTION_COMMITTED__;
   var TOKEN = __TOKEN__;
   var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
   if (!CANDIDATES.length && !TURN_STEPS.length) { return; }
@@ -2527,7 +2528,7 @@ _TURN_SCRIPT = """<script>
     });
     setControl('sow', false, preview.started && preview.duty === null);
     setControl('reset', preview.resettable, false);
-    if (USED_BUILDINGS.length > 0 || conversionChosen.length > 0) {
+    if (RESOLUTION_COMMITTED || USED_BUILDINGS.length > 0 || conversionChosen.length > 0) {
       setControl('reset', true, false);
     }
     if (resourceAllocationAmount(resourceAllocation) > 0) {
@@ -2556,7 +2557,11 @@ _TURN_SCRIPT = """<script>
   function render() {
     if (!CANDIDATES.length) {
       renderTurnSteps();
-      setControl('reset', USED_BUILDINGS.length > 0 || conversionChosen.length > 0, false);
+      setControl(
+        'reset',
+        RESOLUTION_COMMITTED || USED_BUILDINGS.length > 0 || conversionChosen.length > 0,
+        false
+      );
       setControl('confirm', conversionReady(), false);
       return;
     }
@@ -2954,7 +2959,7 @@ _TURN_SCRIPT = """<script>
   if (resetControl) {
     resetControl.addEventListener('click', function () {
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
-      if (USED_BUILDINGS.length > 0) {
+      if (RESOLUTION_COMMITTED || USED_BUILDINGS.length > 0) {
         submitReset();
         return;
       }
@@ -3371,6 +3376,14 @@ def render_play_view_html(
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
+        )
+        .replace(
+            "__RESOLUTION_COMMITTED__",
+            json.dumps(
+                payload.get("state", {}).get("turn_progress", {}).get(
+                    "resolution_committed", False
+                )
+            ),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
         .replace(
