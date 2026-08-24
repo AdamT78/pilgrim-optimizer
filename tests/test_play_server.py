@@ -115,6 +115,7 @@ def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
         ),
         log=[],
         log_blocks=[],
+        phase_column=play_server.phase_column_payload(scenario.state, []),
     )
 
 
@@ -3565,6 +3566,205 @@ def test_round_closing_actions_are_marked_as_round_end_log_blocks(tmp_path: Path
     assert ">Round end<" in page
 
 
+def _phase_row_keys(server: PlayServer) -> list[str]:
+    return [row["key"] for row in server.payload["phase_column"]["rows"]]
+
+
+def _current_phase_row_keys(server: PlayServer) -> list[str]:
+    return [
+        row["key"]
+        for row in server.payload["phase_column"]["rows"]
+        if row["current"]
+    ]
+
+
+def _remove_confession_box_from_market(server: PlayServer) -> None:
+    server.state = replace(
+        server.state,
+        building_market=tuple(
+            building_id
+            for building_id in server.state.building_market
+            if building_id != "confession_box"
+        ),
+        building_availability=tuple(
+            entry
+            for entry in server.state.building_availability
+            if entry[0] != "confession_box"
+        ),
+    )
+    server._refresh()
+
+
+def _apply_first_settled_round_end(server: PlayServer) -> None:
+    candidate = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
+    _apply_settled_turn_and_pass(server, candidate)
+
+
+def test_ordinary_round_end_phase_rows_derive_income_and_marker_from_pass_events() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0),
+        SCENARIOS / "round_end_trade_route_income_basic_001.json",
+    )
+    try:
+        _remove_confession_box_from_market(server)
+        _apply_first_settled_round_end(server)
+
+        assert server.payload["phase_column"]["scope"] == "round_end"
+        page = render_play_view_from_payload(server.payload)
+        assert 'data-phase-column="round_end"' in page
+        assert (
+            'data-round-end-phase="choose_first_player" data-phase-current="true"'
+            in page
+        )
+        assert _phase_row_keys(server) == [
+            "round_marker",
+            "merchant",
+            "trade_route_income",
+            "choose_first_player",
+        ]
+        assert _current_phase_row_keys(server) == ["choose_first_player"]
+        assert "season_end" not in _phase_row_keys(server)
+    finally:
+        server.server_close()
+
+
+def test_capped_round_end_adds_excess_row_only_when_resources_were_returned() -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "round_end_excess_001.json")
+    try:
+        _remove_confession_box_from_market(server)
+        _apply_first_settled_round_end(server)
+
+        assert _phase_row_keys(server) == [
+            "excess",
+            "round_marker",
+            "merchant",
+            "choose_first_player",
+        ]
+        assert _current_phase_row_keys(server) == ["choose_first_player"]
+    finally:
+        server.server_close()
+
+
+def test_pilgrimage_round_end_inserts_season_end_between_marker_and_merchant() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0),
+        SCENARIOS / "round_end_non_final_pilgrimage_continues_001.json",
+    )
+    try:
+        _remove_confession_box_from_market(server)
+        _apply_first_settled_round_end(server)
+
+        assert _phase_row_keys(server) == [
+            "round_marker",
+            "season_end",
+            "merchant",
+            "trade_route_income",
+            "choose_first_player",
+        ]
+        assert _current_phase_row_keys(server) == ["choose_first_player"]
+    finally:
+        server.server_close()
+
+
+def test_confession_phase_rows_survive_each_subquestion_before_first_player_choice() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0),
+        SCENARIOS / "confession_box_multiple_players_player_order_001.json",
+    )
+    try:
+        candidate = next(
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if candidate["action_id"]
+            and any(
+                step["kind"] == "resolution" and step["value"] == "tithe"
+                for step in candidate["steps"]
+            )
+        )
+        _apply_settled_turn_and_pass(server, candidate)
+
+        assert _phase_row_keys(server) == ["round_marker", "merchant", "confession"]
+        assert _current_phase_row_keys(server) == ["confession"]
+        assert "choose_first_player" not in _phase_row_keys(server)
+
+        answer = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
+        server.apply(answer["action_id"], server.payload["state_token"])
+
+        assert server.payload["log_blocks"][-1]["round_end"] is False
+        assert _phase_row_keys(server) == ["round_marker", "merchant", "confession"]
+        assert _current_phase_row_keys(server) == ["confession"]
+
+        while server.payload["state"]["phase"] == "start_player_confession":
+            answer = next(
+                candidate
+                for candidate in server.payload["turn_candidates"]
+                if candidate["action_id"]
+            )
+            server.apply(answer["action_id"], server.payload["state_token"])
+
+        assert _phase_row_keys(server) == [
+            "round_marker",
+            "merchant",
+            "confession",
+            "choose_first_player",
+        ]
+        assert _current_phase_row_keys(server) == ["choose_first_player"]
+    finally:
+        server.server_close()
+
+
+def test_guild_merchant_event_does_not_duplicate_the_round_end_merchant_row() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0),
+        SCENARIOS / "guild_round_end_moves_merchant_twice_001.json",
+    )
+    try:
+        assert server.config.merchant.advance_at_round_end is True
+        candidate = next(
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if candidate["action_id"]
+            and any(
+                step["kind"] == "merchant_advance" and step["value"] == "guild:own_active"
+                for step in candidate["steps"]
+            )
+        )
+        server.apply(candidate["action_id"], server.payload["state_token"])
+        assert server.payload["log_blocks"][-1]["round_end"] is False
+        assert EventType.MERCHANT_ADVANCE.value in server.payload["log_blocks"][-1]["event_types"]
+
+        _pass_end_turn_window(server)
+
+        assert server.payload["log_blocks"][-1]["round_end"] is True
+        assert EventType.MERCHANT_ADVANCE.value in server.payload["log_blocks"][-1]["event_types"]
+        assert _phase_row_keys(server) == [
+            "round_marker",
+            "merchant",
+            "choose_first_player",
+        ]
+        assert _phase_row_keys(server).count("merchant") == 1
+        assert _phase_row_keys(server).index("merchant") == 1
+        assert _current_phase_row_keys(server) == ["choose_first_player"]
+    finally:
+        server.server_close()
+
+
+def test_game_over_keeps_the_three_turn_phase_rows_dim() -> None:
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "scoring_basic_breakdown_001.json")
+    try:
+        assert server.state.game_over is True
+        assert server.payload["phase_column"] == {
+            "scope": "inactive",
+            "rows": [
+                {"key": "beginning", "label": "Beginning of Turn", "current": False},
+                {"key": "sow", "label": "Sow", "current": False},
+                {"key": "end", "label": "End of Turn", "current": False},
+            ],
+        }
+    finally:
+        server.server_close()
+
+
 def test_player_log_drops_developer_dump_lines_in_ordinary_play(tmp_path: Path) -> None:
     server = _played_through_setup(_served(tmp_path))
     for _ in range(4):
@@ -5041,8 +5241,8 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
     the page has to be the template with its data placeholders filled in and nothing else done to
     it. Anything injected by a second route breaks this equality, and the guard reports that its
     own coverage has stopped being what it claims rather than quietly checking less. The template
-    carries the action candidates, committed turn steps, used-building set, and resolution-window
-    flag as separate data.
+    carries the action candidates, committed turn steps, used-building set, resolution-window flag,
+    and server-decided phase-column scope as separate data.
     """
     expected = (
         render_play_view._TURN_SCRIPT.replace(
@@ -5060,6 +5260,10 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
                     "resolution_committed", False
                 )
             ),
+        )
+        .replace(
+            "__PHASE_COLUMN_SCOPE__",
+            json.dumps(payload.get("phase_column", {}).get("scope", "inactive")),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
         .replace(
@@ -5213,6 +5417,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__RESOLUTION_COMMITTED__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__PHASE_COLUMN_SCOPE__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TOKEN__") == 1
     assert render_play_view._TURN_SCRIPT.count("__ALMS_POSITION_TARGETS__") == 1
     _the_script_is_the_template_with_only_its_values_filled_in(page, server.payload)
@@ -5947,6 +6152,7 @@ def test_end_turn_phase_is_painted_in_server_html_before_the_script_runs() -> No
         turn_steps=play_server.turn_steps_payload(committed, scenario.config),
         log=[],
         log_blocks=[],
+        phase_column=play_server.phase_column_payload(committed, []),
     )
 
     page = render_play_view_from_payload(payload)

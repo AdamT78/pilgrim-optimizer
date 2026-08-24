@@ -383,6 +383,31 @@ def _assert_painted_turn_phase(page, current: str) -> None:
         assert row.evaluate("node => getComputedStyle(node).color") == expected_colors[is_current]
 
 
+def _assert_all_turn_phases_dim(page) -> None:
+    """An inactive phase column remains visibly present but has no current row."""
+    for phase in ("beginning", "sow", "end"):
+        row = page.locator(f'[data-turn-phase="{phase}"]')
+        assert row.count() == 1, f"{phase} phase row was not drawn exactly once"
+        assert row.is_visible(), f"{phase} phase row was hidden"
+        assert row.get_attribute("data-phase-current") is None
+        assert row.evaluate("node => getComputedStyle(node).color") == "rgb(107, 103, 94)"
+    assert page.locator('[data-turn-phase][data-phase-current="true"]').count() == 0
+
+
+def _assert_painted_round_end_phases(page, keys: list[str], current: str) -> None:
+    """The completed round-end steps are dim and exactly one live question is green."""
+    assert page.locator("[data-round-end-phase]").count() == len(keys)
+    for key in keys:
+        row = page.locator(f'[data-round-end-phase="{key}"]')
+        assert row.count() == 1, f"{key} round-end row was not drawn exactly once"
+        assert row.is_visible(), f"{key} round-end row was hidden"
+        is_current = key == current
+        assert (row.get_attribute("data-phase-current") == "true") is is_current
+        expected_color = "rgb(95, 191, 110)" if is_current else "rgb(107, 103, 94)"
+        assert row.evaluate("node => getComputedStyle(node).color") == expected_color
+    assert page.locator('[data-round-end-phase][data-phase-current="true"]').count() == 1
+
+
 def _screenshot_active_board(page, path: Path) -> None:
     original_viewport = page.viewport_size
     assert original_viewport is not None
@@ -2553,6 +2578,44 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     assert server.state.turn_progress.resolution_committed is True
     _assert_painted_turn_phase(page, "end")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-end.png")
+
+
+def test_setup_sow_phase_column_stays_dim_after_a_setup_answer(page, serve) -> None:
+    """Setup sowing is not a turn, before or after its player has answered a step."""
+    base_url, server = serve(SCENARIOS / "setup_sow_2p_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    _assert_all_turn_phases_dim(page)
+    _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-setup-sow.png")
+
+    answer = _next_offered_from_dom(page)
+    assert answer is not None, "the setup sow offered no answer to click"
+    _click_handle_centre(page, answer, require_hit=True)
+    page.wait_for_timeout(100)
+
+    assert server.payload["state"]["phase"] == "setup_sow"
+    _assert_all_turn_phases_dim(page)
+
+
+def test_first_player_choice_paints_completed_round_end_steps_and_current_choice(page, serve) -> None:
+    """Round-end history is drawn from the pass before the first-player question is painted."""
+    base_url, server = serve(
+        SCENARIOS / "indulgences_buy_then_round_end_start_player_001.json"
+    )
+    settled = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
+    server.apply(settled["action_id"], server.payload["state_token"])
+    assert server.state.turn_progress.resolution_committed is True
+    server.apply(action_id(EndTurnAction()), server.payload["state_token"])
+    assert server.payload["state"]["phase"] == "start_player_selection"
+
+    page.goto(base_url, wait_until="networkidle")
+
+    _assert_painted_round_end_phases(
+        page,
+        ["round_marker", "merchant", "choose_first_player"],
+        "choose_first_player",
+    )
+    _screenshot_turn_prompt(page, SCREENSHOTS / "round-end-phase-first-player.png")
 
 
 def test_conversion_resource_pill_reaches_amount_above_six_without_prompt_overflow(page, serve) -> None:

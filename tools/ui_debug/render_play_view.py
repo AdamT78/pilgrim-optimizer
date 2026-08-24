@@ -861,35 +861,23 @@ def _box_turn_controls() -> str:
     )
 
 
-def _initial_turn_phase(payload: dict) -> str | None:
-    """The current turn phase before the page script has seen a click.
-
-    Candidate answers live only in the browser, so a fresh page can only be at Beginning of Turn
-    or End of Turn. The latter is a committed resolution window; a game over has no active phase.
-    """
-    state = payload.get("state") or {}
-    if state.get("game_over"):
-        return None
-    if (state.get("turn_progress") or {}).get("resolution_committed"):
-        return "end"
-    return "beginning"
-
-
 def _turn_phase_column(payload: dict) -> str:
-    """The three turn phases, all drawn before any question is revealed."""
-    current = _initial_turn_phase(payload)
-    rows = (
-        ("beginning", "Beginning of Turn"),
-        ("sow", "Sow"),
-        ("end", "End of Turn"),
+    """Draw the server-described turn, round-end, or inactive phase column."""
+    column = payload.get("phase_column") or {}
+    scope = str(column.get("scope", "inactive"))
+    rows = column.get("rows") or (
+        {"key": "beginning", "label": "Beginning of Turn", "current": False},
+        {"key": "sow", "label": "Sow", "current": False},
+        {"key": "end", "label": "End of Turn", "current": False},
     )
+    attribute = "data-round-end-phase" if scope == "round_end" else "data-turn-phase"
     return (
-        '<div class="phase-column">'
+        f'<div class="phase-column" data-phase-column="{escape(scope)}">'
         + "".join(
-            f'<div class="phase-row" data-turn-phase="{phase}"'
-            + (' data-phase-current="true"' if phase == current else "")
-            + f">{label}</div>"
-            for phase, label in rows
+            f'<div class="phase-row" {attribute}="{escape(str(row["key"]))}"'
+            + (' data-phase-current="true"' if row.get("current") else "")
+            + f">{escape(str(row["label"]))}</div>"
+            for row in rows
         )
         + "</div>"
     )
@@ -899,8 +887,6 @@ def render_turn_panel(payload: dict) -> str:
     """Where a turn is answered and agreed to, beside the log rather than on the board."""
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
-    if not candidates and not turn_steps and _initial_turn_phase(payload) is None:
-        return ""
     if not candidates and not turn_steps:
         return (
             '<div class="play-turn" data-component="play-turn">'
@@ -1004,6 +990,7 @@ _TURN_SCRIPT = """<script>
   var TURN_STEPS = __TURN_STEPS__;
   var USED_BUILDINGS = __USED_BUILDINGS__;
   var RESOLUTION_COMMITTED = __RESOLUTION_COMMITTED__;
+  var PHASE_COLUMN_SCOPE = __PHASE_COLUMN_SCOPE__;
   var TOKEN = __TOKEN__;
   var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
   if (!CANDIDATES.length && !TURN_STEPS.length) { return; }
@@ -1083,6 +1070,7 @@ _TURN_SCRIPT = """<script>
   }
 
   function renderPhase() {
+    if (PHASE_COLUMN_SCOPE !== 'turn') { return; }
     var current = RESOLUTION_COMMITTED ? 'end' : (answered.length ? 'sow' : 'beginning');
     Array.prototype.forEach.call(phaseRows, function (row) {
       if (row.getAttribute('data-turn-phase') === current) {
@@ -3315,7 +3303,8 @@ def render_play_view_html(
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
     turn_surface = bool(candidates or turn_steps)
-    turn_panel_visible = turn_surface or not bool(payload.get("state", {}).get("game_over"))
+    # The phase column remains in place even when no turn surface is active.
+    turn_panel_visible = True
     # One-time draw choice from the full candidate set; do not recalculate as the turn narrows.
     city_spoke_reversals = _city_spoke_reversals_used(candidates)
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
@@ -3445,6 +3434,10 @@ def render_play_view_html(
                     "resolution_committed", False
                 )
             ),
+        )
+        .replace(
+            "__PHASE_COLUMN_SCOPE__",
+            json.dumps(payload.get("phase_column", {}).get("scope", "inactive")),
         )
         .replace("__TOKEN__", json.dumps(payload.get("state_token", "")))
         .replace(
