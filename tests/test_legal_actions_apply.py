@@ -78,7 +78,6 @@ def _hired_sources(action) -> int:
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
         (action.start_turn_building_id, action.start_turn_building_source),
         (action.end_turn_building_id, action.end_turn_building_source),
-        (action.merchant_advance_building_id, action.merchant_advance_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
         (action.workforce_move_building_id, action.workforce_move_building_source),

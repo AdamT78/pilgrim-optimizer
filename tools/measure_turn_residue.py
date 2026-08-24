@@ -169,10 +169,6 @@ WHY_NOT_REACHED: tuple[tuple[tuple[str, ...], str], ...] = (
         "library in reach, and an acolyte still in the city once the turn has resolved",
     ),
     (
-        ("merchant_advance_building_id", "merchant_advance_building_source"),
-        "guild in reach",
-    ),
-    (
         ("donate_building_id",),
         "a building already constructed onto your own board, then a give_alms duty to give it away",
     ),

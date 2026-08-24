@@ -66,6 +66,7 @@ from pilgrim.rules.sow_routes import (  # noqa: E402
     kogge_cloisters_candidate_placements,
 )
 from pilgrim.model.actions import (  # noqa: E402
+    BuildingActivationStep,
     EndTurnAction,
     FullTurnAction,
     SetupSowAction,
@@ -183,7 +184,7 @@ def actions_document(state: Any, config: Any, payload: dict) -> dict:
 
 
 def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
-    """The committed conversions currently legal, each with the id the client may quote back."""
+    """The committed building steps currently legal, each with the id the client may quote back."""
     payload = []
     player = state.active_player
     before = state.player_state(player)
@@ -198,18 +199,28 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             and event.action_id == _turn_step_id(step)
             and dict(event.details).get("resource") == "silver"
         )
-        payload.append({
+        entry = {
             "step_id": _turn_step_id(step),
             "building_id": step.building_id,
             "source": step.source,
-            "direction": step.direction,
-            "amount": step.amount,
             "hire_payment": step.hire_payment,
-            "piety_destination": after_step.piety,
-            # Describe the conversion separately from the optional building hire fee. Both values
-            # come from the engine: the total state delta and the BUILDING_HIRED event details.
-            "silver_delta": total_silver_delta - hire_silver_delta,
-        })
+        }
+        if isinstance(step, BuildingActivationStep):
+            entry.update(
+                kind="activation",
+                prompt="Activate Guild: move the Merchant clockwise +1 Duty tile.",
+            )
+        else:
+            entry.update(
+                kind="conversion",
+                direction=step.direction,
+                amount=step.amount,
+                piety_destination=after_step.piety,
+                # Describe the conversion separately from the optional building hire fee. Both
+                # values come from the engine: the total state delta and the hire event details.
+                silver_delta=total_silver_delta - hire_silver_delta,
+            )
+        payload.append(entry)
     return payload
 
 
@@ -222,7 +233,7 @@ class UnknownAction(Exception):
 
 
 class UnknownTurnStep(Exception):
-    """The submission named a conversion step that is not legal in the position now held."""
+    """The submission named a committed building step that is not legal in the position now held."""
 
 
 def _default_seat_roles(player_count: int) -> dict[str, str]:
@@ -529,7 +540,6 @@ HIRE_PAYMENT_OWNER_FIELDS: tuple[tuple[str, str], ...] = (
     ("sow_route_secondary_building_id", "sow_route_secondary_building_source"),
     ("building_conversion_id", "building_conversion_source"),
     ("bank_payment_building_id", "bank_payment_building_source"),
-    ("merchant_advance_building_id", "merchant_advance_building_source"),
     ("workforce_move_building_id", "workforce_move_building_source"),
     ("free_hire_target_building_id", "free_hire_target_building_source"),
     ("effective_acolyte_building_id", "effective_acolyte_building_source"),
@@ -607,7 +617,6 @@ RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "choose a resource."
 BUILDING_PROMPT = "choose a building."
 COMBINATION_PROMPT = "choose one."
-MERCHANT_ADVANCE_PROMPT = "choose whether to use Guild."
 SEAT_PROMPT = "choose first player for this round."
 ARRANGEMENT_PROMPT = (
     "move acolytes from the Abbey to Special Activity and/or between Special Activities."
@@ -675,7 +684,6 @@ _PREVIEW_EFFECT_FIELDS: tuple[str, ...] = (
     "resource_delta",
     "building_constructed",
     "building_donation",
-    "merchant_advance",
     "piety_delta",
     "alms_progress",
     "alms_threshold_reward",
@@ -712,8 +720,6 @@ _PREVIEW_EFFECT_ACTION_FIELDS: tuple[str, ...] = (
     "free_hire_enabler_building_id",
     "free_hire_target_building_id",
     "free_hire_target_building_source",
-    "merchant_advance_building_id",
-    "merchant_advance_building_source",
     "effective_acolyte_building_id",
     "effective_acolyte_building_source",
     "workforce_move_building_id",
@@ -806,20 +812,6 @@ def _turn_action_preview_effects(
     if len(donated) == 1 and getattr(action, "donate_building_id", None) == donated[0]:
         effects["building_donation"] = donated[0]
 
-    if getattr(action, "merchant_advance_building_id", None) == "guild":
-        guild_event = next(
-            (
-                event
-                for event in result.events
-                if event.event_type is EventType.MERCHANT_ADVANCE
-                and dict(event.details).get("cause") == "guild"
-            ),
-            None,
-        )
-        if guild_event is not None:
-            to_position = dict(guild_event.details).get("to_position")
-            if to_position in config.board.positions:
-                effects["merchant_advance"] = config.board.positions.index(to_position)
     if getattr(action, "resolution", None) is not None and action.resolution.value == "give_alms_paid":
         progress_event = next(
             (
@@ -887,7 +879,6 @@ def _attach_turn_action_preview_effects(
                 "resource",
                 "combination",
                 "building",
-                "merchant_advance",
             }:
                 step["resource_delta"] = resource_delta
                 break
@@ -915,12 +906,6 @@ def _attach_turn_action_preview_effects(
         for step in steps:
             if step["kind"] == "resolution":
                 step["piety_delta"] = piety_delta
-                break
-    merchant_position = effects.get("merchant_advance")
-    if merchant_position is not None:
-        for step in steps:
-            if step["kind"] == "merchant_advance":
-                step["merchant_advance"] = merchant_position
                 break
     alms_step = next(
         (
@@ -1086,32 +1071,6 @@ def _hire_payment_resource_steps(
             )
         )
     return steps
-
-
-def _merchant_advance_step(action: FullTurnAction) -> tuple[dict, tuple[str, ...]]:
-    """The optional Guild use, offered as one whole choice beside other combinations."""
-    building_id = action.merchant_advance_building_id
-    source = action.merchant_advance_building_source
-    if building_id is None:
-        return (
-            {
-                "kind": "merchant_advance",
-                "value": "guild:none",
-                "label": "Do not use Guild",
-                "prompt": MERCHANT_ADVANCE_PROMPT,
-            },
-            ("merchant_advance_building_id", "merchant_advance_building_source"),
-        )
-    source_text = _hire_source_phrase(source or "unknown")
-    return (
-        {
-            "kind": "merchant_advance",
-            "value": f"{building_id}:{source or 'unknown'}",
-            "label": f"Use Guild from {source_text} to move the Merchant",
-            "prompt": MERCHANT_ADVANCE_PROMPT,
-        },
-        ("merchant_advance_building_id", "merchant_advance_building_source"),
-    )
 
 
 def _start_relocation_phrase(building_id: str) -> str:
@@ -1333,7 +1292,6 @@ def _presented(
     config: Any | None = None,
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Each further question this page can put about one action, with the fields it answers.
@@ -1419,8 +1377,6 @@ def _presented(
                 asked_buildings=hire_payment_buildings,
             )
         )
-    if offer_merchant_advance and isinstance(action, FullTurnAction):
-        presented.append(_merchant_advance_step(action))
     for name in RESOURCE_CHOICE_FIELDS:
         value = getattr(action, name, None)
         if value is not None:
@@ -1492,7 +1448,6 @@ def _presented_rows(
     config: Any | None = None,
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
     """Call `_presented`, while still allowing tests to monkeypatch the old one-arg shape."""
@@ -1503,7 +1458,6 @@ def _presented_rows(
             config=config,
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
-            offer_merchant_advance=offer_merchant_advance,
             include_preview_effects=include_preview_effects,
         )
     except TypeError as exc:
@@ -1519,7 +1473,6 @@ def _presented_steps(
     config: Any | None = None,
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> list[dict]:
     return [
@@ -1530,7 +1483,6 @@ def _presented_steps(
             config=config,
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
-            offer_merchant_advance=offer_merchant_advance,
             include_preview_effects=include_preview_effects,
         )
     ]
@@ -1724,7 +1676,6 @@ def _steps_before_hire_payment_questions(
     config: Any,
     offer_hire: bool = False,
     offer_start_turn_relocation: bool = False,
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> list[dict]:
     """Decision steps through the hire choice, stopping before any hire-payment stock choice."""
@@ -1738,7 +1689,6 @@ def _steps_before_hire_payment_questions(
                 state=state,
                 config=config,
                 offer_hire=offer_hire,
-                offer_merchant_advance=offer_merchant_advance,
                 include_preview_effects=include_preview_effects,
             ),
             player_id,
@@ -1793,9 +1743,6 @@ def _steps_before_hire_payment_questions(
     if offer_hire and isinstance(action, FullTurnAction):
         hire_step, _fields = _hire_step(action, state, config)
         steps.append(hire_step)
-    if offer_merchant_advance and isinstance(action, FullTurnAction):
-        merchant_step, _fields = _merchant_advance_step(action)
-        steps.append(merchant_step)
     return _address_steps(steps, player_id)
 
 
@@ -1807,12 +1754,10 @@ def _hire_payment_question_buildings_by_action_id(
     config: Any,
     offer_hire_by_action_id: dict[str, bool],
     offer_start_turn_relocation: bool,
-    offer_merchant_advance_by_action_id: dict[str, bool] | None = None,
     include_preview_effects: bool = True,
 ) -> dict[str, tuple[str, ...]]:
     """Per action, which hired buildings still need a stock-choice question."""
     action_with_ids = [(action, action_id(action)) for action in actions]
-    offer_merchant_advance_by_action_id = offer_merchant_advance_by_action_id or {}
     by_action_id: dict[str, tuple[str, ...]] = {
         move_id: tuple()
         for _action, move_id in action_with_ids
@@ -1827,7 +1772,6 @@ def _hire_payment_question_buildings_by_action_id(
                 config=config,
                 offer_hire=offer_hire_by_action_id[move_id],
                 offer_start_turn_relocation=offer_start_turn_relocation,
-                offer_merchant_advance=offer_merchant_advance_by_action_id.get(move_id, False),
                 include_preview_effects=include_preview_effects,
             )
         )
@@ -1948,7 +1892,6 @@ def _covered_fields(
     hire_payment_buildings: tuple[str, ...] = (),
     offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> set[str]:
     """Which residue fields this action's steps actually answer.
@@ -1964,7 +1907,6 @@ def _covered_fields(
             config=config,
             offer_hire=offer_hire,
             hire_payment_buildings=hire_payment_buildings,
-            offer_merchant_advance=offer_merchant_advance,
             include_preview_effects=include_preview_effects,
         )
         for name in fields
@@ -2007,7 +1949,6 @@ def decision_steps(
     hire_payment_buildings: tuple[str, ...] = (),
     offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
-    offer_merchant_advance: bool = False,
     preview_effects: dict[str, Any] | None = None,
     include_preview_effects: bool = True,
 ) -> list[dict]:
@@ -2046,7 +1987,6 @@ def decision_steps(
                 config=config,
                 offer_hire=offer_hire,
                 hire_payment_buildings=hire_payment_buildings,
-                offer_merchant_advance=offer_merchant_advance,
                 include_preview_effects=include_preview_effects,
             ),
             player_id,
@@ -2111,7 +2051,6 @@ def decision_steps(
         config=config,
         offer_hire=offer_hire,
         hire_payment_buildings=hire_payment_buildings,
-        offer_merchant_advance=offer_merchant_advance,
         include_preview_effects=include_preview_effects,
     )
     if isinstance(action, FullTurnAction) and offer_end_turn_relocation:
@@ -2137,7 +2076,6 @@ def _unresolved_fields(
     hire_payment_buildings: tuple[str, ...] = (),
     offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
-    offer_merchant_advance: bool = False,
     include_preview_effects: bool = True,
 ) -> list[str]:
     """Which fields the actions in one group still disagree about.
@@ -2161,7 +2099,6 @@ def _unresolved_fields(
         hire_payment_buildings=hire_payment_buildings,
         offer_start_turn_relocation=offer_start_turn_relocation,
         offer_end_turn_relocation=offer_end_turn_relocation,
-        offer_merchant_advance=offer_merchant_advance,
         include_preview_effects=include_preview_effects,
     )
     unresolved = [
@@ -2221,19 +2158,12 @@ def turn_candidates(
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config) if actions is None else actions)
     hire_contexts = _hire_contexts(actions, config)
-    merchant_advance_contexts = {
-        _resolution_context_key(action, config)
-        for action in actions
-        if isinstance(action, FullTurnAction)
-        and action.merchant_advance_building_id is not None
-    }
     offer_start_turn_relocation = any(
         isinstance(action, FullTurnAction) and _action_uses_start_turn_relocation(action)
         for action in actions
     )
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
-    offer_merchant_advance_by_action_id: dict[str, bool] = {}
     preview_effects_by_action_id: dict[str, dict[str, Any]] = {}
     preview_effect_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
@@ -2245,9 +2175,6 @@ def turn_candidates(
             _resolution_context_key(action, config) in hire_contexts
         )
         offer_hire_by_action_id[move_id] = offered_hire
-        offer_merchant_advance_by_action_id[move_id] = isinstance(action, FullTurnAction) and (
-            _resolution_context_key(action, config) in merchant_advance_contexts
-        )
         preview_effects_by_action_id[move_id] = (
             _turn_action_preview_effects(action, state, config, cache=preview_effect_cache)
             if include_preview_effects and isinstance(action, FullTurnAction)
@@ -2260,7 +2187,6 @@ def turn_candidates(
         config=config,
         offer_hire_by_action_id=offer_hire_by_action_id,
         offer_start_turn_relocation=offer_start_turn_relocation,
-        offer_merchant_advance_by_action_id=offer_merchant_advance_by_action_id,
         include_preview_effects=include_preview_effects,
     )
     for action in actions:
@@ -2275,7 +2201,6 @@ def turn_candidates(
                 hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=False,
-                offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
                 preview_effects={},
                 include_preview_effects=include_preview_effects,
             )
@@ -2299,7 +2224,6 @@ def turn_candidates(
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offered_end_turn_relocation,
-            offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
             preview_effects=preview_effects_by_action_id[move_id],
             include_preview_effects=include_preview_effects,
         )
@@ -2325,7 +2249,6 @@ def turn_candidates(
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_relocation_by_action_id[move_id],
-                offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
                 include_preview_effects=include_preview_effects,
             )
             if len(members) > 1
@@ -2739,7 +2662,7 @@ class PlayServer(ThreadingHTTPServer):
             self._capture_turn_start()
 
     def apply_turn_step(self, submitted_id: str, submitted_token: str) -> None:
-        """Apply one currently legal committed conversion, named by its stable step id."""
+        """Apply one currently legal committed building step, named by its stable step id."""
         with self._applying:
             if not self.has_game():
                 raise UnknownTurnStep("no game is loaded; start a game first")

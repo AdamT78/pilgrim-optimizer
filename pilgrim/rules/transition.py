@@ -9,6 +9,7 @@ from itertools import combinations_with_replacement
 
 from pilgrim.model.actions import (
     AllocationMove,
+    BuildingActivationStep,
     BuildingConversionStep,
     EndTurnAction,
     FullTurnAction,
@@ -16,6 +17,7 @@ from pilgrim.model.actions import (
     SetupSowAction,
     StartPlayerConfessionBoxAction,
     StartPlayerSelectionAction,
+    TurnStep,
     action_id,
     readable_route,
 )
@@ -257,22 +259,6 @@ class _ResolvedBankPayment:
 
 
 @dataclass(frozen=True, slots=True)
-class _GuildMerchantAdvanceOption:
-    """Pre-sow merchant-advance variant for one legal Guild use."""
-
-    building_id: str
-    source: BuildingAbilitySource
-
-
-@dataclass(frozen=True, slots=True)
-class _ResolvedGuildMerchantAdvance:
-    """Validated pre-sow Guild merchant-advance directive from one action."""
-
-    building_id: str
-    source: BuildingAbilitySource
-
-
-@dataclass(frozen=True, slots=True)
 class _ScriptoriumEffectiveAcolyteOption:
     """Pre-sow state plus relation-context metadata for one Scriptorium use."""
 
@@ -436,8 +422,8 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
     return _legal_full_turn_actions(state, config)
 
 
-def turn_steps(state: GameState, config: GameConfig) -> tuple[BuildingConversionStep, ...]:
-    """Return the committed conversion steps legal in the current state.
+def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
+    """Return the committed building steps legal in the current state.
 
     Conversion options are derived from the same building ability and payment rules used by the
     action generator. The state carries the per-turn used-building set, so a building disappears
@@ -448,7 +434,7 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[BuildingConversion
 
     options = _legal_building_conversion_options(state, config)
     used = state.turn_progress.used_buildings
-    return tuple(
+    conversions = tuple(
         BuildingConversionStep(
             building_id=option.building_id,
             source=_hired_building_source_label(option.source),
@@ -463,6 +449,20 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[BuildingConversion
         for option in options
         if option.building_id not in used
     )
+    guild_steps = tuple(
+        BuildingActivationStep(
+            building_id=_BUILDING_GUILD,
+            source=(
+                "own_active"
+                if source.source_type == "own_active"
+                else _hired_building_source_label(source)
+            ),
+            hire_payment=source.hire_resource if _is_hired_source(source) else None,
+        )
+        for source, _state_after_hire in _legal_guild_activation_sources(state, config)
+        if _BUILDING_GUILD not in used
+    )
+    return (*conversions, *guild_steps)
 
 
 def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameAction]:
@@ -513,12 +513,14 @@ def _legal_building_conversion_options(
 def apply_turn_step(
     state: GameState,
     config: GameConfig,
-    step: BuildingConversionStep,
+    step: TurnStep,
 ) -> GameState:
-    """Apply one committed conversion without mutating the input state."""
+    """Apply one committed building step without mutating the input state."""
     if state.game_over:
         raise TransitionValidationError("Cannot apply turn step: game is already over.")
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Turn step")
+    if isinstance(step, BuildingActivationStep):
+        return _apply_building_activation_step(state, config, step)
     if not isinstance(step, BuildingConversionStep):
         raise TypeError(f"Unsupported turn step type: {type(step)!r}")
     if step.building_id in state.turn_progress.used_buildings:
@@ -593,7 +595,91 @@ def apply_turn_step(
     return replace(next_state, turn_progress=progress)
 
 
-def _turn_step_id(step: BuildingConversionStep) -> str:
+def _apply_building_activation_step(
+    state: GameState,
+    config: GameConfig,
+    step: BuildingActivationStep,
+) -> GameState:
+    if step.building_id in state.turn_progress.used_buildings:
+        raise TransitionValidationError(
+            f"Building already used this turn: {step.building_id}."
+        )
+    if step.building_id != _BUILDING_GUILD:
+        raise TransitionValidationError(
+            f"Unsupported parameterless building activation: {step.building_id}."
+        )
+
+    player = state.active_player
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=_BUILDING_GUILD,
+    )
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+        raise TransitionValidationError("Guild is unavailable in current state.")
+    expected_source = (
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
+    )
+    if step.source != expected_source:
+        raise TransitionValidationError(
+            f"Guild activation source does not match resolved source: expected {expected_source}."
+        )
+
+    next_state = state
+    events = list(state.turn_progress.events)
+    transition_action_id = _turn_step_id(step)
+    if _is_hired_source(source):
+        if step.hire_payment not in CORNUCOPIA_HIRE_RESOURCES:
+            raise TransitionValidationError("Guild hire payment must name a concrete resource.")
+        if source.hire_resource == CORNUCOPIA_COUNTER:
+            source = replace(source, hire_resource=step.hire_payment, hire_resource_chosen=True)
+        elif source.hire_resource != step.hire_payment:
+            raise TransitionValidationError(
+                "Guild hire payment does not match the Merchant's current counter."
+            )
+        try:
+            next_state, payment = apply_building_hire_payment(
+                next_state,
+                acting_player=player,
+                source=source,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        events.append(
+            _building_hired_event(
+                source=source,
+                payment=payment,
+                actor=player,
+                action_id=transition_action_id,
+                config=config,
+            )
+        )
+    elif step.hire_payment is not None:
+        raise TransitionValidationError("Own-active Guild does not take a hire payment.")
+
+    events.append(_guild_merchant_bonus_event(actor=player, action_id=transition_action_id))
+    next_state, merchant_event = _apply_guild_merchant_advance_to_state(
+        next_state,
+        actor=player,
+        action_id=transition_action_id,
+        config=config,
+    )
+    events.append(merchant_event)
+    return replace(
+        next_state,
+        turn_progress=replace(
+            next_state.turn_progress,
+            used_buildings=next_state.turn_progress.used_buildings | {step.building_id},
+            events=tuple(sorted(events, key=lambda event: event.action_id)),
+        ),
+    )
+
+
+def _turn_step_id(step: TurnStep) -> str:
+    if isinstance(step, BuildingActivationStep):
+        payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
+        return f"turn_step:building_activation:{step.building_id}:from:{step.source}{payment}"
     payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
     return (
         f"turn_step:building_conversion:{step.building_id}:from:{step.source}"
@@ -828,7 +914,6 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
         variant_actions = _legal_full_turn_actions_for_state(
             start_turn_state,
             config,
-            allow_guild_modifier=start_turn_option is None,
             allow_pulpit_modifier=start_turn_option is None,
             allow_scriptorium_modifier=start_turn_option is None,
             allow_customs_house_modifier=start_turn_option is None,
@@ -849,9 +934,6 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
                 )
             actions.add_if_new(action)
             if not library_sources:
-                continue
-            if action.merchant_advance_building_id == _BUILDING_GUILD:
-                # Defer mixed Guild+Library hire-order interactions for this milestone.
                 continue
             if action.workforce_move_building_id == _BUILDING_PULPIT:
                 # Defer mixed Pulpit+Library hire-order interactions for this milestone.
@@ -881,7 +963,6 @@ def _legal_full_turn_actions_for_state(
     state: GameState,
     config: GameConfig,
     *,
-    allow_guild_modifier: bool,
     allow_pulpit_modifier: bool,
     allow_scriptorium_modifier: bool,
     allow_customs_house_modifier: bool,
@@ -1653,7 +1734,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 scriptorium_option.state,
                 config,
-                allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
@@ -1680,7 +1760,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 pulpit_option.state,
                 config,
-                allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
@@ -1705,7 +1784,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 customs_house_option.state,
                 config,
-                allow_guild_modifier=False,
                 allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
@@ -1731,7 +1809,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 wagon_yard_option.state,
                 config,
-                allow_guild_modifier=(wagon_yard_option.target_building_id == _BUILDING_GUILD),
                 allow_pulpit_modifier=(wagon_yard_option.target_building_id == _BUILDING_PULPIT),
                 allow_scriptorium_modifier=(
                     wagon_yard_option.target_building_id == _BUILDING_SCRIPTORIUM
@@ -1761,36 +1838,6 @@ def _legal_full_turn_actions_for_state(
                     option=wagon_yard_option,
                 )
                 actions.add_if_new(wagon_yard_action)
-    if allow_guild_modifier:
-        guild_options = _legal_guild_merchant_advance_options(state, config)
-        if guild_options:
-            guild_option = guild_options[0]
-            state_after_guild = _state_after_guild_merchant_advance_for_legal_generation(
-                state,
-                option=guild_option,
-                config=config,
-            )
-            for action in _legal_full_turn_actions_for_state(
-                state_after_guild,
-                config,
-                allow_guild_modifier=False,
-                allow_pulpit_modifier=False,
-                allow_scriptorium_modifier=False,
-                allow_customs_house_modifier=False,
-                allow_wagon_yard_modifier=False,
-                allow_bank_modifier=False,
-                uses_scriptorium_effective_counts=False,
-                uses_customs_house_taxation_override=False,
-            ):
-                if not isinstance(action, FullTurnAction):
-                    continue
-                if not _is_guild_modifier_eligible_action(action):
-                    continue
-                guild_action = _with_guild_merchant_advance_fields(
-                    action,
-                    option=guild_option,
-                )
-                actions.add_if_new(guild_action)
     return actions.as_tuple()
 
 
@@ -2107,45 +2154,6 @@ def _apply_full_turn_action(
                 config=config,
             )
         )
-    guild_merchant_advance = _resolved_guild_merchant_advance_for_action(
-        state=state_for_sow,
-        config=config,
-        player=player,
-        action=action,
-    )
-    if guild_merchant_advance is not None:
-        if _is_hired_source(guild_merchant_advance.source):
-            try:
-                state_for_sow, guild_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=guild_merchant_advance.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=guild_merchant_advance.source,
-                    payment=guild_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
-        pre_sowing_events.append(
-            _guild_merchant_bonus_event(
-                actor=player,
-                action_id=transition_action_id,
-            )
-        )
-        state_for_sow, merchant_advance_event = _apply_guild_merchant_advance_to_state(
-            state_for_sow,
-            actor=player,
-            action_id=transition_action_id,
-            config=config,
-        )
-        pre_sowing_events.append(merchant_advance_event)
-
     pulpit_workforce_move = _resolved_pulpit_workforce_move_for_action(
         state=state_for_sow,
         config=config,
@@ -2622,33 +2630,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Bank payment substitution with start-turn relocation modifiers is deferred."
                 )
-        merchant_advance_fields = (
-            action.merchant_advance_building_id,
-            action.merchant_advance_building_source,
-        )
-        merchant_advance_field_count = sum(field is not None for field in merchant_advance_fields)
-        if merchant_advance_field_count not in (0, len(merchant_advance_fields)):
-            raise TransitionValidationError(
-                "merchant_advance_building_id and merchant_advance_building_source must be set together."
-            )
-        has_guild_merchant_modifier = merchant_advance_field_count == len(merchant_advance_fields)
-        if has_guild_merchant_modifier:
-            if action.merchant_advance_building_id != _BUILDING_GUILD:
-                raise TransitionValidationError(
-                    "Only Guild is supported for merchant_advance_building fields."
-                )
-            if has_route_building_id or has_secondary_route_building_id:
-                raise TransitionValidationError(
-                    "Combining Guild Merchant movement with sow-route modifiers is deferred."
-                )
-            if start_turn_relocation is not None:
-                raise TransitionValidationError(
-                    "Combining Guild Merchant movement with start-turn relocation modifiers is deferred."
-                )
-        if has_guild_merchant_modifier and has_bank_payment_modifier:
-            raise TransitionValidationError(
-                "Combining Guild and Bank pre-sow building modifiers in one action is deferred."
-            )
         effective_acolyte_fields = (
             action.effective_acolyte_building_id,
             action.effective_acolyte_building_source,
@@ -2673,10 +2654,6 @@ def _apply_full_turn_action(
             if start_turn_relocation is not None:
                 raise TransitionValidationError(
                     "Combining Scriptorium effective-acolyte modifier with start-turn relocation modifiers is deferred."
-                )
-            if has_guild_merchant_modifier:
-                raise TransitionValidationError(
-                    "Combining Guild and Scriptorium pre-sow building modifiers in one action is deferred."
                 )
             if has_bank_payment_modifier:
                 raise TransitionValidationError(
@@ -2710,10 +2687,6 @@ def _apply_full_turn_action(
             if start_turn_relocation is not None:
                 raise TransitionValidationError(
                     "Combining Customs House Taxation modifier with start-turn relocation modifiers is deferred."
-                )
-            if has_guild_merchant_modifier:
-                raise TransitionValidationError(
-                    "Combining Guild and Customs House pre-sow building modifiers in one action is deferred."
                 )
             if has_scriptorium_effective_modifier:
                 raise TransitionValidationError(
@@ -2817,10 +2790,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
                 )
-        if has_guild_merchant_modifier and has_pulpit_workforce_modifier:
-            raise TransitionValidationError(
-                "Combining Guild and Pulpit pre-sow building modifiers in one action is deferred."
-            )
         if has_scriptorium_effective_modifier and has_pulpit_workforce_modifier:
             raise TransitionValidationError(
                 "Combining Pulpit and Scriptorium pre-sow building modifiers in one action is deferred."
@@ -2851,10 +2820,6 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Only Library is supported for end-turn relocation fields."
             )
-        if has_guild_merchant_modifier and end_turn_field_count == len(end_turn_fields):
-            raise TransitionValidationError(
-                "Combining Guild Merchant movement with end-turn relocation modifiers is deferred."
-            )
         if has_scriptorium_effective_modifier and end_turn_field_count == len(end_turn_fields):
             raise TransitionValidationError(
                 "Combining Scriptorium effective-acolyte modifier with end-turn relocation modifiers is deferred."
@@ -2878,10 +2843,6 @@ def _apply_full_turn_action(
                 "hired_building_id and hired_building_source must be set together."
             )
         if action.hired_building_id is not None:
-            if has_guild_merchant_modifier:
-                raise TransitionValidationError(
-                    "Combining Guild Merchant movement with resolution-level hired building fields is deferred."
-                )
             if has_bank_payment_modifier:
                 raise TransitionValidationError(
                     "Combining Bank payment substitution with resolution-level hired building fields is deferred."
@@ -2906,22 +2867,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=action.hired_building_id,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            has_guild_merchant_modifier
-            and action.merchant_advance_building_source is not None
-            and action.merchant_advance_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_GUILD):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=_BUILDING_GUILD,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -5985,7 +5930,6 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
         (action.end_turn_building_id, action.end_turn_building_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
-        (action.merchant_advance_building_id, action.merchant_advance_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
         (action.workforce_move_building_id, action.workforce_move_building_source),
@@ -6127,10 +6071,11 @@ def _legal_bank_payment_options_for_action(
     return tuple(substitutions)
 
 
-def _legal_guild_merchant_advance_options(
+def _legal_guild_activation_sources(
     state: GameState,
     config: GameConfig,
-) -> tuple[_GuildMerchantAdvanceOption, ...]:
+) -> tuple[tuple[BuildingAbilitySource, GameState], ...]:
+    """The source and payment state for each currently legal Guild activation."""
     source = building_ability_source(
         state,
         config,
@@ -6139,13 +6084,7 @@ def _legal_guild_merchant_advance_options(
     )
     if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
-    return tuple(
-        _GuildMerchantAdvanceOption(
-            building_id=_BUILDING_GUILD,
-            source=hire_source,
-        )
-        for hire_source, _state_after_hire in _hire_payment_states(state, source)
-    )
+    return _hire_payment_states(state, source)
 
 
 def _legal_scriptorium_effective_acolyte_options(
@@ -6263,26 +6202,6 @@ def _legal_pulpit_workforce_move_options(
     return tuple(options)
 
 
-def _state_after_guild_merchant_advance_for_legal_generation(
-    state: GameState,
-    *,
-    option: _GuildMerchantAdvanceOption,
-    config: GameConfig,
-) -> GameState:
-    state_after_hire = state
-    if _is_hired_source(option.source):
-        state_after_hire, _payment = apply_building_hire_payment(
-            state_after_hire,
-            acting_player=state.active_player,
-            source=option.source,
-        )
-    next_merchant_position = advance_merchant_position(
-        state_after_hire.merchant_board_position,
-        config,
-    )
-    return state_after_hire.with_merchant_board_position(next_merchant_position)
-
-
 def _wagon_yard_own_active_is_usable(
     state: GameState,
     config: GameConfig,
@@ -6386,32 +6305,6 @@ def _state_without_temporary_active_building(
     )
 
 
-def _is_guild_modifier_eligible_action(action: FullTurnAction) -> bool:
-    return (
-        action.sow_route_building_id is None
-        and action.sow_route_secondary_building_id is None
-        and action.sow_route_omitted_location is None
-        and action.hired_building_id is None
-        and action.start_turn_building_id is None
-        and action.end_turn_building_id is None
-        and action.merchant_advance_building_id is None
-        and action.merchant_advance_building_source is None
-        and action.workforce_move_building_id is None
-        and action.workforce_move_building_source is None
-        and action.effective_acolyte_building_id is None
-        and action.effective_acolyte_building_source is None
-        and action.taxation_majority_building_id is None
-        and action.taxation_majority_building_source is None
-        and action.bank_payment_building_id is None
-        and action.bank_payment_building_source is None
-        and action.bank_payment_replaced_resource is None
-        and action.bank_payment_silver_amount is None
-        and action.free_hire_enabler_building_id is None
-        and action.free_hire_target_building_id is None
-        and action.free_hire_target_building_source is None
-    )
-
-
 def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
     return (
         action.sow_route_building_id is None
@@ -6419,8 +6312,6 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.sow_route_omitted_location is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
-        and action.merchant_advance_building_id is None
-        and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6444,8 +6335,6 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.sow_route_omitted_location is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
-        and action.merchant_advance_building_id is None
-        and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6469,8 +6358,6 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.sow_route_omitted_location is None
         and action.start_turn_building_id is None
         and action.end_turn_building_id is None
-        and action.merchant_advance_building_id is None
-        and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6496,8 +6383,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.end_turn_building_id is None
         and action.hired_building_id is None
         and action.hired_building_source is None
-        and action.merchant_advance_building_id is None
-        and action.merchant_advance_building_source is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6540,10 +6425,9 @@ def _wagon_yard_action_uses_target_building(
     ):
         return False
     if target_building_id == _BUILDING_GUILD:
-        return (
-            action.merchant_advance_building_id == _BUILDING_GUILD
-            and action.merchant_advance_building_source == "own_active"
-        )
+        # Guild's effect is a committed building step, not a FullTurnAction modifier. Wagon Yard
+        # may still hire it for free; there is simply no extra effect to encode in this action.
+        return True
     if target_building_id == _BUILDING_PULPIT:
         return (
             action.workforce_move_building_id == _BUILDING_PULPIT
@@ -6582,8 +6466,6 @@ def _wagon_yard_action_is_supported_composition(
     if action.hired_building_id is not None or action.hired_building_source is not None:
         return False
 
-    if target_building_id != _BUILDING_GUILD and action.merchant_advance_building_id is not None:
-        return False
     if target_building_id != _BUILDING_PULPIT and action.workforce_move_building_id is not None:
         return False
     if (
@@ -6608,24 +6490,6 @@ def _wagon_yard_action_is_supported_composition(
     ):
         return False
     return True
-
-
-def _with_guild_merchant_advance_fields(
-    action: FullTurnAction,
-    *,
-    option: _GuildMerchantAdvanceOption,
-) -> FullTurnAction:
-    source_label = (
-        "own_active"
-        if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
-    )
-    updated = replace(
-        action,
-        merchant_advance_building_id=option.building_id,
-        merchant_advance_building_source=source_label,
-    )
-    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_scriptorium_effective_acolyte_fields(
@@ -7048,63 +6912,6 @@ def _action_route_building_source_label(
     if action.sow_route_secondary_building_id == building_id:
         return action.sow_route_secondary_building_source
     return None
-
-
-def _resolved_guild_merchant_advance_for_action(
-    *,
-    state: GameState,
-    config: GameConfig,
-    player: PlayerId,
-    action: FullTurnAction,
-) -> _ResolvedGuildMerchantAdvance | None:
-    fields = (
-        action.merchant_advance_building_id,
-        action.merchant_advance_building_source,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "merchant_advance_building_id and merchant_advance_building_source must be set together."
-        )
-
-    building_id = action.merchant_advance_building_id
-    source_label = action.merchant_advance_building_source
-    assert building_id is not None
-    assert source_label is not None
-
-    if building_id != _BUILDING_GUILD:
-        raise TransitionValidationError(
-            "Only Guild is supported for merchant_advance_building fields."
-        )
-
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=_BUILDING_GUILD,
-    )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                "Own-active Guild merchant movement must set source=own_active."
-            )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
-            raise TransitionValidationError(
-                "Guild merchant movement source does not match resolved source: "
-                f"expected {expected_source_label}."
-            )
-    else:
-        raise TransitionValidationError("Guild is unavailable in current state.")
-
-    return _ResolvedGuildMerchantAdvance(
-        building_id=_BUILDING_GUILD,
-        source=source,
-    )
 
 
 def _resolved_scriptorium_effective_acolyte_for_action(

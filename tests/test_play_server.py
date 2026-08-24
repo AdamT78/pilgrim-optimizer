@@ -35,6 +35,7 @@ from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
 from pilgrim.model.actions import (
+    BuildingConversionStep,
     EndTurnAction,
     FullTurnAction,
     SetupSowAction,
@@ -939,6 +940,8 @@ def test_sell_piety_payload_silver_is_the_engine_conversion_delta_across_the_cor
             for entry in play_server.turn_steps_payload(scenario.state, scenario.config)
         }
         for step in steps:
+            if not isinstance(step, BuildingConversionStep):
+                continue
             if step.direction != "sell_piety":
                 continue
             observations += 1
@@ -1327,9 +1330,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
         state=scenario.state,
         config=scenario.config,
     )
-    offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
-        actions, scenario.config
-    )
     revisits = 0
     old_logic_last_not_zero = 0
     fixed_last_not_zero = 0
@@ -1362,7 +1362,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
             offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
-            offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
         )
         edge_steps = [step for step in steps if step["kind"] == "edge"]
         assert edge_steps, "Cloisters action should always present at least one edge step"
@@ -1767,9 +1766,6 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
             state=scenario.state,
             config=scenario.config,
         )
-        offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
-            actions, scenario.config
-        )
 
         def key_for_steps(steps: list[dict]) -> tuple:
             return tuple(
@@ -1788,7 +1784,6 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
-                offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -1838,9 +1833,6 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
             state=scenario.state,
             config=scenario.config,
         )
-        offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(
-            actions, scenario.config
-        )
 
         def key_for_steps(steps: list[dict]) -> tuple:
             return tuple(
@@ -1859,7 +1851,6 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
                 offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
-                offer_merchant_advance=offer_merchant_advance_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -2203,7 +2194,6 @@ def _offer_flags_by_action_id(
         for action in actions
     )
     offer_hire_by_action_id: dict[str, bool] = {}
-    offer_merchant_advance_by_action_id = _merchant_offer_flags_by_action_id(actions, config)
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
     for action in actions:
@@ -2230,7 +2220,6 @@ def _offer_flags_by_action_id(
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=False,
-            offer_merchant_advance=offer_merchant_advance_by_action_id[move_id],
         )
         pre_end_turn_key_by_action_id[move_id] = tuple(
             tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
@@ -2254,21 +2243,6 @@ def _offer_flags_by_action_id(
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
     )
-
-
-def _merchant_offer_flags_by_action_id(
-    actions: list[Any], config: Any
-) -> dict[str, bool]:
-    contexts = {
-        play_server._resolution_context_key(action, config)
-        for action in actions
-        if isinstance(action, FullTurnAction) and action.merchant_advance_building_id is not None
-    }
-    return {
-        action_id(action): isinstance(action, FullTurnAction)
-        and play_server._resolution_context_key(action, config) in contexts
-        for action in actions
-    }
 
 
 def _engine_steps(
@@ -3720,14 +3694,14 @@ def test_guild_merchant_event_does_not_duplicate_the_round_end_merchant_row() ->
     )
     try:
         assert server.config.merchant.advance_at_round_end is True
+        guild = next(
+            step
+            for step in server.payload["turn_steps"]
+            if step["kind"] == "activation" and step["building_id"] == "guild"
+        )
+        server.apply_turn_step(guild["step_id"], server.payload["state_token"])
         candidate = next(
-            candidate
-            for candidate in server.payload["turn_candidates"]
-            if candidate["action_id"]
-            and any(
-                step["kind"] == "merchant_advance" and step["value"] == "guild:own_active"
-                for step in candidate["steps"]
-            )
+            candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"]
         )
         server.apply(candidate["action_id"], server.payload["state_token"])
         assert server.payload["log_blocks"][-1]["round_end"] is False
@@ -4389,19 +4363,22 @@ def test_building_donation_preview_step_matches_engine_slot_state() -> None:
     assert step["building_donation"] in before.player_board_slots.active_buildings
 
 
-def test_guild_preview_step_matches_engine_merchant_position() -> None:
+def test_guild_is_a_committed_turn_step_not_a_candidate_question() -> None:
     scenario = load_scenario("scenarios/guild_active_move_merchant_001.json")
     candidates = play_server.turn_candidates(scenario.state, scenario.config)
-    candidate = next(
-        candidate
-        for candidate in candidates
-        if any(step.get("merchant_advance") is not None for step in candidate["steps"])
+    steps = play_server.turn_steps_payload(scenario.state, scenario.config)
+    guild = next(
+        step
+        for step in steps
+        if step["kind"] == "activation" and step["building_id"] == "guild"
     )
-    action = _candidate_action(scenario, candidate)
-    after = apply_action(scenario.state, action, scenario.config).state
-    step = next(step for step in candidate["steps"] if step.get("merchant_advance") is not None)
-    assert step["merchant_advance"] == after.merchant_board_position
-    assert candidate["unresolved"] == []
+    assert guild["source"] == "own_active"
+    assert guild["prompt"] == "Activate Guild: move the Merchant clockwise +1 Duty tile."
+    assert not any(
+        step["kind"] == "merchant_advance"
+        for candidate in candidates
+        for step in candidate["steps"]
+    )
 
 
 @pytest.mark.parametrize(

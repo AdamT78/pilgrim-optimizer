@@ -1358,102 +1358,117 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     assert "well" in server.state.player_state(acting_player).player_board_slots.active_buildings
 
 
-def test_guild_merchant_preview_waits_for_agreement_and_matches_confirm(page, serve) -> None:
-    base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
-    page.goto(base_url, wait_until="networkidle")
-    acting_player = server.state.active_player
-    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
-    before_position = server.state.merchant_board_position
-    after_action = next(
-        action
-        for action in legal_actions(server.state, server.config)
-        if action.merchant_advance_building_id == "guild"
-    )
-    expected_position = apply_action(server.state, after_action, server.config).state.merchant_board_position
-    before_others = _all_player_holdings(page)
+def _merchant_visible_at(page, position: int) -> bool:
+    return bool(page.evaluate(
+        """
+        position => Array.from(document.querySelectorAll(
+          '[data-component="duty-wheel"] [data-token="merchant"]'
+        )).some(token => {
+          const space = token.closest('[data-board-position-index]');
+          return space && Number(space.getAttribute('data-board-position-index')) === position
+            && token.getAttribute('opacity') !== '0';
+        })
+        """,
+        position,
+    ))
 
-    def merchant_visible_at(position: int) -> bool:
-        return bool(page.evaluate(
-            """
-            position => Array.from(document.querySelectorAll(
-              '[data-component=\"duty-wheel\"] [data-token=\"merchant\"]'
-            )).some(token => {
-              const space = token.closest('[data-board-position-index]');
-              return space && Number(space.getAttribute('data-board-position-index')) === position
-                && token.getAttribute('opacity') !== '0';
-            })
-            """,
-            position,
-        ))
 
-    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
-    action_control = page.query_selector(
-        '[data-turn-control="action"][data-turn-control-enabled="true"]'
-    )
-    assert action_control is not None
-    _click_handle_centre(page, action_control, require_hit=True)
-    page.wait_for_timeout(40)
-    resolution = page.query_selector(
-        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
-    )
-    assert resolution is not None
-    _click_handle_centre(page, resolution, require_hit=True)
-    page.wait_for_timeout(40)
-
-    # The surviving no-Guild and Guild actions disagree, so no Merchant move is shown yet.
-    assert merchant_visible_at(before_position)
+def _stage_guild(page):
     guild = page.query_selector(
-        '[data-combination-key="guild:own_active"][data-turn-offered="true"]'
+        '[data-turn-step-building-id="guild"][data-turn-step-offered="true"]'
     )
-    assert guild is not None
+    assert guild is not None, "Guild was not offered as a committed building step"
     _click_handle_centre(page, guild, require_hit=True)
     page.wait_for_timeout(60)
-    assert merchant_visible_at(expected_position)
-    assert {
-        player: holdings
-        for player, holdings in _all_player_holdings(page).items()
-        if player != active_player_id
-    } == {
-        player: holdings
-        for player, holdings in before_others.items()
-        if player != active_player_id
-    }
+    return guild
+
+
+def _commit_guild(page, server) -> int:
+    step = next(step for step in turn_steps(server.state, server.config) if step.building_id == "guild")
+    expected_position = apply_turn_step(server.state, server.config, step).merchant_board_position
     assert _confirm_enabled(page)
-
-    page.locator('[data-turn-control="reset"]').click()
-    page.wait_for_timeout(100)
-    assert merchant_visible_at(before_position)
-
-    # Pick Guild again and confirm; the committed state must be the same state the marker previewed.
-    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
-    action_control = page.query_selector(
-        '[data-turn-control="action"][data-turn-control-enabled="true"]'
-    )
-    assert action_control is not None
-    _click_handle_centre(page, action_control, require_hit=True)
-    page.wait_for_timeout(40)
-    resolution = page.query_selector(
-        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
-    )
-    assert resolution is not None
-    _click_handle_centre(page, resolution, require_hit=True)
-    page.wait_for_timeout(40)
-    guild = page.query_selector(
-        '[data-combination-key="guild:own_active"][data-turn-offered="true"]'
-    )
-    assert guild is not None
-    _click_handle_centre(page, guild, require_hit=True)
-    page.wait_for_timeout(60)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
     assert server.state.merchant_board_position == expected_position
-    assert merchant_visible_at(expected_position)
-    assert server.state.active_player is acting_player
-    assert server.state.turn_progress.resolution_committed is True
+    assert _merchant_visible_at(page, expected_position)
+    return expected_position
 
+
+def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before_position = server.state.merchant_board_position
+    _assert_painted_turn_phase(page, "beginning")
+    before_box = page.locator('[data-component="play-turn"]').bounding_box()
+    assert before_box is not None
+
+    _stage_guild(page)
+    _assert_painted_turn_phase(page, "beginning")
+    assert page.locator('[data-turn-step-direction-row]').get_attribute(
+        'data-turn-step-row-active'
+    ) == "false"
+    assert not page.locator('[data-turn-step-direction-row]').is_visible()
+    assert page.locator('[data-turn-step-direction][data-turn-step-offered="true"]').count() == 0
+    assert page.locator('[data-turn-step-resource-row]').get_attribute(
+        'data-turn-step-row-active'
+    ) == "false"
+    assert not page.locator('[data-turn-step-resource-row]').is_visible()
+    activation_prompt = page.locator('[data-turn-step-activation-prompt]')
+    assert activation_prompt.is_visible()
+    assert "Activate Guild: move the Merchant clockwise +1 Duty tile." in activation_prompt.inner_text()
+    staged_box = page.locator('[data-component="play-turn"]').bounding_box()
+    assert staged_box is not None
+    assert staged_box["height"] == before_box["height"]
+    _screenshot_turn_prompt(page, SCREENSHOTS / "guild-prompt-staged.png")
+
+    _commit_guild(page, server)
+    _assert_painted_turn_phase(page, "beginning")
+    _screenshot_turn_prompt(page, SCREENSHOTS / "guild-prompt-committed.png")
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(120)
+    assert server.state.merchant_board_position == before_position
+    assert _merchant_visible_at(page, before_position)
+    _assert_painted_turn_phase(page, "beginning")
+
+
+def test_guild_click_commits_in_the_end_of_turn_window_and_never_asks_about_using_guild(
+    page, serve
+) -> None:
+    base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    before_position = server.state.merchant_board_position
+    assert "choose whether to use Guild" not in page.content()
+
+    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
+    action_control = page.query_selector(
+        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    )
+    assert action_control is not None
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
-    assert server.state.active_player != acting_player
+
+    assert server.state.turn_progress.resolution_committed is True
+    _assert_painted_turn_phase(page, "end")
+    assert "choose whether to use Guild" not in page.content()
+    _stage_guild(page)
+    assert "choose whether to use Guild" not in page.content()
+    _commit_guild(page, server)
+    _assert_painted_turn_phase(page, "end")
+
+    page.locator('[data-turn-control="reset"]').click()
+    page.wait_for_timeout(120)
+    assert server.state.merchant_board_position == before_position
+    assert _merchant_visible_at(page, before_position)
+    _assert_painted_turn_phase(page, "beginning")
 
 
 def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:

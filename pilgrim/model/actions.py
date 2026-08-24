@@ -80,8 +80,6 @@ class FullTurnAction:
     free_hire_enabler_building_id: str | None = None
     free_hire_target_building_id: str | None = None
     free_hire_target_building_source: str | None = None
-    merchant_advance_building_id: str | None = None
-    merchant_advance_building_source: str | None = None
     workforce_move_building_id: str | None = None
     workforce_move_building_source: str | None = None
     hired_building_id: str | None = None
@@ -130,7 +128,16 @@ class BuildingConversionStep:
     hire_payment: str | None = None
 
 
-TurnStep = BuildingConversionStep
+@dataclass(frozen=True, slots=True)
+class BuildingActivationStep:
+    """One committed building activation whose effect needs no further parameters."""
+
+    building_id: str
+    source: str
+    hire_payment: str | None = None
+
+
+TurnStep = BuildingConversionStep | BuildingActivationStep
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,7 +326,6 @@ def action_id(action: GameAction) -> str:
             f":replace:{action.bank_payment_replaced_resource or 'unknown'}"
             f":silver:{action.bank_payment_silver_amount if action.bank_payment_silver_amount is not None else 'none'}"
         )
-    merchant_advance_suffix = ""
     if (
         action.effective_acolyte_building_id is not None
         or action.effective_acolyte_building_source is not None
@@ -352,14 +358,6 @@ def action_id(action: GameAction) -> str:
         )
     else:
         free_hire_suffix = ""
-    if (
-        action.merchant_advance_building_id is not None
-        or action.merchant_advance_building_source is not None
-    ):
-        merchant_advance_suffix = (
-            f":merchant_advance_building:{action.merchant_advance_building_id or 'none'}"
-            f":from:{action.merchant_advance_building_source or 'unknown'}"
-        )
     workforce_move_suffix = ""
     if (
         action.workforce_move_building_id is not None
@@ -394,7 +392,7 @@ def action_id(action: GameAction) -> str:
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
-        f"{merchant_advance_suffix}{workforce_move_suffix}{hire_suffix}"
+        f"{workforce_move_suffix}{hire_suffix}"
         f"{tithe_suffix}"
     )
 
@@ -669,8 +667,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         route_summary += (
             " | use building: customs_house for Taxation majority on occupied Duty tiles"
         )
-    if action.merchant_advance_building_id == "guild":
-        route_summary += " | use building: guild to move merchant +1"
     if action.workforce_move_building_id == "pulpit":
         route_summary += " | use building: pulpit to move 1 serf village -> abbey for free"
     if (
@@ -749,12 +745,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += (
             f" | hire building: customs_house from {action.taxation_majority_building_source}"
         )
-    if (
-        action.merchant_advance_building_id == "guild"
-        and action.merchant_advance_building_source is not None
-        and action.merchant_advance_building_source != "own_active"
-    ):
-        summary += f" | hire building: guild from {action.merchant_advance_building_source}"
     if (
         action.workforce_move_building_id == "pulpit"
         and action.workforce_move_building_source is not None

@@ -42,12 +42,12 @@ def test_cli_blocked_wagon_sources_do_not_print_wagon_modifier_lines(capsys) -> 
         assert "use building: wagon_yard to hire" not in output
 
 
-def test_cli_legal_actions_show_wagon_yard_and_target_effect_for_market_and_opponent(capsys) -> None:
+def test_cli_legal_actions_show_wagon_yard_without_precommitting_guild(capsys) -> None:
     market_path = "scenarios/wagon_yard_active_free_hire_market_guild_001.json"
     assert main(["legal-actions", market_path]) == 0
     market_output = capsys.readouterr().out
     assert "use building: wagon_yard to hire guild from market for free" in market_output
-    assert "use building: guild to move merchant +1" in market_output
+    assert "use building: guild to move merchant +1" not in market_output
 
     opponent_path = "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json"
     assert main(["legal-actions", opponent_path]) == 0
@@ -62,9 +62,8 @@ def test_cli_apply_market_free_hire_shows_free_event_and_order(capsys) -> None:
     assert main(["apply", path, "--action-index", str(index), "--verbose"]) == 0
     output = capsys.readouterr().out
     assert "BUILDING_HIRED: player_one hired Guild from market for free with Wagon Yard" in output
-    assert "BUILDING_BONUS: guild moved Merchant clockwise +1" in output
+    assert "BUILDING_BONUS: guild moved Merchant clockwise +1" not in output
     assert "paid wheat 1 to bank" not in output
-    assert output.index("BUILDING_HIRED:") < output.index("BUILDING_BONUS:")
 
 
 def test_cli_apply_opponent_free_hire_shows_no_owner_payment(capsys) -> None:
