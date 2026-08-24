@@ -5,9 +5,15 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction, action_summary
+from pilgrim.model.actions import BuildingActivationStep, FullTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events(events, event_type):
@@ -83,11 +89,11 @@ def test_wagon_yard_preserves_normal_paid_hire_variants_when_affordable() -> Non
     )
     actions = tuple(legal_actions(paid_state, scenario.config))
     paid = [
-        action for action in actions
-        if isinstance(action, FullTurnAction)
-        and action.merchant_advance_building_id == "guild"
-        and action.merchant_advance_building_source == "market"
-        and action.free_hire_enabler_building_id is None
+        step
+        for step in turn_steps(paid_state, scenario.config)
+        if isinstance(step, BuildingActivationStep)
+        and step.building_id == "guild"
+        and step.source == "market"
     ]
     free = [
         action for action in actions
@@ -105,7 +111,7 @@ def test_wagon_yard_action_summary_includes_free_hire_and_target_effect() -> Non
     )
     summary = action_summary(actions[0], scenario.config)
     assert "use building: wagon_yard to hire guild from market for free" in summary
-    assert "use building: guild to move merchant +1" in summary
+    assert "use building: guild to move merchant +1" not in summary
 
 
 def test_wagon_yard_opponent_summary_labels_opponent_source() -> None:
@@ -127,7 +133,7 @@ def test_wagon_yard_market_free_hire_cost_is_zero_and_effect_applies() -> None:
     hired = _events(result.events, EventType.BUILDING_HIRED)[0]
     assert dict(hired.details)["amount"] == 0
     assert dict(hired.details)["payee"] == "none"
-    assert result.state.merchant_board_position == 3
+    assert result.state.merchant_board_position == scenario.state.merchant_board_position
 
 
 def test_wagon_yard_opponent_free_hire_does_not_pay_owner() -> None:
@@ -169,7 +175,7 @@ def test_wagon_yard_keeps_non_conversion_target_effects() -> None:
         assert actions
 
 
-def test_wagon_yard_guild_moves_merchant_without_hire_fee() -> None:
+def test_wagon_yard_hiring_guild_does_not_activate_it_inside_the_full_turn() -> None:
     scenario, actions = _wagon_actions(
         "scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"
     )
@@ -178,8 +184,18 @@ def test_wagon_yard_guild_moves_merchant_without_hire_fee() -> None:
     hired = dict(_events(result.events, EventType.BUILDING_HIRED)[0].details)
     assert hired["building_id"] == "guild"
     assert hired["amount"] == 0
-    assert any(dict(event.details).get("building") == "guild"
-               for event in _events(result.events, EventType.BUILDING_BONUS))
+    assert result.state.merchant_board_position == scenario.state.merchant_board_position
+    assert not any(
+        dict(event.details).get("building") == "guild"
+        for event in _events(result.events, EventType.BUILDING_BONUS)
+    )
+    guild_step = next(
+        step
+        for step in turn_steps(result.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == "guild"
+    )
+    activated = apply_turn_step(result.state, scenario.config, guild_step)
+    assert activated.merchant_board_position != result.state.merchant_board_position
 
 
 def test_wagon_yard_pulpit_and_customs_house_effects_resolve() -> None:

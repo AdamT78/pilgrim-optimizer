@@ -7,7 +7,7 @@ import pytest
 from pilgrim.cli import main
 from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.actions import BuildingActivationStep, FullTurnAction
 from pilgrim.model.enums import TurnResolutionType
 from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 
@@ -87,6 +87,21 @@ def _conversion_output(
     return "\n".join(
         text
         for event in result.events
+        if (text := format_event(event, scenario.config)) is not None
+    )
+
+
+def _guild_activation_output(path: str) -> str:
+    scenario = load_scenario(path)
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == "guild"
+    )
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    return "\n".join(
+        text
+        for event in state.turn_progress.events
         if (text := format_event(event, scenario.config)) is not None
     )
 
@@ -256,22 +271,8 @@ def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
     )
 
 
-def test_cli_guild_hired_contract_reports_hire_bonus_and_effect_order(capsys) -> None:
-    legal_output = _run_cli(
-        ["legal-actions", "scenarios/guild_hire_market_move_merchant_001.json"],
-        capsys,
-    )
-    assert "use building: guild to move merchant +1" in legal_output
-
-    output, _index = _apply_verbose_output(
-        "scenarios/guild_hire_market_move_merchant_001.json",
-        predicate=lambda action: (
-            action.merchant_advance_building_id == "guild"
-            and action.merchant_advance_building_source == "market"
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
-    )
+def test_guild_hired_contract_reports_hire_bonus_and_effect_order() -> None:
+    output = _guild_activation_output("scenarios/guild_hire_market_move_merchant_001.json")
 
     _assert_in_order(
         output,
@@ -279,22 +280,12 @@ def test_cli_guild_hired_contract_reports_hire_bonus_and_effect_order(capsys) ->
             "BUILDING_HIRED: player_one hired Guild from market; paid wheat 1 to bank",
             "BUILDING_BONUS: guild moved Merchant clockwise +1",
             "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver; cause=guild",
-            "SOWING:",
-            "DUTY_RESOLUTION:",
         ],
     )
 
 
-def test_cli_guild_round_end_contract_keeps_only_the_building_merchant_move(capsys) -> None:
-    output, _index = _apply_verbose_output(
-        "scenarios/guild_round_end_moves_merchant_twice_001.json",
-        predicate=lambda action: (
-            action.merchant_advance_building_id == "guild"
-            and action.merchant_advance_building_source == "own_active"
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
-    )
+def test_guild_round_end_contract_keeps_only_the_committed_building_move() -> None:
+    output = _guild_activation_output("scenarios/guild_round_end_moves_merchant_twice_001.json")
     merchant_lines = _matching_lines(output, contains="MERCHANT_ADVANCE:")
 
     assert len(merchant_lines) == 1

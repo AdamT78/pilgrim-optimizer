@@ -750,7 +750,6 @@ def _combination_keys(candidates: list[dict]) -> str:
             if step["kind"] in {
                 "combination",
                 "hire",
-                "merchant_advance",
                 "start_relocation_choice",
                 "end_relocation_choice",
             }:
@@ -767,9 +766,11 @@ def _turn_step_direction_label(direction: str) -> str:
 
 
 def _turn_step_controls(steps: list[dict]) -> str:
-    """The client-side narrowing controls for the engine's committed conversion steps."""
+    """The client-side controls for the engine's committed building steps."""
     directions = []
     for step in steps:
+        if step["kind"] != "conversion":
+            continue
         direction = str(step["direction"])
         if direction not in directions:
             directions.append(direction)
@@ -797,6 +798,8 @@ def _turn_step_controls(steps: list[dict]) -> str:
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label">Conversion</span>'
         f"{direction_buttons}</div>"
+        '<span class="turn-step-activation-prompt" data-turn-step-activation-prompt="true"'
+        ' data-turn-step-activation-active="false"></span>'
         '<div class="turn-step-resource-row" data-turn-step-resource-row="true"'
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label" data-turn-step-answer-label="true">Amount</span>'
@@ -1012,6 +1015,7 @@ _TURN_SCRIPT = """<script>
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
   var turnStepHireButtons = aside.querySelectorAll('[data-turn-step-hire-payment]');
   var turnStepDirectionRow = aside.querySelector('[data-turn-step-direction-row]');
+  var turnStepActivationPrompt = aside.querySelector('[data-turn-step-activation-prompt]');
   var turnStepResourceKeys = document.querySelectorAll('[data-resource-choice-key]');
   var pietyChoicePills = document.querySelectorAll('[data-piety-choice-template]');
   var turnStepAmountTotal = aside.querySelector('[data-turn-step-amount-total="true"]');
@@ -1083,6 +1087,7 @@ _TURN_SCRIPT = """<script>
 
   function turnStepField(step, index) {
     if (index === 0) { return step.building_id; }
+    if (step.kind === 'activation') { return null; }
     if (index === 1) { return step.direction; }
     if (step.building_id === 'indulgences') { return step.piety_destination; }
     return String(step.amount);
@@ -1138,6 +1143,9 @@ _TURN_SCRIPT = """<script>
 
   function conversionReady() {
     var live = survivingTurnSteps();
+    if (conversionChosen.length === 1 && live.length === 1 && live[0].kind === 'activation') {
+      return true;
+    }
     if (conversionChosen.length !== 3) { return false; }
     if (conversionChosen[0] === 'indulgences') {
       return conversionStepId !== null
@@ -1155,11 +1163,13 @@ _TURN_SCRIPT = """<script>
   function renderTurnSteps() {
     var live = survivingTurnSteps();
     var availableBuildings = offeredTurnStepValues(0, TURN_STEPS);
+    var activation = conversionChosen.length === 1
+      && live.length === 1 && live[0].kind === 'activation';
     var directions = conversionChosen.length >= 1
-      ? offeredTurnStepValues(1, live)
+      && !activation ? offeredTurnStepValues(1, live)
       : [];
-    var piety = conversionChosen.length >= 2 && conversionChosen[0] === 'indulgences';
-    var resource = conversionChosen.length >= 2 && !piety;
+    var piety = !activation && conversionChosen.length >= 2 && conversionChosen[0] === 'indulgences';
+    var resource = !activation && conversionChosen.length >= 2 && !piety;
     var pietyAmount = piety && conversionChosen.length > 2
       ? pietyAmountFor(live) : null;
     var resourceId = null;
@@ -1198,7 +1208,13 @@ _TURN_SCRIPT = """<script>
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        conversionChosen.length >= 1 ? 'true' : 'false'
+        conversionChosen.length >= 1 && !activation ? 'true' : 'false'
+      );
+    }
+    if (turnStepActivationPrompt) {
+      turnStepActivationPrompt.textContent = activation ? live[0].prompt : '';
+      turnStepActivationPrompt.setAttribute(
+        'data-turn-step-activation-active', activation ? 'true' : 'false'
       );
     }
     if (turnStepResourceRow) {
@@ -3145,6 +3161,11 @@ def turn_styles(route_color: str) -> str:
   [data-turn-step-row-active="false"] {{ visibility: hidden; }}
   [data-turn-step-answer-label-visible="false"] {{ visibility: hidden; }}
   .turn-step-label {{ min-width: 72px; color: #E0C36A; }}
+  .turn-step-activation-prompt {{
+    display: none; position: absolute; top: 5px; left: 0; right: 0; line-height: 24px;
+    color: #C9C4B4;
+  }}
+  .turn-step-activation-prompt[data-turn-step-activation-active="true"] {{ display: block; }}
   .turn-step-direction {{
     color: #F2F0E6; background: #262626; border: 1px solid #555; border-radius: 999px;
     padding: 4px 9px; font: 12px/1.2 Helvetica, Arial, sans-serif; cursor: pointer;

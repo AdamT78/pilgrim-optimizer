@@ -314,8 +314,10 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    assert sum(legacy_counts.values()) == 68769
-    assert sum(current_counts.values()) == 68407
+    # Guild no longer duplicates complete turns: it is a committed building step, so both this
+    # route-mode count and its legacy comparison omit the same 21 retired Guild variants.
+    assert sum(legacy_counts.values()) == 68748
+    assert sum(current_counts.values()) == 68386
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:
