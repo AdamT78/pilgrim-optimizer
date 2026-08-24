@@ -90,6 +90,11 @@
     });
   }
 
+  function onlyActionId(candidates) {
+    if (candidates.length !== 1 || candidates[0].action_id === null) { return null; }
+    return candidates[0].action_id;
+  }
+
   function renderPhase() {
     if (PHASE_COLUMN_SCOPE !== 'turn') { return; }
     var current = RESOLUTION_COMMITTED ? 'end' : (answered.length ? 'sow' : 'beginning');
@@ -1491,7 +1496,7 @@
   }
 
   function show(
-    offered, resolutionOptions, settled, confirmable, preview, arrangementValues, ordinationValues,
+    offered, resolutionOptions, settled, confirmActionId, preview, arrangementValues, ordinationValues,
     allocationOptions
   ) {
     var origins = offeredByKind(offered, 'origin');
@@ -1644,7 +1649,8 @@
     }
     setControl(
       'confirm',
-      (conversionReady() || (conversionChosen.length === 0 && confirmable)) && !preview.overflow,
+      (conversionReady() || (conversionChosen.length === 0 && confirmActionId !== null))
+        && !preview.overflow,
       false
     );
     setControl(
@@ -1786,25 +1792,22 @@
         shownOffered,
         [],
         CANDIDATES.indexOf(narrowed[0]),
-        narrowed[0].action_id !== null,
+        onlyActionId(narrowed),
         preview,
         arrangements,
         ordinations
       );
       return;
     }
+    var confirmActionId = null;
+    if (allocationActive && allocationComplete) {
+      confirmActionId = onlyActionId(allocationAnyTotal ? allocationExactLive : narrowed);
+    }
     show(
       offered,
       resolutions,
       -1,
-      allocationActive
-        ? allocationComplete
-          && (
-            allocationAnyTotal
-              ? allocationExactLive.length === 1 && allocationExactLive[0].action_id !== null
-              : narrowed.length === 1 && narrowed[0].action_id !== null
-          )
-        : false,
+      confirmActionId,
       preview,
       arrangements,
       ordinations,

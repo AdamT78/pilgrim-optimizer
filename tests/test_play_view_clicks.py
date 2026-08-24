@@ -122,6 +122,23 @@ def _click_handle_centre(page, handle, *, require_hit: bool = True) -> None:
     page.mouse.click(x, y)
 
 
+def _click_handle_point(page, handle, x_fraction: float, y_fraction: float) -> None:
+    point = page.evaluate(
+        """({target, xFraction, yFraction}) => {
+            const box = target.getBoundingClientRect();
+            return {
+                x: box.left + box.width * xFraction,
+                y: box.top + box.height * yFraction,
+            };
+        }""",
+        {"target": handle, "xFraction": x_fraction, "yFraction": y_fraction},
+    )
+    assert _is_hit_target(page, handle, point["x"], point["y"]), (
+        "elementFromPoint at target point missed target"
+    )
+    page.mouse.click(point["x"], point["y"])
+
+
 def _next_offered_from_dom(
     page,
     *,
@@ -1975,6 +1992,135 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
     assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before - 1
     assert _lit_acolytes_at(page, active_player_id, city) == city_before + 1
     _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-committed.png")
+
+
+def test_confirm_needs_one_turn_action_or_a_complete_committed_step(page, serve) -> None:
+    """A real disabled click does nothing; an enabled Confirm always sends its matching request."""
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    opening_state = server.state
+    requests: list[str] = []
+
+    def record_request(request) -> None:
+        if request.method == "POST" and request.url.rsplit("/", 1)[-1] in {"action", "turn-step"}:
+            requests.append(request.url)
+
+    page.on("request", record_request)
+
+    confirm = page.query_selector('[data-turn-control="confirm"]')
+    assert confirm is not None
+    assert not _confirm_enabled(page)
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_timeout(50)
+    assert requests == [], "a disabled opening Confirm sent a request"
+    assert server.state == opening_state
+
+    dormitory = page.query_selector(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    )
+    assert dormitory is not None
+    _click_handle_centre(page, dormitory, require_hit=True)
+    page.wait_for_timeout(20)
+    assert not _confirm_enabled(page), (
+        "staging Dormitory enabled Confirm before a target was chosen"
+    )
+    confirm = page.query_selector('[data-turn-control="confirm"]')
+    assert confirm is not None
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_timeout(50)
+    assert requests == [], "an incomplete Dormitory relocation sent a request"
+    assert server.state == opening_state
+
+    target = page.query_selector(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    )
+    assert target is not None
+    _click_handle_centre(page, target, require_hit=True)
+    page.wait_for_timeout(20)
+    assert _confirm_enabled(page), "a complete Dormitory relocation did not enable Confirm"
+    confirm = page.query_selector('[data-turn-control="confirm"]')
+    assert confirm is not None
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_function(
+        """() => document.querySelector('[data-turn-step-building-id="dormitory"]')
+          .getAttribute('data-turn-step-used') === 'true'"""
+    )
+    assert len(requests) == 1 and requests[0].endswith("/turn-step"), (
+        "an enabled Dormitory Confirm did not send its /turn-step request"
+    )
+    assert server.state != opening_state
+
+    after_dormitory = server.state
+    assert not _confirm_enabled(page), "Confirm stayed enabled after committing Dormitory"
+    confirm = page.query_selector('[data-turn-control="confirm"]')
+    assert confirm is not None
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_timeout(50)
+    assert len(requests) == 1, "a disabled post-Dormitory Confirm sent a request"
+    assert server.state == after_dormitory
+
+    for _ in range(80):
+        if _confirm_enabled(page):
+            break
+        offered = _next_offered_from_dom(page)
+        assert offered is not None, "no offered choice remained while narrowing a turn action"
+        assert offered.get_attribute("data-turn-control") != "confirm"
+        _click_handle_centre(page, offered, require_hit=True)
+        page.wait_for_timeout(20)
+    else:
+        raise AssertionError("the normal turn action did not narrow to an enabled Confirm")
+
+    assert page.locator('[data-turn-panel][data-turn-shown="true"]').count() == 1, (
+        "Confirm enabled before narrowing to one normal turn action"
+    )
+    before_action_token = server.payload["state_token"]
+    confirm = page.query_selector('[data-turn-control="confirm"]')
+    assert confirm is not None
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_function(
+        "token => !document.documentElement.innerHTML.includes(token)", arg=before_action_token
+    )
+    assert len(requests) == 2 and requests[-1].endswith("/action"), (
+        "an enabled normal-turn Confirm did not send its /action request"
+    )
+    assert server.state != after_dormitory
+
+
+def test_pointer_focused_svg_buildings_have_no_mouse_focus_outline(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    map_building = page.query_selector('#setup-fills g[data-building-id]')
+    assert map_building is not None
+    map_fill = map_building.query_selector("polygon")
+    assert map_fill is not None
+    _click_handle_point(page, map_fill, 0.1, 0.5)
+    map_focus = page.evaluate(
+        """target => ({
+            withinBuilding: target.contains(document.activeElement),
+            outline: getComputedStyle(document.activeElement).outlineStyle,
+        })""",
+        map_building,
+    )
+    assert map_focus["withinBuilding"], "the map-building click did not focus its SVG building"
+    assert map_focus["outline"] == "none", "a mouse-focused map building retained its focus outline"
+
+    board_building = page.query_selector(
+        '[data-component="player-board-v2"] g[data-player-board-slot][data-building-id="cloisters"]'
+    )
+    assert board_building is not None
+    _click_handle_centre(page, board_building, require_hit=True)
+    board_focus = page.evaluate(
+        """target => ({
+            withinBuilding: target.contains(document.activeElement),
+            outline: getComputedStyle(document.activeElement).outlineStyle,
+        })""",
+        board_building,
+    )
+    assert board_focus["withinBuilding"], "the player-board click did not focus its SVG building"
+    assert board_focus["outline"] == "none", (
+        "a mouse-focused player-board building retained its focus outline"
+    )
 
 
 def test_relocation_answer_row_shows_only_its_step_prompt_without_changing_height(page, serve) -> None:

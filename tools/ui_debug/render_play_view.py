@@ -1128,6 +1128,8 @@ def turn_styles(route_color: str) -> str:
   }}
   [data-turn-step-building-id][data-turn-step-used="true"] {{ opacity: 0.42; }}
 
+  svg :focus:not(:focus-visible) {{ outline: none; }}
+
 {resource_choice_styles()}
   /* The board renderer draws all three stock keys and the rule above shows them together. A stock
      the surviving turns do not offer is taken back out again here, so the seat is never shown a
