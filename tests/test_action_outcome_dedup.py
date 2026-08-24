@@ -44,12 +44,13 @@ from pilgrim.rules.special_activities import (
     apply_allocation_move_with_capacity,
     legal_allocation_moves,
 )
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import apply_action, legal_actions, turn_steps
 from pilgrim.search.exact import solve_exact
 
 REPO = Path(__file__).resolve().parents[1]
 
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
+MIN_SEARCHABLE_GENERATIONS = 74
 
 # The corpus is every committed position that offers one of these sequences, found rather than
 # listed so that a scenario added later is covered without anyone remembering to add it here. The
@@ -398,14 +399,19 @@ def test_the_root_reaches_the_same_positions(generations) -> None:
 def test_the_search_lands_on_the_same_line(generations) -> None:
     """Equivalent branches removed must not move the optimum.
 
-    Worth knowing about the shape of this evidence: on the committed corpus the best line never
-    contains an allocation or ordination move, so the principal variation alone could not tell
-    these two generations apart. What makes the comparison mean something is the test above --
-    the same positions are reachable -- and the node counts here, which come out equal because the
-    search already collapsed the synonyms into one another through its transposition table.
+    On the committed corpus the best line never contains an allocation or ordination move, so the
+    principal variation alone could not tell these two generations apart. What makes the comparison
+    mean something is the test above -- the same positions are reachable -- and the node counts
+    here, which come out equal because the search already collapsed the synonyms into one another
+    through its transposition table.
     """
+    searched = skipped = 0
     monkeypatch = pytest.MonkeyPatch()
     for name, scenario, _before, _after in generations:
+        if turn_steps(scenario.state, scenario.config):
+            skipped += 1
+            continue
+        searched += 1
         after = solve_exact(scenario.state, scenario.config, 2)
         with monkeypatch.context() as patched:
             patched.setattr(transition, "_allocation_move_sequences", every_allocation_spelling)
@@ -422,6 +428,12 @@ def test_the_search_lands_on_the_same_line(generations) -> None:
         assert before.nodes_expanded == after.nodes_expanded, (
             f"{name}: the search saw a different number of distinct positions"
         )
+
+    assert searched > 0
+    # Library, Pulpit, and hired buildings will become committed steps, shrinking this population.
+    assert searched >= MIN_SEARCHABLE_GENERATIONS, (
+        f"only {searched} search-safe generations remain; {skipped} have committed turn steps"
+    )
 
 
 @pytest.fixture(scope="module")

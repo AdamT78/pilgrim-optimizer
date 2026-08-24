@@ -14,7 +14,7 @@ from pilgrim.model.enums import PlayerId
 from pilgrim.model.state import GameState
 from pilgrim.opponents import OpponentModelType, decision_player_for_node
 from pilgrim.rules.scoring import ScoreBreakdown, score_breakdown
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import apply_action, legal_actions, turn_steps
 from pilgrim.search.objectives import (
     SearchObjective,
     evaluate_search_leaf,
@@ -79,6 +79,7 @@ def solve_exact(
         state: GameState, remaining_depth: int
     ) -> tuple[int, dict[PlayerId, int], tuple[GameAction, ...]]:
         nonlocal nodes_expanded
+        _refuse_unsearched_turn_steps(state, config)
         memo_key = (state, remaining_depth, root_player, opponent_model_type, resolved_objective)
         if memo_key in memo:
             return memo[memo_key]
@@ -175,9 +176,30 @@ def _pass_resolution_window(state: GameState, config: GameConfig) -> GameState:
     action is EndTurnAction before passing, so a future branch in this window cannot be skipped.
     """
     while state.turn_progress.resolution_committed:
-        assert legal_actions(state, config) == (EndTurnAction(),), (
-            "Exact search may pass a resolution window only when EndTurnAction is its sole legal "
-            "action."
-        )
+        _refuse_unsearched_turn_steps(state, config)
+        actions = legal_actions(state, config)
+        if actions != (EndTurnAction(),):
+            raise RuntimeError(
+                "Exact search may pass a resolution window only when EndTurnAction is its sole "
+                f"legal action, not {actions!r}."
+            )
         state = apply_action(state, EndTurnAction(), config).state
     return state
+
+
+def _refuse_unsearched_turn_steps(state: GameState, config: GameConfig) -> None:
+    """Refuse positions whose committed building steps exact search cannot enumerate.
+
+    Exact search enumerates ``legal_actions`` only, so committed building steps are invisible to
+    it. Roughly one eighth of the scenario corpus has such steps available at its opening
+    position. A step-aware searcher is deliberately deferred until the remaining buildings have
+    moved off ``FullTurnAction``.
+    """
+    steps = turn_steps(state, config)
+    if steps:
+        raise RuntimeError(
+            "Exact search cannot enumerate committed turn steps at "
+            f"turn={state.turn}, phase={state.phase.value}, "
+            f"active_player={int(state.active_player)}: "
+            f"{steps!r}"
+        )
