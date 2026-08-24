@@ -285,7 +285,7 @@ def test_cli_guild_hired_contract_reports_hire_bonus_and_effect_order(capsys) ->
     )
 
 
-def test_cli_guild_round_end_contract_shows_two_merchant_movements(capsys) -> None:
+def test_cli_guild_round_end_contract_keeps_only_the_building_merchant_move(capsys) -> None:
     output, _index = _apply_verbose_output(
         "scenarios/guild_round_end_moves_merchant_twice_001.json",
         predicate=lambda action: (
@@ -297,14 +297,13 @@ def test_cli_guild_round_end_contract_shows_two_merchant_movements(capsys) -> No
     )
     merchant_lines = _matching_lines(output, contains="MERCHANT_ADVANCE:")
 
-    assert len(merchant_lines) == 2
-    assert any("cause=guild" in line for line in merchant_lines)
-    assert any("cause=guild" not in line for line in merchant_lines)
+    assert len(merchant_lines) == 1
+    assert all("cause=guild" in line for line in merchant_lines)
     assert (
         "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild"
         in output
     )
-    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" not in output
 
 
 def test_cli_brewery_contract_reports_conversion_and_resource_delta(capsys) -> None:
@@ -485,7 +484,7 @@ def test_cli_taxation_contract_base_bonus_path_is_clear(capsys) -> None:
     assert "INVARIANT_CHECK: passed" in output
 
 
-def test_cli_give_alms_and_season_end_contracts_are_clear(capsys) -> None:
+def test_cli_give_alms_and_season_end_contracts_defer_the_end_pipeline(capsys) -> None:
     give_alms_legal = _run_cli(["legal-actions", "scenarios/give_alms_paid_001.json"], capsys)
     assert "action: give_alms_paid" in give_alms_legal
 
@@ -508,60 +507,40 @@ def test_cli_give_alms_and_season_end_contracts_are_clear(capsys) -> None:
         ],
         capsys,
     )
-    _assert_in_order(
-        season_end_output,
-        [
-            "ROUND_ADVANCE:",
-            "ALMS_SEASON_END:",
-            "ALMS_SEASON_REWARD:",
-            "ALMS_RESET:",
-            "MERCHANT_ADVANCE:",
-            "CONFESSION_BOX_PHASE:",
-        ],
-    )
+    assert "DUTY_RESOLUTION:" in season_end_output
+    assert "ROUND_ADVANCE:" not in season_end_output
+    assert "ALMS_SEASON_END:" not in season_end_output
+    assert "ALMS_SEASON_REWARD:" not in season_end_output
+    assert "ALMS_RESET:" not in season_end_output
+    assert "MERCHANT_ADVANCE:" not in season_end_output
+    assert "CONFESSION_BOX_PHASE:" not in season_end_output
 
 
-def test_cli_round_end_trade_route_income_contract_orders_after_merchant(capsys) -> None:
+def test_cli_round_end_trade_route_income_contract_defers_until_end_turn(capsys) -> None:
     output, _index = _apply_verbose_output(
         "scenarios/round_end_trade_route_income_basic_001.json",
         predicate=lambda action: action.resolution is TurnResolutionType.TITHE,
         capsys=capsys,
     )
 
-    assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" in output
-    _assert_in_order(
-        output,
-        [
-            "MERCHANT_ADVANCE:",
-            "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route",
-            "CONFESSION_BOX_PHASE:",
-            "TURN_ADVANCE:",
-        ],
-    )
+    assert "DUTY_RESOLUTION:" in output
+    assert "MERCHANT_ADVANCE:" not in output
+    assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" not in output
+    assert "CONFESSION_BOX_PHASE:" not in output
+    assert "TURN_ADVANCE:" not in output
 
 
-def test_cli_confession_box_start_player_contract_names_who_is_being_waited_on(capsys) -> None:
-    """The round-ending turn's contract changed shape: it now ends by asking rather than deciding.
-
-    The hire and the bonus have not gone anywhere -- they are printed by the action that ANSWERS,
-    which is a different player's, so a single apply cannot show both ends of it any more. That
-    pairing is covered where it now lives, in the Confession Box CLI tests.
-    """
+def test_cli_confession_box_start_player_contract_defers_the_question(capsys) -> None:
     output, _index = _apply_verbose_output(
         "scenarios/confession_box_hire_market_start_player_001.json",
         predicate=lambda action: action.resolution is TurnResolutionType.TITHE,
         capsys=capsys,
     )
 
-    assert "CONFESSION_BOX_PHASE:" in output
-    _assert_in_order(
-        output,
-        [
-            "MERCHANT_ADVANCE:",
-            "CONFESSION_BOX_PHASE:",
-            "TURN_ADVANCE:",
-        ],
-    )
+    assert "DUTY_RESOLUTION:" in output
+    assert "MERCHANT_ADVANCE:" not in output
+    assert "CONFESSION_BOX_PHASE:" not in output
+    assert "TURN_ADVANCE:" not in output
     assert "START_PLAYER_MARKER:" not in output
 
 

@@ -4497,7 +4497,7 @@ def _apply_full_turn_action(
             )
         )
 
-    if not updated_state.game_over and turn_steps(updated_state, config):
+    if not updated_state.game_over:
         _validate_transition_state(state, updated_state, config)
         events.append(
             _post_transition_invariant_event(

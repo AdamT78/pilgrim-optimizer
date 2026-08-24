@@ -17,10 +17,15 @@ from __future__ import annotations
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import StartPlayerConfessionBoxAction, action_summary
+from pilgrim.model.actions import EndTurnAction, StartPlayerConfessionBoxAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.rules.piety import score_piety
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionResult,
+    TransitionValidationError,
+    apply_action,
+    legal_actions,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -28,14 +33,21 @@ def _events_of_type(events, event_type: EventType):
 
 
 def _round_ended(path: str):
-    """Play the round-ending tithe and stop wherever the engine stops."""
+    """Play the round-ending tithe, then make its required End of Turn pass."""
     scenario = load_scenario(path)
     action = next(
         candidate
         for candidate in legal_actions(scenario.state, scenario.config)
         if candidate.resolution is TurnResolutionType.TITHE
     )
-    return scenario, apply_action(scenario.state, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
+    if result.state.turn_progress.resolution_committed:
+        passed = apply_action(result.state, EndTurnAction(), scenario.config)
+        result = TransitionResult(
+            state=passed.state,
+            events=(*result.events, *passed.events),
+        )
+    return scenario, result
 
 
 def _answer(scenario, state, events, answers: dict[PlayerId, str | None]):

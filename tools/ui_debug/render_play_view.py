@@ -140,6 +140,8 @@ TOOLTIP_DECKLE_SVG_POINTS = " ".join(f"{x},{y}" for x, y in TOOLTIP_DECKLE_POINT
 CITY_POSITION = 0
 TWO_PLAYER_VARIANT = "2_player"
 WIDE_VARIANT = "3_4_player"
+TURN_PHASE_DIM_COLOR = "#6B675E"
+TURN_PHASE_CURRENT_COLOR = "#5FBF6E"
 
 
 def default_output_path() -> Path:
@@ -859,14 +861,55 @@ def _box_turn_controls() -> str:
     )
 
 
+def _initial_turn_phase(payload: dict) -> str | None:
+    """The current turn phase before the page script has seen a click.
+
+    Candidate answers live only in the browser, so a fresh page can only be at Beginning of Turn
+    or End of Turn. The latter is a committed resolution window; a game over has no active phase.
+    """
+    state = payload.get("state") or {}
+    if state.get("game_over"):
+        return None
+    if (state.get("turn_progress") or {}).get("resolution_committed"):
+        return "end"
+    return "beginning"
+
+
+def _turn_phase_column(payload: dict) -> str:
+    """The three turn phases, all drawn before any question is revealed."""
+    current = _initial_turn_phase(payload)
+    rows = (
+        ("beginning", "Beginning of Turn"),
+        ("sow", "Sow"),
+        ("end", "End of Turn"),
+    )
+    return (
+        '<div class="phase-column">'
+        + "".join(
+            f'<div class="phase-row" data-turn-phase="{phase}"'
+            + (' data-phase-current="true"' if phase == current else "")
+            + f">{label}</div>"
+            for phase, label in rows
+        )
+        + "</div>"
+    )
+
+
 def render_turn_panel(payload: dict) -> str:
     """Where a turn is answered and agreed to, beside the log rather than on the board."""
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
-    if not candidates and not turn_steps:
+    if not candidates and not turn_steps and _initial_turn_phase(payload) is None:
         return ""
+    if not candidates and not turn_steps:
+        return (
+            '<div class="play-turn" data-component="play-turn">'
+            f"{_turn_phase_column(payload)}"
+            "</div>"
+        )
     return (
         '<div class="play-turn" data-component="play-turn">'
+        f"{_turn_phase_column(payload)}"
         f"{_prompt_lines(candidates)}"
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}</div>"
@@ -974,6 +1017,7 @@ _TURN_SCRIPT = """<script>
   var counters = board.querySelectorAll('[data-turn-counter]');
   var merchantTokens = board.querySelectorAll('[data-token="merchant"]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
+  var phaseRows = aside.querySelectorAll('[data-turn-phase]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
@@ -1035,6 +1079,17 @@ _TURN_SCRIPT = """<script>
         var step = candidate.steps[index];
         return step !== undefined && step.value === answer;
       });
+    });
+  }
+
+  function renderPhase() {
+    var current = RESOLUTION_COMMITTED ? 'end' : (answered.length ? 'sow' : 'beginning');
+    Array.prototype.forEach.call(phaseRows, function (row) {
+      if (row.getAttribute('data-turn-phase') === current) {
+        row.setAttribute('data-phase-current', 'true');
+      } else {
+        row.removeAttribute('data-phase-current');
+      }
     });
   }
 
@@ -2555,6 +2610,7 @@ _TURN_SCRIPT = """<script>
   }
 
   function render() {
+    renderPhase();
     if (!CANDIDATES.length) {
       renderTurnSteps();
       setControl(
@@ -3061,6 +3117,10 @@ def turn_styles(route_color: str) -> str:
     width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px; padding: 10px 12px;
   }}
+  .phase-column {{ display: flex; flex-direction: column; gap: 2px;
+    margin: -1px 0 9px; padding-bottom: 9px; border-bottom: 1px solid #333333; }}
+  .phase-row {{ color: {TURN_PHASE_DIM_COLOR}; font-size: 12px; letter-spacing: 0.02em; }}
+  .phase-row[data-phase-current="true"] {{ color: {TURN_PHASE_CURRENT_COLOR}; font-weight: 700; }}
   /* One line per question, all drawn, all hidden until the script says theirs is the one being
      asked. Above the keys because several of these are answered nowhere near them -- on the board,
      on a seat's own stock, on a hex of the round track -- and a line that only appeared when the
@@ -3255,6 +3315,7 @@ def render_play_view_html(
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
     turn_surface = bool(candidates or turn_steps)
+    turn_panel_visible = turn_surface or not bool(payload.get("state", {}).get("game_over"))
     # One-time draw choice from the full candidate set; do not recalculate as the turn narrows.
     city_spoke_reversals = _city_spoke_reversals_used(candidates)
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
@@ -3399,7 +3460,7 @@ def render_play_view_html(
         if turn_surface
         else ""
     )
-    turn_css = turn_styles(active_color) if turn_surface else ""
+    turn_css = turn_styles(active_color) if turn_panel_visible else ""
     stage = render_table_stage(
         alms_svg=alms_svg,
         piety_svg=piety_svg,

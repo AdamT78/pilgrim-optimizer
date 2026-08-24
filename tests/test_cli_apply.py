@@ -57,7 +57,7 @@ def test_cli_apply_selects_action_by_one_based_index(capsys) -> None:
     assert "Selected action 1:" in output
     assert first_action_summary in output
     assert "State updated successfully." in output
-    assert "Next active player: player_two" in output
+    assert "Next active player: player_one" in output
 
 
 def test_cli_apply_invalid_action_index_returns_clear_error(capsys) -> None:
@@ -172,7 +172,7 @@ def test_cli_apply_verbose_can_show_alms_events(capsys) -> None:
     assert "Total sandbox evaluation:" in output
 
 
-def test_cli_apply_round_end_pilgrimage_scenario_shows_alms_season_end_scoring(capsys) -> None:
+def test_cli_apply_round_end_pilgrimage_scenario_waits_for_end_turn(capsys) -> None:
     exit_code = main(
         [
             "apply",
@@ -185,21 +185,24 @@ def test_cli_apply_round_end_pilgrimage_scenario_shows_alms_season_end_scoring(c
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "ROUND_ADVANCE:" in output
-    assert "ALMS_SEASON_END:" in output
-    assert "ALMS_SEASON_REWARD:" in output
-    assert "ALMS_RESET:" in output
-    assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat" in output
+    assert "DUTY_RESOLUTION:" in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
-    assert "SEASON_ADVANCE:" not in output
     assert "INVARIANT_CHECK:" in output
     assert "passed for all players" in output
     assert "player_one=2" in output
     assert "player_two=2" in output
-    # The table is handed to player_one, not on to the next seat: the round ended, and the first
-    # player owed a Confession Box question is asked before anybody plays again.
-    assert "Next active player: player_one" in output
-    assert "Resource: wheat" in output
+    for deferred in (
+        "ROUND_ADVANCE:",
+        "ALMS_SEASON_END:",
+        "ALMS_SEASON_REWARD:",
+        "ALMS_RESET:",
+        "MERCHANT_ADVANCE:",
+        "CONFESSION_BOX_PHASE:",
+        "TURN_ADVANCE:",
+    ):
+        assert deferred not in output
+    assert "Next active player: player_two" in output
+    assert "Resource: none" in output
 
 
 def test_cli_apply_dummy_season_move_scenario_no_longer_shows_dummy_events(capsys) -> None:
@@ -219,7 +222,7 @@ def test_cli_apply_dummy_season_move_scenario_no_longer_shows_dummy_events(capsy
     assert "DUMMY_ACOLYTE_MOVE:" not in output
 
 
-def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> None:
+def test_cli_apply_game_end_scenario_opens_end_turn_window(capsys) -> None:
     exit_code = main(
         [
             "apply",
@@ -233,18 +236,19 @@ def test_cli_apply_game_end_scenario_shows_game_end_and_game_over(capsys) -> Non
 
     assert exit_code == 0
     assert "Apply result for scenario 'game_end_nw_site_001'" in output
-    assert "GAME_END:" in output
+    assert "GAME_END:" not in output
+    assert "SHIP_ADVANCE:" not in output
     assert "ALMS_SEASON_REWARD:" not in output
     assert "ALMS_RESET:" not in output
     assert "DUMMY_ACOLYTE_MOVE:" not in output
     assert "MERCHANT_ADVANCE:" not in output
     assert "TURN_ADVANCE:" not in output
     assert "State after action:" in output
-    assert "Next active player: none (game over)" in output
-    assert "Game over: true" in output
+    assert "Next active player: player_two" in output
+    assert "Game over: false" in output
 
 
-def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) -> None:
+def test_cli_apply_round_end_excess_scenario_waits_for_end_turn(capsys) -> None:
     exit_code = main(
         [
             "apply",
@@ -257,14 +261,16 @@ def test_cli_apply_round_end_excess_scenario_shows_round_end_pipeline(capsys) ->
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "EXCESS_RESOURCE_CAP:" in output
-    assert "SHIP_ADVANCE:" in output
-    assert "ROUND_ADVANCE:" in output
-    assert "MERCHANT_ADVANCE:" in output
-    # The round end now finishes by ASKING rather than by deciding: it stops on the first
-    # player owed a Confession Box question, and the marker is awarded by whoever answers
-    # last. So this is the pipeline's last line, and the order it is in is the claim.
-    assert "CONFESSION_BOX_PHASE:" in output
+    assert "DUTY_RESOLUTION:" in output
+    for deferred in (
+        "EXCESS_RESOURCE_CAP:",
+        "SHIP_ADVANCE:",
+        "ROUND_ADVANCE:",
+        "MERCHANT_ADVANCE:",
+        "CONFESSION_BOX_PHASE:",
+        "TURN_ADVANCE:",
+    ):
+        assert deferred not in output
 
 
 def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> None:
@@ -287,8 +293,8 @@ def test_cli_apply_allocation_verbose_shows_player_board_sections(capsys) -> Non
     assert "target: city" not in output
     assert "Village:" in output
     assert "Abbey:" in output
-    assert "Special Activities: 0" in output
-    assert "Special Activities: none" in output
+    assert "Special Activities: 1" in output
+    assert "Special Activities: none" not in output
     assert "Special Activities: fields" in output
     assert "Total: 10" in output
 

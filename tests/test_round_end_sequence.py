@@ -35,7 +35,7 @@ def test_round_ending_turn_runs_expected_sequence_and_state_updates() -> None:
     confession_index = _event_index(result.events, EventType.CONFESSION_BOX_PHASE)
     start_player_index = _event_index(result.events, EventType.START_PLAYER_MARKER)
     turn_advance_index = _event_index(result.events, EventType.TURN_ADVANCE)
-    invariant_index = _event_index(result.events, EventType.INVARIANT_CHECK)
+    invariant_index = _invariant_index(result.events, "post_turn")
 
     assert recall_index < excess_index
     assert excess_index < round_advance_index
@@ -194,3 +194,10 @@ def _event_index(events, event_type: EventType) -> int:
         if event.event_type is event_type:
             return index
     raise AssertionError(f"Missing event type: {event_type}")
+
+
+def _invariant_index(events, name: str) -> int:
+    for index, event in enumerate(events):
+        if event.event_type is EventType.INVARIANT_CHECK and dict(event.details).get("name") == name:
+            return index
+    raise AssertionError(f"Missing invariant check: {name}")

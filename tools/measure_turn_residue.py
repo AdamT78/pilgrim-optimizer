@@ -61,7 +61,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(REPO))
 
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
-from pilgrim.model.actions import FullTurnAction, action_id  # noqa: E402
+from pilgrim.model.actions import EndTurnAction, FullTurnAction, action_id  # noqa: E402
 from pilgrim.model.duties import DUTY_CATEGORIES, duty_category_at_position  # noqa: E402
 from pilgrim.model.enums import TurnResolutionType  # noqa: E402
 from pilgrim.rules.transition import apply_action, legal_actions  # noqa: E402
@@ -345,7 +345,10 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
         resolution = _resolution_of(chosen_candidate)
         if resolution is not None:
             taken[resolution] += 1
-        state = apply_action(state, by_id[chosen_candidate["action_id"]], config).state
+        resolution = apply_action(state, by_id[chosen_candidate["action_id"]], config)
+        state = resolution.state
+        if state.turn_progress.resolution_committed:
+            state = apply_action(state, EndTurnAction(), config).state
 
     return {
         "scenario": scenario_path,

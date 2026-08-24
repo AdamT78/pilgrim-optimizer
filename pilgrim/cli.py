@@ -18,6 +18,7 @@ from pilgrim.evaluation import (
 from pilgrim.io.event_text import format_event
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import (
+    EndTurnAction,
     GameAction,
     SetupSowAction,
     StartPlayerConfessionBoxAction,
@@ -285,11 +286,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.verbose and result.best_action is not None:
             transition_result = apply_action(scenario.state, result.best_action, scenario.config)
+            transition_events = list(transition_result.events)
+            while transition_result.state.turn_progress.resolution_committed:
+                transition_result = apply_action(
+                    transition_result.state,
+                    EndTurnAction(),
+                    scenario.config,
+                )
+                transition_events.extend(transition_result.events)
             print()
             _print_transition_report(
                 initial_state=scenario.state,
                 next_state=transition_result.state,
-                events=transition_result.events,
+                events=tuple(transition_events),
                 config=scenario.config,
                 root_player_id=scenario.root_player_id,
                 events_heading=events_heading,
@@ -645,6 +654,10 @@ def _annotate_actions_with_active_players(
     for action in actions:
         annotated.append((state.active_player, action))
         state = apply_action(state, action, config).state
+        # Exact-search lines contain full-turn decisions. The End Turn window is still an engine
+        # state, but its pass is deterministic and is not one of the line's chosen actions.
+        while state.turn_progress.resolution_committed:
+            state = apply_action(state, EndTurnAction(), config).state
     return tuple(annotated)
 
 

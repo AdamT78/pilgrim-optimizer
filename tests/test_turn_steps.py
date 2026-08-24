@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import BuildingConversionStep
+from pilgrim.model.actions import BuildingConversionStep, EndTurnAction
 from pilgrim.model.enums import PlayerId
 from pilgrim.rules.transition import (
     apply_action,
@@ -42,7 +42,9 @@ def test_turn_progress_is_serialised_and_end_of_turn_resets_it() -> None:
     json.dumps(record)
 
     action = next(iter(legal_actions(state, scenario.config)))
-    result = apply_action(state, action, scenario.config)
+    resolution = apply_action(state, action, scenario.config)
+    assert resolution.state.turn_progress.used_buildings == frozenset({"grain_store"})
+    result = apply_action(resolution.state, EndTurnAction(), scenario.config)
     assert result.state.turn_progress.used_buildings == frozenset()
     assert result.state.turn_progress.events == ()
 

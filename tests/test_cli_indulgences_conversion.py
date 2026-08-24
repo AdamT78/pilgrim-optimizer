@@ -74,7 +74,7 @@ def test_cli_apply_opponent_hired_indulgences_buy_shows_owner_payment() -> None:
     assert "BUILDING_BONUS: indulgences bought 2 piety for 2 silver" in output
 
 
-def test_cli_apply_indulgences_buy_then_round_end_shows_start_player_selection() -> None:
+def test_cli_apply_indulgences_buy_then_round_end_defers_start_player_selection() -> None:
     output = _step_output(
         "scenarios/indulgences_buy_then_round_end_start_player_001.json",
         source="own_active",
@@ -83,4 +83,6 @@ def test_cli_apply_indulgences_buy_then_round_end_shows_start_player_selection()
     )
     assert "BUILDING_BONUS: indulgences bought 1 piety for 1 silver" in output
     assert "RESOURCE_DELTA: player_two silver -1; piety +1" in output
-    assert "START_PLAYER_MARKER: player_two takes the First Player marker" in output
+    assert "START_PLAYER_MARKER: player_two takes the First Player marker" not in output
+    assert "ROUND_ADVANCE:" not in output
+    assert "TURN_ADVANCE:" not in output

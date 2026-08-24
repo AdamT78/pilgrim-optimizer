@@ -1,5 +1,5 @@
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.actions import EndTurnAction, FullTurnAction
 from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.model.state import GameState, PlayerState
@@ -38,14 +38,17 @@ def test_apply_action_applies_sowing_and_duty_in_one_call() -> None:
     )
     result = apply_action(state, action, scenario.config)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 2
-    assert result.state.active_player is PlayerId.PLAYER_TWO
+    assert result.state.active_player is PlayerId.PLAYER_ONE
     assert result.state.phase is TurnPhase.SOW
+    assert result.state.turn_progress.resolution_committed
     assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.village == 2
     assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 1
     assert (
         result.state.player_state(PlayerId.PLAYER_ONE).workforce.committed
         == CommittedAcolytes(roads=1, shrines=2)
     )
+    passed = apply_action(result.state, EndTurnAction(), scenario.config)
+    assert passed.state.active_player is PlayerId.PLAYER_TWO
 
 
 def test_full_turn_duty_recall_returns_acolytes_to_city() -> None:

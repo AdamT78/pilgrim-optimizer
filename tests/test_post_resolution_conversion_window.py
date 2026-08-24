@@ -74,23 +74,28 @@ def test_devotion_keeps_the_turn_open_for_a_conversion_then_end_turn_passes() ->
         "scenarios/indulgences_not_live_no_conversion_001.json",
     ],
 )
-def test_resolution_without_a_conversion_keeps_the_old_immediate_pass(
+def test_resolution_without_a_conversion_defers_the_old_immediate_pass(
     scenario_path: str,
 ) -> None:
     scenario = load_scenario(scenario_path)
     before = scenario.state
     action = legal_actions(before, scenario.config)[0]
 
-    result = apply_action(before, action, scenario.config)
-    expected_turn = before.next_player_turn()
+    resolution = apply_action(before, action, scenario.config)
 
-    assert result.state.turn == expected_turn.turn
-    assert result.state.active_player is expected_turn.active_player
-    assert result.state.phase is TurnPhase.SOW
-    assert result.state.turn_progress == expected_turn.turn_progress
-    assert result.state.turn_progress.resolution_committed is False
-    assert not turn_steps(result.state, scenario.config)
-    assert EventType.TURN_ADVANCE in {event.event_type for event in result.events}
+    assert resolution.state.turn == before.turn
+    assert resolution.state.active_player is before.active_player
+    assert resolution.state.phase is TurnPhase.SOW
+    assert resolution.state.turn_progress.resolution_committed is True
+    assert not turn_steps(resolution.state, scenario.config)
+    assert legal_actions(resolution.state, scenario.config) == (EndTurnAction(),)
+    assert EventType.TURN_ADVANCE not in {event.event_type for event in resolution.events}
+
+    expected_turn = resolution.state.next_player_turn()
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+
+    assert passed.state == expected_turn
+    assert EventType.TURN_ADVANCE in {event.event_type for event in passed.events}
 
 
 def test_round_end_effects_wait_for_end_turn_and_award_the_marker_at_the_pass() -> None:
@@ -123,13 +128,61 @@ def test_round_end_effects_wait_for_end_turn_and_award_the_marker_at_the_pass() 
     )
 
 
-def test_game_ending_resolution_never_opens_a_conversion_window() -> None:
+def test_game_ending_round_end_opens_window_then_pass_ends_game() -> None:
     scenario = load_scenario("scenarios/game_end_nw_site_001.json")
     action = legal_actions(scenario.state, scenario.config)[0]
 
-    result = apply_action(scenario.state, action, scenario.config)
+    resolution = apply_action(scenario.state, action, scenario.config)
 
-    assert result.state.game_over is True
-    assert result.state.turn_progress.resolution_committed is False
-    assert legal_actions(result.state, scenario.config) == ()
-    assert not turn_steps(result.state, scenario.config)
+    assert resolution.state.game_over is False
+    assert resolution.state.turn_progress.resolution_committed is True
+    assert legal_actions(resolution.state, scenario.config) == (EndTurnAction(),)
+
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+
+    assert passed.state.game_over is True
+    assert legal_actions(passed.state, scenario.config) == ()
+
+
+def test_final_game_ending_window_keeps_conversion_usable_before_pass() -> None:
+    scenario = load_scenario("scenarios/game_end_nw_site_001.json")
+    player = scenario.state.active_player
+    player_state = scenario.state.player_state(player)
+    state = scenario.state.with_player_state(
+        player,
+        replace(
+            player_state,
+            # Give Alms donates Library; Indulgences must remain active in the final window.
+            player_board_slots=replace(
+                player_state.player_board_slots,
+                active_buildings=("library", "indulgences"),
+            ),
+        ),
+    )
+    action = next(
+        candidate
+        for candidate in legal_actions(state, scenario.config)
+        if candidate.donate_building_id == "library"
+    )
+
+    resolution = apply_action(state, action, scenario.config)
+    sell_one_piety = next(
+        step
+        for step in turn_steps(resolution.state, scenario.config)
+        if step.building_id == "indulgences" and step.direction == "sell_piety" and step.amount == 1
+    )
+
+    with_conversion = apply_action(
+        apply_turn_step(resolution.state, scenario.config, sell_one_piety),
+        EndTurnAction(),
+        scenario.config,
+    )
+    without_conversion = apply_action(resolution.state, EndTurnAction(), scenario.config)
+
+    converted_player = with_conversion.state.player_state(player)
+    passed_player = without_conversion.state.player_state(player)
+    assert with_conversion.state.game_over is True
+    assert without_conversion.state.game_over is True
+    assert converted_player.resources != passed_player.resources
+    assert converted_player.resources.silver == passed_player.resources.silver + 1
+    assert converted_player.piety == passed_player.piety - 1

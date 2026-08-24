@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_summary
+from pilgrim.model.actions import EndTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.merchant import advance_merchant_position, taxation_board_position
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
@@ -279,9 +279,12 @@ def test_round_ending_turn_with_guild_moves_merchant_twice() -> None:
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    resolution = apply_action(scenario.state, action, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *passed.events)
 
-    merchant_events = _events_of_type(result.events, EventType.MERCHANT_ADVANCE)
+    merchant_events = _events_of_type(events, EventType.MERCHANT_ADVANCE)
     assert len(merchant_events) == 2
     guild_event = _first_action(
         merchant_events,
@@ -291,9 +294,9 @@ def test_round_ending_turn_with_guild_moves_merchant_twice() -> None:
         merchant_events,
         lambda event: dict(event.details).get("cause") is None,
     )
-    sowing_event = _events_of_type(result.events, EventType.SOWING)[0]
-    round_advance_event = _events_of_type(result.events, EventType.ROUND_ADVANCE)[0]
+    sowing_event = _events_of_type(events, EventType.SOWING)[0]
+    round_advance_event = _events_of_type(events, EventType.ROUND_ADVANCE)[0]
 
-    assert result.events.index(guild_event) < result.events.index(sowing_event)
-    assert result.events.index(round_advance_event) < result.events.index(round_end_event)
-    assert result.state.merchant_board_position == 2
+    assert events.index(guild_event) < events.index(sowing_event)
+    assert events.index(round_advance_event) < events.index(round_end_event)
+    assert passed.state.merchant_board_position == 2

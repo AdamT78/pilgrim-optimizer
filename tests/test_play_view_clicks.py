@@ -192,7 +192,12 @@ def _walk_live_dom_until(
                 preferred_control=preferred_control,
             )
         assert offered is not None, f"no live offered target while walking to {target}"
-        _click_handle_centre(page, offered, require_hit=True)
+        if offered.get_attribute("data-turn-control") == "confirm":
+            # The walker passes the deterministic End Turn window to reach a later prompt. Its
+            # target is the requested question, not the Confirm control's hit area.
+            offered.click()
+        else:
+            _click_handle_centre(page, offered, require_hit=True)
         page.wait_for_timeout(20)
     raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
 
@@ -361,6 +366,21 @@ def _screenshot_piety_track(page, path: Path) -> None:
 
 def _screenshot_turn_prompt(page, path: Path) -> None:
     page.locator('[data-component="play-turn"]').screenshot(path=str(path))
+
+
+def _assert_painted_turn_phase(page, current: str) -> None:
+    """The column has one visible green row and the other two remain visibly dim."""
+    expected_colors = {
+        True: "rgb(95, 191, 110)",
+        False: "rgb(107, 103, 94)",
+    }
+    for phase in ("beginning", "sow", "end"):
+        row = page.locator(f'[data-turn-phase="{phase}"]')
+        assert row.count() == 1, f"{phase} phase row was not drawn exactly once"
+        assert row.is_visible(), f"{phase} phase row was hidden"
+        is_current = phase == current
+        assert (row.get_attribute("data-phase-current") == "true") is is_current
+        assert row.evaluate("node => getComputedStyle(node).color") == expected_colors[is_current]
 
 
 def _screenshot_active_board(page, path: Path) -> None:
@@ -1403,6 +1423,11 @@ def test_guild_merchant_preview_waits_for_agreement_and_matches_confirm(page, se
     page.wait_for_timeout(120)
     assert server.state.merchant_board_position == expected_position
     assert merchant_visible_at(expected_position)
+    assert server.state.active_player is acting_player
+    assert server.state.turn_progress.resolution_committed is True
+
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
     assert server.state.active_player != acting_player
 
 
@@ -2439,6 +2464,95 @@ def test_two_active_conversions_commit_from_building_direction_and_amount_clicks
 
     assert server.state != before, "committing a conversion did not change the position"
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+
+
+def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> None:
+    """A conversion is outside the Sow answer sequence, so it cannot advance that phase."""
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+
+    _assert_painted_turn_phase(page, "beginning")
+    _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-beginning.png")
+
+    _choose_conversion(page, "grain_store", "sell_wheat", 1)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(100)
+
+    assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
+    _assert_painted_turn_phase(page, "beginning")
+
+    origin = page.query_selector(
+        '[data-board-position-index][data-turn-start-candidate="true"]'
+    )
+    assert origin is not None, "the next turn never offered an acolyte lift"
+    origin_value = int(origin.get_attribute("data-board-position-index"))
+    tithe_candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate["action_id"] is not None
+        and any(
+            step["kind"] == "origin" and step["value"] == origin_value
+            for step in candidate["steps"]
+        )
+        and any(
+            step["kind"] == "resolution" and step["value"] == "tithe"
+            for step in candidate["steps"]
+        )
+    )
+    expected_resolution = apply_action(
+        server.state,
+        next(
+            action
+            for action in legal_actions(server.state, server.config)
+            if action_id(action) == tithe_candidate["action_id"]
+        ),
+        server.config,
+    ).state
+    _click_handle_centre(page, origin, require_hit=True)
+    page.wait_for_timeout(40)
+
+    _assert_painted_turn_phase(page, "sow")
+    _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-sow.png")
+
+    for step in tithe_candidate["steps"]:
+        if step["kind"] == "edge":
+            selector = f'[data-arrow="{step["value"]}"][data-turn-offered="true"]'
+        elif step["kind"] == "duty":
+            selector = (
+                f'[data-board-position-index="{step["value"]}"]'
+                '[data-turn-duty-candidate="true"]'
+            )
+        else:
+            continue
+        handle = page.query_selector(selector)
+        if handle is None:
+            # Shared route steps auto-advance; they remain part of the candidate, but are not
+            # presented as another player click.
+            continue
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(40)
+    tithe = page.query_selector('[data-turn-control="tithe"][data-turn-control-enabled="true"]')
+    assert tithe is not None, "the selected candidate did not offer Tithe"
+    _click_handle_centre(page, tithe, require_hit=True)
+    page.wait_for_timeout(40)
+
+    resource = next(step for step in tithe_candidate["steps"] if step["kind"] == "resource")
+    resource_key = page.query_selector(
+        f'[data-active-seat="true"] [data-resource-choice-key="{resource["value"]}"]'
+        '[data-turn-offered="true"]'
+    )
+    assert resource_key is not None, "the selected tithe resource was not offered"
+    _click_handle_centre(page, resource_key, require_hit=True)
+    page.wait_for_timeout(40)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+
+    assert server.state == expected_resolution
+    assert server.state.turn_progress.resolution_committed is True
+    _assert_painted_turn_phase(page, "end")
+    _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-end.png")
 
 
 def test_conversion_resource_pill_reaches_amount_above_six_without_prompt_overflow(page, serve) -> None:
