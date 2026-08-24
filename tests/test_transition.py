@@ -1,3 +1,5 @@
+import pytest
+
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import EndTurnAction, FullTurnAction
 from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
@@ -158,6 +160,18 @@ def test_exact_search_depth_corresponds_to_full_turns() -> None:
     assert isinstance(result.best_score, int)
     assert result.nodes_expanded > 0
     assert len(result.principal_variation) == 3
+
+
+def test_exact_search_refuses_committed_turn_steps() -> None:
+    scenario = load_scenario("scenarios/kogge_donated_no_extra_routes_001.json")
+
+    with pytest.raises(RuntimeError, match="cannot enumerate committed turn steps") as raised:
+        solve_exact(scenario.state, scenario.config, depth=0)
+
+    message = str(raised.value)
+    assert "BuildingConversionStep(building_id='grain_store'" in message
+    assert "direction='buy_wheat'" in message
+    assert "BuildingActivationStep(building_id='guild'" in message
 
 
 def test_legal_actions_return_full_turn_actions() -> None:
