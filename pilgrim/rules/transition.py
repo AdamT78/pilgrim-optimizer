@@ -11,6 +11,7 @@ from pilgrim.model.actions import (
     AllocationMove,
     BuildingActivationStep,
     BuildingConversionStep,
+    BuildingRelocationStep,
     EndTurnAction,
     FullTurnAction,
     GameAction,
@@ -157,27 +158,6 @@ class TransitionResult:
 
     state: GameState
     events: tuple[GameEvent, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _StartTurnRelocationOption:
-    """Pre-sow state plus relocation metadata for one start-turn modifier use."""
-
-    state: GameState
-    building_id: str
-    source: BuildingAbilitySource
-    from_position: int
-    to_position: int
-
-
-@dataclass(frozen=True, slots=True)
-class _ResolvedStartTurnRelocation:
-    """Validated start-turn relocation directive from one action."""
-
-    building_id: str
-    source: BuildingAbilitySource
-    from_position: int
-    to_position: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,11 +420,7 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
             source=_hired_building_source_label(option.source),
             direction=option.direction,
             amount=option.amount,
-            hire_payment=(
-                option.source.hire_resource
-                if _is_hired_source(option.source)
-                else None
-            ),
+            hire_payment=(option.source.hire_resource if _is_hired_source(option.source) else None),
         )
         for option in options
         if option.building_id not in used
@@ -462,7 +438,12 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         for source, _state_after_hire in _legal_guild_activation_sources(state, config)
         if _BUILDING_GUILD not in used
     )
-    return (*conversions, *guild_steps)
+    relocations = (
+        ()
+        if state.turn_progress.resolution_committed
+        else _legal_start_turn_relocation_steps(state, config)
+    )
+    return (*conversions, *guild_steps, *relocations)
 
 
 def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameAction]:
@@ -503,11 +484,7 @@ def _legal_building_conversion_options(
         _legal_stone_yard_conversion_options,
         _legal_brewery_conversion_options,
     )
-    return tuple(
-        option
-        for generator in generators
-        for option in generator(state, config)
-    )
+    return tuple(option for generator in generators for option in generator(state, config))
 
 
 def apply_turn_step(
@@ -521,12 +498,12 @@ def apply_turn_step(
     ensure_phase(state, expected=TurnPhase.SOW, action_name="Turn step")
     if isinstance(step, BuildingActivationStep):
         return _apply_building_activation_step(state, config, step)
+    if isinstance(step, BuildingRelocationStep):
+        return _apply_building_relocation_step(state, config, step)
     if not isinstance(step, BuildingConversionStep):
         raise TypeError(f"Unsupported turn step type: {type(step)!r}")
     if step.building_id in state.turn_progress.used_buildings:
-        raise TransitionValidationError(
-            f"Building already used this turn: {step.building_id}."
-        )
+        raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
 
     conversion = _resolved_conversion_for_step(state, config, step)
     player = state.active_player
@@ -601,9 +578,7 @@ def _apply_building_activation_step(
     step: BuildingActivationStep,
 ) -> GameState:
     if step.building_id in state.turn_progress.used_buildings:
-        raise TransitionValidationError(
-            f"Building already used this turn: {step.building_id}."
-        )
+        raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
     if step.building_id != _BUILDING_GUILD:
         raise TransitionValidationError(
             f"Unsupported parameterless building activation: {step.building_id}."
@@ -676,10 +651,150 @@ def _apply_building_activation_step(
     )
 
 
+def _apply_building_relocation_step(
+    state: GameState,
+    config: GameConfig,
+    step: BuildingRelocationStep,
+) -> GameState:
+    if state.turn_progress.resolution_committed:
+        raise TransitionValidationError(
+            "Dormitory and Inquisition relocation steps are only available before resolution."
+        )
+    if step.building_id in state.turn_progress.used_buildings:
+        raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
+    if step.building_id not in {"dormitory", "inquisition"}:
+        raise TransitionValidationError(
+            f"Unsupported building relocation step: {step.building_id}."
+        )
+    if not isinstance(step.selected_position, int):
+        raise TransitionValidationError(
+            "Dormitory and Inquisition relocation targets must be positions."
+        )
+
+    player = state.active_player
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key=step.building_id,
+    )
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+        raise TransitionValidationError(
+            f"{step.building_id.title()} is unavailable in current state."
+        )
+    expected_source = (
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
+    )
+    if step.source != expected_source:
+        raise TransitionValidationError(
+            f"{step.building_id.title()} relocation source does not match resolved source: "
+            f"expected {expected_source}."
+        )
+
+    transition_action_id = _turn_step_id(step)
+    next_state = state
+    events = list(state.turn_progress.events)
+    if _is_hired_source(source):
+        if step.hire_payment not in CORNUCOPIA_HIRE_RESOURCES:
+            raise TransitionValidationError(
+                f"{step.building_id.title()} hire payment must name a concrete resource."
+            )
+        if source.hire_resource == CORNUCOPIA_COUNTER:
+            source = replace(source, hire_resource=step.hire_payment, hire_resource_chosen=True)
+        elif source.hire_resource != step.hire_payment:
+            raise TransitionValidationError(
+                f"{step.building_id.title()} hire payment does not match the Merchant's current counter."
+            )
+        try:
+            next_state, payment = apply_building_hire_payment(
+                next_state,
+                acting_player=player,
+                source=source,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        events.append(
+            _building_hired_event(
+                source=source,
+                payment=payment,
+                actor=player,
+                action_id=transition_action_id,
+                config=config,
+            )
+        )
+    elif step.hire_payment is not None:
+        raise TransitionValidationError(
+            f"Own-active {step.building_id.title()} does not take a hire payment."
+        )
+
+    city_position = config.board.index_for_name("city")
+    duty_positions = set(config.duty_positions())
+    player_vector = next_state.player_vector(player)
+    if step.selected_position not in duty_positions:
+        raise TransitionValidationError(
+            f"{step.building_id.title()} relocation target must be a Duty position."
+        )
+    if step.building_id == "dormitory":
+        from_position, to_position = step.selected_position, city_position
+        if player_vector[from_position] <= 0:
+            raise TransitionValidationError(
+                "Dormitory relocation source must contain at least one acting-player acolyte."
+            )
+    else:
+        from_position, to_position = city_position, step.selected_position
+        if player_vector[from_position] <= 0:
+            raise TransitionValidationError(
+                "Inquisition relocation requires at least one acting-player acolyte in City."
+            )
+    try:
+        relocated_vector = _relocate_one_acolyte_in_mancala_vector(
+            player_vector,
+            from_position=from_position,
+            to_position=to_position,
+        )
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
+    next_state = next_state.with_player_vector(player, relocated_vector)
+    events.append(
+        _start_turn_building_bonus_event(
+            actor=player,
+            action_id=transition_action_id,
+            building_id=step.building_id,
+            from_position=from_position,
+            to_position=to_position,
+            config=config,
+        )
+    )
+    events.append(
+        _start_turn_relocation_event(
+            actor=player,
+            action_id=transition_action_id,
+            building_id=step.building_id,
+            from_position=from_position,
+            to_position=to_position,
+            config=config,
+        )
+    )
+    return replace(
+        next_state,
+        turn_progress=replace(
+            next_state.turn_progress,
+            used_buildings=next_state.turn_progress.used_buildings | {step.building_id},
+            events=tuple(sorted(events, key=lambda event: event.action_id)),
+        ),
+    )
+
+
 def _turn_step_id(step: TurnStep) -> str:
     if isinstance(step, BuildingActivationStep):
         payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
         return f"turn_step:building_activation:{step.building_id}:from:{step.source}{payment}"
+    if isinstance(step, BuildingRelocationStep):
+        payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
+        return (
+            f"turn_step:building_relocation:{step.building_id}:from:{step.source}"
+            f":selected:{step.selected_position}{payment}"
+        )
     payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
     return (
         f"turn_step:building_conversion:{step.building_id}:from:{step.source}"
@@ -900,62 +1015,53 @@ class _ActionAccumulator:
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     actions = _ActionAccumulator()
-    for start_turn_option in _legal_start_turn_relocation_options(state, config):
-        start_turn_state = state if start_turn_option is None else start_turn_option.state
-        # Library is hired at end of turn, after the duty has resolved. Its hire can therefore be
-        # paid from resources the turn earned, not only from what remained after any start-turn
-        # hire. Resolve Library availability from start_turn_state, but filter payment variants from
-        # the pre-turn payer stock so generation does not refuse lines that apply can settle.
-        library_sources = _resolved_library_sources_for_state(
-            start_turn_state,
-            config,
-            payer_state=state.player_state(state.active_player),
-        )
-        variant_actions = _legal_full_turn_actions_for_state(
-            start_turn_state,
-            config,
-            allow_pulpit_modifier=start_turn_option is None,
-            allow_scriptorium_modifier=start_turn_option is None,
-            allow_customs_house_modifier=start_turn_option is None,
-            allow_wagon_yard_modifier=start_turn_option is None,
-            allow_bank_modifier=start_turn_option is None,
-            uses_scriptorium_effective_counts=False,
-            uses_customs_house_taxation_override=False,
-        )
-        for variant_action in variant_actions:
-            if not isinstance(variant_action, FullTurnAction):
-                actions.add_if_new(variant_action)
-                continue
-            action = variant_action
-            if start_turn_option is not None:
-                action = _with_start_turn_relocation_fields(
-                    action,
-                    option=start_turn_option,
-                )
-            actions.add_if_new(action)
-            if not library_sources:
-                continue
-            if action.workforce_move_building_id == _BUILDING_PULPIT:
-                # Defer mixed Pulpit+Library hire-order interactions for this milestone.
-                continue
-            if action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM:
-                # Defer mixed Scriptorium+Library hire-order interactions for this milestone.
-                continue
-            if action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE:
-                # Defer mixed Customs House+Library hire-order interactions for this milestone.
-                continue
-            if action.free_hire_enabler_building_id == _BUILDING_WAGON_YARD:
-                # Defer mixed Wagon Yard+Library hire-order interactions for this milestone.
-                continue
-            for library_source in library_sources:
-                for library_action in _library_suffix_variants_for_action(
-                    original_state=state,
-                    state_for_turn=start_turn_state,
-                    config=config,
-                    action=action,
-                    source=library_source,
-                ):
-                    actions.add_if_new(library_action)
+    # Library is hired at end of turn, after the duty has resolved. Its hire can therefore be
+    # paid from resources the turn earned, not only from what remained before the turn.
+    library_sources = _resolved_library_sources_for_state(
+        state,
+        config,
+        payer_state=state.player_state(state.active_player),
+    )
+    variant_actions = _legal_full_turn_actions_for_state(
+        state,
+        config,
+        allow_pulpit_modifier=True,
+        allow_scriptorium_modifier=True,
+        allow_customs_house_modifier=True,
+        allow_wagon_yard_modifier=True,
+        allow_bank_modifier=True,
+        uses_scriptorium_effective_counts=False,
+        uses_customs_house_taxation_override=False,
+    )
+    for variant_action in variant_actions:
+        if not isinstance(variant_action, FullTurnAction):
+            actions.add_if_new(variant_action)
+            continue
+        action = variant_action
+        actions.add_if_new(action)
+        if not library_sources:
+            continue
+        if action.workforce_move_building_id == _BUILDING_PULPIT:
+            # Defer mixed Pulpit+Library hire-order interactions for this milestone.
+            continue
+        if action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM:
+            # Defer mixed Scriptorium+Library hire-order interactions for this milestone.
+            continue
+        if action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE:
+            # Defer mixed Customs House+Library hire-order interactions for this milestone.
+            continue
+        if action.free_hire_enabler_building_id == _BUILDING_WAGON_YARD:
+            # Defer mixed Wagon Yard+Library hire-order interactions for this milestone.
+            continue
+        for library_source in library_sources:
+            for library_action in _library_suffix_variants_for_action(
+                original_state=state,
+                state_for_turn=state,
+                config=config,
+                action=action,
+                source=library_source,
+            ):
+                actions.add_if_new(library_action)
     return actions.as_tuple()
 
 
@@ -1065,10 +1171,32 @@ def _legal_full_turn_actions_for_state(
             bank_modifier_allowed_for_turn = route_option.building_id is None
 
             for duty_position in config.duty_positions():
-                    if sowed_vector[duty_position] <= 0:
-                        continue
-                    actions_before_duty = len(actions)
-                    duty_category = config.duty_category_for_position(duty_position)
+                if sowed_vector[duty_position] <= 0:
+                    continue
+                actions_before_duty = len(actions)
+                duty_category = config.duty_category_for_position(duty_position)
+                strength = _duty_strength_for_position(
+                    state,
+                    config,
+                    player=state.active_player,
+                    duty_position=duty_position,
+                    sowed_vector=sowed_vector,
+                    relation_context=duty_relation_context,
+                )
+                if duty_category == "taxation":
+                    strength = _taxation_duty_strength_for_position(
+                        state,
+                        config,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
+                    )
+                _duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                if player_resources.silver < silver_cost:
+                    continue
+                category_actions = action_options_for_duty_category(duty_category)
+                if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
                     strength = _duty_strength_for_position(
                         state,
                         config,
@@ -1077,504 +1205,167 @@ def _legal_full_turn_actions_for_state(
                         sowed_vector=sowed_vector,
                         relation_context=duty_relation_context,
                     )
-                    if duty_category == "taxation":
-                        strength = _taxation_duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                    _duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                    if player_resources.silver < silver_cost:
-                        continue
-                    category_actions = action_options_for_duty_category(duty_category)
-                    if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
-                        strength = _duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                        duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                        available_silver = player_resources.silver - silver_cost
-                        if available_silver >= 0:
-                            mill_source = building_ability_source(
-                                state_for_turn,
-                                config,
-                                acting_player=state.active_player,
-                                building_key="mill",
-                            )
-                            alms_house_bonus_capacity = alms_house_duty_value_bonus_capacity(
-                                player_state
-                            )
-                            effective_alms_value = duty_value + alms_house_bonus_capacity
-                            for payment in _alms_payment_options(
-                                duty_value=effective_alms_value,
-                                available_silver=effective_alms_value,
-                                available_wheat=effective_alms_value,
-                            ):
-                                required_silver = silver_cost + payment.silver
-                                required_wheat = payment.wheat
-                                base_action = FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                    alms_payment_silver=payment.silver,
-                                    alms_payment_wheat=payment.wheat,
-                                )
-
-                                if _can_afford_resolution_costs(
-                                    player_state,
-                                    required_silver=required_silver,
-                                    required_wheat=required_wheat,
-                                ):
-                                    actions.add_if_new(base_action)
-
-                                if required_wheat <= 0:
-                                    continue
-
-                                mill_wheat_spent = mill_actual_wheat_cost(required_wheat)
-                                if (
-                                    mill_source.source_type == "own_active"
-                                    and mill_source.usable
-                                ):
-                                    if _can_afford_resolution_costs(
-                                        player_state,
-                                        required_silver=required_silver,
-                                        required_wheat=mill_wheat_spent,
-                                    ):
-                                        actions.add_if_new(base_action)
-                                elif _is_hired_source(mill_source) and mill_source.usable:
-                                    for hire_option in _legal_hire_payment_options(
-                                        source=mill_source,
-                                        player_state=player_state,
-                                    ):
-                                        if not _can_afford_resolution_costs(
-                                            player_state,
-                                            required_silver=required_silver,
-                                            required_wheat=mill_wheat_spent,
-                                            hired_source=hire_option.source,
-                                        ):
-                                            continue
-                                        hired_action = _with_hire_payment_fields(
-                                            FullTurnAction(
-                                                origin=origin,
-                                                route=route,
-                                                selected_duty=duty_position,
-                                                resolution=TurnResolutionType.GIVE_ALMS_PAID,
-                                                alms_payment_silver=payment.silver,
-                                                alms_payment_wheat=payment.wheat,
-                                                hired_building_id="mill",
-                                                hired_building_source=(
-                                                    _hired_building_source_label(
-                                                        hire_option.source
-                                                    )
-                                                ),
-                                            ),
-                                            option=hire_option,
-                                        )
-                                        actions.add_if_new(hired_action)
-                            if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
-                                for building_id in _legal_give_alms_donation_buildings(
-                                    player_state,
-                                    config,
-                                ):
-                                    actions.append(
-                                        FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
-                                            donate_building_id=building_id,
-                                        )
-                                    )
-                    elif TurnResolutionType.ALLOCATION in category_actions:
-                        strength = _duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                        duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                        base_move_sequences = _allocation_move_sequences(
-                            player_state,
-                            max_moves=duty_value,
-                            special_activity_capacity=activity_capacity,
-                        )
-                        infirmary_source = building_ability_source(
-                            state_for_turn,
-                            config,
-                            acting_player=state.active_player,
-                            building_key="infirmary",
-                        )
-
-                        if infirmary_source.source_type == "own_active" and infirmary_source.usable:
-                            for move_sequence in _allocation_move_sequences(
-                                player_state,
-                                max_moves=duty_value + 1,
-                                special_activity_capacity=activity_capacity,
-                            ):
-                                actions.append(
-                                    FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ALLOCATION,
-                                        allocation_moves=move_sequence,
-                                    )
-                                )
-                        else:
-                            for move_sequence in base_move_sequences:
-                                actions.append(
-                                    FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ALLOCATION,
-                                        allocation_moves=move_sequence,
-                                    )
-                                )
-                            for hire_option in _legal_hire_payment_options(
-                                source=infirmary_source,
-                                player_state=player_state,
-                            ):
-                                if not _can_afford_resolution_costs(
-                                    player_state,
-                                    required_silver=silver_cost,
-                                    hired_source=hire_option.source,
-                                ):
-                                    continue
-                                for move_sequence in _allocation_move_sequences(
-                                    player_state,
-                                    max_moves=duty_value + 1,
-                                    special_activity_capacity=activity_capacity,
-                                    min_moves=duty_value + 1,
-                                ):
-                                    actions.append(
-                                        _with_hire_payment_fields(
-                                            FullTurnAction(
-                                                origin=origin,
-                                                route=route,
-                                                selected_duty=duty_position,
-                                                resolution=TurnResolutionType.ALLOCATION,
-                                                allocation_moves=move_sequence,
-                                                hired_building_id="infirmary",
-                                                hired_building_source=(
-                                                    _hired_building_source_label(hire_option.source)
-                                                ),
-                                            ),
-                                            option=hire_option,
-                                        )
-                                    )
-                    elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
-                        strength = _duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                        duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                        road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
-                            player_state
-                        )
-                        if player_resources.silver >= silver_cost:
-                            constructible_building_ids = _constructible_building_ids(
-                                state=state_for_turn,
-                                player_state=player_state,
-                                config=config,
-                                building_market=state_for_turn.building_market,
-                            )
-                            construct_candidate_ids = _construct_market_candidate_building_ids(
-                                state=state_for_turn,
-                                player_state=player_state,
-                                config=config,
-                                building_market=state_for_turn.building_market,
-                            )
-                            for building_id in constructible_building_ids:
-                                construct_action = FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.CONSTRUCT_BUILDING,
-                                    construct_building_id=building_id,
-                                )
-                                actions.append(construct_action)
-                            for building_id in construct_candidate_ids:
-                                stone_cost = config.buildings.definition_by_id(
-                                    building_id
-                                ).stone_cost
-                                construct_action = FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.CONSTRUCT_BUILDING,
-                                    construct_building_id=building_id,
-                                )
-                                if bank_modifier_allowed_for_turn:
-                                    _append_bank_payment_variants_for_action(
-                                        action=construct_action,
-                                        state_for_action=state_for_turn,
-                                        required_silver=silver_cost,
-                                        required_stone=stone_cost,
-                                    )
-                            for construct_plan in _construct_road_only_plans(
-                                duty_value=duty_value,
-                                road_engineer_extra_roads=road_engineer_extra_roads,
-                            ):
-                                actions.append(
-                                    FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
-                                        construct_plan=construct_plan,
-                                    )
-                                )
-                            for construct_plan in _construct_building_plus_road_plans(
-                                duty_value=duty_value,
-                                road_engineer_extra_roads=road_engineer_extra_roads,
-                            ):
-                                for building_id in constructible_building_ids:
-                                    construct_building_and_road_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=(
-                                            TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
-                                        ),
-                                        construct_plan=construct_plan,
-                                        construct_building_id=building_id,
-                                    )
-                                    actions.append(construct_building_and_road_action)
-                                for building_id in construct_candidate_ids:
-                                    stone_cost = config.buildings.definition_by_id(
-                                        building_id
-                                    ).stone_cost
-                                    construct_building_and_road_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=(
-                                            TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
-                                        ),
-                                        construct_plan=construct_plan,
-                                        construct_building_id=building_id,
-                                    )
-                                    if bank_modifier_allowed_for_turn:
-                                        _append_bank_payment_variants_for_action(
-                                            action=construct_building_and_road_action,
-                                            state_for_action=state_for_turn,
-                                            required_silver=silver_cost,
-                                            required_stone=stone_cost,
-                                        )
-                    elif TurnResolutionType.ORDINATION in category_actions:
-                        strength = _duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                        duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                        available_silver = player_resources.silver - silver_cost
-                        if available_silver < 0:
-                            continue
-
-                        infirmary_source = building_ability_source(
-                            state_for_turn,
-                            config,
-                            acting_player=state.active_player,
-                            building_key="infirmary",
-                        )
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    available_silver = player_resources.silver - silver_cost
+                    if available_silver >= 0:
                         mill_source = building_ability_source(
                             state_for_turn,
                             config,
                             acting_player=state.active_player,
                             building_key="mill",
                         )
-
-                        owns_active_infirmary = (
-                            infirmary_source.source_type == "own_active" and infirmary_source.usable
+                        alms_house_bonus_capacity = alms_house_duty_value_bonus_capacity(
+                            player_state
                         )
-                        owns_active_mill = (
-                            mill_source.source_type == "own_active" and mill_source.usable
-                        )
-                        no_hire_mill_active = owns_active_mill
-                        no_hire_player_state = _player_state_with_wheat_delta(
-                            player_state,
-                            wheat_delta=2 if no_hire_mill_active else 0,
-                        )
-                        if no_hire_player_state is not None:
-                            base_sequences = legal_ordination_step_sequences(
-                                no_hire_player_state,
-                                max_steps=duty_value,
-                            )
-                            for step_sequence in base_sequences:
-                                required_wheat = _ordination_wheat_cost(
-                                    len(step_sequence),
-                                    mill_active=no_hire_mill_active,
-                                )
-                                if not _can_afford_resolution_costs(
-                                    player_state,
-                                    required_silver=silver_cost,
-                                    required_wheat=required_wheat,
-                                ):
-                                    continue
-                                base_action = FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.ORDINATION,
-                                    ordination_steps=step_sequence,
-                                )
-                                actions.add_if_new(base_action)
-                                if bank_modifier_allowed_for_turn:
-                                    _append_bank_payment_variants_for_action(
-                                        action=base_action,
-                                        state_for_action=state_for_turn,
-                                        required_silver=silver_cost,
-                                        required_wheat=required_wheat,
-                                    )
-
-                            if owns_active_infirmary:
-                                bonus_sequences = legal_ordination_step_sequences(
-                                    no_hire_player_state,
-                                    max_steps=duty_value + 1,
-                                )
-                                for step_sequence in bonus_sequences:
-                                    if len(step_sequence) <= duty_value:
-                                        continue
-                                    required_wheat = _ordination_wheat_cost(
-                                        len(step_sequence),
-                                        mill_active=no_hire_mill_active,
-                                    )
-                                    if not _can_afford_resolution_costs(
-                                        player_state,
-                                        required_silver=silver_cost,
-                                        required_wheat=required_wheat,
-                                    ):
-                                        continue
-                                    bonus_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ORDINATION,
-                                        ordination_steps=step_sequence,
-                                    )
-                                    actions.add_if_new(bonus_action)
-                                    if bank_modifier_allowed_for_turn:
-                                        _append_bank_payment_variants_for_action(
-                                            action=bonus_action,
-                                            state_for_action=state_for_turn,
-                                            required_silver=silver_cost,
-                                            required_wheat=required_wheat,
-                                        )
-
-                        # Bank can make otherwise-unaffordable Ordination wheat costs legal.
-                        bank_sequence_seed = _player_state_with_wheat_delta(
-                            player_state,
-                            wheat_delta=(
-                                (2 if no_hire_mill_active else 0) + player_resources.silver
-                            ),
-                        )
-                        if (
-                            bank_modifier_allowed_for_turn
-                            and bank_sequence_seed is not None
-                            and player_resources.silver > 0
+                        effective_alms_value = duty_value + alms_house_bonus_capacity
+                        for payment in _alms_payment_options(
+                            duty_value=effective_alms_value,
+                            available_silver=effective_alms_value,
+                            available_wheat=effective_alms_value,
                         ):
-                            bank_base_sequences = legal_ordination_step_sequences(
-                                bank_sequence_seed,
-                                max_steps=duty_value,
+                            required_silver = silver_cost + payment.silver
+                            required_wheat = payment.wheat
+                            base_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                alms_payment_silver=payment.silver,
+                                alms_payment_wheat=payment.wheat,
                             )
-                            for step_sequence in bank_base_sequences:
-                                required_wheat = _ordination_wheat_cost(
-                                    len(step_sequence),
-                                    mill_active=no_hire_mill_active,
-                                )
-                                base_action = FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.ORDINATION,
-                                    ordination_steps=step_sequence,
-                                )
-                                _append_bank_payment_variants_for_action(
-                                    action=base_action,
-                                    state_for_action=state_for_turn,
-                                    required_silver=silver_cost,
-                                    required_wheat=required_wheat,
-                                )
-                            if owns_active_infirmary:
-                                bank_bonus_sequences = legal_ordination_step_sequences(
-                                    bank_sequence_seed,
-                                    max_steps=duty_value + 1,
-                                )
-                                for step_sequence in bank_bonus_sequences:
-                                    if len(step_sequence) <= duty_value:
-                                        continue
-                                    required_wheat = _ordination_wheat_cost(
-                                        len(step_sequence),
-                                        mill_active=no_hire_mill_active,
-                                    )
-                                    bonus_action = FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.ORDINATION,
-                                        ordination_steps=step_sequence,
-                                    )
-                                    _append_bank_payment_variants_for_action(
-                                        action=bonus_action,
-                                        state_for_action=state_for_turn,
-                                        required_silver=silver_cost,
-                                        required_wheat=required_wheat,
-                                    )
 
-                        for hire_option in _legal_hire_payment_options(
-                            source=infirmary_source,
-                            player_state=player_state,
-                        ):
-                            hired_infirmary_player_state = _player_state_with_wheat_delta(
+                            if _can_afford_resolution_costs(
                                 player_state,
-                                wheat_delta=(2 if owns_active_mill else 0)
-                                - _hire_wheat_cost(hire_option.source),
-                            )
-                            if hired_infirmary_player_state is not None:
-                                bonus_sequences = legal_ordination_step_sequences(
-                                    hired_infirmary_player_state,
-                                    max_steps=duty_value + 1,
-                                )
-                                for step_sequence in bonus_sequences:
-                                    if len(step_sequence) <= duty_value:
-                                        continue
-                                    required_wheat = _ordination_wheat_cost(
-                                        len(step_sequence),
-                                        mill_active=owns_active_mill,
-                                    )
+                                required_silver=required_silver,
+                                required_wheat=required_wheat,
+                            ):
+                                actions.add_if_new(base_action)
+
+                            if required_wheat <= 0:
+                                continue
+
+                            mill_wheat_spent = mill_actual_wheat_cost(required_wheat)
+                            if mill_source.source_type == "own_active" and mill_source.usable:
+                                if _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=required_silver,
+                                    required_wheat=mill_wheat_spent,
+                                ):
+                                    actions.add_if_new(base_action)
+                            elif _is_hired_source(mill_source) and mill_source.usable:
+                                for hire_option in _legal_hire_payment_options(
+                                    source=mill_source,
+                                    player_state=player_state,
+                                ):
                                     if not _can_afford_resolution_costs(
                                         player_state,
-                                        required_silver=silver_cost,
-                                        required_wheat=required_wheat,
+                                        required_silver=required_silver,
+                                        required_wheat=mill_wheat_spent,
                                         hired_source=hire_option.source,
                                     ):
                                         continue
-                                    hired_infirmary_action = _with_hire_payment_fields(
+                                    hired_action = _with_hire_payment_fields(
                                         FullTurnAction(
                                             origin=origin,
                                             route=route,
                                             selected_duty=duty_position,
-                                            resolution=TurnResolutionType.ORDINATION,
-                                            ordination_steps=step_sequence,
+                                            resolution=TurnResolutionType.GIVE_ALMS_PAID,
+                                            alms_payment_silver=payment.silver,
+                                            alms_payment_wheat=payment.wheat,
+                                            hired_building_id="mill",
+                                            hired_building_source=(
+                                                _hired_building_source_label(hire_option.source)
+                                            ),
+                                        ),
+                                        option=hire_option,
+                                    )
+                                    actions.add_if_new(hired_action)
+                        if TurnResolutionType.GIVE_ALMS_DONATE_BUILDING in category_actions:
+                            for building_id in _legal_give_alms_donation_buildings(
+                                player_state,
+                                config,
+                            ):
+                                actions.append(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.GIVE_ALMS_DONATE_BUILDING,
+                                        donate_building_id=building_id,
+                                    )
+                                )
+                elif TurnResolutionType.ALLOCATION in category_actions:
+                    strength = _duty_strength_for_position(
+                        state,
+                        config,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
+                    )
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    base_move_sequences = _allocation_move_sequences(
+                        player_state,
+                        max_moves=duty_value,
+                        special_activity_capacity=activity_capacity,
+                    )
+                    infirmary_source = building_ability_source(
+                        state_for_turn,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="infirmary",
+                    )
+
+                    if infirmary_source.source_type == "own_active" and infirmary_source.usable:
+                        for move_sequence in _allocation_move_sequences(
+                            player_state,
+                            max_moves=duty_value + 1,
+                            special_activity_capacity=activity_capacity,
+                        ):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ALLOCATION,
+                                    allocation_moves=move_sequence,
+                                )
+                            )
+                    else:
+                        for move_sequence in base_move_sequences:
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ALLOCATION,
+                                    allocation_moves=move_sequence,
+                                )
+                            )
+                        for hire_option in _legal_hire_payment_options(
+                            source=infirmary_source,
+                            player_state=player_state,
+                        ):
+                            if not _can_afford_resolution_costs(
+                                player_state,
+                                required_silver=silver_cost,
+                                hired_source=hire_option.source,
+                            ):
+                                continue
+                            for move_sequence in _allocation_move_sequences(
+                                player_state,
+                                max_moves=duty_value + 1,
+                                special_activity_capacity=activity_capacity,
+                                min_moves=duty_value + 1,
+                            ):
+                                actions.append(
+                                    _with_hire_payment_fields(
+                                        FullTurnAction(
+                                            origin=origin,
+                                            route=route,
+                                            selected_duty=duty_position,
+                                            resolution=TurnResolutionType.ALLOCATION,
+                                            allocation_moves=move_sequence,
                                             hired_building_id="infirmary",
                                             hired_building_source=(
                                                 _hired_building_source_label(hire_option.source)
@@ -1582,22 +1373,363 @@ def _legal_full_turn_actions_for_state(
                                         ),
                                         option=hire_option,
                                     )
-                                    actions.add_if_new(hired_infirmary_action)
-
-                        for hire_option in _legal_hire_payment_options(
-                            source=mill_source,
-                            player_state=player_state,
-                        ):
-                            hired_mill_player_state = _player_state_with_wheat_delta(
-                                player_state,
-                                wheat_delta=2 - _hire_wheat_cost(hire_option.source),
-                            )
-                            if hired_mill_player_state is not None:
-                                base_sequences = legal_ordination_step_sequences(
-                                    hired_mill_player_state,
-                                    max_steps=duty_value,
                                 )
-                                for step_sequence in base_sequences:
+                elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
+                    strength = _duty_strength_for_position(
+                        state,
+                        config,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
+                    )
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    road_engineer_extra_roads = road_engineer_construct_extra_roads_bonus(
+                        player_state
+                    )
+                    if player_resources.silver >= silver_cost:
+                        constructible_building_ids = _constructible_building_ids(
+                            state=state_for_turn,
+                            player_state=player_state,
+                            config=config,
+                            building_market=state_for_turn.building_market,
+                        )
+                        construct_candidate_ids = _construct_market_candidate_building_ids(
+                            state=state_for_turn,
+                            player_state=player_state,
+                            config=config,
+                            building_market=state_for_turn.building_market,
+                        )
+                        for building_id in constructible_building_ids:
+                            construct_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+                                construct_building_id=building_id,
+                            )
+                            actions.append(construct_action)
+                        for building_id in construct_candidate_ids:
+                            stone_cost = config.buildings.definition_by_id(building_id).stone_cost
+                            construct_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.CONSTRUCT_BUILDING,
+                                construct_building_id=building_id,
+                            )
+                            if bank_modifier_allowed_for_turn:
+                                _append_bank_payment_variants_for_action(
+                                    action=construct_action,
+                                    state_for_action=state_for_turn,
+                                    required_silver=silver_cost,
+                                    required_stone=stone_cost,
+                                )
+                        for construct_plan in _construct_road_only_plans(
+                            duty_value=duty_value,
+                            road_engineer_extra_roads=road_engineer_extra_roads,
+                        ):
+                            actions.append(
+                                FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.CONSTRUCT_ROAD_DEFERRED,
+                                    construct_plan=construct_plan,
+                                )
+                            )
+                        for construct_plan in _construct_building_plus_road_plans(
+                            duty_value=duty_value,
+                            road_engineer_extra_roads=road_engineer_extra_roads,
+                        ):
+                            for building_id in constructible_building_ids:
+                                construct_building_and_road_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=(
+                                        TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+                                    ),
+                                    construct_plan=construct_plan,
+                                    construct_building_id=building_id,
+                                )
+                                actions.append(construct_building_and_road_action)
+                            for building_id in construct_candidate_ids:
+                                stone_cost = config.buildings.definition_by_id(
+                                    building_id
+                                ).stone_cost
+                                construct_building_and_road_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=(
+                                        TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED
+                                    ),
+                                    construct_plan=construct_plan,
+                                    construct_building_id=building_id,
+                                )
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=construct_building_and_road_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_stone=stone_cost,
+                                    )
+                elif TurnResolutionType.ORDINATION in category_actions:
+                    strength = _duty_strength_for_position(
+                        state,
+                        config,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
+                    )
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    available_silver = player_resources.silver - silver_cost
+                    if available_silver < 0:
+                        continue
+
+                    infirmary_source = building_ability_source(
+                        state_for_turn,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="infirmary",
+                    )
+                    mill_source = building_ability_source(
+                        state_for_turn,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="mill",
+                    )
+
+                    owns_active_infirmary = (
+                        infirmary_source.source_type == "own_active" and infirmary_source.usable
+                    )
+                    owns_active_mill = (
+                        mill_source.source_type == "own_active" and mill_source.usable
+                    )
+                    no_hire_mill_active = owns_active_mill
+                    no_hire_player_state = _player_state_with_wheat_delta(
+                        player_state,
+                        wheat_delta=2 if no_hire_mill_active else 0,
+                    )
+                    if no_hire_player_state is not None:
+                        base_sequences = legal_ordination_step_sequences(
+                            no_hire_player_state,
+                            max_steps=duty_value,
+                        )
+                        for step_sequence in base_sequences:
+                            required_wheat = _ordination_wheat_cost(
+                                len(step_sequence),
+                                mill_active=no_hire_mill_active,
+                            )
+                            if not _can_afford_resolution_costs(
+                                player_state,
+                                required_silver=silver_cost,
+                                required_wheat=required_wheat,
+                            ):
+                                continue
+                            base_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ORDINATION,
+                                ordination_steps=step_sequence,
+                            )
+                            actions.add_if_new(base_action)
+                            if bank_modifier_allowed_for_turn:
+                                _append_bank_payment_variants_for_action(
+                                    action=base_action,
+                                    state_for_action=state_for_turn,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                )
+
+                        if owns_active_infirmary:
+                            bonus_sequences = legal_ordination_step_sequences(
+                                no_hire_player_state,
+                                max_steps=duty_value + 1,
+                            )
+                            for step_sequence in bonus_sequences:
+                                if len(step_sequence) <= duty_value:
+                                    continue
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=no_hire_mill_active,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                ):
+                                    continue
+                                bonus_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                )
+                                actions.add_if_new(bonus_action)
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=bonus_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                    )
+
+                    # Bank can make otherwise-unaffordable Ordination wheat costs legal.
+                    bank_sequence_seed = _player_state_with_wheat_delta(
+                        player_state,
+                        wheat_delta=((2 if no_hire_mill_active else 0) + player_resources.silver),
+                    )
+                    if (
+                        bank_modifier_allowed_for_turn
+                        and bank_sequence_seed is not None
+                        and player_resources.silver > 0
+                    ):
+                        bank_base_sequences = legal_ordination_step_sequences(
+                            bank_sequence_seed,
+                            max_steps=duty_value,
+                        )
+                        for step_sequence in bank_base_sequences:
+                            required_wheat = _ordination_wheat_cost(
+                                len(step_sequence),
+                                mill_active=no_hire_mill_active,
+                            )
+                            base_action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ORDINATION,
+                                ordination_steps=step_sequence,
+                            )
+                            _append_bank_payment_variants_for_action(
+                                action=base_action,
+                                state_for_action=state_for_turn,
+                                required_silver=silver_cost,
+                                required_wheat=required_wheat,
+                            )
+                        if owns_active_infirmary:
+                            bank_bonus_sequences = legal_ordination_step_sequences(
+                                bank_sequence_seed,
+                                max_steps=duty_value + 1,
+                            )
+                            for step_sequence in bank_bonus_sequences:
+                                if len(step_sequence) <= duty_value:
+                                    continue
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=no_hire_mill_active,
+                                )
+                                bonus_action = FullTurnAction(
+                                    origin=origin,
+                                    route=route,
+                                    selected_duty=duty_position,
+                                    resolution=TurnResolutionType.ORDINATION,
+                                    ordination_steps=step_sequence,
+                                )
+                                _append_bank_payment_variants_for_action(
+                                    action=bonus_action,
+                                    state_for_action=state_for_turn,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                )
+
+                    for hire_option in _legal_hire_payment_options(
+                        source=infirmary_source,
+                        player_state=player_state,
+                    ):
+                        hired_infirmary_player_state = _player_state_with_wheat_delta(
+                            player_state,
+                            wheat_delta=(2 if owns_active_mill else 0)
+                            - _hire_wheat_cost(hire_option.source),
+                        )
+                        if hired_infirmary_player_state is not None:
+                            bonus_sequences = legal_ordination_step_sequences(
+                                hired_infirmary_player_state,
+                                max_steps=duty_value + 1,
+                            )
+                            for step_sequence in bonus_sequences:
+                                if len(step_sequence) <= duty_value:
+                                    continue
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=owns_active_mill,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                    hired_source=hire_option.source,
+                                ):
+                                    continue
+                                hired_infirmary_action = _with_hire_payment_fields(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.ORDINATION,
+                                        ordination_steps=step_sequence,
+                                        hired_building_id="infirmary",
+                                        hired_building_source=(
+                                            _hired_building_source_label(hire_option.source)
+                                        ),
+                                    ),
+                                    option=hire_option,
+                                )
+                                actions.add_if_new(hired_infirmary_action)
+
+                    for hire_option in _legal_hire_payment_options(
+                        source=mill_source,
+                        player_state=player_state,
+                    ):
+                        hired_mill_player_state = _player_state_with_wheat_delta(
+                            player_state,
+                            wheat_delta=2 - _hire_wheat_cost(hire_option.source),
+                        )
+                        if hired_mill_player_state is not None:
+                            base_sequences = legal_ordination_step_sequences(
+                                hired_mill_player_state,
+                                max_steps=duty_value,
+                            )
+                            for step_sequence in base_sequences:
+                                required_wheat = _ordination_wheat_cost(
+                                    len(step_sequence),
+                                    mill_active=True,
+                                )
+                                if not _can_afford_resolution_costs(
+                                    player_state,
+                                    required_silver=silver_cost,
+                                    required_wheat=required_wheat,
+                                    hired_source=hire_option.source,
+                                ):
+                                    continue
+                                hired_mill_action = _with_hire_payment_fields(
+                                    FullTurnAction(
+                                        origin=origin,
+                                        route=route,
+                                        selected_duty=duty_position,
+                                        resolution=TurnResolutionType.ORDINATION,
+                                        ordination_steps=step_sequence,
+                                        hired_building_id="mill",
+                                        hired_building_source=(
+                                            _hired_building_source_label(hire_option.source)
+                                        ),
+                                    ),
+                                    option=hire_option,
+                                )
+                                actions.add_if_new(hired_mill_action)
+
+                            if owns_active_infirmary:
+                                bonus_sequences = legal_ordination_step_sequences(
+                                    hired_mill_player_state,
+                                    max_steps=duty_value + 1,
+                                )
+                                for step_sequence in bonus_sequences:
+                                    if len(step_sequence) <= duty_value:
+                                        continue
                                     required_wheat = _ordination_wheat_cost(
                                         len(step_sequence),
                                         mill_active=True,
@@ -1609,7 +1741,7 @@ def _legal_full_turn_actions_for_state(
                                         hired_source=hire_option.source,
                                     ):
                                         continue
-                                    hired_mill_action = _with_hire_payment_fields(
+                                    hired_mill_bonus_action = _with_hire_payment_fields(
                                         FullTurnAction(
                                             origin=origin,
                                             route=route,
@@ -1623,110 +1755,75 @@ def _legal_full_turn_actions_for_state(
                                         ),
                                         option=hire_option,
                                     )
-                                    actions.add_if_new(hired_mill_action)
-
-                                if owns_active_infirmary:
-                                    bonus_sequences = legal_ordination_step_sequences(
-                                        hired_mill_player_state,
-                                        max_steps=duty_value + 1,
-                                    )
-                                    for step_sequence in bonus_sequences:
-                                        if len(step_sequence) <= duty_value:
-                                            continue
-                                        required_wheat = _ordination_wheat_cost(
-                                            len(step_sequence),
-                                            mill_active=True,
-                                        )
-                                        if not _can_afford_resolution_costs(
-                                            player_state,
-                                            required_silver=silver_cost,
-                                            required_wheat=required_wheat,
-                                            hired_source=hire_option.source,
-                                        ):
-                                            continue
-                                        hired_mill_bonus_action = _with_hire_payment_fields(
-                                            FullTurnAction(
-                                                origin=origin,
-                                                route=route,
-                                                selected_duty=duty_position,
-                                                resolution=TurnResolutionType.ORDINATION,
-                                                ordination_steps=step_sequence,
-                                                hired_building_id="mill",
-                                                hired_building_source=(
-                                                    _hired_building_source_label(hire_option.source)
-                                                ),
-                                            ),
-                                            option=hire_option,
-                                        )
-                                        actions.add_if_new(hired_mill_bonus_action)
-                    elif TurnResolutionType.TAXATION in category_actions:
-                        strength = _taxation_duty_strength_for_position(
-                            state,
-                            config,
-                            player=state.active_player,
-                            duty_position=duty_position,
-                            sowed_vector=sowed_vector,
-                            relation_context=duty_relation_context,
-                        )
-                        duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                        available_silver = player_resources.silver - silver_cost
-                        if available_silver < 0:
-                            continue
-                        bonus_resource_types = _taxation_bonus_resource_types(
-                            state,
-                            config,
-                            player=state.active_player,
-                            sowed_vector=sowed_vector,
-                            selected_duty=duty_position,
-                            relation_context=duty_relation_context,
-                        )
-                        for step_1_resource in _TAXATION_RESOURCE_TYPES:
-                            for step_2_resources in _taxation_bonus_resource_choices(
-                                bonus_resource_types,
-                                duty_value=duty_value,
-                            ):
-                                actions.append(
-                                    FullTurnAction(
-                                        origin=origin,
-                                        route=route,
-                                        selected_duty=duty_position,
-                                        resolution=TurnResolutionType.TAXATION,
-                                        taxation_step1_resource=step_1_resource,
-                                        taxation_step2_resources=step_2_resources,
-                                    )
-                                )
-                    else:
-                        for category_action in category_actions:
-                            actions.extend(
-                                _legal_action_variants_for_resolution(
-                                    state=state_for_turn,
-                                    config=config,
+                                    actions.add_if_new(hired_mill_bonus_action)
+                elif TurnResolutionType.TAXATION in category_actions:
+                    strength = _taxation_duty_strength_for_position(
+                        state,
+                        config,
+                        player=state.active_player,
+                        duty_position=duty_position,
+                        sowed_vector=sowed_vector,
+                        relation_context=duty_relation_context,
+                    )
+                    duty_value, silver_cost = duty_value_and_silver_cost(strength)
+                    available_silver = player_resources.silver - silver_cost
+                    if available_silver < 0:
+                        continue
+                    bonus_resource_types = _taxation_bonus_resource_types(
+                        state,
+                        config,
+                        player=state.active_player,
+                        sowed_vector=sowed_vector,
+                        selected_duty=duty_position,
+                        relation_context=duty_relation_context,
+                    )
+                    for step_1_resource in _TAXATION_RESOURCE_TYPES:
+                        for step_2_resources in _taxation_bonus_resource_choices(
+                            bonus_resource_types,
+                            duty_value=duty_value,
+                        ):
+                            actions.append(
+                                FullTurnAction(
                                     origin=origin,
                                     route=route,
                                     selected_duty=duty_position,
-                                    resolution=category_action,
+                                    resolution=TurnResolutionType.TAXATION,
+                                    taxation_step1_resource=step_1_resource,
+                                    taxation_step2_resources=step_2_resources,
                                 )
                             )
-                    for tithe_resource in tithe_resources_for_position(config, duty_position):
-                        actions.append(
-                            FullTurnAction(
+                else:
+                    for category_action in category_actions:
+                        actions.extend(
+                            _legal_action_variants_for_resolution(
+                                state=state_for_turn,
+                                config=config,
                                 origin=origin,
                                 route=route,
                                 selected_duty=duty_position,
-                                resolution=TurnResolutionType.TITHE,
-                                tithe_resource=tithe_resource,
+                                resolution=category_action,
                             )
                         )
-                    if route_option.building_id is not None:
-                        for index in range(actions_before_duty, len(actions)):
-                            action = actions[index]
-                            if not isinstance(action, FullTurnAction):
-                                continue
-                            action = _with_route_option_fields(
-                                action,
-                                option=route_option,
-                            )
-                            actions[index] = action
+                for tithe_resource in tithe_resources_for_position(config, duty_position):
+                    actions.append(
+                        FullTurnAction(
+                            origin=origin,
+                            route=route,
+                            selected_duty=duty_position,
+                            resolution=TurnResolutionType.TITHE,
+                            tithe_resource=tithe_resource,
+                        )
+                    )
+                if route_option.building_id is not None:
+                    for index in range(actions_before_duty, len(actions)):
+                        action = actions[index]
+                        if not isinstance(action, FullTurnAction):
+                            continue
+                        action = _with_route_option_fields(
+                            action,
+                            option=route_option,
+                        )
+                        actions[index] = action
     if allow_scriptorium_modifier:
         scriptorium_options = _legal_scriptorium_effective_acolyte_options(state, config)
         if scriptorium_options:
@@ -2011,59 +2108,9 @@ def _apply_full_turn_action(
     turn_start_resources = state.player_state(player).resources
     resolution_resource_delta_baseline = turn_start_resources
     transition_action_id = action_id(action)
-    start_turn_relocation = _resolved_start_turn_relocation_for_action(
-        state=state,
-        config=config,
-        player=player,
-        action=action,
-    )
     state_for_sow = state
     duty_relation_context = _DutyRelationModifierContext(acting_player=player)
     pre_sowing_events: list[GameEvent] = list(state.turn_progress.events)
-    if start_turn_relocation is not None:
-        if _is_hired_source(start_turn_relocation.source):
-            try:
-                state_for_sow, start_turn_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=start_turn_relocation.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=start_turn_relocation.source,
-                    payment=start_turn_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
-        pre_sowing_events.append(
-            _start_turn_building_bonus_event(
-                actor=player,
-                action_id=transition_action_id,
-                relocation=start_turn_relocation,
-                config=config,
-            )
-        )
-        try:
-            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
-                state_for_sow.player_vector(player),
-                from_position=start_turn_relocation.from_position,
-                to_position=start_turn_relocation.to_position,
-            )
-        except ValueError as exc:
-            raise TransitionValidationError(str(exc)) from exc
-        state_for_sow = state_for_sow.with_player_vector(player, relocated_vector)
-        pre_sowing_events.append(
-            _start_turn_relocation_event(
-                actor=player,
-                action_id=transition_action_id,
-                relocation=start_turn_relocation,
-                config=config,
-            )
-        )
 
     wagon_yard_free_hire = _resolved_wagon_yard_free_hire_for_action(
         state=state_for_sow,
@@ -2479,8 +2526,7 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(str(exc)) from exc
 
         if action.resolution is not TurnResolutionType.GIVE_ALMS_PAID and (
-            action.alms_payment_silver != 0
-            or action.alms_payment_wheat != 0
+            action.alms_payment_silver != 0 or action.alms_payment_wheat != 0
         ):
             raise TransitionValidationError(
                 "Only Give Alms actions may include Alms payment fields."
@@ -2626,10 +2672,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Bank payment substitution with sow-route modifiers is deferred."
                 )
-            if start_turn_relocation is not None:
-                raise TransitionValidationError(
-                    "Combining Bank payment substitution with start-turn relocation modifiers is deferred."
-                )
         effective_acolyte_fields = (
             action.effective_acolyte_building_id,
             action.effective_acolyte_building_source,
@@ -2650,10 +2692,6 @@ def _apply_full_turn_action(
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
                     "Combining Scriptorium effective-acolyte modifier with sow-route modifiers is deferred."
-                )
-            if start_turn_relocation is not None:
-                raise TransitionValidationError(
-                    "Combining Scriptorium effective-acolyte modifier with start-turn relocation modifiers is deferred."
                 )
             if has_bank_payment_modifier:
                 raise TransitionValidationError(
@@ -2683,10 +2721,6 @@ def _apply_full_turn_action(
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
                     "Combining Customs House Taxation modifier with sow-route modifiers is deferred."
-                )
-            if start_turn_relocation is not None:
-                raise TransitionValidationError(
-                    "Combining Customs House Taxation modifier with start-turn relocation modifiers is deferred."
                 )
             if has_scriptorium_effective_modifier:
                 raise TransitionValidationError(
@@ -2781,10 +2815,6 @@ def _apply_full_turn_action(
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
                     "Combining Pulpit free serf movement with sow-route modifiers is deferred."
-                )
-            if start_turn_relocation is not None:
-                raise TransitionValidationError(
-                    "Combining Pulpit free serf movement with start-turn relocation modifiers is deferred."
                 )
             if has_bank_payment_modifier:
                 raise TransitionValidationError(
@@ -2966,24 +2996,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=building_key,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            start_turn_relocation is not None
-            and start_turn_relocation.source.source_type != "own_active"
-        ):
-            if not can_hire_building_this_turn(
-                hire_context,
-                building_key=start_turn_relocation.building_id,
-            ):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=start_turn_relocation.building_id,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -3946,9 +3958,7 @@ def _apply_full_turn_action(
                         if amount > 0
                     )
                     combined_wheat_amounts = ",".join(
-                        str(amount)
-                        for amount in (wheat_bonus, well_bonus)
-                        if amount > 0
+                        str(amount) for amount in (wheat_bonus, well_bonus) if amount > 0
                     )
                     if wheat_bonus:
                         # The special-activity event carries the combined player sentence when both
@@ -4003,13 +4013,14 @@ def _apply_full_turn_action(
                     total_stone_gain = duty_value + produce_resource_bonus
                     combined_stone_sources = ",".join(
                         source
-                        for source, amount in (("stone_mason", stone_bonus), ("quarry", quarry_bonus))
+                        for source, amount in (
+                            ("stone_mason", stone_bonus),
+                            ("quarry", quarry_bonus),
+                        )
                         if amount > 0
                     )
                     combined_stone_amounts = ",".join(
-                        str(amount)
-                        for amount in (stone_bonus, quarry_bonus)
-                        if amount > 0
+                        str(amount) for amount in (stone_bonus, quarry_bonus) if amount > 0
                     )
                     if stone_bonus:
                         stone_mason_details: dict[str, int | str | bool] = {
@@ -4845,20 +4856,20 @@ def _require_start_player_for_setup_completion(state: GameState) -> PlayerId:
     return state.start_player
 
 
-def _legal_start_turn_relocation_options(
+def _legal_start_turn_relocation_steps(
     state: GameState,
     config: GameConfig,
-) -> tuple[_StartTurnRelocationOption | None, ...]:
-    options: list[_StartTurnRelocationOption | None] = [None]
-    options.extend(_legal_dormitory_relocation_options(state, config))
-    options.extend(_legal_inquisition_relocation_options(state, config))
-    return tuple(options)
+) -> tuple[BuildingRelocationStep, ...]:
+    return (
+        *_legal_dormitory_relocation_steps(state, config),
+        *_legal_inquisition_relocation_steps(state, config),
+    )
 
 
-def _legal_dormitory_relocation_options(
+def _legal_dormitory_relocation_steps(
     state: GameState,
     config: GameConfig,
-) -> tuple[_StartTurnRelocationOption, ...]:
+) -> tuple[BuildingRelocationStep, ...]:
     source = building_ability_source(
         state,
         config,
@@ -4867,46 +4878,30 @@ def _legal_dormitory_relocation_options(
     )
     if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
-
-    city_position = config.board.index_for_name("city")
-    options: list[_StartTurnRelocationOption] = []
-    payer = state.player_state(state.active_player)
-    for hire_source in _hire_payment_source_variants(source, payer):
-        state_after_hire = _state_after_optional_start_turn_hire_payment(
-            state,
-            player=state.active_player,
-            source=hire_source,
+    used = state.turn_progress.used_buildings
+    if "dormitory" in used:
+        return ()
+    return tuple(
+        BuildingRelocationStep(
+            building_id="dormitory",
+            source=(
+                "own_active"
+                if hire_source.source_type == "own_active"
+                else _hired_building_source_label(hire_source)
+            ),
+            selected_position=duty_position,
+            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
         )
-        if state_after_hire is None:
-            continue
-
-        player_vector = state_after_hire.player_vector(state.active_player)
-        for duty_position in config.duty_positions():
-            if player_vector[duty_position] <= 0:
-                continue
-            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
-                player_vector,
-                from_position=duty_position,
-                to_position=city_position,
-            )
-            options.append(
-                _StartTurnRelocationOption(
-                    state=state_after_hire.with_player_vector(
-                        state.active_player, relocated_vector
-                    ),
-                    building_id="dormitory",
-                    source=hire_source,
-                    from_position=duty_position,
-                    to_position=city_position,
-                )
-            )
-    return tuple(options)
+        for hire_source, state_after_hire in _hire_payment_states(state, source)
+        for duty_position in config.duty_positions()
+        if state_after_hire.player_vector(state.active_player)[duty_position] > 0
+    )
 
 
-def _legal_inquisition_relocation_options(
+def _legal_inquisition_relocation_steps(
     state: GameState,
     config: GameConfig,
-) -> tuple[_StartTurnRelocationOption, ...]:
+) -> tuple[BuildingRelocationStep, ...]:
     source = building_ability_source(
         state,
         config,
@@ -4915,80 +4910,24 @@ def _legal_inquisition_relocation_options(
     )
     if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
-
+    if "inquisition" in state.turn_progress.used_buildings:
+        return ()
     city_position = config.board.index_for_name("city")
-    options: list[_StartTurnRelocationOption] = []
-    payer = state.player_state(state.active_player)
-    for hire_source in _hire_payment_source_variants(source, payer):
-        state_after_hire = _state_after_optional_start_turn_hire_payment(
-            state,
-            player=state.active_player,
-            source=hire_source,
+    return tuple(
+        BuildingRelocationStep(
+            building_id="inquisition",
+            source=(
+                "own_active"
+                if hire_source.source_type == "own_active"
+                else _hired_building_source_label(hire_source)
+            ),
+            selected_position=duty_position,
+            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
         )
-        if state_after_hire is None:
-            continue
-
-        player_vector = state_after_hire.player_vector(state.active_player)
-        if player_vector[city_position] <= 0:
-            continue
-
-        for duty_position in config.duty_positions():
-            relocated_vector = _relocate_one_acolyte_in_mancala_vector(
-                player_vector,
-                from_position=city_position,
-                to_position=duty_position,
-            )
-            options.append(
-                _StartTurnRelocationOption(
-                    state=state_after_hire.with_player_vector(
-                        state.active_player, relocated_vector
-                    ),
-                    building_id="inquisition",
-                    source=hire_source,
-                    from_position=city_position,
-                    to_position=duty_position,
-                )
-            )
-    return tuple(options)
-
-
-def _state_after_optional_start_turn_hire_payment(
-    state: GameState,
-    *,
-    player: PlayerId,
-    source: BuildingAbilitySource,
-) -> GameState | None:
-    if not _is_hired_source(source):
-        return state
-    try:
-        paid_state, _payment = apply_building_hire_payment(
-            state,
-            acting_player=player,
-            source=source,
-        )
-    except ValueError:
-        return None
-    return paid_state
-
-
-def _with_start_turn_relocation_fields(
-    action: FullTurnAction,
-    *,
-    option: _StartTurnRelocationOption,
-) -> FullTurnAction:
-    source_label = (
-        "own_active"
-        if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
+        for hire_source, state_after_hire in _hire_payment_states(state, source)
+        if state_after_hire.player_vector(state.active_player)[city_position] > 0
+        for duty_position in config.duty_positions()
     )
-    updated = replace(
-        action,
-        start_turn_building_id=option.building_id,
-        start_turn_building_source=source_label,
-        start_turn_relocation_from=option.from_position,
-        start_turn_relocation_to=option.to_position,
-    )
-    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _resolved_library_sources_for_state(
@@ -5926,7 +5865,6 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
     """Building ids this action says are hired (source set and not own_active)."""
     candidates = (
         (action.hired_building_id, action.hired_building_source),
-        (action.start_turn_building_id, action.start_turn_building_source),
         (action.end_turn_building_id, action.end_turn_building_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
@@ -5993,11 +5931,7 @@ def _validate_hire_payments_for_action(
             messages.append("missing payments for " + ", ".join(missing))
         if extras:
             messages.append("payments for non-hired buildings " + ", ".join(extras))
-        message = (
-            "hire_payments must match hired sources exactly: "
-            + "; ".join(messages)
-            + "."
-        )
+        message = "hire_payments must match hired sources exactly: " + "; ".join(messages) + "."
         raise TransitionValidationError(message)
 
 
@@ -6310,7 +6244,6 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
@@ -6333,7 +6266,6 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
@@ -6356,7 +6288,6 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
@@ -6379,7 +6310,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.start_turn_building_id is None
         and action.end_turn_building_id is None
         and action.hired_building_id is None
         and action.hired_building_source is None
@@ -6456,7 +6386,7 @@ def _wagon_yard_action_is_supported_composition(
     *,
     target_building_id: str,
 ) -> bool:
-    if action.start_turn_building_id is not None or action.end_turn_building_id is not None:
+    if action.end_turn_building_id is not None:
         return False
     if (
         action.sow_route_building_id is not None
@@ -6656,100 +6586,6 @@ def _legal_action_variants_for_resolution(
             selected_duty=selected_duty,
             resolution=resolution,
         ),
-    )
-
-
-def _resolved_start_turn_relocation_for_action(
-    *,
-    state: GameState,
-    config: GameConfig,
-    player: PlayerId,
-    action: FullTurnAction,
-) -> _ResolvedStartTurnRelocation | None:
-    fields = (
-        action.start_turn_building_id,
-        action.start_turn_building_source,
-        action.start_turn_relocation_from,
-        action.start_turn_relocation_to,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "start_turn_building_id/source and start_turn_relocation_from/to must be set together."
-        )
-
-    building_id = action.start_turn_building_id
-    source_label = action.start_turn_building_source
-    from_position = action.start_turn_relocation_from
-    to_position = action.start_turn_relocation_to
-    assert building_id is not None
-    assert source_label is not None
-    assert from_position is not None
-    assert to_position is not None
-
-    if building_id not in ("dormitory", "inquisition"):
-        raise TransitionValidationError(
-            "Only Dormitory and Inquisition are supported for start-turn relocation fields."
-        )
-
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=building_id,
-    )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                f"{building_id} is own-active; start_turn_building_source must be own_active."
-            )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
-            raise TransitionValidationError(
-                "start_turn_building_source does not match resolved source: "
-                f"expected {expected_source_label}."
-            )
-    else:
-        raise TransitionValidationError(
-            f"{building_id} is not usable for start-turn relocation in current state."
-        )
-
-    city_position = config.board.index_for_name("city")
-    duty_positions = set(config.duty_positions())
-    player_vector = state.player_vector(player)
-
-    if building_id == "dormitory":
-        if from_position not in duty_positions or from_position == city_position:
-            raise TransitionValidationError(
-                "Dormitory relocation source must be a non-city Duty tile."
-            )
-        if to_position != city_position:
-            raise TransitionValidationError("Dormitory relocation target must be City.")
-        if player_vector[from_position] <= 0:
-            raise TransitionValidationError(
-                "Dormitory relocation source must contain at least one acting-player acolyte."
-            )
-    else:
-        if from_position != city_position:
-            raise TransitionValidationError("Inquisition relocation source must be City.")
-        if to_position not in duty_positions or to_position == city_position:
-            raise TransitionValidationError(
-                "Inquisition relocation target must be a non-city Duty tile."
-            )
-        if player_vector[city_position] <= 0:
-            raise TransitionValidationError(
-                "Inquisition relocation requires at least one acting-player acolyte in City."
-            )
-
-    return _ResolvedStartTurnRelocation(
-        building_id=building_id,
-        source=source,
-        from_position=from_position,
-        to_position=to_position,
     )
 
 
@@ -8102,17 +7938,19 @@ def _start_turn_building_bonus_event(
     *,
     actor: PlayerId,
     action_id: str,
-    relocation: _ResolvedStartTurnRelocation,
+    building_id: str,
+    from_position: int,
+    to_position: int,
     config: GameConfig,
 ) -> GameEvent:
-    from_name = config.board.positions[relocation.from_position]
-    to_name = config.board.positions[relocation.to_position]
+    from_name = config.board.positions[from_position]
+    to_name = config.board.positions[to_position]
     return GameEvent(
         event_type=EventType.BUILDING_BONUS,
         actor=actor,
         action_id=action_id,
         details=make_event_details(
-            building=relocation.building_id,
+            building=building_id,
             action="start_turn_relocation",
             start_turn_from=from_name,
             start_turn_to=to_name,
@@ -8124,19 +7962,21 @@ def _start_turn_relocation_event(
     *,
     actor: PlayerId,
     action_id: str,
-    relocation: _ResolvedStartTurnRelocation,
+    building_id: str,
+    from_position: int,
+    to_position: int,
     config: GameConfig,
 ) -> GameEvent:
-    building_name = config.buildings.name_for_id(relocation.building_id)
+    building_name = config.buildings.name_for_id(building_id)
     return GameEvent(
         event_type=EventType.START_TURN_RELOCATION,
         actor=actor,
         action_id=action_id,
         details=make_event_details(
-            building=relocation.building_id,
+            building=building_id,
             building_name=building_name,
-            from_position=relocation.from_position,
-            to_position=relocation.to_position,
+            from_position=from_position,
+            to_position=to_position,
             amount=1,
         ),
     )

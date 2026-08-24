@@ -89,24 +89,16 @@ def load_building_catalogue(root: Path | None = None) -> tuple[dict[str, object]
 
 
 def implemented_building_ids(root: Path | None = None) -> set[str]:
-    turn_modifier_buildings = {
-        entry.building_key for entry in implemented_turn_modifiers()
-    }
+    turn_modifier_buildings = {entry.building_key for entry in implemented_turn_modifiers()}
     duty_enhancement_buildings = {
-        entry.source_key
-        for entry in implemented_enhancements()
-        if entry.source_type == "building"
+        entry.source_key for entry in implemented_enhancements() if entry.source_type == "building"
     }
     catalogue_marked_implemented = {
         str(entry.get("id", ""))
         for entry in load_building_catalogue(root=root)
         if str(entry.get("effect_status", "")).strip().lower() == _STATUS_IMPLEMENTED
     }
-    return (
-        turn_modifier_buildings
-        | duty_enhancement_buildings
-        | catalogue_marked_implemented
-    )
+    return turn_modifier_buildings | duty_enhancement_buildings | catalogue_marked_implemented
 
 
 def partial_building_ids() -> set[str]:
@@ -165,7 +157,6 @@ def _is_hired_source_label(source_label: str | None) -> bool:
 def _action_has_hired_component(action: FullTurnAction) -> bool:
     return (
         action.hired_building_id is not None
-        or _is_hired_source_label(action.start_turn_building_source)
         or _is_hired_source_label(action.end_turn_building_source)
         or _is_hired_source_label(action.sow_route_building_source)
         or _is_hired_source_label(action.sow_route_secondary_building_source)
@@ -174,11 +165,7 @@ def _action_has_hired_component(action: FullTurnAction) -> bool:
 
 
 def _action_is_movement_modifier(action: FullTurnAction) -> bool:
-    return (
-        action.start_turn_building_id is not None
-        or action.sow_route_building_id is not None
-        or action.end_turn_building_id is not None
-    )
+    return action.sow_route_building_id is not None or action.end_turn_building_id is not None
 
 
 def _branching_flag(action_count: int) -> str:
@@ -289,12 +276,8 @@ def _format_recommendations_section() -> str:
 
 
 def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
-    header = (
-        "Scenario                                      Total  Flag      Normal  Movement  GrainStore  Hired  CombinedRoute"
-    )
-    divider = (
-        "---------------------------------------------------------------------------------------------------------------"
-    )
+    header = "Scenario                                      Total  Flag      Normal  Movement  GrainStore  Hired  CombinedRoute"
+    divider = "---------------------------------------------------------------------------------------------------------------"
     lines = ["=== Branching Count Audit ===", header, divider]
     for row in rows:
         scenario_label = row.scenario_path.split("/")[-1]

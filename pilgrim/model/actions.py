@@ -56,10 +56,6 @@ class FullTurnAction:
     allocation_moves: tuple[AllocationMove, ...] = ()
     construct_plan: str | None = None
     construct_building_id: str | None = None
-    start_turn_building_id: str | None = None
-    start_turn_building_source: str | None = None
-    start_turn_relocation_from: int | None = None
-    start_turn_relocation_to: int | None = None
     end_turn_building_id: str | None = None
     end_turn_building_source: str | None = None
     end_turn_relocation_from: int | None = None
@@ -137,7 +133,22 @@ class BuildingActivationStep:
     hire_payment: str | None = None
 
 
-TurnStep = BuildingConversionStep | BuildingActivationStep
+@dataclass(frozen=True, slots=True)
+class BuildingRelocationStep:
+    """One committed building relocation with the non-City end selected.
+
+    Dormitory selects the Duty position to return to City; Inquisition selects the Duty position
+    to receive an acolyte from City. Library can use the same shape when its City destination is
+    moved into committed steps, including its ``\"abbey\"`` destination.
+    """
+
+    building_id: str
+    source: str
+    selected_position: int | str
+    hire_payment: str | None = None
+
+
+TurnStep = BuildingConversionStep | BuildingActivationStep | BuildingRelocationStep
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,19 +276,6 @@ def action_id(action: GameAction) -> str:
             + ":construct_plan:"
             + plan.replace(" + ", "+").replace(" ", "_")
         )
-    start_turn_suffix = ""
-    if (
-        action.start_turn_building_id is not None
-        or action.start_turn_building_source is not None
-        or action.start_turn_relocation_from is not None
-        or action.start_turn_relocation_to is not None
-    ):
-        start_turn_suffix = (
-            f":start_turn_building:{action.start_turn_building_id or 'none'}"
-            f":source:{action.start_turn_building_source or 'unknown'}"
-            f":from:{action.start_turn_relocation_from if action.start_turn_relocation_from is not None else 'none'}"
-            f":to:{action.start_turn_relocation_to if action.start_turn_relocation_to is not None else 'none'}"
-        )
     end_turn_suffix = ""
     if (
         action.end_turn_building_id is not None
@@ -388,7 +386,7 @@ def action_id(action: GameAction) -> str:
         f"turn:sow:{action.origin}:{route}:"
         f"duty:{action.selected_duty}:action:{action.resolution.value}"
         f"{payment_suffix}{donation_suffix}{ordination_suffix}"
-        f"{taxation_suffix}{allocation_suffix}{construct_suffix}{start_turn_suffix}"
+        f"{taxation_suffix}{allocation_suffix}{construct_suffix}"
         f"{end_turn_suffix}"
         f"{sow_route_suffix}{bank_payment_suffix}{effective_acolyte_suffix}"
         f"{taxation_majority_suffix}{free_hire_suffix}"
@@ -483,7 +481,9 @@ def _ordination_cost_phrase(
     action: FullTurnAction, *, state: GameState | None, actor: PlayerId | str | None
 ) -> str:
     due = len(action.ordination_steps)
-    has_mill = "mill" in _active_buildings_for_actor(state, actor) or action.hired_building_id == "mill"
+    has_mill = (
+        "mill" in _active_buildings_for_actor(state, actor) or action.hired_building_id == "mill"
+    )
     waived = min(2, due) if has_mill else 0
     after_mill = max(0, due - waived)
     bank_wheat_replaced = (
@@ -514,7 +514,9 @@ def action_choice_summary_for_players(
         count = len(action.route)
         noun = "acolyte" if count == 1 else "acolytes"
         origin = _board_label_for_position(config, action.origin)
-        ending = _board_label_for_position(config, action.route[-1] if action.route else action.origin)
+        ending = _board_label_for_position(
+            config, action.route[-1] if action.route else action.origin
+        )
         origin_phrase = f"the {origin}" if origin == "City" else origin
         return (
             f"{speaker} sowed {_spoken_count(count)} {noun} "
@@ -612,8 +614,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
 
     if isinstance(action, StartPlayerSelectionAction):
         return (
-            "Start player selection: "
-            f"{action.chosen_start_player.name.lower()} begins this round"
+            f"Start player selection: {action.chosen_start_player.name.lower()} begins this round"
         )
 
     if isinstance(action, EndTurnAction):
@@ -764,23 +765,6 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         elif action.resolution is TurnResolutionType.ORDINATION:
             required_wheat = len(action.ordination_steps)
         summary += f" | mill wheat spent={max(0, required_wheat - 2)}"
-    if (
-        action.start_turn_building_id is not None
-        and action.start_turn_relocation_from is not None
-        and action.start_turn_relocation_to is not None
-        and action.start_turn_building_source is not None
-    ):
-        start_summary = (
-            f"start: {action.start_turn_building_id} "
-            f"{position_name(action.start_turn_relocation_from, positions)} -> "
-            f"{position_name(action.start_turn_relocation_to, positions)}"
-        )
-        if action.start_turn_building_source != "own_active":
-            start_summary += (
-                f" | hire building: {action.start_turn_building_id} "
-                f"from {action.start_turn_building_source}"
-            )
-        summary = f"{start_summary} | {summary}"
     if (
         action.end_turn_building_id is not None
         and action.end_turn_relocation_from is not None

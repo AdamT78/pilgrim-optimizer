@@ -64,22 +64,24 @@ PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 PLAYTEST_CONVERSIONS = "conversions_2p.json"
+PLAYTEST_MOVEMENT = "movement_2p.json"
 PLAYTEST_POSITION_NAMES = (
     PLAYTEST_CLOISTERS,
     PLAYTEST_CLOISTERS_LOOP,
     PLAYTEST_KOGGE_AND_CLOISTERS,
     PLAYTEST_CONVERSIONS,
+    PLAYTEST_MOVEMENT,
 )
 CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
 ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
-    {"sow_route_building_id", "sow_route_secondary_building_id", "sow_route_secondary_building_source"}
+    {
+        "sow_route_building_id",
+        "sow_route_secondary_building_id",
+        "sow_route_secondary_building_source",
+    }
 )
 RELOCATION_REFUSAL_FIELDS = frozenset(
     {
-        "start_turn_building_id",
-        "start_turn_building_source",
-        "start_turn_relocation_from",
-        "start_turn_relocation_to",
         "end_turn_building_id",
         "end_turn_building_source",
         "end_turn_relocation_from",
@@ -91,7 +93,6 @@ SPACE_QUESTION_KINDS = frozenset(
         "origin",
         "skip",
         "duty",
-        "start_relocation_space",
         "end_relocation_space",
     }
 )
@@ -537,9 +538,11 @@ def test_setup_page_lists_discovered_playtest_positions_with_blank_fresh_default
     assert f'value="{PLAYTEST_CLOISTERS_LOOP}"' in page
     assert f'value="{PLAYTEST_KOGGE_AND_CLOISTERS}"' in page
     assert f'value="{PLAYTEST_CONVERSIONS}"' in page
+    assert f'value="{PLAYTEST_MOVEMENT}"' in page
     assert ">cloisters_reach_2p<" in page
     assert ">cloisters_loop_2p<" in page
     assert ">kogge_and_cloisters_2p<" in page
+    assert ">movement_2p<" in page
 
 
 def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribute() -> None:
@@ -628,18 +631,20 @@ def test_start_rejects_an_unknown_test_position_name() -> None:
 
 
 @pytest.mark.parametrize(
-    "position_name,position_label,expected_active_buildings",
+    "position_name,position_label,expected_active_buildings,expected_resources",
     [
-        (PLAYTEST_CLOISTERS, "cloisters_reach_2p", ["cloisters"]),
-        (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p", ["cloisters"]),
-        (PLAYTEST_KOGGE_AND_CLOISTERS, "kogge_and_cloisters_2p", ["kogge", "cloisters"]),
-        (PLAYTEST_CONVERSIONS, "conversions_2p", ["stone_yard", "grain_store"]),
+        (PLAYTEST_CLOISTERS, "cloisters_reach_2p", ["cloisters"], {"stone": 9, "silver": 9, "wheat": 9}),
+        (PLAYTEST_CLOISTERS_LOOP, "cloisters_loop_2p", ["cloisters"], {"stone": 9, "silver": 9, "wheat": 9}),
+        (PLAYTEST_KOGGE_AND_CLOISTERS, "kogge_and_cloisters_2p", ["kogge", "cloisters"], {"stone": 9, "silver": 9, "wheat": 9}),
+        (PLAYTEST_CONVERSIONS, "conversions_2p", ["stone_yard", "grain_store"], {"stone": 9, "silver": 9, "wheat": 9}),
+        (PLAYTEST_MOVEMENT, "movement_2p", ["cloisters", "dormitory"], {"stone": 4, "silver": 9, "wheat": 4}),
     ],
 )
 def test_starting_from_test_position_uses_the_file_count_and_seed(
     position_name: str,
     position_label: str,
     expected_active_buildings: list[str],
+    expected_resources: dict[str, int],
 ) -> None:
     server = PlayServer(("127.0.0.1", 0))
     with _running(server) as base:
@@ -658,7 +663,7 @@ def test_starting_from_test_position_uses_the_file_count_and_seed(
     assert f"Loaded test position - {position_label}." in page
     assert len(state["state"]["players"]) == 2
     assert state["state"]["players"][0]["piety"] == 4
-    assert state["state"]["players"][0]["resources"] == {"stone": 9, "silver": 9, "wheat": 9}
+    assert state["state"]["players"][0]["resources"] == expected_resources
     assert (
         state["state"]["players"][0]["player_board_slots"]["active_buildings"]
         == expected_active_buildings
@@ -763,7 +768,7 @@ def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
         seen.add(path.name)
         checked += 1
 
-    assert checked == 4
+    assert checked == 5
     assert seen == set(PLAYTEST_POSITION_NAMES)
 
 
@@ -846,7 +851,10 @@ def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
         if not isinstance(action, FullTurnAction):
             continue
         walked = (action.origin, *action.route)
-        if any((walked[index], walked[index + 1]) in against_flow_spokes for index in range(len(walked) - 1)):
+        if any(
+            (walked[index], walked[index + 1]) in against_flow_spokes
+            for index in range(len(walked) - 1)
+        ):
             against_flow += 1
 
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
@@ -897,7 +905,9 @@ def test_kogge_and_cloisters_playtest_turn_candidates_have_no_dead_edge_steps() 
     try:
         drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
         dead = _dead_candidates_by_missing_edges(server.payload["turn_candidates"], drawn)
-        assert not dead, f"kogge+cloisters playtest candidates still ask for undrawn arrows: {dead[:10]}"
+        assert not dead, (
+            f"kogge+cloisters playtest candidates still ask for undrawn arrows: {dead[:10]}"
+        )
     finally:
         server.server_close()
 
@@ -912,7 +922,10 @@ def test_conversions_playtest_exposes_and_applies_all_conversion_paths() -> None
     assert len(candidates) == 62
     assert sum(candidate["action_id"] is None for candidate in candidates) == 1
     assert {step.building_id for step in steps} == {
-        "stone_yard", "grain_store", "brewery", "indulgences"
+        "stone_yard",
+        "grain_store",
+        "brewery",
+        "indulgences",
     }
     hired = [step for step in steps if step.hire_payment is not None]
     assert hired and {step.hire_payment for step in hired} == {"wheat", "stone", "silver"}
@@ -923,7 +936,9 @@ def test_conversions_playtest_exposes_and_applies_all_conversion_paths() -> None
         next(step for step in steps if step.building_id == "grain_store"),
     )
     assert {step.building_id for step in turn_steps(after_grain_store, scenario.config)} == {
-        "stone_yard", "brewery", "indulgences"
+        "stone_yard",
+        "brewery",
+        "indulgences",
     }
 
 
@@ -958,7 +973,9 @@ def test_sell_piety_payload_silver_is_the_engine_conversion_delta_across_the_cor
             )
             conversion_silver = total_silver - hire_silver
             assert conversion_silver == abs(after.piety - before.piety)
-            assert payload_by_id[play_server._turn_step_id(step)]["silver_delta"] == conversion_silver
+            assert (
+                payload_by_id[play_server._turn_step_id(step)]["silver_delta"] == conversion_silver
+            )
     assert observations > 0
 
 
@@ -1044,7 +1061,9 @@ def test_every_drawn_city_reversal_arrow_is_used_by_a_candidate(corpus_actions) 
             orphaned.append((scenario_path.name, unused))
 
     assert checked_reversal_arrows > 0, "committed corpus drew no City reversal arrows to verify"
-    assert not orphaned, f"{len(orphaned)} scenarios drew unused City reversal arrows: {orphaned[:5]}"
+    assert not orphaned, (
+        f"{len(orphaned)} scenarios drew unused City reversal arrows: {orphaned[:5]}"
+    )
 
 
 def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_fields(
@@ -1060,10 +1079,14 @@ def test_corpus_has_no_refused_groups_blocked_on_kogge_cloisters_route_building_
             if ROUTE_BUILDING_REFUSAL_FIELDS <= set(unresolved):
                 blocked.append((scenario_path.name, unresolved, int(candidate.get("variants", 0))))
 
-    assert not blocked, f"route-building refusals remained in {len(blocked)} candidate groups: {blocked[:10]}"
+    assert not blocked, (
+        f"route-building refusals remained in {len(blocked)} candidate groups: {blocked[:10]}"
+    )
 
 
-def test_space_questions_never_overlap_on_one_reachable_prefix(corpus_actions, playtest_actions) -> None:
+def test_space_questions_never_overlap_on_one_reachable_prefix(
+    corpus_actions, playtest_actions
+) -> None:
     """One ring family is safe only while at most one wheel question is live at once."""
     overlaps: list[tuple[str, tuple[str, ...], tuple[Any, ...]]] = []
     for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
@@ -1073,7 +1096,9 @@ def test_space_questions_never_overlap_on_one_reachable_prefix(corpus_actions, p
             if len(simultaneous) > 1:
                 overlaps.append((scenario_path.name, simultaneous, prefix))
 
-    assert not overlaps, f"wheel question kinds overlapped on {len(overlaps)} prefixes: {overlaps[:10]}"
+    assert not overlaps, (
+        f"wheel question kinds overlapped on {len(overlaps)} prefixes: {overlaps[:10]}"
+    )
 
 
 def test_relocation_fields_and_hire_payments_are_not_in_refusals(
@@ -1136,10 +1161,14 @@ def test_no_refused_candidate_names_a_decided_field(corpus_actions, playtest_act
         (PLAYTEST_KOGGE_AND_CLOISTERS, 3),
     ],
 )
-def test_playtest_positions_have_expected_refused_counts(position_name: str, expected_refused: int) -> None:
+def test_playtest_positions_have_expected_refused_counts(
+    position_name: str, expected_refused: int
+) -> None:
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / position_name)
     try:
-        refused = sum(1 for candidate in server.payload["turn_candidates"] if candidate["action_id"] is None)
+        refused = sum(
+            1 for candidate in server.payload["turn_candidates"] if candidate["action_id"] is None
+        )
         assert refused == expected_refused
     finally:
         server.server_close()
@@ -1157,7 +1186,9 @@ def test_cloisters_route_permutation_spellings_land_in_the_same_state_record(
 
     compared = 0
     mismatches: list[tuple[str, str, str, tuple[int, ...], tuple[int, ...]]] = []
-    for scenario_path, scenario, all_actions in _all_corpus_actions(corpus_actions, playtest_actions):
+    for scenario_path, scenario, all_actions in _all_corpus_actions(
+        corpus_actions, playtest_actions
+    ):
         actions = [
             action
             for action in all_actions
@@ -1215,7 +1246,9 @@ def test_hire_payments_stays_in_residue_for_full_turn_actions() -> None:
     assert "hire_payments" in play_server._residue_fields(action)
 
 
-def test_settled_candidates_never_alias_more_than_one_legal_action(corpus_actions, playtest_actions) -> None:
+def test_settled_candidates_never_alias_more_than_one_legal_action(
+    corpus_actions, playtest_actions
+) -> None:
     aliased: list[tuple[str, str, int, list[str]]] = []
     settled = 0
     for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
@@ -1246,7 +1279,9 @@ def test_settled_candidates_never_alias_more_than_one_legal_action(corpus_action
 
 
 @pytest.mark.parametrize("position_name", PLAYTEST_POSITION_NAMES)
-def test_playtest_position_can_be_played_for_twelve_turns_and_advances_round(position_name: str) -> None:
+def test_playtest_position_can_be_played_for_twelve_turns_and_advances_round(
+    position_name: str,
+) -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / position_name))
     state = scenario.state
     start_round = state.timing.round_number
@@ -1280,14 +1315,18 @@ def test_cloisters_loop_city_origin_offers_city_skip_candidates() -> None:
             candidate
             for candidate in server.payload["turn_candidates"]
             if candidate["action_id"] is not None
-            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in candidate["steps"])
-            and any(step["kind"] == "skip" and int(step["value"]) == 0 for step in candidate["steps"])
-            and {
-                str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"
-            }
+            and any(
+                step["kind"] == "origin" and int(step["value"]) == 0 for step in candidate["steps"]
+            )
+            and any(
+                step["kind"] == "skip" and int(step["value"]) == 0 for step in candidate["steps"]
+            )
+            and {str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"}
             <= drawn
         ]
-        assert city_candidates, "no reachable city-origin candidate offers city as the skipped space"
+        assert city_candidates, (
+            "no reachable city-origin candidate offers city as the skipped space"
+        )
     finally:
         server.server_close()
 
@@ -1307,7 +1346,9 @@ def test_cloisters_loop_playtest_keeps_player_one_stacks_at_two_or_less_after_on
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS_LOOP)
     try:
         settled = next(
-            candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] is not None
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if candidate["action_id"] is not None
         )
         server.apply(str(settled["action_id"]), str(server.payload["state_token"]))
         player_one = server.state.player_state(PlayerId.PLAYER_ONE)
@@ -1321,7 +1362,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
     player_id = play_server._speaking_player_id(scenario.state)
     actions = list(legal_actions(scenario.state, scenario.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -1360,7 +1400,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
             config=scenario.config,
             offer_hire=offer_hire_by_action_id[action_id(action)],
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-            offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
         )
         edge_steps = [step for step in steps if step["kind"] == "edge"]
@@ -1529,7 +1568,9 @@ def _played_through_setup(server):
 _RESOLUTION_NAMES = tuple(resolution.value for resolution in TurnResolutionType)
 
 
-def _log_blocks_by_resolution_from_fixture(tmp_path: Path) -> tuple[dict[str, list[str]], tuple[str, ...]]:
+def _log_blocks_by_resolution_from_fixture(
+    tmp_path: Path,
+) -> tuple[dict[str, list[str]], tuple[str, ...]]:
     """One transcript block per reached resolution, and the names not reached from this fixture."""
     server = _played_through_setup(_served(tmp_path))
     reached: dict[str, list[str]] = {}
@@ -1542,16 +1583,14 @@ def _log_blocks_by_resolution_from_fixture(tmp_path: Path) -> tuple[dict[str, li
         actions = list(legal_actions(server.state, server.config))
         if not actions:
             break
-        full_turns = [action for action in actions if getattr(action, "resolution", None) is not None]
+        full_turns = [
+            action for action in actions if getattr(action, "resolution", None) is not None
+        ]
         if not full_turns:
             server.apply(action_id(actions[0]), server.payload["state_token"])
             continue
         chosen = next(
-            (
-                action
-                for action in full_turns
-                if action.resolution.value not in reached
-            ),
+            (action for action in full_turns if action.resolution.value not in reached),
             full_turns[0],
         )
         resolution = chosen.resolution.value
@@ -1757,7 +1796,6 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
         payload = _payload_from_corpus(scenario, actions)
         player_id = play_server._speaking_player_id(scenario.state)
         (
-            offer_start_turn_relocation,
             offer_hire_by_action_id,
             hire_payment_buildings_by_action_id,
             offer_end_turn_by_action_id,
@@ -1782,14 +1820,12 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
                 config=scenario.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
         candidates_by_key = {
-            key_for_steps(candidate["steps"]): candidate
-            for candidate in payload["turn_candidates"]
+            key_for_steps(candidate["steps"]): candidate for candidate in payload["turn_candidates"]
         }
 
         for key, members in by_key.items():
@@ -1824,7 +1860,6 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
         payload = _payload_from_corpus(scenario, actions)
         player_id = play_server._speaking_player_id(scenario.state)
         (
-            offer_start_turn_relocation,
             offer_hire_by_action_id,
             hire_payment_buildings_by_action_id,
             offer_end_turn_by_action_id,
@@ -1849,20 +1884,17 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
                 config=scenario.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
         candidates_by_key = {
-            key_for_steps(candidate["steps"]): candidate
-            for candidate in payload["turn_candidates"]
+            key_for_steps(candidate["steps"]): candidate for candidate in payload["turn_candidates"]
         }
 
         for key, members in by_key.items():
             if not any(
-                isinstance(member, FullTurnAction)
-                and member.sow_route_omitted_location is not None
+                isinstance(member, FullTurnAction) and member.sow_route_omitted_location is not None
                 for member in members
             ):
                 continue
@@ -1910,9 +1942,7 @@ def _seated(server) -> set[str]:
 def _key_values(candidates: list[dict], kind: str) -> list[str]:
     """Every distinct value of one kind of step, which is one key each on the page."""
     asked_kinds = (
-        {"combination", "hire", "start_relocation_choice", "end_relocation_choice"}
-        if kind == "combination"
-        else {kind}
+        {"combination", "hire", "end_relocation_choice"} if kind == "combination" else {kind}
     )
     return sorted(
         {step["value"] for c in candidates for step in c["steps"] if step["kind"] in asked_kinds}
@@ -1948,11 +1978,7 @@ def _dead_candidates_by_missing_edges(
 ) -> list[tuple[str | None, list[str]]]:
     dead: list[tuple[str | None, list[str]]] = []
     for candidate in candidates:
-        edges = {
-            str(step["value"])
-            for step in candidate["steps"]
-            if step["kind"] == "edge"
-        }
+        edges = {str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"}
         missing = sorted(edges - drawn_edges)
         if missing:
             dead.append((candidate.get("action_id"), missing))
@@ -1978,9 +2004,8 @@ def _first_settled_skip_candidate(server: PlayServer) -> dict | None:
             for offered in server.payload["turn_candidates"]
             if offered["action_id"] is not None
             and any(step["kind"] == "skip" for step in offered["steps"])
-            and {
-                str(step["value"]) for step in offered["steps"] if step["kind"] == "edge"
-            } <= drawn_arrows
+            and {str(step["value"]) for step in offered["steps"] if step["kind"] == "edge"}
+            <= drawn_arrows
         ),
         None,
     )
@@ -2128,7 +2153,9 @@ def _legal_ordination_orders(
 ) -> list[tuple[str, ...]]:
     orders: list[tuple[str, ...]] = []
 
-    def walk(village: int, abbey: int, ordains_left: int, missions_left: int, path: tuple[str, ...]) -> None:
+    def walk(
+        village: int, abbey: int, ordains_left: int, missions_left: int, path: tuple[str, ...]
+    ) -> None:
         if ordains_left == 0 and missions_left == 0:
             orders.append(path)
             return
@@ -2143,7 +2170,7 @@ def _legal_ordination_orders(
 
 def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
-    if step["kind"] in {"position", "origin", "skip", "duty", "start_relocation_space"}:
+    if step["kind"] in {"position", "origin", "skip", "duty"}:
         return _at(step["value"])
     if step["kind"] == "end_relocation_space":
         return _mission_click() if step["value"] == "abbey" else _at(step["value"])
@@ -2151,7 +2178,7 @@ def _click_for(server, step: dict) -> dict:
         return _follow(step["value"])
     if step["kind"] == "resource":
         return _take(step["value"], _active_seat(server))
-    if step["kind"] in {"combination", "start_relocation_choice", "end_relocation_choice"}:
+    if step["kind"] in {"combination", "end_relocation_choice"}:
         return _pay(step["value"])
     if step["kind"] == "hire":
         return _pay(step["value"])
@@ -2185,14 +2212,10 @@ def _offer_flags_by_action_id(
     *,
     state: Any,
     config: Any,
-) -> tuple[bool, dict[str, bool], dict[str, tuple[str, ...]], dict[str, bool]]:
+) -> tuple[dict[str, bool], dict[str, tuple[str, ...]], dict[str, bool]]:
     """Mirror play-server context gating for hire and relocation step emission."""
     hire_contexts = play_server._hire_contexts(actions, config)
     player_id = play_server._speaking_player_id(state)
-    offer_start_turn_relocation = any(
-        isinstance(action, FullTurnAction) and action.start_turn_building_id is not None
-        for action in actions
-    )
     offer_hire_by_action_id: dict[str, bool] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
@@ -2207,7 +2230,6 @@ def _offer_flags_by_action_id(
         state=state,
         config=config,
         offer_hire_by_action_id=offer_hire_by_action_id,
-        offer_start_turn_relocation=offer_start_turn_relocation,
     )
     for action in actions:
         move_id = action_id(action)
@@ -2218,7 +2240,6 @@ def _offer_flags_by_action_id(
             config=config,
             offer_hire=offer_hire_by_action_id[move_id],
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
-            offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=False,
         )
         pre_end_turn_key_by_action_id[move_id] = tuple(
@@ -2238,7 +2259,6 @@ def _offer_flags_by_action_id(
         for action in actions
     }
     return (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -2251,7 +2271,6 @@ def _engine_steps(
     config: Any,
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
-    offer_start_turn_relocation: bool = False,
     offer_end_turn_relocation: bool = False,
 ) -> list[dict]:
     """One legal action as the sequence of decisions that reaches it, spelled out here by hand.
@@ -2260,6 +2279,7 @@ def _engine_steps(
     would only show the page copied it faithfully. Every field is read off the action itself, so
     what the offers are checked against is the engine's own answer about what is legal.
     """
+
     def paid_resource_for(building_id: str) -> str:
         for paid_building, paid_resource in tuple(action.hire_payments or ()):
             if paid_building == building_id:
@@ -2268,24 +2288,6 @@ def _engine_steps(
 
     route, _omitted_edge_index = play_server._route_destinations_for_steps(action, config)
     steps: list[dict] = []
-    if isinstance(action, FullTurnAction) and offer_start_turn_relocation:
-        if action.start_turn_building_id is None:
-            steps.append({"kind": "start_relocation_choice", "value": "none"})
-        else:
-            building_id = action.start_turn_building_id
-            source_label = action.start_turn_building_source or "unknown"
-            steps.append(
-                {
-                    "kind": "start_relocation_choice",
-                    "value": f"{building_id}:{source_label}",
-                }
-            )
-            target = (
-                action.start_turn_relocation_from
-                if building_id == "dormitory"
-                else action.start_turn_relocation_to
-            )
-            steps.append({"kind": "start_relocation_space", "value": target})
     steps.append({"kind": "origin", "value": action.origin})
     path = (action.origin, *route)
     steps += [
@@ -2376,7 +2378,6 @@ def _engine_decisions(server) -> list[list[dict]]:
     """Every legal move as its sequence of decisions, with no two the same."""
     actions = list(legal_actions(server.state, server.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -2393,7 +2394,6 @@ def _engine_decisions(server) -> list[list[dict]]:
             config=server.config,
             offer_hire=offer_hire_by_action_id[move_id],
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
-            offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offer_end_turn_by_action_id[move_id],
         )
         if steps not in decisions:
@@ -2432,8 +2432,7 @@ def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
             step["kind"] == "combination"
             and step.get("resource_allocation")
             and (
-                step.get("resource_allocation_any_total")
-                or int(step.get("resource_total", 0)) > 0
+                step.get("resource_allocation_any_total") or int(step.get("resource_total", 0)) > 0
             )
         ):
             break
@@ -2470,8 +2469,7 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             counts = _counts(value)
             for resource in ("stone", "silver", "wheat"):
                 clicks.extend(
-                    _take(resource, _active_seat(server))
-                    for _ in range(counts.get(resource, 0))
+                    _take(resource, _active_seat(server)) for _ in range(counts.get(resource, 0))
                 )
             return clicks
         if step["kind"] == "resolution":
@@ -2824,68 +2822,48 @@ def _apply_settled_turn_and_pass(server: PlayServer, candidate: dict) -> None:
         _pass_end_turn_window(server)
 
 
-def test_dormitory_turn_sets_the_chosen_start_turn_relocation_fields() -> None:
-    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "dormitory_active_return_duty_to_city_001.json")
+def test_dormitory_turn_step_payload_names_the_selected_duty_and_applies_it() -> None:
+    server = PlayServer(
+        ("127.0.0.1", 0), SCENARIOS / "dormitory_active_return_duty_to_city_001.json"
+    )
     try:
-        candidate = next(
-            (
-                offered
-                for offered in server.payload["turn_candidates"]
-                if offered.get("action_id") is not None
-                and any(
-                    step["kind"] == "start_relocation_choice"
-                    and str(step["value"]).startswith("dormitory:own_active")
-                    for step in offered["steps"]
-                )
-                and any(step["kind"] == "start_relocation_space" for step in offered["steps"])
-            ),
-            None,
+        step = next(
+            step for step in server.payload["turn_steps"] if step["building_id"] == "dormitory"
         )
-        assert candidate is not None, "fixture offered no settled Dormitory relocation candidate"
-        chosen_from = int(_answer(candidate, "start_relocation_space"))
         city = server.config.board.index_for_name("city")
-        action = _action_for_candidate(server, candidate)
-        assert action.start_turn_building_id == "dormitory"
-        assert action.start_turn_building_source == "own_active"
-        assert action.start_turn_relocation_from == chosen_from
-        assert action.start_turn_relocation_to == city
-        before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
-        server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
-        _pass_end_turn_window(server)
-        assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
+        chosen_from = int(step["selected_position"])
+        before = server.state.player_vector(server.state.active_player)
+        server.apply_turn_step(str(step["step_id"]), str(server.payload["state_token"]))
+
+        assert step["kind"] == "relocation"
+        assert step["source"] == "own_active"
+        assert (
+            server.state.player_vector(server.state.active_player)[chosen_from]
+            == before[chosen_from] - 1
+        )
+        assert server.state.player_vector(server.state.active_player)[city] == before[city] + 1
     finally:
         server.server_close()
 
 
-def test_inquisition_turn_sets_the_chosen_start_turn_relocation_fields() -> None:
+def test_inquisition_turn_step_payload_names_the_selected_duty_and_applies_it() -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "inquisition_active_city_to_duty_001.json")
     try:
-        candidate = next(
-            (
-                offered
-                for offered in server.payload["turn_candidates"]
-                if offered.get("action_id") is not None
-                and any(
-                    step["kind"] == "start_relocation_choice"
-                    and str(step["value"]).startswith("inquisition:own_active")
-                    for step in offered["steps"]
-                )
-                and any(step["kind"] == "start_relocation_space" for step in offered["steps"])
-            ),
-            None,
+        step = next(
+            step for step in server.payload["turn_steps"] if step["building_id"] == "inquisition"
         )
-        assert candidate is not None, "fixture offered no settled Inquisition relocation candidate"
-        chosen_to = int(_answer(candidate, "start_relocation_space"))
         city = server.config.board.index_for_name("city")
-        action = _action_for_candidate(server, candidate)
-        assert action.start_turn_building_id == "inquisition"
-        assert action.start_turn_building_source == "own_active"
-        assert action.start_turn_relocation_from == city
-        assert action.start_turn_relocation_to == chosen_to
-        before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
-        server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
-        _pass_end_turn_window(server)
-        assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
+        chosen_to = int(step["selected_position"])
+        before = server.state.player_vector(server.state.active_player)
+        server.apply_turn_step(str(step["step_id"]), str(server.payload["state_token"]))
+
+        assert step["kind"] == "relocation"
+        assert step["source"] == "own_active"
+        assert server.state.player_vector(server.state.active_player)[city] == before[city] - 1
+        assert (
+            server.state.player_vector(server.state.active_player)[chosen_to]
+            == before[chosen_to] + 1
+        )
     finally:
         server.server_close()
 
@@ -2993,7 +2971,9 @@ def _clicks_before_ordination(server, candidate: dict) -> list[dict]:
 
 
 @needs_node
-def test_allocation_arrangements_reached_in_two_orders_submit_one_canonical_action(tmp_path: Path) -> None:
+def test_allocation_arrangements_reached_in_two_orders_submit_one_canonical_action(
+    tmp_path: Path,
+) -> None:
     first = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
     candidates = _allocation_candidates(first)
     assert candidates, "no allocation candidates were offered"
@@ -3002,35 +2982,55 @@ def test_allocation_arrangements_reached_in_two_orders_submit_one_canonical_acti
         (
             candidate
             for candidate in candidates
-            if any(slot == "abbey" and delta <= -2 for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")))
-            and len([slot for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")) if delta > 0]) >= 2
+            if any(
+                slot == "abbey" and delta <= -2
+                for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
+            )
+            and len(
+                [
+                    slot
+                    for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
+                    if delta > 0
+                ]
+            )
+            >= 2
         ),
         None,
     )
     assert target is not None, "fixture had no two-drop allocation arrangement to exercise order"
     terms = _arrangement_terms(_answer(target, "arrangement"))
     destinations = [slot for slot, delta in terms if delta > 0]
-    first_then_second = (
-        _clicks_before_arrangement(first, target)
-        + [_lift_from("abbey"), _place_on(destinations[0]), _lift_from("abbey"), _place_on(destinations[1])]
-    )
+    first_then_second = _clicks_before_arrangement(first, target) + [
+        _lift_from("abbey"),
+        _place_on(destinations[0]),
+        _lift_from("abbey"),
+        _place_on(destinations[1]),
+    ]
     posted_a = _run_script(first, first_then_second, tmp_path, confirm=True)["posted"]
     assert posted_a is not None
     assert posted_a["action_id"] == target["action_id"]
 
     second = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
-    twin = next(candidate for candidate in _allocation_candidates(second) if candidate["action_id"] == target["action_id"])
-    second_then_first = (
-        _clicks_before_arrangement(second, twin)
-        + [_lift_from("abbey"), _place_on(destinations[1]), _lift_from("abbey"), _place_on(destinations[0])]
+    twin = next(
+        candidate
+        for candidate in _allocation_candidates(second)
+        if candidate["action_id"] == target["action_id"]
     )
+    second_then_first = _clicks_before_arrangement(second, twin) + [
+        _lift_from("abbey"),
+        _place_on(destinations[1]),
+        _lift_from("abbey"),
+        _place_on(destinations[0]),
+    ]
     posted_b = _run_script(second, second_then_first, tmp_path, confirm=True)["posted"]
     assert posted_b is not None
     assert posted_b["action_id"] == target["action_id"]
 
 
 @needs_node
-def test_ordination_counts_reached_in_two_orders_submit_one_canonical_action(tmp_path: Path) -> None:
+def test_ordination_counts_reached_in_two_orders_submit_one_canonical_action(
+    tmp_path: Path,
+) -> None:
     server = PlayServer(
         ("127.0.0.1", 0), SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json"
     )
@@ -3058,7 +3058,8 @@ def test_ordination_counts_reached_in_two_orders_submit_one_canonical_action(tmp
 
             for index, first_order in enumerate(orders[:-1]):
                 clicks_a = _clicks_before_ordination(server, candidate) + [
-                    _ordain_click() if step == "ordain" else _mission_click() for step in first_order
+                    _ordain_click() if step == "ordain" else _mission_click()
+                    for step in first_order
                 ]
                 try:
                     posted_a = _run_script(server, clicks_a, tmp_path, confirm=True)["posted"]
@@ -3083,7 +3084,9 @@ def test_ordination_counts_reached_in_two_orders_submit_one_canonical_action(tmp
                             for step in second_order
                         ]
                         try:
-                            posted_b = _run_script(twin_server, clicks_b, tmp_path, confirm=True)["posted"]
+                            posted_b = _run_script(twin_server, clicks_b, tmp_path, confirm=True)[
+                                "posted"
+                            ]
                         except subprocess.CalledProcessError:
                             continue
                         if posted_b is not None and posted_b["action_id"] == candidate["action_id"]:
@@ -3124,7 +3127,9 @@ def test_ordination_candidate_summary_names_steps_and_cost() -> None:
 @needs_node
 def test_an_empty_allocation_outcome_lights_confirm_without_moving_cubes(tmp_path: Path) -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
-    candidate = next((c for c in _allocation_candidates(server) if _answer(c, "arrangement") == "none"), None)
+    candidate = next(
+        (c for c in _allocation_candidates(server) if _answer(c, "arrangement") == "none"), None
+    )
     if candidate is None:
         pytest.skip("fixture had no empty arrangement outcome")
 
@@ -3132,8 +3137,14 @@ def test_an_empty_allocation_outcome_lights_confirm_without_moving_cubes(tmp_pat
     transcript = _run_script(server, clicks, tmp_path)
     active = str(_active_seat(server))
     assert transcript["controls"][-1]["confirm"] == "true"
-    assert transcript["arrangements"][-1][active]["abbey"] == transcript["arrangements"][0][active]["abbey"]
-    assert transcript["arrangements"][-1][active]["roles"] == transcript["arrangements"][0][active]["roles"]
+    assert (
+        transcript["arrangements"][-1][active]["abbey"]
+        == transcript["arrangements"][0][active]["abbey"]
+    )
+    assert (
+        transcript["arrangements"][-1][active]["roles"]
+        == transcript["arrangements"][0][active]["roles"]
+    )
 
     posted = _run_script(server, clicks, tmp_path, confirm=True)["posted"]
     assert posted is not None
@@ -3162,7 +3173,14 @@ def test_allocation_role_to_role_and_role_to_abbey_use_the_same_click_path(tmp_p
     role_candidate = next(
         candidate
         for candidate in _allocation_candidates(role_to_role)
-        if len([slot for slot, _delta in _arrangement_terms(_answer(candidate, "arrangement")) if slot == "abbey"]) == 0
+        if len(
+            [
+                slot
+                for slot, _delta in _arrangement_terms(_answer(candidate, "arrangement"))
+                if slot == "abbey"
+            ]
+        )
+        == 0
     )
     role_terms = _arrangement_terms(_answer(role_candidate, "arrangement"))
     source_role = next(slot for slot, delta in role_terms if delta < 0)
@@ -3188,7 +3206,11 @@ def test_allocation_role_to_role_and_role_to_abbey_use_the_same_click_path(tmp_p
             for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
         )
         and len(
-            [slot for slot, delta in _arrangement_terms(_answer(candidate, "arrangement")) if delta < 0]
+            [
+                slot
+                for slot, delta in _arrangement_terms(_answer(candidate, "arrangement"))
+                if delta < 0
+            ]
         )
         == 1
     )
@@ -3324,9 +3346,7 @@ def test_ordination_candidates_no_longer_refuse_on_ordination_steps() -> None:
 
 
 def test_allocation_hire_step_precedes_arrangement_and_controls_move_count() -> None:
-    server = PlayServer(
-        ("127.0.0.1", 0), SCENARIOS / "allocation_hire_infirmary_market_001.json"
-    )
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_hire_infirmary_market_001.json")
     legal = {action_id(action): action for action in legal_actions(server.state, server.config)}
     candidates = _hire_candidates(server, "allocation")
     assert candidates, "fixture offered no allocation candidates with a hire step"
@@ -3410,14 +3430,11 @@ def test_starting_a_test_position_offers_clickable_cloisters_skip_candidates() -
         dead = [
             candidate
             for candidate in skip_candidates
-            if {
-                str(step["value"])
-                for step in candidate["steps"]
-                if step["kind"] == "edge"
-            }
-            - drawn
+            if {str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"} - drawn
         ]
-        assert not dead, "selected test position still offered Cloisters candidates with undrawn edges"
+        assert not dead, (
+            "selected test position still offered Cloisters candidates with undrawn edges"
+        )
 
 
 @needs_node
@@ -3456,7 +3473,9 @@ def test_a_cornucopia_tithe_writes_one_player_line_without_sow_path_noise(tmp_pa
     picked = _answer(candidate, "resource")
     duty_index = _answer(candidate, "duty")
     duty_position = server.payload["board_positions"][duty_index]
-    duty_tile = next(tile for tile in server.payload["duty_tiles"] if tile["position_name"] == duty_position)
+    duty_tile = next(
+        tile for tile in server.payload["duty_tiles"] if tile["position_name"] == duty_position
+    )
     duty_label = duty_tile["duty"].replace("_", " ")
     actor = server.payload["state"]["active_player"]
 
@@ -3491,7 +3510,11 @@ def test_a_cornucopia_hire_asks_which_stock_pays_and_honours_the_one_chosen() ->
         assert asked, "fixture offered no settled hire candidate asking for payment stock"
 
         group = next(
-            (siblings for candidate in asked if len((siblings := _siblings(asked, candidate, "resource"))) > 1),
+            (
+                siblings
+                for candidate in asked
+                if len((siblings := _siblings(asked, candidate, "resource"))) > 1
+            ),
             None,
         )
         assert group is not None, "cornucopia hire offered no payment-stock choice"
@@ -3499,7 +3522,9 @@ def test_a_cornucopia_hire_asks_which_stock_pays_and_honours_the_one_chosen() ->
         assert len(offered) > 1, "cornucopia hire offered only one payment stock"
 
         by_resource = {
-            resource: next(candidate for candidate in group if _answer(candidate, "resource") == resource)
+            resource: next(
+                candidate for candidate in group if _answer(candidate, "resource") == resource
+            )
             for resource in offered
         }
         for resource, candidate in by_resource.items():
@@ -3510,12 +3535,16 @@ def test_a_cornucopia_hire_asks_which_stock_pays_and_honours_the_one_chosen() ->
         first_resource, second_resource = offered[0], offered[1]
         first_action = _action_for_candidate(server, by_resource[first_resource])
         second_action = _action_for_candidate(server, by_resource[second_resource])
-        first_after = apply_action(server.state, first_action, server.config).state.player_state(
-            server.state.active_player
-        ).resources
-        second_after = apply_action(server.state, second_action, server.config).state.player_state(
-            server.state.active_player
-        ).resources
+        first_after = (
+            apply_action(server.state, first_action, server.config)
+            .state.player_state(server.state.active_player)
+            .resources
+        )
+        second_after = (
+            apply_action(server.state, second_action, server.config)
+            .state.player_state(server.state.active_player)
+            .resources
+        )
         assert getattr(first_after, first_resource) < getattr(second_after, first_resource), (
             f"picking {first_resource} did not spend more {first_resource} than an alternative payment"
         )
@@ -3545,11 +3574,7 @@ def _phase_row_keys(server: PlayServer) -> list[str]:
 
 
 def _current_phase_row_keys(server: PlayServer) -> list[str]:
-    return [
-        row["key"]
-        for row in server.payload["phase_column"]["rows"]
-        if row["current"]
-    ]
+    return [row["key"] for row in server.payload["phase_column"]["rows"] if row["current"]]
 
 
 def _remove_confession_box_from_market(server: PlayServer) -> None:
@@ -3561,16 +3586,16 @@ def _remove_confession_box_from_market(server: PlayServer) -> None:
             if building_id != "confession_box"
         ),
         building_availability=tuple(
-            entry
-            for entry in server.state.building_availability
-            if entry[0] != "confession_box"
+            entry for entry in server.state.building_availability if entry[0] != "confession_box"
         ),
     )
     server._refresh()
 
 
 def _apply_first_settled_round_end(server: PlayServer) -> None:
-    candidate = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
+    candidate = next(
+        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"]
+    )
     _apply_settled_turn_and_pass(server, candidate)
 
 
@@ -3586,10 +3611,7 @@ def test_ordinary_round_end_phase_rows_derive_income_and_marker_from_pass_events
         assert server.payload["phase_column"]["scope"] == "round_end"
         page = render_play_view_from_payload(server.payload)
         assert 'data-phase-column="round_end"' in page
-        assert (
-            'data-round-end-phase="choose_first_player" data-phase-current="true"'
-            in page
-        )
+        assert 'data-round-end-phase="choose_first_player" data-phase-current="true"' in page
         assert _phase_row_keys(server) == [
             "round_marker",
             "merchant",
@@ -3661,7 +3683,9 @@ def test_confession_phase_rows_survive_each_subquestion_before_first_player_choi
         assert _current_phase_row_keys(server) == ["confession"]
         assert "choose_first_player" not in _phase_row_keys(server)
 
-        answer = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
+        answer = next(
+            candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"]
+        )
         server.apply(answer["action_id"], server.payload["state_token"])
 
         assert server.payload["log_blocks"][-1]["round_end"] is False
@@ -3752,7 +3776,9 @@ def test_player_log_drops_developer_dump_lines_in_ordinary_play(tmp_path: Path) 
     assert not any(re.search(r"\b[A-Z_]+: .*; .*", line) for line in lines), lines
 
 
-def test_recall_is_a_turn_step_and_round_end_prefixes_stay_on_round_end_steps(tmp_path: Path) -> None:
+def test_recall_is_a_turn_step_and_round_end_prefixes_stay_on_round_end_steps(
+    tmp_path: Path,
+) -> None:
     server = _played_through_setup(_served(tmp_path))
 
     first_turn = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
@@ -3789,7 +3815,9 @@ def test_reachable_resolution_log_lines_stay_in_player_language(
 ) -> None:
     reached, missing = resolution_guard_sample
     if resolution not in reached:
-        pytest.skip(f"fixture cannot reach resolution: {resolution}; missing set: {', '.join(missing)}")
+        pytest.skip(
+            f"fixture cannot reach resolution: {resolution}; missing set: {', '.join(missing)}"
+        )
 
     lines = reached[resolution]
     assert lines, f"{resolution} produced no player log lines"
@@ -3823,7 +3851,9 @@ def test_taxation_lines_carry_the_gain_without_a_resource_delta_duplicate(
 
     spoken = [unescape(render_play_view.say(line)) for line in reached["taxation"]]
     assert any("took" in line.lower() and "taxation" in line.lower() for line in spoken), spoken
-    assert not any(re.search(r"\b(stone|silver|wheat)\s+[+-]\\d", line.lower()) for line in spoken), spoken
+    assert not any(
+        re.search(r"\b(stone|silver|wheat)\s+[+-]\\d", line.lower()) for line in spoken
+    ), spoken
 
 
 def test_piety_lines_drop_track_vp_debug_wording(resolution_guard_sample) -> None:
@@ -3902,7 +3932,6 @@ def _offered_pairs(server) -> tuple[set, set]:
     wanted = _values_except(siblings[0]["steps"], "combination")
     actions = list(legal_actions(server.state, server.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -3922,7 +3951,6 @@ def _offered_pairs(server) -> tuple[set, set]:
                 config=server.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             ),
             "combination",
@@ -4060,7 +4088,6 @@ def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
     actions = list(legal_actions(server.state, server.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -4076,7 +4103,6 @@ def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
             config=server.config,
             offer_hire=offer_hire_by_action_id[action_id(action)],
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-            offer_start_turn_relocation=offer_start_turn_relocation,
             offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
         )
         if getattr(action, "resolution", None) is None or action.resolution.value != "taxation":
@@ -4150,15 +4176,12 @@ def test_the_mixes_offered_are_the_ones_the_engine_allows(tmp_path: Path) -> Non
     decisions = _engine_decisions(server)
     transcript = _run_script(server, _clicks_to(server, decisions, list(prefix)), tmp_path)
     eligible = {
-        resource
-        for value in offered
-        for resource, amount in _counts(value).items()
-        if amount > 0
+        resource for value in offered for resource, amount in _counts(value).items() if amount > 0
     }
     assert set(transcript["offered"][-1]) & {"stone", "silver", "wheat"} == eligible
     assert not [value for value in transcript["offered"][-1] if "=" in value]
     assert transcript["asking"][-1] == [
-        f'{server.payload["state"]["active_player"]}: choose 2 resources.'
+        f"{server.payload['state']['active_player']}: choose 2 resources."
     ]
 
 
@@ -4226,9 +4249,10 @@ def test_taxation_step_two_prompt_names_the_position_duty_value() -> None:
         "wheat": 1,
     }
     assert play_server.COMBINATION_PROMPT == "choose one."
-    assert play_server._combination_step(
-        "pay", [("silver", 1), ("wheat", 1)]
-    )["prompt"] == play_server.COMBINATION_PROMPT
+    assert (
+        play_server._combination_step("pay", [("silver", 1), ("wheat", 1)])["prompt"]
+        == play_server.COMBINATION_PROMPT
+    )
 
 
 def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
@@ -4237,8 +4261,7 @@ def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
         step
         for candidate in server.payload["turn_candidates"]
         if any(
-            step["kind"] == "resolution" and step["value"] == "tithe"
-            for step in candidate["steps"]
+            step["kind"] == "resolution" and step["value"] == "tithe" for step in candidate["steps"]
         )
         for step in candidate["steps"]
         if step["kind"] == "resource"
@@ -4246,8 +4269,7 @@ def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
     assert {step["value"] for step in tithe_steps} >= {"stone", "silver", "wheat"}
     for step in tithe_steps:
         assert step["resource_delta"] == {
-            resource: int(resource == step["value"])
-            for resource in ("stone", "silver", "wheat")
+            resource: int(resource == step["value"]) for resource in ("stone", "silver", "wheat")
         }
 
 
@@ -4266,13 +4288,18 @@ def test_resource_preview_step_matches_engine_after_produce() -> None:
     candidate = next(
         candidate
         for candidate in candidates
-        if any(step["kind"] == "resolution" and step["value"] == "produce_wheat" for step in candidate["steps"])
+        if any(
+            step["kind"] == "resolution" and step["value"] == "produce_wheat"
+            for step in candidate["steps"]
+        )
     )
     action = _candidate_action(scenario, candidate)
     before = scenario.state.player_state(scenario.state.active_player).resources
-    after = apply_action(scenario.state, action, scenario.config).state.player_state(
-        scenario.state.active_player
-    ).resources
+    after = (
+        apply_action(scenario.state, action, scenario.config)
+        .state.player_state(scenario.state.active_player)
+        .resources
+    )
     step = next(step for step in candidate["steps"] if step["value"] == "produce_wheat")
     assert step["resource_delta"] == {
         resource: getattr(after, resource) - getattr(before, resource)
@@ -4286,7 +4313,9 @@ def test_construction_preview_step_carries_engine_building_and_cost() -> None:
     candidate = next(
         candidate
         for candidate in candidates
-        if any(step["kind"] == "building" and step["value"] == "well" for step in candidate["steps"])
+        if any(
+            step["kind"] == "building" and step["value"] == "well" for step in candidate["steps"]
+        )
     )
     action = _candidate_action(scenario, candidate)
     before_player = scenario.state.player_state(scenario.state.active_player)
@@ -4296,7 +4325,8 @@ def test_construction_preview_step_carries_engine_building_and_cost() -> None:
     step = next(step for step in candidate["steps"] if step["kind"] == "building")
     assert step["building_constructed"] in after_player.player_board_slots.active_buildings
     assert step["resource_delta"] == {
-        resource: getattr(after_player.resources, resource) - getattr(before_player.resources, resource)
+        resource: getattr(after_player.resources, resource)
+        - getattr(before_player.resources, resource)
         for resource in ("stone", "silver", "wheat")
     }
 
@@ -4315,9 +4345,10 @@ def test_devotion_preview_step_matches_engine_piety_destination() -> None:
     event = next(event for event in result.events if event.event_type is EventType.PIETY_DELTA)
 
     assert step["piety_delta"] == dict(event.details)
-    assert step["piety_delta"]["new_piety_position"] == result.state.player_state(
-        scenario.state.active_player
-    ).piety
+    assert (
+        step["piety_delta"]["new_piety_position"]
+        == result.state.player_state(scenario.state.active_player).piety
+    )
 
 
 def test_devotion_preview_uses_the_engine_cap_at_twelve() -> None:
@@ -4334,7 +4365,9 @@ def test_devotion_preview_uses_the_engine_cap_at_twelve() -> None:
         if any(step.get("piety_delta") is not None for step in candidate["steps"])
     )
     action = next(
-        action for action in legal_actions(state, scenario.config) if action_id(action) == candidate["action_id"]
+        action
+        for action in legal_actions(state, scenario.config)
+        if action_id(action) == candidate["action_id"]
     )
     after = apply_action(state, action, scenario.config).state.player_state(state.active_player)
     step = next(step for step in candidate["steps"] if step.get("piety_delta") is not None)
@@ -4368,9 +4401,7 @@ def test_guild_is_a_committed_turn_step_not_a_candidate_question() -> None:
     candidates = play_server.turn_candidates(scenario.state, scenario.config)
     steps = play_server.turn_steps_payload(scenario.state, scenario.config)
     guild = next(
-        step
-        for step in steps
-        if step["kind"] == "activation" and step["building_id"] == "guild"
+        step for step in steps if step["kind"] == "activation" and step["building_id"] == "guild"
     )
     assert guild["source"] == "own_active"
     assert guild["prompt"] == "Activate Guild: move the Merchant clockwise +1 Duty tile."
@@ -4401,11 +4432,15 @@ def test_paid_alms_preview_step_carries_engine_progress_and_threshold_events(
         and action.alms_payment_wheat == 0
     )
     candidates = play_server.turn_candidates(scenario.state, scenario.config)
-    candidate = next(candidate for candidate in candidates if candidate["action_id"] == action_id(action))
+    candidate = next(
+        candidate for candidate in candidates if candidate["action_id"] == action_id(action)
+    )
     step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
     result = apply_action(scenario.state, action, scenario.config)
     expected_progress = dict(
-        next(event for event in result.events if event.event_type is EventType.ALMS_PROGRESS).details
+        next(
+            event for event in result.events if event.event_type is EventType.ALMS_PROGRESS
+        ).details
     )
     expected_rewards = [
         dict(event.details)
@@ -4416,7 +4451,9 @@ def test_paid_alms_preview_step_carries_engine_progress_and_threshold_events(
     assert step["resource_allocation"] is True
     assert step["resource_allocation_any_total"] is True
     assert step["resource_delta"] == {
-        resource: getattr(result.state.player_state(scenario.state.active_player).resources, resource)
+        resource: getattr(
+            result.state.player_state(scenario.state.active_player).resources, resource
+        )
         - getattr(scenario.state.player_state(scenario.state.active_player).resources, resource)
         for resource in ("stone", "silver", "wheat")
     }
@@ -4427,15 +4464,12 @@ def test_paid_alms_preview_step_carries_engine_progress_and_threshold_events(
 
 @needs_node
 def test_six_taxation_multisets_are_reachable_by_pill_clicks(tmp_path: Path) -> None:
-    server = PlayServer(
-        ("127.0.0.1", 0), SCENARIOS / "taxation_three_bonus_types_001.json"
-    )
+    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "taxation_three_bonus_types_001.json")
     try:
         candidates = [
             candidate
             for candidate in server.payload["turn_candidates"]
-            if _resolves(candidate, "taxation")
-            and _answer(candidate, "resource") == "stone"
+            if _resolves(candidate, "taxation") and _answer(candidate, "resource") == "stone"
         ]
         assert len({_answer(candidate, "combination") for candidate in candidates}) == 6
         decisions = _engine_decisions(server)
@@ -4504,7 +4538,6 @@ def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
     """Read off the actions themselves, not off the steps the page was handed."""
     actions = list(legal_actions(server.state, server.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -4524,8 +4557,9 @@ def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
                         action,
                         config=server.config,
                         offer_hire=offer_hire_by_action_id[action_id(action)],
-                        hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                        offer_start_turn_relocation=offer_start_turn_relocation,
+                        hire_payment_buildings=hire_payment_buildings_by_action_id[
+                            action_id(action)
+                        ],
                         offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
                     ),
                     "building",
@@ -4685,7 +4719,9 @@ def test_setup_status_counts_sows_and_then_hands_off_to_round_progress(tmp_path:
     while server.payload["state"]["phase"] == "setup_sow":
         page = render_play_view_from_payload(server.payload)
         seen.append(dict(_header_of(page))["Status"])
-        server.apply(server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"])
+        server.apply(
+            server.payload["turn_candidates"][0]["action_id"], server.payload["state_token"]
+        )
 
     after_setup = render_play_view_from_payload(server.payload)
     assert seen == [
@@ -5109,7 +5145,6 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     wanted = [step["value"] for step in candidate["steps"]]
     actions = list(legal_actions(server.state, server.config))
     (
-        offer_start_turn_relocation,
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
         offer_end_turn_by_action_id,
@@ -5127,7 +5162,6 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
                 config=server.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_start_turn_relocation=offer_start_turn_relocation,
                 offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
         )
@@ -5207,9 +5241,7 @@ def _script_carried_by(page: str) -> str:
     return found.group(0)
 
 
-def _the_script_is_the_template_with_only_its_values_filled_in(
-    page: str, payload: dict
-) -> None:
+def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payload: dict) -> None:
     """What lets the greps below read the template instead of the page.
 
     They grep `_TURN_SCRIPT`, which is the code as written, with no data in it at all -- so nothing
@@ -5233,9 +5265,7 @@ def _the_script_is_the_template_with_only_its_values_filled_in(
         .replace(
             "__RESOLUTION_COMMITTED__",
             json.dumps(
-                payload.get("state", {}).get("turn_progress", {}).get(
-                    "resolution_committed", False
-                )
+                payload.get("state", {}).get("turn_progress", {}).get("resolution_committed", False)
             ),
         )
         .replace(
@@ -5714,9 +5744,9 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
         "shown": transcript["shownPanel"][index],
         "asking": transcript["asking"][index],
         "startCandidates": transcript["startCandidates"][index],
-            "startRelocationCandidates": transcript["startRelocationCandidates"][index],
+        "startRelocationCandidates": transcript["startRelocationCandidates"][index],
         "skipCandidates": transcript["skipCandidates"][index],
-            "endRelocationCandidates": transcript["endRelocationCandidates"][index],
+        "endRelocationCandidates": transcript["endRelocationCandidates"][index],
         "dutyCandidates": transcript["dutyCandidates"][index],
         "reset": transcript["resetShown"][index],
         "counter": transcript["counterShown"][index],
@@ -6105,7 +6135,9 @@ def test_the_buttons_do_not_describe_a_turn_they_may_not_be_part_of(tmp_path: Pa
 
 def test_the_wheel_corners_keep_only_the_counter_and_box_holds_the_controls(tmp_path: Path) -> None:
     page = render_play_view_from_payload(_served(tmp_path).payload)
-    action = page[page.index('<div class="panel p-action">') : page.index('<div class="panel p-map">')]
+    action = page[
+        page.index('<div class="panel p-action">') : page.index('<div class="panel p-map">')
+    ]
     box = page[page.index('data-component="play-turn"') : page.index('class="log-transcript"')]
 
     assert 'data-turn-counter="' in action
@@ -6327,7 +6359,9 @@ def test_the_page_written_to_a_file_stays_read_only(tmp_path: Path) -> None:
     )
     page_without_tooltip_behavior = page.replace(building_tooltip_script(), "")
     for affordance in ("<script>", "data-sow-abandon", "data-sow-candidate", "data-sow-on-route"):
-        assert affordance not in page_without_tooltip_behavior, f"the static page offers {affordance}"
+        assert affordance not in page_without_tooltip_behavior, (
+            f"the static page offers {affordance}"
+        )
 
 
 def test_the_reference_scenario_is_the_position_the_play_view_is_for() -> None:

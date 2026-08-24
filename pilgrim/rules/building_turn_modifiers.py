@@ -56,7 +56,7 @@ _BUILDING_TURN_MODIFIERS: tuple[BuildingTurnModifier, ...] = (
         phase="start_of_turn",
         effect="may return 1 acolyte from any Duty action to City",
         status="implemented",
-        notes="implemented as optional pre-sow start-turn relocation action prefix.",
+        notes="implemented as an optional committed step before resolution.",
     ),
     BuildingTurnModifier(
         building_key="inquisition",
@@ -64,7 +64,7 @@ _BUILDING_TURN_MODIFIERS: tuple[BuildingTurnModifier, ...] = (
         phase="start_of_turn",
         effect="may move 1 acolyte from City to any Duty",
         status="implemented",
-        notes="implemented as optional pre-sow start-turn relocation action prefix.",
+        notes="implemented as an optional committed step before resolution.",
     ),
     BuildingTurnModifier(
         building_key="library",
@@ -85,9 +85,7 @@ def all_building_turn_modifiers() -> tuple[BuildingTurnModifier, ...]:
 def turn_modifiers_for_building(building_key: str) -> tuple[BuildingTurnModifier, ...]:
     """Return modifiers registered for one building key."""
     normalized = _normalize_building_key(building_key)
-    return tuple(
-        entry for entry in _BUILDING_TURN_MODIFIERS if entry.building_key == normalized
-    )
+    return tuple(entry for entry in _BUILDING_TURN_MODIFIERS if entry.building_key == normalized)
 
 
 def turn_modifiers_for_phase(phase: str) -> tuple[BuildingTurnModifier, ...]:
@@ -113,12 +111,7 @@ def implemented_turn_modifiers() -> tuple[BuildingTurnModifier, ...]:
 
 
 def _normalize_building_key(building_key: str) -> str:
-    normalized = (
-        building_key.strip()
-        .lower()
-        .replace("-", " ")
-        .replace("_", " ")
-    )
+    normalized = building_key.strip().lower().replace("-", " ").replace("_", " ")
     normalized = "_".join(normalized.split())
     if not normalized:
         raise ValueError("building_key cannot be empty.")

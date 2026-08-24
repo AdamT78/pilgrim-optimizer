@@ -53,7 +53,7 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "start_of_turn",
             "may return 1 acolyte from any Duty action to City",
             "implemented",
-            "implemented as optional pre-sow start-turn relocation action prefix.",
+            "implemented as an optional committed step before resolution.",
         ),
         (
             "inquisition",
@@ -61,7 +61,7 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "start_of_turn",
             "may move 1 acolyte from City to any Duty",
             "implemented",
-            "implemented as optional pre-sow start-turn relocation action prefix.",
+            "implemented as an optional committed step before resolution.",
         ),
         (
             "library",
@@ -75,15 +75,16 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
 
 
 def test_turn_modifier_category_and_phase_groupings() -> None:
-    assert {
-        entry.building_key for entry in turn_modifiers_for_category("sow_route_modifier")
-    } == {"kogge", "cloisters"}
+    assert {entry.building_key for entry in turn_modifiers_for_category("sow_route_modifier")} == {
+        "kogge",
+        "cloisters",
+    }
     assert {
         entry.building_key for entry in turn_modifiers_for_category("start_turn_relocation")
     } == {"dormitory", "inquisition"}
-    assert {
-        entry.building_key for entry in turn_modifiers_for_category("end_turn_relocation")
-    } == {"library"}
+    assert {entry.building_key for entry in turn_modifiers_for_category("end_turn_relocation")} == {
+        "library"
+    }
 
     assert {entry.building_key for entry in turn_modifiers_for_phase("during_sow")} == {
         "kogge",
@@ -93,9 +94,7 @@ def test_turn_modifier_category_and_phase_groupings() -> None:
         "dormitory",
         "inquisition",
     }
-    assert {entry.building_key for entry in turn_modifiers_for_phase("end_of_turn")} == {
-        "library"
-    }
+    assert {entry.building_key for entry in turn_modifiers_for_phase("end_of_turn")} == {"library"}
 
 
 def test_turn_modifier_lookup_by_building_is_normalized() -> None:

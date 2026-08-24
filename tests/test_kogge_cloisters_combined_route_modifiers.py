@@ -23,6 +23,7 @@ from pilgrim.rules.transition import TransitionValidationError, apply_action, le
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 EXPECTED_MOVED_ACTION_DELTAS = {
     "kogge_and_cloisters_2p.json": 140,
+    "movement_2p.json": 287,
     "kogge_cloisters_own_own_skip_city_001.json": 39,
     "kogge_cloisters_own_own_skip_duty_001.json": 39,
     "kogge_cloisters_hire_kogge_own_cloisters_001.json": 37,
@@ -314,10 +315,12 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    # Guild no longer duplicates complete turns: it is a committed building step, so both this
-    # route-mode count and its legacy comparison omit the same 21 retired Guild variants.
-    assert sum(legacy_counts.values()) == 68748
-    assert sum(current_counts.values()) == 68386
+    # This aggregate includes the playtest directory. movement_2p deliberately adds a live
+    # Cloisters+Kogge position, so its 1,557 legacy and 1,270 current actions belong here too.
+    # Guild, Dormitory, and Inquisition are committed steps, so neither route-mode population
+    # includes their retired complete-turn multiplication.
+    assert sum(legacy_counts.values()) == 18651
+    assert sum(current_counts.values()) == 18002
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:

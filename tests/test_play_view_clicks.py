@@ -32,9 +32,7 @@ PLAYTEST_CONVERSIONS = "conversions_2p.json"
 
 @pytest.fixture(scope="session")
 def chromium_browser():
-    sync_api = pytest.importorskip(
-        "playwright.sync_api", reason="playwright is not installed"
-    )
+    sync_api = pytest.importorskip("playwright.sync_api", reason="playwright is not installed")
     with sync_api.sync_playwright() as playwright:
         try:
             browser = playwright.chromium.launch(headless=True)
@@ -207,7 +205,9 @@ def _walk_until_skip_step_by_preferring_edges(page, *, target: str, max_clicks: 
     for _ in range(max_clicks):
         if page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0:
             return
-        origin = page.query_selector('[data-board-position-index][data-turn-start-candidate="true"]')
+        origin = page.query_selector(
+            '[data-board-position-index][data-turn-start-candidate="true"]'
+        )
         if origin is not None:
             _click_handle_centre(page, origin, require_hit=True)
             page.wait_for_timeout(20)
@@ -257,8 +257,7 @@ def _visible_role_count(page, role_id: str) -> int:
 
 def _confirm_enabled(page) -> bool:
     return (
-        page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled")
-        == "true"
+        page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled") == "true"
     )
 
 
@@ -298,7 +297,12 @@ def _screenshot_taxation_pills(page, path: Path) -> None:
     bottom = max(box["y"] + box["height"] for box in boxes if box is not None)
     page.screenshot(
         path=str(path),
-        clip={"x": left - 10, "y": top - 10, "width": right - left + 20, "height": bottom - top + 20},
+        clip={
+            "x": left - 10,
+            "y": top - 10,
+            "width": right - left + 20,
+            "height": bottom - top + 20,
+        },
     )
 
 
@@ -444,9 +448,7 @@ def _click_if_offered(page, selector: str) -> None:
         page.wait_for_timeout(40)
 
 
-def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
-    page, serve
-) -> None:
+def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(page, serve) -> None:
     """The six engine combinations remain reachable through the resource pills."""
     outcomes = {}
     for combination in (
@@ -461,13 +463,22 @@ def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
         page.goto(base_url, wait_until="networkidle")
         _reach_taxation_step_two(page)
 
-        assert page.locator('[data-turn-prompt*="choose 2 resources."]'
-                            '[data-turn-offered="true"]').count() == 1
-        assert page.locator(
-            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-        ).count() == 3
+        assert (
+            page.locator(
+                '[data-turn-prompt*="choose 2 resources."][data-turn-offered="true"]'
+            ).count()
+            == 1
+        )
+        assert (
+            page.locator(
+                '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+            ).count()
+            == 3
+        )
         if combination == ("stone", "stone"):
-            page.screenshot(path=str(SCREENSHOTS / "taxation-six-option-position.png"), full_page=True)
+            page.screenshot(
+                path=str(SCREENSHOTS / "taxation-six-option-position.png"), full_page=True
+            )
 
         before_step_two = _player_holdings(page)
         other_players_before = _all_player_holdings(page)
@@ -482,9 +493,12 @@ def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
             for resource in before_step_two
             if resource != combination[0]
         )
-        assert page.locator(
-            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-        ).count() > 0
+        assert (
+            page.locator(
+                '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+            ).count()
+            > 0
+        )
         assert {
             player: holdings
             for player, holdings in _all_player_holdings(page).items()
@@ -503,9 +517,12 @@ def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(
         for resource in combination:
             expected[resource] += 1
         assert preview == expected
-        assert page.locator(
-            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-        ).count() == 0
+        assert (
+            page.locator(
+                '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+            ).count()
+            == 0
+        )
         assert {
             player: holdings
             for player, holdings in _all_player_holdings(page).items()
@@ -542,18 +559,25 @@ def test_taxation_step_two_darkens_step_one_only_resources(page, serve) -> None:
     page.goto(base_url, wait_until="networkidle")
     _reach_taxation_step_two(page, step_one="wheat")
 
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
-        '[data-turn-offered="true"]'
-    ).count() == 0
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
-        '[data-turn-offered="true"]'
-    ).count() == 1
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
-        '[data-turn-offered="true"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key="wheat"][data-turn-offered="true"]'
+        ).count()
+        == 0
+    )
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key="stone"][data-turn-offered="true"]'
+        ).count()
+        == 1
+    )
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+            '[data-turn-offered="true"]'
+        ).count()
+        == 1
+    )
     assert not _confirm_enabled(page)
 
 
@@ -572,9 +596,12 @@ def test_tithe_cornucopia_previews_the_picked_holding_and_confirm_changes_nothin
         assert handle is not None, f"missing Cornucopia tithe target {selector}"
         _click_handle_centre(page, handle, require_hit=True)
         page.wait_for_timeout(40)
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-    ).count() == 3
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count()
+        == 3
+    )
 
     before = _player_holdings(page)
     others_before = _all_player_holdings(page)
@@ -589,9 +616,7 @@ def test_tithe_cornucopia_previews_the_picked_holding_and_confirm_changes_nothin
         for player, holdings in _all_player_holdings(page).items()
         if player != active_player_id
     } == {
-        player: holdings
-        for player, holdings in others_before.items()
-        if player != active_player_id
+        player: holdings for player, holdings in others_before.items() if player != active_player_id
     }
 
     assert _confirm_enabled(page)
@@ -651,9 +676,7 @@ def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None
     expected_state = apply_action(server.state, action, server.config).state
     expected = expected_state.player_state(acting_player).resources
 
-    for selector in (
-        '[data-arrow="city->north"][data-turn-offered="true"]',
-    ):
+    for selector in ('[data-arrow="city->north"][data-turn-offered="true"]',):
         handle = page.query_selector(selector)
         assert handle is not None, f"missing produce target {selector}"
         _click_handle_centre(page, handle, require_hit=True)
@@ -695,9 +718,7 @@ def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None
     page.wait_for_timeout(100)
     assert _player_holdings(page) == before
 
-    for selector in (
-        '[data-arrow="city->north"][data-turn-offered="true"]',
-    ):
+    for selector in ('[data-arrow="city->north"][data-turn-offered="true"]',):
         handle = page.query_selector(selector)
         assert handle is not None
         _click_handle_centre(page, handle, require_hit=True)
@@ -796,9 +817,7 @@ def test_devotion_previews_piety_cap_and_confirm_matches_reset(page, serve) -> N
     } == other_positions
 
 
-def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(
-    page, serve
-) -> None:
+def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
     page.goto(base_url, wait_until="networkidle")
 
@@ -820,14 +839,17 @@ def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(
         '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]',
     ):
         handle = page.query_selector(selector)
-        assert handle is not None, f"missing devotion target while conversion pills are live: {selector}"
+        assert handle is not None, (
+            f"missing devotion target while conversion pills are live: {selector}"
+        )
         _click_handle_centre(page, handle, require_hit=True)
         page.wait_for_timeout(40)
 
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
-    assert page.get_attribute(
-        '[data-component="piety-track-v2"]', 'data-piety-preview-position'
-    ) is not None
+    assert (
+        page.get_attribute('[data-component="piety-track-v2"]', "data-piety-preview-position")
+        is not None
+    )
 
 
 def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
@@ -906,9 +928,10 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     _click_handle_centre(page, reset_handle, require_hit=True)
     page.wait_for_timeout(100)
     assert server.state == before_state
-    assert tuple(
-        candidate["action_id"] for candidate in server.payload["turn_candidates"]
-    ) == initial_candidate_ids
+    assert (
+        tuple(candidate["action_id"] for candidate in server.payload["turn_candidates"])
+        == initial_candidate_ids
+    )
     initial_resolution_keys = {
         step["value"]
         for candidate in server.payload["turn_candidates"]
@@ -927,9 +950,12 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     _click_handle_centre(page, action_handle, require_hit=True)
     page.wait_for_timeout(40)
     for resolution_key in initial_resolution_keys - {"tithe"}:
-        assert page.locator(
-            f'[data-resolution-key="{resolution_key}"][data-turn-offered="true"]'
-        ).count() == 1
+        assert (
+            page.locator(
+                f'[data-resolution-key="{resolution_key}"][data-turn-offered="true"]'
+            ).count()
+            == 1
+        )
 
     click_devotion(choose_action=False)
     click_sell_and_confirm()
@@ -940,12 +966,13 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     page.wait_for_timeout(120)
 
     assert server.state == expected
-    assert server.state.player_state(acting_player).piety == expected.player_state(
-        acting_player
-    ).piety
-    assert server.state.player_state(acting_player).resources.silver == expected.player_state(
-        acting_player
-    ).resources.silver
+    assert (
+        server.state.player_state(acting_player).piety == expected.player_state(acting_player).piety
+    )
+    assert (
+        server.state.player_state(acting_player).resources.silver
+        == expected.player_state(acting_player).resources.silver
+    )
 
 
 def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serve) -> None:
@@ -1044,9 +1071,10 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
-    assert server.state.player_state(server.state.active_player).piety != before_state.player_state(
-        before_state.active_player
-    ).piety
+    assert (
+        server.state.player_state(server.state.active_player).piety
+        != before_state.player_state(before_state.active_player).piety
+    )
     assert server.state.player_state(server.state.active_player).piety == target
 
 
@@ -1058,13 +1086,14 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     ],
     ids=lambda path: path.name,
 )
-def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(page, serve, scenario_path) -> None:
+def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(
+    page, serve, scenario_path
+) -> None:
     base_url, _server = serve(scenario_path)
     page.goto(base_url, wait_until="networkidle")
-    pairs = sorted({
-        (step["building_id"], step["direction"])
-        for step in _server.payload["turn_steps"]
-    })
+    pairs = sorted(
+        {(step["building_id"], step["direction"]) for step in _server.payload["turn_steps"]}
+    )
     assert pairs
 
     prompt = page.locator('[data-component="play-turn"]')
@@ -1110,7 +1139,9 @@ def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(page, serve
 
         page.locator('[data-turn-control="reset"]').click()
         page.wait_for_timeout(80)
-        assert not row.is_visible(), f"answer row remained after reset for {building_id}/{direction}"
+        assert not row.is_visible(), (
+            f"answer row remained after reset for {building_id}/{direction}"
+        )
         assert prompt.bounding_box()["height"] == pytest.approx(initial_height, abs=0.1)
 
 
@@ -1132,8 +1163,7 @@ def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page,
     assert direction is not None
     _click_handle_centre(page, direction, require_hit=True)
     stone = page.query_selector(
-        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
-        '[data-turn-offered="true"]'
+        '[data-active-seat="true"] [data-resource-choice-key="stone"][data-turn-offered="true"]'
     )
     assert stone is not None
     _click_handle_centre(page, stone, require_hit=True)
@@ -1156,9 +1186,12 @@ def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page,
     )
     assert resolution is not None
     _click_handle_centre(page, resolution, require_hit=True)
-    assert page.locator('[data-turn-step-direction-row="true"]').get_attribute(
-        "data-turn-step-row-active"
-    ) == "false"
+    assert (
+        page.locator('[data-turn-step-direction-row="true"]').get_attribute(
+            "data-turn-step-row-active"
+        )
+        == "false"
+    )
     assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == ""
     assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
     assert server.state == before_state
@@ -1179,8 +1212,7 @@ def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page,
     assert direction is not None
     _click_handle_centre(page, direction, require_hit=True)
     stone = page.query_selector(
-        '[data-active-seat="true"] [data-resource-choice-key="stone"]'
-        '[data-turn-offered="true"]'
+        '[data-active-seat="true"] [data-resource-choice-key="stone"][data-turn-offered="true"]'
     )
     assert stone is not None
     _click_handle_centre(page, stone, require_hit=True)
@@ -1211,9 +1243,7 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     )
 
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-before.png")
-    for selector in (
-        '[data-turn-control="action"][data-turn-control-enabled="true"]',
-    ):
+    for selector in ('[data-turn-control="action"][data-turn-control-enabled="true"]',):
         handle = page.query_selector(selector)
         assert handle is not None, f"missing donation target {selector}"
         _click_handle_centre(page, handle, require_hit=True)
@@ -1221,23 +1251,17 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-after.png")
 
     preview_slots = _all_player_slots(page)
-    assert preview_slots[active_player_id][0] == [
-        "donated", action.donate_building_id, "true"
-    ]
+    assert preview_slots[active_player_id][0] == ["donated", action.donate_building_id, "true"]
     assert {
         player: slots for player, slots in preview_slots.items() if player != active_player_id
-    } == {
-        player: slots for player, slots in before_slots.items() if player != active_player_id
-    }
+    } == {player: slots for player, slots in before_slots.items() if player != active_player_id}
     assert _confirm_enabled(page)
 
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(100)
     assert _all_player_slots(page) == before_slots
 
-    for selector in (
-        '[data-turn-control="action"][data-turn-control-enabled="true"]',
-    ):
+    for selector in ('[data-turn-control="action"][data-turn-control-enabled="true"]',):
         handle = page.query_selector(selector)
         assert handle is not None, f"missing donation target after reset {selector}"
         _click_handle_centre(page, handle, require_hit=True)
@@ -1249,7 +1273,9 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
         in server.state.player_state(acting_player).player_board_slots.donated_buildings
     )
     assert _all_player_slots(page)[active_player_id][0] == [
-        "donated", action.donate_building_id, "true"
+        "donated",
+        action.donate_building_id,
+        "true",
     ]
 
 
@@ -1266,15 +1292,14 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
         if any(step.get("building_constructed") == "well" for step in candidate["steps"])
     )
     action = next(
-        action for action in legal_actions(server.state, server.config)
+        action
+        for action in legal_actions(server.state, server.config)
         if action_id(action) == candidate["action_id"]
     )
     expected_state = apply_action(server.state, action, server.config).state
     expected_player = expected_state.player_state(acting_player)
 
-    _click_if_offered(
-        page, '[data-board-position-index="3"][data-turn-start-candidate="true"]'
-    )
+    _click_if_offered(page, '[data-board-position-index="3"][data-turn-start-candidate="true"]')
     _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
     action_control = page.query_selector(
         '[data-turn-control="action"][data-turn-control-enabled="true"]'
@@ -1290,9 +1315,7 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     page.wait_for_timeout(40)
 
     _screenshot_active_board(page, SCREENSHOTS / "construction-preview-before.png")
-    building = page.query_selector(
-        '[data-building-choice-key="well"][data-turn-offered="true"]'
-    )
+    building = page.query_selector('[data-building-choice-key="well"][data-turn-offered="true"]')
     assert building is not None
     _click_handle_centre(page, building, require_hit=True)
     page.wait_for_timeout(60)
@@ -1304,9 +1327,12 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
         "silver": expected_player.resources.silver,
         "wheat": expected_player.resources.wheat,
     }
-    assert page.locator(
-        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+        ).count()
+        == 1
+    )
     assert {
         player: holdings
         for player, holdings in _all_player_holdings(page).items()
@@ -1321,15 +1347,16 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(100)
     assert _player_holdings(page) == before
-    assert page.locator(
-        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
-    ).count() == 0
+    assert (
+        page.locator(
+            f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+        ).count()
+        == 0
+    )
 
     # The first pass already proves reset restored the preview; Confirm must commit exactly that
     # same state, with no arithmetic in the browser to reconstruct it.
-    _click_if_offered(
-        page, '[data-board-position-index="3"][data-turn-start-candidate="true"]'
-    )
+    _click_if_offered(page, '[data-board-position-index="3"][data-turn-start-candidate="true"]')
     _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
     action_control = page.query_selector(
         '[data-turn-control="action"][data-turn-control-enabled="true"]'
@@ -1343,24 +1370,26 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     assert resolution is not None
     _click_handle_centre(page, resolution, require_hit=True)
     page.wait_for_timeout(40)
-    building = page.query_selector(
-        '[data-building-choice-key="well"][data-turn-offered="true"]'
-    )
+    building = page.query_selector('[data-building-choice-key="well"][data-turn-offered="true"]')
     assert building is not None
     _click_handle_centre(page, building, require_hit=True)
     page.wait_for_timeout(60)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
     assert _player_holdings(page, f'[data-player="{active_player_id}"]') == preview
-    assert page.locator(
-        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+        ).count()
+        == 1
+    )
     assert "well" in server.state.player_state(acting_player).player_board_slots.active_buildings
 
 
 def _merchant_visible_at(page, position: int) -> bool:
-    return bool(page.evaluate(
-        """
+    return bool(
+        page.evaluate(
+            """
         position => Array.from(document.querySelectorAll(
           '[data-component="duty-wheel"] [data-token="merchant"]'
         )).some(token => {
@@ -1369,8 +1398,9 @@ def _merchant_visible_at(page, position: int) -> bool:
             && token.getAttribute('opacity') !== '0';
         })
         """,
-        position,
-    ))
+            position,
+        )
+    )
 
 
 def _stage_guild(page):
@@ -1384,7 +1414,9 @@ def _stage_guild(page):
 
 
 def _commit_guild(page, server) -> int:
-    step = next(step for step in turn_steps(server.state, server.config) if step.building_id == "guild")
+    step = next(
+        step for step in turn_steps(server.state, server.config) if step.building_id == "guild"
+    )
     expected_position = apply_turn_step(server.state, server.config, step).merchant_board_position
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
@@ -1394,7 +1426,9 @@ def _commit_guild(page, server) -> int:
     return expected_position
 
 
-def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn(page, serve) -> None:
+def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn(
+    page, serve
+) -> None:
     base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
     page.goto(base_url, wait_until="networkidle")
     before_position = server.state.merchant_board_position
@@ -1404,18 +1438,23 @@ def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn
 
     _stage_guild(page)
     _assert_painted_turn_phase(page, "beginning")
-    assert page.locator('[data-turn-step-direction-row]').get_attribute(
-        'data-turn-step-row-active'
-    ) == "false"
-    assert not page.locator('[data-turn-step-direction-row]').is_visible()
+    assert (
+        page.locator("[data-turn-step-direction-row]").get_attribute("data-turn-step-row-active")
+        == "false"
+    )
+    assert not page.locator("[data-turn-step-direction-row]").is_visible()
     assert page.locator('[data-turn-step-direction][data-turn-step-offered="true"]').count() == 0
-    assert page.locator('[data-turn-step-resource-row]').get_attribute(
-        'data-turn-step-row-active'
-    ) == "false"
-    assert not page.locator('[data-turn-step-resource-row]').is_visible()
-    activation_prompt = page.locator('[data-turn-step-activation-prompt]')
+    assert (
+        page.locator("[data-turn-step-resource-row]").get_attribute("data-turn-step-row-active")
+        == "false"
+    )
+    assert not page.locator("[data-turn-step-resource-row]").is_visible()
+    activation_prompt = page.locator("[data-turn-step-activation-prompt]")
     assert activation_prompt.is_visible()
-    assert "Activate Guild: move the Merchant clockwise +1 Duty tile." in activation_prompt.inner_text()
+    assert (
+        "Activate Guild: move the Merchant clockwise +1 Duty tile."
+        in activation_prompt.inner_text()
+    )
     staged_box = page.locator('[data-component="play-turn"]').bounding_box()
     assert staged_box is not None
     assert staged_box["height"] == before_box["height"]
@@ -1533,27 +1572,50 @@ def _lit_city_slots_for_player(page, player_id: str) -> int:
     ).count()
 
 
+def _lit_acolytes_at(page, player_id: str, position: int) -> int:
+    return page.locator(
+        f'[data-board-position-index="{position}"] '
+        f'[data-cube-tally] rect[data-player="{player_id}"][opacity="1"]'
+    ).count()
+
+
 def _turn_state_snapshot(page) -> dict[str, object]:
     """A compact view of what the page currently offers and enables in the turn UI."""
     return {
-        "origins": page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count(),
-        "start_relocation_spaces": page.locator(
-            '[data-board-position-index][data-turn-start-relocation-candidate="true"]'
+        "origins": page.locator(
+            '[data-board-position-index][data-turn-start-candidate="true"]'
         ).count(),
-        "skips": page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count(),
+        "relocation_targets": page.locator(
+            '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+        ).count(),
+        "skips": page.locator(
+            '[data-board-position-index][data-turn-skip-candidate="true"]'
+        ).count(),
         "end_relocation_spaces": page.locator(
             '[data-board-position-index][data-turn-end-relocation-candidate="true"]'
         ).count(),
         "end_relocation_abbey": page.locator(
             '[data-active-seat="true"][data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"]'
         ).count(),
-        "duties": page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count(),
+        "duties": page.locator(
+            '[data-board-position-index][data-turn-duty-candidate="true"]'
+        ).count(),
         "arrows": page.locator('[data-arrow][data-turn-offered="true"]').count(),
-        "resolution_keys": page.locator('[data-resolution-key][data-turn-offered="true"]').all_inner_texts(),
-        "combination_keys": page.locator('[data-combination-key][data-turn-offered="true"]').all_inner_texts(),
-        "resource_keys": page.locator('[data-resource-choice-key][data-turn-offered="true"]').count(),
-        "seat_keys": page.locator('[data-seat-choice-key][data-turn-offered="true"]').all_inner_texts(),
-        "building_keys": page.locator('[data-building-choice-key][data-turn-offered="true"]').all_inner_texts(),
+        "resolution_keys": page.locator(
+            '[data-resolution-key][data-turn-offered="true"]'
+        ).all_inner_texts(),
+        "combination_keys": page.locator(
+            '[data-combination-key][data-turn-offered="true"]'
+        ).all_inner_texts(),
+        "resource_keys": page.locator(
+            '[data-resource-choice-key][data-turn-offered="true"]'
+        ).count(),
+        "seat_keys": page.locator(
+            '[data-seat-choice-key][data-turn-offered="true"]'
+        ).all_inner_texts(),
+        "building_keys": page.locator(
+            '[data-building-choice-key][data-turn-offered="true"]'
+        ).all_inner_texts(),
         "action_enabled": page.get_attribute(
             '[data-turn-control="action"]', "data-turn-control-enabled"
         ),
@@ -1639,12 +1701,14 @@ def test_setup_rows_three_and_four_compute_display_none_at_two_players(page, ser
     page.goto(base_url, wait_until="networkidle")
     page.select_option("#player_count", "2")
 
-    assert page.eval_on_selector(
-        '[data-seat-row="3"]', "row => getComputedStyle(row).display"
-    ) == "none"
-    assert page.eval_on_selector(
-        '[data-seat-row="4"]', "row => getComputedStyle(row).display"
-    ) == "none"
+    assert (
+        page.eval_on_selector('[data-seat-row="3"]', "row => getComputedStyle(row).display")
+        == "none"
+    )
+    assert (
+        page.eval_on_selector('[data-seat-row="4"]', "row => getComputedStyle(row).display")
+        == "none"
+    )
 
 
 def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) -> None:
@@ -1657,7 +1721,9 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
         "#test_position option",
         "nodes => nodes.map(node => ({ value: node.value, text: node.textContent || '' }))",
     )
-    assert any(option["value"] == "" for option in option_values), "fresh-game blank option is missing"
+    assert any(option["value"] == "" for option in option_values), (
+        "fresh-game blank option is missing"
+    )
     assert any(option["value"] == PLAYTEST_CLOISTERS for option in option_values), (
         "playtest scenario is missing from dropdown"
     )
@@ -1674,9 +1740,10 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     page.select_option("#test_position", PLAYTEST_CLOISTERS)
     assert page.get_attribute("#player_count", "disabled") is not None
     assert page.get_attribute("#seed", "disabled") is not None
-    assert page.eval_on_selector(
-        '[data-seat-row="3"]', "row => getComputedStyle(row).display"
-    ) == "none"
+    assert (
+        page.eval_on_selector('[data-seat-row="3"]', "row => getComputedStyle(row).display")
+        == "none"
+    )
 
     submit = page.query_selector('button[type="submit"]')
     assert submit is not None, "setup form submit button missing"
@@ -1694,7 +1761,9 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
         page,
         target="cloisters skip step from selected test position",
     )
-    skip_target = page.query_selector('[data-board-position-index][data-turn-skip-candidate="true"]')
+    skip_target = page.query_selector(
+        '[data-board-position-index][data-turn-skip-candidate="true"]'
+    )
     assert skip_target is not None, "loaded test position never offered a Cloisters skip target"
     _click_handle_centre(page, skip_target, require_hit=True)
     page.wait_for_timeout(20)
@@ -1705,7 +1774,9 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     "position_name",
     [PLAYTEST_CLOISTERS, PLAYTEST_CLOISTERS_LOOP, PLAYTEST_KOGGE_AND_CLOISTERS],
 )
-def test_setup_test_position_dropdown_each_playtest_position_starts(page, serve, position_name: str) -> None:
+def test_setup_test_position_dropdown_each_playtest_position_starts(
+    page, serve, position_name: str
+) -> None:
     base_url, _server = serve(None)
     page.goto(base_url, wait_until="networkidle")
     page.select_option("#test_position", position_name)
@@ -1732,7 +1803,9 @@ def test_cloisters_loop_opens_on_lift_question_and_city_click_enables_reset_with
     assert any("choose a space to lift acolytes from." in prompt for prompt in prompts), prompts
     assert all("follow an arrow." not in prompt for prompt in prompts), prompts
 
-    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    city_origin = page.query_selector(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
     assert city_origin is not None, "city should be offered as a start-candidate origin"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
@@ -1758,7 +1831,9 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
             offered
             for offered in server.payload["turn_candidates"]
             if offered.get("action_id") is not None
-            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"])
+            and any(
+                step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"]
+            )
             and any(step["kind"] == "skip" and int(step["value"]) == 0 for step in offered["steps"])
         ),
         None,
@@ -1771,7 +1846,9 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
     )
 
     page.goto(base_url, wait_until="networkidle")
-    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    city_origin = page.query_selector(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
     assert city_origin is not None, "city should be offered as a start origin"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
@@ -1782,62 +1859,146 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
             _click_handle_centre(page, edge, require_hit=True)
             page.wait_for_timeout(20)
 
-    city_skip = page.query_selector('[data-board-position-index="0"][data-turn-skip-candidate="true"]')
+    city_skip = page.query_selector(
+        '[data-board-position-index="0"][data-turn-skip-candidate="true"]'
+    )
     assert city_skip is not None, "city revisit was not offered as a skip target"
     _click_handle_centre(page, city_skip, require_hit=True)
     page.wait_for_timeout(20)
 
-    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0, (
-        "city skip click did not settle the skip question"
-    )
-    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
-        "duty question did not follow city skip selection"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0
+    ), "city skip click did not settle the skip question"
+    assert (
+        page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0
+    ), "duty question did not follow city skip selection"
 
 
-def test_inquisition_start_turn_move_is_asked_before_origin_and_unlocks_more_origins(page, serve) -> None:
-    base_url, _server = serve(SCENARIOS / "inquisition_active_city_to_duty_001.json")
+def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
+    before = server.state
+    prompt = page.locator('[data-component="play-turn"]')
+    height_before = prompt.bounding_box()["height"]
 
     opening = _turn_state_snapshot(page)
-    prompts = [str(prompt).lower() for prompt in opening["prompts"]]
-    assert opening["origins"] == 0, opening
-    assert any("before-sow move" in prompt for prompt in prompts), prompts
-
-    inquisition_locator = page.locator(
-        '[data-combination-key][data-turn-offered="true"]'
-    ).filter(has_text="Inquisition")
-    assert inquisition_locator.count() >= 1, "Inquisition option was not offered first"
-    inquisition = inquisition_locator.first.element_handle()
-    assert inquisition is not None
-    _click_handle_centre(page, inquisition, require_hit=True)
+    assert opening["relocation_targets"] == 0, opening
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    assert dormitory.count() == 1, "Dormitory was not offered as a committed building step"
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
     page.wait_for_timeout(20)
 
-    before_target = _turn_state_snapshot(page)
-    assert before_target["origins"] == 0, before_target
-
     relocation_targets = page.locator(
-        '[data-board-position-index][data-turn-start-relocation-candidate="true"]'
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
     )
-    assert relocation_targets.count() == 8, "Inquisition did not offer all duty-space relocation targets"
+    assert relocation_targets.count() == 1, "Dormitory did not offer its occupied Duty target"
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-staged.png")
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="reset"]').element_handle(),
+        require_hit=True,
+    )
+    page.wait_for_timeout(20)
+    assert server.state == before
+    assert _turn_state_snapshot(page)["relocation_targets"] == 0
+
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    relocation_targets = page.locator(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    )
     relocation_target = relocation_targets.first.element_handle()
     assert relocation_target is not None
     chosen_target = int(relocation_target.get_attribute("data-board-position-index"))
+    active_player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    assert active_player_id is not None
+    target_before = _lit_acolytes_at(page, active_player_id, chosen_target)
+    city = server.config.board.index_for_name("city")
+    city_before = _lit_acolytes_at(page, active_player_id, city)
     _click_handle_centre(page, relocation_target, require_hit=True)
     page.wait_for_timeout(20)
 
-    after_move = _turn_state_snapshot(page)
-    assert after_move["start_relocation_spaces"] == 0, after_move
-    assert after_move["origins"] == 2, after_move
-    offered_origins = {
-        int(value)
-        for value in page.eval_on_selector_all(
-            '[data-board-position-index][data-turn-start-candidate="true"]',
-            "nodes => nodes.map(node => node.getAttribute('data-board-position-index'))",
-        )
-        if value is not None
-    }
-    assert offered_origins == {0, chosen_target}, offered_origins
+    assert _confirm_enabled(page)
+    assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before - 1
+    assert _lit_acolytes_at(page, active_player_id, city) == city_before + 1
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="reset"]').element_handle(),
+        require_hit=True,
+    )
+    page.wait_for_timeout(20)
+    assert server.state == before
+    assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before
+    assert _lit_acolytes_at(page, active_player_id, city) == city_before
+
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    relocation_target = page.locator(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    ).first.element_handle()
+    assert relocation_target is not None
+    _click_handle_centre(page, relocation_target, require_hit=True)
+    page.wait_for_timeout(20)
+
+    turn_step_requests = []
+
+    def record_turn_step_request(request) -> None:
+        if request.method == "POST" and request.url.endswith("/turn-step"):
+            turn_step_requests.append(request)
+
+    page.on("request", record_turn_step_request)
+    assert _confirm_enabled(page)
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        require_hit=True,
+    )
+    page.wait_for_timeout(100)
+    assert len(turn_step_requests) == 1, "an enabled Confirm must issue its /turn-step request"
+    assert server.state != before
+    assert server.state.player_vector(server.state.active_player)[chosen_target] == (
+        before.player_vector(before.active_player)[chosen_target] - 1
+    )
+    assert server.state.player_vector(server.state.active_player)[city] == (
+        before.player_vector(before.active_player)[city] + 1
+    )
+    assert "dormitory" in server.state.turn_progress.used_buildings
+    assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before - 1
+    assert _lit_acolytes_at(page, active_player_id, city) == city_before + 1
+    _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-committed.png")
+
+
+def test_relocation_answer_row_shows_only_its_step_prompt_without_changing_height(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    prompt = page.locator('[data-component="play-turn"]')
+    height_before = prompt.bounding_box()["height"]
+    expected = next(
+        step["prompt"]
+        for step in server.payload["turn_steps"]
+        if step["building_id"] == "dormitory"
+    )
+
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+
+    answer_row = page.locator('[data-turn-step-resource-row="true"]')
+    assert answer_row.inner_text() == expected
+    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
+    assert not page.locator('[data-turn-step-activation-prompt]').is_visible()
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
 
 
 def test_cloisters_reach_play_view_does_not_draw_city_east_reversal_arrow(page, serve) -> None:
@@ -1859,7 +2020,9 @@ def test_kogge_and_cloisters_play_view_city_east_reversal_is_present_hit_testabl
     x, y = _centre(page, city_east)
     assert _is_hit_target(page, city_east, x, y), "city->east centre did not hit-test to itself"
 
-    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    city_origin = page.query_selector(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
@@ -1885,31 +2048,36 @@ def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_t
             offered
             for offered in server.payload["turn_candidates"]
             if offered.get("action_id") is not None
-            and any(step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"])
+            and any(
+                step["kind"] == "origin" and int(step["value"]) == 0 for step in offered["steps"]
+            )
             and any(step["kind"] == "skip" for step in offered["steps"])
             and any(
-                step["kind"] == "edge"
-                and str(step["value"]) in against_flow_edges
+                step["kind"] == "edge" and str(step["value"]) in against_flow_edges
                 for step in offered["steps"]
             )
         ),
         None,
     )
-    assert candidate is not None, "playtest offered no settled city-origin candidate using north/south->city"
+    assert candidate is not None, (
+        "playtest offered no settled city-origin candidate using north/south->city"
+    )
     edge_values = [str(step["value"]) for step in candidate["steps"] if step["kind"] == "edge"]
-    against_indexes = [index for index, value in enumerate(edge_values) if value in against_flow_edges]
+    against_indexes = [
+        index for index, value in enumerate(edge_values) if value in against_flow_edges
+    ]
     assert against_indexes, "chosen candidate did not include an against-flow City-entry edge"
-    assert min(against_indexes) > 0, "against-flow City-entry edge was not reached from the City route"
+    assert min(against_indexes) > 0, (
+        "against-flow City-entry edge was not reached from the City route"
+    )
     assert max(against_indexes) < len(edge_values) - 1, "route did not continue after entering City"
-    skip_value = next(
-        int(step["value"]) for step in candidate["steps"] if step["kind"] == "skip"
-    )
-    duty_value = next(
-        int(step["value"]) for step in candidate["steps"] if step["kind"] == "duty"
-    )
+    skip_value = next(int(step["value"]) for step in candidate["steps"] if step["kind"] == "skip")
+    duty_value = next(int(step["value"]) for step in candidate["steps"] if step["kind"] == "duty")
 
     page.goto(base_url, wait_until="networkidle")
-    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    city_origin = page.query_selector(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
@@ -1934,9 +2102,9 @@ def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_t
     _click_handle_centre(page, duty_target, require_hit=True)
     page.wait_for_timeout(20)
 
-    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() == 0, (
-        "duty choice did not settle after clicking the duty target"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() == 0
+    ), "duty choice did not settle after clicking the duty target"
     after = _turn_state_snapshot(page)
     assert (
         after["action_enabled"] == "true"
@@ -1946,7 +2114,9 @@ def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_t
     ), "turn did not advance beyond the duty choice after route and skip"
 
 
-def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(page, serve) -> None:
+def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(
+    page, serve
+) -> None:
     """A plain route completion must not eliminate Cloisters routes that extend the same prefix."""
     base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
     candidates = server.payload["turn_candidates"]
@@ -1999,9 +2169,9 @@ def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(
             _click_handle_centre(page, edge_target, require_hit=True)
             page.wait_for_timeout(20)
 
-    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
-        "plain route completion did not make any duty selectable"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0
+    ), "plain route completion did not make any duty selectable"
     extending_edge = cloisters_edges[-1]
     extending_target = page.query_selector(
         f'[data-arrow="{extending_edge}"][data-turn-offered="true"]'
@@ -2011,9 +2181,9 @@ def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(
     )
     _click_handle_centre(page, extending_target, require_hit=True)
     page.wait_for_timeout(20)
-    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0, (
-        "continuing the Cloisters extension edge did not reach the skip question"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0
+    ), "continuing the Cloisters extension edge did not reach the skip question"
 
 
 def test_a_wheel_origin_space_and_then_route_arrow_really_receive_clicks(page, serve) -> None:
@@ -2043,15 +2213,23 @@ def test_a_wheel_origin_space_and_then_route_arrow_really_receive_clicks(page, s
     )
 
 
-def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions(page, serve) -> None:
+def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions(
+    page, serve
+) -> None:
     """Catches spoke-lane regressions: no overlap, keep-left signs, and still-clickable centres."""
     base_url, server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
     candidate = next(
         (
             offered
             for offered in server.payload["turn_candidates"]
-            if any(step["kind"] == "edge" and step["value"] == "city->east" for step in offered["steps"])
-            and any(step["kind"] == "edge" and step["value"] == "east->city" for step in offered["steps"])
+            if any(
+                step["kind"] == "edge" and step["value"] == "city->east"
+                for step in offered["steps"]
+            )
+            and any(
+                step["kind"] == "edge" and step["value"] == "east->city"
+                for step in offered["steps"]
+            )
         ),
         None,
     )
@@ -2126,9 +2304,9 @@ def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions
     assert second is not None, "route did not continue with east->city after city->east"
     _click_handle_centre(page, second, require_hit=True)
     page.wait_for_timeout(20)
-    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
-        "route using both east-axis directions did not advance to a duty choice"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0
+    ), "route using both east-axis directions did not advance to a duty choice"
 
 
 def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) -> None:
@@ -2136,19 +2314,8 @@ def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) ->
     base_url, _server = serve(SCENARIOS / "kogge_hire_opponent_city_to_west_001.json")
     page.goto(base_url, wait_until="networkidle")
 
-    if page.locator('[data-board-position-index][data-turn-start-candidate="true"]').count() == 0:
-        move_none = page.locator(
-            '[data-combination-key="none"][data-turn-offered="true"]'
-        )
-        assert move_none.count() == 1, "the relocation choice was not offered as Move no one"
-        move_none_handle = move_none.first.element_handle()
-        assert move_none_handle is not None
-        _click_handle_centre(page, move_none_handle, require_hit=True)
-        page.wait_for_timeout(20)
-
-    # The relocation answer can force the city origin; agreed steps are then
-    # auto-advanced, so there may be no origin control left to click.
     city = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    # When every candidate starts in City, the client has already agreed that forced origin.
     if city is not None:
         _click_handle_centre(page, city, require_hit=True)
         page.wait_for_timeout(20)
@@ -2206,9 +2373,9 @@ def test_kogge_route_can_enter_city_against_arrows_from_ring_and_continue(page, 
     _click_handle_centre(page, city_to_east, require_hit=True)
     page.wait_for_timeout(20)
 
-    assert page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0, (
-        "route did not advance to duty selection after entering City against arrows"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-duty-candidate="true"]').count() > 0
+    ), "route did not advance to duty selection after entering City against arrows"
 
 
 def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> None:
@@ -2218,7 +2385,9 @@ def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> No
 
     _walk_until_skip_step_by_preferring_edges(page, target="cloisters skip step")
 
-    skip_target = page.query_selector('[data-board-position-index][data-turn-skip-candidate="true"]')
+    skip_target = page.query_selector(
+        '[data-board-position-index][data-turn-skip-candidate="true"]'
+    )
     assert skip_target is not None, "no offered skip target on wheel"
     x, y = _centre(page, skip_target)
     assert page.evaluate(
@@ -2230,9 +2399,9 @@ def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> No
     ), "skip target is not the top hit at its centre"
     _click_handle_centre(page, skip_target, require_hit=True)
     page.wait_for_timeout(20)
-    assert page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0, (
-        "skip click did not advance beyond the skip question"
-    )
+    assert (
+        page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() == 0
+    ), "skip click did not advance beyond the skip question"
 
 
 def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve) -> None:
@@ -2262,7 +2431,10 @@ def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve
     )
     assert stock_key is not None
     _click_handle_centre(page, stock_key, require_hit=True)
-    assert page.locator(f'[data-player-seat="{seat_number}"][data-resource-choice="true"]').count() == 0
+    assert (
+        page.locator(f'[data-player-seat="{seat_number}"][data-resource-choice="true"]').count()
+        == 0
+    )
 
 
 def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page, serve) -> None:
@@ -2273,9 +2445,12 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
             c
             for c in server.payload["turn_candidates"]
             if any(step["kind"] == "ordination" for step in c["steps"])
-            and (counts := _ordination_counts(
-                next(step["value"] for step in c["steps"] if step["kind"] == "ordination")
-            ))[0] >= 1
+            and (
+                counts := _ordination_counts(
+                    next(step["value"] for step in c["steps"] if step["kind"] == "ordination")
+                )
+            )[0]
+            >= 1
             and counts[1] >= 1
         ),
         None,
@@ -2354,7 +2529,9 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
         _click_handle_centre(page, next_abbey, require_hit=True)
         page.wait_for_timeout(20)
 
-    assert _confirm_enabled(page), f"confirm did not light for ordination outcome {ordination_value}"
+    assert _confirm_enabled(page), (
+        f"confirm did not light for ordination outcome {ordination_value}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -2385,9 +2562,7 @@ def test_bonus_building_hire_options_are_mouse_reachable(
             target=f"hire step for {resolution}",
             preferred_resolution=resolution,
         )
-        button = page.query_selector(
-            f'[data-combination-key="{choice}"][data-turn-offered="true"]'
-        )
+        button = page.query_selector(f'[data-combination-key="{choice}"][data-turn-offered="true"]')
         assert button is not None, f"expected offered hire option {choice!r}"
         _click_handle_centre(page, button, require_hit=True)
         page.wait_for_timeout(30)
@@ -2442,7 +2617,7 @@ def test_hidden_building_keys_keep_no_hit_area(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "construct_building_live_only_001.json")
     page.goto(base_url, wait_until="networkidle")
 
-    assert page.locator('[data-building-choice-key]').count() == 4
+    assert page.locator("[data-building-choice-key]").count() == 4
     assert page.locator('[data-building-choice-key][data-turn-offered="true"]').count() == 0
 
     hidden_keys = page.query_selector_all('[data-building-choice-key][data-turn-offered="false"]')
@@ -2472,14 +2647,12 @@ def test_allocation_overlap_guard_is_load_bearing(page, serve, monkeypatch) -> N
     """Proves the overlap guard fails when lift/place flags regress to both-live-at-once."""
     from tools.ui_debug import render_play_view
 
-    broken = (
-        render_play_view._TURN_SCRIPT.replace(
-            "var canLiftNow = !waitingToPlace && canLift;",
-            "var canLiftNow = canLift;",
-        ).replace(
-            "var canPlaceNow = waitingToPlace && canPlace;",
-            "var canPlaceNow = canPlace;",
-        )
+    broken = render_play_view._TURN_SCRIPT.replace(
+        "var canLiftNow = !waitingToPlace && canLift;",
+        "var canLiftNow = canLift;",
+    ).replace(
+        "var canPlaceNow = waitingToPlace && canPlace;",
+        "var canPlaceNow = canPlace;",
     )
     assert broken != render_play_view._TURN_SCRIPT
     monkeypatch.setattr(render_play_view, "_TURN_SCRIPT", broken)
@@ -2491,7 +2664,9 @@ def test_allocation_overlap_guard_is_load_bearing(page, serve, monkeypatch) -> N
         _assert_allocation_vestry_overlap_behaviour(page, base_url, server)
 
 
-def test_two_active_conversions_commit_from_building_direction_and_amount_clicks(page, serve) -> None:
+def test_two_active_conversions_commit_from_building_direction_and_amount_clicks(
+    page, serve
+) -> None:
     base_url, server = serve(SCENARIOS / "two_active_conversions_001.json")
     before = server.state
     page.goto(base_url, wait_until="networkidle")
@@ -2522,9 +2697,7 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
     _assert_painted_turn_phase(page, "beginning")
 
-    origin = page.query_selector(
-        '[data-board-position-index][data-turn-start-candidate="true"]'
-    )
+    origin = page.query_selector('[data-board-position-index][data-turn-start-candidate="true"]')
     assert origin is not None, "the next turn never offered an acolyte lift"
     origin_value = int(origin.get_attribute("data-board-position-index"))
     tithe_candidate = next(
@@ -2536,8 +2709,7 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
             for step in candidate["steps"]
         )
         and any(
-            step["kind"] == "resolution" and step["value"] == "tithe"
-            for step in candidate["steps"]
+            step["kind"] == "resolution" and step["value"] == "tithe" for step in candidate["steps"]
         )
     )
     expected_resolution = apply_action(
@@ -2560,8 +2732,7 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
             selector = f'[data-arrow="{step["value"]}"][data-turn-offered="true"]'
         elif step["kind"] == "duty":
             selector = (
-                f'[data-board-position-index="{step["value"]}"]'
-                '[data-turn-duty-candidate="true"]'
+                f'[data-board-position-index="{step["value"]}"][data-turn-duty-candidate="true"]'
             )
         else:
             continue
@@ -2612,12 +2783,14 @@ def test_setup_sow_phase_column_stays_dim_after_a_setup_answer(page, serve) -> N
     _assert_all_turn_phases_dim(page)
 
 
-def test_first_player_choice_paints_completed_round_end_steps_and_current_choice(page, serve) -> None:
+def test_first_player_choice_paints_completed_round_end_steps_and_current_choice(
+    page, serve
+) -> None:
     """Round-end history is drawn from the pass before the first-player question is painted."""
-    base_url, server = serve(
-        SCENARIOS / "indulgences_buy_then_round_end_start_player_001.json"
+    base_url, server = serve(SCENARIOS / "indulgences_buy_then_round_end_start_player_001.json")
+    settled = next(
+        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"]
     )
-    settled = next(candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"])
     server.apply(settled["action_id"], server.payload["state_token"])
     assert server.state.turn_progress.resolution_committed is True
     server.apply(action_id(EndTurnAction()), server.payload["state_token"])
@@ -2633,7 +2806,9 @@ def test_first_player_choice_paints_completed_round_end_steps_and_current_choice
     _screenshot_turn_prompt(page, SCREENSHOTS / "round-end-phase-first-player.png")
 
 
-def test_conversion_resource_pill_reaches_amount_above_six_without_prompt_overflow(page, serve) -> None:
+def test_conversion_resource_pill_reaches_amount_above_six_without_prompt_overflow(
+    page, serve
+) -> None:
     base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
     page.goto(base_url, wait_until="networkidle")
     _choose_conversion(page, "stone_yard", "sell_stone", 7)
@@ -2672,8 +2847,10 @@ def test_indulgences_destination_pill_commits_one_click_at_track_distance(page, 
         and step["direction"] == "sell_piety"
         and step["piety_destination"] == target
     )
-    assert destination.locator('[data-piety-choice-silver]').text_content() == f"{expected_silver:+d}"
-    assert destination.locator('[data-piety-choice-piety-change]').count() == 0
+    assert (
+        destination.locator("[data-piety-choice-silver]").text_content() == f"{expected_silver:+d}"
+    )
+    assert destination.locator("[data-piety-choice-piety-change]").count() == 0
     _click_handle_centre(page, destination.element_handle(), require_hit=True)
     assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
     assert _confirm_enabled(page)
@@ -2686,9 +2863,7 @@ def test_illegal_indulgences_destination_has_no_live_pill(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
     page.goto(base_url, wait_until="networkidle")
     _choose_conversion(page, "indulgences", "sell_piety", 1)
-    assert page.locator(
-        '[data-piety-choice-pill][data-piety-choice-destination="12"]'
-    ).count() == 0
+    assert page.locator('[data-piety-choice-pill][data-piety-choice-destination="12"]').count() == 0
 
 
 def test_piety_pill_silver_delta_is_engine_derived_without_hire_fee(page, serve) -> None:
@@ -2702,15 +2877,11 @@ def test_piety_pill_silver_delta_is_engine_derived_without_hire_fee(page, serve)
         '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, direction.element_handle(), require_hit=True)
-    offered = page.locator(
-        '[data-piety-choice-pill][data-piety-choice-offered="true"]'
-    )
+    offered = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
     assert offered.count() == 2
-    destination = page.locator(
-        '[data-piety-choice-pill][data-piety-choice-destination="1"]'
-    )
-    assert destination.locator('[data-piety-choice-silver]').text_content() == "+1"
-    assert destination.locator('[data-piety-choice-piety-change]').count() == 0
+    destination = page.locator('[data-piety-choice-pill][data-piety-choice-destination="1"]')
+    assert destination.locator("[data-piety-choice-silver]").text_content() == "+1"
+    assert destination.locator("[data-piety-choice-piety-change]").count() == 0
     _click_handle_centre(page, destination.element_handle(), require_hit=True)
 
 
@@ -2724,9 +2895,9 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     main_payload = dict(server.payload, turn_steps=[])
     main_page.set_content(render_play_view_from_payload(main_payload), wait_until="networkidle")
     main_height = main_page.locator('[data-component="piety-track-v2"]').bounding_box()["height"]
-    assert page.locator('[data-piety-choice-pill]').count() == 0
+    assert page.locator("[data-piety-choice-pill]").count() == 0
     assert panel.bounding_box()["height"] == pytest.approx(main_height, abs=0.1)
-    assert page.locator('[data-piety-score-row]').count() == 13
+    assert page.locator("[data-piety-score-row]").count() == 13
     turn_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
 
     building = page.locator(
@@ -2761,7 +2932,7 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
             or second["y"] + second["height"] <= first["y"]
         )
 
-    obstacles = page.locator('[data-piety-position-label], [data-piety-score-row]')
+    obstacles = page.locator("[data-piety-position-label], [data-piety-score-row]")
     obstacle_boxes = [obstacles.nth(index).bounding_box() for index in range(obstacles.count())]
     assert all(not intersects(pill, obstacle) for pill in pill_boxes for obstacle in obstacle_boxes)
 
@@ -2811,7 +2982,9 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     assert piety_frame_style["stroke"] != piety_frame_style["fill"]
 
     def rgb(value: str) -> tuple[int, int, int]:
-        return tuple(int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", "))
+        return tuple(
+            int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", ")
+        )
 
     board_fill = rgb(board_frame_style["fill"])
     board_stroke = rgb(board_frame_style["stroke"])
@@ -2828,14 +3001,13 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
         return {
             "x": min(box["x"] for box in boxes),
             "y": min(box["y"] for box in boxes),
-            "width": max(box["x"] + box["width"] for box in boxes)
-            - min(box["x"] for box in boxes),
+            "width": max(box["x"] + box["width"] for box in boxes) - min(box["x"] for box in boxes),
             "height": max(box["y"] + box["height"] for box in boxes)
             - min(box["y"] for box in boxes),
         }
 
-    discs = page.locator('[data-player-disc]')
-    stars = page.locator('[data-piety-score-row]')
+    discs = page.locator("[data-player-disc]")
+    stars = page.locator("[data-piety-score-row]")
     assert stars.count() == 13
     disc_row = union([discs.nth(index).bounding_box() for index in range(discs.count())])
     assert all(
@@ -2855,9 +3027,7 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
     )
     _click_handle_centre(page, building.element_handle(), require_hit=True)
 
-    sell = page.locator(
-        '[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]'
-    )
+    sell = page.locator('[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]')
     _click_handle_centre(page, sell.element_handle(), require_hit=True)
     sell_pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
     expected_sell = {
@@ -2871,27 +3041,26 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
         for index in range(sell_pills.count())
     } == expected_sell
     disc_boxes = [
-        page.locator('[data-player-disc]').nth(index).bounding_box()
-        for index in range(page.locator('[data-player-disc]').count())
+        page.locator("[data-player-disc]").nth(index).bounding_box()
+        for index in range(page.locator("[data-player-disc]").count())
     ]
     disc_top = min(box["y"] for box in disc_boxes)
     disc_bottom = max(box["y"] + box["height"] for box in disc_boxes)
     assert all(
         disc_top - 1 <= sell_pills.nth(index).bounding_box()["y"]
         and sell_pills.nth(index).bounding_box()["y"]
-        + sell_pills.nth(index).bounding_box()["height"] <= disc_bottom + 1
+        + sell_pills.nth(index).bounding_box()["height"]
+        <= disc_bottom + 1
         for index in range(sell_pills.count())
     )
     assert all(
-        sell_pills.nth(index).locator('[data-piety-choice-silver]').text_content()
+        sell_pills.nth(index).locator("[data-piety-choice-silver]").text_content()
         for index in range(sell_pills.count())
     )
 
     page.locator('[data-turn-control="reset"]').click()
     _click_handle_centre(page, building.element_handle(), require_hit=True)
-    buy = page.locator(
-        '[data-turn-step-direction="buy_piety"][data-turn-step-offered="true"]'
-    )
+    buy = page.locator('[data-turn-step-direction="buy_piety"][data-turn-step-offered="true"]')
     _click_handle_centre(page, buy.element_handle(), require_hit=True)
     buy_pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')
     expected_buy = {
@@ -2906,12 +3075,12 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
     } == expected_buy
     assert all(
         disc_top - 1 <= buy_pills.nth(index).bounding_box()["y"]
-        and buy_pills.nth(index).bounding_box()["y"]
-        + buy_pills.nth(index).bounding_box()["height"] <= disc_bottom + 1
+        and buy_pills.nth(index).bounding_box()["y"] + buy_pills.nth(index).bounding_box()["height"]
+        <= disc_bottom + 1
         for index in range(buy_pills.count())
     )
     assert all(
-        buy_pills.nth(index).locator('[data-piety-choice-silver]').text_content()
+        buy_pills.nth(index).locator("[data-piety-choice-silver]").text_content()
         for index in range(buy_pills.count())
     )
 
@@ -2950,14 +3119,19 @@ def test_piety_destination_number_matches_board_typography_and_contrast(page, se
     assert styles["piety"] == styles["board"]
 
     def rgb(value: str) -> tuple[int, int, int]:
-        return tuple(int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", "))
+        return tuple(
+            int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", ")
+        )
 
     foreground = rgb(styles["piety"]["fill"])
     background = rgb(styles["background"])
 
     def relative_luminance(colour: tuple[int, int, int]) -> float:
         channels = [channel / 255 for channel in colour]
-        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        linear = [
+            value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+            for value in channels
+        ]
         return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
     light = relative_luminance(foreground)
@@ -3010,10 +3184,13 @@ def test_conversion_playtest_starts_from_setup_and_commits_from_player_board(pag
     page.wait_for_timeout(100)
 
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
-    assert page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
-        '[data-turn-step-offered="true"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
+            '[data-turn-step-offered="true"]'
+        ).count()
+        == 1
+    )
 
 
 def test_conversion_playtest_draws_only_owned_buildings_in_player_slots(page, serve) -> None:
@@ -3042,9 +3219,12 @@ def test_conversion_playtest_draws_only_owned_buildings_in_player_slots(page, se
     market_only &= conversion_ids
     assert market_only
     for building_id in market_only:
-        assert page.locator(
-            f'[data-component="player-board-v2"] [data-building-id="{building_id}"]'
-        ).count() == 0
+        assert (
+            page.locator(
+                f'[data-component="player-board-v2"] [data-building-id="{building_id}"]'
+            ).count()
+            == 0
+        )
 
 
 def test_building_tooltips_use_catalogue_text_glyphs_and_no_layout_space(page, serve) -> None:
@@ -3220,9 +3400,12 @@ def test_building_tooltips_use_catalogue_text_glyphs_and_no_layout_space(page, s
         elif building_id == "confession_box":
             assert tooltip.locator("[data-tooltip-resource]").count() == 0
 
-        assert page.locator(".panel").evaluate_all(
-            "nodes => nodes.map(node => node.getBoundingClientRect().height)"
-        ) == panel_heights
+        assert (
+            page.locator(".panel").evaluate_all(
+                "nodes => nodes.map(node => node.getBoundingClientRect().height)"
+            )
+            == panel_heights
+        )
         page.mouse.move(5, 5)
 
     assert_halo_darkens_map_around_tooltip()
@@ -3404,9 +3587,7 @@ def test_building_tooltip_halo_lifts_a_player_board_as_well_as_the_map(page, ser
         f"map {map_background:.0f} and board {board_background:.0f} must both be lit surfaces"
     )
     assert over_board[0] >= 10, f"the halo does not darken a player board at all: {over_board}"
-    assert sum(over_board[:8]) / 8 >= 10, (
-        f"the halo barely marks a player board: {over_board[:8]}"
-    )
+    assert sum(over_board[:8]) / 8 >= 10, f"the halo barely marks a player board: {over_board[:8]}"
     assert sum(over_board[:8]) / 8 >= sum(over_map[:8]) / 8 * 0.6, (
         f"a player board gets far less lift than the map: board {over_board[:8]},"
         f" map {over_map[:8]}"
@@ -3448,9 +3629,18 @@ def test_building_tooltip_uses_one_anchor_for_map_hex_and_board_slot(page, serve
         and brewery_overlay_box is not None
     )
     mill_points = (
-        (mill_fill_box["x"] + mill_fill_box["width"] / 2, mill_fill_box["y"] + mill_fill_box["height"] * 0.22),
-        (mill_fill_box["x"] + mill_fill_box["width"] / 2, mill_fill_box["y"] + mill_fill_box["height"] * 0.78),
-        (mill_label_box["x"] + mill_label_box["width"] / 2, mill_label_box["y"] + mill_label_box["height"] / 2),
+        (
+            mill_fill_box["x"] + mill_fill_box["width"] / 2,
+            mill_fill_box["y"] + mill_fill_box["height"] * 0.22,
+        ),
+        (
+            mill_fill_box["x"] + mill_fill_box["width"] / 2,
+            mill_fill_box["y"] + mill_fill_box["height"] * 0.78,
+        ),
+        (
+            mill_label_box["x"] + mill_label_box["width"] / 2,
+            mill_label_box["y"] + mill_label_box["height"] / 2,
+        ),
     )
     mill_positions = [hover_point(*point) for point in mill_points]
     assert all(
@@ -3460,10 +3650,22 @@ def test_building_tooltip_uses_one_anchor_for_map_hex_and_board_slot(page, serve
     ), mill_positions
 
     brewery_points = (
-        (brewery_fill_box["x"] + brewery_fill_box["width"] / 2, brewery_fill_box["y"] + brewery_fill_box["height"] * 0.22),
-        (brewery_fill_box["x"] + brewery_fill_box["width"] / 2, brewery_fill_box["y"] + brewery_fill_box["height"] * 0.78),
-        (brewery_label_box["x"] + brewery_label_box["width"] / 2, brewery_label_box["y"] + brewery_label_box["height"] / 2),
-        (brewery_overlay_box["x"] + brewery_overlay_box["width"] / 2, brewery_overlay_box["y"] + brewery_overlay_box["height"] / 2),
+        (
+            brewery_fill_box["x"] + brewery_fill_box["width"] / 2,
+            brewery_fill_box["y"] + brewery_fill_box["height"] * 0.22,
+        ),
+        (
+            brewery_fill_box["x"] + brewery_fill_box["width"] / 2,
+            brewery_fill_box["y"] + brewery_fill_box["height"] * 0.78,
+        ),
+        (
+            brewery_label_box["x"] + brewery_label_box["width"] / 2,
+            brewery_label_box["y"] + brewery_label_box["height"] / 2,
+        ),
+        (
+            brewery_overlay_box["x"] + brewery_overlay_box["width"] / 2,
+            brewery_overlay_box["y"] + brewery_overlay_box["height"] / 2,
+        ),
     )
     brewery_positions = [hover_point(*point) for point in brewery_points]
     assert all(
@@ -3612,9 +3814,7 @@ def test_brewery_hire_and_convert_click_still_selects_conversion(page, serve) ->
     ).first
     assert direction.count() == 1
     _click_handle_centre(page, direction.element_handle(), require_hit=True)
-    resource = page.locator(
-        '[data-resource-choice-key="wheat"][data-turn-offered="true"]'
-    ).first
+    resource = page.locator('[data-resource-choice-key="wheat"][data-turn-offered="true"]').first
     assert resource.count() == 1
     _click_handle_centre(page, resource.element_handle(), require_hit=True)
     # Brewery is a market hire with three legal hire-payment variants.  The
@@ -3632,18 +3832,27 @@ def test_two_active_conversions_leave_the_other_building_offered(page, serve) ->
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(100)
 
-    assert page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
-        '[data-turn-step-offered="true"]'
-    ).count() == 0
-    assert page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
-        '[data-turn-step-used="true"]'
-    ).count() == 1
-    assert page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
-        '[data-turn-step-offered="true"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+            '[data-turn-step-offered="true"]'
+        ).count()
+        == 0
+    )
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+            '[data-turn-step-used="true"]'
+        ).count()
+        == 1
+    )
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-turn-step-building-id="stone_yard"]'
+            '[data-turn-step-offered="true"]'
+        ).count()
+        == 1
+    )
     assert "grain_store" in server.state.turn_progress.used_buildings
 
 
@@ -3664,15 +3873,16 @@ def test_two_active_conversions_do_not_offer_an_absent_amount(page, serve) -> No
     _click_handle_centre(page, direction, require_hit=True)
 
     resource_key = page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
-        '[data-turn-offered="true"]'
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"][data-turn-offered="true"]'
     )
     assert resource_key.count() == 1
     _click_handle_centre(page, resource_key.element_handle(), require_hit=True)
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
-        '[data-turn-offered="true"]'
-    ).count() == 0
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key="wheat"][data-turn-offered="true"]'
+        ).count()
+        == 0
+    )
     assert page.locator('[data-turn-step-amount="2"]').count() == 0
     assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
     assert _confirm_enabled(page), "Confirm did not accept the only engine-offered amount"
@@ -3688,29 +3898,26 @@ def test_two_active_conversions_reset_restores_the_turn_start_position(page, ser
     page.wait_for_timeout(100)
     assert server.state != initial
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
-    assert page.get_attribute(
-        '[data-turn-control="reset"]', "data-turn-control-enabled"
-    ) == "true"
+    assert page.get_attribute('[data-turn-control="reset"]', "data-turn-control-enabled") == "true"
 
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(100)
 
     assert server.state == initial
     assert server.state.turn_progress.used_buildings == frozenset()
-    assert page.locator(
-        '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
-        '[data-turn-step-offered="true"]'
-    ).count() == 1
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-turn-step-building-id="grain_store"]'
+            '[data-turn-step-offered="true"]'
+        ).count()
+        == 1
+    )
 
 
 def _reach_paid_alms(page) -> None:
-    _click_if_offered(
-        page, '[data-board-position-index="0"][data-turn-start-candidate="true"]'
-    )
+    _click_if_offered(page, '[data-board-position-index="0"][data-turn-start-candidate="true"]')
     _click_if_offered(page, '[data-arrow="city->south"][data-turn-offered="true"]')
-    _click_if_offered(
-        page, '[data-board-position-index="5"][data-turn-duty-candidate="true"]'
-    )
+    _click_if_offered(page, '[data-board-position-index="5"][data-turn-duty-candidate="true"]')
     for selector in (
         '[data-turn-control="action"][data-turn-control-enabled="true"]',
         '[data-resolution-key="give_alms_paid"][data-turn-offered="true"]',
@@ -3804,8 +4011,7 @@ def _alms_payment_action(server: PlayServer, units: int):
 
 def _click_alms_silver(page) -> None:
     handle = page.query_selector(
-        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
-        '[data-turn-offered="true"]'
+        '[data-active-seat="true"] [data-resource-choice-key="silver"][data-turn-offered="true"]'
     )
     assert handle is not None, "silver was not offered as an Alms payment pill"
     _click_handle_centre(page, handle, require_hit=True)
@@ -3814,7 +4020,7 @@ def _click_alms_silver(page) -> None:
 
 def _screenshot_alms_and_active_board(page, path: Path) -> None:
     boxes = [
-        page.locator('.p-alms > svg').bounding_box(),
+        page.locator(".p-alms > svg").bounding_box(),
         page.locator(
             '[data-component="player-board-v2"][data-active-seat="true"] > svg'
         ).bounding_box(),
@@ -3849,9 +4055,12 @@ def test_give_alms_pills_build_any_payment_preview_reset_and_confirm(page, serve
 
     _reach_paid_alms(page)
     assert page.locator('[data-combination-key][data-turn-offered="true"]').count() == 0
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-    ).count() == 2
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count()
+        == 2
+    )
     max_units = max(
         action.alms_payment_silver + action.alms_payment_wheat
         for action in legal_actions(server.state, server.config)
@@ -3876,17 +4085,16 @@ def test_give_alms_pills_build_any_payment_preview_reset_and_confirm(page, serve
         ) == str(expected_state.player_state(acting_player).alms_position)
         assert _confirm_enabled(page), f"Confirm did not light after {units} Alms unit(s)"
         if units == 1:
-            _screenshot_alms_and_active_board(
-                page, SCREENSHOTS / "give-alms-payment-after-one.png"
-            )
+            _screenshot_alms_and_active_board(page, SCREENSHOTS / "give-alms-payment-after-one.png")
         if units == 2:
-            _screenshot_alms_and_active_board(
-                page, SCREENSHOTS / "give-alms-payment-after-two.png"
-            )
+            _screenshot_alms_and_active_board(page, SCREENSHOTS / "give-alms-payment-after-two.png")
 
-    assert page.locator(
-        '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
-    ).count() == 0
+    assert (
+        page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key][data-turn-offered="true"]'
+        ).count()
+        == 0
+    )
     assert server.state == initial_state
     assert {
         player: snapshot
@@ -3907,7 +4115,9 @@ def test_give_alms_pills_build_any_payment_preview_reset_and_confirm(page, serve
     _reach_paid_alms(page)
     _click_alms_silver(page)
     _click_alms_silver(page)
-    expected_state = apply_action(initial_state, _alms_payment_action(server, 2), server.config).state
+    expected_state = apply_action(
+        initial_state, _alms_payment_action(server, 2), server.config
+    ).state
     assert _alms_board_snapshot(_active_board_snapshot(page)) == _alms_board_snapshot(
         _expected_board_snapshot(expected_state, acting_player)
     )
@@ -3930,19 +4140,21 @@ def test_give_alms_threshold_rewards_preview_in_order_and_match_confirm(page, se
     action = _alms_payment_action(server, 4)
     expected_state = apply_action(initial_state, action, server.config).state
     candidate = next(
-        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] == action_id(action)
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate["action_id"] == action_id(action)
     )
     step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
     rewards = step["alms_threshold_reward"]
     assert [reward["threshold"] for reward in rewards] == [2, 4]
     assert [reward["reward"] for reward in rewards] == [
-        server.config.alms.threshold_reward_for_row(reward["threshold"])
-        for reward in rewards
+        server.config.alms.threshold_reward_for_row(reward["threshold"]) for reward in rewards
     ]
     assert all(reward["moved"] is True for reward in rewards)
-    assert all(event.event_type.value != "workforce_move" for event in apply_action(
-        initial_state, action, server.config
-    ).events)
+    assert all(
+        event.event_type.value != "workforce_move"
+        for event in apply_action(initial_state, action, server.config).events
+    )
 
     for _ in range(4):
         _click_alms_silver(page)
@@ -3969,7 +4181,9 @@ def test_give_alms_threshold_rewards_preview_in_order_and_match_confirm(page, se
     )
 
 
-def test_give_alms_row_six_preview_keeps_unavailable_reward_and_matches_confirm(page, serve) -> None:
+def test_give_alms_row_six_preview_keeps_unavailable_reward_and_matches_confirm(
+    page, serve
+) -> None:
     base_url, server = serve(SCENARIOS / "give_alms_threshold_reward_row_six_001.json")
     initial_state = server.state
     acting_player = initial_state.active_player
@@ -3981,7 +4195,9 @@ def test_give_alms_row_six_preview_keeps_unavailable_reward_and_matches_confirm(
     expected_state = apply_action(initial_state, action, server.config).state
     result = apply_action(initial_state, action, server.config)
     candidate = next(
-        candidate for candidate in server.payload["turn_candidates"] if candidate["action_id"] == action_id(action)
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate["action_id"] == action_id(action)
     )
     step = next(step for step in candidate["steps"] if step.get("resource_allocation_any_total"))
     rewards = step["alms_threshold_reward"]
