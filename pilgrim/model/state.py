@@ -56,6 +56,7 @@ class TurnProgress:
 
     used_buildings: frozenset[str] = frozenset()
     events: tuple[GameEvent, ...] = ()
+    resolution_committed: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.used_buildings, frozenset):

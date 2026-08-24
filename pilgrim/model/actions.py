@@ -159,6 +159,13 @@ class StartPlayerSelectionAction:
 
 
 @dataclass(frozen=True, slots=True)
+class EndTurnAction:
+    """Pass the turn after its resolution and any committed conversions are complete."""
+
+    action_type: ActionType = field(default=ActionType.END_TURN, init=False)
+
+
+@dataclass(frozen=True, slots=True)
 class AllocationMove:
     """One allocation sub-move between Abbey and special-activity slots."""
 
@@ -183,7 +190,11 @@ class AllocationMove:
 
 
 GameAction = (
-    FullTurnAction | SetupSowAction | StartPlayerConfessionBoxAction | StartPlayerSelectionAction
+    FullTurnAction
+    | SetupSowAction
+    | StartPlayerConfessionBoxAction
+    | StartPlayerSelectionAction
+    | EndTurnAction
 )
 
 
@@ -200,6 +211,9 @@ def action_id(action: GameAction) -> str:
 
     if isinstance(action, StartPlayerSelectionAction):
         return f"start_player_selection:{action.chosen_start_player.name.lower()}"
+
+    if isinstance(action, EndTurnAction):
+        return "end_turn"
 
     # Full-turn actions only below.
     route = "->".join(str(position) for position in action.route)
@@ -522,6 +536,9 @@ def action_choice_summary_for_players(
         chosen = action.chosen_start_player.name.lower()
         return f"{speaker} chose {chosen} to begin this round."
 
+    if isinstance(action, EndTurnAction):
+        return f"{speaker} ended the turn."
+
     duty = _player_wording(duty_category_at_position(config, action.selected_duty))
     if action.resolution is TurnResolutionType.TITHE:
         gained = action.tithe_resource or "a resource"
@@ -600,6 +617,9 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             "Start player selection: "
             f"{action.chosen_start_player.name.lower()} begins this round"
         )
+
+    if isinstance(action, EndTurnAction):
+        return "End turn"
 
     # Full-turn actions only below.
     selected_duty = position_name(action.selected_duty, positions)

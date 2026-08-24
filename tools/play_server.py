@@ -66,6 +66,7 @@ from pilgrim.rules.sow_routes import (  # noqa: E402
     kogge_cloisters_candidate_placements,
 )
 from pilgrim.model.actions import (  # noqa: E402
+    EndTurnAction,
     FullTurnAction,
     SetupSowAction,
     StartPlayerConfessionBoxAction,
@@ -1387,6 +1388,17 @@ def _presented(
                 ("chosen_start_player",),
             )
         ]
+    if isinstance(action, EndTurnAction):
+        return [
+            (
+                {
+                    "kind": "resolution",
+                    "value": "end_turn",
+                    "prompt": "End the turn.",
+                },
+                (),
+            )
+        ]
     presented: list[tuple[dict, tuple[str, ...]]] = []
     if offer_hire and isinstance(action, FullTurnAction):
         if state is None or config is None:
@@ -1716,7 +1728,10 @@ def _steps_before_hire_payment_questions(
     include_preview_effects: bool = True,
 ) -> list[dict]:
     """Decision steps through the hire choice, stopping before any hire-payment stock choice."""
-    if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
+    if isinstance(
+        action,
+        (EndTurnAction, StartPlayerConfessionBoxAction, StartPlayerSelectionAction),
+    ):
         return _address_steps(
             _presented_steps(
                 action,
@@ -2020,7 +2035,10 @@ def decision_steps(
     # A start-player selection is one question and nothing before it. There is no origin to lift
     # from and no duty to resolve: whoever holds the marker names a player, and that is the whole
     # of the action.
-    if isinstance(action, (StartPlayerConfessionBoxAction, StartPlayerSelectionAction)):
+    if isinstance(
+        action,
+        (EndTurnAction, StartPlayerConfessionBoxAction, StartPlayerSelectionAction),
+    ):
         return _address_steps(
             _presented_steps(
                 action,
@@ -2594,6 +2612,7 @@ class PlayServer(ThreadingHTTPServer):
             raise UnknownAction(f"no legal action with id {submitted_id!r} in this position")
 
         actor = self.state.active_player
+        turn_before = self.state.turn
         # Applied-log lead line sits directly above event lines that already name steps and costs,
         # so it stays short and only says which duty action was chosen.
         summary_line = action_choice_summary_for_players(chosen, self.config, actor=actor)
@@ -2623,7 +2642,8 @@ class PlayServer(ThreadingHTTPServer):
             self.log_lines.extend(player_lines)
             self.log_blocks.append({"lines": player_lines, "round_end": round_end})
         self._refresh()
-        self._capture_turn_start()
+        if self.state.turn != turn_before:
+            self._capture_turn_start()
 
     def apply_turn_step(self, submitted_id: str, submitted_token: str) -> None:
         """Apply one currently legal committed conversion, named by its stable step id."""

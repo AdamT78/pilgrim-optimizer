@@ -10,6 +10,7 @@ from itertools import combinations_with_replacement
 from pilgrim.model.actions import (
     AllocationMove,
     BuildingConversionStep,
+    EndTurnAction,
     FullTurnAction,
     GameAction,
     SetupSowAction,
@@ -430,6 +431,8 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
         return _legal_start_player_selection_actions(state)
     if state.phase is not TurnPhase.SOW:
         return ()
+    if state.turn_progress.resolution_committed:
+        return (EndTurnAction(),)
     return _legal_full_turn_actions(state, config)
 
 
@@ -469,6 +472,12 @@ def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameActi
     yielded: set[GameAction] = set()
 
     def walk(current: GameState) -> Iterator[GameAction]:
+        if current.turn_progress.resolution_committed:
+            end_turn = EndTurnAction()
+            if end_turn not in yielded:
+                yielded.add(end_turn)
+                yield end_turn
+            return
         if current in visited:
             return
         visited.add(current)
@@ -600,6 +609,8 @@ def apply_action(state: GameState, action: GameAction, config: GameConfig) -> Tr
         return _apply_start_player_confession_action(state, action, config)
     if isinstance(action, StartPlayerSelectionAction):
         return _apply_start_player_selection_action(state, action, config)
+    if isinstance(action, EndTurnAction):
+        return _apply_end_turn_action(state, action, config)
     if isinstance(action, FullTurnAction):
         return _apply_full_turn_action(state, action, config)
     raise TypeError(f"Unsupported action type: {type(action)!r}")
@@ -4486,11 +4497,113 @@ def _apply_full_turn_action(
             )
         )
 
+    if not updated_state.game_over and turn_steps(updated_state, config):
+        _validate_transition_state(state, updated_state, config)
+        events.append(
+            _post_transition_invariant_event(
+                actor=player,
+                action_id=transition_action_id,
+                state=updated_state,
+                name="post_resolution",
+            )
+        )
+        window_progress = replace(
+            updated_state.turn_progress,
+            events=tuple(events),
+            resolution_committed=True,
+        )
+        return TransitionResult(
+            state=replace(updated_state, turn_progress=window_progress),
+            events=tuple(events),
+        )
+
+    return _complete_turn_after_resolution(
+        updated_state,
+        config,
+        actor=player,
+        action_id=transition_action_id,
+        events=events,
+        conservation_before=state,
+    )
+
+
+def _apply_end_turn_action(
+    state: GameState,
+    action: EndTurnAction,
+    config: GameConfig,
+) -> TransitionResult:
+    if state.game_over:
+        raise TransitionValidationError("Cannot apply action: game is already over.")
+    ensure_phase(state, expected=TurnPhase.SOW, action_name="End turn action")
+    if not state.turn_progress.resolution_committed:
+        raise TransitionValidationError(
+            "End turn action is only legal after a resolution has been committed."
+        )
+    return _complete_turn_after_resolution(
+        state,
+        config,
+        actor=state.active_player,
+        action_id=action_id(action),
+        events=[],
+        conservation_before=state,
+    )
+
+
+def _validate_transition_state(
+    before_state: GameState,
+    next_state: GameState,
+    config: GameConfig,
+) -> None:
+    ensure_non_negative_resources(next_state)
+    validate_building_state(next_state, config)
+    ensure_valid_timing(next_state)
+    ensure_valid_dummy_state(next_state)
+    ensure_valid_special_activities_state(next_state)
+    ensure_valid_setup_state(next_state)
+    ensure_valid_start_player_confession_state(next_state)
+    ensure_acolyte_conservation(before_state, next_state)
+    ensure_dummy_acolyte_conservation(before_state, next_state)
+
+
+def _post_transition_invariant_event(
+    *,
+    actor: PlayerId,
+    action_id: str,
+    state: GameState,
+    name: str,
+) -> GameEvent:
+    return GameEvent(
+        event_type=EventType.INVARIANT_CHECK,
+        actor=actor,
+        action_id=action_id,
+        details=make_event_details(
+            name=name,
+            acolytes_conserved=True,
+            serfs_non_negative=True,
+            invariant_scope="all_players",
+            **_invariant_workforce_details(state),
+            dummy_north_group_total=state.dummy_acolytes.north_total,
+            dummy_south_group_total=state.dummy_acolytes.south_total,
+            dummy_total=state.dummy_total,
+        ),
+    )
+
+
+def _complete_turn_after_resolution(
+    state: GameState,
+    config: GameConfig,
+    *,
+    actor: PlayerId,
+    action_id: str,
+    events: list[GameEvent],
+    conservation_before: GameState,
+) -> TransitionResult:
+    """Pass a resolved turn, including round/season effects, from either turn path."""
     try:
         timing_result = advance_timing(
-            updated_state,
+            state,
             config.timing,
-            action_id=transition_action_id,
+            action_id=action_id,
         )
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
@@ -4503,48 +4616,30 @@ def _apply_full_turn_action(
         next_state, round_end_events = _resolve_round_end_phases(
             next_state,
             config,
-            actor=player,
-            action_id=transition_action_id,
+            actor=actor,
+            action_id=action_id,
             completed_round_number=completed_round_number,
-            action=action,
         )
         events.extend(round_end_events)
         if not next_state.game_over:
             events.append(
                 _turn_advance_event(
-                    actor=player,
-                    action_id=transition_action_id,
-                    from_player=player,
+                    actor=actor,
+                    action_id=action_id,
+                    from_player=actor,
                     to_player=next_state.active_player,
                 )
             )
     else:
         events.extend(timing_result.events)
 
-    ensure_non_negative_resources(next_state)
-    validate_building_state(next_state, config)
-    ensure_valid_timing(next_state)
-    ensure_valid_dummy_state(next_state)
-    ensure_valid_special_activities_state(next_state)
-    ensure_valid_setup_state(next_state)
-    ensure_valid_start_player_confession_state(next_state)
-    ensure_acolyte_conservation(state, next_state)
-    ensure_dummy_acolyte_conservation(state, next_state)
+    _validate_transition_state(conservation_before, next_state, config)
     events.append(
-        GameEvent(
-            event_type=EventType.INVARIANT_CHECK,
-            actor=player,
-            action_id=transition_action_id,
-            details=make_event_details(
-                name="post_turn",
-                acolytes_conserved=True,
-                serfs_non_negative=True,
-                invariant_scope="all_players",
-                **_invariant_workforce_details(next_state),
-                dummy_north_group_total=next_state.dummy_acolytes.north_total,
-                dummy_south_group_total=next_state.dummy_acolytes.south_total,
-                dummy_total=next_state.dummy_total,
-            ),
+        _post_transition_invariant_event(
+            actor=actor,
+            action_id=action_id,
+            state=next_state,
+            name="post_turn",
         )
     )
     return TransitionResult(state=next_state, events=tuple(events))
@@ -4557,7 +4652,6 @@ def _resolve_round_end_phases(
     actor: PlayerId,
     action_id: str,
     completed_round_number: int,
-    action: FullTurnAction,
 ) -> tuple[GameState, tuple[GameEvent, ...]]:
     events: list[GameEvent] = []
     next_state = state
