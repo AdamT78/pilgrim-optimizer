@@ -52,7 +52,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pilgrim.io.event_text import format_event_for_players  # noqa: E402
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType  # noqa: E402
+from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType, TurnPhase  # noqa: E402
 from pilgrim.io.scenarios import load_scenario  # noqa: E402
 from pilgrim.io.view import view_payload  # noqa: E402
 from pilgrim.setup.generator import SUPPORTED_PLAYER_COUNTS, generate_setup_scenario  # noqa: E402
@@ -2372,6 +2372,77 @@ def turn_candidates(
     return candidates
 
 
+_TURN_PHASE_ROWS = (
+    ("beginning", "Beginning of Turn"),
+    ("sow", "Sow"),
+    ("end", "End of Turn"),
+)
+_ROUND_END_EVENT_ROWS = (
+    (EventType.EXCESS_RESOURCE_CAP, "excess", "Excess resources returned"),
+    (EventType.SHIP_ADVANCE, "round_marker", "Round marker advanced"),
+    (EventType.ALMS_SEASON_END, "season_end", "Season end"),
+    (EventType.MERCHANT_ADVANCE, "merchant", "Merchant advanced"),
+    (EventType.TRADE_ROUTE_INCOME, "trade_route_income", "Trade route income paid"),
+    (EventType.CONFESSION_BOX_PHASE, "confession", "Confession"),
+)
+
+
+def phase_column_payload(state: Any, log_blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Describe the phase column the page must draw for this outstanding decision.
+
+    The engine state says whether the table is in a turn, a round-end question, or neither. The
+    round-end history is read from the marked log block's structured event types, so a later
+    Confession answer cannot erase the work completed before the first Confession question.
+    """
+    phase = state.phase
+    if state.game_over or phase is TurnPhase.SETUP_SOW:
+        return {
+            "scope": "inactive",
+            "rows": [
+                {"key": key, "label": label, "current": False}
+                for key, label in _TURN_PHASE_ROWS
+            ],
+        }
+    if phase is TurnPhase.SOW:
+        current = "end" if state.turn_progress.resolution_committed else "beginning"
+        return {
+            "scope": "turn",
+            "rows": [
+                {"key": key, "label": label, "current": key == current}
+                for key, label in _TURN_PHASE_ROWS
+            ],
+        }
+    if phase not in {TurnPhase.START_PLAYER_CONFESSION, TurnPhase.START_PLAYER_SELECTION}:
+        return {
+            "scope": "inactive",
+            "rows": [
+                {"key": key, "label": label, "current": False}
+                for key, label in _TURN_PHASE_ROWS
+            ],
+        }
+
+    round_end_event_types = set()
+    for block in reversed(log_blocks):
+        if block.get("round_end"):
+            round_end_event_types = {str(event_type) for event_type in block.get("event_types", ())}
+            break
+    current = "confession" if phase is TurnPhase.START_PLAYER_CONFESSION else "choose_first_player"
+    rows = [
+        {"key": key, "label": label, "current": key == current}
+        for event_type, key, label in _ROUND_END_EVENT_ROWS
+        if event_type.value in round_end_event_types
+    ]
+    if phase is TurnPhase.START_PLAYER_SELECTION:
+        rows.append(
+            {
+                "key": "choose_first_player",
+                "label": "Choose first player",
+                "current": True,
+            }
+        )
+    return {"scope": "round_end", "rows": rows}
+
+
 class PlayServer(ThreadingHTTPServer):
     """Holds the one loaded position every route answers from, and the log of how it got there."""
 
@@ -2421,7 +2492,9 @@ class PlayServer(ThreadingHTTPServer):
                 self.session.seat_roles = _default_seat_roles(player_count)
         if intro_line:
             self.log_lines = [intro_line]
-            self.log_blocks = [{"lines": [intro_line], "round_end": False}]
+            self.log_blocks = [
+                {"lines": [intro_line], "round_end": False, "event_types": []}
+            ]
         else:
             self.log_lines = []
             self.log_blocks = []
@@ -2555,7 +2628,12 @@ class PlayServer(ThreadingHTTPServer):
         self._turn_start_state = self.state
         self._turn_start_log_lines = list(self.log_lines)
         self._turn_start_log_blocks = [
-            dict(block, lines=list(block["lines"])) for block in self.log_blocks
+            dict(
+                block,
+                lines=list(block["lines"]),
+                event_types=list(block.get("event_types", ())),
+            )
+            for block in self.log_blocks
         ]
 
     def _refresh(self) -> None:
@@ -2573,7 +2651,15 @@ class PlayServer(ThreadingHTTPServer):
             turn_candidates=turn_candidates(self.state, self.config),
             turn_steps=turn_steps_payload(self.state, self.config),
             log=list(self.log_lines),
-            log_blocks=[dict(block, lines=list(block["lines"])) for block in self.log_blocks],
+            log_blocks=[
+                dict(
+                    block,
+                    lines=list(block["lines"]),
+                    event_types=list(block.get("event_types", ())),
+                )
+                for block in self.log_blocks
+            ],
+            phase_column=phase_column_payload(self.state, self.log_blocks),
         )
         if self._setup_metadata is not None:
             self.payload["setup_metadata"] = self._setup_metadata
@@ -2636,11 +2722,18 @@ class PlayServer(ThreadingHTTPServer):
         ]
         if player_lines:
             round_end = any(
-                event.event_type in {EventType.ROUND_END, EventType.ROUND_ADVANCE}
+                event.event_type
+                in {EventType.ROUND_END, EventType.ROUND_ADVANCE, EventType.SHIP_ADVANCE}
                 for event in result.events
             )
             self.log_lines.extend(player_lines)
-            self.log_blocks.append({"lines": player_lines, "round_end": round_end})
+            self.log_blocks.append(
+                {
+                    "lines": player_lines,
+                    "round_end": round_end,
+                    "event_types": [event.event_type.value for event in result.events],
+                }
+            )
         self._refresh()
         if self.state.turn != turn_before:
             self._capture_turn_start()
@@ -2685,7 +2778,11 @@ class PlayServer(ThreadingHTTPServer):
             self.state = self._turn_start_state
             self.log_lines = list(self._turn_start_log_lines)
             self.log_blocks = [
-                dict(block, lines=list(block["lines"]))
+                dict(
+                    block,
+                    lines=list(block["lines"]),
+                    event_types=list(block.get("event_types", ())),
+                )
                 for block in self._turn_start_log_blocks
             ]
             self._refresh()
