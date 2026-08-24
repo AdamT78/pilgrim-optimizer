@@ -5,6 +5,7 @@ from typing import Callable, Iterable
 
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import (
+    EndTurnAction,
     FullTurnAction,
     GameAction,
     StartPlayerConfessionBoxAction,
@@ -109,6 +110,12 @@ def apply_scripted_turns(
             )
 
         result = apply_action(state, selected_action, config)
+        if result.state.turn_progress.resolution_committed:
+            passed = apply_action(result.state, EndTurnAction(), config)
+            result = TransitionResult(
+                state=passed.state,
+                events=(*result.events, *passed.events),
+            )
         # The Confession Box questions belong to the turn that ended the round rather than to the
         # turn after it. Declined here -- the answer that changes nothing -- and folded into this
         # step's events, so a script that never mentions the boxes still sees the round end it

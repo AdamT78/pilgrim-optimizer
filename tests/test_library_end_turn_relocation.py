@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
+from pilgrim.model.actions import EndTurnAction
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
@@ -56,23 +57,26 @@ def test_library_opponent_hire_pays_owner_and_moves_after_recall_before_turn_adv
             and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    resolution = apply_action(scenario.state, action, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *passed.events)
 
-    hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
-    bonus_event = _events_of_type(result.events, EventType.BUILDING_BONUS)[0]
-    recall_event = _events_of_type(result.events, EventType.ACOLYTE_RECALL)[0]
-    relocation_event = _events_of_type(result.events, EventType.END_TURN_RELOCATION)[0]
-    turn_advance_event = _events_of_type(result.events, EventType.TURN_ADVANCE)[0]
+    hired_event = _events_of_type(events, EventType.BUILDING_HIRED)[0]
+    bonus_event = _events_of_type(events, EventType.BUILDING_BONUS)[0]
+    recall_event = _events_of_type(events, EventType.ACOLYTE_RECALL)[0]
+    relocation_event = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
+    turn_advance_event = _events_of_type(events, EventType.TURN_ADVANCE)[0]
     hired_details = dict(hired_event.details)
 
     assert hired_details["source"] == "player_two"
     assert hired_details["payee"] == "player_two"
     assert hired_details["resource"] == "wheat"
-    assert result.events.index(recall_event) < result.events.index(hired_event)
-    assert result.events.index(hired_event) < result.events.index(bonus_event)
-    assert result.events.index(bonus_event) < result.events.index(relocation_event)
-    assert result.events.index(relocation_event) < result.events.index(turn_advance_event)
-    assert result.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
+    assert events.index(recall_event) < events.index(hired_event)
+    assert events.index(hired_event) < events.index(bonus_event)
+    assert events.index(bonus_event) < events.index(relocation_event)
+    assert events.index(relocation_event) < events.index(turn_advance_event)
+    assert passed.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
 
 
 def test_library_hire_market_city_to_abbey_moves_acolyte_to_abbey() -> None:
@@ -157,17 +161,20 @@ def test_own_active_library_event_order_is_recall_bonus_relocation_turn_advance(
             and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    resolution = apply_action(scenario.state, action, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *passed.events)
 
-    recall_event = _events_of_type(result.events, EventType.ACOLYTE_RECALL)[0]
-    bonus_event = _events_of_type(result.events, EventType.BUILDING_BONUS)[0]
-    relocation_event = _events_of_type(result.events, EventType.END_TURN_RELOCATION)[0]
-    turn_advance_event = _events_of_type(result.events, EventType.TURN_ADVANCE)[0]
+    recall_event = _events_of_type(events, EventType.ACOLYTE_RECALL)[0]
+    bonus_event = _events_of_type(events, EventType.BUILDING_BONUS)[0]
+    relocation_event = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
+    turn_advance_event = _events_of_type(events, EventType.TURN_ADVANCE)[0]
 
-    assert _events_of_type(result.events, EventType.BUILDING_HIRED) == []
-    assert result.events.index(recall_event) < result.events.index(bonus_event)
-    assert result.events.index(bonus_event) < result.events.index(relocation_event)
-    assert result.events.index(relocation_event) < result.events.index(turn_advance_event)
+    assert _events_of_type(events, EventType.BUILDING_HIRED) == []
+    assert events.index(recall_event) < events.index(bonus_event)
+    assert events.index(bonus_event) < events.index(relocation_event)
+    assert events.index(relocation_event) < events.index(turn_advance_event)
 
 
 def test_apply_rejects_invalid_library_source_or_target_fields() -> None:

@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import StartPlayerConfessionBoxAction
+from pilgrim.model.actions import EndTurnAction, StartPlayerConfessionBoxAction
 from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.model.resources import Resources
 from pilgrim.rules.scoring import (
@@ -33,7 +33,9 @@ def test_piety_score_uses_real_track_value_not_temporary_confession_bonus() -> N
     )
     # Played through the box rather than past it: the round end stops to ask, and it is the answer
     # -- player_one using their own -- that this test needs to have happened.
-    asked = apply_action(scenario.state, tithe, scenario.config)
+    resolution = apply_action(scenario.state, tithe, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    asked = apply_action(resolution.state, EndTurnAction(), scenario.config)
     used = apply_action(
         asked.state,
         StartPlayerConfessionBoxAction(use=True, source="own_active"),

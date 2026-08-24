@@ -196,8 +196,16 @@ def test_converted_piety_can_change_who_takes_the_first_player_marker() -> None:
         action for action in legal_actions(scenario.state, scenario.config)
         if action.resolution is TurnResolutionType.TITHE
     )
-    with_conversion = apply_action(conversion_state, with_conversion_action, scenario.config)
+    with_resolution = apply_action(conversion_state, with_conversion_action, scenario.config)
+    assert with_resolution.state.turn_progress.resolution_committed
+    with_conversion = apply_action(
+        with_resolution.state,
+        EndTurnAction(),
+        scenario.config,
+    )
+    with_conversion_events = (*with_resolution.events, *with_conversion.events)
     without_conversion = apply_action(scenario.state, without_conversion_action, scenario.config)
+    assert without_conversion.state.turn_progress.resolution_committed
     without_conversion = apply_action(
         without_conversion.state,
         EndTurnAction(),
@@ -205,7 +213,7 @@ def test_converted_piety_can_change_who_takes_the_first_player_marker() -> None:
     )
     assert with_conversion.state.active_player is PlayerId.PLAYER_TWO
     assert without_conversion.state.active_player is PlayerId.PLAYER_ONE
-    marker = _events(with_conversion.events, EventType.START_PLAYER_MARKER)[0]
+    marker = _events(with_conversion_events, EventType.START_PLAYER_MARKER)[0]
     assert dict(marker.details)["deciding_player"] == "player_two"
 
 

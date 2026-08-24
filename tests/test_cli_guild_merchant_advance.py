@@ -118,7 +118,7 @@ def test_cli_apply_opponent_hired_guild_shows_owner_payment(capsys) -> None:
     )
 
 
-def test_cli_apply_round_ending_guild_turn_shows_two_merchant_advances(capsys) -> None:
+def test_cli_apply_round_ending_guild_turn_defers_the_round_merchant_advance(capsys) -> None:
     action_index = _guild_action_index(
         "scenarios/guild_round_end_moves_merchant_twice_001.json",
         source="own_active",
@@ -136,6 +136,8 @@ def test_cli_apply_round_ending_guild_turn_shows_two_merchant_advances(capsys) -
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert output.count("MERCHANT_ADVANCE:") == 2
+    assert output.count("MERCHANT_ADVANCE:") == 1
     assert "MERCHANT_ADVANCE: taxation -> produce (north); current resource=wheat; cause=guild" in output
-    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" in output
+    assert "MERCHANT_ADVANCE: produce -> clerical (north_east); current resource=silver" not in output
+    assert "ROUND_ADVANCE:" not in output
+    assert "TURN_ADVANCE:" not in output

@@ -33,7 +33,7 @@ import pytest
 
 import pilgrim.rules.transition as transition
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction
+from pilgrim.model.actions import EndTurnAction, FullTurnAction
 from pilgrim.rules.ordination import (
     apply_ordination_step,
     legal_ordination_steps,
@@ -143,9 +143,17 @@ def skeleton(action) -> FullTurnAction:
 
 
 def landing(state, action, config):
-    """Where an action leaves the game, or the refusal it earns. Both are outcomes to compare."""
+    """Where a completed turn leaves the game, or the refusal it earns.
+
+    Full turns now pause at the deterministic End Turn window. This audit compares action outcomes,
+    not the action-id-bearing event trail held inside that temporary window, so it passes the only
+    legal EndTurnAction before comparing final states.
+    """
     try:
-        return ("state", apply_action(state, action, config).state)
+        landed = apply_action(state, action, config).state
+        if landed.turn_progress.resolution_committed:
+            landed = apply_action(landed, EndTurnAction(), config).state
+        return ("state", landed)
     except Exception as exc:  # a refusal is a result too, and must match for equivalent spellings
         return ("refused", type(exc).__name__, str(exc))
 

@@ -13,7 +13,7 @@ rather than the way of getting past it.
 
 from __future__ import annotations
 
-from pilgrim.model.actions import GameAction, StartPlayerConfessionBoxAction
+from pilgrim.model.actions import EndTurnAction, GameAction, StartPlayerConfessionBoxAction
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import TurnPhase
 from pilgrim.model.state import GameState
@@ -25,10 +25,14 @@ def apply_declining_confession(
     action: GameAction,
     config: GameConfig,
 ) -> TransitionResult:
-    """Apply one action, then decline every Confession Box question it stops on."""
+    """Apply one full turn, pass its End Turn window, then decline Confession Box questions."""
     result = apply_action(state, action, config)
     events = list(result.events)
     next_state = result.state
+    while next_state.turn_progress.resolution_committed:
+        passed = apply_action(next_state, EndTurnAction(), config)
+        events.extend(passed.events)
+        next_state = passed.state
     while next_state.phase is TurnPhase.START_PLAYER_CONFESSION:
         declined = apply_action(next_state, StartPlayerConfessionBoxAction(use=False), config)
         events.extend(declined.events)

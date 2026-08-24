@@ -958,13 +958,23 @@ def test_sell_piety_payload_silver_is_the_engine_conversion_delta_across_the_cor
     assert observations > 0
 
 
+def _complete_first_available_turn(state, config):
+    """Resolve the first offered full turn, including its mandatory End of Turn pass."""
+    for _ in range(20):
+        actions = list(legal_actions(state, config))
+        assert actions, "playtest stopped before it offered a full turn"
+        result = apply_action(state, actions[0], config)
+        if result.state.turn_progress.resolution_committed:
+            return apply_action(result.state, EndTurnAction(), config).state
+        state = result.state
+    raise AssertionError("playtest never reached an End of Turn window")
+
+
 def test_conversions_playtest_runs_for_twenty_turns() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
     state = scenario.state
-    for turn_index in range(20):
-        actions = list(legal_actions(state, scenario.config))
-        assert actions, f"{PLAYTEST_CONVERSIONS} had no legal action at turn {turn_index + 1}"
-        state = apply_action(state, actions[0], scenario.config).state
+    for _ in range(20):
+        state = _complete_first_available_turn(state, scenario.config)
 
 
 def test_conversions_playtest_reaches_metadata_driven_alms_season_end() -> None:
@@ -988,7 +998,7 @@ def test_conversions_playtest_reaches_metadata_driven_alms_season_end() -> None:
             break
         state = result.state
 
-    assert season_end_action_count == 14
+    assert season_end_action_count == 16
     assert season_end_game_turn == 6
     assert state.timing.round_number == 5
     assert {
@@ -1134,6 +1144,13 @@ def test_playtest_positions_have_expected_refused_counts(position_name: str, exp
 def test_cloisters_route_permutation_spellings_land_in_the_same_state_record(
     corpus_actions, playtest_actions
 ) -> None:
+    def completed_turn_record(scenario, action: FullTurnAction) -> dict:
+        result = apply_action(scenario.state, action, scenario.config)
+        state = result.state
+        if state.turn_progress.resolution_committed:
+            state = apply_action(state, EndTurnAction(), scenario.config).state
+        return state_to_record(state)
+
     compared = 0
     mismatches: list[tuple[str, str, str, tuple[int, ...], tuple[int, ...]]] = []
     for scenario_path, scenario, all_actions in _all_corpus_actions(corpus_actions, playtest_actions):
@@ -1155,13 +1172,13 @@ def test_cloisters_route_permutation_spellings_land_in_the_same_state_record(
                 continue
             first, *others = spellings
             first_route = tuple(first.route or ())
-            first_record = state_to_record(apply_action(scenario.state, first, scenario.config).state)
+            first_record = completed_turn_record(scenario, first)
             for other in others:
                 other_route = tuple(other.route or ())
                 if other_route == first_route:
                     continue
                 compared += 1
-                other_record = state_to_record(apply_action(scenario.state, other, scenario.config).state)
+                other_record = completed_turn_record(scenario, other)
                 if other_record != first_record:
                     mismatches.append(
                         (
@@ -1229,10 +1246,8 @@ def test_playtest_position_can_be_played_for_twelve_turns_and_advances_round(pos
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / position_name))
     state = scenario.state
     start_round = state.timing.round_number
-    for turn_index in range(12):
-        actions = list(legal_actions(state, scenario.config))
-        assert actions, f"{position_name} had no legal action at turn {turn_index + 1}"
-        state = apply_action(state, actions[0], scenario.config).state
+    for _ in range(12):
+        state = _complete_first_available_turn(state, scenario.config)
     assert state.timing.round_number > start_round
 
 
@@ -1483,7 +1498,7 @@ def _played_until_the_page_must_refuse(server, limit: int = 40):
         if any(candidate["unresolved"] for candidate in server.payload["turn_candidates"]):
             return server
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"])
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
     raise AssertionError(f"no turn in {limit} needed refusing, so the refusal went unexercised")
 
 
@@ -1543,6 +1558,7 @@ def _log_blocks_by_resolution_from_fixture(tmp_path: Path) -> tuple[dict[str, li
         server.apply(action_id(chosen), server.payload["state_token"])
         if resolution not in reached:
             reached[resolution] = list(server.payload["log_blocks"][-1]["lines"])
+        _pass_end_turn_window(server)
     missing = tuple(name for name in _RESOLUTION_NAMES if name not in reached)
     return reached, missing
 
@@ -2658,9 +2674,20 @@ def test_a_normal_turn_moves_the_cubes_pays_for_itself_and_passes_the_seat(
     with _running(server) as base:
         before = _get_json(base, "/state.json")
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"])
-        status, _page = _post(base, settled["action_id"], server.payload["state_token"])
+        resolution_status, _page = _post(
+            base,
+            settled["action_id"],
+            server.payload["state_token"],
+        )
+        assert server.state.turn_progress.resolution_committed
+        status, _page = _post(
+            base,
+            action_id(EndTurnAction()),
+            server.payload["state_token"],
+        )
         after = _get_json(base, "/state.json")
 
+    assert resolution_status == 200
     assert status == 200
     assert after["state"]["acolytes"] != before["state"]["acolytes"], "no cube moved"
     assert after["state"]["players"] != before["state"]["players"], "nothing was gained or spent"
@@ -2811,6 +2838,17 @@ def _action_for_candidate(server: PlayServer, candidate: dict) -> Any:
     )
 
 
+def _pass_end_turn_window(server: PlayServer) -> None:
+    assert server.state.turn_progress.resolution_committed
+    server.apply(action_id(EndTurnAction()), server.payload["state_token"])
+
+
+def _apply_settled_turn_and_pass(server: PlayServer, candidate: dict) -> None:
+    server.apply(candidate["action_id"], server.payload["state_token"])
+    if server.state.turn_progress.resolution_committed:
+        _pass_end_turn_window(server)
+
+
 def test_dormitory_turn_sets_the_chosen_start_turn_relocation_fields() -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "dormitory_active_return_duty_to_city_001.json")
     try:
@@ -2838,6 +2876,7 @@ def test_dormitory_turn_sets_the_chosen_start_turn_relocation_fields() -> None:
         assert action.start_turn_relocation_to == city
         before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
         server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
+        _pass_end_turn_window(server)
         assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
     finally:
         server.server_close()
@@ -2870,6 +2909,7 @@ def test_inquisition_turn_sets_the_chosen_start_turn_relocation_fields() -> None
         assert action.start_turn_relocation_to == chosen_to
         before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
         server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
+        _pass_end_turn_window(server)
         assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
     finally:
         server.server_close()
@@ -2902,6 +2942,7 @@ def test_library_turn_sets_the_chosen_end_turn_relocation_fields() -> None:
         assert action.end_turn_relocation_to == chosen_target
         before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
         server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
+        _pass_end_turn_window(server)
         assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
     finally:
         server.server_close()
@@ -3131,6 +3172,7 @@ def test_an_empty_allocation_outcome_lights_confirm_without_moving_cubes(tmp_pat
     before_abbey = int(before["workforce"]["abbey"])
     before_roles = dict(before["special_activities"])
     server.apply(posted["action_id"], posted["state_token"])
+    _pass_end_turn_window(server)
     after = player_record(server.payload, actor)
     assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
     assert int(after["workforce"]["abbey"]) == before_abbey
@@ -3514,7 +3556,7 @@ def test_round_closing_actions_are_marked_as_round_end_log_blocks(tmp_path: Path
         if server.payload["state"]["timing"]["round_number"] > opening_round:
             break
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
 
     assert server.payload["state"]["timing"]["round_number"] > opening_round
     assert any(block["round_end"] for block in server.payload["log_blocks"])
@@ -3527,7 +3569,7 @@ def test_player_log_drops_developer_dump_lines_in_ordinary_play(tmp_path: Path) 
     server = _played_through_setup(_served(tmp_path))
     for _ in range(4):
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
 
     lines = [line for block in server.payload["log_blocks"] for line in block["lines"]]
     assert lines, "ordinary play produced no log lines"
@@ -3545,10 +3587,11 @@ def test_recall_is_a_turn_step_and_round_end_prefixes_stay_on_round_end_steps(tm
     recall_line = next((line for line in turn_lines if "recalled" in line.lower()), None)
     assert recall_line is not None, f"turn block had no recall line: {turn_lines}"
     assert not recall_line.startswith("Round end:"), recall_line
+    _pass_end_turn_window(server)
 
     while server.payload["state"]["timing"]["round_number"] == 1:
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
 
     round_end_lines = server.payload["log_blocks"][-1]["lines"]
     for expected in ("ship advanced", "Merchant advanced", "First Player marker"):
@@ -3835,7 +3878,7 @@ def _played_until_a_bonus_offers_a_choice(server, limit: int = 30):
         if _mix_groups(server):
             return server
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
     raise AssertionError("no Taxation bonus ever offered a choice, so nothing was tested")
 
 
@@ -3955,7 +3998,7 @@ def test_a_taxation_bonus_with_one_mix_still_uses_the_resource_pills(tmp_path: P
         for candidate in server.payload["turn_candidates"]
     ):
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
 
     candidate = next(
         c
@@ -4258,7 +4301,7 @@ def _played_until_a_construct_offers_a_choice(server, limit: int = 30):
         if _building_choices(server):
             return server
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
     raise AssertionError("no construct ever offered a choice, so nothing was tested")
 
 
@@ -4394,7 +4437,7 @@ def test_a_construct_with_one_building_to_go_at_never_puts_the_question(tmp_path
         for step in candidate["steps"]
     ):
         settled = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
 
     assert _building_choices(server) == {}, "this position had a choice, so it tests nothing"
     candidate = next(
@@ -5190,6 +5233,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert "setAttribute('data-turn-skip-candidate'" in code
     assert "setAttribute('data-turn-duty-candidate'" in code
     assert "setAttribute('data-turn-shown'" in code
+    assert "setAttribute('data-phase-current'" in code
     # And it may not know what any step is ABOUT. A step says how it is answered and the script
     # routes on that; the day it can tell a tithe's stock from a taxation's by name is the day the
     # next field needs the script taught about it rather than merely published to it. The whole
@@ -5889,6 +5933,32 @@ def test_the_wheel_corners_keep_only_the_counter_and_box_holds_the_controls(tmp_
     assert 'data-turn-control="sow"' not in page
 
 
+def test_end_turn_phase_is_painted_in_server_html_before_the_script_runs() -> None:
+    scenario = load_scenario("scenarios/produce_wheat_001.json")
+    committed = replace(
+        scenario.state,
+        turn_progress=replace(scenario.state.turn_progress, resolution_committed=True),
+    )
+    state_payload = view_payload(committed, scenario.config)
+    payload = dict(
+        state_payload,
+        state_token=state_token(state_payload),
+        turn_candidates=play_server.turn_candidates(committed, scenario.config),
+        turn_steps=play_server.turn_steps_payload(committed, scenario.config),
+        log=[],
+        log_blocks=[],
+    )
+
+    page = render_play_view_from_payload(payload)
+
+    assert page.count('data-turn-phase="') == 3
+    assert len(re.findall(r'<div class="phase-row"[^>]*data-phase-current="true"', page)) == 1
+    assert (
+        '<div class="phase-row" data-turn-phase="end" data-phase-current="true">End of Turn</div>'
+        in page
+    )
+
+
 def test_the_opening_decision_is_put_on_every_board_and_can_be_hit(tmp_path: Path) -> None:
     """THE SYMPTOM, in the position a new game actually opens in.
 
@@ -6141,7 +6211,7 @@ def _played_until_a_box_is_offered(server, limit: int = 80):
         settled = next((c for c in server.payload["turn_candidates"] if c["action_id"]), None)
         if settled is None:
             break
-        server.apply(settled["action_id"], server.payload["state_token"])
+        _apply_settled_turn_and_pass(server, settled)
     raise AssertionError(f"no round end in {limit} moves asked about a box")
 
 

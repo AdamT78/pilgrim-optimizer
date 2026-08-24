@@ -17,7 +17,7 @@ def _tithe_action_index(path: str) -> int:
     raise AssertionError(f"No tithe full-turn action found for scenario: {path}")
 
 
-def test_cli_round_end_trade_route_income_basic_order_and_wording(capsys) -> None:
+def test_cli_round_end_trade_route_income_basic_defers_until_end_turn(capsys) -> None:
     action_index = _tithe_action_index("scenarios/round_end_trade_route_income_basic_001.json")
     exit_code = main(
         [
@@ -31,17 +31,13 @@ def test_cli_round_end_trade_route_income_basic_order_and_wording(capsys) -> Non
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "MERCHANT_ADVANCE:" in output
-    assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" in output
-    # The round end now finishes by ASKING rather than by deciding: it stops on the first
-    # player owed a Confession Box question, and the marker is awarded by whoever answers
-    # last. So this is the pipeline's last line, and the order it is in is the claim.
-    assert "CONFESSION_BOX_PHASE:" in output
-    assert output.index("MERCHANT_ADVANCE:") < output.index("TRADE_ROUTE_INCOME:")
-    assert output.index("TRADE_ROUTE_INCOME:") < output.index("CONFESSION_BOX_PHASE:")
+    assert "DUTY_RESOLUTION:" in output
+    assert "MERCHANT_ADVANCE:" not in output
+    assert "TRADE_ROUTE_INCOME: player_one gained wheat +1 from 1 trade route" not in output
+    assert "CONFESSION_BOX_PHASE:" not in output
 
 
-def test_cli_round_end_trade_route_income_plural_wording(capsys) -> None:
+def test_cli_round_end_trade_route_income_plural_income_waits_for_end_turn(capsys) -> None:
     action_index = _tithe_action_index(
         "scenarios/round_end_trade_route_income_multiple_routes_001.json"
     )
@@ -57,10 +53,11 @@ def test_cli_round_end_trade_route_income_plural_wording(capsys) -> None:
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "TRADE_ROUTE_INCOME: player_one gained wheat +3 from 3 trade routes" in output
+    assert "DUTY_RESOLUTION:" in output
+    assert "TRADE_ROUTE_INCOME: player_one gained wheat +3 from 3 trade routes" not in output
 
 
-def test_cli_round_end_trade_route_income_after_two_guild_moves_regression(capsys) -> None:
+def test_cli_round_end_trade_route_income_after_two_guild_moves_waits_for_end_turn(capsys) -> None:
     action_index = _tithe_action_index(
         "scenarios/round_end_trade_route_income_after_two_guild_moves_001.json"
     )
@@ -76,12 +73,8 @@ def test_cli_round_end_trade_route_income_after_two_guild_moves_regression(capsy
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "MERCHANT_ADVANCE: clerical -> build_roads (east); current resource=stone" in output
-    assert "TRADE_ROUTE_INCOME: player_one gained stone +2 from 2 trade routes" in output
-    assert "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route" in output
-    assert output.index("MERCHANT_ADVANCE:") < output.index(
-        "TRADE_ROUTE_INCOME: player_one gained stone +2 from 2 trade routes"
-    )
-    assert output.index(
-        "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route"
-    ) < output.index("CONFESSION_BOX_PHASE:")
+    assert "DUTY_RESOLUTION:" in output
+    assert "MERCHANT_ADVANCE: clerical -> build_roads (east); current resource=stone" not in output
+    assert "TRADE_ROUTE_INCOME: player_one gained stone +2 from 2 trade routes" not in output
+    assert "TRADE_ROUTE_INCOME: player_two gained stone +1 from 1 trade route" not in output
+    assert "CONFESSION_BOX_PHASE:" not in output

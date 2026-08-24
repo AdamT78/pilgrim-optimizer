@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import action_id
+from pilgrim.model.actions import EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId
 from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
 
@@ -357,23 +357,26 @@ def test_kogge_plus_library_preserves_route_and_end_turn_event_boundaries() -> N
             and candidate.end_turn_relocation_to == "abbey"
         ),
     )
-    result = apply_action(composed_state, action, scenario.config)
+    resolution = apply_action(composed_state, action, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *passed.events)
 
     kogge_bonus_index = _event_index(
-        result.events,
+        events,
         EventType.BUILDING_BONUS,
         lambda event: dict(event.details).get("building") == "kogge",
     )
-    sowing_index = _event_index(result.events, EventType.SOWING)
-    duty_index = _event_index(result.events, EventType.DUTY_RESOLUTION)
-    recall_index = _event_index(result.events, EventType.ACOLYTE_RECALL)
+    sowing_index = _event_index(events, EventType.SOWING)
+    duty_index = _event_index(events, EventType.DUTY_RESOLUTION)
+    recall_index = _event_index(events, EventType.ACOLYTE_RECALL)
     library_bonus_index = _event_index(
-        result.events,
+        events,
         EventType.BUILDING_BONUS,
         lambda event: dict(event.details).get("building") == "library",
     )
-    end_turn_index = _event_index(result.events, EventType.END_TURN_RELOCATION)
-    turn_advance_index = _event_index(result.events, EventType.TURN_ADVANCE)
+    end_turn_index = _event_index(events, EventType.END_TURN_RELOCATION)
+    turn_advance_index = _event_index(events, EventType.TURN_ADVANCE)
 
     assert (
         kogge_bonus_index
@@ -384,4 +387,4 @@ def test_kogge_plus_library_preserves_route_and_end_turn_event_boundaries() -> N
         < end_turn_index
         < turn_advance_index
     )
-    assert result.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 4
+    assert passed.state.player_state(PlayerId.PLAYER_ONE).workforce.abbey == 4

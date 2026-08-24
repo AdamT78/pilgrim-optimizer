@@ -8,7 +8,7 @@ from pilgrim.evaluation.breakdown import (
     EvaluationBreakdown,
     evaluate_root_player,
 )
-from pilgrim.model.actions import GameAction, action_id
+from pilgrim.model.actions import EndTurnAction, GameAction, action_id
 from pilgrim.model.config import GameConfig
 from pilgrim.model.enums import PlayerId
 from pilgrim.model.state import GameState
@@ -107,7 +107,7 @@ def solve_exact(
         }
         best_line: tuple[GameAction, ...] = ()
         for action in actions:
-            child_state = apply_action(state, action, config).state
+            child_state = _pass_resolution_window(apply_action(state, action, config).state, config)
             child_root_score, child_scores, child_line = search(child_state, remaining_depth - 1)
             actor_score = child_scores[decision_player]
             candidate_line = (action, *child_line)
@@ -125,6 +125,7 @@ def solve_exact(
         memo[memo_key] = result
         return result
 
+    initial_state = _pass_resolution_window(initial_state, config)
     best_score, _, principal_variation = search(initial_state, depth)
     best_action = principal_variation[0] if principal_variation else None
     principal_variation_ids = tuple(action_id(action) for action in principal_variation)
@@ -162,5 +163,21 @@ def _state_after_line(
 ) -> GameState:
     state = initial_state
     for action in actions:
-        state = apply_action(state, action, config).state
+        state = _pass_resolution_window(apply_action(state, action, config).state, config)
+    return state
+
+
+def _pass_resolution_window(state: GameState, config: GameConfig) -> GameState:
+    """Advance checked deterministic End Turn windows without spending search depth.
+
+    Search depth measures full-turn decisions. The UI's post-resolution window is still a real
+    engine state (and may hold player-facing events). Exact search checks that its sole legal
+    action is EndTurnAction before passing, so a future branch in this window cannot be skipped.
+    """
+    while state.turn_progress.resolution_committed:
+        assert legal_actions(state, config) == (EndTurnAction(),), (
+            "Exact search may pass a resolution window only when EndTurnAction is its sole legal "
+            "action."
+        )
+        state = apply_action(state, EndTurnAction(), config).state
     return state

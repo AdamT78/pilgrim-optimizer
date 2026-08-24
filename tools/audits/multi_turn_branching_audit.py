@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pilgrim.io.scenarios import LoadedScenario, load_scenario
 from pilgrim.model.actions import (
+    EndTurnAction,
     FullTurnAction,
     GameAction,
     SetupSowAction,
@@ -278,15 +279,27 @@ def _run_trace_rows(
         # A game opens, and every round ends, by stopping on whoever holds the First Player marker.
         # Answered and stepped over rather than measured: a row counts how a TURN branches --
         # routes, duties, what to do with them -- and a position whose only question is who begins
-        # has none of that. Its branching is one per seat, and is not what this audit looks at.
-        # The holder keeps it, so the trace walks a fixed seating rather than a wandering one.
-        # The Confession Box questions are stepped over on the same grounds and with the answer
-        # that changes nothing. A seat deciding whether to buy two piety for the marker is not
-        # branching a turn either, and declining leaves the walk where it was.
-        while current_state.phase in (
-            TurnPhase.START_PLAYER_CONFESSION,
-            TurnPhase.START_PLAYER_SELECTION,
-        ):
+        # has none of that. The holder keeps it, so the trace walks a fixed seating rather than a
+        # wandering one. Confession Box questions are stepped over with the answer that changes
+        # nothing for the same reason.
+        #
+        # End Turn is now always a separate, deterministic window. It is intentionally skipped
+        # too: this audit measures the branching of FullTurnAction, and recording a one-action
+        # pass as a zero-full-turn row would mix a UI timing checkpoint into those metrics.
+        while True:
+            if current_state.turn_progress.resolution_committed:
+                window_actions = legal_actions(current_state, config)
+                if window_actions != (EndTurnAction(),):
+                    raise ValueError(
+                        f"End-turn window was not deterministic at trace={trace_name} step={step}."
+                    )
+                current_state = apply_action(current_state, EndTurnAction(), config).state
+                continue
+            if current_state.phase not in (
+                TurnPhase.START_PLAYER_CONFESSION,
+                TurnPhase.START_PLAYER_SELECTION,
+            ):
+                break
             answer: GameAction = (
                 StartPlayerConfessionBoxAction(use=False)
                 if current_state.phase is TurnPhase.START_PLAYER_CONFESSION

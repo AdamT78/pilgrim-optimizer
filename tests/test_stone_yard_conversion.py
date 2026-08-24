@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import BuildingConversionStep, action_summary
+from pilgrim.model.actions import BuildingConversionStep, EndTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.transition import (
@@ -135,7 +135,9 @@ def test_buying_stone_can_exceed_six_then_round_end_caps_back_to_six() -> None:
         action for action in legal_actions(state, scenario.config)
         if action.resolution is TurnResolutionType.TITHE
     )
-    result = apply_action(state, action, scenario.config)
+    resolution = apply_action(state, action, scenario.config)
+    assert resolution.state.turn_progress.resolution_committed
+    result = apply_action(resolution.state, EndTurnAction(), scenario.config)
     cap = next(event for event in _events(result.events, EventType.EXCESS_RESOURCE_CAP)
                if dict(event.details).get("player") == "player_two")
     assert dict(cap.details)["stone_before"] == 7

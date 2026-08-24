@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pilgrim.cli import main
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import StartPlayerConfessionBoxAction
+from pilgrim.model.actions import EndTurnAction, StartPlayerConfessionBoxAction
 from pilgrim.model.enums import PlayerId, TurnPhase, TurnResolutionType
 from pilgrim.model.state import GameState
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -28,6 +28,8 @@ def _round_ended(path: str, *, waiting_on: PlayerId | None = None) -> GameState:
         if candidate.resolution is TurnResolutionType.TITHE
     )
     state = apply_action(scenario.state, action, scenario.config).state
+    assert state.turn_progress.resolution_committed
+    state = apply_action(state, EndTurnAction(), scenario.config).state
     while (
         waiting_on is not None
         and state.phase is TurnPhase.START_PLAYER_CONFESSION
@@ -103,13 +105,14 @@ def _tithe_index(path: str) -> int:
     raise AssertionError(f"No round-ending tithe in {path}.")
 
 
-def test_cli_round_end_names_who_is_being_waited_on_and_stops(capsys) -> None:
+def test_cli_round_end_stops_at_the_end_turn_window(capsys) -> None:
     source = "scenarios/confession_box_owned_temp_piety_above_12_001.json"
     output = _applied(source, action_index=_tithe_index(source), capsys=capsys)
 
-    assert "CONFESSION_BOX_PHASE:" in output
-    assert "waiting on player_one" in output
-    assert "START_PLAYER_MARKER:" not in output, "the marker was awarded before anyone answered"
+    assert "DUTY_RESOLUTION:" in output
+    assert "CONFESSION_BOX_PHASE:" not in output
+    assert "START_PLAYER_MARKER:" not in output, "the marker was awarded before the End of Turn pass"
+    assert "TURN_ADVANCE:" not in output
 
 
 def test_cli_apply_owned_confession_box_shows_temporary_piety_above_twelve(

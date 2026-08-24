@@ -80,7 +80,7 @@ def test_cli_apply_opponent_hired_stone_yard_buy_shows_owner_payment() -> None:
     assert "BUILDING_BONUS: stone_yard bought 2 stone for 2 silver" in output
 
 
-def test_cli_apply_stone_yard_buy_above_six_round_end_cap_shows_cap_event() -> None:
+def test_cli_apply_stone_yard_buy_above_six_defers_the_round_end_cap() -> None:
     output = _step_output(
         "scenarios/stone_yard_buy_above_six_then_round_end_cap_001.json",
         source="own_active",
@@ -89,4 +89,6 @@ def test_cli_apply_stone_yard_buy_above_six_round_end_cap_shows_cap_event() -> N
     )
     assert "BUILDING_BONUS: stone_yard bought 1 stone for 1 silver" in output
     assert "RESOURCE_DELTA: player_two stone +1; silver -1" in output
-    assert "EXCESS_RESOURCE_CAP: player_two stone 7 -> 6" in output
+    assert "EXCESS_RESOURCE_CAP: player_two stone 7 -> 6" not in output
+    assert "ROUND_ADVANCE:" not in output
+    assert "TURN_ADVANCE:" not in output
