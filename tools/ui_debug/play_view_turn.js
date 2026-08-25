@@ -72,6 +72,7 @@
   var conversionStepId = null;
   var resourceAllocation = {};
   var resourceAllocationTotal = null;
+  var requestInFlight = false;
   var conversionBuildings = document.querySelectorAll('[data-turn-step-building-id]');
   Array.prototype.forEach.call(seats, function (seat) {
     if (seat.getAttribute('data-active-seat') === 'true') {
@@ -658,6 +659,7 @@
   }
 
   function arrangementClick(slot, sourceKind) {
+    if (requestInFlight) { return; }
     if (!activeSeat || !activeSeat.getAttribute('data-arrangement-choice')) { return; }
     var counts = currentArrangementCounts();
     if (!counts) { return; }
@@ -828,6 +830,7 @@
   }
 
   function ordinationClick(kind) {
+    if (requestInFlight) { return; }
     if (!activeSeat || !activeSeat.getAttribute('data-ordination-choice')) { return; }
     var counts = currentOrdinationCounts();
     if (kind === 'ordain') {
@@ -910,17 +913,27 @@
   function replacePage(request) {
     /* The server sends the whole page back, drawn from the state it now holds. Swapping it in
        is the only way anything on this board changes: nothing here draws a piece. */
-    if (request.status !== 200) { window.alert('refused: ' + request.responseText); return; }
+    if (request.status !== 200) {
+      requestInFlight = false;
+      window.alert('refused: ' + request.responseText);
+      return;
+    }
     document.open();
     document.write(request.responseText);
     document.close();
   }
 
   function postPage(path, body) {
+    if (requestInFlight) { return; }
+    requestInFlight = true;
     var request = new XMLHttpRequest();
     request.open('POST', path, true);
     request.setRequestHeader('Content-Type', 'application/json');
     request.onload = function () { replacePage(request); };
+    request.onerror = function () {
+      requestInFlight = false;
+      window.alert('refused: request failed');
+    };
     request.send(JSON.stringify(body));
   }
 
@@ -969,16 +982,26 @@
     });
   }
 
-  function control(name) {
-    return document.querySelector('[data-turn-control="' + name + '"]');
+  function controls(name) {
+    return document.querySelectorAll('[data-turn-control="' + name + '"]');
   }
 
   function setControl(name, enabled, active) {
-    var item = control(name);
-    if (!item) { return; }
-    item.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
-    item.setAttribute('data-turn-control-active', active ? 'true' : 'false');
-    item.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    Array.prototype.forEach.call(controls(name), function (item) {
+      item.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
+      item.setAttribute('data-turn-control-active', active ? 'true' : 'false');
+      item.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    });
+  }
+
+  function setConfirmLabel(endTurn) {
+    var shown = endTurn ? 'end_turn' : 'confirm';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-turn-control-label]'), function (item) {
+      item.setAttribute(
+        'data-turn-offered',
+        item.getAttribute('data-turn-control-label') === shown ? 'true' : 'false'
+      );
+    });
   }
 
   function spaceAt(name) {
@@ -1662,6 +1685,9 @@
         && !preview.overflow,
       false
     );
+    setConfirmLabel(
+      RESOLUTION_COMMITTED && conversionChosen.length === 0 && confirmActionId !== null
+    );
     setControl(
       'action',
       actionResolutions.length > 0 && preview.resolution === null && resolutionSplit !== 'tithe',
@@ -1683,6 +1709,7 @@
       restoreBaseline();
       applyTurnStepRelocationPreview();
       renderTurnSteps();
+      setConfirmLabel(false);
       setControl(
         'reset',
         RESOLUTION_COMMITTED || USED_BUILDINGS.length > 0 || conversionChosen.length > 0,
@@ -1826,6 +1853,7 @@
 
   Array.prototype.forEach.call(conversionBuildings, function (building) {
     building.addEventListener('click', function (event) {
+      if (requestInFlight) { return; }
       if (building.getAttribute('data-turn-step-offered') !== 'true') { return; }
       if (building.getAttribute('data-turn-step-market') === 'true') {
         event.stopImmediatePropagation();
@@ -1838,6 +1866,7 @@
 
   Array.prototype.forEach.call(turnStepDirections, function (button) {
     button.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (button.getAttribute('data-turn-step-offered') !== 'true') { return; }
       conversionChosen = [
         conversionChosen[0],
@@ -1850,6 +1879,7 @@
 
   Array.prototype.forEach.call(turnStepResourceKeys, function (key) {
     key.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (key.getAttribute('data-turn-offered') !== 'true') { return; }
       var allocationCandidates = surviving(chosen).filter(function (candidate) {
         var step = candidate.steps[chosen.length];
@@ -1907,6 +1937,7 @@
 
   Array.prototype.forEach.call(pietyChoicePills, function (choice) {
     choice.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (choice.getAttribute('data-piety-choice-offered') !== 'true') { return; }
       conversionChosen = [
         conversionChosen[0],
@@ -1921,6 +1952,7 @@
 
   Array.prototype.forEach.call(turnStepHireButtons, function (button) {
     button.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (button.getAttribute('data-turn-step-hire-offered') !== 'true') { return; }
       var payment = button.getAttribute('data-turn-step-hire-payment');
       var live = survivingTurnSteps(conversionChosen).filter(function (step) {
@@ -1933,6 +1965,7 @@
 
   Array.prototype.forEach.call(spaces, function (space) {
     space.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (
         space.getAttribute('data-turn-start-candidate') !== 'true'
         && space.getAttribute('data-turn-step-relocation-candidate') !== 'true'
@@ -1956,6 +1989,7 @@
 
   Array.prototype.forEach.call(arrows, function (arrow) {
     arrow.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (arrow.getAttribute('data-turn-offered') !== 'true') { return; }
       var edge = arrow.getAttribute('data-arrow');
       chosen.push(edge);
@@ -1971,6 +2005,7 @@
   function answers(elements, attribute) {
     Array.prototype.forEach.call(elements, function (key) {
       key.addEventListener('click', function () {
+        if (requestInFlight) { return; }
         if (key.getAttribute('data-turn-offered') !== 'true') { return; }
         var value = key.getAttribute(attribute);
         if (attribute === 'data-resolution-key') {
@@ -1994,11 +2029,13 @@
   if (activeSeat) {
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="village"]'), function (token) {
       token.addEventListener('click', function () {
+        if (requestInFlight) { return; }
         ordinationClick('ordain');
       });
     });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="abbey"]'), function (token) {
       token.addEventListener('click', function () {
+        if (requestInFlight) { return; }
         if (activeSeat.getAttribute('data-end-relocation-choice') === 'true') {
           conversionChosen = [conversionChosen[0], 'abbey'];
           conversionStepId = null;
@@ -2011,19 +2048,21 @@
     });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="role"]'), function (token) {
       token.addEventListener('click', function () {
+        if (requestInFlight) { return; }
         arrangementClick(token.getAttribute('data-role'), 'token');
       });
     });
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-role-circle]'), function (circle) {
       circle.addEventListener('click', function () {
+        if (requestInFlight) { return; }
         arrangementClick(circle.getAttribute('data-role-circle'), 'circle');
       });
     });
   }
 
-  var confirmControl = control('confirm');
-  if (confirmControl) {
+  Array.prototype.forEach.call(controls('confirm'), function (confirmControl) {
     confirmControl.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (confirmControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
       if (conversionChosen.length > 0) {
         if (!conversionReady()) {
@@ -2081,11 +2120,11 @@
       if (live.length !== 1 || !live[0].action_id) { return; }
       submit(live[0].action_id);
     });
-  }
+  });
 
-  var resetControl = control('reset');
-  if (resetControl) {
+  Array.prototype.forEach.call(controls('reset'), function (resetControl) {
     resetControl.addEventListener('click', function () {
+      if (requestInFlight) { return; }
       if (resetControl.getAttribute('data-turn-control-enabled') !== 'true') { return; }
       if (RESOLUTION_COMMITTED || USED_BUILDINGS.length > 0) {
         submitReset();
@@ -2103,9 +2142,10 @@
       autoAdvance = true;
       render();
     });
-  }
+  });
 
   function chooseResolutionSplit(name) {
+    if (requestInFlight) { return; }
     var live = surviving(chosen);
     var offered = stepsAt(chosen.length, live);
     var resolutions = offeredByKind(offered, 'resolution');
@@ -2122,11 +2162,12 @@
   }
 
   ['action', 'tithe'].forEach(function (name) {
-    var controlButton = control(name);
-    if (!controlButton) { return; }
-    controlButton.addEventListener('click', function () {
-      if (controlButton.getAttribute('data-turn-control-enabled') !== 'true') { return; }
-      chooseResolutionSplit(name);
+    Array.prototype.forEach.call(controls(name), function (controlButton) {
+      controlButton.addEventListener('click', function () {
+        if (requestInFlight) { return; }
+        if (controlButton.getAttribute('data-turn-control-enabled') !== 'true') { return; }
+        chooseResolutionSplit(name);
+      });
     });
   });
 

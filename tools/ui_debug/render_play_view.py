@@ -859,10 +859,16 @@ def _box_turn_controls() -> str:
     """The box controls. Same `data-turn-control` handles, new location."""
 
     def button(label: str, key: str) -> str:
+        caption = (
+            '<span data-turn-control-label="confirm" data-turn-offered="false">Confirm</span>'
+            '<span data-turn-control-label="end_turn" data-turn-offered="false">End turn</span>'
+            if key == "confirm"
+            else label
+        )
         return (
             f'<button type="button" class="turn-control" data-turn-control="{key}"'
             ' data-turn-control-enabled="false" data-turn-control-active="false"'
-            f' aria-label="{label}" aria-disabled="true">{label}</button>'
+            f' aria-label="{label}" aria-disabled="true">{caption}</button>'
         )
 
     return (
@@ -1077,6 +1083,7 @@ def turn_styles(route_color: str) -> str:
   .turn-control-row-bottom [data-turn-control="confirm"] {{
     min-width: 0;
   }}
+  .turn-control [data-turn-control-label][data-turn-offered="false"] {{ display: none; }}
   .turn-step-controls {{ position: relative; z-index: 2; margin: 8px 0; color: #C9C4B4; }}
   .turn-step-direction-row, .turn-step-resource-row, .turn-step-hire-row {{
     display: flex; align-items: center; gap: 6px; margin-top: 5px; height: 24px;

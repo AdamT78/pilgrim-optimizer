@@ -216,8 +216,8 @@ def _walk_live_dom_until(
     raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
 
 
-def _reach_movement_library_window(page) -> None:
-    """Use the same real-click action prefix to reach movement_2p's Library window."""
+def _narrow_movement_library_turn_to_confirm(page) -> None:
+    """Use movement_2p's ordinary action prefix to leave one full turn candidate."""
     # This ordinary four-question action leaves an acolyte in City and is intentionally free of
     # another building step. The Action control exposes its final resolution question.
     for selector in (
@@ -232,6 +232,11 @@ def _reach_movement_library_window(page) -> None:
         _click_handle_centre(page, handle, require_hit=True)
         page.wait_for_timeout(20)
     assert _confirm_enabled(page), "Library prefix did not narrow to one turn action"
+
+
+def _reach_movement_library_window(page) -> None:
+    """Commit the ordinary movement_2p action and reach its Library end-of-turn window."""
+    _narrow_movement_library_turn_to_confirm(page)
     _click_handle_point(
         page,
         page.locator('[data-turn-control="confirm"]').element_handle(),
@@ -323,6 +328,17 @@ def _confirm_enabled(page) -> bool:
     return (
         page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled") == "true"
     )
+
+
+def _painted_confirm_label(page) -> str:
+    """The visible server-drawn caption, rather than a script-owned control attribute."""
+    label = page.locator(
+        '[data-turn-control="confirm"] [data-turn-control-label][data-turn-offered="true"]'
+    )
+    assert label.count() == 1, "Confirm did not paint exactly one current caption"
+    text = label.text_content()
+    assert text is not None, "Confirm's painted caption had no text"
+    return text
 
 
 def _reach_taxation_step_two(page, *, step_one: str = "stone") -> None:
@@ -2316,6 +2332,108 @@ def test_confirm_needs_one_turn_action_or_a_complete_committed_step(page, serve)
         "an enabled normal-turn Confirm did not send its /action request"
     )
     assert server.state != after_dormitory
+
+
+def test_confirm_paints_the_action_that_its_next_press_will_take(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    origin = page.query_selector(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    )
+    assert origin is not None, "movement_2p did not offer its opening sow origin"
+    _click_handle_centre(page, origin, require_hit=True)
+    page.wait_for_timeout(20)
+    assert _painted_confirm_label(page) == "Confirm", "Sow painted a label that would pass the turn"
+    sow_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
+
+    page.reload(wait_until="networkidle")
+    _reach_movement_library_window(page)
+    assert _painted_confirm_label(page) == "End turn", (
+        "the un-staged End of Turn window did not say what Confirm would do"
+    )
+    end_turn_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
+    assert end_turn_height == pytest.approx(sow_height, abs=0.1), (
+        "the End of Turn caption changed the prompt box height"
+    )
+    full_page = page.evaluate(
+        """() => ({
+            width: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight,
+        })"""
+    )
+    assert full_page == page.viewport_size, (
+        "the End of Turn screenshot no longer covers the entire play page"
+    )
+    page.screenshot(path=str(SCREENSHOTS / "end-turn-confirm-label.png"))
+
+    library = page.query_selector(
+        '[data-turn-step-building-id="library"][data-turn-step-offered="true"]'
+    )
+    assert library is not None, "Library was not offered in its End of Turn window"
+    _click_handle_centre(page, library, require_hit=True)
+    page.wait_for_timeout(20)
+    assert _painted_confirm_label(page) == "Confirm", (
+        "a staged End of Turn step still painted the pass label"
+    )
+    staged_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
+    assert staged_height == pytest.approx(end_turn_height, abs=0.1), (
+        "switching Confirm's rendered caption changed the prompt box height"
+    )
+
+
+def test_two_rapid_real_confirm_clicks_send_one_request(page, serve) -> None:
+    """The second pointer event must not pass the freshly replaced End of Turn window."""
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    _narrow_movement_library_turn_to_confirm(page)
+    requests: list[str] = []
+
+    def record_request(request) -> None:
+        if request.method == "POST" and request.url.rsplit("/", 1)[-1] == "action":
+            requests.append(request.url)
+
+    page.on("request", record_request)
+    confirm = page.query_selector('[data-turn-control="confirm"][data-turn-control-enabled="true"]')
+    assert confirm is not None, "the narrowed action did not enable Confirm"
+    x, y = _centre(page, confirm)
+    y -= confirm.bounding_box()["height"] * 0.4
+    assert _is_hit_target(page, confirm, x, y), "Confirm's visible upper edge was not its click target"
+    page.mouse.click(x, y)
+    page.mouse.click(x, y)
+    page.wait_for_timeout(100)
+
+    assert len(requests) == 1, "two rapid enabled Confirm clicks sent more than one request"
+
+
+def test_a_refused_submission_releases_the_in_flight_guard(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    _reach_movement_library_window(page)
+    stale_token = server.payload["state_token"]
+    server.apply(action_id(EndTurnAction()), stale_token)
+    requests: list[str] = []
+    dialogs: list[str] = []
+
+    def record_request(request) -> None:
+        if request.method == "POST" and request.url.rsplit("/", 1)[-1] == "action":
+            requests.append(request.url)
+
+    def dismiss_refusal(dialog) -> None:
+        dialogs.append(dialog.message)
+        dialog.dismiss()
+
+    page.on("request", record_request)
+    page.on("dialog", dismiss_refusal)
+    confirm = page.query_selector('[data-turn-control="confirm"][data-turn-control-enabled="true"]')
+    assert confirm is not None, "the stale page did not retain its enabled End turn control"
+    _click_handle_centre(page, confirm, require_hit=True)
+    page.wait_for_timeout(100)
+    assert dialogs and dialogs[-1].startswith("refused:"), "the stale submission was not refused"
+    assert _confirm_enabled(page), "a refused submission left the still-painted control disabled"
+    _click_handle_centre(page, confirm, require_hit=True)
+    page.wait_for_timeout(100)
+    assert len(requests) == 2, "the control stayed dead after its refusal alert was dismissed"
 
 
 def test_pointer_focused_svg_buildings_have_no_mouse_focus_outline(page, serve) -> None:
