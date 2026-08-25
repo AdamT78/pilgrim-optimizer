@@ -279,18 +279,16 @@ def action_id(action: GameAction) -> str:
         or action.sow_route_secondary_building_source is not None
         or action.sow_route_omitted_location is not None
     ):
-        sow_route_suffix = (
-            f":sow_route_building:{action.sow_route_building_id or 'none'}"
-            f":from:{action.sow_route_building_source or 'unknown'}"
-        )
+        sow_route_suffix = f":sow_route_building:{action.sow_route_building_id or 'none'}"
+        if action.sow_route_building_source is not None:
+            sow_route_suffix += f":from:{action.sow_route_building_source}"
         if (
             action.sow_route_secondary_building_id is not None
             or action.sow_route_secondary_building_source is not None
         ):
-            sow_route_suffix += (
-                f":secondary_building:{action.sow_route_secondary_building_id or 'none'}"
-                f":secondary_from:{action.sow_route_secondary_building_source or 'unknown'}"
-            )
+            sow_route_suffix += f":secondary_building:{action.sow_route_secondary_building_id or 'none'}"
+            if action.sow_route_secondary_building_source is not None:
+                sow_route_suffix += f":secondary_from:{action.sow_route_secondary_building_source}"
         if action.sow_route_omitted_location is not None:
             sow_route_suffix += f":skip:{action.sow_route_omitted_location}"
     bank_payment_suffix = ""
@@ -605,18 +603,17 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     selected_duty = position_name(action.selected_duty, positions)
     duty_category = duty_category_at_position(config, action.selected_duty)
 
-    def _source_for_route_building(building_id: str) -> str | None:
-        if action.sow_route_building_id == building_id:
-            return action.sow_route_building_source
-        if action.sow_route_secondary_building_id == building_id:
-            return action.sow_route_secondary_building_source
-        return None
-
-    kogge_source = _source_for_route_building("kogge")
-    cloisters_source = _source_for_route_building("cloisters")
+    uses_kogge = (
+        action.sow_route_building_id == "kogge"
+        or action.sow_route_secondary_building_id == "kogge"
+    )
+    uses_cloisters = (
+        action.sow_route_building_id == "cloisters"
+        or action.sow_route_secondary_building_id == "cloisters"
+    )
     has_combined_kogge_cloisters = (
-        kogge_source is not None
-        and cloisters_source is not None
+        uses_kogge
+        and uses_cloisters
         and action.sow_route_omitted_location is not None
     )
 
@@ -627,7 +624,7 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
             " | use building: cloisters to skip "
             f"{position_name(action.sow_route_omitted_location, positions)}"
         )
-    elif cloisters_source is not None and action.sow_route_omitted_location is not None:
+    elif uses_cloisters and action.sow_route_omitted_location is not None:
         route_summary += (
             f" | skip {position_name(action.sow_route_omitted_location, positions)} with cloisters"
         )
@@ -696,19 +693,8 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
     if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED:
         summary += f" | building: {action.construct_building_id or 'unknown'}"
         summary += f" | deferred plan: {action.construct_plan or 'none'}"
-    if has_combined_kogge_cloisters:
-        if kogge_source != "own_active":
-            summary += f" | hire building: kogge from {kogge_source}"
-        if cloisters_source != "own_active":
-            summary += f" | hire building: cloisters from {cloisters_source}"
-    else:
-        if kogge_source is not None:
-            if kogge_source == "own_active":
-                summary += " | use building: kogge"
-            else:
-                summary += f" | hire building: kogge from {kogge_source}"
-        if cloisters_source is not None and cloisters_source != "own_active":
-            summary += f" | hire building: cloisters from {cloisters_source}"
+    if uses_kogge and not has_combined_kogge_cloisters:
+        summary += " | use building: kogge"
     if action.hired_building_id and action.hired_building_source:
         summary += (
             f" | hire building: {action.hired_building_id} from {action.hired_building_source}"

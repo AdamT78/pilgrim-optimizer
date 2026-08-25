@@ -346,29 +346,31 @@ def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -
         action
         for action in legal_actions(state, scenario.config)
         if isinstance(action, FullTurnAction)
-        and Counter(resource for _building, resource in action.hire_payments)
-        == Counter({"wheat": 1, "stone": 1})
+        and action.hire_payments == (("infirmary", "wheat"),)
     )
 
     result = apply_action(state, action, scenario.config)
-    action_events = [event for event in result.events if event.action_id == action_id(action)]
-    assert _hire_event_resources(action_events) == Counter({"wheat": 1, "stone": 1})
+    assert _hire_event_resources(result.events) == Counter({"wheat": 1, "stone": 1})
 
 
 @pytest.mark.slow
 def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire() -> None:
     scenario = load_scenario(DEEP_SCENARIO)
     config = _with_counter_under_the_merchant(scenario, "stone")
-    actions = legal_actions(scenario.state, config)
+    state = apply_turn_step(
+        scenario.state,
+        config,
+        next(step for step in turn_steps(scenario.state, config) if step.building_id == "cloisters"),
+    )
+    actions = legal_actions(state, config)
     action = next(
         action
         for action in actions
         if isinstance(action, FullTurnAction)
-        and len(action.hire_payments) == 2
-        and {resource for _building, resource in action.hire_payments} == {"stone"}
+        and action.hire_payments == (("infirmary", "stone"),)
     )
 
-    result = apply_action(scenario.state, action, config)
+    result = apply_action(state, action, config)
     assert _hire_event_resources(result.events) == Counter({"stone": 2})
 
 
@@ -398,7 +400,7 @@ def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
     base = next(
         action
         for action in actions
-        if isinstance(action, FullTurnAction) and len(action.hire_payments) >= 2
+        if isinstance(action, FullTurnAction) and action.hire_payments
     )
 
     with_extra = replace(
@@ -408,16 +410,21 @@ def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
     with pytest.raises(TransitionValidationError, match="non-hired buildings"):
         apply_action(scenario.state, with_extra, scenario.config)
 
-    with_missing = replace(base, hire_payments=base.hire_payments[1:])
-    with pytest.raises(TransitionValidationError, match="Missing hire payment"):
+    with_missing = replace(base, hire_payments=())
+    with pytest.raises(TransitionValidationError, match="missing payments"):
         apply_action(scenario.state, with_missing, scenario.config)
 
 
 def test_a_building_named_in_two_route_slots_is_rejected() -> None:
     scenario = load_scenario("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
+    state = apply_turn_step(
+        scenario.state,
+        scenario.config,
+        next(step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "cloisters"),
+    )
     base = next(
         action
-        for action in legal_actions(scenario.state, scenario.config)
+        for action in legal_actions(state, scenario.config)
         if isinstance(action, FullTurnAction)
         and action.sow_route_building_id == "cloisters"
         and action.sow_route_secondary_building_id is None
@@ -428,7 +435,7 @@ def test_a_building_named_in_two_route_slots_is_rejected() -> None:
         sow_route_secondary_building_source=base.sow_route_building_source,
     )
     with pytest.raises(TransitionValidationError, match="cannot be the same"):
-        apply_action(scenario.state, duplicated, scenario.config)
+        apply_action(state, duplicated, scenario.config)
 
 
 def test_action_id_differs_when_hire_payments_differ() -> None:

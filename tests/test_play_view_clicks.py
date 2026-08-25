@@ -16,7 +16,7 @@ import pytest
 from PIL import Image
 
 from pilgrim.model.actions import EndTurnAction, action_id
-from pilgrim.model.enums import TurnResolutionType
+from pilgrim.model.enums import PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 from tools.play_server import PlayServer
 
@@ -242,6 +242,24 @@ def _reach_movement_library_window(page) -> None:
         """() => {
           const library = document.querySelector('[data-turn-step-building-id="library"]');
           return library && library.getAttribute('data-turn-step-offered') === 'true';
+        }"""
+    )
+
+
+def _pass_movement_red_turn_to_yellow(page) -> None:
+    """Commit the ordinary Red turn, then pass its End of Turn window to Yellow's opening."""
+    _reach_movement_library_window(page)
+    confirm = page.query_selector('[data-turn-control="confirm"][data-turn-control-enabled="true"]')
+    assert confirm is not None, "Red's End of Turn pass was not enabled"
+    _click_handle_point(page, confirm, 0.5, 0.2)
+    page.wait_for_function(
+        """() => {
+          const active = document.querySelector('[data-active-seat="true"]');
+          const cloisters = document.querySelector(
+            '[data-player="player_one"] [data-turn-step-building-id="cloisters"]'
+          );
+          return active && active.getAttribute('data-player') === 'player_two'
+            && cloisters && cloisters.getAttribute('data-turn-step-offered') === 'true';
         }"""
     )
 
@@ -2669,31 +2687,112 @@ def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions
     ), "route using both east-axis directions did not advance to a duty choice"
 
 
-def test_kogge_city_start_outbound_arrow_click_advances_the_turn(page, serve) -> None:
-    """Catches Kogge city-start regressions where city->east looked offered but stayed dead."""
-    base_url, _server = serve(SCENARIOS / "kogge_hire_opponent_city_to_west_001.json")
+def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_removes_them(
+    page, serve
+) -> None:
+    """A hired route is unavailable until its committed step, and Reset returns to that truth."""
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
+    turn_start = server.state
+    yellow_silver = turn_start.player_state(PlayerId.PLAYER_TWO).resources.silver
 
-    city = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
-    # When every candidate starts in City, the client has already agreed that forced origin.
-    if city is not None:
+    def choose_city_and_count_reversed_arrows() -> int:
+        city = page.query_selector(
+            '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+        )
+        assert city is not None, "City was not offered as a sow origin"
         _click_handle_centre(page, city, require_hit=True)
         page.wait_for_timeout(20)
+        return sum(
+            page.locator(f'[data-arrow="{arrow}"][data-turn-offered="true"]').count()
+            for arrow in ("city->east", "city->west", "north->city", "south->city")
+        )
 
-    city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
-    assert city_east is not None, "city->east was not offered after lifting from city"
-    before = _turn_state_snapshot(page)
-    _click_handle_centre(page, city_east, require_hit=True)
+    assert choose_city_and_count_reversed_arrows() == 0
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="reset"]').element_handle(),
+        require_hit=True,
+    )
     page.wait_for_timeout(20)
 
-    after = _turn_state_snapshot(page)
-    assert after != before, "clicking city->east did not change the turn state"
-    assert (
-        after["duties"] > 0
-        or after["arrows"] > 0
-        or after["action_enabled"] == "true"
-        or after["tithe_enabled"] == "true"
-    ), "clicking city->east did not advance to a later turn question"
+    kogge = page.locator(
+        '[data-player="player_two"] '
+        '[data-turn-step-building-id="kogge"][data-turn-step-offered="true"]'
+    ).first
+    assert kogge.count() == 1, "Yellow's Kogge hire step was not offered"
+    _click_handle_centre(page, kogge.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    assert _confirm_enabled(page), "Kogge's complete hire step did not enable Confirm"
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        """() => document.querySelector('[data-turn-step-building-id="kogge"]')
+          .getAttribute('data-turn-step-used') === 'true'"""
+    )
+
+    assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver + 1
+    assert choose_city_and_count_reversed_arrows() > 0
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="reset"]').element_handle(),
+        require_hit=True,
+    )
+    page.wait_for_timeout(20)
+    assert server.state == turn_start
+    assert choose_city_and_count_reversed_arrows() == 0
+
+
+def test_hired_cloisters_step_reveals_its_extension_and_reaches_the_skip_question(
+    page, serve
+) -> None:
+    """A paid Cloisters route stays painted through its extra edge and then asks what to skip."""
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    _pass_movement_red_turn_to_yellow(page)
+
+    cloisters = page.query_selector(
+        '[data-player="player_one"] [data-turn-step-building-id="cloisters"]'
+        '[data-turn-step-offered="true"]'
+    )
+    assert cloisters is not None, "Yellow could not choose Red's Cloisters hire"
+    _click_handle_centre(page, cloisters, require_hit=True)
+    assert _confirm_enabled(page), "a complete Cloisters hire step did not enable Confirm"
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        """() => document.querySelector('[data-turn-step-building-id="cloisters"]')
+          .getAttribute('data-turn-step-used') === 'true'"""
+    )
+
+    for selector in (
+        '[data-board-position-index="3"][data-turn-start-candidate="true"]',
+        '[data-arrow="east->city"][data-turn-offered="true"]',
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+    ):
+        target = page.query_selector(selector)
+        assert target is not None, f"missing painted Cloisters route target {selector}"
+        _click_handle_centre(page, target, require_hit=True)
+        page.wait_for_timeout(20)
+
+    extension = page.query_selector('[data-arrow="north->north_east"][data-turn-offered="true"]')
+    assert extension is not None, "hired Cloisters did not paint its extra route edge"
+    _click_handle_centre(page, extension, require_hit=True)
+    page.wait_for_timeout(20)
+    skip_spaces = page.locator('[data-turn-skip-candidate="true"]').evaluate_all(
+        '(spaces) => spaces.map(space => space.getAttribute("data-board-position"))'
+    )
+    assert set(skip_spaces) == {"city", "north", "north_east"}, (
+        "walking the Cloisters extension did not reach its skip question"
+    )
 
 
 def test_kogge_route_can_enter_city_against_arrows_from_ring_and_continue(page, serve) -> None:
