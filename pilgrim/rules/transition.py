@@ -356,6 +356,19 @@ _BUILDING_PULPIT = "pulpit"
 _BUILDING_WAGON_YARD = "wagon_yard"
 _BUILDING_CONFESSION_BOX = "confession_box"
 _CONFESSION_BOX_TEMPORARY_PIETY_BONUS = 2
+_HIRED_MODIFIER_BUILDING_IDS: tuple[str, str, str, str] = (
+    _BUILDING_SCRIPTORIUM,
+    _BUILDING_CUSTOMS_HOUSE,
+    _BUILDING_BANK,
+    _BUILDING_WAGON_YARD,
+)
+_WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS: frozenset[str] = frozenset(
+    {
+        _BUILDING_SCRIPTORIUM,
+        _BUILDING_CUSTOMS_HOUSE,
+        _BUILDING_BANK,
+    }
+)
 _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS: frozenset[str] = frozenset(
     {
         _BUILDING_GRAIN_STORE,
@@ -440,12 +453,13 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         if _BUILDING_GUILD not in used
     )
     route_hires = _legal_route_building_hire_steps(state, config)
+    modifier_hires = _legal_modifier_building_hire_steps(state, config)
     relocations = (
         _legal_library_relocation_steps(state, config)
         if state.turn_progress.resolution_committed
         else _legal_start_turn_relocation_steps(state, config)
     )
-    return (*conversions, *guild_steps, *route_hires, *relocations)
+    return (*conversions, *guild_steps, *route_hires, *modifier_hires, *relocations)
 
 
 def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameAction]:
@@ -581,16 +595,20 @@ def _apply_building_activation_step(
 ) -> GameState:
     if step.building_id in state.turn_progress.used_buildings:
         raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
-    if step.building_id not in (_BUILDING_GUILD, *_ROUTE_BUILDING_IDS):
+    if step.building_id not in (
+        _BUILDING_GUILD,
+        *_ROUTE_BUILDING_IDS,
+        *_HIRED_MODIFIER_BUILDING_IDS,
+    ):
         raise TransitionValidationError(
             f"Unsupported parameterless building activation: {step.building_id}."
         )
     if (
-        step.building_id in _ROUTE_BUILDING_IDS
+        step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
         and state.turn_progress.resolution_committed
     ):
         raise TransitionValidationError(
-            "Route-building hires are only available before resolution."
+            "Modifier-building hires are only available before resolution."
         )
 
     player = state.active_player
@@ -600,11 +618,21 @@ def _apply_building_activation_step(
         acting_player=player,
         building_key=step.building_id,
     )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    free_with_wagon_yard = _activation_is_free_with_wagon_yard(
+        state,
+        config,
+        building_id=step.building_id,
+        source=source,
+    )
+    if free_with_wagon_yard:
+        source = _source_hired_for_free_wagon_yard(source)
+    if (not source.usable and not free_with_wagon_yard) or (
+        source.source_type != "own_active" and not _is_hired_source(source)
+    ):
         raise TransitionValidationError(f"{step.building_id.title()} is unavailable in current state.")
-    if step.building_id in _ROUTE_BUILDING_IDS and not _is_hired_source(source):
+    if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS) and not _is_hired_source(source):
         raise TransitionValidationError(
-            f"{step.building_id.title()} route hires require a hired building source."
+            f"{step.building_id.title()} activation hires require a hired building source."
         )
     expected_source = (
         "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
@@ -618,14 +646,30 @@ def _apply_building_activation_step(
     next_state = state
     events = list(state.turn_progress.events)
     transition_action_id = _turn_step_id(step)
-    if _is_hired_source(source):
+    if free_with_wagon_yard:
+        if step.hire_payment is not None:
+            raise TransitionValidationError(
+                f"Wagon Yard's free {step.building_id.title()} hire does not take a payment."
+            )
+        events.append(
+            _wagon_yard_free_hire_event(
+                actor=player,
+                action_id=transition_action_id,
+                target_building_id=step.building_id,
+                target_source=_hired_building_source_label(source),
+                config=config,
+            )
+        )
+    elif _is_hired_source(source):
         if step.hire_payment not in CORNUCOPIA_HIRE_RESOURCES:
-            raise TransitionValidationError("Guild hire payment must name a concrete resource.")
+            raise TransitionValidationError(
+                f"{step.building_id.title()} hire payment must name a concrete resource."
+            )
         if source.hire_resource == CORNUCOPIA_COUNTER:
             source = replace(source, hire_resource=step.hire_payment, hire_resource_chosen=True)
         elif source.hire_resource != step.hire_payment:
             raise TransitionValidationError(
-                "Guild hire payment does not match the Merchant's current counter."
+                f"{step.building_id.title()} hire payment does not match the Merchant's current counter."
             )
         try:
             next_state, payment = apply_building_hire_payment(
@@ -649,7 +693,7 @@ def _apply_building_activation_step(
             f"Own-active {step.building_id.title()} does not take a hire payment."
         )
 
-    if step.building_id in _ROUTE_BUILDING_IDS:
+    if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS):
         return replace(
             next_state,
             turn_progress=replace(
@@ -2314,24 +2358,6 @@ def _apply_full_turn_action(
         action=action,
     )
     if scriptorium_effective_acolyte is not None:
-        if _is_hired_source(scriptorium_effective_acolyte.source):
-            try:
-                state_for_sow, scriptorium_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=scriptorium_effective_acolyte.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=scriptorium_effective_acolyte.source,
-                    payment=scriptorium_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
         pre_sowing_events.append(
             _scriptorium_effective_acolyte_bonus_event(
                 actor=player,
@@ -2350,24 +2376,6 @@ def _apply_full_turn_action(
         action=action,
     )
     if customs_house_taxation is not None:
-        if _is_hired_source(customs_house_taxation.source):
-            try:
-                state_for_sow, customs_house_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=customs_house_taxation.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=customs_house_taxation.source,
-                    payment=customs_house_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
         pre_sowing_events.append(
             _customs_house_taxation_bonus_event(
                 actor=player,
@@ -2386,24 +2394,6 @@ def _apply_full_turn_action(
         action=action,
     )
     if bank_payment is not None:
-        if _is_hired_source(bank_payment.source):
-            try:
-                state_for_sow, bank_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=bank_payment.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=bank_payment.source,
-                    payment=bank_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
         pre_sowing_events.append(
             _bank_payment_bonus_event(
                 actor=player,
@@ -2708,22 +2698,29 @@ def _apply_full_turn_action(
             and action.sow_route_secondary_building_id != _ROUTE_BUILDING_CLOISTERS
         ):
             raise TransitionValidationError("Kogge actions may not set sow_route_omitted_location.")
-        bank_payment_fields = (
-            action.bank_payment_building_id,
-            action.bank_payment_building_source,
-            action.bank_payment_replaced_resource,
-            action.bank_payment_silver_amount,
-        )
-        bank_payment_field_count = sum(field is not None for field in bank_payment_fields)
-        if bank_payment_field_count not in (0, len(bank_payment_fields)):
-            raise TransitionValidationError(
-                "bank_payment_building_id/source and bank_payment_replaced_resource/silver_amount must be set together."
+        has_bank_payment_modifier = action.bank_payment_building_id is not None
+        if not has_bank_payment_modifier and any(
+            field is not None
+            for field in (
+                action.bank_payment_building_source,
+                action.bank_payment_replaced_resource,
+                action.bank_payment_silver_amount,
             )
-        has_bank_payment_modifier = bank_payment_field_count == len(bank_payment_fields)
+        ):
+            raise TransitionValidationError(
+                "Bank payment fields require bank_payment_building_id."
+            )
         if has_bank_payment_modifier:
             if action.bank_payment_building_id != _BUILDING_BANK:
                 raise TransitionValidationError(
                     "Only Bank is supported for bank_payment_building fields."
+                )
+            if (
+                action.bank_payment_building_source is not None
+                and action.bank_payment_building_source != "own_active"
+            ):
+                raise TransitionValidationError(
+                    "bank_payment_building_source may only name an own-active Bank."
                 )
             if action.bank_payment_replaced_resource not in _BANK_REPLACED_RESOURCES:
                 replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
@@ -2747,22 +2744,25 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Bank payment substitution with sow-route modifiers is deferred."
                 )
-        effective_acolyte_fields = (
-            action.effective_acolyte_building_id,
-            action.effective_acolyte_building_source,
-        )
-        effective_acolyte_field_count = sum(field is not None for field in effective_acolyte_fields)
-        if effective_acolyte_field_count not in (0, len(effective_acolyte_fields)):
+        has_scriptorium_effective_modifier = action.effective_acolyte_building_id is not None
+        if (
+            not has_scriptorium_effective_modifier
+            and action.effective_acolyte_building_source is not None
+        ):
             raise TransitionValidationError(
-                "effective_acolyte_building_id and effective_acolyte_building_source must be set together."
+                "effective_acolyte_building_source requires effective_acolyte_building_id."
             )
-        has_scriptorium_effective_modifier = effective_acolyte_field_count == len(
-            effective_acolyte_fields
-        )
         if has_scriptorium_effective_modifier:
             if action.effective_acolyte_building_id != _BUILDING_SCRIPTORIUM:
                 raise TransitionValidationError(
                     "Only Scriptorium is supported for effective_acolyte_building fields."
+                )
+            if (
+                action.effective_acolyte_building_source is not None
+                and action.effective_acolyte_building_source != "own_active"
+            ):
+                raise TransitionValidationError(
+                    "effective_acolyte_building_source may only name an own-active Scriptorium."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -2772,22 +2772,25 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Combining Bank and Scriptorium pre-sow building modifiers in one action is deferred."
                 )
-        taxation_majority_fields = (
-            action.taxation_majority_building_id,
-            action.taxation_majority_building_source,
-        )
-        taxation_majority_field_count = sum(field is not None for field in taxation_majority_fields)
-        if taxation_majority_field_count not in (0, len(taxation_majority_fields)):
+        has_customs_house_taxation_modifier = action.taxation_majority_building_id is not None
+        if (
+            not has_customs_house_taxation_modifier
+            and action.taxation_majority_building_source is not None
+        ):
             raise TransitionValidationError(
-                "taxation_majority_building_id and taxation_majority_building_source must be set together."
+                "taxation_majority_building_source requires taxation_majority_building_id."
             )
-        has_customs_house_taxation_modifier = taxation_majority_field_count == len(
-            taxation_majority_fields
-        )
         if has_customs_house_taxation_modifier:
             if action.taxation_majority_building_id != _BUILDING_CUSTOMS_HOUSE:
                 raise TransitionValidationError(
                     "Only Customs House is supported for taxation_majority_building fields."
+                )
+            if (
+                action.taxation_majority_building_source is not None
+                and action.taxation_majority_building_source != "own_active"
+            ):
+                raise TransitionValidationError(
+                    "taxation_majority_building_source may only name an own-active Customs House."
                 )
             if action.resolution is not TurnResolutionType.TAXATION:
                 raise TransitionValidationError(
@@ -2827,7 +2830,8 @@ def _apply_full_turn_action(
             assert target_source is not None
             if (
                 target_building_id not in _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS
-                or target_building_id == _BUILDING_WAGON_YARD
+                or target_building_id
+                in (_BUILDING_WAGON_YARD, *_WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS)
             ):
                 raise TransitionValidationError(
                     "Wagon Yard free-hire target building is unsupported."
@@ -2841,7 +2845,7 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Wagon Yard free-hire target source must be market or an opponent id."
                 )
-            if not _wagon_yard_own_active_is_usable(state, config):
+            if _wagon_yard_source_available_this_turn(state, config) is None:
                 raise TransitionValidationError("Wagon Yard is unavailable in current state.")
             legal_target_sources = set(
                 _wagon_yard_target_sources_for_building(
@@ -2941,38 +2945,6 @@ def _apply_full_turn_action(
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
         if (
-            has_scriptorium_effective_modifier
-            and action.effective_acolyte_building_source is not None
-            and action.effective_acolyte_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_SCRIPTORIUM):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=_BUILDING_SCRIPTORIUM,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            has_customs_house_taxation_modifier
-            and action.taxation_majority_building_source is not None
-            and action.taxation_majority_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_CUSTOMS_HOUSE):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=_BUILDING_CUSTOMS_HOUSE,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
             has_pulpit_workforce_modifier
             and action.workforce_move_building_source is not None
             and action.workforce_move_building_source != "own_active"
@@ -2985,22 +2957,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=_BUILDING_PULPIT,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            has_bank_payment_modifier
-            and action.bank_payment_building_source is not None
-            and action.bank_payment_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_BANK):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=_BUILDING_BANK,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4833,6 +4789,53 @@ def _legal_route_building_hire_steps(
     return tuple(steps)
 
 
+def _legal_modifier_building_hire_steps(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[BuildingActivationStep, ...]:
+    """Return the paid pre-resolution hires that make a modifier usable this turn."""
+    if state.turn_progress.resolution_committed:
+        return ()
+    steps: list[BuildingActivationStep] = []
+    for building_id in _HIRED_MODIFIER_BUILDING_IDS:
+        if building_id in state.turn_progress.used_buildings:
+            continue
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=state.active_player,
+            building_key=building_id,
+        )
+        free_with_wagon_yard = _activation_is_free_with_wagon_yard(
+            state,
+            config,
+            building_id=building_id,
+            source=source,
+        )
+        if not _is_hired_source(source) and not free_with_wagon_yard:
+            continue
+        if not source.usable and not free_with_wagon_yard:
+            continue
+        if free_with_wagon_yard:
+            source = _source_hired_for_free_wagon_yard(source)
+            steps.append(
+                BuildingActivationStep(
+                    building_id=building_id,
+                    source=_hired_building_source_label(source),
+                )
+            )
+            continue
+        steps.extend(
+            BuildingActivationStep(
+                building_id=building_id,
+                source=_hired_building_source_label(hire_source),
+                hire_payment=hire_source.hire_resource,
+            )
+            for hire_source, _state_after_hire in _hire_payment_states(state, source)
+        )
+    return tuple(steps)
+
+
 def _legal_dormitory_relocation_steps(
     state: GameState,
     config: GameConfig,
@@ -5047,6 +5050,75 @@ def _route_building_source_available_this_turn(
             reason="",
         )
     return None
+
+
+def _modifier_building_source_available_this_turn(
+    state: GameState,
+    config: GameConfig,
+    *,
+    building_id: str,
+) -> BuildingAbilitySource | None:
+    """Resolve a modifier that is owned now or was explicitly hired this turn."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=building_id,
+    )
+    if source.usable and source.source_type == "own_active":
+        return source
+    if building_id in state.turn_progress.used_buildings and (
+        _is_hired_source(source)
+        or (
+            source.reason in {"insufficient_resource", "merchant_resource_none"}
+            and source.payable_to is not None
+        )
+    ):
+        # The completed activation paid the source before the action space was generated. The
+        # post-payment ability lookup may now call it unaffordable, but it remains available for
+        # the rest of this turn precisely because that activation was committed.
+        return replace(
+            source,
+            source_type=(
+                "live_market_hire" if source.payable_to == "bank" else "opponent_active_hire"
+            ),
+            usable=True,
+            reason="",
+        )
+    return None
+
+
+def _activation_is_free_with_wagon_yard(
+    state: GameState,
+    config: GameConfig,
+    *,
+    building_id: str,
+    source: BuildingAbilitySource,
+) -> bool:
+    """Whether Wagon Yard turns this modifier's otherwise hired activation into a free step."""
+    return (
+        building_id in _WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS
+        and (
+            _is_hired_source(source)
+            or (
+                source.reason in {"insufficient_resource", "merchant_resource_none"}
+                and source.payable_to is not None
+            )
+        )
+        and _wagon_yard_source_available_this_turn(state, config) is not None
+    )
+
+
+def _source_hired_for_free_wagon_yard(source: BuildingAbilitySource) -> BuildingAbilitySource:
+    """Restore the payable source label when Wagon Yard bypasses its otherwise unaffordable fee."""
+    if _is_hired_source(source):
+        return source
+    return replace(
+        source,
+        source_type=("live_market_hire" if source.payable_to == "bank" else "opponent_active_hire"),
+        usable=True,
+        reason="",
+    )
 
 
 def _legal_cloisters_route_options(
@@ -5785,59 +5857,56 @@ def _legal_bank_payment_options_for_action(
     if max(required_stone, required_wheat, required_piety) <= 0:
         return ()
 
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_BANK,
+        building_id=_BUILDING_BANK,
     )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    if source is None:
         return ()
 
     substitutions: list[_BankPaymentOption] = []
-    for bank_hire_source, state_after_hire in _hire_payment_states(state, source):
-        player_state = state_after_hire.player_state(state.active_player)
-        required_amounts = {
-            "stone": max(0, required_stone),
-            "wheat": max(0, required_wheat),
-            "piety": max(0, required_piety),
-        }
-        for replaced_resource, required_amount in required_amounts.items():
-            if required_amount <= 0:
+    for replaced_resource, required_amount in {
+        "stone": max(0, required_stone),
+        "wheat": max(0, required_wheat),
+        "piety": max(0, required_piety),
+    }.items():
+        if required_amount <= 0:
+            continue
+        player_state = state.player_state(state.active_player)
+        max_substitution = min(required_amount, player_state.resources.silver)
+        for silver_amount in range(1, max_substitution + 1):
+            (
+                adjusted_stone,
+                adjusted_silver,
+                adjusted_wheat,
+                adjusted_piety,
+            ) = _costs_with_bank_substitution(
+                required_stone=required_stone,
+                required_silver=required_silver,
+                required_wheat=required_wheat,
+                required_piety=required_piety,
+                replaced_resource=replaced_resource,
+                silver_amount=silver_amount,
+            )
+            if not _can_afford_resolution_costs(
+                player_state,
+                required_stone=adjusted_stone,
+                required_silver=adjusted_silver,
+                required_wheat=adjusted_wheat,
+                required_piety=adjusted_piety,
+                hired_source=hired_source,
+            ):
                 continue
-            max_substitution = min(required_amount, player_state.resources.silver)
-            for silver_amount in range(1, max_substitution + 1):
-                (
-                    adjusted_stone,
-                    adjusted_silver,
-                    adjusted_wheat,
-                    adjusted_piety,
-                ) = _costs_with_bank_substitution(
-                    required_stone=required_stone,
-                    required_silver=required_silver,
-                    required_wheat=required_wheat,
-                    required_piety=required_piety,
+            substitutions.append(
+                _BankPaymentOption(
+                    state=state,
+                    building_id=_BUILDING_BANK,
+                    source=source,
                     replaced_resource=replaced_resource,
                     silver_amount=silver_amount,
                 )
-                if not _can_afford_resolution_costs(
-                    player_state,
-                    required_stone=adjusted_stone,
-                    required_silver=adjusted_silver,
-                    required_wheat=adjusted_wheat,
-                    required_piety=adjusted_piety,
-                    hired_source=hired_source,
-                ):
-                    continue
-                substitutions.append(
-                    _BankPaymentOption(
-                        state=state_after_hire,
-                        building_id=_BUILDING_BANK,
-                        source=bank_hire_source,
-                        replaced_resource=replaced_resource,
-                        silver_amount=silver_amount,
-                    )
-                )
+            )
 
     return tuple(substitutions)
 
@@ -5862,22 +5931,20 @@ def _legal_scriptorium_effective_acolyte_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_ScriptoriumEffectiveAcolyteOption, ...]:
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_SCRIPTORIUM,
+        building_id=_BUILDING_SCRIPTORIUM,
     )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    if source is None:
         return ()
 
-    return tuple(
+    return (
         _ScriptoriumEffectiveAcolyteOption(
-            state=state_after_hire,
+            state=state,
             building_id=_BUILDING_SCRIPTORIUM,
-            source=hire_source,
-        )
-        for hire_source, state_after_hire in _hire_payment_states(state, source)
+            source=source,
+        ),
     )
 
 
@@ -5885,22 +5952,20 @@ def _legal_customs_house_taxation_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_CustomsHouseTaxationOption, ...]:
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_CUSTOMS_HOUSE,
+        building_id=_BUILDING_CUSTOMS_HOUSE,
     )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    if source is None:
         return ()
 
-    return tuple(
+    return (
         _CustomsHouseTaxationOption(
-            state=state_after_hire,
+            state=state,
             building_id=_BUILDING_CUSTOMS_HOUSE,
-            source=hire_source,
-        )
-        for hire_source, state_after_hire in _hire_payment_states(state, source)
+            source=source,
+        ),
     )
 
 
@@ -5908,12 +5973,15 @@ def _legal_wagon_yard_free_hire_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_WagonYardFreeHireOption, ...]:
-    if not _wagon_yard_own_active_is_usable(state, config):
+    if _wagon_yard_source_available_this_turn(state, config) is None:
         return ()
 
     options: list[_WagonYardFreeHireOption] = []
     for target_building_id in sorted(_WAGON_YARD_SUPPORTED_TARGET_BUILDINGS):
-        if target_building_id == _BUILDING_WAGON_YARD:
+        if target_building_id in (
+            _BUILDING_WAGON_YARD,
+            *_WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS,
+        ):
             continue
         for target_source in _wagon_yard_target_sources_for_building(
             state,
@@ -5973,23 +6041,15 @@ def _legal_pulpit_workforce_move_options(
     return tuple(options)
 
 
-def _wagon_yard_own_active_is_usable(
+def _wagon_yard_source_available_this_turn(
     state: GameState,
     config: GameConfig,
-) -> bool:
-    source = building_ability_source(
+) -> BuildingAbilitySource | None:
+    return _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_WAGON_YARD,
+        building_id=_BUILDING_WAGON_YARD,
     )
-    if source.source_type != "own_active" or not source.usable:
-        return False
-    if building_live_round(state, _BUILDING_WAGON_YARD) is not None and not is_building_live(
-        state, _BUILDING_WAGON_YARD
-    ):
-        return False
-    return True
 
 
 def _wagon_yard_target_sources_for_building(
@@ -6261,14 +6321,14 @@ def _with_scriptorium_effective_acolyte_fields(
     source_label = (
         "own_active"
         if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
+        else None
     )
     updated = replace(
         action,
         effective_acolyte_building_id=option.building_id,
         effective_acolyte_building_source=source_label,
     )
-    return _with_hire_payment_for_source(updated, source=option.source)
+    return updated
 
 
 def _with_customs_house_taxation_fields(
@@ -6279,14 +6339,14 @@ def _with_customs_house_taxation_fields(
     source_label = (
         "own_active"
         if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
+        else None
     )
     updated = replace(
         action,
         taxation_majority_building_id=option.building_id,
         taxation_majority_building_source=source_label,
     )
-    return _with_hire_payment_for_source(updated, source=option.source)
+    return updated
 
 
 def _with_wagon_yard_free_hire_fields(
@@ -6328,7 +6388,7 @@ def _with_bank_payment_fields(
     source_label = (
         "own_active"
         if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
+        else None
     )
     updated = replace(
         action,
@@ -6337,7 +6397,7 @@ def _with_bank_payment_fields(
         bank_payment_replaced_resource=option.replaced_resource,
         bank_payment_silver_amount=option.silver_amount,
     )
-    return _with_hire_payment_for_source(updated, source=option.source)
+    return updated
 
 
 def _legal_action_variants_for_resolution(
@@ -6489,46 +6549,36 @@ def _resolved_scriptorium_effective_acolyte_for_action(
     player: PlayerId,
     action: FullTurnAction,
 ) -> _ResolvedScriptoriumEffectiveAcolyte | None:
-    fields = (
-        action.effective_acolyte_building_id,
-        action.effective_acolyte_building_source,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "effective_acolyte_building_id and effective_acolyte_building_source must be set together."
-        )
-
     building_id = action.effective_acolyte_building_id
     source_label = action.effective_acolyte_building_source
-    assert building_id is not None
-    assert source_label is not None
+    if building_id is None:
+        if source_label is not None:
+            raise TransitionValidationError(
+                "effective_acolyte_building_source requires effective_acolyte_building_id."
+            )
+        return None
 
     if building_id != _BUILDING_SCRIPTORIUM:
         raise TransitionValidationError(
             "Only Scriptorium is supported for effective_acolyte_building fields."
         )
 
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=player,
-        building_key=_BUILDING_SCRIPTORIUM,
+        building_id=_BUILDING_SCRIPTORIUM,
     )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
+    if source is None:
+        raise TransitionValidationError("Scriptorium is unavailable in current state.")
+    if source.source_type == "own_active":
         if source_label != "own_active":
             raise TransitionValidationError(
                 "Own-active Scriptorium modifier must set source=own_active."
             )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
+    elif _is_hired_source(source):
+        if source_label is not None:
             raise TransitionValidationError(
-                "Scriptorium modifier source does not match resolved source: "
-                f"expected {expected_source_label}."
+                "Hired Scriptorium modifier must be enabled by its committed hire step, not action fields."
             )
     else:
         raise TransitionValidationError("Scriptorium is unavailable in current state.")
@@ -6546,22 +6596,14 @@ def _resolved_customs_house_taxation_for_action(
     player: PlayerId,
     action: FullTurnAction,
 ) -> _ResolvedCustomsHouseTaxation | None:
-    fields = (
-        action.taxation_majority_building_id,
-        action.taxation_majority_building_source,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "taxation_majority_building_id and taxation_majority_building_source must be set together."
-        )
-
     building_id = action.taxation_majority_building_id
     source_label = action.taxation_majority_building_source
-    assert building_id is not None
-    assert source_label is not None
+    if building_id is None:
+        if source_label is not None:
+            raise TransitionValidationError(
+                "taxation_majority_building_source requires taxation_majority_building_id."
+            )
+        return None
 
     if action.resolution is not TurnResolutionType.TAXATION:
         raise TransitionValidationError(
@@ -6573,24 +6615,22 @@ def _resolved_customs_house_taxation_for_action(
             "Only Customs House is supported for taxation_majority_building fields."
         )
 
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=player,
-        building_key=_BUILDING_CUSTOMS_HOUSE,
+        building_id=_BUILDING_CUSTOMS_HOUSE,
     )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
+    if source is None:
+        raise TransitionValidationError("Customs House is unavailable in current state.")
+    if source.source_type == "own_active":
         if source_label != "own_active":
             raise TransitionValidationError(
                 "Own-active Customs House Taxation modifier must set source=own_active."
             )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
+    elif _is_hired_source(source):
+        if source_label is not None:
             raise TransitionValidationError(
-                "Customs House Taxation modifier source does not match resolved source: "
-                f"expected {expected_source_label}."
+                "Hired Customs House modifier must be enabled by its committed hire step, not action fields."
             )
     else:
         raise TransitionValidationError("Customs House is unavailable in current state.")
@@ -6608,28 +6648,23 @@ def _resolved_bank_payment_for_action(
     player: PlayerId,
     action: FullTurnAction,
 ) -> _ResolvedBankPayment | None:
-    fields = (
-        action.bank_payment_building_id,
-        action.bank_payment_building_source,
-        action.bank_payment_replaced_resource,
-        action.bank_payment_silver_amount,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "bank_payment_building_id/source and bank_payment_replaced_resource/silver_amount must be set together."
-        )
-
     building_id = action.bank_payment_building_id
     source_label = action.bank_payment_building_source
     replaced_resource = action.bank_payment_replaced_resource
     silver_amount = action.bank_payment_silver_amount
-    assert building_id is not None
-    assert source_label is not None
-    assert replaced_resource is not None
-    assert silver_amount is not None
+    if building_id is None:
+        if any(
+            field is not None
+            for field in (source_label, replaced_resource, silver_amount)
+        ):
+            raise TransitionValidationError(
+                "Bank payment fields require bank_payment_building_id."
+            )
+        return None
+    if replaced_resource is None or silver_amount is None:
+        raise TransitionValidationError(
+            "Bank payment building, replaced resource, and silver amount must be set together."
+        )
 
     if building_id != _BUILDING_BANK:
         raise TransitionValidationError("Only Bank is supported for bank_payment_building fields.")
@@ -6647,24 +6682,22 @@ def _resolved_bank_payment_for_action(
             "Bank payment substitution is only supported for Ordination and Construct building actions."
         )
 
-    source = building_ability_source(
+    source = _modifier_building_source_available_this_turn(
         state,
         config,
-        acting_player=player,
-        building_key=_BUILDING_BANK,
+        building_id=_BUILDING_BANK,
     )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
+    if source is None:
+        raise TransitionValidationError("Bank is unavailable in current state.")
+    if source.source_type == "own_active":
         if source_label != "own_active":
             raise TransitionValidationError(
                 "Own-active Bank payment substitution must set source=own_active."
             )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
+    elif _is_hired_source(source):
+        if source_label is not None:
             raise TransitionValidationError(
-                "Bank payment substitution source does not match resolved source: "
-                f"expected {expected_source_label}."
+                "Hired Bank modifier must be enabled by its committed hire step, not action fields."
             )
     else:
         raise TransitionValidationError("Bank is unavailable in current state.")
@@ -6710,14 +6743,15 @@ def _resolved_wagon_yard_free_hire_for_action(
         )
     if (
         target_building_id not in _WAGON_YARD_SUPPORTED_TARGET_BUILDINGS
-        or target_building_id == _BUILDING_WAGON_YARD
+        or target_building_id
+        in (_BUILDING_WAGON_YARD, *_WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS)
     ):
         raise TransitionValidationError("Wagon Yard free-hire target building is unsupported.")
     if target_source in ("own_active", _player_label(player)):
         raise TransitionValidationError(
             "Wagon Yard free-hire target source cannot be own active building."
         )
-    if not _wagon_yard_own_active_is_usable(state, config):
+    if _wagon_yard_source_available_this_turn(state, config) is None:
         raise TransitionValidationError("Wagon Yard is unavailable in current state.")
 
     legal_sources = set(

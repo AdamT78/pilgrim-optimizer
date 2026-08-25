@@ -8,7 +8,13 @@ from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.merchant import taxation_board_position
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -24,6 +30,16 @@ def _scriptorium_actions(path: str):
         if action.effective_acolyte_building_id == "scriptorium"
     ]
     return scenario, actions, scriptorium_actions
+
+
+def _hired_scriptorium_actions(path: str):
+    scenario = load_scenario(path)
+    step = next(step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "scriptorium")
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    actions = legal_actions(state, scenario.config)
+    return scenario, state, actions, [
+        action for action in actions if action.effective_acolyte_building_id == "scriptorium"
+    ]
 
 
 def _first_action(actions, predicate):
@@ -96,25 +112,29 @@ def test_own_active_scriptorium_source_priority_blocks_hired_variants() -> None:
 
 
 def test_hired_market_scriptorium_generates_variants_when_payable() -> None:
-    _scenario, _actions, scriptorium_actions = _scriptorium_actions(
+    scenario, _state, _actions, scriptorium_actions = _hired_scriptorium_actions(
         "scenarios/scriptorium_hire_market_majority_selected_duty_001.json"
     )
 
+    assert not _scriptorium_actions("scenarios/scriptorium_hire_market_majority_selected_duty_001.json")[2]
+    assert any(step.building_id == "scriptorium" for step in turn_steps(scenario.state, scenario.config))
     assert scriptorium_actions
     assert all(
-        action.effective_acolyte_building_source == "market"
+        action.effective_acolyte_building_source is None
         for action in scriptorium_actions
     )
 
 
 def test_hired_opponent_scriptorium_generates_variants_when_payable() -> None:
-    _scenario, _actions, scriptorium_actions = _scriptorium_actions(
+    scenario, _state, _actions, scriptorium_actions = _hired_scriptorium_actions(
         "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json"
     )
 
+    assert not _scriptorium_actions("scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json")[2]
+    assert any(step.building_id == "scriptorium" for step in turn_steps(scenario.state, scenario.config))
     assert scriptorium_actions
     assert all(
-        action.effective_acolyte_building_source == "player_two"
+        action.effective_acolyte_building_source is None
         for action in scriptorium_actions
     )
 
@@ -168,17 +188,17 @@ def test_scriptorium_turn_changes_selected_duty_relation_without_physical_acolyt
 
 
 def test_hired_market_scriptorium_pays_bank_before_sowing() -> None:
-    scenario, _actions, scriptorium_actions = _scriptorium_actions(
+    scenario, state, _actions, scriptorium_actions = _hired_scriptorium_actions(
         "scenarios/scriptorium_hire_market_majority_selected_duty_001.json"
     )
     action = _first_action(
         scriptorium_actions,
         lambda candidate: (
-            candidate.effective_acolyte_building_source == "market"
+            candidate.effective_acolyte_building_source is None
             and candidate.resolution is TurnResolutionType.CLERICAL_DEVOTION
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
 
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _first_action(
@@ -198,17 +218,17 @@ def test_hired_market_scriptorium_pays_bank_before_sowing() -> None:
 
 
 def test_hired_opponent_scriptorium_pays_owner_before_sowing() -> None:
-    scenario, _actions, scriptorium_actions = _scriptorium_actions(
+    scenario, state, _actions, scriptorium_actions = _hired_scriptorium_actions(
         "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json"
     )
     action = _first_action(
         scriptorium_actions,
         lambda candidate: (
-            candidate.effective_acolyte_building_source == "player_two"
+            candidate.effective_acolyte_building_source is None
             and candidate.resolution is TurnResolutionType.CLERICAL_DEVOTION
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
 
     assert hired_details["source"] == "player_two"
@@ -253,13 +273,13 @@ def test_action_summary_includes_scriptorium_modifier_and_hire_suffix() -> None:
     )
     assert "hire building: scriptorium" not in own_summary
 
-    hired_scenario, _hired_actions, hired_scriptorium_actions = _scriptorium_actions(
+    hired_scenario, _hired_state, _hired_actions, hired_scriptorium_actions = _hired_scriptorium_actions(
         "scenarios/scriptorium_hire_market_majority_selected_duty_001.json"
     )
     hired_action = _first_action(
         hired_scriptorium_actions,
         lambda candidate: (
-            candidate.effective_acolyte_building_source == "market"
+            candidate.effective_acolyte_building_source is None
             and candidate.resolution is TurnResolutionType.CLERICAL_DEVOTION
         ),
     )
@@ -268,7 +288,7 @@ def test_action_summary_includes_scriptorium_modifier_and_hire_suffix() -> None:
         "use building: scriptorium for +1 effective acolyte on occupied Duty tiles"
         in hired_summary
     )
-    assert "hire building: scriptorium from market" in hired_summary
+    assert "hire building: scriptorium" not in hired_summary
 
 
 def test_scriptorium_taxation_majority_applies_to_selected_and_other_occupied_duties() -> None:

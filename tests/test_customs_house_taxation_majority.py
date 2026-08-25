@@ -7,7 +7,13 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 
 def _events_of_type(events, event_type: EventType):
@@ -23,6 +29,18 @@ def _customs_house_actions(path: str):
         if action.taxation_majority_building_id == "customs_house"
     ]
     return scenario, actions, customs_house_actions
+
+
+def _hired_customs_house_actions(path: str):
+    scenario = load_scenario(path)
+    step = next(
+        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "customs_house"
+    )
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    actions = legal_actions(state, scenario.config)
+    return scenario, state, actions, [
+        action for action in actions if action.taxation_majority_building_id == "customs_house"
+    ]
 
 
 def _first_action(actions, predicate):
@@ -86,25 +104,29 @@ def test_own_active_customs_house_source_priority_blocks_hired_variants() -> Non
 
 
 def test_hired_market_customs_house_generates_variants_when_payable() -> None:
-    _scenario, _actions, customs_house_actions = _customs_house_actions(
+    scenario, _state, _actions, customs_house_actions = _hired_customs_house_actions(
         "scenarios/customs_house_hire_market_taxation_majority_001.json"
     )
 
+    assert not _customs_house_actions("scenarios/customs_house_hire_market_taxation_majority_001.json")[2]
+    assert any(step.building_id == "customs_house" for step in turn_steps(scenario.state, scenario.config))
     assert customs_house_actions
     assert all(
-        action.taxation_majority_building_source == "market"
+        action.taxation_majority_building_source is None
         for action in customs_house_actions
     )
 
 
 def test_hired_opponent_customs_house_generates_variants_when_payable() -> None:
-    _scenario, _actions, customs_house_actions = _customs_house_actions(
+    scenario, _state, _actions, customs_house_actions = _hired_customs_house_actions(
         "scenarios/customs_house_hire_opponent_taxation_majority_001.json"
     )
 
+    assert not _customs_house_actions("scenarios/customs_house_hire_opponent_taxation_majority_001.json")[2]
+    assert any(step.building_id == "customs_house" for step in turn_steps(scenario.state, scenario.config))
     assert customs_house_actions
     assert all(
-        action.taxation_majority_building_source == "player_two"
+        action.taxation_majority_building_source is None
         for action in customs_house_actions
     )
 
@@ -283,18 +305,18 @@ def test_taxation_without_customs_house_remains_non_majority() -> None:
 
 
 def test_hired_market_customs_house_pays_bank_before_sowing() -> None:
-    scenario, _actions, customs_house_actions = _customs_house_actions(
+    scenario, state, _actions, customs_house_actions = _hired_customs_house_actions(
         "scenarios/customs_house_hire_market_taxation_majority_001.json"
     )
     action = _first_action(
         customs_house_actions,
         lambda candidate: (
-            candidate.taxation_majority_building_source == "market"
+            candidate.taxation_majority_building_source is None
             and candidate.resolution is TurnResolutionType.TAXATION
             and candidate.taxation_step1_resource == "wheat"
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
 
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _first_action(
@@ -314,18 +336,18 @@ def test_hired_market_customs_house_pays_bank_before_sowing() -> None:
 
 
 def test_hired_opponent_customs_house_pays_owner_before_sowing() -> None:
-    scenario, _actions, customs_house_actions = _customs_house_actions(
+    scenario, state, _actions, customs_house_actions = _hired_customs_house_actions(
         "scenarios/customs_house_hire_opponent_taxation_majority_001.json"
     )
     action = _first_action(
         customs_house_actions,
         lambda candidate: (
-            candidate.taxation_majority_building_source == "player_two"
+            candidate.taxation_majority_building_source is None
             and candidate.resolution is TurnResolutionType.TAXATION
             and candidate.taxation_step1_resource == "wheat"
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
 
     assert hired_details["source"] == "player_two"
@@ -424,13 +446,13 @@ def test_action_summary_includes_customs_house_modifier_and_hire_suffix() -> Non
     assert "|action: taxation" not in own_summary
     assert "hire building: customs_house" not in own_summary
 
-    hired_scenario, _hired_actions, hired_customs_house_actions = _customs_house_actions(
+    hired_scenario, _hired_state, _hired_actions, hired_customs_house_actions = _hired_customs_house_actions(
         "scenarios/customs_house_hire_market_taxation_majority_001.json"
     )
     hired_action = _first_action(
         hired_customs_house_actions,
         lambda candidate: (
-            candidate.taxation_majority_building_source == "market"
+            candidate.taxation_majority_building_source is None
             and candidate.resolution is TurnResolutionType.TAXATION
             and candidate.taxation_step1_resource == "wheat"
         ),
@@ -439,4 +461,4 @@ def test_action_summary_includes_customs_house_modifier_and_hire_suffix() -> Non
     assert "use building: customs_house for Taxation majority on occupied Duty tiles" in hired_summary
     assert "| selected duty: north (taxation) | action: taxation" in hired_summary
     assert "|action: taxation" not in hired_summary
-    assert "hire building: customs_house from market" in hired_summary
+    assert "hire building: customs_house" not in hired_summary

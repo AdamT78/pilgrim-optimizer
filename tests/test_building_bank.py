@@ -12,7 +12,9 @@ from pilgrim.rules.transition import (
     TransitionValidationError,
     _costs_with_bank_substitution,
     apply_action,
+    apply_turn_step,
     legal_actions,
+    turn_steps,
 )
 
 
@@ -33,6 +35,18 @@ def _bank_actions(path: str):
     ]
     bank_actions = [action for action in actions if action.bank_payment_building_id == "bank"]
     return scenario, actions, bank_actions
+
+
+def _hired_bank_actions(path: str):
+    scenario = load_scenario(path)
+    step = next(step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank")
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    actions = [
+        action
+        for action in legal_actions(state, scenario.config)
+        if isinstance(action, FullTurnAction)
+    ]
+    return scenario, state, actions, [action for action in actions if action.bank_payment_building_id == "bank"]
 
 
 def test_own_active_bank_generates_partial_and_full_ordination_substitution_variants() -> None:
@@ -210,18 +224,20 @@ def test_bank_variants_only_exist_for_supported_payment_resolutions() -> None:
 
 
 def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant_none() -> None:
-    scenario, _actions, bank_actions = _bank_actions("scenarios/bank_hire_market_ordination_001.json")
+    scenario, state, _actions, bank_actions = _hired_bank_actions(
+        "scenarios/bank_hire_market_ordination_001.json"
+    )
     action = _first_action(
         bank_actions,
         lambda candidate: (
             candidate.resolution is TurnResolutionType.ORDINATION
             and candidate.ordination_steps == ("ordain", "ordain")
-            and candidate.bank_payment_building_source == "market"
+            and candidate.bank_payment_building_source is None
             and candidate.bank_payment_replaced_resource == "wheat"
             and candidate.bank_payment_silver_amount == 1
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _first_action(
         _events_of_type(result.events, EventType.BUILDING_BONUS),
@@ -242,31 +258,24 @@ def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant
     merchant_none_state = scenario.state.with_merchant_board_position(
         taxation_board_position(scenario.config)
     )
-    actions_when_none = [
-        action
-        for action in legal_actions(merchant_none_state, scenario.config)
-        if isinstance(action, FullTurnAction)
-    ]
-    assert not any(
-        action.bank_payment_building_id == "bank"
-        and action.bank_payment_building_source == "market"
-        for action in actions_when_none
-    )
+    assert not [step for step in turn_steps(merchant_none_state, scenario.config) if step.building_id == "bank"]
 
 
 def test_hired_opponent_bank_pays_owner_before_substitution() -> None:
-    scenario, _actions, bank_actions = _bank_actions("scenarios/bank_hire_opponent_ordination_001.json")
+    scenario, state, _actions, bank_actions = _hired_bank_actions(
+        "scenarios/bank_hire_opponent_ordination_001.json"
+    )
     action = _first_action(
         bank_actions,
         lambda candidate: (
             candidate.resolution is TurnResolutionType.ORDINATION
             and candidate.ordination_steps == ("ordain", "ordain")
-            and candidate.bank_payment_building_source == "player_two"
+            and candidate.bank_payment_building_source is None
             and candidate.bank_payment_replaced_resource == "wheat"
             and candidate.bank_payment_silver_amount == 1
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
     assert hired_details["building_id"] == "bank"
     assert hired_details["source"] == "player_two"
@@ -277,22 +286,28 @@ def test_hired_opponent_bank_pays_owner_before_substitution() -> None:
 
 
 def test_wagon_yard_can_free_hire_bank_and_apply_substitution() -> None:
-    scenario, _actions, bank_actions = _bank_actions(
-        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json"
+    scenario = load_scenario("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json")
+    free_hire = next(
+        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank"
     )
+    assert free_hire.source == "market"
+    assert free_hire.hire_payment is None
+    state = apply_turn_step(scenario.state, scenario.config, free_hire)
+    bank_actions = [
+        action
+        for action in legal_actions(state, scenario.config)
+        if isinstance(action, FullTurnAction) and action.bank_payment_building_id == "bank"
+    ]
     action = _first_action(
         bank_actions,
         lambda candidate: (
-            candidate.free_hire_enabler_building_id == "wagon_yard"
-            and candidate.free_hire_target_building_id == "bank"
-            and candidate.free_hire_target_building_source == "market"
-            and candidate.bank_payment_building_source == "own_active"
+            candidate.bank_payment_building_source is None
             and candidate.resolution is TurnResolutionType.ORDINATION
             and candidate.ordination_steps == ("ordain", "ordain")
             and candidate.bank_payment_silver_amount == 2
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(state, action, scenario.config)
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     hired_details = dict(hired_event.details)
     assert hired_details["building_id"] == "bank"

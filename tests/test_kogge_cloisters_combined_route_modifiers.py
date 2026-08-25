@@ -32,7 +32,7 @@ EXPECTED_MOVED_ACTION_DELTAS = {
     "kogge_cloisters_own_own_skip_city_001.json": 39,
     "kogge_cloisters_own_own_skip_duty_001.json": 39,
 }
-MIN_ROUTE_STEP_FREE_POSITIONS = 305
+MIN_ROUTE_STEP_FREE_POSITIONS = 292
 
 
 def _events_of_type(events, event_type: EventType):
@@ -315,13 +315,20 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         entry
         for entry in (*corpus_actions, *playtest_actions)
         if not any(
-            step.building_id in {"kogge", "cloisters"}
+            step.building_id
+            in {
+                "kogge",
+                "cloisters",
+                "scriptorium",
+                "customs_house",
+                "bank",
+                "wagon_yard",
+            }
             for step in turn_steps(entry[1].state, entry[1].config)
         )
     )
-    # Route hires are now committed steps, so their opening action sets no longer describe the
-    # same population. Keep this route-step-free floor to make that exclusion visible as more
-    # buildings move out of FullTurnAction.
+    # These committed building steps change an opening action set independently of the Kogge and
+    # Cloisters comparison. Keep the step-free population floor so the exclusion remains visible.
     assert len(all_actions) >= MIN_ROUTE_STEP_FREE_POSITIONS
 
     current_counts: dict[str, int] = {}
@@ -339,8 +346,8 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    assert sum(legacy_counts.values()) == 5413
-    assert sum(current_counts.values()) == 5195
+    assert sum(legacy_counts.values()) == 5277
+    assert sum(current_counts.values()) == 5059
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:

@@ -286,7 +286,7 @@ def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> Non
 def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(
     monkeypatch, corpus_actions
 ) -> None:
-    assert len(corpus_actions) == 313
+    assert len(corpus_actions) == 314
 
     moved_without_kogge_reach: list[str] = []
     checked_without_kogge_reach = 0

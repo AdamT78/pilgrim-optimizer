@@ -71,69 +71,22 @@ def test_cli_apply_own_active_customs_house_shows_bonus_before_sowing(capsys) ->
     ) < output.index("SOWING: picked up 1 from city; route city -> north")
 
 
-def test_cli_apply_market_hired_customs_house_shows_hire_then_bonus(capsys) -> None:
-    action_index = _customs_house_action_index(
-        "scenarios/customs_house_hire_market_taxation_majority_001.json",
-        source="market",
-        resolution=TurnResolutionType.TAXATION,
-        taxation_step1_resource="wheat",
-        taxation_step2_resources=("stone", "silver"),
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/customs_house_hire_market_taxation_majority_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_legal_actions_do_not_fold_market_customs_house_hire_into_an_action(capsys) -> None:
+    exit_code = main(["legal-actions", "scenarios/customs_house_hire_market_taxation_majority_001.json"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (
-        "BUILDING_HIRED: player_one hired Customs House from market; paid wheat 1 to bank"
-        in output
-    )
-    assert (
-        "BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn"
-        in output
-    )
-    assert output.index(
-        "BUILDING_HIRED: player_one hired Customs House from market; paid wheat 1 to bank"
-    ) < output.index(
-        "BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn"
-    )
+    assert "use building: customs_house for Taxation majority on occupied Duty tiles" not in output
+    assert "hire building: customs_house from market" not in output
 
 
-def test_cli_apply_opponent_hired_customs_house_shows_owner_payment(capsys) -> None:
-    action_index = _customs_house_action_index(
-        "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
-        source="player_two",
-        resolution=TurnResolutionType.TAXATION,
-        taxation_step1_resource="wheat",
-        taxation_step2_resources=("stone", "silver"),
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_legal_actions_do_not_fold_opponent_customs_house_hire_into_an_action(capsys) -> None:
+    exit_code = main(["legal-actions", "scenarios/customs_house_hire_opponent_taxation_majority_001.json"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (
-        "BUILDING_HIRED: player_one hired Customs House from player_two; paid silver 1 to player_two"
-        in output
-    )
-    assert (
-        "BUILDING_BONUS: customs_house claimed Taxation majority on occupied Duty tiles this turn"
-        in output
-    )
+    assert "use building: customs_house for Taxation majority on occupied Duty tiles" not in output
+    assert "hire building: customs_house from player_two" not in output
 
 
 def test_cli_apply_customs_house_beats_larger_stack_for_selected_taxation(capsys) -> None:

@@ -2814,6 +2814,11 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
     turn_start = server.state
     yellow_silver = turn_start.player_state(PlayerId.PLAYER_TWO).resources.silver
 
+    def wait_for_turn_start() -> None:
+        page.wait_for_selector(
+            '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+        )
+
     def choose_city_and_count_reversed_arrows() -> int:
         city = page.query_selector(
             '[data-board-position-index="0"][data-turn-start-candidate="true"]'
@@ -2832,7 +2837,7 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
         page.locator('[data-turn-control="reset"]').element_handle(),
         require_hit=True,
     )
-    page.wait_for_timeout(20)
+    wait_for_turn_start()
 
     kogge = page.locator(
         '[data-player="player_two"] '
@@ -2860,7 +2865,8 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
         page.locator('[data-turn-control="reset"]').element_handle(),
         require_hit=True,
     )
-    page.wait_for_timeout(20)
+    # The committed hire makes Reset replace the document; the old page has no City origin marker.
+    wait_for_turn_start()
     assert server.state == turn_start
     assert choose_city_and_count_reversed_arrows() == 0
 

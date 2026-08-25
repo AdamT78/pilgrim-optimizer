@@ -50,7 +50,7 @@ from pilgrim.search.exact import solve_exact
 REPO = Path(__file__).resolve().parents[1]
 
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
-MIN_SEARCHABLE_GENERATIONS = 65
+MIN_SEARCHABLE_GENERATIONS = 62
 
 # The corpus is every committed position that offers one of these sequences, found rather than
 # listed so that a scenario added later is covered without anyone remembering to add it here. The
@@ -438,8 +438,8 @@ def test_the_search_lands_on_the_same_line(generations) -> None:
         )
 
     assert searched > 0
-    # The committed route-building hires leave 65 searchable generations today. Keep a floor so
-    # future committed buildings cannot shrink this comparison population unnoticed.
+    # The committed modifier-building hires leave 62 searchable generations today. Keep a floor
+    # so future committed buildings cannot shrink this comparison population unnoticed.
     assert searched >= MIN_SEARCHABLE_GENERATIONS, (
         f"only {searched} search-safe generations remain; {skipped_at_opening} begin with steps and "
         f"{skipped_by_search_guard} reach them during search"
@@ -478,10 +478,10 @@ def test_equal_outcome_survives_a_late_position_too(deep_generation) -> None:
         if sequenced(action):
             groups[(skeleton(action), outcome_of(action))].append(action)
 
-    # Library is a committed post-resolution step, so its former complete-action spellings no
-    # longer belong to this FullTurnAction population. Keep this below the 484 equivalent pairs
-    # present in the fixture so the test still examines the entire available dense sample.
-    budget = 400
+    # Library and the hired modifier buildings are committed steps, so their former complete-action
+    # spellings no longer belong to this FullTurnAction population. The fixture retains 88
+    # equivalent pairs today; keep the floor below that so the test still samples a dense population.
+    budget = 80
     pairs = 0
     for _key, spellings in sorted(groups.items(), key=lambda item: repr(item[0])):
         if len(spellings) < 2 or pairs >= budget:
@@ -517,9 +517,9 @@ def test_the_late_position_still_reaches_everything_it_used_to(
 
     assert set(reachable_after) == set(reachable_before)
     assert reachable_after == reachable_before
-    # Start-turn and Library relocations are now committed separately, so neither multiplies this
-    # FullTurnAction population. Keep a floor beneath today's 284 distinct outcomes.
-    assert sum(len(v) for v in reachable_after.values()) > 280, (
+    # Start-turn, Library, and hired modifier effects are committed separately, so none multiply
+    # this FullTurnAction population. Keep a floor beneath today's 50 distinct outcomes.
+    assert sum(len(v) for v in reachable_after.values()) > 45, (
         "this fixture is here to be dense; something has shrunk it"
     )
 

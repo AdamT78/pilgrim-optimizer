@@ -52,8 +52,8 @@ def test_cli_legal_actions_show_wagon_yard_without_precommitting_guild(capsys) -
     opponent_path = "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json"
     assert main(["legal-actions", opponent_path]) == 0
     opponent_output = capsys.readouterr().out
-    assert "use building: wagon_yard to hire customs_house from player_two for free" in opponent_output
-    assert "use building: customs_house" in opponent_output
+    assert "use building: wagon_yard to hire customs_house from player_two for free" not in opponent_output
+    assert "use building: customs_house" not in opponent_output
 
 
 def test_cli_apply_market_free_hire_shows_free_event_and_order(capsys) -> None:
@@ -66,22 +66,15 @@ def test_cli_apply_market_free_hire_shows_free_event_and_order(capsys) -> None:
     assert "paid wheat 1 to bank" not in output
 
 
-def test_cli_apply_opponent_free_hire_shows_no_owner_payment(capsys) -> None:
+def test_cli_legal_actions_do_not_fold_opponent_customs_house_hire_into_an_action(capsys) -> None:
     path = "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json"
-    index = _wagon_action_index(path, target="customs_house", source="player_two")
-    assert main(["apply", path, "--action-index", str(index), "--verbose"]) == 0
+    assert main(["legal-actions", path]) == 0
     output = capsys.readouterr().out
-    assert "BUILDING_HIRED: player_one hired Customs House from player_two for free with Wagon Yard" in output
-    assert "to player_two" not in output
+    assert "use building: wagon_yard to hire customs_house from player_two for free" not in output
 
 
-def test_cli_wagon_yard_merchant_taxation_override_shows_legal_actions_and_apply(capsys) -> None:
+def test_cli_wagon_yard_merchant_taxation_override_keeps_customs_house_out_of_actions(capsys) -> None:
     path = "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json"
     assert main(["legal-actions", path]) == 0
     legal_output = capsys.readouterr().out
-    assert "use building: wagon_yard to hire customs_house from market for free" in legal_output
-    index = _wagon_action_index(path, target="customs_house", source="market")
-    assert main(["apply", path, "--action-index", str(index), "--verbose"]) == 0
-    apply_output = capsys.readouterr().out
-    assert "BUILDING_HIRED: player_one hired Customs House from market for free with Wagon Yard" in apply_output
-    assert "BUILDING_BONUS: customs_house" in apply_output
+    assert "use building: wagon_yard to hire customs_house from market for free" not in legal_output
