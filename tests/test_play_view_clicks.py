@@ -162,7 +162,6 @@ def _next_offered_from_dom(
         '[data-board-position-index][data-turn-start-candidate="true"]',
         '[data-board-position-index][data-turn-start-relocation-candidate="true"]',
         '[data-board-position-index][data-turn-skip-candidate="true"]',
-        '[data-board-position-index][data-turn-end-relocation-candidate="true"]',
         '[data-board-position-index][data-turn-duty-candidate="true"]',
         '[data-active-seat="true"][data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"]',
         '[data-arrow][data-turn-offered="true"]',
@@ -215,6 +214,36 @@ def _walk_live_dom_until(
             _click_handle_centre(page, offered, require_hit=True)
         page.wait_for_timeout(20)
     raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
+
+
+def _reach_movement_library_window(page) -> None:
+    """Use the same real-click action prefix to reach movement_2p's Library window."""
+    # This ordinary four-question action leaves an acolyte in City and is intentionally free of
+    # another building step. The Action control exposes its final resolution question.
+    for selector in (
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]',
+        '[data-arrow="city->north"][data-turn-offered="true"]',
+        '[data-board-position-index="4"][data-turn-duty-candidate="true"]',
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        '[data-resolution-key="construct_road_deferred"][data-turn-offered="true"]',
+    ):
+        handle = page.query_selector(selector)
+        assert handle is not None, f"missing movement_2p Library prefix target {selector}"
+        _click_handle_centre(page, handle, require_hit=True)
+        page.wait_for_timeout(20)
+    assert _confirm_enabled(page), "Library prefix did not narrow to one turn action"
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        """() => {
+          const library = document.querySelector('[data-turn-step-building-id="library"]');
+          return library && library.getAttribute('data-turn-step-offered') === 'true';
+        }"""
+    )
 
 
 def _walk_until_skip_step_by_preferring_edges(page, *, target: str, max_clicks: int = 80) -> None:
@@ -1608,12 +1637,6 @@ def _turn_state_snapshot(page) -> dict[str, object]:
         "skips": page.locator(
             '[data-board-position-index][data-turn-skip-candidate="true"]'
         ).count(),
-        "end_relocation_spaces": page.locator(
-            '[data-board-position-index][data-turn-end-relocation-candidate="true"]'
-        ).count(),
-        "end_relocation_abbey": page.locator(
-            '[data-active-seat="true"][data-end-relocation-choice="true"] [data-token="abbey"][opacity="1"]'
-        ).count(),
         "duties": page.locator(
             '[data-board-position-index][data-turn-duty-candidate="true"]'
         ).count(),
@@ -1894,7 +1917,7 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
 def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, serve) -> None:
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
-    before = server.state
+    turn_start = server.state
     prompt = page.locator('[data-component="play-turn"]')
     height_before = prompt.bounding_box()["height"]
 
@@ -1919,7 +1942,7 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
         require_hit=True,
     )
     page.wait_for_timeout(20)
-    assert server.state == before
+    assert server.state == turn_start
     assert _turn_state_snapshot(page)["relocation_targets"] == 0
 
     dormitory = page.locator(
@@ -1937,22 +1960,22 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
     assert active_player_id is not None
     target_before = _lit_acolytes_at(page, active_player_id, chosen_target)
     city = server.config.board.index_for_name("city")
-    city_before = _lit_acolytes_at(page, active_player_id, city)
+    city_before = _lit_city_slots_for_player(page, active_player_id)
     _click_handle_centre(page, relocation_target, require_hit=True)
     page.wait_for_timeout(20)
 
     assert _confirm_enabled(page)
     assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before - 1
-    assert _lit_acolytes_at(page, active_player_id, city) == city_before + 1
+    assert _lit_city_slots_for_player(page, active_player_id) == city_before + 1
     _click_handle_centre(
         page,
         page.locator('[data-turn-control="reset"]').element_handle(),
         require_hit=True,
     )
     page.wait_for_timeout(20)
-    assert server.state == before
+    assert server.state == turn_start
     assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before
-    assert _lit_acolytes_at(page, active_player_id, city) == city_before
+    assert _lit_city_slots_for_player(page, active_player_id) == city_before
 
     dormitory = page.locator(
         '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
@@ -1974,24 +1997,215 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
 
     page.on("request", record_turn_step_request)
     assert _confirm_enabled(page)
-    _click_handle_centre(
+    _click_handle_point(
         page,
         page.locator('[data-turn-control="confirm"]').element_handle(),
-        require_hit=True,
+        0.5,
+        0.2,
     )
-    page.wait_for_timeout(100)
+    page.wait_for_function(
+        """() => document.querySelector('[data-turn-step-building-id="dormitory"]')
+          .getAttribute('data-turn-step-used') === 'true'"""
+    )
     assert len(turn_step_requests) == 1, "an enabled Confirm must issue its /turn-step request"
-    assert server.state != before
+    assert server.state != turn_start
     assert server.state.player_vector(server.state.active_player)[chosen_target] == (
-        before.player_vector(before.active_player)[chosen_target] - 1
+        turn_start.player_vector(turn_start.active_player)[chosen_target] - 1
     )
     assert server.state.player_vector(server.state.active_player)[city] == (
-        before.player_vector(before.active_player)[city] + 1
+        turn_start.player_vector(turn_start.active_player)[city] + 1
     )
     assert "dormitory" in server.state.turn_progress.used_buildings
     assert _lit_acolytes_at(page, active_player_id, chosen_target) == target_before - 1
-    assert _lit_acolytes_at(page, active_player_id, city) == city_before + 1
     _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-committed.png")
+
+
+def test_library_step_stages_and_confirms_duty_with_preview_and_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    turn_step_requests = []
+
+    def record_turn_step_request(request) -> None:
+        if request.method == "POST" and request.url.endswith("/turn-step"):
+            turn_step_requests.append(request)
+
+    page.on("request", record_turn_step_request)
+
+    def stage_library():
+        active_player = page.get_attribute('[data-active-seat="true"]', "data-player")
+        assert active_player is not None
+        city_before = _lit_city_slots_for_player(page, active_player)
+        library = page.locator(
+            '[data-turn-step-building-id="library"][data-turn-step-offered="true"]'
+        ).first
+        _click_handle_centre(page, library.element_handle(), require_hit=True)
+        page.wait_for_timeout(20)
+        return active_player, city_before
+
+    def reset_to_turn_start() -> None:
+        turn_start = server._turn_start_state
+        assert turn_start is not None
+        _click_handle_centre(
+            page,
+            page.locator('[data-turn-control="reset"]').element_handle(),
+            require_hit=True,
+        )
+        page.wait_for_function(
+            """() => {
+              const city = document.querySelector('[data-board-position-index="0"]');
+              return city && city.getAttribute('data-turn-start-candidate') === 'true';
+            }"""
+        )
+        assert server.state == turn_start
+
+    _reach_movement_library_window(page)
+
+    prompt = page.locator('[data-component="play-turn"]')
+    height_before = prompt.bounding_box()["height"]
+    expected_prompt = next(
+        step["prompt"] for step in server.payload["turn_steps"] if step["building_id"] == "library"
+    )
+    active_player, city_before = stage_library()
+    assert page.locator('[data-turn-step-resource-row="true"]').inner_text() == expected_prompt
+    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
+    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    duty_targets = page.locator(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    )
+    assert duty_targets.count() == len(server.config.duty_positions()), (
+        "Library did not light every non-City Duty target"
+    )
+    duty_target = duty_targets.first
+    duty_position = int(duty_target.get_attribute("data-board-position-index"))
+    duty_before = _lit_acolytes_at(page, active_player, duty_position)
+    _click_handle_centre(page, duty_target.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    assert _confirm_enabled(page), "a complete Library Duty relocation did not enable Confirm"
+    assert _lit_acolytes_at(page, active_player, duty_position) == duty_before + 1
+    assert _lit_city_slots_for_player(page, active_player) == city_before - 1
+    _screenshot_turn_prompt(page, SCREENSHOTS / "library-prompt-staged-duty.png")
+    reset_to_turn_start()
+
+    _reach_movement_library_window(page)
+    active_player, city_before = stage_library()
+    duty_target = page.locator(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    ).first
+    duty_position = int(duty_target.get_attribute("data-board-position-index"))
+    duty_before = _lit_acolytes_at(page, active_player, duty_position)
+    step_start = server.state
+    state_token = server.payload["state_token"]
+    requests_before = len(turn_step_requests)
+    _click_handle_centre(page, duty_target.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        "token => !document.documentElement.innerHTML.includes(token)", arg=state_token
+    )
+    assert len(turn_step_requests) == requests_before + 1
+    assert server.state != step_start
+    assert server.state.player_vector(server.state.active_player)[duty_position] == (
+        step_start.player_vector(step_start.active_player)[duty_position] + 1
+    )
+    assert server.state.player_vector(server.state.active_player)[
+        server.config.board.index_for_name("city")
+    ] == step_start.player_vector(step_start.active_player)[server.config.board.index_for_name("city")] - 1
+    assert _lit_acolytes_at(page, active_player, duty_position) == duty_before + 1
+    assert _lit_city_slots_for_player(page, active_player) == city_before - 1
+    reset_to_turn_start()
+
+
+def test_library_step_stages_and_confirms_abbey_with_preview_and_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    turn_step_requests = []
+
+    def record_turn_step_request(request) -> None:
+        if request.method == "POST" and request.url.endswith("/turn-step"):
+            turn_step_requests.append(request)
+
+    page.on("request", record_turn_step_request)
+
+    def stage_library():
+        active_player = page.get_attribute('[data-active-seat="true"]', "data-player")
+        assert active_player is not None
+        city_before = _lit_city_slots_for_player(page, active_player)
+        library = page.locator(
+            '[data-turn-step-building-id="library"][data-turn-step-offered="true"]'
+        ).first
+        _click_handle_centre(page, library.element_handle(), require_hit=True)
+        page.wait_for_timeout(20)
+        return active_player, city_before
+
+    def reset_to_turn_start() -> None:
+        turn_start = server._turn_start_state
+        assert turn_start is not None
+        _click_handle_centre(
+            page,
+            page.locator('[data-turn-control="reset"]').element_handle(),
+            require_hit=True,
+        )
+        page.wait_for_function(
+            """() => {
+              const city = document.querySelector('[data-board-position-index="0"]');
+              return city && city.getAttribute('data-turn-start-candidate') === 'true';
+            }"""
+        )
+        assert server.state == turn_start
+
+    _reach_movement_library_window(page)
+    active_player, city_before = stage_library()
+    abbey_before = _visible_active_token_count(page, "abbey")
+    abbey = page.locator(
+        '[data-active-seat="true"][data-end-relocation-choice="true"] '
+        '[data-token="abbey"][opacity="1"]'
+    ).first
+    assert abbey.count() == 1, "Library did not light Abbey as a relocation target"
+    _click_handle_centre(page, abbey.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    assert _confirm_enabled(page), "a complete Library Abbey relocation did not enable Confirm"
+    assert _visible_active_token_count(page, "abbey") == abbey_before + 1
+    assert _lit_city_slots_for_player(page, active_player) == city_before - 1
+    _screenshot_turn_prompt(page, SCREENSHOTS / "library-prompt-staged-abbey.png")
+    reset_to_turn_start()
+
+    _reach_movement_library_window(page)
+    active_player, city_before = stage_library()
+    abbey_before = _visible_active_token_count(page, "abbey")
+    abbey = page.locator(
+        '[data-active-seat="true"][data-end-relocation-choice="true"] '
+        '[data-token="abbey"][opacity="1"]'
+    ).first
+    step_start = server.state
+    state_token = server.payload["state_token"]
+    requests_before = len(turn_step_requests)
+    _click_handle_centre(page, abbey.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        "token => !document.documentElement.innerHTML.includes(token)", arg=state_token
+    )
+    assert len(turn_step_requests) == requests_before + 1
+    assert server.state != step_start
+    assert server.state.player_state(server.state.active_player).workforce.abbey == (
+        step_start.player_state(step_start.active_player).workforce.abbey + 1
+    )
+    city = server.config.board.index_for_name("city")
+    assert server.state.player_vector(server.state.active_player)[city] == (
+        step_start.player_vector(step_start.active_player)[city] - 1
+    )
+    assert _visible_active_token_count(page, "abbey") == abbey_before + 1
+    assert _lit_city_slots_for_player(page, active_player) == city_before - 1
 
 
 def test_confirm_needs_one_turn_action_or_a_complete_committed_step(page, serve) -> None:

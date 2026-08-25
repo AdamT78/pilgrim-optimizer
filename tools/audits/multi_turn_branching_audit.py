@@ -113,8 +113,6 @@ def action_hired_building_count(action: FullTurnAction) -> int:
     count = 0
     if action.hired_building_id is not None:
         count += 1
-    if _is_hired_source(action.end_turn_building_source):
-        count += 1
     if _is_hired_source(action.sow_route_building_source):
         count += 1
     if _is_hired_source(action.sow_route_secondary_building_source):
@@ -166,7 +164,7 @@ def action_has_start_turn_modifier(action: FullTurnAction) -> bool:
 
 
 def action_has_end_turn_modifier(action: FullTurnAction) -> bool:
-    return action.end_turn_building_id is not None
+    return False
 
 
 def action_has_grain_store_conversion(action: FullTurnAction) -> bool:

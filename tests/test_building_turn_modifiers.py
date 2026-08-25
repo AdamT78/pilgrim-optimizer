@@ -69,7 +69,7 @@ def test_turn_modifier_registry_contains_expected_entries() -> None:
             "end_of_turn",
             "may move 1 acolyte from City directly to a Duty action or back to Abbey",
             "implemented",
-            "implemented as optional post-turn end-turn relocation action suffix.",
+            "implemented as an optional committed step after resolution.",
         ),
     }
 

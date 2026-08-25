@@ -72,7 +72,7 @@ _BUILDING_TURN_MODIFIERS: tuple[BuildingTurnModifier, ...] = (
         phase="end_of_turn",
         effect="may move 1 acolyte from City directly to a Duty action or back to Abbey",
         status="implemented",
-        notes="implemented as optional post-turn end-turn relocation action suffix.",
+        notes="implemented as an optional committed step after resolution.",
     ),
 )
 

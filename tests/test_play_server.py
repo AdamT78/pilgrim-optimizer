@@ -80,20 +80,11 @@ ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
         "sow_route_secondary_building_source",
     }
 )
-RELOCATION_REFUSAL_FIELDS = frozenset(
-    {
-        "end_turn_building_id",
-        "end_turn_building_source",
-        "end_turn_relocation_from",
-        "end_turn_relocation_to",
-    }
-)
 SPACE_QUESTION_KINDS = frozenset(
     {
         "origin",
         "skip",
         "duty",
-        "end_relocation_space",
     }
 )
 
@@ -1101,10 +1092,9 @@ def test_space_questions_never_overlap_on_one_reachable_prefix(
     )
 
 
-def test_relocation_fields_and_hire_payments_are_not_in_refusals(
+def test_hire_payments_are_not_in_refusals(
     corpus_actions, playtest_actions
 ) -> None:
-    relocation_blocked: list[tuple[str, tuple[str, ...], int]] = []
     hire_payment_blocked: list[tuple[str, tuple[str, ...], int]] = []
     refused = 0
     for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
@@ -1115,20 +1105,12 @@ def test_relocation_fields_and_hire_payments_are_not_in_refusals(
             refused += 1
             unresolved = tuple(sorted(str(name) for name in candidate.get("unresolved", ())))
             unresolved_set = set(unresolved)
-            if unresolved_set & RELOCATION_REFUSAL_FIELDS:
-                relocation_blocked.append(
-                    (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
-                )
             if "hire_payments" in unresolved_set:
                 hire_payment_blocked.append(
                     (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
                 )
 
     assert refused > 0, "corpus had no refused groups, so this checked nothing"
-    assert not relocation_blocked, (
-        f"relocation fields still block {len(relocation_blocked)} candidate groups: "
-        f"{relocation_blocked[:10]}"
-    )
     assert not hire_payment_blocked, (
         f"hire_payments still block {len(hire_payment_blocked)} candidate groups: "
         f"{hire_payment_blocked[:10]}"
@@ -1364,7 +1346,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=scenario.state,
@@ -1400,7 +1381,6 @@ def test_cloisters_loop_fixture_proves_revisit_was_the_counter_bug() -> None:
             config=scenario.config,
             offer_hire=offer_hire_by_action_id[action_id(action)],
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-            offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
         )
         edge_steps = [step for step in steps if step["kind"] == "edge"]
         assert edge_steps, "Cloisters action should always present at least one edge step"
@@ -1798,7 +1778,6 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
         (
             offer_hire_by_action_id,
             hire_payment_buildings_by_action_id,
-            offer_end_turn_by_action_id,
         ) = _offer_flags_by_action_id(
             actions,
             state=scenario.state,
@@ -1820,7 +1799,6 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
                 config=scenario.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -1862,7 +1840,6 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
         (
             offer_hire_by_action_id,
             hire_payment_buildings_by_action_id,
-            offer_end_turn_by_action_id,
         ) = _offer_flags_by_action_id(
             actions,
             state=scenario.state,
@@ -1884,7 +1861,6 @@ def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_
                 config=scenario.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
             by_key.setdefault(key_for_steps(steps), []).append(action)
 
@@ -1942,7 +1918,7 @@ def _seated(server) -> set[str]:
 def _key_values(candidates: list[dict], kind: str) -> list[str]:
     """Every distinct value of one kind of step, which is one key each on the page."""
     asked_kinds = (
-        {"combination", "hire", "end_relocation_choice"} if kind == "combination" else {kind}
+        {"combination", "hire"} if kind == "combination" else {kind}
     )
     return sorted(
         {step["value"] for c in candidates for step in c["steps"] if step["kind"] in asked_kinds}
@@ -2172,13 +2148,11 @@ def _click_for(server, step: dict) -> dict:
     """The click that answers one step, chosen by the step's kind and never by what it is about."""
     if step["kind"] in {"position", "origin", "skip", "duty"}:
         return _at(step["value"])
-    if step["kind"] == "end_relocation_space":
-        return _mission_click() if step["value"] == "abbey" else _at(step["value"])
     if step["kind"] == "edge":
         return _follow(step["value"])
     if step["kind"] == "resource":
         return _take(step["value"], _active_seat(server))
-    if step["kind"] in {"combination", "end_relocation_choice"}:
+    if step["kind"] == "combination":
         return _pay(step["value"])
     if step["kind"] == "hire":
         return _pay(step["value"])
@@ -2212,13 +2186,12 @@ def _offer_flags_by_action_id(
     *,
     state: Any,
     config: Any,
-) -> tuple[dict[str, bool], dict[str, tuple[str, ...]], dict[str, bool]]:
-    """Mirror play-server context gating for hire and relocation step emission."""
+) -> tuple[dict[str, bool], dict[str, tuple[str, ...]]]:
+    """Mirror play-server context gating for hire-step emission."""
     hire_contexts = play_server._hire_contexts(actions, config)
     player_id = play_server._speaking_player_id(state)
     offer_hire_by_action_id: dict[str, bool] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
-    pre_end_turn_key_by_action_id: dict[str, tuple[Any, ...]] = {}
     for action in actions:
         move_id = action_id(action)
         offer_hire_by_action_id[move_id] = isinstance(action, FullTurnAction) and (
@@ -2231,37 +2204,9 @@ def _offer_flags_by_action_id(
         config=config,
         offer_hire_by_action_id=offer_hire_by_action_id,
     )
-    for action in actions:
-        move_id = action_id(action)
-        pre_end_turn_steps = play_server.decision_steps(
-            action,
-            player_id,
-            state=state,
-            config=config,
-            offer_hire=offer_hire_by_action_id[move_id],
-            hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
-            offer_end_turn_relocation=False,
-        )
-        pre_end_turn_key_by_action_id[move_id] = tuple(
-            tuple(step["value"]) if isinstance(step["value"], tuple) else step["value"]
-            for step in pre_end_turn_steps
-        )
-    end_turn_contexts = {
-        pre_end_turn_key_by_action_id[action_id(action)]
-        for action in actions
-        if isinstance(action, FullTurnAction) and action.end_turn_building_id is not None
-    }
-    offer_end_turn_by_action_id = {
-        action_id(action): (
-            isinstance(action, FullTurnAction)
-            and pre_end_turn_key_by_action_id[action_id(action)] in end_turn_contexts
-        )
-        for action in actions
-    }
     return (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     )
 
 
@@ -2271,7 +2216,6 @@ def _engine_steps(
     config: Any,
     offer_hire: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
-    offer_end_turn_relocation: bool = False,
 ) -> list[dict]:
     """One legal action as the sequence of decisions that reaches it, spelled out here by hand.
 
@@ -2353,24 +2297,6 @@ def _engine_steps(
         if mission:
             terms.append(f"mission={mission}")
         steps.append({"kind": "ordination", "value": ",".join(terms) if terms else "none"})
-    if isinstance(action, FullTurnAction) and offer_end_turn_relocation:
-        if action.end_turn_building_id is None:
-            steps.append({"kind": "end_relocation_choice", "value": "none"})
-        else:
-            building_id = action.end_turn_building_id
-            source_label = action.end_turn_building_source or "unknown"
-            steps.append(
-                {
-                    "kind": "end_relocation_choice",
-                    "value": f"{building_id}:{source_label}",
-                }
-            )
-            steps.append(
-                {
-                    "kind": "end_relocation_space",
-                    "value": action.end_turn_relocation_to,
-                }
-            )
     return steps
 
 
@@ -2380,7 +2306,6 @@ def _engine_decisions(server) -> list[list[dict]]:
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=server.state,
@@ -2394,7 +2319,6 @@ def _engine_decisions(server) -> list[list[dict]]:
             config=server.config,
             offer_hire=offer_hire_by_action_id[move_id],
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
-            offer_end_turn_relocation=offer_end_turn_by_action_id[move_id],
         )
         if steps not in decisions:
             decisions.append(steps)
@@ -2868,35 +2792,23 @@ def test_inquisition_turn_step_payload_names_the_selected_duty_and_applies_it() 
         server.server_close()
 
 
-def test_library_turn_sets_the_chosen_end_turn_relocation_fields() -> None:
+def test_library_turn_step_is_offered_only_in_the_end_of_turn_window() -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "library_active_city_to_duty_001.json")
     try:
-        candidate = next(
-            (
-                offered
-                for offered in server.payload["turn_candidates"]
-                if offered.get("action_id") is not None
-                and any(
-                    step["kind"] == "end_relocation_choice"
-                    and str(step["value"]).startswith("library:own_active")
-                    for step in offered["steps"]
-                )
-                and any(step["kind"] == "end_relocation_space" for step in offered["steps"])
-            ),
-            None,
-        )
-        assert candidate is not None, "fixture offered no settled Library relocation candidate"
-        chosen_target = _answer(candidate, "end_relocation_space")
-        city = server.config.board.index_for_name("city")
-        action = _action_for_candidate(server, candidate)
-        assert action.end_turn_building_id == "library"
-        assert action.end_turn_building_source == "own_active"
-        assert action.end_turn_relocation_from == city
-        assert action.end_turn_relocation_to == chosen_target
-        before_turn = int(server.payload["state"]["timing"]["absolute_turn"])
+        assert not any(step["building_id"] == "library" for step in server.payload["turn_steps"])
+        candidate = next(c for c in server.payload["turn_candidates"] if c["action_id"] is not None)
         server.apply(str(candidate["action_id"]), str(server.payload["state_token"]))
-        _pass_end_turn_window(server)
-        assert int(server.payload["state"]["timing"]["absolute_turn"]) == before_turn + 1
+        city = server.config.board.index_for_name("city")
+        library_step = next(
+            step
+            for step in server.payload["turn_steps"]
+            if step["building_id"] == "library" and step["selected_position"] == "abbey"
+        )
+        assert library_step["kind"] == "relocation"
+        before = server.state.player_vector(server.state.active_player)
+        server.apply_turn_step(str(library_step["step_id"]), str(server.payload["state_token"]))
+        assert server.state.player_vector(server.state.active_player)[city] == before[city] - 1
+        assert server.state.player_state(server.state.active_player).workforce.abbey >= 1
     finally:
         server.server_close()
 
@@ -3934,7 +3846,6 @@ def _offered_pairs(server) -> tuple[set, set]:
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=server.state,
@@ -3951,7 +3862,6 @@ def _offered_pairs(server) -> tuple[set, set]:
                 config=server.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             ),
             "combination",
         )
@@ -4090,7 +4000,6 @@ def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=server.state,
@@ -4103,7 +4012,6 @@ def _mixes_the_engine_allows(server, prefix: tuple) -> set[str]:
             config=server.config,
             offer_hire=offer_hire_by_action_id[action_id(action)],
             hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-            offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
         )
         if getattr(action, "resolution", None) is None or action.resolution.value != "taxation":
             continue
@@ -4540,7 +4448,6 @@ def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=server.state,
@@ -4560,7 +4467,6 @@ def _buildings_the_engine_would_construct(server, prefix: tuple) -> list[str]:
                         hire_payment_buildings=hire_payment_buildings_by_action_id[
                             action_id(action)
                         ],
-                        offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
                     ),
                     "building",
                 )
@@ -5147,7 +5053,6 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
     (
         offer_hire_by_action_id,
         hire_payment_buildings_by_action_id,
-        offer_end_turn_by_action_id,
     ) = _offer_flags_by_action_id(
         actions,
         state=server.state,
@@ -5162,7 +5067,6 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
                 config=server.config,
                 offer_hire=offer_hire_by_action_id[action_id(action)],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[action_id(action)],
-                offer_end_turn_relocation=offer_end_turn_by_action_id[action_id(action)],
             )
         )
         == wanted
@@ -5746,7 +5650,6 @@ def _snapshot_at(transcript: dict, index: int) -> dict:
         "startCandidates": transcript["startCandidates"][index],
         "startRelocationCandidates": transcript["startRelocationCandidates"][index],
         "skipCandidates": transcript["skipCandidates"][index],
-        "endRelocationCandidates": transcript["endRelocationCandidates"][index],
         "dutyCandidates": transcript["dutyCandidates"][index],
         "reset": transcript["resetShown"][index],
         "counter": transcript["counterShown"][index],

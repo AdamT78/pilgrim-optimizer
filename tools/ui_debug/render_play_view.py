@@ -765,7 +765,6 @@ def _combination_keys(candidates: list[dict]) -> str:
             if step["kind"] in {
                 "combination",
                 "hire",
-                "end_relocation_choice",
             }:
                 seen.setdefault(step["value"], step.get("label", step["value"]))
     return "".join(
@@ -1026,10 +1025,6 @@ def turn_styles(route_color: str) -> str:
   [data-turn-skip-candidate="true"] {{ cursor: pointer; }}
   [data-turn-skip-candidate="true"] .board-circle {{
     stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 5 3;
-  }}
-  [data-turn-end-relocation-candidate="true"] {{ cursor: pointer; }}
-  [data-turn-end-relocation-candidate="true"] .board-circle {{
-    stroke: {route_color}; stroke-width: 4.4; stroke-dasharray: 10 4;
   }}
   [data-turn-duty-candidate="true"] {{ cursor: pointer; }}
   [data-turn-duty-candidate="true"] .board-circle {{

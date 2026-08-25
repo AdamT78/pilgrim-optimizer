@@ -49,10 +49,10 @@ def test_every_legal_action_applies(deep_actions, corpus_actions) -> None:
             except Exception as exc:
                 unexpected.append((path.stem, action_id(action), str(exc)))
 
-    # Dormitory and Inquisition now commit separately, so their old action-prefix multiplication
-    # deliberately leaves this full-turn population. Keep a floor so a later accidental collapse
-    # still cannot make the corpus walk vacuous.
-    assert total > 14_000, f"only {total} actions walked; the corpus has shrunk"
+    # Dormitory, Inquisition, and Library now commit separately, so their old action-prefix
+    # multiplication deliberately leaves this FullTurnAction population. Keep a floor so a later
+    # accidental collapse still cannot make the corpus walk vacuous.
+    assert total > 5_300, f"only {total} actions walked; the corpus has shrunk"
     assert not unexpected, "legal actions that apply_action refuses:\n" + "\n".join(
         f"  {name}: {reason}\n    {ident}" for name, ident, reason in unexpected[:20]
     )
@@ -64,11 +64,11 @@ def test_the_deep_fixture_is_where_this_would_be_found(deep_actions) -> None:
     assert current_merchant_resource(scenario.state, scenario.config) == CORNUCOPIA_COUNTER, (
         "this fixture is here because the Merchant offers the wildcard on it"
     )
-    # Committed start-turn relocation no longer multiplies complete-action variants here.
-    assert len(actions) > 9_500, f"the deep fixture now offers only {len(actions)} actions"
+    # Committed relocation steps no longer multiply complete-action variants here.
+    assert len(actions) > 700, f"the deep fixture now offers only {len(actions)} actions"
 
     multi_hire = sum(1 for action in actions if _hired_sources(action) > 1)
-    assert multi_hire > 1_000, (
+    assert multi_hire > 240, (
         f"only {multi_hire} actions hire more than once; the case that broke is not covered"
     )
 
@@ -81,7 +81,6 @@ def _hired_sources(action) -> int:
         (action.hired_building_id, action.hired_building_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
-        (action.end_turn_building_id, action.end_turn_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
         (action.workforce_move_building_id, action.workforce_move_building_source),

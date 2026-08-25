@@ -310,7 +310,7 @@ class _ResolvedPulpitWorkforceMove:
 
 @dataclass(frozen=True, slots=True)
 class _ResolvedEndTurnRelocation:
-    """Validated end-turn relocation directive from one action."""
+    """Validated end-turn Library relocation directive from one committed step."""
 
     building_id: str
     source: BuildingAbilitySource
@@ -439,7 +439,7 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         if _BUILDING_GUILD not in used
     )
     relocations = (
-        ()
+        _legal_library_relocation_steps(state, config)
         if state.turn_progress.resolution_committed
         else _legal_start_turn_relocation_steps(state, config)
     )
@@ -656,6 +656,8 @@ def _apply_building_relocation_step(
     config: GameConfig,
     step: BuildingRelocationStep,
 ) -> GameState:
+    if step.building_id == "library":
+        return _apply_library_relocation_step(state, config, step)
     if state.turn_progress.resolution_committed:
         raise TransitionValidationError(
             "Dormitory and Inquisition relocation steps are only available before resolution."
@@ -772,6 +774,131 @@ def _apply_building_relocation_step(
             building_id=step.building_id,
             from_position=from_position,
             to_position=to_position,
+            config=config,
+        )
+    )
+    return replace(
+        next_state,
+        turn_progress=replace(
+            next_state.turn_progress,
+            used_buildings=next_state.turn_progress.used_buildings | {step.building_id},
+            events=tuple(sorted(events, key=lambda event: event.action_id)),
+        ),
+    )
+
+
+def _apply_library_relocation_step(
+    state: GameState,
+    config: GameConfig,
+    step: BuildingRelocationStep,
+) -> GameState:
+    if not state.turn_progress.resolution_committed:
+        raise TransitionValidationError(
+            "Library relocation steps are only available after resolution."
+        )
+    if step.building_id in state.turn_progress.used_buildings:
+        raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
+
+    player = state.active_player
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=player,
+        building_key="library",
+    )
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+        raise TransitionValidationError("Library is unavailable in the End of Turn window.")
+    expected_source = (
+        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
+    )
+    if step.source != expected_source:
+        raise TransitionValidationError(
+            f"Library relocation source does not match resolved source: expected {expected_source}."
+        )
+
+    transition_action_id = _turn_step_id(step)
+    next_state = state
+    events = list(state.turn_progress.events)
+    if _is_hired_source(source):
+        if step.hire_payment not in CORNUCOPIA_HIRE_RESOURCES:
+            raise TransitionValidationError("Library hire payment must name a concrete resource.")
+        if source.hire_resource == CORNUCOPIA_COUNTER:
+            source = replace(source, hire_resource=step.hire_payment, hire_resource_chosen=True)
+        elif source.hire_resource != step.hire_payment:
+            raise TransitionValidationError(
+                "Library hire payment does not match the Merchant's current counter."
+            )
+        try:
+            next_state, payment = apply_building_hire_payment(
+                next_state,
+                acting_player=player,
+                source=source,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        events.append(
+            _building_hired_event(
+                source=source,
+                payment=payment,
+                actor=player,
+                action_id=transition_action_id,
+                config=config,
+            )
+        )
+    elif step.hire_payment is not None:
+        raise TransitionValidationError("Own-active Library does not take a hire payment.")
+
+    city_position = config.board.index_for_name("city")
+    selected_position = step.selected_position
+    if isinstance(selected_position, str):
+        selected = selected_position.strip().lower().replace("-", "_").replace(" ", "_")
+        if selected != _LIBRARY_ABBEY_TARGET:
+            raise TransitionValidationError(
+                "Library relocation target must be Abbey or a non-city Duty tile."
+            )
+        to_position = None
+        to_pool = _LIBRARY_ABBEY_TARGET
+    elif (
+        isinstance(selected_position, int)
+        and not isinstance(selected_position, bool)
+        and selected_position in set(config.duty_positions())
+        and selected_position != city_position
+    ):
+        to_position = selected_position
+        to_pool = config.board.positions[selected_position]
+    else:
+        raise TransitionValidationError(
+            "Library relocation target must be Abbey or a non-city Duty tile."
+        )
+
+    if next_state.player_vector(player)[city_position] <= 0:
+        raise TransitionValidationError(
+            "Library relocation requires at least one acting-player acolyte in City."
+        )
+    relocation = _ResolvedEndTurnRelocation(
+        building_id="library",
+        source=source,
+        from_position=city_position,
+        to_position=to_position,
+        to_pool=to_pool,
+    )
+    next_state = _apply_end_turn_relocation_to_state(
+        next_state,
+        player=player,
+        relocation=relocation,
+    )
+    events.append(
+        _end_turn_building_bonus_event(
+            actor=player,
+            action_id=transition_action_id,
+            relocation=relocation,
+        )
+    )
+    events.append(
+        _end_turn_relocation_event(
+            actor=player,
+            action_id=transition_action_id,
+            relocation=relocation,
             config=config,
         )
     )
@@ -1015,13 +1142,6 @@ class _ActionAccumulator:
 
 def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...]:
     actions = _ActionAccumulator()
-    # Library is hired at end of turn, after the duty has resolved. Its hire can therefore be
-    # paid from resources the turn earned, not only from what remained before the turn.
-    library_sources = _resolved_library_sources_for_state(
-        state,
-        config,
-        payer_state=state.player_state(state.active_player),
-    )
     variant_actions = _legal_full_turn_actions_for_state(
         state,
         config,
@@ -1037,31 +1157,7 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
         if not isinstance(variant_action, FullTurnAction):
             actions.add_if_new(variant_action)
             continue
-        action = variant_action
-        actions.add_if_new(action)
-        if not library_sources:
-            continue
-        if action.workforce_move_building_id == _BUILDING_PULPIT:
-            # Defer mixed Pulpit+Library hire-order interactions for this milestone.
-            continue
-        if action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM:
-            # Defer mixed Scriptorium+Library hire-order interactions for this milestone.
-            continue
-        if action.taxation_majority_building_id == _BUILDING_CUSTOMS_HOUSE:
-            # Defer mixed Customs House+Library hire-order interactions for this milestone.
-            continue
-        if action.free_hire_enabler_building_id == _BUILDING_WAGON_YARD:
-            # Defer mixed Wagon Yard+Library hire-order interactions for this milestone.
-            continue
-        for library_source in library_sources:
-            for library_action in _library_suffix_variants_for_action(
-                original_state=state,
-                state_for_turn=state,
-                config=config,
-                action=action,
-                source=library_source,
-            ):
-                actions.add_if_new(library_action)
+        actions.add_if_new(variant_action)
     return actions.as_tuple()
 
 
@@ -2832,41 +2928,6 @@ def _apply_full_turn_action(
             raise TransitionValidationError(
                 "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
             )
-        end_turn_fields = (
-            action.end_turn_building_id,
-            action.end_turn_building_source,
-            action.end_turn_relocation_from,
-            action.end_turn_relocation_to,
-        )
-        end_turn_field_count = sum(field is not None for field in end_turn_fields)
-        if end_turn_field_count not in (0, len(end_turn_fields)):
-            raise TransitionValidationError(
-                "end_turn_building_id/source and end_turn_relocation_from/to must be set together."
-            )
-        if (
-            end_turn_field_count == len(end_turn_fields)
-            and action.end_turn_building_id != "library"
-        ):
-            raise TransitionValidationError(
-                "Only Library is supported for end-turn relocation fields."
-            )
-        if has_scriptorium_effective_modifier and end_turn_field_count == len(end_turn_fields):
-            raise TransitionValidationError(
-                "Combining Scriptorium effective-acolyte modifier with end-turn relocation modifiers is deferred."
-            )
-        if has_pulpit_workforce_modifier and end_turn_field_count == len(end_turn_fields):
-            raise TransitionValidationError(
-                "Combining Pulpit free serf movement with end-turn relocation modifiers is deferred."
-            )
-        if has_customs_house_taxation_modifier and end_turn_field_count == len(end_turn_fields):
-            raise TransitionValidationError(
-                "Combining Customs House Taxation modifier with end-turn relocation modifiers is deferred."
-            )
-        if has_bank_payment_modifier and end_turn_field_count == len(end_turn_fields):
-            raise TransitionValidationError(
-                "Combining Bank payment substitution with end-turn relocation modifiers is deferred."
-            )
-
         hire_context = BuildingHireTurnContext()
         if (action.hired_building_id is None) != (action.hired_building_source is None):
             raise TransitionValidationError(
@@ -2996,21 +3057,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=building_key,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            action.end_turn_building_id == "library"
-            and action.end_turn_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key="library"):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key="library",
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4400,59 +4446,6 @@ def _apply_full_turn_action(
             )
         )
 
-    end_turn_relocation = _resolved_end_turn_relocation_for_action(
-        state=updated_state,
-        config=config,
-        player=player,
-        action=action,
-    )
-    if end_turn_relocation is not None:
-        if _is_hired_source(end_turn_relocation.source):
-            try:
-                updated_state, end_turn_hire_payment = apply_building_hire_payment(
-                    updated_state,
-                    acting_player=player,
-                    source=end_turn_relocation.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            _refresh_resource_delta_event(
-                events,
-                actor=player,
-                action_id=transition_action_id,
-                before_resources=resolution_resource_delta_baseline,
-                after_resources=updated_state.player_state(player).resources,
-            )
-            events.append(
-                _building_hired_event(
-                    source=end_turn_relocation.source,
-                    payment=end_turn_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
-        events.append(
-            _end_turn_building_bonus_event(
-                actor=player,
-                action_id=transition_action_id,
-                relocation=end_turn_relocation,
-            )
-        )
-        updated_state = _apply_end_turn_relocation_to_state(
-            updated_state,
-            player=player,
-            relocation=end_turn_relocation,
-        )
-        events.append(
-            _end_turn_relocation_event(
-                actor=player,
-                action_id=transition_action_id,
-                relocation=end_turn_relocation,
-                config=config,
-            )
-        )
-
     if not updated_state.game_over:
         _validate_transition_state(state, updated_state, config)
         events.append(
@@ -4930,157 +4923,40 @@ def _legal_inquisition_relocation_steps(
     )
 
 
-def _resolved_library_sources_for_state(
+def _library_end_turn_targets(config: GameConfig) -> tuple[int | str, ...]:
+    return (*config.duty_positions(), _LIBRARY_ABBEY_TARGET)
+
+
+def _legal_library_relocation_steps(
     state: GameState,
     config: GameConfig,
-    *,
-    payer_state: PlayerState,
-) -> tuple[BuildingAbilitySource, ...]:
+) -> tuple[BuildingRelocationStep, ...]:
+    if "library" in state.turn_progress.used_buildings:
+        return ()
     source = building_ability_source(
         state,
         config,
         acting_player=state.active_player,
         building_key="library",
     )
-    if not source.usable:
-        return ()
-    if source.source_type == "own_active":
-        return (source,)
-    if _is_hired_source(source):
-        return _hire_payment_source_variants(
-            source,
-            payer_state,
-        )
-    return ()
-
-
-def _library_suffix_variants_for_action(
-    *,
-    original_state: GameState,
-    state_for_turn: GameState,
-    config: GameConfig,
-    action: FullTurnAction,
-    source: BuildingAbilitySource,
-) -> tuple[FullTurnAction, ...]:
-    if source.building_key != "library":
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
         return ()
     city_position = config.board.index_for_name("city")
-    city_acolytes = _city_acolytes_after_action_for_end_turn(
-        state_for_turn,
-        config,
-        action=action,
-    )
-    if city_acolytes <= 0:
-        return ()
-
-    variants: list[FullTurnAction] = []
-    for target in _library_end_turn_targets(config):
-        candidate = _with_end_turn_library_relocation_fields(
-            action,
-            source=source,
-            from_position=city_position,
-            to_target=target,
-        )
-        if not _is_action_apply_legal(
-            original_state,
-            candidate,
-            config,
-        ):
-            continue
-        variants.append(candidate)
-    return tuple(variants)
-
-
-def _library_end_turn_targets(config: GameConfig) -> tuple[int | str, ...]:
-    return (*config.duty_positions(), _LIBRARY_ABBEY_TARGET)
-
-
-def _city_acolytes_after_action_for_end_turn(
-    state: GameState,
-    config: GameConfig,
-    *,
-    action: FullTurnAction,
-) -> int:
-    player = state.active_player
-    player_vector = state.player_vector(player)
-    picked_up = player_vector[action.origin]
-    if picked_up <= 0 or len(action.route) != picked_up:
-        return 0
-
-    try:
-        cloisters_route = _resolved_cloisters_route_for_action(
-            state=state,
-            config=config,
-            player=player,
-            action=action,
-        )
-    except TransitionValidationError:
-        return 0
-    try:
-        kogge_source = _resolved_kogge_source_for_action(
-            state=state,
-            config=config,
-            player=player,
-            action=action,
-        )
-    except TransitionValidationError:
-        return 0
-    try:
-        sowed_vector = _sow_vector_with_optional_city_kogge(
-            player_vector,
-            origin=action.origin,
-            route=action.route,
-            board=config.board,
-            allows_kogge_city_spokes=kogge_source is not None and kogge_source.usable,
-            cloisters_omitted_location=(
-                cloisters_route.omitted_location if cloisters_route is not None else None
+    return tuple(
+        BuildingRelocationStep(
+            building_id="library",
+            source=(
+                "own_active"
+                if hire_source.source_type == "own_active"
+                else _hired_building_source_label(hire_source)
             ),
-            cloisters_with_kogge=(kogge_source is not None and cloisters_route is not None),
+            selected_position=target,
+            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
         )
-    except ValueError:
-        return 0
-
-    city_position = config.board.index_for_name("city")
-    city_count = sowed_vector[city_position]
-    if action.resolution is TurnResolutionType.TITHE:
-        return city_count
-
-    city_count += sowed_vector[action.selected_duty]
-    if action.resolution is TurnResolutionType.ORDINATION:
-        city_count += sum(1 for step in action.ordination_steps if step == ORDINATION_MISSION)
-    return city_count
-
-
-def _with_end_turn_library_relocation_fields(
-    action: FullTurnAction,
-    *,
-    source: BuildingAbilitySource,
-    from_position: int,
-    to_target: int | str,
-) -> FullTurnAction:
-    source_label = (
-        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
+        for hire_source, state_after_hire in _hire_payment_states(state, source)
+        if state_after_hire.player_vector(state.active_player)[city_position] > 0
+        for target in _library_end_turn_targets(config)
     )
-    updated = replace(
-        action,
-        end_turn_building_id="library",
-        end_turn_building_source=source_label,
-        end_turn_relocation_from=from_position,
-        end_turn_relocation_to=to_target,
-    )
-    return _with_hire_payment_for_source(updated, source=source)
-
-
-def _is_action_apply_legal(
-    state: GameState,
-    action: FullTurnAction,
-    config: GameConfig,
-) -> bool:
-    try:
-        apply_action(state, action, config)
-    except TransitionValidationError:
-        return False
-    return True
 
 
 def _relocate_one_acolyte_in_mancala_vector(
@@ -5865,7 +5741,6 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
     """Building ids this action says are hired (source set and not own_active)."""
     candidates = (
         (action.hired_building_id, action.hired_building_source),
-        (action.end_turn_building_id, action.end_turn_building_source),
         (action.sow_route_building_id, action.sow_route_building_source),
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
@@ -6244,7 +6119,6 @@ def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6266,7 +6140,6 @@ def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6288,7 +6161,6 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.end_turn_building_id is None
         and action.workforce_move_building_id is None
         and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
@@ -6310,7 +6182,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.end_turn_building_id is None
         and action.hired_building_id is None
         and action.hired_building_source is None
         and action.workforce_move_building_id is None
@@ -6386,8 +6257,6 @@ def _wagon_yard_action_is_supported_composition(
     *,
     target_building_id: str,
 ) -> bool:
-    if action.end_turn_building_id is not None:
-        return False
     if (
         action.sow_route_building_id is not None
         or action.sow_route_secondary_building_id is not None
@@ -6586,105 +6455,6 @@ def _legal_action_variants_for_resolution(
             selected_duty=selected_duty,
             resolution=resolution,
         ),
-    )
-
-
-def _resolved_end_turn_relocation_for_action(
-    *,
-    state: GameState,
-    config: GameConfig,
-    player: PlayerId,
-    action: FullTurnAction,
-) -> _ResolvedEndTurnRelocation | None:
-    fields = (
-        action.end_turn_building_id,
-        action.end_turn_building_source,
-        action.end_turn_relocation_from,
-        action.end_turn_relocation_to,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "end_turn_building_id/source and end_turn_relocation_from/to must be set together."
-        )
-
-    building_id = action.end_turn_building_id
-    source_label = action.end_turn_building_source
-    from_position = action.end_turn_relocation_from
-    to_target = action.end_turn_relocation_to
-    assert building_id is not None
-    assert source_label is not None
-    assert from_position is not None
-    assert to_target is not None
-
-    if building_id != "library":
-        raise TransitionValidationError("Only Library is supported for end-turn relocation fields.")
-
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=building_id,
-    )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                "Library is own-active; end_turn_building_source must be own_active."
-            )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
-            raise TransitionValidationError(
-                "end_turn_building_source does not match resolved source: "
-                f"expected {expected_source_label}."
-            )
-    else:
-        raise TransitionValidationError(
-            "Library is not usable for end-turn relocation in current state."
-        )
-
-    city_position = config.board.index_for_name("city")
-    if from_position != city_position:
-        raise TransitionValidationError("Library relocation source must be City.")
-
-    duty_positions = set(config.duty_positions())
-    to_pool: str
-    to_position: int | None
-    if isinstance(to_target, str):
-        normalized_target = to_target.strip().lower().replace("-", "_").replace(" ", "_")
-        if normalized_target != _LIBRARY_ABBEY_TARGET:
-            raise TransitionValidationError(
-                "Library relocation target must be Abbey or a non-city Duty tile."
-            )
-        to_pool = _LIBRARY_ABBEY_TARGET
-        to_position = None
-    elif isinstance(to_target, int) and not isinstance(to_target, bool):
-        if to_target not in duty_positions or to_target == city_position:
-            raise TransitionValidationError(
-                "Library relocation target must be Abbey or a non-city Duty tile."
-            )
-        to_pool = config.board.positions[to_target]
-        to_position = to_target
-    else:
-        raise TransitionValidationError(
-            "Library relocation target must be Abbey or a non-city Duty tile."
-        )
-
-    player_vector = state.player_vector(player)
-    if player_vector[city_position] <= 0:
-        raise TransitionValidationError(
-            "Library relocation requires at least one acting-player acolyte in City."
-        )
-
-    return _ResolvedEndTurnRelocation(
-        building_id=building_id,
-        source=source,
-        from_position=city_position,
-        to_position=to_position,
-        to_pool=to_pool,
     )
 
 

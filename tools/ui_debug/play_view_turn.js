@@ -257,6 +257,13 @@
         space.setAttribute('data-turn-step-relocation-candidate', 'true');
       }
     });
+    if (activeSeat) {
+      if (relocationTargets.indexOf('abbey') !== -1) {
+        activeSeat.setAttribute('data-end-relocation-choice', 'true');
+      } else {
+        activeSeat.removeAttribute('data-end-relocation-choice');
+      }
+    }
     if (turnStepResourceRow) {
       turnStepResourceRow.setAttribute(
         'data-turn-step-row-active',
@@ -931,8 +938,7 @@
 
   /* A step says how it is answered and this sorts them by that, so a new
      kind of question is a new bucket here and nothing else. That includes
-     four kinds answered on the wheel: `origin`, `skip`, `duty`, and
-     `end_relocation_space`, split so they can
+     three kinds answered on the wheel: `origin`, `skip`, and `duty`, split so they can
      be marked differently without naming fields. No step is recognised by
      what it is ABOUT: there is no field name anywhere in this file, and a
      page that told a tithe's stock from a taxation's would be one that had
@@ -1383,11 +1389,29 @@
       || !activePlayer
     ) { return; }
     var step = live[0];
-    if (step.building_id !== 'dormitory' && step.building_id !== 'inquisition') { return; }
-    var selected = positionName(Number(step.selected_position));
-    if (!selected) { return; }
-    var source = step.building_id === 'dormitory' ? selected : 'city';
-    var destination = step.building_id === 'dormitory' ? 'city' : selected;
+    if (
+      step.building_id !== 'dormitory'
+      && step.building_id !== 'inquisition'
+      && step.building_id !== 'library'
+    ) { return; }
+    var source = 'city';
+    var destination = null;
+    if (step.building_id === 'dormitory') {
+      source = positionName(Number(step.selected_position));
+      destination = 'city';
+    } else if (step.selected_position === 'abbey') {
+      var abbeyToken = abbeyTokensOnActiveSeat().filter(function (token) {
+        return !tokenVisible(token);
+      })[0];
+      var cityCube = visibleColumnAt(source, activePlayer)[0];
+      if (!abbeyToken || !cityCube) { return; }
+      cityCube.setAttribute('opacity', '0');
+      abbeyToken.setAttribute('opacity', '1');
+      return;
+    } else {
+      destination = positionName(Number(step.selected_position));
+    }
+    if (!source || !destination) { return; }
     var moved = visibleColumnAt(source, activePlayer)[0];
     var placed = placeOneCubeAt(destination, activePlayer);
     if (!moved || !placed) {
@@ -1502,11 +1526,6 @@
     var origins = offeredByKind(offered, 'origin');
     var skips = offeredByKind(offered, 'skip');
     var duties = offeredByKind(offered, 'duty');
-    var endRelocationValues = offeredByKind(offered, 'end_relocation_space');
-    var endRelocationSpaces = endRelocationValues
-      .map(function (value) { return Number(value); })
-      .filter(function (value) { return !Number.isNaN(value); });
-    var endRelocationAbbey = endRelocationValues.indexOf('abbey') !== -1;
     var edges = offeredByKind(offered, 'edge');
     var resolutions = resolutionOptions || [];
     var actionResolutions = resolutions.filter(function (value) {
@@ -1556,11 +1575,6 @@
       } else {
         space.setAttribute('data-turn-duty-candidate', 'true');
       }
-      if (endRelocationSpaces.indexOf(index) === -1) {
-        space.removeAttribute('data-turn-end-relocation-candidate');
-      } else {
-        space.setAttribute('data-turn-end-relocation-candidate', 'true');
-      }
       /* Offered and taken are different marks. Once origin is taken, it is no longer offered and
          carries no ring of its own. */
       space.removeAttribute('data-turn-start-selected');
@@ -1600,7 +1614,6 @@
         })
         .concat(offeredByKind(offered, 'hire'))
         .concat(offeredByKind(offered, 'merchant_advance'))
-        .concat(offeredByKind(offered, 'end_relocation_choice'))
     );
     mark(buildings, 'data-building-choice-key', offeredByKind(offered, 'building'));
     /* A stock is picked on the board of the seat whose stock it is, and on no other. The other
@@ -1628,10 +1641,6 @@
       mark(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key',
            offering ? boards : []);
     });
-    if (activeSeat) {
-      if (endRelocationAbbey) { activeSeat.setAttribute('data-end-relocation-choice', 'true'); }
-      else { activeSeat.removeAttribute('data-end-relocation-choice'); }
-    }
     showArrangement(arrangementValues || []);
     showOrdination(ordinationValues || []);
     renderTurnSteps();
@@ -1928,7 +1937,6 @@
         space.getAttribute('data-turn-start-candidate') !== 'true'
         && space.getAttribute('data-turn-step-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-skip-candidate') !== 'true'
-        && space.getAttribute('data-turn-end-relocation-candidate') !== 'true'
         && space.getAttribute('data-turn-duty-candidate') !== 'true'
       ) { return; }
       var value = Number(space.getAttribute('data-board-position-index'));
@@ -1992,10 +2000,8 @@
     Array.prototype.forEach.call(activeSeat.querySelectorAll('[data-token="abbey"]'), function (token) {
       token.addEventListener('click', function () {
         if (activeSeat.getAttribute('data-end-relocation-choice') === 'true') {
-          chosen.push('abbey');
-          answered.push('abbey');
-          resolutionSplit = null;
-          autoAdvance = true;
+          conversionChosen = [conversionChosen[0], 'abbey'];
+          conversionStepId = null;
           render();
           return;
         }

@@ -152,10 +152,6 @@ WHY_NOT_REACHED: tuple[tuple[tuple[str, ...], str], ...] = (
     ),
     (
         (
-            "end_turn_building_id",
-            "end_turn_building_source",
-            "end_turn_relocation_from",
-            "end_turn_relocation_to",
         ),
         "library in reach, and an acolyte still in the city once the turn has resolved",
     ),
