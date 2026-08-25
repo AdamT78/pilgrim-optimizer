@@ -6047,6 +6047,12 @@ def test_the_wheel_corners_keep_only_the_counter_and_box_holds_the_controls(tmp_
     assert 'data-turn-control="' not in action
     for control in ("action", "tithe", "reset", "confirm"):
         assert f'data-turn-control="{control}"' in box
+    controls_start = box.index('<div class="turn-controls" data-component="turn-controls">')
+    assert controls_start > box.rindex('data-turn-prompt="'), (
+        "the restored control grid no longer follows the prompt lines"
+    )
+    assert '<div class="turn-control-row turn-control-row-top">' in box
+    assert '<div class="turn-control-row turn-control-row-bottom">' in box
     assert 'data-turn-control="sow"' not in page
 
 
