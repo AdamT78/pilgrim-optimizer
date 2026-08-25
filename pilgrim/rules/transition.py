@@ -431,10 +431,10 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
     conversions = tuple(
         BuildingConversionStep(
             building_id=option.building_id,
-            source=_hired_building_source_label(option.source),
+            source=_own_or_hired_building_source_label(option.source),
             direction=option.direction,
             amount=option.amount,
-            hire_payment=(option.source.hire_resource if _is_hired_source(option.source) else None),
+            hire_payment=_building_source_hire_payment(option.source),
         )
         for option in options
         if option.building_id not in used
@@ -442,12 +442,8 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
     guild_steps = tuple(
         BuildingActivationStep(
             building_id=_BUILDING_GUILD,
-            source=(
-                "own_active"
-                if source.source_type == "own_active"
-                else _hired_building_source_label(source)
-            ),
-            hire_payment=source.hire_resource if _is_hired_source(source) else None,
+            source=_own_or_hired_building_source_label(source),
+            hire_payment=_building_source_hire_payment(source),
         )
         for source, _state_after_hire in _legal_guild_activation_sources(state, config)
         if _BUILDING_GUILD not in used
@@ -539,7 +535,7 @@ def apply_turn_step(
                 source=conversion.source,
                 payment=payment,
                 actor=player,
-                action_id=_turn_step_id(step),
+                action_id=turn_step_id(step),
                 config=config,
             )
         )
@@ -552,7 +548,7 @@ def apply_turn_step(
         )
     except ValueError as exc:
         raise TransitionValidationError(str(exc)) from exc
-    transition_action_id = _turn_step_id(step)
+    transition_action_id = turn_step_id(step)
     events.append(
         _grain_store_conversion_bonus_event(
             actor=player,
@@ -634,9 +630,7 @@ def _apply_building_activation_step(
         raise TransitionValidationError(
             f"{step.building_id.title()} activation hires require a hired building source."
         )
-    expected_source = (
-        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
-    )
+    expected_source = _own_or_hired_building_source_label(source)
     if step.source != expected_source:
         raise TransitionValidationError(
             f"{step.building_id.title()} activation source does not match resolved source: "
@@ -645,7 +639,7 @@ def _apply_building_activation_step(
 
     next_state = state
     events = list(state.turn_progress.events)
-    transition_action_id = _turn_step_id(step)
+    transition_action_id = turn_step_id(step)
     if free_with_wagon_yard:
         if step.hire_payment is not None:
             raise TransitionValidationError(
@@ -744,26 +738,19 @@ def _apply_building_relocation_step(
         )
 
     player = state.active_player
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=step.building_id,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=step.building_id)
+    if source is None:
         raise TransitionValidationError(
             f"{step.building_id.title()} is unavailable in current state."
         )
-    expected_source = (
-        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
-    )
+    expected_source = _own_or_hired_building_source_label(source)
     if step.source != expected_source:
         raise TransitionValidationError(
             f"{step.building_id.title()} relocation source does not match resolved source: "
             f"expected {expected_source}."
         )
 
-    transition_action_id = _turn_step_id(step)
+    transition_action_id = turn_step_id(step)
     next_state = state
     events = list(state.turn_progress.events)
     if _is_hired_source(source):
@@ -870,23 +857,16 @@ def _apply_library_relocation_step(
         raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
 
     player = state.active_player
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key="library",
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key="library")
+    if source is None:
         raise TransitionValidationError("Library is unavailable in the End of Turn window.")
-    expected_source = (
-        "own_active" if source.source_type == "own_active" else _hired_building_source_label(source)
-    )
+    expected_source = _own_or_hired_building_source_label(source)
     if step.source != expected_source:
         raise TransitionValidationError(
             f"Library relocation source does not match resolved source: expected {expected_source}."
         )
 
-    transition_action_id = _turn_step_id(step)
+    transition_action_id = turn_step_id(step)
     next_state = state
     events = list(state.turn_progress.events)
     if _is_hired_source(source):
@@ -982,7 +962,7 @@ def _apply_library_relocation_step(
     )
 
 
-def _turn_step_id(step: TurnStep) -> str:
+def turn_step_id(step: TurnStep) -> str:
     if isinstance(step, BuildingActivationStep):
         payment = f":pay:{step.hire_payment}" if step.hire_payment is not None else ""
         return f"turn_step:building_activation:{step.building_id}:from:{step.source}{payment}"
@@ -4840,13 +4820,8 @@ def _legal_dormitory_relocation_steps(
     state: GameState,
     config: GameConfig,
 ) -> tuple[BuildingRelocationStep, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key="dormitory",
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key="dormitory")
+    if source is None:
         return ()
     used = state.turn_progress.used_buildings
     if "dormitory" in used:
@@ -4854,13 +4829,9 @@ def _legal_dormitory_relocation_steps(
     return tuple(
         BuildingRelocationStep(
             building_id="dormitory",
-            source=(
-                "own_active"
-                if hire_source.source_type == "own_active"
-                else _hired_building_source_label(hire_source)
-            ),
+            source=_own_or_hired_building_source_label(hire_source),
             selected_position=duty_position,
-            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
+            hire_payment=_building_source_hire_payment(hire_source),
         )
         for hire_source, state_after_hire in _hire_payment_states(state, source)
         for duty_position in config.duty_positions()
@@ -4872,13 +4843,8 @@ def _legal_inquisition_relocation_steps(
     state: GameState,
     config: GameConfig,
 ) -> tuple[BuildingRelocationStep, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key="inquisition",
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key="inquisition")
+    if source is None:
         return ()
     if "inquisition" in state.turn_progress.used_buildings:
         return ()
@@ -4886,13 +4852,9 @@ def _legal_inquisition_relocation_steps(
     return tuple(
         BuildingRelocationStep(
             building_id="inquisition",
-            source=(
-                "own_active"
-                if hire_source.source_type == "own_active"
-                else _hired_building_source_label(hire_source)
-            ),
+            source=_own_or_hired_building_source_label(hire_source),
             selected_position=duty_position,
-            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
+            hire_payment=_building_source_hire_payment(hire_source),
         )
         for hire_source, state_after_hire in _hire_payment_states(state, source)
         if state_after_hire.player_vector(state.active_player)[city_position] > 0
@@ -4910,25 +4872,16 @@ def _legal_library_relocation_steps(
 ) -> tuple[BuildingRelocationStep, ...]:
     if "library" in state.turn_progress.used_buildings:
         return ()
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key="library",
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key="library")
+    if source is None:
         return ()
     city_position = config.board.index_for_name("city")
     return tuple(
         BuildingRelocationStep(
             building_id="library",
-            source=(
-                "own_active"
-                if hire_source.source_type == "own_active"
-                else _hired_building_source_label(hire_source)
-            ),
+            source=_own_or_hired_building_source_label(hire_source),
             selected_position=target,
-            hire_payment=hire_source.hire_resource if _is_hired_source(hire_source) else None,
+            hire_payment=_building_source_hire_payment(hire_source),
         )
         for hire_source, state_after_hire in _hire_payment_states(state, source)
         if state_after_hire.player_vector(state.active_player)[city_position] > 0
@@ -5347,13 +5300,8 @@ def _legal_grain_store_conversion_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_BuildingConversionOption, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_GRAIN_STORE,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_GRAIN_STORE)
+    if source is None:
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5404,13 +5352,8 @@ def _legal_indulgences_conversion_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_BuildingConversionOption, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_INDULGENCES,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_INDULGENCES)
+    if source is None:
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5466,13 +5409,8 @@ def _legal_stone_yard_conversion_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_BuildingConversionOption, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_STONE_YARD,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_STONE_YARD)
+    if source is None:
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5523,13 +5461,8 @@ def _legal_brewery_conversion_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_BuildingConversionOption, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_BREWERY,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_BREWERY)
+    if source is None:
         return ()
 
     options: list[_BuildingConversionOption] = []
@@ -5916,13 +5849,8 @@ def _legal_guild_activation_sources(
     config: GameConfig,
 ) -> tuple[tuple[BuildingAbilitySource, GameState], ...]:
     """The source and payment state for each currently legal Guild activation."""
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_GUILD,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_GUILD)
+    if source is None:
         return ()
     return _hire_payment_states(state, source)
 
@@ -6007,13 +5935,8 @@ def _legal_pulpit_workforce_move_options(
     state: GameState,
     config: GameConfig,
 ) -> tuple[_PulpitWorkforceMoveOption, ...]:
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=state.active_player,
-        building_key=_BUILDING_PULPIT,
-    )
-    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+    source = _activatable_building_source(state, config, building_key=_BUILDING_PULPIT)
+    if source is None:
         return ()
 
     options: list[_PulpitWorkforceMoveOption] = []
@@ -6367,11 +6290,7 @@ def _with_pulpit_workforce_move_fields(
     *,
     option: _PulpitWorkforceMoveOption,
 ) -> FullTurnAction:
-    source_label = (
-        "own_active"
-        if option.source.source_type == "own_active"
-        else _hired_building_source_label(option.source)
-    )
+    source_label = _own_or_hired_building_source_label(option.source)
     updated = replace(
         action,
         workforce_move_building_id=option.building_id,
@@ -7171,8 +7090,39 @@ def _hired_building_source_label(source: BuildingAbilitySource) -> str:
     return source.source_type
 
 
+def _own_or_hired_building_source_label(source: BuildingAbilitySource) -> str:
+    """The serialized label for an own-active or hired building source."""
+    if source.source_type == "own_active":
+        return "own_active"
+    return _hired_building_source_label(source)
+
+
 def _is_hired_source(source: BuildingAbilitySource) -> bool:
     return source.source_type in ("live_market_hire", "opponent_active_hire")
+
+
+def _building_source_hire_payment(source: BuildingAbilitySource) -> str | None:
+    """The resource paid to hire a source, or none for an own-active source."""
+    return source.hire_resource if _is_hired_source(source) else None
+
+
+def _activatable_building_source(
+    state: GameState, config: GameConfig, *, building_key: str
+) -> BuildingAbilitySource | None:
+    """The active player's own or hired source for a building whose ability they may use now.
+
+    “Activatable” excludes unavailable and neither-own-nor-hired sources. It deliberately does
+    not cover the separate hired-only, Wagon Yard free-use, or in-turn route-source predicates.
+    """
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=building_key,
+    )
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+        return None
+    return source
 
 
 def _resolved_mill_source_for_action(

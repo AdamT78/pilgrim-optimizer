@@ -79,7 +79,7 @@ from pilgrim.model.actions import (  # noqa: E402
 )
 from pilgrim.rules.buildings import building_ability_source, building_by_id  # noqa: E402
 from pilgrim.rules.transition import (  # noqa: E402
-    _turn_step_id,
+    turn_step_id,
     apply_action,
     apply_turn_step as apply_engine_turn_step,
     legal_actions,
@@ -197,11 +197,11 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             -int(dict(event.details).get("amount", 0))
             for event in result.events
             if event.event_type is EventType.BUILDING_HIRED
-            and event.action_id == _turn_step_id(step)
+            and event.action_id == turn_step_id(step)
             and dict(event.details).get("resource") == "silver"
         )
         entry = {
-            "step_id": _turn_step_id(step),
+            "step_id": turn_step_id(step),
             "building_id": step.building_id,
             "source": step.source,
             "hire_payment": step.hire_payment,
@@ -2384,7 +2384,7 @@ class PlayServer(ThreadingHTTPServer):
                 (
                     step
                     for step in turn_steps(self.state, self.config)
-                    if _turn_step_id(step) == submitted_id
+                    if turn_step_id(step) == submitted_id
                 ),
                 None,
             )

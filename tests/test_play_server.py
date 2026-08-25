@@ -959,13 +959,13 @@ def test_sell_piety_payload_silver_is_the_engine_conversion_delta_across_the_cor
                 -int(dict(event.details).get("amount", 0))
                 for event in result.events
                 if event.event_type is EventType.BUILDING_HIRED
-                and event.action_id == play_server._turn_step_id(step)
+                and event.action_id == play_server.turn_step_id(step)
                 and dict(event.details).get("resource") == "silver"
             )
             conversion_silver = total_silver - hire_silver
             assert conversion_silver == abs(after.piety - before.piety)
             assert (
-                payload_by_id[play_server._turn_step_id(step)]["silver_delta"] == conversion_silver
+                payload_by_id[play_server.turn_step_id(step)]["silver_delta"] == conversion_silver
             )
     assert observations > 0
 
