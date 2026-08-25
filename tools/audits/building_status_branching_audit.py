@@ -157,7 +157,6 @@ def _is_hired_source_label(source_label: str | None) -> bool:
 def _action_has_hired_component(action: FullTurnAction) -> bool:
     return (
         action.hired_building_id is not None
-        or _is_hired_source_label(action.end_turn_building_source)
         or _is_hired_source_label(action.sow_route_building_source)
         or _is_hired_source_label(action.sow_route_secondary_building_source)
         or _is_hired_source_label(action.building_conversion_source)
@@ -165,7 +164,7 @@ def _action_has_hired_component(action: FullTurnAction) -> bool:
 
 
 def _action_is_movement_modifier(action: FullTurnAction) -> bool:
-    return action.sow_route_building_id is not None or action.end_turn_building_id is not None
+    return action.sow_route_building_id is not None
 
 
 def _branching_flag(action_count: int) -> str:

@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import EndTurnAction
+from pilgrim.model.actions import BuildingRelocationStep, EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import (
     TransitionValidationError,
@@ -14,220 +14,247 @@ from pilgrim.rules.transition import (
     legal_actions,
     turn_steps,
 )
+from pilgrim.search.exact import solve_exact
 
 
 def _events_of_type(events, event_type: EventType):
     return [event for event in events if event.event_type is event_type]
 
 
-def _library_actions(path: str):
+def _resolved_state(path: str):
     scenario = load_scenario(path)
-    actions = legal_actions(scenario.state, scenario.config)
-    return scenario, [action for action in actions if action.end_turn_building_id == "library"]
-
-
-def _first_action(actions, predicate):
-    return next(action for action in actions if predicate(action))
-
-
-def test_library_active_generates_city_to_duty_and_city_to_abbey_variants() -> None:
-    scenario, actions = _library_actions("scenarios/library_active_city_to_duty_001.json")
     city = scenario.config.board.index_for_name("city")
-    duty_positions = set(scenario.config.duty_positions())
-
-    assert actions
-    assert all(action.end_turn_building_source == "own_active" for action in actions)
-    assert all(action.end_turn_relocation_from == city for action in actions)
-    assert any(action.end_turn_relocation_to == "abbey" for action in actions)
-    assert any(action.end_turn_relocation_to in duty_positions for action in actions)
-
-
-def test_library_market_hire_generates_variants_when_payable() -> None:
-    _scenario, actions = _library_actions("scenarios/library_hire_market_city_to_duty_001.json")
-
-    assert actions
-    assert all(action.end_turn_building_source == "market" for action in actions)
-    assert all(action.end_turn_building_id == "library" for action in actions)
-
-
-def test_library_opponent_hire_pays_owner_and_moves_after_recall_before_turn_advance() -> None:
-    scenario, actions = _library_actions("scenarios/library_hire_opponent_city_to_duty_001.json")
-    city = scenario.config.board.index_for_name("city")
-    west = scenario.config.board.index_for_name("west")
-    action = _first_action(
-        actions,
-        lambda candidate: (
-            candidate.end_turn_building_source == "player_two"
-            and candidate.end_turn_relocation_to == west
-            and candidate.origin == city
-            and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
-        ),
-    )
-    resolution = apply_action(scenario.state, action, scenario.config)
-    assert resolution.state.turn_progress.resolution_committed
-    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
-    events = (*resolution.events, *passed.events)
-
-    hired_event = _events_of_type(events, EventType.BUILDING_HIRED)[0]
-    bonus_event = _events_of_type(events, EventType.BUILDING_BONUS)[0]
-    recall_event = _events_of_type(events, EventType.ACOLYTE_RECALL)[0]
-    relocation_event = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
-    turn_advance_event = _events_of_type(events, EventType.TURN_ADVANCE)[0]
-    hired_details = dict(hired_event.details)
-
-    assert hired_details["source"] == "player_two"
-    assert hired_details["payee"] == "player_two"
-    assert hired_details["resource"] == "wheat"
-    assert events.index(recall_event) < events.index(hired_event)
-    assert events.index(hired_event) < events.index(bonus_event)
-    assert events.index(bonus_event) < events.index(relocation_event)
-    assert events.index(relocation_event) < events.index(turn_advance_event)
-    assert passed.state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
-
-
-def test_library_hire_market_city_to_abbey_moves_acolyte_to_abbey() -> None:
-    scenario, actions = _library_actions("scenarios/library_hire_market_city_to_abbey_001.json")
-    city = scenario.config.board.index_for_name("city")
-    action = _first_action(
-        actions,
-        lambda candidate: (
-            candidate.end_turn_building_source == "market"
-            and candidate.end_turn_relocation_to == "abbey"
-            and candidate.origin == city
-            and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
-        ),
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.origin == city and action.resolution is TurnResolutionType.PRODUCE_WHEAT
     )
     result = apply_action(scenario.state, action, scenario.config)
-    player = result.state.player_state(PlayerId.PLAYER_ONE)
-
-    hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
-    relocation_event = _events_of_type(result.events, EventType.END_TURN_RELOCATION)[0]
-    hired_details = dict(hired_event.details)
-    relocation_details = dict(relocation_event.details)
-
-    assert hired_details["source"] == "market"
-    assert hired_details["payee"] == "bank"
-    assert hired_details["resource"] == "wheat"
-    assert relocation_details["from_pool"] == "city"
-    assert relocation_details["to_pool"] == "abbey"
-    assert player.workforce.abbey == 4
-    assert player.workforce.mancala[city] == 0
+    assert result.state.turn_progress.resolution_committed
+    return scenario, result
 
 
-def test_library_hire_blocked_for_merchant_none_insufficient_donated_and_not_live() -> None:
-    _scenario, merchant_none_actions = _library_actions(
-        "scenarios/library_merchant_none_no_hire_001.json"
-    )
-    assert merchant_none_actions == []
-
-    _scenario, insufficient_actions = _library_actions(
-        "scenarios/library_insufficient_resource_no_hire_001.json"
-    )
-    assert insufficient_actions == []
-
-    _scenario, donated_actions = _library_actions("scenarios/library_donated_no_modifier_001.json")
-    assert donated_actions == []
-
-    _scenario, not_live_actions = _library_actions(
-        "scenarios/library_not_live_no_modifier_001.json"
-    )
-    assert not_live_actions == []
+def _library_steps(state, config):
+    return [step for step in turn_steps(state, config) if step.building_id == "library"]
 
 
-def test_library_no_city_acolyte_after_turn_generates_no_suffix_variants() -> None:
-    _scenario, actions = _library_actions(
-        "scenarios/library_no_city_acolyte_after_turn_no_modifier_001.json"
-    )
-    assert actions == []
+def test_relocation_steps_are_offered_in_their_respective_windows() -> None:
+    library_scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
+    assert _library_steps(library_scenario.state, library_scenario.config) == []
+    assert not {
+        step.building_id
+        for step in turn_steps(library_scenario.state, library_scenario.config)
+        if step.building_id in {"dormitory", "inquisition"}
+    }
+
+    _scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+    assert _library_steps(resolution.state, library_scenario.config)
+    assert not {
+        step.building_id
+        for step in turn_steps(resolution.state, library_scenario.config)
+        if step.building_id in {"dormitory", "inquisition"}
+    }
+
+    for path, building_id in (
+        ("scenarios/dormitory_active_return_duty_to_city_001.json", "dormitory"),
+        ("scenarios/inquisition_active_city_to_duty_001.json", "inquisition"),
+    ):
+        scenario = load_scenario(path)
+        assert building_id in {step.building_id for step in turn_steps(scenario.state, scenario.config)}
+        result = apply_action(
+            scenario.state,
+            next(iter(legal_actions(scenario.state, scenario.config))),
+            scenario.config,
+        )
+        assert result.state.turn_progress.resolution_committed
+        assert building_id not in {
+            step.building_id for step in turn_steps(result.state, scenario.config)
+        }
 
 
-def test_normal_full_turn_actions_without_library_suffix_remain_legal() -> None:
+def test_library_targets_every_duty_and_abbey_after_resolution() -> None:
     scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-
-    assert any(action.end_turn_building_id is None for action in actions)
-    assert any(action.end_turn_building_id == "library" for action in actions)
-
-
-def test_library_events_not_emitted_when_suffix_not_used() -> None:
-    scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
-    actions = legal_actions(scenario.state, scenario.config)
-    action = _first_action(actions, lambda candidate: candidate.end_turn_building_id is None)
-    result = apply_action(scenario.state, action, scenario.config)
-
-    assert _events_of_type(result.events, EventType.END_TURN_RELOCATION) == []
-    assert not any(
-        dict(event.details).get("building") == "library"
-        for event in _events_of_type(result.events, EventType.BUILDING_BONUS)
-    )
-
-
-def test_own_active_library_event_order_is_recall_bonus_relocation_turn_advance() -> None:
-    scenario, actions = _library_actions("scenarios/library_active_city_to_duty_001.json")
+    _scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+    steps = _library_steps(resolution.state, scenario.config)
     city = scenario.config.board.index_for_name("city")
-    west = scenario.config.board.index_for_name("west")
-    action = _first_action(
-        actions,
-        lambda candidate: (
-            candidate.end_turn_building_source == "own_active"
-            and candidate.end_turn_relocation_to == west
-            and candidate.origin == city
-            and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
+
+    assert all(step.source == "own_active" and step.hire_payment is None for step in steps)
+    assert {step.selected_position for step in steps} == {
+        *set(scenario.config.duty_positions()) - {city},
+        "abbey",
+    }
+    assert legal_actions(resolution.state, scenario.config) == (EndTurnAction(),)
+
+
+def test_library_market_and_opponent_hires_are_steps_paid_after_turn_earnings() -> None:
+    market_scenario = load_scenario("scenarios/library_hire_market_city_to_abbey_001.json")
+    market_player = market_scenario.state.active_player
+    market_player_state = market_scenario.state.player_state(market_player)
+    market_start = market_scenario.state.with_player_state(
+        market_player,
+        replace(
+            market_player_state,
+            resources=replace(market_player_state.resources, wheat=0),
         ),
     )
-    resolution = apply_action(scenario.state, action, scenario.config)
+    market_action = next(
+        action
+        for action in legal_actions(market_start, market_scenario.config)
+        if action.resolution is TurnResolutionType.PRODUCE_WHEAT
+    )
+    market_resolution = apply_action(market_start, market_action, market_scenario.config)
+    assert market_start.player_state(market_player).resources.wheat == 0
+    assert market_resolution.state.player_state(market_player).resources.wheat == 1
+    market_step = next(
+        step for step in _library_steps(market_resolution.state, market_scenario.config)
+        if step.selected_position == "abbey"
+    )
+    assert market_step.source == "market"
+    market_state = apply_turn_step(market_resolution.state, market_scenario.config, market_step)
+    market_events = market_state.turn_progress.events
+    assert dict(_events_of_type(market_events, EventType.BUILDING_HIRED)[0].details)["payee"] == "bank"
+    assert market_state.player_state(market_player).resources.wheat == 0
+
+    opponent_scenario, opponent_resolution = _resolved_state(
+        "scenarios/library_hire_opponent_city_to_duty_001.json"
+    )
+    west = opponent_scenario.config.board.index_for_name("west")
+    opponent_step = next(
+        step for step in _library_steps(opponent_resolution.state, opponent_scenario.config)
+        if step.selected_position == west
+    )
+    assert opponent_step.source == "player_two"
+    opponent_state = apply_turn_step(opponent_resolution.state, opponent_scenario.config, opponent_step)
+    hired = _events_of_type(opponent_state.turn_progress.events, EventType.BUILDING_HIRED)[0]
+    assert dict(hired.details)["payee"] == "player_two"
+    assert opponent_state.player_state(PlayerId.PLAYER_TWO).resources.wheat == 1
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "scenarios/library_merchant_none_no_hire_001.json",
+        "scenarios/library_insufficient_resource_no_hire_001.json",
+        "scenarios/library_donated_no_modifier_001.json",
+        "scenarios/library_not_live_no_modifier_001.json",
+        "scenarios/library_no_city_acolyte_after_turn_no_modifier_001.json",
+    ),
+)
+def test_library_is_not_offered_when_its_source_or_city_acolyte_is_unavailable(path: str) -> None:
+    scenario = load_scenario(path)
+    resolution = apply_action(
+        scenario.state,
+        next(iter(legal_actions(scenario.state, scenario.config))),
+        scenario.config,
+    )
     assert resolution.state.turn_progress.resolution_committed
-    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
-    events = (*resolution.events, *passed.events)
-
-    recall_event = _events_of_type(events, EventType.ACOLYTE_RECALL)[0]
-    bonus_event = _events_of_type(events, EventType.BUILDING_BONUS)[0]
-    relocation_event = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
-    turn_advance_event = _events_of_type(events, EventType.TURN_ADVANCE)[0]
-
-    assert _events_of_type(events, EventType.BUILDING_HIRED) == []
-    assert events.index(recall_event) < events.index(bonus_event)
-    assert events.index(bonus_event) < events.index(relocation_event)
-    assert events.index(relocation_event) < events.index(turn_advance_event)
+    assert _library_steps(resolution.state, scenario.config) == [], path
 
 
-def test_apply_rejects_invalid_library_source_or_target_fields() -> None:
-    scenario, actions = _library_actions("scenarios/library_active_city_to_duty_001.json")
+def test_library_step_moves_after_recall_and_before_turn_advance() -> None:
+    scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+    west = scenario.config.board.index_for_name("west")
+    step = next(
+        step for step in _library_steps(resolution.state, scenario.config) if step.selected_position == west
+    )
+    after_step = apply_turn_step(resolution.state, scenario.config, step)
+    passed = apply_action(after_step, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *after_step.turn_progress.events, *passed.events)
+
+    recall = _events_of_type(events, EventType.ACOLYTE_RECALL)[0]
+    bonus = _events_of_type(events, EventType.BUILDING_BONUS)[0]
+    relocation = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
+    advance = _events_of_type(events, EventType.TURN_ADVANCE)[0]
+    assert events.index(recall) < events.index(bonus) < events.index(relocation) < events.index(advance)
+
+
+def test_library_rejects_pre_resolution_and_invalid_target() -> None:
+    scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
+    pre_resolution = BuildingRelocationStep("library", "own_active", "abbey")
+    with pytest.raises(TransitionValidationError, match="only available after resolution"):
+        apply_turn_step(scenario.state, scenario.config, pre_resolution)
+
+    _scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
     city = scenario.config.board.index_for_name("city")
-    action = _first_action(actions, lambda candidate: candidate.end_turn_relocation_to == "abbey")
+    invalid = BuildingRelocationStep("library", "own_active", city)
+    with pytest.raises(TransitionValidationError, match="Abbey or a non-city Duty"):
+        apply_turn_step(resolution.state, scenario.config, invalid)
 
-    invalid_source = replace(action, end_turn_relocation_from=city + 1)
-    with pytest.raises(TransitionValidationError, match="Library relocation source must be City"):
-        apply_action(scenario.state, invalid_source, scenario.config)
 
-    invalid_target = replace(action, end_turn_relocation_to=city)
-    with pytest.raises(TransitionValidationError, match="Library relocation target must be Abbey"):
-        apply_action(scenario.state, invalid_target, scenario.config)
+def test_library_rejects_a_step_whose_source_does_not_match_the_opening() -> None:
+    scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+    invalid = BuildingRelocationStep("library", "market", "abbey", "wheat")
+    with pytest.raises(TransitionValidationError, match="source does not match"):
+        apply_turn_step(resolution.state, scenario.config, invalid)
+
+
+def test_full_turn_actions_have_no_library_relocation_fields_or_id_suffix() -> None:
+    scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
+    action = next(iter(legal_actions(scenario.state, scenario.config)))
+
+    for field in (
+        "end_turn_building_id",
+        "end_turn_building_source",
+        "end_turn_relocation_from",
+        "end_turn_relocation_to",
+    ):
+        assert not hasattr(action, field), f"FullTurnAction still exposes {field}"
+    assert "end_turn" not in action_id(action), "action_id still serializes an end-turn suffix"
+
+
+def test_exact_search_refuses_library_in_the_end_of_turn_window() -> None:
+    scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+
+    with pytest.raises(RuntimeError, match="cannot enumerate committed turn steps") as raised:
+        solve_exact(resolution.state, scenario.config, depth=0)
+
+    assert "BuildingRelocationStep(building_id='library'" in str(raised.value)
 
 
 def test_library_can_follow_a_committed_start_turn_relocation() -> None:
     scenario = load_scenario("scenarios/dormitory_active_return_duty_to_city_001.json")
     player = scenario.state.active_player
     player_state = scenario.state.player_state(player)
-    combined_state = scenario.state.with_player_state(
+    state = scenario.state.with_player_state(
         player,
         replace(
             player_state,
             player_board_slots=replace(
                 player_state.player_board_slots,
-                active_buildings=(
-                    *player_state.player_board_slots.active_buildings,
-                    "library",
-                ),
+                active_buildings=(*player_state.player_board_slots.active_buildings, "library"),
             ),
         ),
     )
-
     dormitory_step = next(
-        step
-        for step in turn_steps(combined_state, scenario.config)
-        if step.building_id == "dormitory"
+        step for step in turn_steps(state, scenario.config) if step.building_id == "dormitory"
     )
-    after_step = apply_turn_step(combined_state, scenario.config, dormitory_step)
-    actions = legal_actions(after_step, scenario.config)
-    assert any(action.end_turn_building_id == "library" for action in actions)
+    after_dormitory = apply_turn_step(state, scenario.config, dormitory_step)
+    action = next(iter(legal_actions(after_dormitory, scenario.config)))
+    resolution = apply_action(after_dormitory, action, scenario.config)
+    assert _library_steps(resolution.state, scenario.config)
+
+
+def test_library_can_follow_a_pulpit_full_turn_action() -> None:
+    scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
+    player = scenario.state.active_player
+    player_state = scenario.state.player_state(player)
+    state = scenario.state.with_player_state(
+        player,
+        replace(
+            player_state,
+            player_board_slots=replace(
+                player_state.player_board_slots,
+                active_buildings=(*player_state.player_board_slots.active_buildings, "pulpit"),
+            ),
+        ),
+    )
+    action = next(
+        action
+        for action in legal_actions(state, scenario.config)
+        if action.workforce_move_building_id == "pulpit"
+        and action.resolution is TurnResolutionType.PRODUCE_WHEAT
+    )
+    resolution = apply_action(state, action, scenario.config)
+    assert _library_steps(resolution.state, scenario.config), (
+        "Library must remain available after Pulpit's FullTurnAction modifier"
+    )

@@ -364,16 +364,17 @@ def test_kogge_plus_library_preserves_route_and_end_turn_event_boundaries() -> N
     )
     action = _first_action(
         legal_actions(composed_state, scenario.config),
-        lambda candidate: (
-            candidate.sow_route_building_id == "kogge"
-            and candidate.end_turn_building_id == "library"
-            and candidate.end_turn_relocation_to == "abbey"
-        ),
+        lambda candidate: candidate.sow_route_building_id == "kogge",
     )
     resolution = apply_action(composed_state, action, scenario.config)
     assert resolution.state.turn_progress.resolution_committed
-    passed = apply_action(resolution.state, EndTurnAction(), scenario.config)
-    events = (*resolution.events, *passed.events)
+    library_step = _first_action(
+        turn_steps(resolution.state, scenario.config),
+        lambda candidate: candidate.building_id == "library" and candidate.selected_position == "abbey",
+    )
+    after_step = apply_turn_step(resolution.state, scenario.config, library_step)
+    passed = apply_action(after_step, EndTurnAction(), scenario.config)
+    events = (*resolution.events, *after_step.turn_progress.events, *passed.events)
 
     kogge_bonus_index = _event_index(
         events,

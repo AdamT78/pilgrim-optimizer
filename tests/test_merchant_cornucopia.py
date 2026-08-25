@@ -372,20 +372,25 @@ def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire(
     assert _hire_event_resources(result.events) == Counter({"stone": 2})
 
 
-def test_a_late_library_hire_can_pay_from_turn_earnings(deep_actions) -> None:
+def test_a_late_library_hire_can_pay_from_turn_earnings() -> None:
     """A hire late in the turn may be paid out of what the turn earned, not only what it opened with."""
-    scenario, actions = deep_actions
+    scenario = load_scenario("scenarios/library_hire_market_city_to_abbey_001.json")
+    city = scenario.config.board.index_for_name("city")
     action = next(
         action
-        for action in actions
+        for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction)
-        and action.hire_payments == (("dormitory", "silver"), ("library", "silver"))
+        and action.origin == city
+        and action.resolution is TurnResolutionType.PRODUCE_WHEAT
     )
-
-    result = apply_action(scenario.state, action, scenario.config)
-    assert _hire_event_resources(result.events) == Counter({"silver": 2})
-    resources = result.state.player_state(scenario.state.active_player).resources
-    assert (resources.stone, resources.silver, resources.wheat) == (6, 0, 0)
+    resolved = apply_action(scenario.state, action, scenario.config)
+    step = next(
+        step
+        for step in turn_steps(resolved.state, scenario.config)
+        if step.building_id == "library" and step.selected_position == "abbey"
+    )
+    after_step = apply_turn_step(resolved.state, scenario.config, step)
+    assert _hire_event_resources(after_step.turn_progress.events) == Counter({"wheat": 1})
 
 
 def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
@@ -404,7 +409,7 @@ def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
         apply_action(scenario.state, with_extra, scenario.config)
 
     with_missing = replace(base, hire_payments=base.hire_payments[1:])
-    with pytest.raises(TransitionValidationError, match="missing payments"):
+    with pytest.raises(TransitionValidationError, match="Missing hire payment"):
         apply_action(scenario.state, with_missing, scenario.config)
 
 

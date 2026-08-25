@@ -109,11 +109,9 @@ def test_movement_playtest_opens_with_every_promised_building_live_and_usable() 
         "Guild must offer a committed step at the movement playtest opening"
     )
 
-    actions = legal_actions(state, config)
-    assert any(
-        isinstance(action, FullTurnAction) and action.end_turn_building_id == "library"
-        for action in actions
-    ), "Library must appear as an end-of-turn relocation action until it becomes a committed step"
+    assert not any(
+        step.building_id == "library" for step in turn_steps(state, config)
+    ), "Library must wait for the End of Turn window before offering a committed step"
 
     routes = _route_set(state, config)
     routes_without_cloisters = _route_set(

@@ -107,7 +107,9 @@ def test_every_action_dataclass_hashes_the_way_it_compares(dataclass_type) -> No
 @pytest.mark.slow
 def test_the_deep_position_hashes_every_action_it_generates(deep_actions) -> None:
     """Hashability asserted on real actions, not on empty ones the fields never populate."""
-    assert len(deep_actions) > 10_000, "this fixture is here to be big; something has shrunk it"
+    # Committed building steps no longer multiply the complete-action set; retain a floor under
+    # today's 715 genuinely complete actions so this fixture cannot go vacuous.
+    assert len(deep_actions) > 700, "this fixture is here to be big; something has shrunk it"
     by_hash: dict[int, list] = {}
     for action in deep_actions:
         by_hash.setdefault(hash(action), []).append(action)
@@ -256,4 +258,4 @@ def test_the_deep_fixture_is_the_position_it_says_it_is(deep_position, deep_acti
     """Without this the fixture could drift shallow and every assertion above would still pass."""
     assert deep_position.state.round_number == 18
     assert deep_position.state.table_player_count == 2
-    assert len(deep_actions) > 10_000
+    assert len(deep_actions) > 700

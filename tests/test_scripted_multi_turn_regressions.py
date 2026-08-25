@@ -17,7 +17,7 @@ from pilgrim.model.enums import EventType, PlayerId, TurnPhase, TurnResolutionTy
 from pilgrim.model.events import GameEvent
 from pilgrim.model.state import GameState
 from pilgrim.rules.buildings import future_buildings, is_building_live, live_buildings
-from pilgrim.rules.transition import TransitionResult, apply_action, legal_actions
+from pilgrim.rules.transition import TransitionResult, apply_action, apply_turn_step, legal_actions, turn_steps
 
 Selector = Callable[[GameState, tuple[GameAction, ...]], GameAction]
 
@@ -329,7 +329,7 @@ def test_scripted_branching_trace_is_deterministic_and_has_unique_action_ids() -
         assert row["selected_action_id"] in legal_action_ids
 
 
-def test_library_end_turn_relocation_persists_across_next_player_turn() -> None:
+def test_library_committed_relocation_persists_across_next_player_turn() -> None:
     scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
     north = scenario.config.board.index_for_name("north")
     player_two = scenario.state.player_state(PlayerId.PLAYER_TWO)
@@ -343,23 +343,27 @@ def test_library_end_turn_relocation_persists_across_next_player_turn() -> None:
             ),
         ),
     )
-    scripted = apply_scripted_turns(
-        state_with_opponent_action,
-        scenario.config,
-        (
-            select_action(
-                "library produce wheat relocate to north",
-                lambda candidate: (
-                    isinstance(candidate, FullTurnAction)
-                    and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
-                    and candidate.end_turn_building_id == "library"
-                    and candidate.end_turn_relocation_to == north
-                ),
-            ),
-            select_tithe(),
+    first_action = find_action(
+        legal_actions(state_with_opponent_action, scenario.config),
+        lambda candidate: (
+            isinstance(candidate, FullTurnAction)
+            and candidate.resolution is TurnResolutionType.PRODUCE_WHEAT
         ),
+        "produce wheat before Library's End of Turn window",
     )
+    resolution = apply_action(state_with_opponent_action, first_action, scenario.config)
+    library_step = next(
+        step
+        for step in turn_steps(resolution.state, scenario.config)
+        if step.building_id == "library" and step.selected_position == north
+    )
+    after_library = apply_turn_step(resolution.state, scenario.config, library_step)
+    first_turn = apply_action(after_library, EndTurnAction(), scenario.config)
 
-    assert EventType.END_TURN_RELOCATION in event_types(scripted[0].result.events)
-    assert scripted[0].result.state.player_vector(PlayerId.PLAYER_ONE)[north] == 1
-    assert scripted[1].result.state.player_vector(PlayerId.PLAYER_ONE)[north] == 1
+    second_action = select_tithe()(first_turn.state, legal_actions(first_turn.state, scenario.config))
+    second_resolution = apply_action(first_turn.state, second_action, scenario.config)
+    second_turn = apply_action(second_resolution.state, EndTurnAction(), scenario.config)
+
+    assert EventType.END_TURN_RELOCATION in event_types(after_library.turn_progress.events)
+    assert first_turn.state.player_vector(PlayerId.PLAYER_ONE)[north] == 1
+    assert second_turn.state.player_vector(PlayerId.PLAYER_ONE)[north] == 1

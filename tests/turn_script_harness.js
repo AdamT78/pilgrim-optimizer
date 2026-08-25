@@ -5,7 +5,7 @@
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
 // arrangementPointerRules }.
 //
-// A click is { kind: 'position'|'origin'|'skip'|'duty'|'end_relocation_space'|'edge'|'resolution'
+// A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
 // |'combination'|'resource'|'seat'|'building'
 // |'control'|'village'|'abbey'|'role', value }; a resource click also carries { seat }, a seat
 // click names the player whose board is pressed, a building click names the building whose hex on
@@ -329,7 +329,6 @@ const transcript = {
   startCandidates: [],
   startRelocationCandidates: [],
   skipCandidates: [],
-  endRelocationCandidates: [],
   dutyCandidates: [],
   asking: [],
   resetShown: [],
@@ -672,23 +671,19 @@ function snapshot() {
   const starts = [];
   const startRelocations = [];
   const skips = [];
-  const endRelocations = [];
   const duties = [];
   spaces.forEach((space, index) => {
     const asksOrigin = space.getAttribute('data-turn-start-candidate') === 'true';
     const asksStartRelocation =
       space.getAttribute('data-turn-start-relocation-candidate') === 'true';
     const asksSkip = space.getAttribute('data-turn-skip-candidate') === 'true';
-    const asksEndRelocation =
-      space.getAttribute('data-turn-end-relocation-candidate') === 'true';
     const asksDuty = space.getAttribute('data-turn-duty-candidate') === 'true';
-    if (asksOrigin || asksStartRelocation || asksSkip || asksEndRelocation || asksDuty) {
+    if (asksOrigin || asksStartRelocation || asksSkip || asksDuty) {
       offered.push(index);
     }
     if (asksOrigin) starts.push(index);
     if (asksStartRelocation) startRelocations.push(index);
     if (asksSkip) skips.push(index);
-    if (asksEndRelocation) endRelocations.push(index);
     if (asksDuty) duties.push(index);
     const pickedOrigin = space.getAttribute('data-turn-start-selected') === 'true';
     const pickedSkip = space.getAttribute('data-turn-skip-selected') === 'true';
@@ -773,7 +768,6 @@ function snapshot() {
     starts,
     startRelocations,
     skips,
-    endRelocations,
     duties,
     asking,
     reset: control('reset') ? control('reset').getAttribute('data-turn-control-enabled') === 'true' : false,
@@ -797,7 +791,6 @@ function record() {
   transcript.startCandidates.push(snap.starts);
   transcript.startRelocationCandidates.push(snap.startRelocations);
   transcript.skipCandidates.push(snap.skips);
-  transcript.endRelocationCandidates.push(snap.endRelocations);
   transcript.dutyCandidates.push(snap.duties);
   transcript.asking.push(snap.asking);
   transcript.resetShown.push(snap.reset);
@@ -869,13 +862,10 @@ function pressRole(click) {
 }
 
 job.clicks.forEach((click) => {
-  if (click.kind === 'end_relocation_space' && click.value === 'abbey') {
-    pressAbbey();
-  } else if (
+  if (
     click.kind === 'position'
     || click.kind === 'origin'
     || click.kind === 'skip'
-    || click.kind === 'end_relocation_space'
     || click.kind === 'duty'
   ) {
     const target = spaces.find((space) =>
@@ -922,7 +912,6 @@ if (job.reset) {
     startCandidates: snap.starts,
     startRelocationCandidates: snap.startRelocations,
     skipCandidates: snap.skips,
-    endRelocationCandidates: snap.endRelocations,
     dutyCandidates: snap.duties,
     reset: snap.reset,
     counter: snap.counter,
