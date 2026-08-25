@@ -31,6 +31,17 @@ def _wagon_actions(path: str, target: str):
     )
 
 
+def _wagon_free_activation(path: str, target: str):
+    scenario = load_scenario(path)
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == target
+    )
+    assert step.hire_payment is None
+    return scenario, apply_turn_step(scenario.state, scenario.config, step)
+
+
 def _first(actions, predicate):
     return next(action for action in actions if predicate(action))
 
@@ -39,26 +50,36 @@ def test_own_active_wagon_yard_generates_market_and_opponent_free_hire_variants(
     _scenario, market = _wagon_actions(
         "scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"
     )
-    _scenario, opponent = _wagon_actions(
+    opponent_scenario, opponent_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
         "customs_house",
     )
     assert market
-    assert opponent
     assert {action.free_hire_target_building_source for action in market} == {"market"}
-    assert {action.free_hire_target_building_source for action in opponent} == {"player_two"}
+    hired = _events(opponent_state.turn_progress.events, EventType.BUILDING_HIRED)[0]
+    assert dict(hired.details)["source"] == "player_two"
+    assert dict(hired.details)["amount"] == 0
+    assert any(
+        action.taxation_majority_building_id == "customs_house"
+        for action in legal_actions(opponent_state, opponent_scenario.config)
+        if isinstance(action, FullTurnAction)
+    )
 
 
 def test_wagon_yard_supports_minimum_target_building_set() -> None:
     for path, target in (
-        ("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json", "bank"),
         ("scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"),
         ("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"),
-        ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
-        ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
     ):
         _scenario, actions = _wagon_actions(path, target)
         assert actions
+    for path, target in (
+        ("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json", "bank"),
+        ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
+        ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
+    ):
+        _scenario, state = _wagon_free_activation(path, target)
+        assert target in state.turn_progress.used_buildings
 
 
 def test_wagon_yard_works_when_merchant_is_on_taxation_or_has_no_hire_resource() -> None:
@@ -66,9 +87,9 @@ def test_wagon_yard_works_when_merchant_is_on_taxation_or_has_no_hire_resource()
         ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
         ("scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json", "scriptorium"),
     ):
-        _scenario, actions = _wagon_actions(path, target)
-        assert actions
-        assert all(action.hired_building_id is None for action in actions)
+        _scenario, state = _wagon_free_activation(path, target)
+        hired = _events(state.turn_progress.events, EventType.BUILDING_HIRED)[0]
+        assert dict(hired.details)["amount"] == 0
 
 
 def test_wagon_yard_free_hire_does_not_require_paid_hire_affordability() -> None:
@@ -114,14 +135,16 @@ def test_wagon_yard_action_summary_includes_free_hire_and_target_effect() -> Non
     assert "use building: guild to move merchant +1" not in summary
 
 
-def test_wagon_yard_opponent_summary_labels_opponent_source() -> None:
-    scenario, actions = _wagon_actions(
-        "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
-        "customs_house",
+def test_wagon_yard_opponent_free_activation_labels_opponent_source() -> None:
+    scenario = load_scenario("scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json")
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == "customs_house"
     )
-    summary = action_summary(actions[0], scenario.config)
-    assert "use building: wagon_yard to hire customs_house from player_two for free" in summary
-    assert "use building: customs_house" in summary
+
+    assert step.source == "player_two"
+    assert step.hire_payment is None
 
 
 def test_wagon_yard_market_free_hire_cost_is_zero_and_effect_applies() -> None:
@@ -137,13 +160,11 @@ def test_wagon_yard_market_free_hire_cost_is_zero_and_effect_applies() -> None:
 
 
 def test_wagon_yard_opponent_free_hire_does_not_pay_owner() -> None:
-    scenario, actions = _wagon_actions(
+    _scenario, state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
         "customs_house",
     )
-    action = actions[0]
-    result = apply_action(scenario.state, action, scenario.config)
-    hired = _events(result.events, EventType.BUILDING_HIRED)[0]
+    hired = _events(state.turn_progress.events, EventType.BUILDING_HIRED)[0]
     assert dict(hired.details)["payee"] == "none"
     assert dict(hired.details)["amount"] == 0
 
@@ -168,11 +189,15 @@ def test_wagon_yard_keeps_non_conversion_target_effects() -> None:
     for path, target in (
         ("scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"),
         ("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"),
-        ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
-        ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
     ):
         _scenario, actions = _wagon_actions(path, target)
         assert actions
+    for path, target in (
+        ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
+        ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
+    ):
+        _scenario, state = _wagon_free_activation(path, target)
+        assert target in state.turn_progress.used_buildings
 
 
 def test_wagon_yard_hiring_guild_does_not_activate_it_inside_the_full_turn() -> None:
@@ -205,32 +230,48 @@ def test_wagon_yard_pulpit_and_customs_house_effects_resolve() -> None:
     result = apply_action(scenario.state, actions[0], scenario.config)
     assert _events(result.events, EventType.WORKFORCE_MOVE)
 
-    scenario, actions = _wagon_actions(
+    scenario, customs_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"
     )
-    action = next(action for action in actions if action.resolution is TurnResolutionType.TAXATION)
-    result = apply_action(scenario.state, action, scenario.config)
+    action = next(
+        action
+        for action in legal_actions(customs_state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.resolution is TurnResolutionType.TAXATION
+        and action.taxation_majority_building_id == "customs_house"
+    )
+    result = apply_action(customs_state, action, scenario.config)
     assert dict(_events(result.events, EventType.DUTY_RESOLUTION)[0].details)["strength"] == "majority"
 
 
 def test_wagon_yard_scriptorium_and_customs_house_effects_resolve() -> None:
-    scriptorium, scriptorium_actions = _wagon_actions(
+    scriptorium, scriptorium_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"
     )
-    scriptorium_result = apply_action(scriptorium.state, scriptorium_actions[0], scriptorium.config)
+    scriptorium_action = next(
+        action
+        for action in legal_actions(scriptorium_state, scriptorium.config)
+        if isinstance(action, FullTurnAction) and action.effective_acolyte_building_id == "scriptorium"
+    )
+    scriptorium_result = apply_action(scriptorium_state, scriptorium_action, scriptorium.config)
     assert any(
         dict(event.details).get("building") == "scriptorium"
         for event in _events(scriptorium_result.events, EventType.BUILDING_BONUS)
     )
 
-    customs, customs_actions = _wagon_actions(
+    customs, customs_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"
     )
     customs_action = _first(
-        customs_actions,
-        lambda action: action.resolution is TurnResolutionType.TAXATION,
+        [
+            action
+            for action in legal_actions(customs_state, customs.config)
+            if isinstance(action, FullTurnAction)
+        ],
+        lambda action: action.resolution is TurnResolutionType.TAXATION
+        and action.taxation_majority_building_id == "customs_house",
     )
-    customs_result = apply_action(customs.state, customs_action, customs.config)
+    customs_result = apply_action(customs_state, customs_action, customs.config)
     assert any(
         dict(event.details).get("building") == "customs_house"
         for event in _events(customs_result.events, EventType.BUILDING_BONUS)

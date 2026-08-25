@@ -211,7 +211,7 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             prompt = (
                 "Activate Guild: move the Merchant clockwise +1 Duty tile."
                 if step.building_id == "guild"
-                else f"Hire {building_name}: pay to use its route ability this turn."
+                else f"Hire {building_name}: pay to use its ability this turn."
             )
             entry.update(
                 kind="activation",

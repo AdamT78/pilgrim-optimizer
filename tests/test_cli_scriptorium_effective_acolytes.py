@@ -69,65 +69,22 @@ def test_cli_apply_own_active_scriptorium_shows_bonus_before_sowing(capsys) -> N
     ) < output.index("SOWING: picked up 1 from north; route north -> north_east")
 
 
-def test_cli_apply_market_hired_scriptorium_shows_hire_then_bonus(capsys) -> None:
-    action_index = _scriptorium_action_index(
-        "scenarios/scriptorium_hire_market_majority_selected_duty_001.json",
-        source="market",
-        resolution=TurnResolutionType.CLERICAL_DEVOTION,
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/scriptorium_hire_market_majority_selected_duty_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_legal_actions_do_not_fold_market_scriptorium_hire_into_an_action(capsys) -> None:
+    exit_code = main(["legal-actions", "scenarios/scriptorium_hire_market_majority_selected_duty_001.json"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (
-        "BUILDING_HIRED: player_one hired Scriptorium from market; paid wheat 1 to bank"
-        in output
-    )
-    assert (
-        "BUILDING_BONUS: scriptorium added +1 effective acolyte on occupied Duty tiles this turn"
-        in output
-    )
-    assert output.index(
-        "BUILDING_HIRED: player_one hired Scriptorium from market; paid wheat 1 to bank"
-    ) < output.index(
-        "BUILDING_BONUS: scriptorium added +1 effective acolyte on occupied Duty tiles this turn"
-    )
+    assert "use building: scriptorium for +1 effective acolyte" not in output
+    assert "hire building: scriptorium from market" not in output
 
 
-def test_cli_apply_opponent_hired_scriptorium_shows_owner_payment(capsys) -> None:
-    action_index = _scriptorium_action_index(
-        "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
-        source="player_two",
-        resolution=TurnResolutionType.CLERICAL_DEVOTION,
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_legal_actions_do_not_fold_opponent_scriptorium_hire_into_an_action(capsys) -> None:
+    exit_code = main(["legal-actions", "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (
-        "BUILDING_HIRED: player_one hired Scriptorium from player_two; paid silver 1 to player_two"
-        in output
-    )
-    assert (
-        "BUILDING_BONUS: scriptorium added +1 effective acolyte on occupied Duty tiles this turn"
-        in output
-    )
+    assert "use building: scriptorium for +1 effective acolyte" not in output
+    assert "hire building: scriptorium from player_two" not in output
 
 
 def test_cli_apply_scriptorium_taxation_shows_majority_and_step2_bonus(capsys) -> None:
@@ -159,4 +116,3 @@ def test_cli_apply_scriptorium_taxation_shows_majority_and_step2_bonus(capsys) -
         "silver cost 0; action taxation"
     ) in output
     assert "TAXATION: player_one took bonus resources stone, silver from other majority duty tiles" in output
-

@@ -186,17 +186,28 @@ def test_cli_customs_house_legal_actions_contract_prunes_non_taxation_variants_o
     )
 
 
-def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order(capsys) -> None:
-    output, _index = _apply_verbose_output(
-        "scenarios/customs_house_hire_market_taxation_majority_001.json",
-        predicate=lambda action: (
-            action.taxation_majority_building_id == "customs_house"
-            and action.taxation_majority_building_source == "market"
-            and action.resolution is TurnResolutionType.TAXATION
-            and action.taxation_step1_resource == "wheat"
-            and action.taxation_step2_resources == ("stone", "silver")
-        ),
-        capsys=capsys,
+def test_cli_customs_house_apply_contract_hire_bonus_and_taxation_order() -> None:
+    """The CLI can name one action, while this path now explicitly commits its earlier hire."""
+    scenario = load_scenario("scenarios/customs_house_hire_market_taxation_majority_001.json")
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == "customs_house"
+    )
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    action = next(
+        action
+        for action in legal_actions(state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.taxation_majority_building_id == "customs_house"
+        and action.taxation_majority_building_source is None
+        and action.resolution is TurnResolutionType.TAXATION
+        and action.taxation_step1_resource == "wheat"
+        and action.taxation_step2_resources == ("stone", "silver")
+    )
+    result = apply_action(state, action, scenario.config)
+    output = "\n".join(
+        text for event in result.events if (text := format_event(event, scenario.config)) is not None
     )
 
     assert (
