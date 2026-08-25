@@ -10,7 +10,7 @@ from pilgrim.rules.buildings import (
     current_merchant_resource,
     is_building_live,
 )
-from pilgrim.rules.transition import legal_actions, turn_steps
+from pilgrim.rules.transition import apply_turn_step, legal_actions, turn_steps
 
 
 MOVEMENT_PLAYTEST = "scenarios/playtest/movement_2p.json"
@@ -108,6 +108,11 @@ def test_movement_playtest_opens_with_every_promised_building_live_and_usable() 
     assert any(step.building_id == "guild" for step in steps), (
         "Guild must offer a committed step at the movement playtest opening"
     )
+    kogge_step = next(
+        (step for step in steps if step.building_id == "kogge"),
+        None,
+    )
+    assert kogge_step is not None, "Kogge must offer a committed opponent-hire step"
 
     assert not any(
         step.building_id == "library" for step in turn_steps(state, config)
@@ -118,15 +123,12 @@ def test_movement_playtest_opens_with_every_promised_building_live_and_usable() 
         _without_active_building(state, player=PlayerId.PLAYER_ONE, building_id="cloisters"),
         config,
     )
-    routes_without_kogge = _route_set(
-        _without_active_building(state, player=PlayerId.PLAYER_TWO, building_id="kogge"),
-        config,
-    )
+    routes_after_hiring_kogge = _route_set(apply_turn_step(state, config, kogge_step), config)
     assert routes_without_cloisters < routes, (
         "Cloisters must widen the opening legal route set, not merely be displayed"
     )
-    assert routes_without_kogge < routes, (
-        "Kogge must widen the opening legal route set, not merely be displayed"
+    assert routes < routes_after_hiring_kogge, (
+        "Hiring Kogge must widen the legal route set after its committed step"
     )
     assert state.round_number + 3 <= config.timing.max_rounds, (
         "Movement playtest must retain several turns after its opening turn"

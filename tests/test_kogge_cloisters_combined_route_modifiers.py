@@ -18,19 +18,21 @@ from pilgrim.rules.sow_routes import (
     route_requires_kogge,
     valid_cloisters_omissions,
 )
-from pilgrim.rules.transition import TransitionValidationError, apply_action, legal_actions
+from pilgrim.rules.transition import (
+    TransitionValidationError,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 
 SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"
 EXPECTED_MOVED_ACTION_DELTAS = {
     "kogge_and_cloisters_2p.json": 140,
-    "movement_2p.json": 44,
     "kogge_cloisters_own_own_skip_city_001.json": 39,
     "kogge_cloisters_own_own_skip_duty_001.json": 39,
-    "kogge_cloisters_hire_kogge_own_cloisters_001.json": 37,
-    "kogge_cloisters_own_kogge_hire_cloisters_001.json": 37,
-    "kogge_cloisters_hire_both_market_001.json": 35,
-    "kogge_cloisters_hire_both_opponent_001.json": 35,
 }
+MIN_ROUTE_STEP_FREE_POSITIONS = 305
 
 
 def _events_of_type(events, event_type: EventType):
@@ -51,6 +53,17 @@ def _combined_actions(path: str):
 
 def _first_action(actions, predicate):
     return next(action for action in actions if predicate(action))
+
+
+def _state_after_route_hires(state, config):
+    for building_id in ("kogge", "cloisters"):
+        step = next(
+            (step for step in turn_steps(state, config) if step.building_id == building_id),
+            None,
+        )
+        if step is not None:
+            state = apply_turn_step(state, config, step)
+    return state
 
 
 def _combined_candidate_walk_for_action(action, board) -> tuple[int, ...]:
@@ -298,7 +311,18 @@ def test_combined_kogge_cloisters_actions_require_kogge_candidate_walk_across_co
 
 
 def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, playtest_actions) -> None:
-    all_actions = (*corpus_actions, *playtest_actions)
+    all_actions = tuple(
+        entry
+        for entry in (*corpus_actions, *playtest_actions)
+        if not any(
+            step.building_id in {"kogge", "cloisters"}
+            for step in turn_steps(entry[1].state, entry[1].config)
+        )
+    )
+    # Route hires are now committed steps, so their opening action sets no longer describe the
+    # same population. Keep this route-step-free floor to make that exclusion visible as more
+    # buildings move out of FullTurnAction.
+    assert len(all_actions) >= MIN_ROUTE_STEP_FREE_POSITIONS
 
     current_counts: dict[str, int] = {}
     for scenario_path, _scenario, actions in all_actions:
@@ -315,11 +339,8 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    # This aggregate includes the playtest directory. movement_2p deliberately adds a live
-    # Cloisters+Kogge position. Guild, Dormitory, Inquisition, and Library are committed steps,
-    # so neither route-mode population includes their retired complete-turn multiplication.
-    assert sum(legacy_counts.values()) == 8112
-    assert sum(current_counts.values()) == 7706
+    assert sum(legacy_counts.values()) == 5413
+    assert sum(current_counts.values()) == 5195
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:
@@ -374,18 +395,23 @@ def test_combined_summary_own_active_shows_parallel_modifier_wording() -> None:
     )
 
 
-def test_combined_summary_hired_keeps_hire_details_at_end() -> None:
-    scenario, _actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_hire_both_market_001.json"
-    )
+def test_combined_summary_after_hires_keeps_only_route_modifier_wording() -> None:
+    scenario = load_scenario("scenarios/kogge_cloisters_hire_both_market_001.json")
+    hired_state = _state_after_route_hires(scenario.state, scenario.config)
+    combined_actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
     board = scenario.config.board
     city = board.index_for_name("city")
     west = board.index_for_name("west")
     action = _first_action(
         combined_actions,
         lambda candidate: (
-            candidate.sow_route_building_source == "market"
-            and candidate.sow_route_secondary_building_source == "market"
+            candidate.sow_route_building_source is None
+            and candidate.sow_route_secondary_building_source is None
             and candidate.sow_route_omitted_location == city
             and candidate.selected_duty == west
             and candidate.resolution is TurnResolutionType.ALLOCATION
@@ -397,9 +423,7 @@ def test_combined_summary_hired_keeps_hire_details_at_end() -> None:
     assert summary.startswith("Turn: sow city -> ")
     assert " | use building: kogge | use building: cloisters to skip city | " in summary
     assert "selected duty: west (allocation) | action: allocation | moves: abbey -> stone_mason" in summary
-    assert summary.endswith(
-        "hire building: kogge from market | hire building: cloisters from market"
-    )
+    assert "hire building:" not in summary
 
 
 def test_apply_own_own_combined_skip_duty_orders_kogge_then_cloisters_bonus_before_sowing() -> None:
@@ -458,22 +482,27 @@ def test_apply_own_own_combined_can_skip_city_when_candidate_contains_city() -> 
 
 
 def test_hired_kogge_own_cloisters_combined_generates_and_pays_once() -> None:
-    scenario, _actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_hire_kogge_own_cloisters_001.json"
-    )
+    scenario = load_scenario("scenarios/kogge_cloisters_hire_kogge_own_cloisters_001.json")
+    hired_state = _state_after_route_hires(scenario.state, scenario.config)
+    combined_actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
     south_east = scenario.config.board.index_for_name("south_east")
     south = scenario.config.board.index_for_name("south")
     action = _first_action(
         combined_actions,
         lambda candidate: (
-            candidate.sow_route_building_source == "market"
+            candidate.sow_route_building_source is None
             and candidate.sow_route_secondary_building_source == "own_active"
             and candidate.sow_route_omitted_location == south_east
             and candidate.selected_duty == south
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(hired_state, action, scenario.config)
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     hired_details = dict(hired_event.details)
 
@@ -485,22 +514,27 @@ def test_hired_kogge_own_cloisters_combined_generates_and_pays_once() -> None:
 
 
 def test_own_kogge_hired_cloisters_combined_generates_and_pays_once() -> None:
-    scenario, _actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_own_kogge_hire_cloisters_001.json"
-    )
+    scenario = load_scenario("scenarios/kogge_cloisters_own_kogge_hire_cloisters_001.json")
+    hired_state = _state_after_route_hires(scenario.state, scenario.config)
+    combined_actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
     south_east = scenario.config.board.index_for_name("south_east")
     south = scenario.config.board.index_for_name("south")
     action = _first_action(
         combined_actions,
         lambda candidate: (
             candidate.sow_route_building_source == "own_active"
-            and candidate.sow_route_secondary_building_source == "market"
+            and candidate.sow_route_secondary_building_source is None
             and candidate.sow_route_omitted_location == south_east
             and candidate.selected_duty == south
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(hired_state, action, scenario.config)
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     hired_details = dict(hired_event.details)
 
@@ -510,22 +544,27 @@ def test_own_kogge_hired_cloisters_combined_generates_and_pays_once() -> None:
 
 
 def test_hired_both_market_combined_emits_two_hires_before_bonuses_and_sowing() -> None:
-    scenario, _actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_hire_both_market_001.json"
-    )
+    scenario = load_scenario("scenarios/kogge_cloisters_hire_both_market_001.json")
+    hired_state = _state_after_route_hires(scenario.state, scenario.config)
+    combined_actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
     south_east = scenario.config.board.index_for_name("south_east")
     south = scenario.config.board.index_for_name("south")
     action = _first_action(
         combined_actions,
         lambda candidate: (
-            candidate.sow_route_building_source == "market"
-            and candidate.sow_route_secondary_building_source == "market"
+            candidate.sow_route_building_source is None
+            and candidate.sow_route_secondary_building_source is None
             and candidate.sow_route_omitted_location == south_east
             and candidate.selected_duty == south
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(hired_state, action, scenario.config)
 
     hired_events = _events_of_type(result.events, EventType.BUILDING_HIRED)
     bonus_events = _events_of_type(result.events, EventType.BUILDING_BONUS)
@@ -537,31 +576,35 @@ def test_hired_both_market_combined_emits_two_hires_before_bonuses_and_sowing() 
     )
 
     assert len(hired_events) == 2
-    assert [dict(event.details)["building_id"] for event in hired_events] == ["kogge", "cloisters"]
-    assert result.events.index(hired_events[0]) < result.events.index(hired_events[1])
-    assert result.events.index(hired_events[1]) < result.events.index(kogge_bonus)
+    assert {dict(event.details)["building_id"] for event in hired_events} == {"kogge", "cloisters"}
+    assert all(result.events.index(event) < result.events.index(kogge_bonus) for event in hired_events)
     assert result.events.index(kogge_bonus) < result.events.index(cloisters_bonus)
     assert result.events.index(cloisters_bonus) < result.events.index(sowing_event)
     assert result.state.player_state(PlayerId.PLAYER_ONE).resources.wheat == 1
 
 
 def test_hired_both_opponent_combined_pays_owner_twice() -> None:
-    scenario, _actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_hire_both_opponent_001.json"
-    )
+    scenario = load_scenario("scenarios/kogge_cloisters_hire_both_opponent_001.json")
+    hired_state = _state_after_route_hires(scenario.state, scenario.config)
+    combined_actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
     south_east = scenario.config.board.index_for_name("south_east")
     south = scenario.config.board.index_for_name("south")
     action = _first_action(
         combined_actions,
         lambda candidate: (
-            candidate.sow_route_building_source == "player_two"
-            and candidate.sow_route_secondary_building_source == "player_two"
+            candidate.sow_route_building_source is None
+            and candidate.sow_route_secondary_building_source is None
             and candidate.sow_route_omitted_location == south_east
             and candidate.selected_duty == south
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(scenario.state, action, scenario.config)
+    result = apply_action(hired_state, action, scenario.config)
     hired_events = _events_of_type(result.events, EventType.BUILDING_HIRED)
 
     assert len(hired_events) == 2
@@ -571,20 +614,28 @@ def test_hired_both_opponent_combined_pays_owner_twice() -> None:
 
 
 def test_insufficient_resources_blocks_two_hire_combined_but_single_hire_variants_remain() -> None:
-    _scenario, actions, combined_actions = _combined_actions(
-        "scenarios/kogge_cloisters_insufficient_for_two_hires_001.json"
+    scenario = load_scenario("scenarios/kogge_cloisters_insufficient_for_two_hires_001.json")
+    initial_steps = turn_steps(scenario.state, scenario.config)
+    after_kogge = apply_turn_step(
+        scenario.state,
+        scenario.config,
+        _first_action(initial_steps, lambda step: step.building_id == "kogge"),
     )
+    actions = legal_actions(after_kogge, scenario.config)
+    combined_actions = [
+        action
+        for action in actions
+        if action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
+    ]
 
     assert combined_actions == []
+    assert any(step.building_id == "cloisters" for step in initial_steps)
+    assert not any(step.building_id == "cloisters" for step in turn_steps(after_kogge, scenario.config))
     assert any(
         action.sow_route_building_id == "kogge"
-        and action.sow_route_building_source == "market"
+        and action.sow_route_building_source is None
         and action.sow_route_secondary_building_id is None
-        for action in actions
-    )
-    assert any(
-        action.sow_route_building_id == "cloisters"
-        and action.sow_route_building_source == "market"
         for action in actions
     )
 

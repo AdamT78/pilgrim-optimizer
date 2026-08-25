@@ -207,9 +207,15 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             "hire_payment": step.hire_payment,
         }
         if isinstance(step, BuildingActivationStep):
+            building_name = building_by_id(config.buildings, step.building_id).name
+            prompt = (
+                "Activate Guild: move the Merchant clockwise +1 Duty tile."
+                if step.building_id == "guild"
+                else f"Hire {building_name}: pay to use its route ability this turn."
+            )
             entry.update(
                 kind="activation",
-                prompt="Activate Guild: move the Merchant clockwise +1 Duty tile.",
+                prompt=prompt,
             )
         elif isinstance(step, BuildingRelocationStep):
             building_name = building_by_id(config.buildings, step.building_id).name
@@ -553,8 +559,6 @@ HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
 # Action fields that identify one potentially hired building and where it is sourced from.
 HIRE_PAYMENT_OWNER_FIELDS: tuple[tuple[str, str], ...] = (
     ("hired_building_id", "hired_building_source"),
-    ("sow_route_building_id", "sow_route_building_source"),
-    ("sow_route_secondary_building_id", "sow_route_secondary_building_source"),
     ("building_conversion_id", "building_conversion_source"),
     ("bank_payment_building_id", "bank_payment_building_source"),
     ("workforce_move_building_id", "workforce_move_building_source"),

@@ -14,7 +14,7 @@ from pilgrim.rules.building_turn_modifiers import (
     scaffolded_turn_modifiers,
 )
 from pilgrim.rules.sow_routes import SowRouteVariant, cloisters_actual_placements_after_omission
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 
 
 def _events_of_type(events, event_type: EventType):
@@ -106,6 +106,14 @@ def _first_step_name(action, scenario) -> str:
     return scenario.config.board.positions[action.route[0]]
 
 
+def _state_after_kogge_hire(state, config):
+    return apply_turn_step(
+        state,
+        config,
+        next(step for step in turn_steps(state, config) if step.building_id == "kogge"),
+    )
+
+
 def test_without_kogge_city_east_and_west_routes_are_not_legal() -> None:
     scenario, actions = _city_route_actions("scenarios/produce_wheat_001.json")
     first_steps = {_first_step_name(action, scenario) for action in actions}
@@ -129,9 +137,16 @@ def test_own_active_kogge_adds_city_east_and_west_routes() -> None:
 
 
 def test_market_hired_kogge_route_emits_hired_then_bonus_then_sowing() -> None:
-    scenario, actions = _city_route_actions("scenarios/kogge_hire_market_city_to_east_001.json")
+    scenario = load_scenario("scenarios/kogge_hire_market_city_to_east_001.json")
+    hired_state = _state_after_kogge_hire(scenario.state, scenario.config)
+    city = scenario.config.board.index_for_name("city")
+    actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.origin == city and action.route
+    ]
     east_action = next(action for action in actions if _first_step_name(action, scenario) == "east")
-    result = apply_action(scenario.state, east_action, scenario.config)
+    result = apply_action(hired_state, east_action, scenario.config)
 
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = next(
@@ -144,7 +159,7 @@ def test_market_hired_kogge_route_emits_hired_then_bonus_then_sowing() -> None:
     bonus_details = dict(bonus_event.details)
 
     assert east_action.sow_route_building_id == "kogge"
-    assert east_action.sow_route_building_source == "market"
+    assert east_action.sow_route_building_source is None
     assert hired_details["source"] == "market"
     assert hired_details["payee"] == "bank"
     assert hired_details["resource"] == "wheat"
@@ -156,13 +171,20 @@ def test_market_hired_kogge_route_emits_hired_then_bonus_then_sowing() -> None:
 
 
 def test_opponent_hired_kogge_route_pays_owner() -> None:
-    scenario, actions = _city_route_actions("scenarios/kogge_hire_opponent_city_to_west_001.json")
+    scenario = load_scenario("scenarios/kogge_hire_opponent_city_to_west_001.json")
+    hired_state = _state_after_kogge_hire(scenario.state, scenario.config)
+    city = scenario.config.board.index_for_name("city")
+    actions = [
+        action
+        for action in legal_actions(hired_state, scenario.config)
+        if action.origin == city and action.route
+    ]
     west_action = next(action for action in actions if _first_step_name(action, scenario) == "west")
-    result = apply_action(scenario.state, west_action, scenario.config)
+    result = apply_action(hired_state, west_action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
 
     assert west_action.sow_route_building_id == "kogge"
-    assert west_action.sow_route_building_source == "player_two"
+    assert west_action.sow_route_building_source is None
     assert hired_details["source"] == "player_two"
     assert hired_details["payee"] == "player_two"
     assert hired_details["resource"] == "wheat"

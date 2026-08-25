@@ -68,63 +68,31 @@ def test_cli_apply_own_active_cloisters_shows_bonus_before_sowing(capsys) -> Non
     )
 
 
-def test_cli_apply_market_hired_cloisters_shows_hire_bonus_then_sowing(capsys) -> None:
-    action_index = _cloisters_action_index(
-        "scenarios/cloisters_hire_market_skip_duty_tile_001.json",
-        source="market",
-        origin="north",
-        omitted="north_east",
-        selected_duty="east",
-        resolution=TurnResolutionType.TITHE,
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/cloisters_hire_market_skip_duty_tile_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_does_not_offer_an_uncommitted_market_cloisters_hire(capsys) -> None:
+    scenario_path = "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
+    scenario = load_scenario(scenario_path)
+    exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "BUILDING_HIRED: player_one hired Cloisters from market; paid wheat 1 to bank" in output
-    assert "BUILDING_BONUS: cloisters skipped north_east during sow route" in output
-    assert "SOWING: picked up 2 from north; route " in output
-    assert "skipped north_east with Cloisters" in output
-    assert output.index(
-        "BUILDING_HIRED: player_one hired Cloisters from market; paid wheat 1 to bank"
-    ) < output.index("BUILDING_BONUS: cloisters skipped north_east during sow route")
-    assert output.index(
-        "BUILDING_BONUS: cloisters skipped north_east during sow route"
-    ) < output.index("SOWING: picked up 2 from north; route ")
+    assert "hire building: cloisters from market" not in output
+    assert not [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.sow_route_building_id == "cloisters"
+    ]
 
 
-def test_cli_apply_opponent_hired_cloisters_shows_owner_payment(capsys) -> None:
-    action_index = _cloisters_action_index(
-        "scenarios/cloisters_hire_opponent_skip_city_001.json",
-        source="player_two",
-        origin="east",
-        omitted="city",
-        selected_duty="north",
-        resolution=TurnResolutionType.TITHE,
-    )
-    exit_code = main(
-        [
-            "apply",
-            "scenarios/cloisters_hire_opponent_skip_city_001.json",
-            "--action-index",
-            str(action_index),
-            "--verbose",
-        ]
-    )
+def test_cli_does_not_offer_an_uncommitted_opponent_cloisters_hire(capsys) -> None:
+    scenario_path = "scenarios/cloisters_hire_opponent_skip_city_001.json"
+    scenario = load_scenario(scenario_path)
+    exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert (
-        "BUILDING_HIRED: player_one hired Cloisters from player_two; paid wheat 1 to player_two"
-        in output
-    )
-    assert "BUILDING_BONUS: cloisters skipped city during sow route" in output
-    assert "skipped city with Cloisters" in output
+    assert "hire building: cloisters from player_two" not in output
+    assert not [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if action.sow_route_building_id == "cloisters"
+    ]
