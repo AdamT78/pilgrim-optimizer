@@ -15,6 +15,11 @@ from pilgrim.rules.building_turn_modifiers import implemented_turn_modifiers
 from pilgrim.rules.duty_enhancements import implemented_enhancements
 from pilgrim.rules.transition import legal_actions
 
+if __package__:
+    from .turn_step_metrics import collect_turn_step_metrics
+else:
+    from turn_step_metrics import collect_turn_step_metrics
+
 _STATUS_IMPLEMENTED = "implemented"
 _STATUS_PARTIAL = "partial"
 _STATUS_DEFERRED = "deferred"
@@ -62,11 +67,19 @@ class BuildingStatusRow:
 @dataclass(frozen=True, slots=True)
 class BranchingAuditRow:
     scenario_path: str
-    total_actions: int
-    normal_actions: int
+    legal_action_count: int
+    turn_step_count: int
+    reachable_step_sequences: int
+    action_step_sequence_product: int
+    post_resolution_window_measured: bool
+    sequence_walk_truncated: bool
+    dropped_step_sequence_prefixes: tuple[tuple[str, ...], ...]
+    additional_dropped_step_sequence_prefix_count: int
+    hired_turn_steps: int
+    conversion_turn_steps: int
+    grain_store_conversion_turn_steps: int
+    relocation_turn_steps: int
     movement_modifier_actions: int
-    grain_store_conversion_actions: int
-    hired_building_actions: int
     combined_route_modifier_actions: int
     flag: str
 
@@ -150,19 +163,6 @@ def collect_building_status_rows(root: Path | None = None) -> tuple[BuildingStat
     return tuple(rows)
 
 
-def _is_hired_source_label(source_label: str | None) -> bool:
-    return source_label is not None and source_label != "own_active"
-
-
-def _action_has_hired_component(action: FullTurnAction) -> bool:
-    return (
-        action.hired_building_id is not None
-        or _is_hired_source_label(action.sow_route_building_source)
-        or _is_hired_source_label(action.sow_route_secondary_building_source)
-        or _is_hired_source_label(action.building_conversion_source)
-    )
-
-
 def _action_is_movement_modifier(action: FullTurnAction) -> bool:
     return action.sow_route_building_id is not None
 
@@ -191,17 +191,17 @@ def collect_branching_rows(
         scenario = load_scenario(str(scenario_file))
         actions = legal_actions(scenario.state, scenario.config)
         full_turn_actions = [action for action in actions if isinstance(action, FullTurnAction)]
+        step_metrics = collect_turn_step_metrics(
+            scenario.state,
+            scenario.config,
+            legal_action_count=len(actions),
+        )
 
         movement_modifier_actions = 0
-        conversion_actions = 0
-        hired_actions = 0
         combined_route_actions = 0
-        normal_actions = 0
 
         for action in full_turn_actions:
             has_movement_modifier = _action_is_movement_modifier(action)
-            has_conversion = action.building_conversion_id == "grain_store"
-            has_hired_component = _action_has_hired_component(action)
             has_combined_route = (
                 action.sow_route_building_id == "kogge"
                 and action.sow_route_secondary_building_id == "cloisters"
@@ -209,25 +209,29 @@ def collect_branching_rows(
 
             if has_movement_modifier:
                 movement_modifier_actions += 1
-            if has_conversion:
-                conversion_actions += 1
-            if has_hired_component:
-                hired_actions += 1
             if has_combined_route:
                 combined_route_actions += 1
-            if not (has_movement_modifier or has_conversion or has_hired_component):
-                normal_actions += 1
 
         rows.append(
             BranchingAuditRow(
                 scenario_path=scenario_path,
-                total_actions=len(actions),
-                normal_actions=normal_actions,
+                legal_action_count=len(actions),
+                turn_step_count=step_metrics.total_turn_steps,
+                reachable_step_sequences=step_metrics.reachable_step_sequences,
+                action_step_sequence_product=step_metrics.action_step_sequence_product,
+                post_resolution_window_measured=scenario.state.turn_progress.resolution_committed,
+                sequence_walk_truncated=step_metrics.sequence_walk_truncated,
+                dropped_step_sequence_prefixes=step_metrics.dropped_step_sequence_prefixes,
+                additional_dropped_step_sequence_prefix_count=(
+                    step_metrics.additional_dropped_step_sequence_prefix_count
+                ),
+                hired_turn_steps=step_metrics.hired_turn_steps,
+                conversion_turn_steps=step_metrics.conversion_turn_steps,
+                grain_store_conversion_turn_steps=step_metrics.grain_store_conversion_turn_steps,
+                relocation_turn_steps=step_metrics.relocation_turn_steps,
                 movement_modifier_actions=movement_modifier_actions,
-                grain_store_conversion_actions=conversion_actions,
-                hired_building_actions=hired_actions,
                 combined_route_modifier_actions=combined_route_actions,
-                flag=_branching_flag(len(actions)),
+                flag=_branching_flag(step_metrics.action_step_sequence_product),
             )
         )
 
@@ -275,22 +279,60 @@ def _format_recommendations_section() -> str:
 
 
 def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
-    header = "Scenario                                      Total  Flag      Normal  Movement  GrainStore  Hired  CombinedRoute"
-    divider = "---------------------------------------------------------------------------------------------------------------"
+    header = (
+        "Scenario                                      Actions  Steps  StepSeq  Act×Seq  "
+        "PostWindow  Flag      HiredSteps  Conversions  GrainStore  Relocations  "
+        "Movement  CombinedRoute"
+    )
+    divider = "-" * len(header)
     lines = ["=== Branching Count Audit ===", header, divider]
     for row in rows:
         scenario_label = row.scenario_path.split("/")[-1]
+        sequence_count = _format_bounded_count(
+            row.reachable_step_sequences,
+            truncated=row.sequence_walk_truncated,
+        )
+        action_step_product = _format_bounded_count(
+            row.action_step_sequence_product,
+            truncated=row.sequence_walk_truncated,
+        )
+        post_window = "MEASURED" if row.post_resolution_window_measured else "UNMEASURED"
         lines.append(
             f"{scenario_label:<44} "
-            f"{row.total_actions:>5}  "
+            f"{row.legal_action_count:>7}  "
+            f"{row.turn_step_count:>5}  "
+            f"{sequence_count:>7}  "
+            f"{action_step_product:>7}  "
+            f"{post_window:<10}  "
             f"{row.flag:<8}  "
-            f"{row.normal_actions:>6}  "
+            f"{row.hired_turn_steps:>10}  "
+            f"{row.conversion_turn_steps:>11}  "
+            f"{row.grain_store_conversion_turn_steps:>10}  "
+            f"{row.relocation_turn_steps:>11}  "
             f"{row.movement_modifier_actions:>8}  "
-            f"{row.grain_store_conversion_actions:>10}  "
-            f"{row.hired_building_actions:>5}  "
             f"{row.combined_route_modifier_actions:>13}"
         )
+    truncated_rows = [row for row in rows if row.sequence_walk_truncated]
+    if truncated_rows:
+        lines.extend(["", "Step-sequence walk truncations (reported counts are lower bounds):"])
+        for row in truncated_rows:
+            shown_count = len(row.dropped_step_sequence_prefixes)
+            lines.append(
+                f"- {row.scenario_path.split('/')[-1]} retained {shown_count} dropped "
+                "sequence prefixes:"
+            )
+            lines.extend(
+                f"  - {' -> '.join(prefix)}" for prefix in row.dropped_step_sequence_prefixes
+            )
+            lines.append(
+                "  - additional dropped prefixes not shown: "
+                f"{row.additional_dropped_step_sequence_prefix_count}"
+            )
     return "\n".join(lines)
+
+
+def _format_bounded_count(value: int, *, truncated: bool) -> str:
+    return f">={value}" if truncated else str(value)
 
 
 def generate_report(
