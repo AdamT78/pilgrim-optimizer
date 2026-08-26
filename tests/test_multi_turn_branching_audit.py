@@ -20,7 +20,7 @@ def test_audit_report_contains_expected_headings() -> None:
     assert "Summary:" in report
     assert "Base branching summary:" in report
     assert "Committed turn steps:" in report
-    assert "Steps  StepSeq  Act×Seq" in report
+    assert "Steps  StepSeq  States  Act×Seq  Act×State" in report
     assert "Overall summary:" in report
 
 
@@ -28,10 +28,15 @@ def test_classification_helpers_flag_expected_action_features() -> None:
     combined_scenario = load_scenario("scenarios/kogge_cloisters_hire_both_market_001.json")
     state = combined_scenario.state
     for building_id in ("kogge", "cloisters"):
+        step = next(
+            step
+            for step in turn_steps(state, combined_scenario.config)
+            if step.building_id == building_id
+        )
         state = apply_turn_step(
             state,
             combined_scenario.config,
-            next(step for step in turn_steps(state, combined_scenario.config) if step.building_id == building_id),
+            step,
         )
     combined_action = _find_action(
         legal_actions(state, combined_scenario.config),
@@ -82,7 +87,9 @@ def test_trace_rows_are_deterministic_and_have_no_duplicate_action_ids() -> None
     assert rows
     assert all(row.legal_action_count > 0 for row in rows)
     assert all(row.reachable_step_sequences > 0 for row in rows)
+    assert all(row.distinct_reachable_states > 0 for row in rows)
     assert all(row.action_step_sequence_product >= row.legal_action_count for row in rows)
+    assert all(row.action_distinct_state_product >= row.legal_action_count for row in rows)
     assert all(row.duplicate_action_id_count == 0 for row in rows)
     assert all(row.unique_action_id_count == row.legal_action_count for row in rows)
     assert all(row.full_turn_actions > 0 for row in rows)
@@ -93,7 +100,9 @@ def test_trace_rows_are_deterministic_and_have_no_duplicate_action_ids() -> None
     grain_store_rows = first[1].rows
     assert grain_store_rows[0].grain_store_conversion_turn_steps == 3
     assert grain_store_rows[0].reachable_step_sequences == 4
+    assert grain_store_rows[0].distinct_reachable_states == 4
     assert grain_store_rows[0].action_step_sequence_product == 12
+    assert grain_store_rows[0].action_distinct_state_product == 12
     assert grain_store_rows[0].pre_action_step_commits
     assert all(
         "building_conversion:grain_store" in commit.selected_step_id

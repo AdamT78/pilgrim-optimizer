@@ -16,25 +16,21 @@ from pilgrim.rules.duty_enhancements import implemented_enhancements
 from pilgrim.rules.transition import legal_actions
 
 if __package__:
+    from .audit_helpers import _format_bounded_count, project_root
     from .turn_step_metrics import collect_turn_step_metrics
 else:
+    from audit_helpers import _format_bounded_count, project_root
     from turn_step_metrics import collect_turn_step_metrics
 
 _STATUS_IMPLEMENTED = "implemented"
 _STATUS_PARTIAL = "partial"
 _STATUS_DEFERRED = "deferred"
-_STATUS_BLOCKED_SPATIAL = "blocked_by_roads_spatial"
-_STATUS_BLOCKED_SCORING = "blocked_by_final_scoring"
-_STATUS_NEEDS_CONFIRMATION = "needs_rule_confirmation"
 _STATUS_UNKNOWN = "unknown"
 
 _STATUS_DISPLAY_ORDER: tuple[str, ...] = (
     _STATUS_IMPLEMENTED,
     _STATUS_PARTIAL,
     _STATUS_DEFERRED,
-    _STATUS_BLOCKED_SPATIAL,
-    _STATUS_BLOCKED_SCORING,
-    _STATUS_NEEDS_CONFIRMATION,
     _STATUS_UNKNOWN,
 )
 
@@ -53,6 +49,12 @@ _SCENARIO_LIST: tuple[str, ...] = (
     "scenarios/grain_store_active_sell_wheat_001.json",
     "scenarios/grain_store_active_buy_wheat_001.json",
     "scenarios/grain_store_buy_then_ordination_001.json",
+    "scenarios/playtest/cloisters_loop_2p.json",
+    "scenarios/playtest/cloisters_reach_2p.json",
+    "scenarios/playtest/conversions_2p.json",
+    "scenarios/playtest/kogge_and_cloisters_2p.json",
+    "scenarios/playtest/movement_2p.json",
+    "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
 )
 
 
@@ -70,7 +72,9 @@ class BranchingAuditRow:
     legal_action_count: int
     turn_step_count: int
     reachable_step_sequences: int
+    distinct_reachable_states: int
     action_step_sequence_product: int
+    action_distinct_state_product: int
     post_resolution_window_measured: bool
     sequence_walk_truncated: bool
     dropped_step_sequence_prefixes: tuple[tuple[str, ...], ...]
@@ -82,10 +86,6 @@ class BranchingAuditRow:
     movement_modifier_actions: int
     combined_route_modifier_actions: int
     flag: str
-
-
-def project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
 
 
 def configured_scenarios() -> tuple[str, ...]:
@@ -218,7 +218,9 @@ def collect_branching_rows(
                 legal_action_count=len(actions),
                 turn_step_count=step_metrics.total_turn_steps,
                 reachable_step_sequences=step_metrics.reachable_step_sequences,
+                distinct_reachable_states=step_metrics.distinct_reachable_states,
                 action_step_sequence_product=step_metrics.action_step_sequence_product,
+                action_distinct_state_product=step_metrics.action_distinct_state_product,
                 post_resolution_window_measured=scenario.state.turn_progress.resolution_committed,
                 sequence_walk_truncated=step_metrics.sequence_walk_truncated,
                 dropped_step_sequence_prefixes=step_metrics.dropped_step_sequence_prefixes,
@@ -242,7 +244,8 @@ def _format_building_status_section(rows: tuple[BuildingStatusRow, ...]) -> str:
     lines: list[str] = []
     lines.append("=== Building Status Audit ===")
     lines.append(
-        "Metadata note: catalogue effect_status is currently coarse; runtime-derived status is used where available."
+        "Metadata note: catalogue effect_status is currently coarse; "
+        "runtime-derived status is used where available."
     )
     lines.append("")
 
@@ -262,25 +265,26 @@ def _format_building_status_section(rows: tuple[BuildingStatusRow, ...]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _format_recommendations_section() -> str:
-    lines = [
-        "=== Safe Next Candidates ===",
-        "- Buildings that modify already-implemented duty flows (produce, clerical, give_alms, ordination, allocation, construct-building acquisition).",
-        "- Buildings that are pure resource/track modifiers and do not require new board-spatial systems.",
-        "",
-        "Likely Deferred / Higher-Risk Areas",
-        "- Effects requiring roads/bridges/shrines/trail spatial runtime.",
-        "- Effects requiring final scoring runtime.",
-        "- Effects whose canonical rule text still needs confirmation.",
-        "",
-        "Classification limitation: this audit does not infer blocked-by-spatial or blocked-by-final-scoring per building from machine-readable metadata because those tags are not yet encoded in the catalogue.",
-    ]
-    return "\n".join(lines)
+def _format_unimplemented_buildings_section(rows: tuple[BuildingStatusRow, ...]) -> str:
+    unimplemented = sorted(
+        (row for row in rows if row.status == _STATUS_DEFERRED),
+        key=lambda row: row.building_name.lower(),
+    )
+    if not unimplemented:
+        return ""
+    return "\n".join(
+        [
+            "=== Unimplemented Buildings ===",
+            *(f"- {row.building_name}: {row.reason}" for row in unimplemented),
+        ]
+    )
 
 
 def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
+    scenario_width = max(44, *(len(row.scenario_path.split("/")[-1]) for row in rows))
     header = (
-        "Scenario                                      Actions  Steps  StepSeq  Act×Seq  "
+        f"{'Scenario':<{scenario_width}}  Actions  Steps  StepSeq  States  Act×Seq  "
+        "Act×State  "
         "PostWindow  Flag      HiredSteps  Conversions  GrainStore  Relocations  "
         "Movement  CombinedRoute"
     )
@@ -292,17 +296,27 @@ def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
             row.reachable_step_sequences,
             truncated=row.sequence_walk_truncated,
         )
+        state_count = _format_bounded_count(
+            row.distinct_reachable_states,
+            truncated=row.sequence_walk_truncated,
+        )
         action_step_product = _format_bounded_count(
             row.action_step_sequence_product,
             truncated=row.sequence_walk_truncated,
         )
+        action_state_product = _format_bounded_count(
+            row.action_distinct_state_product,
+            truncated=row.sequence_walk_truncated,
+        )
         post_window = "MEASURED" if row.post_resolution_window_measured else "UNMEASURED"
         lines.append(
-            f"{scenario_label:<44} "
+            f"{scenario_label:<{scenario_width}}  "
             f"{row.legal_action_count:>7}  "
             f"{row.turn_step_count:>5}  "
             f"{sequence_count:>7}  "
+            f"{state_count:>6}  "
             f"{action_step_product:>7}  "
+            f"{action_state_product:>9}  "
             f"{post_window:<10}  "
             f"{row.flag:<8}  "
             f"{row.hired_turn_steps:>10}  "
@@ -314,7 +328,9 @@ def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
         )
     truncated_rows = [row for row in rows if row.sequence_walk_truncated]
     if truncated_rows:
-        lines.extend(["", "Step-sequence walk truncations (reported counts are lower bounds):"])
+        lines.extend(
+            ["", "Step-sequence/state walk truncations (reported counts are lower bounds):"]
+        )
         for row in truncated_rows:
             shown_count = len(row.dropped_step_sequence_prefixes)
             lines.append(
@@ -331,10 +347,6 @@ def _format_branching_section(rows: tuple[BranchingAuditRow, ...]) -> str:
     return "\n".join(lines)
 
 
-def _format_bounded_count(value: int, *, truncated: bool) -> str:
-    return f">={value}" if truncated else str(value)
-
-
 def generate_report(
     *,
     root: Path | None = None,
@@ -348,10 +360,10 @@ def generate_report(
     )
     sections = (
         _format_building_status_section(building_rows),
-        _format_recommendations_section(),
+        _format_unimplemented_buildings_section(building_rows),
         _format_branching_section(branching_rows),
     )
-    return "\n\n".join(sections).rstrip() + "\n"
+    return "\n\n".join(section for section in sections if section).rstrip() + "\n"
 
 
 def main() -> None:
