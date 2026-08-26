@@ -4135,9 +4135,15 @@ def test_the_mixes_offered_are_the_ones_the_engine_allows(tmp_path: Path) -> Non
     }
     assert set(transcript["offered"][-1]) & {"stone", "silver", "wheat"} == eligible
     assert not [value for value in transcript["offered"][-1] if "=" in value]
-    assert transcript["asking"][-1] == [
-        f"{server.payload['state']['active_player']}: choose 2 resources."
-    ]
+    prompts = {
+        step["prompt"]
+        for candidate in server.payload["turn_candidates"]
+        if tuple(_values_except(candidate["steps"], "combination")) == prefix
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and step.get("resource_total") == 2
+    }
+    assert len(prompts) == 1
+    assert transcript["asking"][-1] == [prompts.pop()]
 
 
 @needs_node
@@ -4180,7 +4186,7 @@ def test_a_mix_is_offered_in_english_and_never_as_a_tuple() -> None:
     assert "take stone and silver" in labels
 
 
-def test_taxation_step_two_prompt_names_the_position_duty_value() -> None:
+def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
     scenario = load_scenario("scenarios/taxation_three_bonus_types_001.json")
     candidates = play_server.turn_candidates(
         scenario.state,
@@ -4195,7 +4201,15 @@ def test_taxation_step_two_prompt_names_the_position_duty_value() -> None:
     ]
 
     assert taxation_steps
-    assert {step["prompt"] for step in taxation_steps} == {"player_one: choose 2 resources."}
+    assert {step["prompt"] for step in taxation_steps} == {
+        "player_one: Taxation step 2: south west (ordination) unlocks silver: "
+        "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
+        "real count makes it a majority (1 vs 0). Choose 2 resources.",
+        "player_one: Taxation step 2: south west (ordination) unlocks silver: "
+        "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
+        "real count makes it a majority (1 vs 0); north west (produce) unlocks wheat: "
+        "real count makes it a majority (1 vs 0). Choose 2 resources."
+    }
     step_two = taxation_steps[0]
     assert step_two["resource_delta"] == {"stone": 2, "silver": 0, "wheat": 0}
     assert step_two["resource_unit_deltas"]["wheat"] == {
@@ -4208,6 +4222,45 @@ def test_taxation_step_two_prompt_names_the_position_duty_value() -> None:
         play_server._combination_step("pay", [("silver", 1), ("wheat", 1)])["prompt"]
         == play_server.COMBINATION_PROMPT
     )
+
+
+@pytest.mark.parametrize(
+    ("scenario_path", "expected"),
+    (
+        (
+            "scenarios/scriptorium_taxation_majority_other_tiles_001.json",
+            "player_one: Taxation step 2: south west (ordination) unlocks silver: "
+            "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) "
+            "unlocks stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). "
+            "Choose 2 resources.",
+        ),
+        (
+            "scenarios/customs_house_active_taxation_majority_001.json",
+            "player_one: Taxation step 2: south west (ordination) unlocks silver: "
+            "Customs House makes this occupied tile a majority (1 vs 1); west (allocation) "
+            "unlocks stone: Customs House makes this occupied tile a majority (1 vs 1). "
+            "Choose 2 resources.",
+        ),
+    ),
+)
+def test_taxation_step_two_prompt_explains_building_majorities(
+    scenario_path: str,
+    expected: str,
+) -> None:
+    scenario = load_scenario(scenario_path)
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=tuple(legal_actions(scenario.state, scenario.config)),
+    )
+    prompts = {
+        step["prompt"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and step.get("resource_total") == 2
+    }
+
+    assert prompts == {expected}
 
 
 def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:

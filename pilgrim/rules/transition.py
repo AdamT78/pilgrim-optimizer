@@ -161,6 +161,23 @@ class TransitionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class TaxationMajorityUnlock:
+    """One other Duty tile that makes a Taxation step-II resource available.
+
+    The relation values are the engine's settled post-sowing counts.  The server may turn them
+    into an explanation, but must not re-run the majority comparison to make one.
+    """
+
+    duty_position: int
+    duty_category: str
+    resources: tuple[str, ...]
+    majority_reason: str
+    player_acolytes: int
+    effective_player_acolytes: int
+    competing_acolytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class _SowRouteOption:
     """One legal sow-route option with optional route-modifier metadata."""
 
@@ -398,6 +415,94 @@ def legal_actions(state: GameState, config: GameConfig) -> tuple[GameAction, ...
     if state.turn_progress.resolution_committed:
         return (EndTurnAction(),)
     return _legal_full_turn_actions(state, config)
+
+
+def taxation_majority_unlocks_for_action(
+    state: GameState,
+    config: GameConfig,
+    action: FullTurnAction,
+) -> tuple[TaxationMajorityUnlock, ...]:
+    """Explain the occupied other duties that unlock one Taxation step-II choice.
+
+    This is the read-only counterpart of Taxation resolution.  It follows the same pre-sowing
+    modifier and sowing path as application, then returns the already-decided majority facts for
+    the server to describe.  It deliberately returns data rather than a sentence: the engine owns
+    the comparison, while the server owns player-facing words.
+    """
+    if action.resolution is not TurnResolutionType.TAXATION:
+        raise ValueError("Taxation majority explanations require a Taxation action.")
+
+    player = state.active_player
+    state_for_sow = state
+    relation_context = _DutyRelationModifierContext(acting_player=player)
+    wagon_yard_free_hire = _resolved_wagon_yard_free_hire_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if wagon_yard_free_hire is not None:
+        state_for_sow, _ = _state_with_temporary_active_building(
+            state_for_sow,
+            player=player,
+            building_id=wagon_yard_free_hire.target_building_id,
+        )
+
+    cloisters_route = _resolved_cloisters_route_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    kogge_source = _resolved_kogge_source_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    )
+    if _resolved_scriptorium_effective_acolyte_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    ) is not None:
+        relation_context = replace(relation_context, uses_scriptorium=True)
+    if _resolved_customs_house_taxation_for_action(
+        state=state_for_sow,
+        config=config,
+        player=player,
+        action=action,
+    ) is not None:
+        relation_context = replace(relation_context, uses_customs_house=True)
+
+    if wagon_yard_free_hire is not None and wagon_yard_free_hire.target_was_temporary_added:
+        state_for_sow = _state_without_temporary_active_building(
+            state_for_sow,
+            player=player,
+            building_id=wagon_yard_free_hire.target_building_id,
+        )
+
+    player_vector = state_for_sow.player_vector(player)
+    sowed_vector = _sow_vector_with_optional_city_kogge(
+        player_vector,
+        origin=action.origin,
+        route=action.route,
+        board=config.board,
+        allows_kogge_city_spokes=kogge_source is not None and kogge_source.usable,
+        cloisters_omitted_location=(
+            cloisters_route.omitted_location if cloisters_route is not None else None
+        ),
+        cloisters_with_kogge=kogge_source is not None and cloisters_route is not None,
+    )
+    state_after_sow = state_for_sow.with_player_vector(player, sowed_vector)
+    return _taxation_majority_unlocks(
+        state_after_sow,
+        config,
+        player=player,
+        sowed_vector=sowed_vector,
+        selected_duty=action.selected_duty,
+        relation_context=relation_context,
+    )
 
 
 def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
@@ -7866,11 +7971,44 @@ def _taxation_bonus_resource_types(
     selected_duty: int,
     relation_context: _DutyRelationModifierContext,
 ) -> tuple[str, ...]:
-    unlocked_resources: set[str] = set()
+    unlocked_resources = {
+        resource
+        for unlock in _taxation_majority_unlocks(
+            state,
+            config,
+            player=player,
+            sowed_vector=sowed_vector,
+            selected_duty=selected_duty,
+            relation_context=relation_context,
+        )
+        for resource in unlock.resources
+    }
+    return tuple(
+        resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources
+    )
+
+
+def _taxation_majority_unlocks(
+    state: GameState,
+    config: GameConfig,
+    *,
+    player: PlayerId,
+    sowed_vector: tuple[int, ...],
+    selected_duty: int,
+    relation_context: _DutyRelationModifierContext,
+) -> tuple[TaxationMajorityUnlock, ...]:
+    """Return every other majority duty that unlocks a Taxation resource.
+
+    Taxation choice generation and the play-server explanation read this same result.  Keeping the
+    reason beside the resource prevents the screen from having to reproduce a modifier-sensitive
+    majority comparison just to explain an offer it already received.
+    """
+    unlocks: list[TaxationMajorityUnlock] = []
     for duty_position in config.duty_positions():
         if duty_position == selected_duty:
             continue
-        if config.duty_category_for_position(duty_position) == "taxation":
+        duty_category = config.duty_category_for_position(duty_position)
+        if duty_category == "taxation":
             continue
         strength = _taxation_duty_strength_for_position(
             state,
@@ -7884,12 +8022,53 @@ def _taxation_bonus_resource_types(
             continue
         resource = config.tithe_counters.resource_for_board_index(duty_position)
         if resource == "cornucopia":
-            unlocked_resources.update(_TAXATION_RESOURCE_TYPES)
+            resources = _TAXATION_RESOURCE_TYPES
         elif resource in _TAXATION_RESOURCE_TYPES:
-            unlocked_resources.add(resource)
-    return tuple(
-        resource for resource in _TAXATION_RESOURCE_TYPES if resource in unlocked_resources
-    )
+            resources = (resource,)
+        else:
+            continue
+
+        player_acolytes = sowed_vector[duty_position]
+        effective_player_acolytes = _effective_player_acolytes_for_duty_position(
+            base_count=player_acolytes,
+            duty_position=duty_position,
+            relation_context=relation_context,
+            config=config,
+        )
+        competing_acolytes = max(
+            _competing_counts(
+                state,
+                player=player,
+                duty_position=duty_position,
+            )
+        )
+        unmodified_strength = duty_strength(
+            player_acolytes,
+            _competing_counts(
+                state,
+                player=player,
+                duty_position=duty_position,
+            ),
+        )
+        if relation_context.uses_customs_house:
+            majority_reason = "customs_house"
+        elif unmodified_strength is DutyStrength.MAJORITY:
+            majority_reason = "real_count"
+        else:
+            majority_reason = "scriptorium"
+
+        unlocks.append(
+            TaxationMajorityUnlock(
+                duty_position=duty_position,
+                duty_category=duty_category,
+                resources=resources,
+                majority_reason=majority_reason,
+                player_acolytes=player_acolytes,
+                effective_player_acolytes=effective_player_acolytes,
+                competing_acolytes=competing_acolytes,
+            )
+        )
+    return tuple(unlocks)
 
 
 def _taxation_bonus_resource_choices(
