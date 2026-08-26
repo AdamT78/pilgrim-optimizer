@@ -16,19 +16,22 @@ locally is a bug even when it renders correctly.
 
 ## Running the tests
 
-Python 3.13, `pip install -e ".[dev]"`. Two lanes, matching `.github/workflows/tests.yml`:
+Python 3.13, `pip install -e ".[dev]"`. Three PR-gated lanes, matching
+`.github/workflows/tests.yml`:
 
 ```
 pytest -m "not slow"                                    # the PR gate
+pytest -m slow -p no:cacheprovider \
+  --ignore=tests/test_play_view_clicks.py                 # deep guards
 pytest -q -p no:cacheprovider tests/test_play_view_clicks.py   # browser click guards, also the PR gate
-pytest                                                  # everything, incl. slow; runs only on push to main
+pytest                                                  # all three lanes in one invocation
 ```
 
 `slow` is set two ways: `tests/test_play_view_clicks.py` marks its whole module, and
 `tests/conftest.py` marks anything using the `deep_actions` fixture. The click suite is slow but
 still gates pull requests, because the PR job runs that file explicitly. The deep-fixture tests
-are the ones nothing on a pull request covers, and a failure there can sit on main unnoticed —
-so if you touch anything the deep fixture reaches, run `pytest -m slow` yourself.
+have their own PR step, excluding the click module so they run once — so if you touch anything the
+deep fixture reaches, run `pytest -m slow` yourself.
 
 Use `-x -p no:cacheprovider` while iterating. **Never pipe pytest to `tail` or `head`** — the
 truncated output hides which test failed and why.
@@ -100,9 +103,10 @@ adjust the tripwire to agree with the new output.
 `tools/ui_debug/play_view_turn.js` holds the turn script. `render_play_view.py` reads it at
 call time into the module-level `_TURN_SCRIPT`; keep that indirection, a test monkeypatches it.
 
-`tests/turn_script_harness.js` runs the shipped script against a stub board under node. It is
-gated on node being present and node is not declared in CI, so tests written against it are
-currently skipped there — say so rather than counting them as coverage.
+`tests/turn_script_harness.js` runs the shipped script against a stub board under node. CI declares
+Node with `actions/setup-node` and checks it before pytest, so its harness tests run in the fast
+lane. Locally they remain gated on node being present and skip when it is absent; do not count a
+locally skipped harness test as coverage.
 
 ## Reporting back
 
