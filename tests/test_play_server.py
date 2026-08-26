@@ -44,6 +44,11 @@ from pilgrim.model.actions import (
     action_summary_for_players,
 )
 from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType, PlayerId, TurnResolutionType
+from pilgrim.rules.buildings import (
+    BUILDING_ABILITY_REASONS,
+    BuildingAbilityReason,
+    BuildingAbilitySource,
+)
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import apply_action, legal_actions
@@ -1704,6 +1709,10 @@ def _run_script(
                 # draws a key for every one of them. A stub holding only the right answers cannot
                 # show a script reaching past them.
                 "buildings": _buildings_on_the_track(server),
+                # The status targets carry their already-worded engine payload. The harness reads
+                # the script's rendered value back, so a future fallback or client-side reason
+                # translation cannot hide behind a browser-only tooltip test.
+                "buildingAbilityTargets": server.payload.get("building_abilities", []),
                 # Every seat, with the page's own word for which one is on, so the script has four
                 # boards to choose wrongly between rather than one it cannot help but get right.
                 # Always four, however many are playing, because the page always draws four and
@@ -1743,6 +1752,29 @@ def _buildings_on_the_track(server) -> list[str]:
 def _buildings_on_payload(payload: dict) -> list[str]:
     page = render_play_view_from_payload(payload)
     return re.findall(r'data-building-choice-key="([a-z_]+)"', page)
+
+
+@needs_node
+def test_building_ability_reason_is_rendered_and_missing_reason_stays_blank(tmp_path: Path) -> None:
+    """The script copies the engine sentence; it does not invent one for an absent reason."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        opening = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
+        assert opening["mill"] == "Not usable: this building was not selected for this game."
+        assert opening["kogge"] == "Usable: pay 1 silver to Yellow."
+
+        server.payload["building_abilities"] = [
+            (
+                {**ability, "reason": None, "status_text": None}
+                if ability["building_id"] == "mill"
+                else ability
+            )
+            for ability in server.payload["building_abilities"]
+        ]
+        without_reason = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
+        assert without_reason["mill"] == ""
+    finally:
+        server.server_close()
 
 
 @pytest.mark.slow
@@ -4320,6 +4352,100 @@ def test_guild_is_a_committed_turn_step_not_a_candidate_question() -> None:
     )
 
 
+def test_building_ability_payload_carries_each_engine_source_field_and_refreshes() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        abilities = {
+            ability["building_id"]: ability for ability in server.payload["building_abilities"]
+        }
+        assert set(abilities) == {building.id for building in server.config.buildings.catalogue}
+        assert abilities["dormitory"] == {
+            "building_id": "dormitory",
+            "source_type": "own_active",
+            "owner": "player_one",
+            "hire_resource": None,
+            "hire_resource_chosen": False,
+            "hire_cost": 0,
+            "payable_to": None,
+            "usable": True,
+            "reason": None,
+            "status_text": "Usable: no payment.",
+        }
+        assert abilities["kogge"]["owner"] == "player_two"
+        assert abilities["kogge"]["payable_to"] == "player_two"
+        assert abilities["kogge"]["status_text"] == "Usable: pay 1 silver to Yellow."
+        assert abilities["mill"]["reason"] == "not_selected"
+
+        server.state = _with_stock(server.state, stone=4, silver=0, wheat=4)
+        server._refresh()
+        refreshed = next(
+            ability
+            for ability in server.payload["building_abilities"]
+            if ability["building_id"] == "kogge"
+        )
+        assert refreshed["reason"] == "insufficient_resource"
+        assert refreshed["status_text"] == (
+            "Not usable: insufficient silver to pay 1 silver to Yellow."
+        )
+    finally:
+        server.server_close()
+
+
+def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
+    statuses: dict[BuildingAbilityReason, str] = {}
+    for reason in BUILDING_ABILITY_REASONS:
+        statuses[reason] = play_server._building_ability_status_text(
+            BuildingAbilitySource(
+                building_key="test_building",
+                source_type="unavailable",
+                owner="player_two",
+                hire_resource="silver",
+                hire_cost=1,
+                payable_to="player_two",
+                usable=False,
+                reason=reason,
+            )
+        )
+        assert statuses[reason], reason
+    assert statuses[BuildingAbilityReason.DONATED] == (
+        "Not usable: this building was donated by Yellow."
+    )
+
+
+def test_cornucopia_turn_step_payload_keeps_the_enumerated_payment_resource() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS)
+    try:
+        hired = [step for step in server.payload["turn_steps"] if step["hire_payment"] is not None]
+        assert hired
+        assert {step["ability"]["hire_resource"] for step in hired} == {
+            step["hire_payment"] for step in hired
+        }
+        assert all(step["ability"]["hire_resource_chosen"] for step in hired)
+        for step in hired:
+            payee = step["ability"]["payable_to"]
+            displayed_payee = SEAT_COLOURS.get(payee, payee)
+            assert step["ability"]["status_text"] == (
+                f"Usable: pay 1 {step['hire_payment']} to {displayed_payee}."
+            )
+    finally:
+        server.server_close()
+
+
+def test_committed_hire_adds_the_engine_event_line_to_the_player_log() -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        kogge = next(
+            step for step in server.payload["turn_steps"] if step["building_id"] == "kogge"
+        )
+        server.apply_turn_step(kogge["step_id"], server.payload["state_token"])
+        assert server.payload["log_blocks"][-1]["lines"] == [
+            "BUILDING_HIRED: player_one hired Kogge from player_two; paid silver 1 to player_two"
+        ]
+        assert server.payload["log_blocks"][-1]["event_types"] == ["building_hired"]
+    finally:
+        server.server_close()
+
+
 @pytest.mark.parametrize(
     ("scenario_name", "payment_units"),
     [
@@ -5154,14 +5280,15 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
     the page has to be the template with its data placeholders filled in and nothing else done to
     it. Anything injected by a second route breaks this equality, and the guard reports that its
     own coverage has stopped being what it claims rather than quietly checking less. The template
-    carries the action candidates, committed turn steps, used-building set, resolution-window flag,
-    and server-decided phase-column scope as separate data.
+    carries the action candidates, committed turn steps, resolved building abilities, used-building
+    set, resolution-window flag, and server-decided phase-column scope as separate data.
     """
     expected = (
         render_play_view._TURN_SCRIPT.replace(
             "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
         )
         .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
+        .replace("__BUILDING_ABILITIES__", json.dumps(payload.get("building_abilities") or []))
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
@@ -5326,6 +5453,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # rather than an assumption the greps rest on.
     assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__BUILDING_ABILITIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__RESOLUTION_COMMITTED__") == 1
     assert render_play_view._TURN_SCRIPT.count("__PHASE_COLUMN_SCOPE__") == 1

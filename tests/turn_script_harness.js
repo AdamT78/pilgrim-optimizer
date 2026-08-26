@@ -3,7 +3,7 @@
 //
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
-// arrangementPointerRules }.
+// arrangementPointerRules, buildingAbilityTargets }.
 //
 // A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
 // |'combination'|'resource'|'seat'|'building'
@@ -206,6 +206,9 @@ const pairs = (job.combinations || []).map((value) =>
 const buildings = (job.buildings || []).map((id) =>
   makeElement('g', { 'data-building-choice-key': id }, [])
 );
+const buildingAbilityTargets = (job.buildingAbilityTargets || []).map((ability) =>
+  makeElement('g', { 'data-building-id': ability.building_id }, [])
+);
 
 function abbeyTokensFor(count) {
   const visible = Math.max(0, Math.min(8, Number(count) || 0));
@@ -317,7 +320,11 @@ const aside = makeElement(
   [].concat(prompts, keys, pairs, panels)
 );
 
-const root = makeElement('document', {}, [].concat([board, aside], buildings, seats));
+const root = makeElement(
+  'document',
+  {},
+  [].concat([board, aside], buildings, buildingAbilityTargets, seats)
+);
 
 const transcript = {
   offered: [],
@@ -336,6 +343,7 @@ const transcript = {
   controls: [],
   cubes: [],
   arrangements: [],
+  buildingAbilityTexts: [],
   overflow: [],
   posted: null,
   rewritten: false,
@@ -758,6 +766,11 @@ function snapshot() {
     if (states[name] === 'true' && offered.indexOf(name) === -1) offered.push(name);
   });
   const overflow = board.getAttribute('data-turn-preview-overflow') === 'true';
+  const buildingAbilityTexts = {};
+  buildingAbilityTargets.forEach((target) => {
+    buildingAbilityTexts[target.getAttribute('data-building-id')] =
+      target.getAttribute('data-building-ability-text') || '';
+  });
   return {
     offered,
     chosen,
@@ -776,6 +789,7 @@ function snapshot() {
     controlActive: activeStates,
     cubes: cubeSnapshot(),
     arrangements: arrangementSnapshot(),
+    buildingAbilityTexts,
     overflow,
   };
 }
@@ -800,6 +814,7 @@ function record() {
   transcript.controlActive.push(snap.controlActive);
   transcript.cubes.push(snap.cubes);
   transcript.arrangements.push(snap.arrangements);
+  transcript.buildingAbilityTexts.push(snap.buildingAbilityTexts);
   transcript.overflow.push(snap.overflow);
 }
 

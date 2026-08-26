@@ -77,7 +77,12 @@ from pilgrim.model.actions import (  # noqa: E402
     action_choice_summary_for_players,
     action_summary_for_players,
 )
-from pilgrim.rules.buildings import building_ability_source, building_by_id  # noqa: E402
+from pilgrim.rules.buildings import (  # noqa: E402
+    BUILDING_ABILITY_REASONS,
+    BuildingAbilityReason,
+    building_ability_source,
+    building_by_id,
+)
 from pilgrim.rules.transition import (  # noqa: E402
     turn_step_id,
     apply_action,
@@ -205,6 +210,10 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             "building_id": step.building_id,
             "source": step.source,
             "hire_payment": step.hire_payment,
+            # Applying the exact enumerated step is what carries a Cornucopia payer's concrete
+            # stock choice. Looking the source up again would find the Merchant's wildcard, so
+            # hand the page this applied source rather than asking it to reconstruct a payment.
+            "ability": _turn_step_ability_payload(state, config, step, result),
         }
         if isinstance(step, BuildingActivationStep):
             building_name = building_by_id(config.buildings, step.building_id).name
@@ -247,6 +256,137 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             )
         payload.append(entry)
     return payload
+
+
+def _building_ability_party_name(party: str | None) -> str | None:
+    """Name an ability's owner or payee exactly as the player-facing log does."""
+    if party is None or party == "bank":
+        return party
+    return SEAT_COLOURS.get(party, party)
+
+
+def _building_ability_status_text(source: Any) -> str:
+    """One player-facing status sentence from an engine-resolved ability source.
+
+    The browser receives this finished sentence with the source fields. It may place the sentence
+    beside a building, but it must never turn a rule code into player language itself.
+    """
+    if source.usable:
+        payee = _building_ability_party_name(source.payable_to)
+        if source.hire_cost > 0 and source.hire_resource is not None and payee:
+            return (
+                f"Usable: pay {source.hire_cost} {source.hire_resource} to "
+                f"{payee}."
+            )
+        return "Usable: no payment."
+
+    reason = source.reason or None
+    if reason is None:
+        return ""
+    if reason not in BUILDING_ABILITY_REASONS:
+        raise ValueError(f"Unknown building ability reason: {reason!r}")
+    if reason == BuildingAbilityReason.NOT_LIVE:
+        return "Not usable: this building is not live yet."
+    if reason == BuildingAbilityReason.NOT_SELECTED:
+        return "Not usable: this building was not selected for this game."
+    if reason == BuildingAbilityReason.DONATED:
+        owner_name = _building_ability_party_name(source.owner)
+        owner = f" by {owner_name}" if owner_name else ""
+        return f"Not usable: this building was donated{owner}."
+    if reason == BuildingAbilityReason.INSUFFICIENT_RESOURCE:
+        payee = _building_ability_party_name(source.payable_to)
+        if source.hire_cost > 0 and source.hire_resource is not None and payee:
+            return (
+                f"Not usable: insufficient {source.hire_resource} to pay {source.hire_cost} "
+                f"{source.hire_resource} to {payee}."
+            )
+        return "Not usable: the hire payment cannot be afforded."
+    if reason == BuildingAbilityReason.MERCHANT_RESOURCE_NONE:
+        return "Not usable: the Merchant names no hire resource."
+    raise AssertionError(f"Known building ability reason has no player-facing status: {reason!r}")
+
+
+def _building_ability_source_payload(source: Any) -> dict[str, Any]:
+    """Serialize every fact the browser needs to describe one resolved building source."""
+    return {
+        "building_id": source.building_key,
+        "source_type": source.source_type,
+        "owner": source.owner,
+        "hire_resource": source.hire_resource,
+        "hire_resource_chosen": source.hire_resource_chosen,
+        "hire_cost": source.hire_cost,
+        "payable_to": source.payable_to,
+        "usable": source.usable,
+        "reason": source.reason or None,
+        # This is deliberately a value, not a browser-side mapping from `reason`: an absent
+        # engine reason produces no sentence instead of a helpful-looking fiction.
+        "status_text": _building_ability_status_text(source),
+    }
+
+
+def building_abilities_payload(state: Any, config: Any) -> list[dict[str, Any]]:
+    """Resolve every catalogue building for the active player in this exact window."""
+    return [
+        _building_ability_source_payload(
+            building_ability_source(
+                state,
+                config,
+                acting_player=state.active_player,
+                building_key=building.id,
+            )
+        )
+        for building in config.buildings.catalogue
+    ]
+
+
+def _turn_step_ability_payload(state: Any, config: Any, step: Any, result: Any) -> dict[str, Any]:
+    """Serialize the source an enumerated step actually applies, including a Cornucopia pick."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=step.building_id,
+    )
+    payload = _building_ability_source_payload(source)
+    hire_event = next(
+        (
+            event
+            for event in result.events
+            if event.event_type is EventType.BUILDING_HIRED
+            and event.action_id == turn_step_id(step)
+        ),
+        None,
+    )
+    if hire_event is None:
+        return payload
+
+    details = dict(hire_event.details)
+    resource = str(details.get("resource", "none"))
+    amount = int(details.get("amount", 0))
+    payee = str(details.get("payee", "none"))
+    if amount <= 0 or resource == "none":
+        return payload | {
+            "usable": True,
+            "reason": None,
+            "hire_resource": None,
+            "hire_resource_chosen": False,
+            "hire_cost": 0,
+            "payable_to": None,
+            "status_text": "Usable: no payment.",
+        }
+
+    # `resource` is the payment on the applied step's event. It is not re-resolved from the
+    # source, which matters when the Merchant's Cornucopia let the payer choose this stock.
+    payee_name = _building_ability_party_name(payee)
+    return payload | {
+        "usable": True,
+        "reason": None,
+        "hire_resource": resource,
+        "hire_resource_chosen": resource != source.hire_resource,
+        "hire_cost": amount,
+        "payable_to": payee,
+        "status_text": f"Usable: pay {amount} {resource} to {payee_name}.",
+    }
 
 
 class StaleStateToken(Exception):
@@ -2284,6 +2424,7 @@ class PlayServer(ThreadingHTTPServer):
             state_token=self.token,
             turn_candidates=turn_candidates(self.state, self.config),
             turn_steps=turn_steps_payload(self.state, self.config),
+            building_abilities=building_abilities_payload(self.state, self.config),
             log=list(self.log_lines),
             log_blocks=[
                 dict(
@@ -2393,6 +2534,28 @@ class PlayServer(ThreadingHTTPServer):
                     f"no legal turn step with id {submitted_id!r} in this position"
                 )
             self.state = apply_engine_turn_step(self.state, self.config, chosen)
+            event_lines = [
+                line
+                for line in (
+                    format_event_for_players(event, self.config)
+                    for event in self.state.events
+                    if event.action_id == submitted_id
+                )
+                if line is not None
+            ]
+            if event_lines:
+                self.log_lines.extend(event_lines)
+                self.log_blocks.append(
+                    {
+                        "lines": event_lines,
+                        "round_end": False,
+                        "event_types": [
+                            event.event_type.value
+                            for event in self.state.events
+                            if event.action_id == submitted_id
+                        ],
+                    }
+                )
             self._refresh()
 
     def reset_turn(self, submitted_token: str) -> None:

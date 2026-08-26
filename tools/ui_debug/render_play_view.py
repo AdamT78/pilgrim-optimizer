@@ -309,6 +309,7 @@ def _building_tooltip_templates(catalog: dict) -> str:
             f'<span class="building-tooltip-category">{escape(str(building["category"]))}</span>'
             "</div>"
             f'<div class="building-tooltip-description">{description}</div>'
+            '<div class="building-tooltip-ability" data-building-tooltip-ability="true"></div>'
             "</div>"
             + _tooltip_deckle_layer("building-tooltip-shadow")
             + _tooltip_deckle_layer("building-tooltip-halo")
@@ -384,6 +385,10 @@ def building_tooltip_styles() -> str:
   .building-tooltip-description {
     max-width: 340px; font-size: 11px; line-height: 1.38; overflow-wrap: break-word;
   }
+  .building-tooltip-ability {
+    max-width: 340px; margin-top: 8px; padding-top: 7px; border-top: 1px solid #B39B72;
+    color: #5F442B; font-size: 11px; font-weight: 700; line-height: 1.38; overflow-wrap: break-word;
+  }
   .building-tooltip-resource {
     display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .04em;
     vertical-align: -.22em; overflow: visible;
@@ -444,6 +449,13 @@ def building_tooltip_script() -> str:
       var template = templateFor(id);
       if (!template) { return; }
       tooltip.innerHTML = template.innerHTML;
+      var ability = tooltip.querySelector('[data-building-tooltip-ability="true"]');
+      var abilityText = target.getAttribute('data-building-ability-text');
+      if (ability && abilityText) {
+        ability.textContent = abilityText;
+      } else if (ability) {
+        ability.remove();
+      }
       tooltip.setAttribute('data-building-tooltip-visible', 'true');
       tooltip.setAttribute('aria-hidden', 'false');
       var targetBox = canonicalAnchor(target, id).getBoundingClientRect();
@@ -1256,6 +1268,7 @@ def render_play_view_html(
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
+    building_abilities = payload.get("building_abilities") or []
     turn_surface = bool(candidates or turn_steps)
     # The phase column remains in place even when no turn surface is active.
     turn_panel_visible = True
@@ -1377,6 +1390,7 @@ def render_play_view_html(
     script = (
         _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
+        .replace("__BUILDING_ABILITIES__", json.dumps(building_abilities))
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
@@ -1402,7 +1416,7 @@ def render_play_view_html(
                 )
             ),
         )
-        if turn_surface
+        if turn_surface or building_abilities
         else ""
     )
     turn_css = turn_styles(active_color) if turn_panel_visible else ""

@@ -13,6 +13,33 @@
   var PHASE_COLUMN_SCOPE = __PHASE_COLUMN_SCOPE__;
   var TOKEN = __TOKEN__;
   var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
+  var BUILDING_ABILITIES = __BUILDING_ABILITIES__;
+  var buildingAbilityTargets = document.querySelectorAll('[data-building-id]');
+
+  function buildingAbilityFor(buildingId) {
+    for (var index = 0; index < BUILDING_ABILITIES.length; index += 1) {
+      if (BUILDING_ABILITIES[index].building_id === buildingId) {
+        return BUILDING_ABILITIES[index];
+      }
+    }
+    return null;
+  }
+
+  function renderBuildingAbilityTexts(liveSteps) {
+    Array.prototype.forEach.call(buildingAbilityTargets, function (target) {
+      var buildingId = target.getAttribute('data-building-id');
+      var ability = buildingAbilityFor(buildingId);
+      if (conversionChosen && conversionChosen[0] === buildingId && liveSteps.length === 1) {
+        ability = liveSteps[0].ability || ability;
+      }
+      target.setAttribute(
+        'data-building-ability-text',
+        ability && typeof ability.status_text === 'string' ? ability.status_text : ''
+      );
+    });
+  }
+
+  renderBuildingAbilityTexts([]);
   if (!CANDIDATES.length && !TURN_STEPS.length) { return; }
 
   var board = document.querySelector('[data-component="duty-wheel"]');
@@ -289,10 +316,7 @@
     }
     if (turnStepResourceHint) {
       turnStepResourceHint.textContent = relocation
-        ? (live.length ? live[0].prompt : '')
-        : piety
-        ? (conversionChosen.length > 2 ? '' : 'click a piety position on the track')
-        : resource ? 'click the live resource pill' : '';
+        ? (live.length ? live[0].prompt : '') : '';
     }
     var hirePayments = [];
     if (piety && conversionChosen.length >= 3) {
@@ -360,6 +384,7 @@
         ? conversionChosen[2]
         : pietyAmount === null ? '' : pietyAmount;
     }
+    renderBuildingAbilityTexts(live);
   }
 
   function tokenVisible(token) {

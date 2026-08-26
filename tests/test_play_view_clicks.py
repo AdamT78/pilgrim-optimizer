@@ -1079,8 +1079,8 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     hint = page.locator('[data-turn-step-resource-hint="true"]')
     answer_row = page.locator('[data-turn-step-resource-row="true"]')
     assert label.is_visible()
-    assert hint.is_visible()
-    assert hint.inner_text().strip()
+    assert not hint.is_visible()
+    assert hint.inner_text() == ""
     assert slot.inner_text() == ""
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
     _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-piety-answer-pending.png")
@@ -1096,7 +1096,7 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert label.is_visible()
     assert slot.is_visible()
     assert slot.inner_text() == str(expected_amount_by_destination[target])
-    assert hint.inner_text() == ""
+    assert not hint.is_visible()
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
     _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-piety-answer-chosen.png")
 
@@ -1198,12 +1198,12 @@ def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(
         row = page.locator('[data-turn-step-resource-row="true"]')
         label = page.locator('[data-turn-step-answer-label="true"]')
         slot = page.locator('[data-turn-step-amount-total="true"]')
-        hint = page.locator('[data-turn-step-resource-hint="true"]')
         assert row.is_visible(), f"answer row disappeared for {building_id}/{direction}"
         assert label.is_visible(), f"answer label disappeared for {building_id}/{direction}"
-        assert slot.inner_text().strip() or hint.inner_text().strip(), (
-            f"bare answer label for {building_id}/{direction}"
-        )
+        assert (
+            page.locator('[data-resource-choice-key][data-turn-offered="true"]').count()
+            or page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count()
+        ), f"no live answer control for {building_id}/{direction}"
         assert prompt.bounding_box()["height"] == pytest.approx(initial_height, abs=0.1)
 
         answer = page.query_selector('[data-resource-choice-key][data-turn-offered="true"]')
@@ -2844,6 +2844,12 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
         '[data-turn-step-building-id="kogge"][data-turn-step-offered="true"]'
     ).first
     assert kogge.count() == 1, "Yellow's Kogge hire step was not offered"
+    kogge.hover()
+    tooltip = page.locator('[data-building-tooltip="true"]')
+    assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
+    assert tooltip.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Usable: pay 1 silver to Yellow."
+    )
     _click_handle_centre(page, kogge.element_handle(), require_hit=True)
     page.wait_for_timeout(20)
     assert _confirm_enabled(page), "Kogge's complete hire step did not enable Confirm"
@@ -2859,6 +2865,9 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
     )
 
     assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver + 1
+    assert page.locator(".log-event").all_inner_texts() == [
+        "BUILDING_HIRED: Red hired Kogge from Yellow; paid silver 1 to Yellow"
+    ]
     assert choose_city_and_count_reversed_arrows() > 0
     _click_handle_centre(
         page,
@@ -3493,8 +3502,7 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     _click_handle_centre(page, direction.element_handle(), require_hit=True)
     assert page.locator('[data-turn-step-answer-label="true"]').inner_text() == "Amount"
     hint = page.locator('[data-turn-step-resource-hint="true"]')
-    assert hint.is_visible()
-    assert hint.inner_text() == "click a piety position on the track"
+    assert not hint.is_visible()
     assert page.locator('[data-component="play-turn"]').bounding_box()["height"] == pytest.approx(
         turn_height, abs=0.1
     )
