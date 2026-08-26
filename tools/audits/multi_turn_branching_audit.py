@@ -38,8 +38,10 @@ from pilgrim.rules.transition import (
 from pilgrim.setup.generator import generate_setup_scenario
 
 if __package__:
+    from .audit_helpers import _format_bounded_count, project_root
     from .turn_step_metrics import collect_turn_step_metrics
 else:
+    from audit_helpers import _format_bounded_count, project_root
     from turn_step_metrics import collect_turn_step_metrics
 
 _TRACE_ORDER: tuple[str, ...] = (
@@ -97,7 +99,9 @@ class TraceStepRow:
     legal_action_count: int
     turn_step_count: int
     reachable_step_sequences: int
+    distinct_reachable_states: int
     action_step_sequence_product: int
+    action_distinct_state_product: int
     sequence_walk_truncated: bool
     dropped_step_sequence_prefixes: tuple[tuple[str, ...], ...]
     additional_dropped_step_sequence_prefix_count: int
@@ -132,10 +136,6 @@ class TraceStepRow:
 class TraceResult:
     definition: TraceDefinition
     rows: tuple[TraceStepRow, ...]
-
-
-def project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
 
 
 def configured_trace_names() -> tuple[str, ...]:
@@ -445,7 +445,9 @@ def _run_trace_rows(
             legal_action_count=len(actions_before_steps),
             turn_step_count=step_metrics.total_turn_steps,
             reachable_step_sequences=step_metrics.reachable_step_sequences,
+            distinct_reachable_states=step_metrics.distinct_reachable_states,
             action_step_sequence_product=step_metrics.action_step_sequence_product,
+            action_distinct_state_product=step_metrics.action_distinct_state_product,
             sequence_walk_truncated=step_metrics.sequence_walk_truncated,
             dropped_step_sequence_prefixes=step_metrics.dropped_step_sequence_prefixes,
             additional_dropped_step_sequence_prefix_count=(
@@ -560,11 +562,15 @@ def _format_trace_result(result: TraceResult) -> list[str]:
         f"Description: {result.definition.description}",
         "Branching totals:",
         (
-            "Step  AbsTurn  Round  Season  TIR  Player       Legal  Steps  StepSeq  Act×Seq  "
+            "Step  AbsTurn  Round  Season  TIR  Player       Legal  Steps  StepSeq  States  "
+            "Act×Seq  "
+            "Act×State  "
             "Unique  Dups  HireSt  ConvSt  GrainSt  RelocSt  RouteMod  Kogge  Cloisters  K+C"
         ),
         (
-            "----  -------  -----  ------  ---  -----------  -----  -----  -------  -------  "
+            "----  -------  -----  ------  ---  -----------  -----  -----  -------  ------  "
+            "-------  "
+            "---------  "
             "------  ----  ------  ------  -------  -------  --------  -----  ---------  ---"
         ),
     ]
@@ -573,8 +579,16 @@ def _format_trace_result(result: TraceResult) -> list[str]:
             row.reachable_step_sequences,
             truncated=row.sequence_walk_truncated,
         )
+        state_count = _format_bounded_count(
+            row.distinct_reachable_states,
+            truncated=row.sequence_walk_truncated,
+        )
         action_step_product = _format_bounded_count(
             row.action_step_sequence_product,
+            truncated=row.sequence_walk_truncated,
+        )
+        action_state_product = _format_bounded_count(
+            row.action_distinct_state_product,
             truncated=row.sequence_walk_truncated,
         )
         lines.append(
@@ -587,7 +601,9 @@ def _format_trace_result(result: TraceResult) -> list[str]:
             f"{row.legal_action_count:>5}  "
             f"{row.turn_step_count:>5}  "
             f"{sequence_count:>7}  "
+            f"{state_count:>6}  "
             f"{action_step_product:>7}  "
+            f"{action_state_product:>9}  "
             f"{row.unique_action_id_count:>6}  "
             f"{row.duplicate_action_id_count:>4}  "
             f"{row.hired_turn_steps:>6}  "
@@ -660,7 +676,7 @@ def _format_step_sequence_truncations(rows: tuple[TraceStepRow, ...]) -> list[st
     if not truncated_rows:
         return []
 
-    lines = ["Step-sequence walk truncations (reported counts are lower bounds):"]
+    lines = ["Step-sequence/state walk truncations (reported counts are lower bounds):"]
     for row in truncated_rows:
         shown_count = len(row.dropped_step_sequence_prefixes)
         lines.append(f"- step {row.step} retained {shown_count} dropped sequence prefixes:")
@@ -680,7 +696,9 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
     max_legal = max(rows, key=lambda row: row.legal_action_count)
     max_turn_steps = max(rows, key=lambda row: row.turn_step_count)
     max_step_sequences = max(rows, key=lambda row: row.reachable_step_sequences)
+    max_distinct_states = max(rows, key=lambda row: row.distinct_reachable_states)
     max_action_step_product = max(rows, key=lambda row: row.action_step_sequence_product)
+    max_action_state_product = max(rows, key=lambda row: row.action_distinct_state_product)
     max_dups = max(rows, key=lambda row: row.duplicate_action_id_count)
     max_hired = max(rows, key=lambda row: row.hired_turn_steps)
     max_combined = max(rows, key=lambda row: row.actions_with_kogge_cloisters_combined)
@@ -696,6 +714,14 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
         max_action_step_product.action_step_sequence_product,
         truncated=max_action_step_product.sequence_walk_truncated,
     )
+    max_distinct_state_count = _format_bounded_count(
+        max_distinct_states.distinct_reachable_states,
+        truncated=max_distinct_states.sequence_walk_truncated,
+    )
+    max_action_state_count = _format_bounded_count(
+        max_action_state_product.action_distinct_state_product,
+        truncated=max_action_state_product.sequence_walk_truncated,
+    )
     likely_driver = _likely_branching_driver(max_action_step_product)
     return [
         "Summary:",
@@ -710,6 +736,16 @@ def _format_trace_summary(rows: tuple[TraceStepRow, ...]) -> list[str]:
             "- max action×step-sequence branches: "
             f"{max_action_step_count} "
             f"at step {max_action_step_product.step}"
+        ),
+        (
+            "- max distinct reachable states: "
+            f"{max_distinct_state_count} "
+            f"at step {max_distinct_states.step}"
+        ),
+        (
+            "- max action×distinct-state branches: "
+            f"{max_action_state_count} "
+            f"at step {max_action_state_product.step}"
         ),
         f"- max duplicate action IDs: {max_dups.duplicate_action_id_count} at step {max_dups.step}",
         f"- max hired turn steps: {max_hired.hired_turn_steps} at step {max_hired.step}",
@@ -769,11 +805,6 @@ def _format_overall_summary(results: tuple[TraceResult, ...]) -> list[str]:
         f"- total deterministic turn steps committed: {committed_steps}",
         f"- total duplicate action IDs observed: {duplicate_total}",
     ]
-
-
-def _format_bounded_count(value: int, *, truncated: bool) -> str:
-    return f">={value}" if truncated else str(value)
-
 
 def _select_preferred_safe_action(
     actions: tuple[GameAction, ...],

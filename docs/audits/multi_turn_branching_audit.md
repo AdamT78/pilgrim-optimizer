@@ -46,7 +46,10 @@ Each trace step reports:
 - committed-step branching counts:
   - `turn_step_count`
   - `reachable_step_sequences` (including the empty, no-commit sequence)
+  - `distinct_reachable_states` (the distinct engine states reached by those same commit-order
+    sequences)
   - `action_step_sequence_product` (`Act×Seq`)
+  - `action_distinct_state_product` (`Act×State`)
   - `hired_turn_steps`
   - `conversion_turn_steps`
   - `grain_store_conversion_turn_steps`
@@ -104,11 +107,12 @@ only one action.
 ## Limitations
 
 - Trace selectors are intentionally simple and deterministic, not optimal strategy.
-- The 10,000-prefix step-sequence walk cap prints lower bounds (`>=…`), keeps the first eight
-  stable dropped prefixes, and prints the count of additional omitted prefixes. `Act×Seq`
-  multiplies the current legal-action count by reachable step prefixes; it is a comparable
-  branching diagnostic, not a future step-aware search-node count because step commits can alter
-  the next legal-action set.
+- The 10,000-prefix walk cap bounds both the sequence and distinct-state counts. It prints every
+  bounded count as a lower bound (`>=…`), keeps the first eight stable dropped prefixes, and
+  prints the count of additional omitted prefixes. `Act×Seq` multiplies the current legal-action
+  count by reachable step prefixes; `Act×State` uses the distinct resulting states and shows the
+  potential benefit of state memoisation. Neither is a future step-aware search-node count because
+  step commits can alter the next legal-action set.
 - Counts are generated-choice diagnostics, not semantic proof of play quality.
 - Generated 3p/4p traces use fixed seeds and normal-play overrides to probe branching in turn flow.
 - Current action model stores one route tuple on actions; there is no separate candidate-vs-actual

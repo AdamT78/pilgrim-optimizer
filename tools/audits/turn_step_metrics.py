@@ -32,7 +32,9 @@ class TurnStepMetrics:
     grain_store_conversion_turn_steps: int
     relocation_turn_steps: int
     reachable_step_sequences: int
+    distinct_reachable_states: int
     action_step_sequence_product: int
+    action_distinct_state_product: int
     sequence_walk_truncated: bool
     dropped_step_sequence_prefixes: tuple[tuple[str, ...], ...]
     additional_dropped_step_sequence_prefix_count: int
@@ -65,15 +67,18 @@ def collect_turn_step_metrics(
 
     The walk counts every reachable sequence prefix once. It intentionally has no state
     canonicalization: distinct commit orders are player choices and therefore distinct search
-    branches even if a future engine optimization might merge their outcomes. At the cap, the
-    report retains the first few omitted sequence prefixes in stable step-ID order and counts any
-    additional omitted prefixes rather than presenting the bounded count as complete.
+    branches. Alongside that upper-bound count, it records the distinct resulting states reached
+    by those prefixes to show what a future state-memoising search could merge. At the cap, both
+    counts are lower bounds. The report retains the first few omitted sequence prefixes in stable
+    step-ID order and counts any additional omitted prefixes rather than presenting the bounded
+    walk as complete.
     """
     if sequence_cap < 1:
         raise ValueError("sequence_cap must be at least 1.")
 
     offered_steps = tuple(turn_steps(state, config))
     sequence_count = 0
+    reachable_states: set[GameState] = set()
     truncated = False
     dropped_prefixes: list[tuple[str, ...]] = []
     additional_dropped_prefix_count = 0
@@ -90,6 +95,7 @@ def collect_turn_step_metrics(
 
         # Every prefix is a choice point because the player may stop committing steps here.
         sequence_count += 1
+        reachable_states.add(current_state)
         for step in sorted(turn_steps(current_state, config), key=turn_step_id):
             walk(
                 apply_turn_step(current_state, config, step),
@@ -106,7 +112,9 @@ def collect_turn_step_metrics(
         ),
         relocation_turn_steps=sum(step_is_relocation(step) for step in offered_steps),
         reachable_step_sequences=sequence_count,
+        distinct_reachable_states=len(reachable_states),
         action_step_sequence_product=legal_action_count * sequence_count,
+        action_distinct_state_product=legal_action_count * len(reachable_states),
         sequence_walk_truncated=truncated,
         dropped_step_sequence_prefixes=tuple(dropped_prefixes),
         additional_dropped_step_sequence_prefix_count=additional_dropped_prefix_count,
