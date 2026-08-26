@@ -47,6 +47,7 @@ else:
 _TRACE_ORDER: tuple[str, ...] = (
     "basic_2p_round_flow",
     "movement_hotspot_2p",
+    "pulpit_hire_2p",
     "grain_store_2p",
     "generated_setup_3p",
     "generated_setup_4p",
@@ -224,6 +225,14 @@ def trace_definitions() -> tuple[TraceDefinition, ...]:
             steps=6,
             loader=_load_movement_hotspot_2p,
             selector=_select_movement_hotspot_action,
+            turn_step_selector=_select_lowest_turn_step,
+        ),
+        TraceDefinition(
+            name="pulpit_hire_2p",
+            description="2p market-hired Pulpit step before sowing.",
+            steps=2,
+            loader=_load_pulpit_hire_2p,
+            selector=_select_preferred_safe_action,
             turn_step_selector=_select_lowest_turn_step,
         ),
         TraceDefinition(
@@ -887,6 +896,10 @@ def _load_movement_hotspot_2p(root: Path) -> LoadedScenario:
         player_id=PlayerId.PLAYER_TWO,
     )
     return replace(scenario, state=adjusted_state)
+
+
+def _load_pulpit_hire_2p(root: Path) -> LoadedScenario:
+    return load_scenario(root / "scenarios" / "playtest" / "pulpit_2p.json")
 
 
 def _load_grain_store_2p(root: Path) -> LoadedScenario:

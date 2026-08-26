@@ -111,6 +111,20 @@ def test_trace_rows_are_deterministic_and_have_no_duplicate_action_ids() -> None
     assert audit._likely_branching_driver(grain_store_rows[0]) == "committed turn-step branching"
 
 
+def test_pulpit_trace_records_hired_step_branching_before_sowing() -> None:
+    result = audit.collect_trace_results(trace_names=("pulpit_hire_2p",))[0]
+    first_row = result.rows[0]
+
+    assert first_row.legal_action_count == 3
+    assert first_row.turn_step_count == 1
+    assert first_row.reachable_step_sequences == 2
+    assert first_row.hired_turn_steps == 1
+    assert first_row.pre_action_step_commits
+    assert "building_activation:pulpit:from:market:pay:wheat" in (
+        first_row.pre_action_step_commits[0].selected_step_id
+    )
+
+
 def test_generated_setup_three_and_four_player_traces_run() -> None:
     results = audit.collect_trace_results(
         trace_names=("generated_setup_3p", "generated_setup_4p"),

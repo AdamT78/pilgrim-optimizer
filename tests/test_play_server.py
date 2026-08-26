@@ -70,12 +70,14 @@ PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 PLAYTEST_CONVERSIONS = "conversions_2p.json"
 PLAYTEST_MOVEMENT = "movement_2p.json"
+PLAYTEST_PULPIT = "pulpit_2p.json"
 PLAYTEST_POSITION_NAMES = (
     PLAYTEST_CLOISTERS,
     PLAYTEST_CLOISTERS_LOOP,
     PLAYTEST_KOGGE_AND_CLOISTERS,
     PLAYTEST_CONVERSIONS,
     PLAYTEST_MOVEMENT,
+    PLAYTEST_PULPIT,
 )
 CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
 ROUTE_BUILDING_REFUSAL_FIELDS = frozenset(
@@ -535,10 +537,12 @@ def test_setup_page_lists_discovered_playtest_positions_with_blank_fresh_default
     assert f'value="{PLAYTEST_KOGGE_AND_CLOISTERS}"' in page
     assert f'value="{PLAYTEST_CONVERSIONS}"' in page
     assert f'value="{PLAYTEST_MOVEMENT}"' in page
+    assert f'value="{PLAYTEST_PULPIT}"' in page
     assert ">cloisters_reach_2p<" in page
     assert ">cloisters_loop_2p<" in page
     assert ">kogge_and_cloisters_2p<" in page
     assert ">movement_2p<" in page
+    assert ">pulpit_2p<" in page
 
 
 def test_setup_page_hides_extra_rows_by_computed_display_not_only_hidden_attribute() -> None:
@@ -634,6 +638,7 @@ def test_start_rejects_an_unknown_test_position_name() -> None:
         (PLAYTEST_KOGGE_AND_CLOISTERS, "kogge_and_cloisters_2p", ["kogge", "cloisters"], {"stone": 9, "silver": 9, "wheat": 9}),
         (PLAYTEST_CONVERSIONS, "conversions_2p", ["stone_yard", "grain_store"], {"stone": 9, "silver": 9, "wheat": 9}),
         (PLAYTEST_MOVEMENT, "movement_2p", ["cloisters", "dormitory"], {"stone": 4, "silver": 9, "wheat": 4}),
+        (PLAYTEST_PULPIT, "pulpit_2p", [], {"stone": 0, "silver": 0, "wheat": 1}),
     ],
 )
 def test_starting_from_test_position_uses_the_file_count_and_seed(
@@ -764,8 +769,18 @@ def test_every_playtest_scenario_loads_validates_and_can_be_served() -> None:
         seen.add(path.name)
         checked += 1
 
-    assert checked == 5
+    assert checked == 6
     assert seen == set(PLAYTEST_POSITION_NAMES)
+
+
+def test_pulpit_playtest_offers_the_hired_step_for_hand_exercise() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_PULPIT))
+    steps = play_server.turn_steps_payload(scenario.state, scenario.config)
+    pulpit = next(step for step in steps if step["building_id"] == "pulpit")
+
+    assert pulpit["source"] == "market"
+    assert pulpit["hire_payment"] == "wheat"
+    assert pulpit["ability"]["status_text"] == "Usable: pay 1 wheat to bank."
 
 
 def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:

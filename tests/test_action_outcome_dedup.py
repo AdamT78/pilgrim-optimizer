@@ -50,7 +50,10 @@ from pilgrim.search.exact import solve_exact
 REPO = Path(__file__).resolve().parents[1]
 
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
-MIN_SEARCHABLE_GENERATIONS = 62
+# Pulpit's two formerly search-safe modifier positions now begin with a committed turn step. They
+# are exercised by the Pulpit step tests instead; this floor continues to guard the remaining
+# action-only search comparison population.
+MIN_SEARCHABLE_GENERATIONS = 60
 
 # The corpus is every committed position that offers one of these sequences, found rather than
 # listed so that a scenario added later is covered without anyone remembering to add it here. The
@@ -438,8 +441,9 @@ def test_the_search_lands_on_the_same_line(generations) -> None:
         )
 
     assert searched > 0
-    # The committed modifier-building hires leave 62 searchable generations today. Keep a floor
-    # so future committed buildings cannot shrink this comparison population unnoticed.
+    # The committed modifier-building hires, including Pulpit's newly committed step, leave 60
+    # searchable generations today. Keep a floor so future committed buildings cannot shrink this
+    # comparison population unnoticed.
     assert searched >= MIN_SEARCHABLE_GENERATIONS, (
         f"only {searched} search-safe generations remain; {skipped_at_opening} begin with steps and "
         f"{skipped_by_search_guard} reach them during search"

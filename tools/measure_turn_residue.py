@@ -147,10 +147,6 @@ WHY_NOT_REACHED: tuple[tuple[tuple[str, ...], str], ...] = (
         " second building to take for free",
     ),
     (
-        ("workforce_move_building_id", "workforce_move_building_source"),
-        "pulpit in reach and a village worker to send to the abbey",
-    ),
-    (
         (
         ),
         "library in reach, and an acolyte still in the city once the turn has resolved",

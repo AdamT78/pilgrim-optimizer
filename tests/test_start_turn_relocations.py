@@ -334,7 +334,6 @@ def test_full_turn_actions_and_ids_carry_no_start_turn_relocation_fields() -> No
 @pytest.mark.parametrize(
     ("scenario_path", "building_id", "field_name"),
     (
-        ("scenarios/pulpit_active_move_serf_001.json", "pulpit", "workforce_move_building_id"),
         (
             "scenarios/scriptorium_active_majority_selected_duty_001.json",
             "scriptorium",
@@ -345,14 +344,9 @@ def test_full_turn_actions_and_ids_carry_no_start_turn_relocation_fields() -> No
             "customs_house",
             "taxation_majority_building_id",
         ),
-        (
-            "scenarios/wagon_yard_active_free_hire_market_pulpit_001.json",
-            "wagon_yard",
-            "free_hire_enabler_building_id",
-        ),
     ),
 )
-def test_dormitory_step_can_combine_with_each_previously_excluded_modifier(
+def test_dormitory_step_can_combine_with_each_remaining_full_turn_modifier(
     scenario_path: str,
     building_id: str,
     field_name: str,
@@ -368,6 +362,20 @@ def test_dormitory_step_can_combine_with_each_previously_excluded_modifier(
         getattr(action, field_name) == building_id
         for action in legal_actions(after_step, scenario.config)
     )
+
+
+def test_dormitory_step_can_combine_with_wagon_yards_free_pulpit_step() -> None:
+    scenario = load_scenario("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json")
+    state = _with_active_building(scenario, "dormitory")
+    dormitory_step = _first(
+        turn_steps(state, scenario.config), lambda candidate: candidate.building_id == "dormitory"
+    )
+    after_dormitory = apply_turn_step(state, scenario.config, dormitory_step)
+    pulpit_step = _first(
+        turn_steps(after_dormitory, scenario.config), lambda candidate: candidate.building_id == "pulpit"
+    )
+
+    assert pulpit_step.hire_payment is None
 
 
 def test_inquisition_step_can_combine_with_bank() -> None:

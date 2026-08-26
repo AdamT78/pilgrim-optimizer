@@ -220,6 +220,8 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             prompt = (
                 "Activate Guild: move the Merchant clockwise +1 Duty tile."
                 if step.building_id == "guild"
+                else "Activate Pulpit."
+                if step.building_id == "pulpit"
                 else f"Hire {building_name}: pay to use its ability this turn."
             )
             entry.update(
@@ -701,7 +703,6 @@ HIRE_PAYMENT_OWNER_FIELDS: tuple[tuple[str, str], ...] = (
     ("hired_building_id", "hired_building_source"),
     ("building_conversion_id", "building_conversion_source"),
     ("bank_payment_building_id", "bank_payment_building_source"),
-    ("workforce_move_building_id", "workforce_move_building_source"),
     ("free_hire_target_building_id", "free_hire_target_building_source"),
     ("effective_acolyte_building_id", "effective_acolyte_building_source"),
 )
@@ -859,8 +860,6 @@ _PREVIEW_EFFECT_ACTION_FIELDS: tuple[str, ...] = (
     "free_hire_target_building_source",
     "effective_acolyte_building_id",
     "effective_acolyte_building_source",
-    "workforce_move_building_id",
-    "workforce_move_building_source",
     "hired_building_id",
     "hired_building_source",
     "hire_payments",

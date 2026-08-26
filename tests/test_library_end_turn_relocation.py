@@ -234,7 +234,7 @@ def test_library_can_follow_a_committed_start_turn_relocation() -> None:
     assert _library_steps(resolution.state, scenario.config)
 
 
-def test_library_can_follow_a_pulpit_full_turn_action() -> None:
+def test_library_can_follow_a_committed_pulpit_step() -> None:
     scenario = load_scenario("scenarios/library_active_city_to_duty_001.json")
     player = scenario.state.active_player
     player_state = scenario.state.player_state(player)
@@ -248,13 +248,16 @@ def test_library_can_follow_a_pulpit_full_turn_action() -> None:
             ),
         ),
     )
+    pulpit_step = next(
+        step for step in turn_steps(state, scenario.config) if step.building_id == "pulpit"
+    )
+    after_pulpit = apply_turn_step(state, scenario.config, pulpit_step)
     action = next(
         action
-        for action in legal_actions(state, scenario.config)
-        if action.workforce_move_building_id == "pulpit"
-        and action.resolution is TurnResolutionType.PRODUCE_WHEAT
+        for action in legal_actions(after_pulpit, scenario.config)
+        if action.resolution is TurnResolutionType.PRODUCE_WHEAT
     )
-    resolution = apply_action(state, action, scenario.config)
+    resolution = apply_action(after_pulpit, action, scenario.config)
     assert _library_steps(resolution.state, scenario.config), (
-        "Library must remain available after Pulpit's FullTurnAction modifier"
+        "Library must remain available after Pulpit's committed turn step"
     )

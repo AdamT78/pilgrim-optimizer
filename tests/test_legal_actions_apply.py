@@ -112,7 +112,6 @@ def _hired_sources(action) -> int:
         (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
-        (action.workforce_move_building_id, action.workforce_move_building_source),
         (action.bank_payment_building_id, action.bank_payment_building_source),
     )
     return sum(
