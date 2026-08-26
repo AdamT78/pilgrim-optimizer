@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import BuildingConversionStep, EndTurnAction
+from pilgrim.model.actions import EndTurnAction
 from pilgrim.model.enums import PlayerId
 from pilgrim.rules.transition import (
     apply_action,

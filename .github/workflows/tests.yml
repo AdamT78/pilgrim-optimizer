@@ -20,6 +20,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
+      # Deliberately F-only: undefined/shadowed names must gate, while existing E501s do not.
+      - run: ruff check --select F
       - name: Require Node.js for turn-script harness tests
         run: |
           if ! command -v node >/dev/null; then
@@ -39,3 +41,179 @@ jobs:
         run: pytest -m slow -p no:cacheprovider --ignore=tests/test_play_view_clicks.py
       - name: Run browser click guards
         run: pytest -q -p no:cacheprovider tests/test_play_view_clicks.py
+
+  generation-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the package for generation captures
+        run: pip install -e .
+      - name: Detect capture-tooling changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            tools/capture_legal_actions.py tools/capture_turn_steps.py; then
+            echo "CAPTURE_TOOLING_CHANGED=false" >>"$GITHUB_ENV"
+          else
+            status=$?
+            if [ "$status" -ne 1 ]; then
+              exit "$status"
+            fi
+            echo "CAPTURE_TOOLING_CHANGED=true" >>"$GITHUB_ENV"
+          fi
+      - name: Capture base generation
+        env:
+          REVISION: ${{ github.event.pull_request.base.sha }}
+          OUTPUT_DIR: ${{ runner.temp }}/generation-base
+        run: |
+          set -euo pipefail
+          date +%s > "$RUNNER_TEMP/generation-report-start"
+          git checkout --detach "$REVISION"
+          python tools/capture_legal_actions.py "$OUTPUT_DIR/actions"
+          python tools/capture_turn_steps.py "$OUTPUT_DIR/turn-steps"
+      - name: Capture head generation
+        env:
+          REVISION: ${{ github.event.pull_request.head.sha }}
+          OUTPUT_DIR: ${{ runner.temp }}/generation-head
+        run: |
+          set -euo pipefail
+          git checkout --detach "$REVISION"
+          python tools/capture_legal_actions.py "$OUTPUT_DIR/actions"
+          python tools/capture_turn_steps.py "$OUTPUT_DIR/turn-steps"
+      - name: Report generated-output changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_DIR: ${{ runner.temp }}/generation-base
+          HEAD_DIR: ${{ runner.temp }}/generation-head
+        run: |
+          set -euo pipefail
+          started=$(cat "$RUNNER_TEMP/generation-report-start")
+          export LC_ALL=C
+          DIFF_BODY_BYTE_BUDGET=400000
+
+          report_diff() {
+            local label="$1"
+            local base_dir="$2"
+            local head_dir="$3"
+            local diff_file="$RUNNER_TEMP/${label}.diff"
+            local listing_file="$RUNNER_TEMP/${label}.files"
+            local body_file="$RUNNER_TEMP/${label}.body"
+            local counts_file="$RUNNER_TEMP/${label}.counts"
+            local differing_files=0
+            local file_word="files"
+            local total_lines=0
+            local shown_lines=0
+            local shown_bytes=0
+            local omitted_lines=0
+            local status=0
+
+            if diff -qr "$base_dir" "$head_dir" >"$listing_file"; then
+              {
+                echo "### ${label}"
+                echo
+                echo "0 differing files."
+                echo
+                echo "No generated-output changes."
+                echo
+              } >>"$GITHUB_STEP_SUMMARY"
+              return
+            else
+              status=$?
+            fi
+
+            if [ "$status" -gt 1 ]; then
+              cat "$listing_file" >&2
+              return "$status"
+            fi
+
+            differing_files=$(awk 'END { print NR }' "$listing_file")
+            if [ "$differing_files" -eq 1 ]; then
+              file_word="file"
+            fi
+
+            if diff -r "$base_dir" "$head_dir" >"$diff_file"; then
+              echo "Expected a detailed diff after finding differing files." >&2
+              return 1
+            else
+              status=$?
+            fi
+
+            if [ "$status" -gt 1 ]; then
+              cat "$diff_file" >&2
+              return "$status"
+            fi
+
+            awk -v budget="$DIFF_BODY_BYTE_BUDGET" -v counts_file="$counts_file" '
+              {
+                total_lines += 1
+                line_bytes = length($0) + 1
+                if (!truncated && shown_bytes + line_bytes <= budget) {
+                  print
+                  shown_lines += 1
+                  shown_bytes += line_bytes
+                } else {
+                  truncated = 1
+                }
+              }
+              END {
+                printf "%d %d %d\n", total_lines, shown_lines, shown_bytes > counts_file
+              }
+            ' "$diff_file" >"$body_file"
+            read -r total_lines shown_lines shown_bytes <"$counts_file"
+            omitted_lines=$((total_lines - shown_lines))
+
+            {
+              echo "### ${label}"
+              echo
+              echo "${differing_files} differing ${file_word}."
+              echo
+              if [ "$omitted_lines" -gt 0 ]; then
+                echo "Diff body is truncated to ${shown_bytes} bytes of the ${DIFF_BODY_BYTE_BUDGET}-byte per-section budget; ${shown_lines} of ${total_lines} lines shown and ${omitted_lines} lines omitted."
+              else
+                echo "All ${total_lines} diff lines shown within the ${DIFF_BODY_BYTE_BUDGET}-byte per-section budget."
+              fi
+              if [ "$shown_lines" -gt 0 ]; then
+                echo
+                echo '```diff'
+                cat "$body_file"
+                echo '```'
+              fi
+              echo
+            } >>"$GITHUB_STEP_SUMMARY"
+          }
+
+          {
+            echo "## Generated output report"
+            echo
+            if [ "$CAPTURE_TOOLING_CHANGED" = "true" ]; then
+              echo "## ⚠️ Capture tooling changed in this pull request"
+              echo
+              echo "The capture scripts differ between base and head. The generation differences below may reflect that tooling change rather than an engine change."
+              echo
+              echo "Changed capture scripts:"
+              while IFS= read -r capture_script; do
+                echo "- \`${capture_script}\`"
+              done < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- tools/capture_legal_actions.py tools/capture_turn_steps.py)
+              echo
+            fi
+            echo "Comparing \`$BASE_SHA\` to \`$HEAD_SHA\`."
+            echo
+            echo "Each diff body is capped at ${DIFF_BODY_BYTE_BUDGET} bytes so this report stays below GitHub's 1 MiB summary limit."
+            echo
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          report_diff "Legal actions" "$BASE_DIR/actions" "$HEAD_DIR/actions"
+          report_diff "Turn steps" "$BASE_DIR/turn-steps" "$HEAD_DIR/turn-steps"
+
+          echo "Captured and compared in $(( $(date +%s) - started ))s." >>"$GITHUB_STEP_SUMMARY"

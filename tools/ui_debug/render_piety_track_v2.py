@@ -35,8 +35,6 @@ it is read, never imported or executed.
 
 from __future__ import annotations
 
-from html import escape
-
 import json
 import math
 from pathlib import Path
@@ -381,7 +379,7 @@ def render_vp_star(layout: dict, geometry: dict, index: int, vp: int) -> str:
     center_x = position_center_x(layout, index)
     star_cy = geometry["star_cy"]
     return (
-        f'<g data-piety-score-row="true">'
+        '<g data-piety-score-row="true">'
         + render_star_path(center_x, star_cy, STAR_OUTER_RADIUS, STAR_INNER_RADIUS)
         + f'<text x="{center_x:.1f}" y="{star_cy + STAR_LABEL_OFFSET:.1f}"'
         f' text-anchor="middle" {STAR_LABEL_FONT}'

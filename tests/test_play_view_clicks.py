@@ -1331,7 +1331,16 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-after.png")
 
     preview_slots = _all_player_slots(page)
-    assert preview_slots[active_player_id][0] == ["donated", action.donate_building_id, "true"]
+    expected_slots = [
+        ["bought", building_id, "false"]
+        for building_id in expected_player.player_board_slots.active_buildings
+    ] + [
+        ["donated", building_id, "true"]
+        for building_id in expected_player.player_board_slots.donated_buildings
+    ]
+    assert preview_slots[active_player_id] == expected_slots + [
+        ["empty", "", "false"]
+    ] * (len(preview_slots[active_player_id]) - len(expected_slots))
     assert {
         player: slots for player, slots in preview_slots.items() if player != active_player_id
     } == {player: slots for player, slots in before_slots.items() if player != active_player_id}
