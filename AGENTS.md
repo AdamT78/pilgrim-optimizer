@@ -38,15 +38,26 @@ truncated output hides which test failed and why.
 
 ### When the sandbox blocks a lane
 
-`tests/test_play_server.py` and `tests/test_play_view_clicks.py` bind a real server on
-`127.0.0.1:0`, and the click suite launches Chromium through Playwright. If the environment
-denies the bind or refuses to start the browser:
+Different lanes need different things:
 
-- **Stop and say so.** Report which lane could not run and why.
-- Do not skip those tests, mock the server, or reduce the suite to the parts that happen to run.
+- `tests/test_play_server.py` binds a real server on `127.0.0.1:0`.
+- `tests/test_play_view_clicks.py` binds a server *and* launches Chromium through Playwright.
+- 50 tests in `tests/test_play_server.py` shell out to node.
+- Everything else, including the deep-fixture slow guards
+  (`pytest -m slow --ignore=tests/test_play_view_clicks.py`), needs none of that.
+
+If the environment denies the bind or refuses to start the browser:
+
+- **Ask for the permission and retry.** A blocked lane is usually one approval away, and a
+  person is usually there to give it.
+- If it stays blocked, **run every lane that is not blocked** and report precisely which subset
+  could not run. Being unable to bind a server is not a reason to skip the engine tests.
+- Do not skip the blocked tests, mock the server, or reduce a suite to the parts that happen
+  to run.
 - Do not report a lane as passing when part of it never executed.
 
-A truthful "I could not run this" is worth more than a green summary that means nothing.
+A truthful "I could not run these fourteen, here is everything else" is worth more than a green
+summary that means nothing — and more than an empty one.
 
 ## Tests are load-bearing
 
@@ -71,6 +82,13 @@ floors under a population, not measurements.
 When one fails, do not simply lower the number. Ask first whether the property it guards still
 exists somewhere: usually it has moved to `turn_steps` rather than disappeared, and the fix is
 to assert it there. Only then re-floor, with a comment saying why the number moved.
+
+The same trap catches instruments, not just floors. When an effect moves between representations,
+whatever counted it goes blind without failing: it keeps running and reports zero. That has now
+cost three separate branches — the stale floors, a `multi_hire` count that had quietly become
+zero, and both branching audits. So when you move an effect, move its measurement with it, and
+check what else counts it: the corpus floors, `tools/audits/`, and the capture tripwires. Treat a
+count that has dropped to zero as a blind instrument until you have proved otherwise.
 
 ## Refactors must prove themselves
 
