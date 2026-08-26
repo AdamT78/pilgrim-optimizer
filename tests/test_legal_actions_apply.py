@@ -11,20 +11,20 @@ engine now records one payment per hired building so application can replay exac
 enumeration chose.
 
 So this walks every committed position, applies every action offered there, and requires none to
-raise. It is not a fast test. The round-eighteen fixture alone is thirty thousand actions and about
-fourteen seconds of it; the other three hundred and eight positions are four thousand actions and
-one second. The fixture is in nonetheless, because every one of those 3,374 was found there and
-nowhere else -- it is the only committed position deep enough to have several buildings live at
-once, which is what it takes to hire more than one in a turn.
+raise. The round-eighteen fixture now offers 126 `FullTurnAction` values, and the whole committed
+corpus offers 3,243 actions: building effects that formerly multiplied complete actions are now
+committed as separate turn steps. The fixture remains essential because it is the position deep
+enough to hire several buildings in one turn. Its hire-step sequences check that each chosen
+payment is retained so application can replay it.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 
-from pilgrim.model.actions import FullTurnAction, action_id
+from pilgrim.model.actions import FullTurnAction, TurnStep, action_id
 from pilgrim.rules.merchant import CORNUCOPIA_COUNTER, current_merchant_resource
-from pilgrim.rules.transition import apply_action
+from pilgrim.rules.transition import apply_action, apply_turn_step, turn_steps
 
 DEEP_FIXTURE = "deep_round_eighteen_seed_seven_two_player_001"
 
@@ -49,10 +49,10 @@ def test_every_legal_action_applies(deep_actions, corpus_actions) -> None:
             except Exception as exc:
                 unexpected.append((path.stem, action_id(action), str(exc)))
 
-    # Dormitory, Inquisition, and Library now commit separately, so their old action-prefix
-    # multiplication deliberately leaves this FullTurnAction population. Keep a floor so a later
-    # accidental collapse still cannot make the corpus walk vacuous.
-    assert total > 5_300, f"only {total} actions walked; the corpus has shrunk"
+    # Building effects now commit as turn steps, removing their old FullTurnAction-prefix
+    # multiplication. Keep a floor below today's 3,243 actions so the corpus walk cannot go
+    # vacuous when action generation accidentally collapses.
+    assert total > 3_000, f"only {total} actions walked; the corpus has shrunk"
     assert not unexpected, "legal actions that apply_action refuses:\n" + "\n".join(
         f"  {name}: {reason}\n    {ident}" for name, ident, reason in unexpected[:20]
     )
@@ -64,13 +64,42 @@ def test_the_deep_fixture_is_where_this_would_be_found(deep_actions) -> None:
     assert current_merchant_resource(scenario.state, scenario.config) == CORNUCOPIA_COUNTER, (
         "this fixture is here because the Merchant offers the wildcard on it"
     )
-    # Committed relocation steps no longer multiply complete-action variants here.
-    assert len(actions) > 700, f"the deep fixture now offers only {len(actions)} actions"
+    # Separate turn steps deliberately remove the relocation and hire combinations that used to
+    # multiply this FullTurnAction population. Keep a floor below today's 126 actions so this
+    # remains a meaningfully deep action fixture.
+    assert len(actions) > 100, f"the deep fixture now offers only {len(actions)} actions"
 
-    multi_hire = sum(1 for action in actions if _hired_sources(action) > 1)
-    assert multi_hire > 240, (
-        f"only {multi_hire} actions hire more than once; the case that broke is not covered"
+    hire_steps = [
+        step for step in turn_steps(scenario.state, scenario.config) if step.source != "own_active"
+    ]
+    assert hire_steps and all(step.hire_payment is not None for step in hire_steps), (
+        "the deep fixture must offer paid hires whose chosen payment is recorded"
     )
+    initial_used = scenario.state.turn_progress.used_buildings
+    hire_pairs: list[tuple[TurnStep, TurnStep]] = []
+    for first_step in hire_steps:
+        after_first = apply_turn_step(scenario.state, scenario.config, first_step)
+        assert after_first.turn_progress.used_buildings == initial_used | {first_step.building_id}
+
+        following_hires = [
+            step
+            for step in turn_steps(after_first, scenario.config)
+            if step.source != "own_active" and step.building_id != first_step.building_id
+        ]
+        assert following_hires and all(step.hire_payment is not None for step in following_hires), (
+            f"hiring {first_step.building_id} must leave paid hires for a different building"
+        )
+        for second_step in following_hires:
+            after_second = apply_turn_step(after_first, scenario.config, second_step)
+            assert after_second.turn_progress.used_buildings == (
+                after_first.turn_progress.used_buildings | {second_step.building_id}
+            )
+            hire_pairs.append((first_step, second_step))
+
+    assert any(
+        first_step.hire_payment != second_step.hire_payment
+        for first_step, second_step in hire_pairs
+    ), "two hires never use different resources; the Cornucopia's per-hire choice is not expressed"
 
 
 def _hired_sources(action) -> int:
@@ -119,9 +148,11 @@ def test_the_wildcard_is_a_choice_and_the_payer_can_afford_what_it_offers(deep_a
     passing on a wildcard nobody exercises. And every resource offered has to be one the payer can
     settle, which is what stops the choice from being three actions of which two fail.
 
-    This fixture reaches hires after optional pre-sow effects that can change stock, so affordability
-    is observed through "everything offered applies" above rather than by comparing only to opening
-    resources.
+    Whether two hires can use distinct resources is asserted by the deep fixture's turn-step pairs.
+
+    This fixture reaches hires after optional pre-sow effects that can change stock, so
+    affordability is observed through "everything offered applies" above rather than by comparing
+    only to opening resources.
     """
     _scenario, actions = deep_actions
     offered = Counter(
@@ -135,15 +166,4 @@ def test_the_wildcard_is_a_choice_and_the_payer_can_afford_what_it_offers(deep_a
     )
     assert len(offered) > 1, (
         f"the wildcard offered only {set(offered)}; it is not being presented as a choice"
-    )
-
-    mixed_multi = [
-        action
-        for action in actions
-        if _hired_sources(action) > 1
-        and len({resource for _building, resource in action.hire_payments}) > 1
-    ]
-    assert mixed_multi, (
-        "turns hiring more than once never mix hire payment resources; "
-        "per-hire payment choices are not being expressed"
     )
