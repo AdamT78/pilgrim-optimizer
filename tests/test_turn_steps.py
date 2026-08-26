@@ -4,6 +4,8 @@ import inspect
 import json
 from dataclasses import replace
 
+import pytest
+
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import EndTurnAction
@@ -121,6 +123,48 @@ def test_two_active_conversion_buildings_remain_independently_available() -> Non
         step.building_id not in after_both.turn_progress.used_buildings
         for step in turn_steps(after_both, scenario.config)
     )
+
+
+@pytest.mark.parametrize(
+    ("scenario_path", "building_id"),
+    (
+        ("scenarios/grain_store_active_sell_wheat_001.json", "grain_store"),
+        ("scenarios/guild_active_move_merchant_001.json", "guild"),
+        ("scenarios/pulpit_active_move_serf_001.json", "pulpit"),
+        ("scenarios/kogge_hire_market_city_to_east_001.json", "kogge"),
+        ("scenarios/scriptorium_hire_market_majority_selected_duty_001.json", "scriptorium"),
+        ("scenarios/dormitory_active_return_duty_to_city_001.json", "dormitory"),
+    ),
+)
+def test_turn_steps_centrally_hides_each_used_beginning_window_building(
+    scenario_path: str,
+    building_id: str,
+) -> None:
+    scenario = _scenario(scenario_path)
+    offered = turn_steps(scenario.state, scenario.config)
+    used_state = replace(
+        scenario.state,
+        turn_progress=replace(scenario.state.turn_progress, used_buildings=frozenset({building_id})),
+    )
+
+    assert building_id in {step.building_id for step in offered}
+    assert building_id not in {step.building_id for step in turn_steps(used_state, scenario.config)}
+
+
+def test_turn_steps_centrally_hides_used_library_in_the_end_window() -> None:
+    scenario = _scenario("scenarios/library_active_city_to_duty_001.json")
+    resolution = apply_action(
+        scenario.state,
+        next(iter(legal_actions(scenario.state, scenario.config))),
+        scenario.config,
+    )
+    used_state = replace(
+        resolution.state,
+        turn_progress=replace(resolution.state.turn_progress, used_buildings=frozenset({"library"})),
+    )
+
+    assert "library" in {step.building_id for step in turn_steps(resolution.state, scenario.config)}
+    assert "library" not in {step.building_id for step in turn_steps(used_state, scenario.config)}
 
 
 def test_full_turn_actions_is_a_lazy_generator() -> None:

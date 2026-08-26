@@ -1,0 +1,76 @@
+{
+  "scenario_id": "pulpit_2p",
+  "root_player_id": "player_one",
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 2,
+  "setup_file": "../../configs/setups/basic_mancala_sandbox.json",
+  "board_file": "../../configs/board.json",
+  "duties_file": "../../configs/duties.json",
+  "piety_file": "../../configs/piety.json",
+  "alms_file": "../../configs/alms.json",
+  "timing_file": "../../configs/timing.json",
+  "merchant_file": "../../configs/merchant.json",
+  "ship_file": "../../configs/ship.json",
+  "buildings_file": "../../configs/buildings.json",
+  "setup_metadata": {
+    "seed": 99,
+    "note": "Pulpit playtest opens in round three with Pulpit live in the market and wheat available to hire it. Commit its step before choosing a turn action."
+  },
+  "initial_state": {
+    "active_player": "player_one",
+    "merchant_board_position": 1,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 3,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "building_market": ["pulpit"],
+    "building_availability": {
+      "pulpit": 2
+    },
+    "players": {
+      "player_one": {
+        "piety": 4,
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 1
+        },
+        "workforce": {
+          "mancala": [0, 1, 0, 0, 0, 0, 0, 0, 0],
+          "village": 2,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 1, 0, 0, 0, 0, 0, 0, 0],
+          "village": 2,
+          "abbey": 0,
+          "committed": {
+            "roads": 0,
+            "shrines": 0,
+            "market_ports": 0,
+            "pilgrimage_sites": 0,
+            "alms_table": 0
+          }
+        }
+      }
+    }
+  }
+}

@@ -54,6 +54,7 @@ _SCENARIO_LIST: tuple[str, ...] = (
     "scenarios/playtest/conversions_2p.json",
     "scenarios/playtest/kogge_and_cloisters_2p.json",
     "scenarios/playtest/movement_2p.json",
+    "scenarios/playtest/pulpit_2p.json",
     "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
 )
 

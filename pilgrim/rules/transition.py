@@ -292,23 +292,6 @@ class _ResolvedWagonYardFreeHire:
 
 
 @dataclass(frozen=True, slots=True)
-class _PulpitWorkforceMoveOption:
-    """Pre-sow workforce-move variant for one legal Pulpit use."""
-
-    state: GameState
-    building_id: str
-    source: BuildingAbilitySource
-
-
-@dataclass(frozen=True, slots=True)
-class _ResolvedPulpitWorkforceMove:
-    """Validated pre-sow Pulpit workforce-move directive from one action."""
-
-    building_id: str
-    source: BuildingAbilitySource
-
-
-@dataclass(frozen=True, slots=True)
 class _ResolvedEndTurnRelocation:
     """Validated end-turn Library relocation directive from one committed step."""
 
@@ -364,6 +347,7 @@ _HIRED_MODIFIER_BUILDING_IDS: tuple[str, str, str, str] = (
 )
 _WAGON_YARD_COMMITTED_STEP_TARGET_BUILDINGS: frozenset[str] = frozenset(
     {
+        _BUILDING_PULPIT,
         _BUILDING_SCRIPTORIUM,
         _BUILDING_CUSTOMS_HOUSE,
         _BUILDING_BANK,
@@ -427,7 +411,6 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         return ()
 
     options = _legal_building_conversion_options(state, config)
-    used = state.turn_progress.used_buildings
     conversions = tuple(
         BuildingConversionStep(
             building_id=option.building_id,
@@ -437,7 +420,6 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
             hire_payment=_building_source_hire_payment(option.source),
         )
         for option in options
-        if option.building_id not in used
     )
     guild_steps = tuple(
         BuildingActivationStep(
@@ -446,8 +428,8 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
             hire_payment=_building_source_hire_payment(source),
         )
         for source, _state_after_hire in _legal_guild_activation_sources(state, config)
-        if _BUILDING_GUILD not in used
     )
+    pulpit_steps = _legal_pulpit_workforce_move_steps(state, config)
     route_hires = _legal_route_building_hire_steps(state, config)
     modifier_hires = _legal_modifier_building_hire_steps(state, config)
     relocations = (
@@ -455,7 +437,16 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         if state.turn_progress.resolution_committed
         else _legal_start_turn_relocation_steps(state, config)
     )
-    return (*conversions, *guild_steps, *route_hires, *modifier_hires, *relocations)
+    candidates = (
+        *conversions,
+        *guild_steps,
+        *pulpit_steps,
+        *route_hires,
+        *modifier_hires,
+        *relocations,
+    )
+    used = state.turn_progress.used_buildings
+    return tuple(step for step in candidates if step.building_id not in used)
 
 
 def full_turn_actions(state: GameState, config: GameConfig) -> Iterator[GameAction]:
@@ -593,6 +584,7 @@ def _apply_building_activation_step(
         raise TransitionValidationError(f"Building already used this turn: {step.building_id}.")
     if step.building_id not in (
         _BUILDING_GUILD,
+        _BUILDING_PULPIT,
         *_ROUTE_BUILDING_IDS,
         *_HIRED_MODIFIER_BUILDING_IDS,
     ):
@@ -600,7 +592,8 @@ def _apply_building_activation_step(
             f"Unsupported parameterless building activation: {step.building_id}."
         )
     if (
-        step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
+        step.building_id
+        in (_BUILDING_PULPIT, *_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
         and state.turn_progress.resolution_committed
     ):
         raise TransitionValidationError(
@@ -622,8 +615,9 @@ def _apply_building_activation_step(
     )
     if free_with_wagon_yard:
         source = _source_hired_for_free_wagon_yard(source)
-    if (not source.usable and not free_with_wagon_yard) or (
-        source.source_type != "own_active" and not _is_hired_source(source)
+    if not free_with_wagon_yard and (
+        not source.usable
+        or (source.source_type != "own_active" and not _is_hired_source(source))
     ):
         raise TransitionValidationError(f"{step.building_id.title()} is unavailable in current state.")
     if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS) and not _is_hired_source(source):
@@ -688,6 +682,31 @@ def _apply_building_activation_step(
         )
 
     if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS):
+        return replace(
+            next_state,
+            turn_progress=replace(
+                next_state.turn_progress,
+                used_buildings=next_state.turn_progress.used_buildings | {step.building_id},
+                events=tuple(sorted(events, key=lambda event: event.action_id)),
+            ),
+        )
+
+    if step.building_id == _BUILDING_PULPIT:
+        try:
+            next_state, workforce_event = _apply_pulpit_workforce_move_to_state(
+                next_state,
+                actor=player,
+                action_id=transition_action_id,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        events.append(
+            _pulpit_workforce_bonus_event(
+                actor=player,
+                action_id=transition_action_id,
+            )
+        )
+        events.append(workforce_event)
         return replace(
             next_state,
             turn_progress=replace(
@@ -1195,7 +1214,6 @@ def _legal_full_turn_actions(state: GameState, config: GameConfig) -> tuple[Game
     variant_actions = _legal_full_turn_actions_for_state(
         state,
         config,
-        allow_pulpit_modifier=True,
         allow_scriptorium_modifier=True,
         allow_customs_house_modifier=True,
         allow_wagon_yard_modifier=True,
@@ -1215,7 +1233,6 @@ def _legal_full_turn_actions_for_state(
     state: GameState,
     config: GameConfig,
     *,
-    allow_pulpit_modifier: bool,
     allow_scriptorium_modifier: bool,
     allow_customs_house_modifier: bool,
     allow_wagon_yard_modifier: bool,
@@ -1957,7 +1974,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 scriptorium_option.state,
                 config,
-                allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
@@ -1976,30 +1992,6 @@ def _legal_full_turn_actions_for_state(
                     option=scriptorium_option,
                 )
                 actions.add_if_new(scriptorium_action)
-    if allow_pulpit_modifier:
-        pulpit_options = _legal_pulpit_workforce_move_options(state, config)
-        if pulpit_options:
-            pulpit_option = pulpit_options[0]
-            for action in _legal_full_turn_actions_for_state(
-                pulpit_option.state,
-                config,
-                allow_pulpit_modifier=False,
-                allow_scriptorium_modifier=False,
-                allow_customs_house_modifier=False,
-                allow_wagon_yard_modifier=False,
-                allow_bank_modifier=False,
-                uses_scriptorium_effective_counts=False,
-                uses_customs_house_taxation_override=False,
-            ):
-                if not isinstance(action, FullTurnAction):
-                    continue
-                if not _is_pulpit_modifier_eligible_action(action):
-                    continue
-                pulpit_action = _with_pulpit_workforce_move_fields(
-                    action,
-                    option=pulpit_option,
-                )
-                actions.add_if_new(pulpit_action)
     if allow_customs_house_modifier:
         customs_house_options = _legal_customs_house_taxation_options(state, config)
         if customs_house_options:
@@ -2007,7 +1999,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 customs_house_option.state,
                 config,
-                allow_pulpit_modifier=False,
                 allow_scriptorium_modifier=False,
                 allow_customs_house_modifier=False,
                 allow_wagon_yard_modifier=False,
@@ -2032,7 +2023,6 @@ def _legal_full_turn_actions_for_state(
             for action in _legal_full_turn_actions_for_state(
                 wagon_yard_option.state,
                 config,
-                allow_pulpit_modifier=(wagon_yard_option.target_building_id == _BUILDING_PULPIT),
                 allow_scriptorium_modifier=(
                     wagon_yard_option.target_building_id == _BUILDING_SCRIPTORIUM
                 ),
@@ -2290,47 +2280,6 @@ def _apply_full_turn_action(
                 config=config,
             )
         )
-    pulpit_workforce_move = _resolved_pulpit_workforce_move_for_action(
-        state=state_for_sow,
-        config=config,
-        player=player,
-        action=action,
-    )
-    if pulpit_workforce_move is not None:
-        if _is_hired_source(pulpit_workforce_move.source):
-            try:
-                state_for_sow, pulpit_hire_payment = apply_building_hire_payment(
-                    state_for_sow,
-                    acting_player=player,
-                    source=pulpit_workforce_move.source,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-            pre_sowing_events.append(
-                _building_hired_event(
-                    source=pulpit_workforce_move.source,
-                    payment=pulpit_hire_payment,
-                    actor=player,
-                    action_id=transition_action_id,
-                    config=config,
-                )
-            )
-        try:
-            state_for_sow, pulpit_workforce_event = _apply_pulpit_workforce_move_to_state(
-                state_for_sow,
-                actor=player,
-                action_id=transition_action_id,
-            )
-        except ValueError as exc:
-            raise TransitionValidationError(str(exc)) from exc
-        pre_sowing_events.append(
-            _pulpit_workforce_bonus_event(
-                actor=player,
-                action_id=transition_action_id,
-            )
-        )
-        pre_sowing_events.append(pulpit_workforce_event)
-
     scriptorium_effective_acolyte = _resolved_scriptorium_effective_acolyte_for_action(
         state=state_for_sow,
         config=config,
@@ -2856,41 +2805,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Bank payment substitution with Wagon Yard is only supported when Wagon Yard targets Bank."
                 )
-        workforce_move_fields = (
-            action.workforce_move_building_id,
-            action.workforce_move_building_source,
-        )
-        workforce_move_field_count = sum(field is not None for field in workforce_move_fields)
-        if workforce_move_field_count not in (0, len(workforce_move_fields)):
-            raise TransitionValidationError(
-                "workforce_move_building_id and workforce_move_building_source must be set together."
-            )
-        has_pulpit_workforce_modifier = workforce_move_field_count == len(workforce_move_fields)
-        if has_pulpit_workforce_modifier:
-            if action.workforce_move_building_id != _BUILDING_PULPIT:
-                raise TransitionValidationError(
-                    "Only Pulpit is supported for workforce_move_building fields."
-                )
-            if has_route_building_id or has_secondary_route_building_id:
-                raise TransitionValidationError(
-                    "Combining Pulpit free serf movement with sow-route modifiers is deferred."
-                )
-            if has_bank_payment_modifier:
-                raise TransitionValidationError(
-                    "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
-                )
-        if has_scriptorium_effective_modifier and has_pulpit_workforce_modifier:
-            raise TransitionValidationError(
-                "Combining Pulpit and Scriptorium pre-sow building modifiers in one action is deferred."
-            )
-        if has_customs_house_taxation_modifier and has_pulpit_workforce_modifier:
-            raise TransitionValidationError(
-                "Combining Pulpit and Customs House pre-sow building modifiers in one action is deferred."
-            )
-        if has_bank_payment_modifier and has_pulpit_workforce_modifier:
-            raise TransitionValidationError(
-                "Combining Bank and Pulpit pre-sow building modifiers in one action is deferred."
-            )
         hire_context = BuildingHireTurnContext()
         if (action.hired_building_id is None) != (action.hired_building_source is None):
             raise TransitionValidationError(
@@ -2921,22 +2835,6 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=action.hired_building_id,
-                )
-            except ValueError as exc:
-                raise TransitionValidationError(str(exc)) from exc
-        if (
-            has_pulpit_workforce_modifier
-            and action.workforce_move_building_source is not None
-            and action.workforce_move_building_source != "own_active"
-        ):
-            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_PULPIT):
-                raise TransitionValidationError(
-                    "Same building cannot be hired more than once in one turn."
-                )
-            try:
-                hire_context = record_hired_building_this_turn(
-                    hire_context,
-                    building_key=_BUILDING_PULPIT,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4748,8 +4646,6 @@ def _legal_route_building_hire_steps(
         return ()
     steps: list[BuildingActivationStep] = []
     for building_id in _ROUTE_BUILDING_IDS:
-        if building_id in state.turn_progress.used_buildings:
-            continue
         source = building_ability_source(
             state,
             config,
@@ -4778,8 +4674,6 @@ def _legal_modifier_building_hire_steps(
         return ()
     steps: list[BuildingActivationStep] = []
     for building_id in _HIRED_MODIFIER_BUILDING_IDS:
-        if building_id in state.turn_progress.used_buildings:
-            continue
         source = building_ability_source(
             state,
             config,
@@ -4823,9 +4717,6 @@ def _legal_dormitory_relocation_steps(
     source = _activatable_building_source(state, config, building_key="dormitory")
     if source is None:
         return ()
-    used = state.turn_progress.used_buildings
-    if "dormitory" in used:
-        return ()
     return tuple(
         BuildingRelocationStep(
             building_id="dormitory",
@@ -4845,8 +4736,6 @@ def _legal_inquisition_relocation_steps(
 ) -> tuple[BuildingRelocationStep, ...]:
     source = _activatable_building_source(state, config, building_key="inquisition")
     if source is None:
-        return ()
-    if "inquisition" in state.turn_progress.used_buildings:
         return ()
     city_position = config.board.index_for_name("city")
     return tuple(
@@ -4870,8 +4759,6 @@ def _legal_library_relocation_steps(
     state: GameState,
     config: GameConfig,
 ) -> tuple[BuildingRelocationStep, ...]:
-    if "library" in state.turn_progress.used_buildings:
-        return ()
     source = _activatable_building_source(state, config, building_key="library")
     if source is None:
         return ()
@@ -5712,7 +5599,6 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
         (action.hired_building_id, action.hired_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
-        (action.workforce_move_building_id, action.workforce_move_building_source),
         (action.bank_payment_building_id, action.bank_payment_building_source),
     )
     return tuple(
@@ -5931,37 +5817,56 @@ def _legal_wagon_yard_free_hire_options(
     return tuple(options)
 
 
-def _legal_pulpit_workforce_move_options(
+def _legal_pulpit_workforce_move_steps(
     state: GameState,
     config: GameConfig,
-) -> tuple[_PulpitWorkforceMoveOption, ...]:
-    source = _activatable_building_source(state, config, building_key=_BUILDING_PULPIT)
-    if source is None:
+) -> tuple[BuildingActivationStep, ...]:
+    """Return Pulpit's pre-sow activation steps, including every settled hire payment."""
+    if state.turn_progress.resolution_committed:
         return ()
 
-    options: list[_PulpitWorkforceMoveOption] = []
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_PULPIT,
+    )
+    free_with_wagon_yard = _activation_is_free_with_wagon_yard(
+        state,
+        config,
+        building_id=_BUILDING_PULPIT,
+        source=source,
+    )
+    if not free_with_wagon_yard and (
+        not source.usable
+        or (source.source_type != "own_active" and not _is_hired_source(source))
+    ):
+        return ()
+    if free_with_wagon_yard:
+        source = _source_hired_for_free_wagon_yard(source)
+        if state.player_state(state.active_player).workforce.village < 1:
+            return ()
+        return (
+            BuildingActivationStep(
+                building_id=_BUILDING_PULPIT,
+                source=_hired_building_source_label(source),
+            ),
+        )
+
+    steps: list[BuildingActivationStep] = []
     for hire_source, state_after_hire in _hire_payment_states(state, source):
         player_state = state_after_hire.player_state(state.active_player)
         if player_state.workforce.village < 1:
             continue
-        moved_workforce = replace(
-            player_state.workforce,
-            village=player_state.workforce.village - 1,
-            abbey=player_state.workforce.abbey + 1,
-        )
-        moved_state = state_after_hire.with_player_state(
-            state.active_player,
-            replace(player_state, workforce=moved_workforce),
-        )
-        options.append(
-            _PulpitWorkforceMoveOption(
-                state=moved_state,
+        steps.append(
+            BuildingActivationStep(
                 building_id=_BUILDING_PULPIT,
-                source=hire_source,
+                source=_own_or_hired_building_source_label(hire_source),
+                hire_payment=_building_source_hire_payment(hire_source),
             )
         )
 
-    return tuple(options)
+    return tuple(steps)
 
 
 def _wagon_yard_source_available_this_turn(
@@ -6059,34 +5964,11 @@ def _state_without_temporary_active_building(
     )
 
 
-def _is_pulpit_modifier_eligible_action(action: FullTurnAction) -> bool:
-    return (
-        action.sow_route_building_id is None
-        and action.sow_route_secondary_building_id is None
-        and action.sow_route_omitted_location is None
-        and action.workforce_move_building_id is None
-        and action.workforce_move_building_source is None
-        and action.effective_acolyte_building_id is None
-        and action.effective_acolyte_building_source is None
-        and action.taxation_majority_building_id is None
-        and action.taxation_majority_building_source is None
-        and action.bank_payment_building_id is None
-        and action.bank_payment_building_source is None
-        and action.bank_payment_replaced_resource is None
-        and action.bank_payment_silver_amount is None
-        and action.free_hire_enabler_building_id is None
-        and action.free_hire_target_building_id is None
-        and action.free_hire_target_building_source is None
-    )
-
-
 def _is_scriptorium_modifier_eligible_action(action: FullTurnAction) -> bool:
     return (
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.workforce_move_building_id is None
-        and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
@@ -6106,8 +5988,6 @@ def _is_customs_house_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.workforce_move_building_id is None
-        and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
@@ -6129,8 +6009,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         and action.sow_route_omitted_location is None
         and action.hired_building_id is None
         and action.hired_building_source is None
-        and action.workforce_move_building_id is None
-        and action.workforce_move_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
@@ -6174,11 +6052,6 @@ def _wagon_yard_action_uses_target_building(
         # Guild's effect is a committed building step, not a FullTurnAction modifier. Wagon Yard
         # may still hire it for free; there is simply no extra effect to encode in this action.
         return True
-    if target_building_id == _BUILDING_PULPIT:
-        return (
-            action.workforce_move_building_id == _BUILDING_PULPIT
-            and action.workforce_move_building_source == "own_active"
-        )
     if target_building_id == _BUILDING_SCRIPTORIUM:
         return (
             action.effective_acolyte_building_id == _BUILDING_SCRIPTORIUM
@@ -6210,8 +6083,6 @@ def _wagon_yard_action_is_supported_composition(
     if action.hired_building_id is not None or action.hired_building_source is not None:
         return False
 
-    if target_building_id != _BUILDING_PULPIT and action.workforce_move_building_id is not None:
-        return False
     if (
         target_building_id != _BUILDING_SCRIPTORIUM
         and action.effective_acolyte_building_id is not None
@@ -6283,20 +6154,6 @@ def _with_wagon_yard_free_hire_fields(
         free_hire_target_building_id=option.target_building_id,
         free_hire_target_building_source=option.target_source,
     )
-
-
-def _with_pulpit_workforce_move_fields(
-    action: FullTurnAction,
-    *,
-    option: _PulpitWorkforceMoveOption,
-) -> FullTurnAction:
-    source_label = _own_or_hired_building_source_label(option.source)
-    updated = replace(
-        action,
-        workforce_move_building_id=option.building_id,
-        workforce_move_building_source=source_label,
-    )
-    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _with_bank_payment_fields(
@@ -6707,63 +6564,6 @@ def _resolved_wagon_yard_free_hire_for_action(
         target_building_id=target_building_id,
         target_source=target_source,
         target_was_temporary_added=target_was_temporary_added,
-    )
-
-
-def _resolved_pulpit_workforce_move_for_action(
-    *,
-    state: GameState,
-    config: GameConfig,
-    player: PlayerId,
-    action: FullTurnAction,
-) -> _ResolvedPulpitWorkforceMove | None:
-    fields = (
-        action.workforce_move_building_id,
-        action.workforce_move_building_source,
-    )
-    field_count = sum(field is not None for field in fields)
-    if field_count == 0:
-        return None
-    if field_count != len(fields):
-        raise TransitionValidationError(
-            "workforce_move_building_id and workforce_move_building_source must be set together."
-        )
-
-    building_id = action.workforce_move_building_id
-    source_label = action.workforce_move_building_source
-    assert building_id is not None
-    assert source_label is not None
-
-    if building_id != _BUILDING_PULPIT:
-        raise TransitionValidationError(
-            "Only Pulpit is supported for workforce_move_building fields."
-        )
-
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=_BUILDING_PULPIT,
-    )
-    source = _hire_source_for_action(source, action)
-    if source.source_type == "own_active" and source.usable:
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                "Own-active Pulpit free move must set source=own_active."
-            )
-    elif _is_hired_source(source) and source.usable:
-        expected_source_label = _hired_building_source_label(source)
-        if source_label != expected_source_label:
-            raise TransitionValidationError(
-                "Pulpit free move source does not match resolved source: "
-                f"expected {expected_source_label}."
-            )
-    else:
-        raise TransitionValidationError("Pulpit is unavailable in current state.")
-
-    return _ResolvedPulpitWorkforceMove(
-        building_id=_BUILDING_PULPIT,
-        source=source,
     )
 
 

@@ -67,12 +67,14 @@ def test_own_active_wagon_yard_generates_market_and_opponent_free_hire_variants(
 
 
 def test_wagon_yard_supports_minimum_target_building_set() -> None:
-    for path, target in (
-        ("scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"),
-        ("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"),
-    ):
-        _scenario, actions = _wagon_actions(path, target)
-        assert actions
+    _scenario, guild_actions = _wagon_actions(
+        "scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"
+    )
+    assert guild_actions
+    _scenario, pulpit_state = _wagon_free_activation(
+        "scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"
+    )
+    assert "pulpit" in pulpit_state.turn_progress.used_buildings
     for path, target in (
         ("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json", "bank"),
         ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
@@ -186,12 +188,14 @@ def test_wagon_yard_hire_cost_remains_zero_even_when_merchant_resource_exists() 
 
 
 def test_wagon_yard_keeps_non_conversion_target_effects() -> None:
-    for path, target in (
-        ("scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"),
-        ("scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"),
-    ):
-        _scenario, actions = _wagon_actions(path, target)
-        assert actions
+    _scenario, guild_actions = _wagon_actions(
+        "scenarios/wagon_yard_active_free_hire_market_guild_001.json", "guild"
+    )
+    assert guild_actions
+    _scenario, pulpit_state = _wagon_free_activation(
+        "scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"
+    )
+    assert "pulpit" in pulpit_state.turn_progress.used_buildings
     for path, target in (
         ("scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json", "scriptorium"),
         ("scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"),
@@ -224,11 +228,13 @@ def test_wagon_yard_hiring_guild_does_not_activate_it_inside_the_full_turn() -> 
 
 
 def test_wagon_yard_pulpit_and_customs_house_effects_resolve() -> None:
-    scenario, actions = _wagon_actions(
+    _scenario, pulpit_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_market_pulpit_001.json", "pulpit"
     )
-    result = apply_action(scenario.state, actions[0], scenario.config)
-    assert _events(result.events, EventType.WORKFORCE_MOVE)
+    pulpit_hire = _events(pulpit_state.turn_progress.events, EventType.BUILDING_HIRED)[0]
+    assert _events(pulpit_state.turn_progress.events, EventType.WORKFORCE_MOVE)
+    assert dict(pulpit_hire.details)["amount"] == 0
+    assert dict(pulpit_hire.details)["payee"] == "none"
 
     scenario, customs_state = _wagon_free_activation(
         "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json", "customs_house"

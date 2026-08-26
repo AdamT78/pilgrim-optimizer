@@ -181,13 +181,18 @@ def test_full_corpus_reports_the_capped_state_lower_bound() -> None:
     rows = audit.collect_branching_rows()
     report = audit._format_branching_section(rows)
 
-    assert len(rows) == 17
+    assert len(rows) == 18
     assert tuple(row.scenario_path for row in rows) == audit.configured_scenarios()
     assert all(row.post_resolution_window_measured is False for row in rows)
 
     conversions = next(
         row for row in rows if row.scenario_path == "scenarios/playtest/conversions_2p.json"
     )
+    pulpit = next(row for row in rows if row.scenario_path == "scenarios/playtest/pulpit_2p.json")
+    assert pulpit.legal_action_count == 3
+    assert pulpit.turn_step_count == 1
+    assert pulpit.reachable_step_sequences == 2
+    assert pulpit.hired_turn_steps == 1
     assert conversions.sequence_walk_truncated is True
     assert conversions.reachable_step_sequences == 10_000
     assert conversions.distinct_reachable_states == 5_884

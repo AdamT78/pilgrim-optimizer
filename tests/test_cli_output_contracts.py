@@ -106,6 +106,21 @@ def _guild_activation_output(path: str) -> str:
     )
 
 
+def _pulpit_activation_output(path: str) -> str:
+    scenario = load_scenario(path)
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if isinstance(step, BuildingActivationStep) and step.building_id == "pulpit"
+    )
+    state = apply_turn_step(scenario.state, scenario.config, step)
+    return "\n".join(
+        text
+        for event in state.turn_progress.events
+        if (text := format_event(event, scenario.config)) is not None
+    )
+
+
 def test_cli_scriptorium_legal_actions_contract_prunes_no_op_variants_output(capsys) -> None:
     scenario_path = "scenarios/scriptorium_taxation_majority_other_tiles_001.json"
     output = _run_cli(["legal-actions", scenario_path], capsys)
@@ -250,25 +265,16 @@ def test_cli_wagon_yard_apply_contract_free_hire_bonus_and_order(capsys) -> None
     assert "BUILDING_BONUS: brewery sold" not in output
 
 
-def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
+def test_cli_pulpit_contract_reports_its_committed_step_events(capsys) -> None:
     legal_output = _run_cli(
         ["legal-actions", "scenarios/pulpit_active_move_serf_001.json"],
         capsys,
     )
-    assert "use building: pulpit to move 1 serf village -> abbey for free" in legal_output
+    assert "use building: pulpit to move 1 serf village -> abbey for free" not in legal_output
 
-    output, _index = _apply_verbose_output(
-        "scenarios/pulpit_active_move_serf_001.json",
-        predicate=lambda action: (
-            action.workforce_move_building_id == "pulpit"
-            and action.workforce_move_building_source == "own_active"
-            and action.resolution is TurnResolutionType.TITHE
-        ),
-        capsys=capsys,
-    )
+    output = _pulpit_activation_output("scenarios/pulpit_active_move_serf_001.json")
 
     assert "WORKFORCE_MOVE: player_one moved 1 serf village -> abbey for free with Pulpit" in output
-    assert "INVARIANT_CHECK: passed" in output
     assert "BUILDING_HIRED:" not in output
     assert "paid wheat 1 to" not in output
     _assert_in_order(
@@ -276,8 +282,6 @@ def test_cli_pulpit_contract_reports_free_workforce_move(capsys) -> None:
         [
             "BUILDING_BONUS: pulpit moved 1 serf village -> abbey for free",
             "WORKFORCE_MOVE: player_one moved 1 serf village -> abbey for free with Pulpit",
-            "SOWING:",
-            "DUTY_RESOLUTION:",
         ],
     )
 
