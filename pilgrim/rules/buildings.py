@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Any
 
 from pilgrim.model.buildings import (
@@ -34,6 +35,19 @@ MIN_BUILDING_LIVE_ROUND = 2
 MAX_BUILDING_LIVE_ROUND = 26
 DEFAULT_BUILDING_LIVE_ROUND = MIN_BUILDING_LIVE_ROUND
 _HIRE_COST = 1
+
+
+class BuildingAbilityReason(StrEnum):
+    """The complete engine vocabulary for an unavailable building ability."""
+
+    NOT_LIVE = "not_live"
+    NOT_SELECTED = "not_selected"
+    DONATED = "donated"
+    INSUFFICIENT_RESOURCE = "insufficient_resource"
+    MERCHANT_RESOURCE_NONE = "merchant_resource_none"
+
+
+BUILDING_ABILITY_REASONS: frozenset[BuildingAbilityReason] = frozenset(BuildingAbilityReason)
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,7 +496,7 @@ def building_ability_source(
             source_type="unavailable",
             owner=donated_owner,
             usable=False,
-            reason="donated",
+            reason=BuildingAbilityReason.DONATED,
         )
 
     player_state = state.player_state(acting_player)
@@ -521,7 +535,7 @@ def building_ability_source(
                 hire_cost=_HIRE_COST,
                 payable_to="bank",
                 usable=False,
-                reason="not_live",
+                reason=BuildingAbilityReason.NOT_LIVE,
             )
         return _hired_source(
             state,
@@ -537,7 +551,7 @@ def building_ability_source(
         building_key=building_key,
         source_type="unavailable",
         usable=False,
-        reason="not_selected",
+        reason=BuildingAbilityReason.NOT_SELECTED,
     )
 
 
@@ -793,7 +807,7 @@ def _hired_source(
             hire_cost=_HIRE_COST,
             payable_to=payable_to,
             usable=False,
-            reason="merchant_resource_none",
+            reason=BuildingAbilityReason.MERCHANT_RESOURCE_NONE,
         )
 
     acting_resources = state.player_state(acting_player).resources
@@ -814,7 +828,7 @@ def _hired_source(
                 hire_cost=_HIRE_COST,
                 payable_to=payable_to,
                 usable=False,
-                reason="insufficient_resource",
+                reason=BuildingAbilityReason.INSUFFICIENT_RESOURCE,
             )
         return BuildingAbilitySource(
             building_key=building_key,
@@ -836,7 +850,7 @@ def _hired_source(
             hire_cost=_HIRE_COST,
             payable_to=payable_to,
             usable=False,
-            reason="insufficient_resource",
+            reason=BuildingAbilityReason.INSUFFICIENT_RESOURCE,
         )
 
     return BuildingAbilitySource(
