@@ -29,11 +29,13 @@ _CHANGED_TEXTS: tuple[str, ...] = (
     "Special Activities",
     "player_one: Move two acolytes from the Abbey to Special Activity and/or between "
     "Special Activities",
-    "player_one: Taxation step 2: south east (construct) unlocks silver: "
-    "real count makes it a majority (1 vs 0). Choose one resource",
-    "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-    "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
-    "real count makes it a majority (1 vs 0). Choose two resources",
+    "player_one: Taxation step 2. No other Duty tile is a majority.",
+    "player_one: Taxation step 2. Choose one resource.",
+    "player_one: Taxation step 2. Choose two resources.",
+    "player_one: Taxation step 2. The Scriptorium makes south west and west majorities. "
+    "Choose two resources.",
+    "player_one: Taxation step 2. The Customs House makes your occupied tiles majorities. "
+    "Choose two resources.",
     "A building can be hired here.",
     "A building can be used here, free.",
     "Buildings can be used here — some free, some hired.",
@@ -118,21 +120,18 @@ def test_taxation_and_special_activity_prompts_name_the_engine_count() -> None:
         for step in one_resource
         if step.get("resource_total") == 1
     } == {
-        "player_one: Taxation step 2: south east (construct) unlocks silver: "
-        "real count makes it a majority (1 vs 0). Choose one resource"
+        "player_one: Taxation step 2. Choose one resource."
     }
     assert {
         step["prompt"]
         for step in two_resources
         if step.get("resource_total") == 2
     } == {
-        "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-        "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
-        "real count makes it a majority (1 vs 0). Choose two resources"
+        "player_one: Taxation step 2. Choose two resources."
     }
     assert {
         step["prompt"] for step in no_majority if step.get("resource_total") == 0
-    } == {"player_one: Taxation step 2: no other Duty tile is a majority."}
+    } == {"player_one: Taxation step 2. No other Duty tile is a majority."}
     assert {step["prompt"] for step in arrangements} == {
         "player_one: Move one acolyte from the Abbey to Special Activity and/or between "
         "Special Activities",

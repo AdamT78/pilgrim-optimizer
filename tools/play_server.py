@@ -823,13 +823,13 @@ def _combination_step(
     }
 
 
-def _spoken_resource_list(resources: tuple[str, ...]) -> str:
-    """Name one engine-provided resource set without giving the page a wording job."""
-    if len(resources) == 1:
-        return resources[0]
-    if len(resources) == 2:
-        return f"{resources[0]} and {resources[1]}"
-    return ", ".join(resources[:-1]) + f", and {resources[-1]}"
+def _spoken_position_list(positions: tuple[str, ...]) -> str:
+    """Name engine-provided board positions without giving the page a wording job."""
+    if len(positions) == 1:
+        return positions[0]
+    if len(positions) == 2:
+        return f"{positions[0]} and {positions[1]}"
+    return ", ".join(positions[:-1]) + f", and {positions[-1]}"
 
 
 def _taxation_step_two_prompt(
@@ -837,38 +837,41 @@ def _taxation_step_two_prompt(
     state: Any,
     config: Any,
 ) -> str:
-    """Put the engine's Taxation-majority explanation into the step-II question."""
+    """Put the engine's modifier-only Taxation explanation into the step-II question."""
     unlocks = taxation_majority_unlocks_for_action(state, config, action)
     resource_count = len(action.taxation_step2_resources)
     if not unlocks:
-        return "Taxation step 2: no other Duty tile is a majority."
+        return "Taxation step 2. No other Duty tile is a majority."
 
-    clauses: list[str] = []
-    for unlock in unlocks:
-        position = config.board.positions[unlock.duty_position].replace("_", " ")
-        duty = unlock.duty_category.replace("_", " ")
-        resource_text = _spoken_resource_list(unlock.resources)
-        counts = (
-            f"{unlock.effective_player_acolytes} vs {unlock.competing_acolytes}"
+    reasons = {unlock.majority_reason for unlock in unlocks}
+    unknown_reasons = reasons - {"real_count", "scriptorium", "customs_house"}
+    if unknown_reasons:
+        raise ValueError(f"Unknown Taxation majority reason: {unknown_reasons.pop()!r}")
+
+    if "customs_house" in reasons:
+        explanation = "The Customs House makes your occupied tiles majorities."
+    else:
+        scriptorium_positions = tuple(
+            config.board.positions[unlock.duty_position].replace("_", " ")
+            for unlock in unlocks
+            if unlock.majority_reason == "scriptorium"
         )
-        if unlock.majority_reason == "real_count":
-            reason = f"real count makes it a majority ({counts})"
-        elif unlock.majority_reason == "scriptorium":
-            reason = (
-                "Scriptorium changes "
-                f"{unlock.player_acolytes} to {unlock.effective_player_acolytes}, "
-                "making a majority "
-                f"({counts})"
+        if not scriptorium_positions:
+            explanation = ""
+        elif len(scriptorium_positions) == 1:
+            explanation = (
+                f"The Scriptorium makes {_spoken_position_list(scriptorium_positions)} a majority."
             )
-        elif unlock.majority_reason == "customs_house":
-            reason = f"Customs House makes this occupied tile a majority ({counts})"
         else:
-            raise ValueError(f"Unknown Taxation majority reason: {unlock.majority_reason!r}")
-        clauses.append(f"{position} ({duty}) unlocks {resource_text}: {reason}")
+            explanation = (
+                "The Scriptorium makes "
+                f"{_spoken_position_list(scriptorium_positions)} majorities."
+            )
 
-    return "Taxation step 2: " + "; ".join(clauses) + ". " + _resource_choice_prompt(
-        resource_count
-    )
+    prefix = "Taxation step 2."
+    if explanation:
+        prefix += f" {explanation}"
+    return f"{prefix} {_resource_choice_prompt(resource_count)}."
 
 
 def _number_in_words(number: int) -> str:

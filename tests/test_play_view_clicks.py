@@ -606,7 +606,7 @@ def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(pa
 
         assert (
             page.locator(
-                '[data-turn-prompt*="Taxation step 2:"][data-turn-offered="true"]'
+                '[data-turn-prompt*="Taxation step 2."][data-turn-offered="true"]'
             ).count()
             == 1
         )
@@ -730,9 +730,8 @@ def test_taxation_step_two_renders_the_server_scriptorium_explanation(page, serv
     prompt = page.locator('[data-turn-prompt][data-turn-offered="true"]')
     assert prompt.count() == 1
     assert prompt.text_content() == (
-        "Red: Taxation step 2: south west (ordination) unlocks silver: "
-        "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) unlocks "
-        "stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). Choose two resources"
+        "Red: Taxation step 2. The Scriptorium makes south west and west majorities. "
+        "Choose two resources."
     )
 
 
@@ -2382,7 +2381,7 @@ def test_confirm_needs_one_turn_action_or_a_complete_committed_step(page, serve)
     # the current engine question and Confirm still has exactly the action it will submit.
     assert page.locator('[data-turn-panel][data-turn-shown="true"]').count() == 0
     assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == (
-        "Red: Taxation step 2: no other Duty tile is a majority."
+        "Red: Taxation step 2. No other Duty tile is a majority."
     )
     before_action_token = server.payload["state_token"]
     confirm = page.query_selector('[data-turn-control="confirm"]')
