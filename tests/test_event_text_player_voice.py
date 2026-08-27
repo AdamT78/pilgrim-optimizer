@@ -26,9 +26,6 @@ from tools.audits.text_inventory import scenario_paths
 
 def test_the_event_types_still_using_developer_fallback_are_explicit() -> None:
     expected = [
-        "start_turn_relocation",
-        "end_turn_relocation",
-        "workforce_move",
         "alms_season_end",
         "alms_season_reward",
         "alms_reset",
@@ -80,6 +77,9 @@ def _assert_the_corpus_has_no_accidental_debug_player_text() -> None:
         if event.event_type in PLAYER_EVENT_FALLBACK_TYPES:
             continue
         if line is None:
+            if bool(dict(event.details).get("player_line_suppressed", False)):
+                assert event.event_type not in PLAYER_EVENT_FALLBACK_TYPES
+                continue
             if event.event_type in _PLAYER_BONUS_EVENT_TYPES:
                 assert _bonus_line_is_intentionally_absent(event), (
                     f"{event.event_type.value} {dict(event.details)!r} returned no player line"

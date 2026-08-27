@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from pilgrim.io.event_text import format_event_for_players
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import BuildingRelocationStep, EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
@@ -166,6 +167,25 @@ def test_library_step_moves_after_recall_and_before_turn_advance() -> None:
     relocation = _events_of_type(events, EventType.END_TURN_RELOCATION)[0]
     advance = _events_of_type(events, EventType.TURN_ADVANCE)[0]
     assert events.index(recall) < events.index(bonus) < events.index(relocation) < events.index(advance)
+
+
+def test_library_bonus_owns_the_only_player_relocation_line() -> None:
+    scenario, resolution = _resolved_state("scenarios/library_active_city_to_duty_001.json")
+    west = scenario.config.board.index_for_name("west")
+    step = next(
+        step for step in _library_steps(resolution.state, scenario.config) if step.selected_position == west
+    )
+    after_step = apply_turn_step(resolution.state, scenario.config, step)
+    bonus = _events_of_type(after_step.turn_progress.events, EventType.BUILDING_BONUS)[0]
+    relocation = _events_of_type(after_step.turn_progress.events, EventType.END_TURN_RELOCATION)[0]
+    player_lines = [
+        line
+        for event in (bonus, relocation)
+        if (line := format_event_for_players(event, scenario.config)) is not None
+    ]
+
+    assert player_lines == ["player_one used the Library to move an acolyte from the City to West."]
+    assert dict(relocation.details)["player_line_suppressed"] is True
 
 
 def test_library_rejects_pre_resolution_and_invalid_target() -> None:

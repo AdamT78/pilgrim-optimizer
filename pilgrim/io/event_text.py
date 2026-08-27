@@ -1095,6 +1095,12 @@ _PLAYER_DROPPED_EVENT_TYPES: set[EventType] = {
     EventType.CONFESSION_BOX_PHASE,
 }
 
+_PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES: set[EventType] = {
+    EventType.START_TURN_RELOCATION,
+    EventType.END_TURN_RELOCATION,
+    EventType.WORKFORCE_MOVE,
+}
+
 _PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
     EventType.SETUP_COMPLETE,
     *_PLAYER_TURN_STEP_EVENT_TYPES,
@@ -1105,6 +1111,7 @@ _PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
     EventType.BUILDING_BONUS,
     EventType.SPECIAL_ACTIVITY_BONUS,
     *_PLAYER_ROUND_END_EVENT_TYPES,
+    *_PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES,
 }
 
 PLAYER_EVENT_FALLBACK_TYPES: tuple[EventType, ...] = tuple(
@@ -1121,6 +1128,14 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
     event_type = event.event_type
 
     if event_type in _PLAYER_DROPPED_EVENT_TYPES:
+        return None
+    if event_type in _PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES:
+        if bool(details.get("player_line_suppressed", False)):
+            return None
+        raise AssertionError(
+            f"{event_type.value} needs a player sentence unless its building bonus announces it."
+        )
+    if bool(details.get("player_line_suppressed", False)):
         return None
 
     if event_type is EventType.SETUP_COMPLETE:
@@ -1351,8 +1366,6 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         return f"Round {round_number} ended."
 
     if event_type is EventType.BUILDING_BONUS:
-        if bool(details.get("player_line_suppressed", False)):
-            return None
         line = _building_bonus_for_players(actor, details)
         if line is not None:
             return line
@@ -1366,8 +1379,6 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         return None
 
     if event_type is EventType.SPECIAL_ACTIVITY_BONUS:
-        if bool(details.get("player_line_suppressed", False)):
-            return None
         line = _special_activity_bonus_for_players(actor, details)
         if line is not None:
             return line

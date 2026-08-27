@@ -7216,6 +7216,7 @@ def _apply_pulpit_workforce_move_to_state(
             to_pool="abbey",
             wheat_paid=0,
             building=_BUILDING_PULPIT,
+            player_line_suppressed=True,
         ),
     )
     return next_state, workforce_event
@@ -7588,6 +7589,7 @@ def _start_turn_relocation_event(
             from_position=from_position,
             to_position=to_position,
             amount=1,
+            player_line_suppressed=True,
         ),
     )
 
@@ -7629,6 +7631,7 @@ def _end_turn_relocation_event(
             from_pool="city",
             to_pool=relocation.to_pool,
             amount=1,
+            player_line_suppressed=True,
         ),
     )
 
