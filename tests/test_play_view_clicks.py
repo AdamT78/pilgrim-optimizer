@@ -545,7 +545,7 @@ def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(pa
 
         assert (
             page.locator(
-                '[data-turn-prompt*="choose 2 resources."][data-turn-offered="true"]'
+                '[data-turn-prompt*="Taxation step 2:"][data-turn-offered="true"]'
             ).count()
             == 1
         )
@@ -659,6 +659,20 @@ def test_taxation_step_two_darkens_step_one_only_resources(page, serve) -> None:
         == 1
     )
     assert not _confirm_enabled(page)
+
+
+def test_taxation_step_two_renders_the_server_scriptorium_explanation(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "scriptorium_taxation_majority_other_tiles_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    _reach_taxation_step_two(page)
+
+    prompt = page.locator('[data-turn-prompt][data-turn-offered="true"]')
+    assert prompt.count() == 1
+    assert prompt.text_content() == (
+        "Red: Taxation step 2: south west (ordination) unlocks silver: "
+        "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) unlocks "
+        "stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). Choose 2 resources."
+    )
 
 
 def test_tithe_cornucopia_previews_the_picked_holding_and_confirm_changes_nothing(

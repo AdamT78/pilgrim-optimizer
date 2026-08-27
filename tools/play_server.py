@@ -88,6 +88,7 @@ from pilgrim.rules.transition import (  # noqa: E402
     apply_action,
     apply_turn_step as apply_engine_turn_step,
     legal_actions,
+    taxation_majority_unlocks_for_action,
     turn_steps,
 )
 from tools.ui_debug.render_play_view import SEAT_COLOURS, render_play_view_from_payload  # noqa: E402
@@ -815,6 +816,59 @@ def _combination_step(
     }
 
 
+def _spoken_resource_list(resources: tuple[str, ...]) -> str:
+    """Name one engine-provided resource set without giving the page a wording job."""
+    if len(resources) == 1:
+        return resources[0]
+    if len(resources) == 2:
+        return f"{resources[0]} and {resources[1]}"
+    return ", ".join(resources[:-1]) + f", and {resources[-1]}"
+
+
+def _taxation_step_two_prompt(
+    action: FullTurnAction,
+    state: Any,
+    config: Any,
+) -> str:
+    """Put the engine's Taxation-majority explanation into the step-II question."""
+    unlocks = taxation_majority_unlocks_for_action(state, config, action)
+    resource_count = len(action.taxation_step2_resources)
+    if not unlocks:
+        return (
+            "Taxation step 2: no other Duty tile is a majority. "
+            f"Choose {resource_count} resources."
+        )
+
+    clauses: list[str] = []
+    for unlock in unlocks:
+        position = config.board.positions[unlock.duty_position].replace("_", " ")
+        duty = unlock.duty_category.replace("_", " ")
+        resource_text = _spoken_resource_list(unlock.resources)
+        counts = (
+            f"{unlock.effective_player_acolytes} vs {unlock.competing_acolytes}"
+        )
+        if unlock.majority_reason == "real_count":
+            reason = f"real count makes it a majority ({counts})"
+        elif unlock.majority_reason == "scriptorium":
+            reason = (
+                "Scriptorium changes "
+                f"{unlock.player_acolytes} to {unlock.effective_player_acolytes}, "
+                "making a majority "
+                f"({counts})"
+            )
+        elif unlock.majority_reason == "customs_house":
+            reason = f"Customs House makes this occupied tile a majority ({counts})"
+        else:
+            raise ValueError(f"Unknown Taxation majority reason: {unlock.majority_reason!r}")
+        clauses.append(f"{position} ({duty}) unlocks {resource_text}: {reason}")
+
+    return (
+        "Taxation step 2: "
+        + "; ".join(clauses)
+        + f". Choose {resource_count} resources."
+    )
+
+
 def _resource_delta(before: Any, after: Any) -> dict[str, int]:
     return {
         resource: getattr(after.resources, resource) - getattr(before.resources, resource)
@@ -1358,10 +1412,15 @@ def _presented(
             continue
         taken = tuple(getattr(action, name, ()) or ())
         amounts = [(noun, taken.count(noun)) for noun in COMBINATION_STOCKS]
+        prompt = f"choose {len(taken)} resources."
+        if resolution == "taxation" and state is not None and config is not None:
+            if not isinstance(action, FullTurnAction):
+                raise ValueError("Taxation step-II presentation requires a full turn action.")
+            prompt = _taxation_step_two_prompt(action, state, config)
         step = _combination_step(
             verb,
             amounts,
-            prompt=f"choose {len(taken)} resources.",
+            prompt=prompt,
         )
         step["resource_allocation"] = True
         step["resource_total"] = len(taken)
@@ -2029,6 +2088,50 @@ def _unresolved_fields(
     return unresolved
 
 
+def _align_implicit_taxation_step_two_prompts(candidates: list[dict]) -> None:
+    """Give one UI frontier the positive engine explanation when a passive branch is implicit.
+
+    Scriptorium and Customs House are neither offered nor confirmed.  Their positive Taxation
+    actions therefore share every visible answer before step II with an unmodified no-bonus
+    action.  The pills can only complete the positive branch, but candidate order used to choose
+    the no-bonus sentence.  Select the positive branch's server-written prompt for that shared
+    frontier; this changes neither actions nor the browser's generic prompt-reveal logic.
+    """
+    grouped: collections.defaultdict[tuple[Any, ...], list[tuple[dict, int]]] = (
+        collections.defaultdict(list)
+    )
+    for candidate in candidates:
+        steps = candidate["steps"]
+        for index, step in enumerate(steps):
+            if step["kind"] != "combination" or "resource_total" not in step:
+                continue
+            prefix = tuple(
+                tuple(previous["value"])
+                if isinstance(previous["value"], tuple)
+                else previous["value"]
+                for previous in steps[:index]
+            )
+            grouped[prefix].append((candidate, index))
+            break
+
+    for frontier in grouped.values():
+        positive_prompts = {
+            candidate["steps"][index]["prompt"]
+            for candidate, index in frontier
+            if candidate["steps"][index]["resource_total"] > 0
+        }
+        if not positive_prompts:
+            continue
+        if len(positive_prompts) != 1:
+            raise AssertionError(
+                "Taxation step-II candidates at one visible frontier disagree about their "
+                "positive explanation."
+            )
+        prompt = positive_prompts.pop()
+        for candidate, index in frontier:
+            candidate["steps"][index]["prompt"] = prompt
+
+
 def turn_candidates(
     state: Any,
     config: Any,
@@ -2149,6 +2252,7 @@ def turn_candidates(
                 "variants": len(members),
             }
         )
+    _align_implicit_taxation_step_two_prompts(candidates)
     return candidates
 
 
