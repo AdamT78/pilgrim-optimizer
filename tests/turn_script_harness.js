@@ -3,7 +3,7 @@
 //
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
-// arrangementPointerRules, buildingAbilityTargets }.
+// arrangementPointerRules, buildingAbilityTargets, phaseColumn, phaseOnly, phaseCandidateRuns }.
 //
 // A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
 // |'combination'|'resource'|'seat'|'building'
@@ -20,7 +20,13 @@
 'use strict';
 
 const fs = require('fs');
-const job = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const phaseCandidateTemplate = input.script.replace(
+  /var CANDIDATES = [\s\S]*?;\n  var TURN_STEPS/,
+  'var CANDIDATES = __HARNESS_PHASE_CANDIDATES__;\n  var TURN_STEPS'
+);
+
+function runJob(job) {
 
 function parsePart(part) {
   const tag = /^[A-Za-z0-9_-]+/.test(part) ? part.match(/^[A-Za-z0-9_-]+/)[0] : null;
@@ -203,6 +209,17 @@ const keys = (job.resolutions || []).map((name) =>
 const pairs = (job.combinations || []).map((value) =>
   makeElement('button', { 'data-combination-key': value }, [])
 );
+const confirmLabels = ['confirm', 'end_turn'].map((label) =>
+  makeElement('span', { 'data-turn-control-label': label, 'data-turn-offered': 'false' }, [])
+);
+const phaseRows = ((job.phaseColumn && job.phaseColumn.rows) || []).map((row) => {
+  const attrs = { 'data-turn-phase': row.key };
+  if (row.current) attrs['data-phase-current'] = 'true';
+  return makeElement('div', attrs, []);
+});
+const phasePrompts = Object.keys((job.phaseColumn && job.phaseColumn.prompts) || {}).map((key) =>
+  makeElement('div', { 'data-turn-phase-prompt': key }, [])
+);
 const buildings = (job.buildings || []).map((id) =>
   makeElement('g', { 'data-building-choice-key': id }, [])
 );
@@ -317,7 +334,7 @@ for (let index = 0; index < (job.panels || []).length; index += 1) {
 const aside = makeElement(
   'div',
   { 'data-component': 'play-turn' },
-  [].concat(prompts, keys, pairs, panels)
+  [].concat(phaseRows, phasePrompts, prompts, keys, pairs, confirmLabels, panels)
 );
 
 const root = makeElement(
@@ -343,6 +360,7 @@ const transcript = {
   controls: [],
   cubes: [],
   arrangements: [],
+  confirmLabels: [],
   buildingAbilityTexts: [],
   overflow: [],
   posted: null,
@@ -814,12 +832,53 @@ function record() {
   transcript.controlActive.push(snap.controlActive);
   transcript.cubes.push(snap.cubes);
   transcript.arrangements.push(snap.arrangements);
+  const confirmLabel = Array.from(document.querySelectorAll('[data-turn-control-label]')).find(
+    (label) => label.getAttribute('data-turn-offered') === 'true'
+  );
+  transcript.confirmLabels.push(
+    confirmLabel ? confirmLabel.getAttribute('data-turn-control-label') : null
+  );
   transcript.buildingAbilityTexts.push(snap.buildingAbilityTexts);
   transcript.overflow.push(snap.overflow);
 }
 
+let source = job.phaseCandidateRuns
+  ? phaseCandidateTemplate.replace(
+    '__HARNESS_PHASE_CANDIDATES__',
+    JSON.stringify(job.phaseCandidateRuns[0])
+  )
+  : job.script;
+if (job.phaseCandidateRuns) {
+  const beforePhaseHook = source;
+  source = source.replace(
+    '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();',
+    '  window.__phaseHarnessRender = function (candidates) {\n'
+      + '    CANDIDATES = candidates;\n'
+      + '    chosen = [];\n'
+      + '    render();\n'
+      + '  };\n\n'
+      + '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();'
+  );
+  if (source === beforePhaseHook) throw new Error('phase harness did not expose render');
+}
+
 // eslint-disable-next-line no-eval
-eval(job.script);
+eval(source);
+
+if (job.phaseOnly) {
+  const phaseSnapshot = () => ({
+    phaseRows: phaseRows
+      .filter((row) => row.getAttribute('data-phase-current') === 'true')
+      .map((row) => row.getAttribute('data-turn-phase')),
+  });
+  if (job.phaseCandidateRuns) {
+    return job.phaseCandidateRuns.map((candidates) => {
+      window.__phaseHarnessRender(candidates);
+      return phaseSnapshot();
+    });
+  }
+  return phaseSnapshot();
+}
 
 record();
 
@@ -948,4 +1007,10 @@ if (job.confirm) {
 transcript.resetVisible = control('reset')
   ? control('reset').getAttribute('data-turn-control-enabled')
   : null;
-process.stdout.write(JSON.stringify(transcript));
+return transcript;
+}
+
+const output = Array.isArray(input.runs)
+  ? input.runs.map((run) => runJob(Object.assign({}, input, run)))
+  : runJob(input);
+process.stdout.write(JSON.stringify(output));

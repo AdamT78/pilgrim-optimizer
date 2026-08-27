@@ -28,6 +28,7 @@ PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 PLAYTEST_CONVERSIONS = "conversions_2p.json"
+PLAYTEST_PULPIT = "pulpit_2p.json"
 
 
 @pytest.fixture(scope="session")
@@ -116,6 +117,9 @@ def _is_hit_target(page, handle, x: float, y: float) -> bool:
 
 
 def _click_handle_centre(page, handle, *, require_hit: bool = True) -> None:
+    # Asking every sow act grows the under-Alms transcript; the shared layout intentionally makes
+    # that column scroll rather than resize the board, so centre-click guards first expose it.
+    handle.scroll_into_view_if_needed()
     x, y = _centre(page, handle)
     if require_hit:
         assert _is_hit_target(page, handle, x, y), "elementFromPoint at target centre missed target"
@@ -123,6 +127,7 @@ def _click_handle_centre(page, handle, *, require_hit: bool = True) -> None:
 
 
 def _click_handle_point(page, handle, x_fraction: float, y_fraction: float) -> None:
+    handle.scroll_into_view_if_needed()
     point = page.evaluate(
         """({target, xFraction, yFraction}) => {
             const box = target.getBoundingClientRect();
@@ -214,6 +219,62 @@ def _walk_live_dom_until(
             _click_handle_centre(page, offered, require_hit=True)
         page.wait_for_timeout(20)
     raise AssertionError(f"did not reach {target} within {max_clicks} clicks")
+
+
+def _click_candidate_step(page, step: dict) -> None:
+    """Press the current DOM affordance for one engine-described turn step."""
+    kind = step["kind"]
+    value = step["value"]
+    if kind == "origin":
+        selector = f'[data-board-position-index="{value}"][data-turn-start-candidate="true"]'
+    elif kind == "edge":
+        selector = f'[data-arrow="{value}"][data-turn-offered="true"]'
+    elif kind == "skip":
+        selector = f'[data-board-position-index="{value}"][data-turn-skip-candidate="true"]'
+    elif kind == "duty":
+        selector = f'[data-board-position-index="{value}"][data-turn-duty-candidate="true"]'
+    elif kind == "resource":
+        selector = f'[data-active-seat="true"] [data-resource-choice-key="{value}"]'
+        selector += '[data-turn-offered="true"]'
+    elif kind == "building":
+        selector = f'[data-building-choice-key="{value}"][data-turn-offered="true"]'
+    elif kind in {"combination", "hire", "merchant_advance"}:
+        selector = f'[data-combination-key="{value}"][data-turn-offered="true"]'
+    elif kind == "seat":
+        selector = f'[data-seat-choice-key="{value}"][data-turn-offered="true"]'
+    elif kind == "resolution":
+        if value == "tithe":
+            selector = '[data-turn-control="tithe"][data-turn-control-enabled="true"]'
+        else:
+            action = page.query_selector('[data-turn-control="action"][data-turn-control-enabled="true"]')
+            assert action is not None, f"Action was not offered for {value}"
+            _click_handle_centre(page, action, require_hit=True)
+            page.wait_for_timeout(40)
+            selector = f'[data-resolution-key="{value}"][data-turn-offered="true"]'
+            choice = page.query_selector(selector)
+            if choice is None:
+                return
+    else:
+        raise AssertionError(f"no browser click mapping for engine step kind {kind!r}")
+    target = page.query_selector(selector)
+    assert target is not None, f"engine step {kind}={value!r} was not offered by {selector}"
+    _click_handle_centre(page, target, require_hit=True)
+    page.wait_for_timeout(40)
+
+
+def _click_candidate_prefix(page, candidate: dict, *, before_kind: str) -> None:
+    """Walk every player question before `before_kind`.
+
+    The server may mark a sole continuation arrow automatic; it remains in the candidate path
+    even though the page has already followed it while rendering the next question.
+    """
+    for step in candidate["steps"]:
+        if step["kind"] == before_kind:
+            return
+        if step.get("auto_advance") is True:
+            continue
+        _click_candidate_step(page, step)
+    raise AssertionError(f"candidate has no {before_kind!r} step")
 
 
 def _narrow_movement_library_turn_to_confirm(page) -> None:
@@ -770,11 +831,7 @@ def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None
     expected_state = apply_action(server.state, action, server.config).state
     expected = expected_state.player_state(acting_player).resources
 
-    for selector in ('[data-arrow="city->north"][data-turn-offered="true"]',):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing produce target {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
     action_control = page.query_selector(
         '[data-turn-control="action"][data-turn-control-enabled="true"]'
     )
@@ -812,11 +869,7 @@ def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None
     page.wait_for_timeout(100)
     assert _player_holdings(page) == before
 
-    for selector in ('[data-arrow="city->north"][data-turn-offered="true"]',):
-        handle = page.query_selector(selector)
-        assert handle is not None
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
     action_control = page.query_selector(
         '[data-turn-control="action"][data-turn-control-enabled="true"]'
     )
@@ -860,14 +913,11 @@ def test_devotion_previews_piety_cap_and_confirm_matches_reset(page, serve) -> N
         acting_player
     )
 
-    for selector in (
-        '[data-arrow="city->north"][data-turn-offered="true"]',
-        '[data-turn-control="action"][data-turn-control-enabled="true"]',
-    ):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing devotion target {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    action_control = page.query_selector('[data-turn-control="action"][data-turn-control-enabled="true"]')
+    assert action_control is not None, "Action was not offered for devotion"
+    _click_handle_centre(page, action_control, require_hit=True)
+    page.wait_for_timeout(40)
 
     _screenshot_piety_track(page, SCREENSHOTS / "devotion-piety-before.png")
     resolution = page.query_selector(
@@ -891,15 +941,10 @@ def test_devotion_previews_piety_cap_and_confirm_matches_reset(page, serve) -> N
     page.wait_for_timeout(100)
     assert _all_piety_positions(page) == before_positions
 
-    for selector in (
-        '[data-arrow="city->north"][data-turn-offered="true"]',
-        '[data-turn-control="action"][data-turn-control-enabled="true"]',
-        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]',
-    ):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing devotion target after reset {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    )
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
     assert server.state.player_state(acting_player).piety == expected_player.piety
@@ -912,7 +957,7 @@ def test_devotion_previews_piety_cap_and_confirm_matches_reset(page, serve) -> N
 
 
 def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(page, serve) -> None:
-    base_url, _server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
+    base_url, server = serve(SCENARIOS / "indulgences_active_sell_piety_001.json")
     page.goto(base_url, wait_until="networkidle")
 
     building = page.query_selector(
@@ -928,16 +973,16 @@ def test_piety_preview_does_not_leave_indulgence_pills_anchored_to_old_disc(page
     _click_handle_centre(page, direction, require_hit=True)
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() > 0
 
-    for selector in (
-        '[data-turn-control="action"][data-turn-control-enabled="true"]',
-        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]',
-    ):
-        handle = page.query_selector(selector)
-        assert handle is not None, (
-            f"missing devotion target while conversion pills are live: {selector}"
-        )
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    devotion = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+               for step in candidate["steps"])
+    )
+    _click_candidate_prefix(page, devotion, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in devotion["steps"] if step["kind"] == "resolution")
+    )
 
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
     assert (
@@ -954,6 +999,12 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
         candidate["action_id"] for candidate in server.payload["turn_candidates"]
     )
     acting_player = before_state.active_player
+    devotion_candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+               for step in candidate["steps"])
+    )
     devotion = next(
         action
         for action in legal_actions(before_state, server.config)
@@ -973,6 +1024,8 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     expected = apply_action(after_conversion, EndTurnAction(), server.config).state
 
     def click_devotion(*, choose_action: bool = True) -> None:
+        if choose_action:
+            _click_candidate_prefix(page, devotion_candidate, before_kind="resolution")
         selectors = []
         if choose_action:
             selectors.append('[data-turn-control="action"][data-turn-control-enabled="true"]')
@@ -1033,6 +1086,9 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
         if step["kind"] == "resolution"
     }
     assert len(initial_resolution_keys) > 1
+    # Reset restores the first unanswered sow act.  Reach the action split again before checking
+    # its offered resolutions rather than relying on the old forced-prefix shortcut.
+    _click_candidate_prefix(page, devotion_candidate, before_kind="resolution")
     action_control = page.locator('[data-turn-control="action"]')
     assert action_control.is_visible()
     assert action_control.get_attribute("data-turn-control-enabled") == "true"
@@ -1054,7 +1110,8 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     click_devotion(choose_action=False)
     click_sell_and_confirm()
     assert server.state == after_conversion
-    assert "ended the turn." in page.locator('[data-component="play-turn"]').inner_text()
+    _assert_painted_turn_phase(page, "end")
+    assert page.locator('[data-turn-phase-prompt="end"]').count() == 0
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
@@ -1114,6 +1171,13 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
     _screenshot_turn_prompt(page, SCREENSHOTS / "conversion-piety-answer-chosen.png")
 
+    devotion = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+               for step in candidate["steps"])
+    )
+    _click_candidate_prefix(page, devotion, before_kind="resolution")
     page.locator('[data-turn-control="action"][data-turn-control-enabled="true"]').click()
     page.wait_for_timeout(40)
     resolution = page.query_selector(
@@ -1133,7 +1197,7 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert not hint.is_visible()
     assert hint.inner_text() == ""
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
-    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    _assert_painted_turn_phase(page, "sow")
     assert server.state == before_state
 
     page.locator('[data-turn-control="reset"]').click()
@@ -1264,15 +1328,13 @@ def test_resolution_abandons_partial_resource_conversion_and_reset_is_safe(page,
     assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
     assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
 
-    for selector in (
-        '[data-board-position-index="0"][data-turn-start-candidate="true"]',
-        '[data-arrow="city->south"][data-turn-offered="true"]',
-        '[data-board-position-index="6"][data-turn-duty-candidate="true"]',
-    ):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing resource-conversion resolution prefix {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    devotion = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+               for step in candidate["steps"])
+    )
+    _click_candidate_prefix(page, devotion, before_kind="resolution")
     page.locator('[data-turn-control="action"][data-turn-control-enabled="true"]').click()
     page.wait_for_timeout(40)
     resolution = page.query_selector(
@@ -1337,11 +1399,10 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     )
 
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-before.png")
-    for selector in ('[data-turn-control="action"][data-turn-control-enabled="true"]',):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing donation target {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    )
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-after.png")
 
     preview_slots = _all_player_slots(page)
@@ -1364,11 +1425,10 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     page.wait_for_timeout(100)
     assert _all_player_slots(page) == before_slots
 
-    for selector in ('[data-turn-control="action"][data-turn-control-enabled="true"]',):
-        handle = page.query_selector(selector)
-        assert handle is not None, f"missing donation target after reset {selector}"
-        _click_handle_centre(page, handle, require_hit=True)
-        page.wait_for_timeout(40)
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    )
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
     assert (
@@ -1402,20 +1462,10 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     expected_state = apply_action(server.state, action, server.config).state
     expected_player = expected_state.player_state(acting_player)
 
-    _click_if_offered(page, '[data-board-position-index="3"][data-turn-start-candidate="true"]')
-    _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
-    action_control = page.query_selector(
-        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
     )
-    assert action_control is not None
-    _click_handle_centre(page, action_control, require_hit=True)
-    page.wait_for_timeout(40)
-    resolution = page.query_selector(
-        '[data-resolution-key="construct_building"][data-turn-offered="true"]'
-    )
-    assert resolution is not None
-    _click_handle_centre(page, resolution, require_hit=True)
-    page.wait_for_timeout(40)
 
     _screenshot_active_board(page, SCREENSHOTS / "construction-preview-before.png")
     building = page.query_selector('[data-building-choice-key="well"][data-turn-offered="true"]')
@@ -1459,20 +1509,10 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
 
     # The first pass already proves reset restored the preview; Confirm must commit exactly that
     # same state, with no arithmetic in the browser to reconstruct it.
-    _click_if_offered(page, '[data-board-position-index="3"][data-turn-start-candidate="true"]')
-    _click_if_offered(page, '[data-arrow="east->south_east"][data-turn-offered="true"]')
-    action_control = page.query_selector(
-        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
     )
-    assert action_control is not None
-    _click_handle_centre(page, action_control, require_hit=True)
-    page.wait_for_timeout(40)
-    resolution = page.query_selector(
-        '[data-resolution-key="construct_building"][data-turn-offered="true"]'
-    )
-    assert resolution is not None
-    _click_handle_centre(page, resolution, require_hit=True)
-    page.wait_for_timeout(40)
     building = page.query_selector('[data-building-choice-key="well"][data-turn-offered="true"]')
     assert building is not None
     _click_handle_centre(page, building, require_hit=True)
@@ -1582,19 +1622,16 @@ def test_guild_click_commits_in_the_end_of_turn_window_and_never_asks_about_usin
     before_position = server.state.merchant_board_position
     assert "choose whether to use Guild" not in page.content()
 
-    _click_if_offered(page, '[data-arrow="north->north_east"][data-turn-offered="true"]')
-    action_control = page.query_selector(
-        '[data-turn-control="action"][data-turn-control-enabled="true"]'
+    devotion = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+               for step in candidate["steps"])
     )
-    assert action_control is not None
-    _click_handle_centre(page, action_control, require_hit=True)
-    page.wait_for_timeout(40)
-    resolution = page.query_selector(
-        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    _click_candidate_prefix(page, devotion, before_kind="resolution")
+    _click_candidate_step(
+        page, next(step for step in devotion["steps"] if step["kind"] == "resolution")
     )
-    assert resolution is not None
-    _click_handle_centre(page, resolution, require_hit=True)
-    page.wait_for_timeout(40)
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
 
@@ -2341,8 +2378,11 @@ def test_confirm_needs_one_turn_action_or_a_complete_committed_step(page, serve)
     else:
         raise AssertionError("the normal turn action did not narrow to an enabled Confirm")
 
-    assert page.locator('[data-turn-panel][data-turn-shown="true"]').count() == 1, (
-        "Confirm enabled before narrowing to one normal turn action"
+    # A taxation step requiring zero resources has no control to press, but it remains visible as
+    # the current engine question and Confirm still has exactly the action it will submit.
+    assert page.locator('[data-turn-panel][data-turn-shown="true"]').count() == 0
+    assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == (
+        "Red: Taxation step 2: no other Duty tile is a majority."
     )
     before_action_token = server.payload["state_token"]
     confirm = page.query_selector('[data-turn-control="confirm"]')
@@ -2368,17 +2408,15 @@ def test_confirm_paints_the_action_that_its_next_press_will_take(page, serve) ->
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(20)
     assert _painted_confirm_label(page) == "Confirm", "Sow painted a label that would pass the turn"
-    sow_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
 
     page.reload(wait_until="networkidle")
     _reach_movement_library_window(page)
+    _assert_painted_turn_phase(page, "end")
     assert _painted_confirm_label(page) == "End turn", (
-        "the un-staged End of Turn window did not say what Confirm would do"
+        "the End-of-Turn Confirm did not say what its next press would do"
     )
+    assert _confirm_enabled(page), "the direct End-of-Turn Confirm was not enabled"
     end_turn_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
-    assert end_turn_height == pytest.approx(sow_height, abs=0.1), (
-        "the End of Turn caption changed the prompt box height"
-    )
     full_page = page.evaluate(
         """() => ({
             width: document.documentElement.scrollWidth,
@@ -2814,6 +2852,7 @@ def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions
     assert west_out["cy"] > city_center_y, "city->west must sit below the west spoke axis"
     assert west_in["cy"] < city_center_y, "west->city must sit above the west spoke axis"
 
+    _click_candidate_prefix(page, candidate, before_kind="edge")
     first = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
     assert first is not None, "city->east was not offered on the opening Kogge step"
     _click_handle_centre(page, first, require_hit=True)
@@ -3034,6 +3073,7 @@ def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve
         page,
         resource_choice_is_live,
         target="resource choice on asking seat",
+        preferred_control="tithe",
     )
 
     asking_seat = page.query_selector('[data-player-seat][data-resource-choice="true"]')
@@ -3223,10 +3263,9 @@ def test_seat_choice_keys_are_reachable_for_all_four_seats_and_light_confirm(pag
         assert _confirm_enabled(page), "confirm did not light after clicking a seat key"
 
 
-#
-# No offered-key assertion here: in committed scenarios where only one building is legal, the
-# building step is forced and the page answers it without asking. That auto-advance is by design.
-#
+# This fixture opens before any construct candidate is reached, so this checks only that the drawn
+# but unoffered building keys have no hit area.  The one-building construct itself is covered by
+# the turn-script test that now requires its click.
 def test_hidden_building_keys_keep_no_hit_area(page, serve) -> None:
     """Catches hidden-key regressions: in SVG, `pointer-events: all` still applies while hidden."""
     base_url, _server = serve(SCENARIOS / "construct_building_live_only_001.json")
@@ -3343,6 +3382,8 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-sow.png")
 
     for step in tithe_candidate["steps"]:
+        if step.get("auto_advance") is True:
+            continue
         if step["kind"] == "edge":
             selector = f'[data-arrow="{step["value"]}"][data-turn-offered="true"]'
         elif step["kind"] == "duty":
@@ -3352,10 +3393,7 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
         else:
             continue
         handle = page.query_selector(selector)
-        if handle is None:
-            # Shared route steps auto-advance; they remain part of the candidate, but are not
-            # presented as another player click.
-            continue
+        assert handle is not None, f"the candidate step {step['value']} was not offered"
         _click_handle_centre(page, handle, require_hit=True)
         page.wait_for_timeout(40)
     tithe = page.query_selector('[data-turn-control="tithe"][data-turn-control-enabled="true"]')
@@ -3379,6 +3417,88 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     assert server.state.turn_progress.resolution_committed is True
     _assert_painted_turn_phase(page, "end")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-end.png")
+
+
+def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page, serve) -> None:
+    """The thin board proves acts remain visible and both phase paint paths agree."""
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_PULPIT)
+    server_html = page.request.get(base_url).text()
+    assert (
+        '<div class="phase-row" data-turn-phase="beginning" data-phase-current="true">'
+        "Beginning of Turn</div>"
+    ) in server_html
+    assert server.payload["phase_column"]["prompts"] == {
+        "beginning": "Pick up acolytes for sowing. A building can be hired."
+    }
+    assert [
+        step["turn_phase"] for step in server.payload["turn_candidates"][0]["steps"][:3]
+    ] == ["beginning", "sow", "sow"]
+
+    page.goto(base_url, wait_until="networkidle")
+    _assert_painted_turn_phase(page, "beginning")
+    assert page.locator('[data-turn-phase-prompt="beginning"]').inner_text() == (
+        "Pick up acolytes for sowing. A building can be hired."
+    )
+
+    for selector, prompt in (
+        (
+            '[data-board-position-index="1"][data-turn-start-candidate="true"]',
+            "Red: choose a space to lift acolytes from.",
+        ),
+        (
+            '[data-board-position-index="2"][data-turn-duty-candidate="true"]',
+            "Red: choose a duty to take.",
+        ),
+    ):
+        assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == prompt
+        target = page.query_selector(selector)
+        assert target is not None, f"the one-answer Pulpit question was not offered: {selector}"
+        _click_handle_centre(page, target, require_hit=True)
+        page.wait_for_timeout(40)
+
+    _assert_painted_turn_phase(page, "sow")
+    assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == (
+        "Red: Action or Tithe."
+    )
+    action = page.query_selector('[data-turn-control="action"][data-turn-control-enabled="true"]')
+    assert action is not None
+    _click_handle_centre(page, action, require_hit=True)
+    page.wait_for_timeout(40)
+    resolution = page.query_selector(
+        '[data-resolution-key="clerical_devotion"][data-turn-offered="true"]'
+    )
+    assert resolution is not None
+    _click_handle_centre(page, resolution, require_hit=True)
+    page.wait_for_timeout(40)
+    assert _confirm_enabled(page)
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+
+    assert server.state.turn_progress.resolution_committed is True
+    _assert_painted_turn_phase(page, "end")
+    assert server.payload["phase_column"]["prompts"] == {}
+    assert page.locator('[data-turn-phase-prompt="end"]').count() == 0
+
+
+def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve) -> None:
+    """A continuation arrow is automatic only until a duty or another route can be chosen."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
+    page.goto(base_url, wait_until="networkidle")
+
+    origin = page.query_selector('[data-board-position-index="1"][data-turn-start-candidate="true"]')
+    assert origin is not None, "Cloisters Reach did not ask the player to lift acolytes"
+    _click_handle_centre(page, origin, require_hit=True)
+    page.wait_for_timeout(40)
+
+    _assert_painted_turn_phase(page, "sow")
+    duties = page.locator('[data-turn-duty-candidate="true"]').evaluate_all(
+        "spaces => spaces.map(space => Number(space.getAttribute('data-board-position-index')))"
+    )
+    arrows = page.locator('[data-arrow][data-turn-offered="true"]').evaluate_all(
+        "arrows => arrows.map(arrow => arrow.getAttribute('data-arrow'))"
+    )
+    assert set(duties) == {2, 3, 4, 7}
+    assert set(arrows) == {"east->city", "east->south_east"}
 
 
 def test_setup_sow_phase_column_stays_dim_after_a_setup_answer(page, serve) -> None:

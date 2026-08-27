@@ -905,6 +905,7 @@ def _turn_phase_column(payload: dict) -> str:
         {"key": "end", "label": "End of Turn", "current": False},
     )
     attribute = "data-round-end-phase" if scope == "round_end" else "data-turn-phase"
+    prompts = column.get("prompts") or {}
     return (
         f'<div class="phase-column" data-phase-column="{escape(scope)}">'
         + "".join(
@@ -912,6 +913,14 @@ def _turn_phase_column(payload: dict) -> str:
             + (' data-phase-current="true"' if row.get("current") else "")
             + f">{escape(str(row['label']))}</div>"
             for row in rows
+        )
+        + "".join(
+            f'<div class="phase-prompt" data-turn-phase-prompt="{escape(str(key))}"'
+            + (' data-turn-phase-prompt-current="true"' if key == next(
+                (row["key"] for row in rows if row.get("current")), None
+            ) else "")
+            + f">{escape(str(prompt))}</div>"
+            for key, prompt in prompts.items()
         )
         + "</div>"
     )
@@ -1067,6 +1076,9 @@ def turn_styles(route_color: str) -> str:
     margin: -1px 0 9px; padding-bottom: 9px; border-bottom: 1px solid #333333; }}
   .phase-row {{ color: {TURN_PHASE_DIM_COLOR}; font-size: 12px; letter-spacing: 0.02em; }}
   .phase-row[data-phase-current="true"] {{ color: {TURN_PHASE_CURRENT_COLOR}; font-weight: 700; }}
+  .phase-prompt {{ display: none; margin-top: 7px; color: #F2EEDF; font-size: 12px;
+    line-height: 1.45; }}
+  .phase-prompt[data-turn-phase-prompt-current="true"] {{ display: block; }}
   /* One line per question, all drawn, all hidden until the script says theirs is the one being
      asked. Above the keys because several of these are answered nowhere near them -- on the board,
      on a seat's own stock, on a hex of the round track -- and a line that only appeared when the

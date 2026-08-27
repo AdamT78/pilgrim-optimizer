@@ -834,10 +834,7 @@ def _taxation_step_two_prompt(
     unlocks = taxation_majority_unlocks_for_action(state, config, action)
     resource_count = len(action.taxation_step2_resources)
     if not unlocks:
-        return (
-            "Taxation step 2: no other Duty tile is a majority. "
-            f"Choose {resource_count} resources."
-        )
+        return "Taxation step 2: no other Duty tile is a majority."
 
     clauses: list[str] = []
     for unlock in unlocks:
@@ -1358,6 +1355,9 @@ def _presented(
                     "kind": "resolution",
                     "value": "end_turn",
                     "prompt": "End the turn.",
+                    # The engine has no further choice to put to the player: Confirm submits this
+                    # already-settled action directly instead of opening the Action split.
+                    "direct_confirm": True,
                 },
                 (),
             )
@@ -2132,6 +2132,37 @@ def _align_implicit_taxation_step_two_prompts(candidates: list[dict]) -> None:
             candidate["steps"][index]["prompt"] = prompt
 
 
+def _frontier_value(value: Any) -> Any:
+    """Make a turn-step value usable as part of a frontier key."""
+    if isinstance(value, (list, tuple)):
+        return tuple(_frontier_value(part) for part in value)
+    return value
+
+
+def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
+    """Mark movement that has no player-facing alternative at its frontier.
+
+    The page must not decide which engine steps are automatic. Grouping the supplied
+    candidates by their already chosen prefix lets the server identify the narrow case
+    where continuing sowing has exactly one available step, and that step is an edge.
+    """
+    frontiers: collections.defaultdict[tuple[Any, ...], list[dict]] = collections.defaultdict(list)
+    for candidate in candidates:
+        prefix: list[Any] = []
+        for step in candidate["steps"]:
+            frontiers[tuple(prefix)].append(step)
+            prefix.append(_frontier_value(step["value"]))
+
+    for steps in frontiers.values():
+        offered = {
+            (step["kind"], _frontier_value(step["value"])): step for step in steps
+        }
+        if len(offered) != 1 or next(iter(offered.values()))["kind"] != "edge":
+            continue
+        for step in steps:
+            step["auto_advance"] = True
+
+
 def turn_candidates(
     state: Any,
     config: Any,
@@ -2253,6 +2284,17 @@ def turn_candidates(
             }
         )
     _align_implicit_taxation_step_two_prompts(candidates)
+    if state.phase is TurnPhase.SOW and not state.turn_progress.resolution_committed:
+        for candidate in candidates:
+            for index, step in enumerate(candidate["steps"]):
+                # The page has to move the phase marker while it narrows candidates locally.  Give
+                # it the engine-side answer at each cursor position instead of teaching it that a
+                # first answer means an acolyte was picked up.
+                step["turn_phase"] = "beginning" if index == 0 else "sow"
+            # Once every decision in a full turn is named, its resolution is still only previewed.
+            # Confirm is the engine boundary that replaces this page with the End of Turn window.
+            candidate["settled_turn_phase"] = "sow"
+        _mark_unambiguous_edge_steps(candidates)
     return candidates
 
 
@@ -2271,7 +2313,58 @@ _ROUND_END_EVENT_ROWS = (
 )
 
 
-def phase_column_payload(state: Any, log_blocks: list[dict[str, Any]]) -> dict[str, Any]:
+def _turn_window_prompt(
+    *,
+    resolution_committed: bool,
+    available_turn_steps: list[dict[str, Any]],
+) -> str:
+    """Write the short, window-level instruction from enumerated building steps.
+
+    The client may not turn step metadata into claims about what buildings are usable.  These are
+    deliberately counts rather than names: on a late board a complete list would bury the useful
+    fact that a hire or free activation exists.
+    """
+    hire_count = sum(step.get("hire_payment") is not None for step in available_turn_steps)
+    free_activation_count = sum(
+        step.get("hire_payment") is None for step in available_turn_steps
+    )
+    can_hire = hire_count > 0
+    can_activate_for_free = free_activation_count > 0
+
+    def availability_sentence(count: int, singular: str, plural: str) -> str:
+        return singular if count == 1 else plural
+
+    hire_sentence = availability_sentence(
+        hire_count,
+        "A building can be hired.",
+        "Buildings can be hired.",
+    )
+    activation_sentence = availability_sentence(
+        free_activation_count,
+        "A building can be activated without payment.",
+        "Buildings can be activated without payment.",
+    )
+    if not resolution_committed:
+        sentences = ["Pick up acolytes for sowing."]
+        if can_hire:
+            sentences.append(hire_sentence)
+        if can_activate_for_free:
+            sentences.append(activation_sentence)
+        return " ".join(sentences)
+
+    available = []
+    if can_hire:
+        available.append(hire_sentence)
+    if can_activate_for_free:
+        available.append(activation_sentence)
+    return " ".join(available)
+
+
+def phase_column_payload(
+    state: Any,
+    log_blocks: list[dict[str, Any]],
+    available_turn_steps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Describe the phase column the page must draw for this outstanding decision.
 
     The engine state says whether the table is in a turn, a round-end question, or neither. The
@@ -2288,12 +2381,17 @@ def phase_column_payload(state: Any, log_blocks: list[dict[str, Any]]) -> dict[s
         }
     if phase is TurnPhase.SOW:
         current = "end" if state.turn_progress.resolution_committed else "beginning"
+        window_prompt = _turn_window_prompt(
+            resolution_committed=state.turn_progress.resolution_committed,
+            available_turn_steps=available_turn_steps or [],
+        )
         return {
             "scope": "turn",
             "rows": [
                 {"key": key, "label": label, "current": key == current}
                 for key, label in _TURN_PHASE_ROWS
             ],
+            "prompts": {current: window_prompt} if window_prompt else {},
         }
     if phase not in {TurnPhase.START_PLAYER_CONFESSION, TurnPhase.START_PLAYER_SELECTION}:
         return {
@@ -2522,11 +2620,12 @@ class PlayServer(ThreadingHTTPServer):
             return
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
+        available_turn_steps = turn_steps_payload(self.state, self.config)
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
             turn_candidates=turn_candidates(self.state, self.config),
-            turn_steps=turn_steps_payload(self.state, self.config),
+            turn_steps=available_turn_steps,
             building_abilities=building_abilities_payload(self.state, self.config),
             log=list(self.log_lines),
             log_blocks=[
@@ -2537,7 +2636,9 @@ class PlayServer(ThreadingHTTPServer):
                 )
                 for block in self.log_blocks
             ],
-            phase_column=phase_column_payload(self.state, self.log_blocks),
+            phase_column=phase_column_payload(
+                self.state, self.log_blocks, available_turn_steps=available_turn_steps
+            ),
         )
         if self._setup_metadata is not None:
             self.payload["setup_metadata"] = self._setup_metadata

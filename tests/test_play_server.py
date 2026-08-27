@@ -43,7 +43,13 @@ from pilgrim.model.actions import (
     action_id,
     action_summary_for_players,
 )
-from pilgrim.model.enums import CANONICAL_POSITION_NAMES, EventType, PlayerId, TurnResolutionType
+from pilgrim.model.enums import (
+    CANONICAL_POSITION_NAMES,
+    EventType,
+    PlayerId,
+    TurnPhase,
+    TurnResolutionType,
+)
 from pilgrim.rules.buildings import (
     BUILDING_ABILITY_REASONS,
     BuildingAbilityReason,
@@ -808,6 +814,118 @@ def test_cloisters_reach_playtest_turn_candidates_have_no_dead_edge_steps() -> N
         assert not dead, f"playtest candidates still ask for undrawn arrows: {dead[:10]}"
     finally:
         server.server_close()
+
+
+def test_sow_payload_auto_advances_only_unambiguous_cloisters_edges() -> None:
+    """The server, not the page, distinguishes a forced route from a route choice."""
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CLOISTERS))
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    assert {
+        step["kind"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step.get("auto_advance") is True
+    } == {"edge"}
+
+    def offered(prefix: list[object]) -> set[tuple[object, object, object]]:
+        index = len(prefix)
+        return {
+            (
+                candidate["steps"][index]["kind"],
+                candidate["steps"][index]["value"],
+                candidate["steps"][index].get("auto_advance"),
+            )
+            for candidate in candidates
+            if len(candidate["steps"]) > index
+            and [step["value"] for step in candidate["steps"][:index]] == prefix
+        }
+
+    assert offered([1]) == {("edge", "north->north_east", True)}
+    assert offered([1, "north->north_east"]) == {("edge", "north_east->east", True)}
+    assert offered([1, "north->north_east", "north_east->east"]) == {
+        ("duty", 2, None),
+        ("duty", 3, None),
+        ("duty", 4, None),
+        ("duty", 7, None),
+        ("edge", "east->city", None),
+        ("edge", "east->south_east", None),
+    }
+
+
+def _turn_candidate_frontiers(candidates: list[dict]) -> list[dict[str, Any]]:
+    """Group candidate steps exactly as the page groups its next answer."""
+    frontiers: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for candidate_index, candidate in enumerate(candidates):
+        prefix: list[Any] = []
+        for step_index, step in enumerate(candidate["steps"]):
+            key = tuple(prefix)
+            frontier = frontiers.setdefault(
+                key,
+                {
+                    "prefix": key,
+                    "steps": [],
+                    "cursor": {"candidateIndex": candidate_index, "depth": step_index},
+                },
+            )
+            frontier["steps"].append(step)
+            prefix.append(play_server._frontier_value(step["value"]))
+    return list(frontiers.values())
+
+
+def _distinct_frontier_options(frontier: dict[str, Any]) -> dict[tuple[Any, Any], dict]:
+    return {
+        (step["kind"], play_server._frontier_value(step["value"])): step
+        for step in frontier["steps"]
+    }
+
+
+def _assert_auto_advance_frontiers(
+    scenario_name: str, candidates: list[dict], *, auto_advance_is_active: bool
+) -> int:
+    """Check the metadata whose only consumer is the generic page loop."""
+    frontiers = _turn_candidate_frontiers(candidates)
+    for frontier in frontiers:
+        options = _distinct_frontier_options(frontier)
+        marked = [step for step in frontier["steps"] if "auto_advance" in step]
+        if marked:
+            assert all(step["kind"] == "edge" for step in marked), (
+                f"{scenario_name} marked a non-edge automatic at {frontier['prefix']!r}: "
+                f"{[(step['kind'], step['value']) for step in marked]!r}"
+            )
+            assert len(options) == 1, (
+                f"{scenario_name} marked an edge automatic at its multi-option frontier "
+                f"{frontier['prefix']!r}: {list(options)!r}"
+            )
+            assert all(step["auto_advance"] is True for step in marked)
+        if auto_advance_is_active:
+            expected = len(options) == 1 and next(iter(options.values()))["kind"] == "edge"
+            assert len(marked) == (len(frontier["steps"]) if expected else 0), (
+                f"{scenario_name} auto_advance did not match its frontier at "
+                f"{frontier['prefix']!r}: {list(options)!r}"
+            )
+    return len(frontiers)
+
+
+def test_auto_advance_is_exactly_the_unambiguous_edge_at_every_corpus_frontier() -> None:
+    """Building fixtures must not get a step kind the generic automatic loop swallows."""
+    checked = 0
+    top_level_paths = sorted(SCENARIOS.glob("*.json"))
+    playtest_paths = sorted(PLAYTEST_SCENARIOS.glob("*.json"))
+    for scenario_path in [*top_level_paths, *playtest_paths]:
+        scenario = load_scenario(str(scenario_path))
+        candidates = play_server.turn_candidates(scenario.state, scenario.config)
+        checked += _assert_auto_advance_frontiers(
+            scenario_path.name,
+            candidates,
+            auto_advance_is_active=(
+                scenario.state.phase is TurnPhase.SOW
+                and not scenario.state.turn_progress.resolution_committed
+            ),
+        )
+
+    assert len(top_level_paths) >= 314, f"only {len(top_level_paths)} top-level scenarios were checked"
+    assert [path.name for path in playtest_paths] == sorted(PLAYTEST_POSITION_NAMES)
+    assert checked >= 5400, f"only {checked} corpus frontiers were checked"
 
 
 def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
@@ -1669,6 +1787,7 @@ def _run_script(
     reset: bool = False,
     confirm: bool = False,
     mutate=None,
+    job_fields: dict[str, Any] | None = None,
 ):
     """Execute the page's own turn script against a stub board, and report what it did.
 
@@ -1750,6 +1869,7 @@ def _run_script(
                 "reset": reset,
                 "confirm": confirm,
             }
+            | (job_fields or {})
         ),
         encoding="utf-8",
     )
@@ -1757,6 +1877,134 @@ def _run_script(
         ["node", str(HARNESS), str(job)], capture_output=True, text=True, check=True
     )
     return json.loads(finished.stdout)
+
+
+def _phase_column_at_cursor(column: dict, current: str) -> dict:
+    """Keep the server's phase rows, changing only which supplied cursor names as current."""
+    return {
+        **column,
+        "rows": [{**row, "current": row["key"] == current} for row in column["rows"]],
+    }
+
+
+def _server_painted_turn_phases(column: dict) -> list[str]:
+    page = render_play_view._turn_phase_column({"phase_column": column})
+    return re.findall(r'data-turn-phase="([^"]+)" data-phase-current="true"', page)
+
+
+def _phase_named_at_frontier(frontier: dict[str, Any]) -> str:
+    phases = {step["turn_phase"] for step in frontier["steps"]}
+    assert len(phases) == 1, f"one page cursor carried several server phases: {phases!r}"
+    return phases.pop()
+
+
+def _phase_after_the_page_follows_automatic_steps(
+    candidates: list[dict], cursor: dict[str, int]
+) -> str:
+    """Read the next phase from the payload after its marked automatic continuation."""
+    selected = candidates[cursor["candidateIndex"]]["steps"][: cursor["depth"]]
+    prefix = [step["value"] for step in selected]
+    while True:
+        live = [
+            candidate
+            for candidate in candidates
+            if len(candidate["steps"]) >= len(prefix)
+            and [step["value"] for step in candidate["steps"][: len(prefix)]] == prefix
+        ]
+        offered = {
+            (step["kind"], play_server._frontier_value(step["value"])): step
+            for candidate in live
+            if len(candidate["steps"]) > len(prefix)
+            for step in [candidate["steps"][len(prefix)]]
+        }
+        if len(offered) == 1 and next(iter(offered.values())).get("auto_advance") is True:
+            prefix.append(next(iter(offered.values()))["value"])
+            continue
+        if offered:
+            phases = {step["turn_phase"] for step in offered.values()}
+        else:
+            phases = {candidate["settled_turn_phase"] for candidate in live}
+        assert len(phases) == 1, f"one page cursor carried several server phases: {phases!r}"
+        return phases.pop()
+
+
+def _candidates_at_cursor(candidates: list[dict], cursor: dict[str, int]) -> list[dict]:
+    """Put one payload cursor at the front without translating its server-written steps."""
+    selected = candidates[cursor["candidateIndex"]]["steps"][: cursor["depth"]]
+    prefix = [step["value"] for step in selected]
+    return [
+        {**candidate, "steps": candidate["steps"][len(prefix) :]}
+        for candidate in candidates
+        if len(candidate["steps"]) >= len(prefix)
+        and [step["value"] for step in candidate["steps"][: len(prefix)]] == prefix
+    ]
+
+
+def _run_phase_cursors(
+    server, candidates: list[dict], cursors: list[dict[str, int]], tmp_path: Path
+) -> list[dict]:
+    """Run the shipped script once per cursor without replacing its phase logic in Python."""
+    output = _run_script(
+        server,
+        [],
+        tmp_path,
+        job_fields={
+            "phaseColumn": server.payload["phase_column"],
+            "phaseOnly": True,
+            "phaseCandidateRuns": [
+                _candidates_at_cursor(candidates, cursor)
+                for cursor in cursors
+            ],
+        },
+    )
+    assert isinstance(output, list)
+    return output
+
+
+@needs_node
+def test_every_playtest_frontier_paints_the_phase_its_payload_names(tmp_path: Path) -> None:
+    """Server first paint and client rerender both consume the payload's phase, never a rule."""
+    checked = 0
+    scenario_names = []
+    for scenario_path in sorted(PLAYTEST_SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            candidates = server.payload["turn_candidates"]
+            frontiers = _turn_candidate_frontiers(candidates)
+            scenario_names.append(scenario_path.name)
+            expected = [_phase_named_at_frontier(frontier) for frontier in frontiers]
+            cursors = [frontier["cursor"] for frontier in frontiers]
+
+            for phase in expected:
+                column = _phase_column_at_cursor(server.payload["phase_column"], phase)
+                assert _server_painted_turn_phases(column) == [phase]
+
+            painted = _run_phase_cursors(server, candidates, cursors, tmp_path)
+            assert len(painted) == len(frontiers)
+            for frontier, observed in zip(frontiers, painted, strict=True):
+                expected_phase = _phase_after_the_page_follows_automatic_steps(
+                    candidates, frontier["cursor"]
+                )
+                assert observed["phaseRows"] == [expected_phase], (
+                    f"{scenario_path.name} client painted {observed['phaseRows']!r} at "
+                    f"{frontier['prefix']!r}; its server payload names {expected_phase!r}"
+                )
+            checked += len(frontiers)
+
+            settled = next(candidate for candidate in candidates if candidate["action_id"] is not None)
+            server.apply(settled["action_id"], server.payload["state_token"])
+            assert _server_painted_turn_phases(server.payload["phase_column"]) == ["end"]
+            assert _run_script(
+                server,
+                [],
+                tmp_path,
+                job_fields={"phaseColumn": server.payload["phase_column"], "phaseOnly": True},
+            ) == {"phaseRows": ["end"]}
+        finally:
+            server.server_close()
+
+    assert sorted(scenario_names) == sorted(PLAYTEST_POSITION_NAMES)
+    assert checked >= 1700, f"only {checked} playtest frontiers were checked"
 
 
 def _buildings_on_the_track(server) -> list[str]:
@@ -2394,28 +2642,23 @@ def _next_values(decisions: list[list[dict]], prefix: list) -> list:
     return _values(_next_steps(decisions, prefix))
 
 
-def _forced_prefix(decisions: list[list[dict]], prefix: list) -> list:
-    """Advance past every step the survivors agree on, as the page does."""
-    prefix = list(prefix)
-    while len(_next_steps(decisions, prefix)) == 1:
-        step = _next_steps(decisions, prefix)[0]
-        if step["kind"] == "resolution" or (
-            step["kind"] == "combination"
-            and step.get("resource_allocation")
-            and (
-                step.get("resource_allocation_any_total") or int(step.get("resource_total", 0)) > 0
-            )
-        ):
-            break
-        prefix.append(step["value"])
-    return prefix
+def _page_auto_advances(server, prefix: list, step: dict) -> bool:
+    """Whether this engine step is one the payload says the page has already followed."""
+    index = len(prefix)
+    matching = [
+        candidate["steps"][index]
+        for candidate in server.payload["turn_candidates"]
+        if len(candidate["steps"]) > index
+        and [previous["value"] for previous in candidate["steps"][:index]] == prefix
+        and candidate["steps"][index]["kind"] == step["kind"]
+        and candidate["steps"][index]["value"] == step["value"]
+    ]
+    assert matching, f"no page candidate matched engine step {step!r} after {prefix!r}"
+    return all(current.get("auto_advance") is True for current in matching)
 
 
 def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
-    """The clicks that reach one particular move, skipping every step the page takes by itself.
-
-    Handing over all of a move's steps would not work and should not: the page advances past the
-    forced ones on its own, so a caller supplying them too would answer the wrong questions.
+    """The clicks that reach one particular move, except server-marked route continuations.
 
     Which affordance each click uses comes from the engine's own step kind, so a test never has to
     know that a tithe's stock is pressed on a board and an alms payment beside it.
@@ -2423,11 +2666,13 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
     clicks: list[dict] = []
     prefix: list = []
     while True:
-        prefix = _forced_prefix(decisions, prefix)
         if len(prefix) >= len(target):
             return clicks
         value = target[len(prefix)]
         step = next(s for s in _next_steps(decisions, prefix) if s["value"] == value)
+        if _page_auto_advances(server, prefix, step):
+            prefix.append(value)
+            continue
         if step["kind"] == "arrangement":
             prefix.append(value)
             clicks += _arrangement_clicks(str(value))
@@ -2475,11 +2720,12 @@ def test_what_is_offered_is_what_the_engine_says_may_come_next(phase, tmp_path: 
     clicks: list = []
     prefix: list = []
     for _question in range(3):
-        prefix = _forced_prefix(decisions, prefix)
         next_steps = _next_steps(decisions, prefix)
         expected = _values(next_steps)
-        if len(expected) <= 1:
-            break
+        while len(next_steps) == 1 and _page_auto_advances(server, prefix, next_steps[0]):
+            prefix.append(next_steps[0]["value"])
+            next_steps = _next_steps(decisions, prefix)
+            expected = _values(next_steps)
         transcript = _run_script(server, list(clicks), tmp_path)
         if all(step["kind"] == "resolution" for step in next_steps):
             grouped = []
@@ -2514,35 +2760,67 @@ def test_what_is_offered_is_what_the_engine_says_may_come_next(phase, tmp_path: 
 
 
 @needs_node
-@pytest.mark.parametrize("phase", ["setup_sow", "sow"])
-def test_a_step_the_survivors_agree_on_is_never_put_as_a_question(phase, tmp_path: Path) -> None:
-    """Forced steps are taken, not asked about, at whatever length the decisions happen to run."""
-    server = _served(tmp_path)
-    if phase == "sow":
-        _played_through_setup(server)
-    decisions = _engine_decisions(server)
-    prefix = _forced_prefix(decisions, [])
-    opening = _next_steps(decisions, prefix)
-    first = opening[0]
-    if first["kind"] == "resolution":
-        clicks = [_press("tithe")] if first["value"] == "tithe" else [_press("action")]
-        if (
-            first["value"] != "tithe"
-            and len(
-                [
-                    step
-                    for step in opening
-                    if step["kind"] == "resolution" and step["value"] != "tithe"
-                ]
+def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path) -> None:
+    """The thin Pulpit board still makes its pickup and duty visible acts."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_PULPIT)
+    try:
+        origin, edge, duty = server.payload["turn_candidates"][0]["steps"][:3]
+        assert origin.get("auto_advance") is None
+        assert edge.get("auto_advance") is True
+        assert duty.get("auto_advance") is None
+        expected = (
+            ([], "choose a space to lift acolytes from.", [1]),
+            ([_at(1)], "choose a duty to take.", [2]),
+        )
+        for clicks, prompt_end, offered in expected:
+            transcript = _run_script(server, clicks, tmp_path)
+            assert transcript["asking"][-1][0].endswith(prompt_end)
+            assert transcript["offered"][-1] == offered
+    finally:
+        server.server_close()
+
+
+@needs_node
+def test_every_playtest_end_window_directly_confirms_its_only_engine_action(tmp_path: Path) -> None:
+    """Every sampled End window must let Confirm submit the EndTurnAction it alone permits."""
+    observed: list[tuple[str, str, str]] = []
+    for scenario_path in sorted(PLAYTEST_SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            full_turn = next(
+                action
+                for action in legal_actions(server.state, server.config)
+                if isinstance(action, FullTurnAction)
             )
-            > 1
-        ):
-            clicks.append(_do(first["value"]))
-    else:
-        clicks = [_click_for(server, first)]
-    transcript = _run_script(server, clicks, tmp_path)
-    for offered in transcript["offered"]:
-        assert len(offered) != 1, f"a single option was presented as a choice: {offered}"
+            server.apply(action_id(full_turn), server.payload["state_token"])
+            assert list(legal_actions(server.state, server.config)) == [EndTurnAction()]
+            transcript = _run_script(server, [], tmp_path)
+            observed.append(
+                (
+                    scenario_path.name,
+                    transcript["controls"][-1]["confirm"],
+                    transcript["confirmLabels"][-1],
+                )
+            )
+        finally:
+            server.server_close()
+
+    assert len(observed) == len(PLAYTEST_POSITION_NAMES) == 6
+    assert all(enabled == "true" and label == "end_turn" for _, enabled, label in observed), observed
+
+    for scenario_path, _, _ in observed:
+        server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / scenario_path)
+        try:
+            full_turn = next(
+                action
+                for action in legal_actions(server.state, server.config)
+                if isinstance(action, FullTurnAction)
+            )
+            server.apply(action_id(full_turn), server.payload["state_token"])
+            transcript = _run_script(server, [], tmp_path, confirm=True)
+            assert transcript["posted"]["action_id"] == action_id(EndTurnAction())
+        finally:
+            server.server_close()
 
 
 def test_a_move_runs_to_no_fixed_number_of_decisions(tmp_path: Path) -> None:
@@ -3536,6 +3814,43 @@ def _current_phase_row_keys(server: PlayServer) -> list[str]:
     return [row["key"] for row in server.payload["phase_column"]["rows"] if row["current"]]
 
 
+def test_turn_window_prompt_names_only_available_building_kinds() -> None:
+    assert play_server._turn_window_prompt(
+        resolution_committed=False, available_turn_steps=[]
+    ) == "Pick up acolytes for sowing."
+    assert play_server._turn_window_prompt(
+        resolution_committed=False,
+        available_turn_steps=[{"hire_payment": "silver"}, {"hire_payment": None}],
+    ) == (
+        "Pick up acolytes for sowing. A building can be hired. "
+        "A building can be activated without payment."
+    )
+    assert play_server._turn_window_prompt(
+        resolution_committed=True, available_turn_steps=[]
+    ) == ""
+    assert play_server._turn_window_prompt(
+        resolution_committed=True,
+        available_turn_steps=[{"hire_payment": "silver"}, {"hire_payment": None}],
+    ) == "A building can be hired. A building can be activated without payment."
+
+
+def test_movement_turn_window_counts_each_available_hire() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    steps = play_server.turn_steps_payload(scenario.state, scenario.config)
+
+    assert sum(step["hire_payment"] is not None for step in steps) == 10
+    assert play_server.phase_column_payload(
+        scenario.state,
+        [],
+        available_turn_steps=steps,
+    )["prompts"] == {
+        "beginning": (
+            "Pick up acolytes for sowing. Buildings can be hired. "
+            "A building can be activated without payment."
+        )
+    }
+
+
 def _remove_confession_box_from_market(server: PlayServer) -> None:
     server.state = replace(
         server.state,
@@ -3966,13 +4281,8 @@ def _only_the_active_seat_is_asked(transcript: dict, seat: int) -> None:
 
 
 @needs_node
-def test_a_counter_that_pays_one_thing_is_never_put_as_a_choice(tmp_path: Path) -> None:
-    """Most tithe counters name their stock, so there is nothing to ask and no board lights.
-
-    The same rule the route steps have always followed, now that a stock is a step too: a question
-    with one answer is taken rather than asked. Worth its own check because this is the kind where
-    not asking is the common case and asking is the exception.
-    """
+def test_a_counter_that_pays_one_thing_still_asks_for_its_stock(tmp_path: Path) -> None:
+    """A tithe with one named stock lights that stock's board before it can be confirmed."""
     server = _reference_server()
     asked = _asked(server, "tithe", "resource")
     forced = [c for c in asked if len(_siblings(asked, c, "resource")) == 1]
@@ -3982,9 +4292,11 @@ def test_a_counter_that_pays_one_thing_is_never_put_as_a_choice(tmp_path: Path) 
     decisions = _engine_decisions(server)
     clicks = _clicks_to(server, decisions, [step["value"] for step in candidate["steps"]])
 
-    assert all(click["kind"] != "resource" for click in clicks), "a settled stock was pressed"
+    assert any(click["kind"] == "resource" for click in clicks), "the settled stock was not pressed"
+    seat = SEATED_PLAYERS.index(server.payload["state"]["active_player"]) + 1
+    before_stock = _run_script(server, _clicks_before_the_stock(server, candidate), tmp_path)
+    assert before_stock["askedSeats"][-1] == [str(seat)], "the settled stock never lit its board"
     transcript = _run_script(server, clicks, tmp_path, confirm=True)
-    assert transcript["askedSeats"] == [[]] * len(transcript["askedSeats"]), "a board was asked"
     assert transcript["posted"]["action_id"] == candidate["action_id"]
 
 
@@ -4222,6 +4534,23 @@ def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
         play_server._combination_step("pay", [("silver", 1), ("wheat", 1)])["prompt"]
         == play_server.COMBINATION_PROMPT
     )
+
+
+def test_taxation_step_two_without_a_majority_has_no_zero_resource_instruction() -> None:
+    scenario = load_scenario("scenarios/taxation_no_other_majority_001.json")
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=tuple(legal_actions(scenario.state, scenario.config)),
+    )
+    prompts = {
+        step["prompt"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and step.get("resource_total") == 0
+    }
+
+    assert prompts == {"player_one: Taxation step 2: no other Duty tile is a majority."}
 
 
 @pytest.mark.parametrize(
@@ -4733,13 +5062,12 @@ def test_the_buildings_offered_are_the_ones_the_engine_would_construct(tmp_path:
 
 
 @needs_node
-def test_a_construct_with_one_building_to_go_at_never_puts_the_question(tmp_path: Path) -> None:
-    """A step every survivor agrees on is taken, not asked, and this is one of those.
+def test_a_construct_with_one_building_to_go_is_still_put_as_a_question(tmp_path: Path) -> None:
+    """A one-building construct remains visible, even though the engine has only one answer.
 
     Round 3 of the reference board has a single building live, so the construct turns there carry a
-    building step whose value nobody has a choice about. It has to behave like every other forced
-    step -- swallowed on the way past -- rather than becoming a hex the player must press to
-    confirm something that was never in doubt.
+    building step whose value nobody has a choice about.  The player still presses its hex: the
+    act belongs in the turn record even when no branch follows from it.
     """
     server = _reference_server()
     while not any(
@@ -4760,9 +5088,12 @@ def test_a_construct_with_one_building_to_go_at_never_puts_the_question(tmp_path
 
     decisions = _engine_decisions(server)
     prefix = _values_except(candidate["steps"], "building")
-    transcript = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path, confirm=True)
+    before_building = _run_script(server, _clicks_to(server, decisions, prefix), tmp_path)
+    transcript = _run_script(
+        server, _clicks_to(server, decisions, _values(candidate["steps"])), tmp_path, confirm=True
+    )
 
-    assert forced not in transcript["offered"][-1], "the only building on offer was still asked for"
+    assert forced in before_building["offered"][-1], "the only building on offer was not asked for"
     assert transcript["posted"]["action_id"] == candidate["action_id"]
 
 
@@ -5121,9 +5452,9 @@ def test_lighting_the_live_market_instead_of_the_answers_is_caught(
     is live. So a page computing liveness for itself would pass every test above, and it would be
     computing a rule in the browser, which is the thing none of this is allowed to do.
 
-    Narrowing what the engine will construct separates them. A page reading the survivors asks
-    nothing here, because one building is not a choice; a page reading the market goes on lighting
-    both and offers a turn that does not exist.
+    Narrowing what the engine will construct separates them. A page reading the survivors lights
+    the one required building; a page reading the market goes on lighting both and offers a turn
+    that does not exist.
     """
     from pilgrim.rules import transition
 
@@ -5151,7 +5482,7 @@ def test_lighting_the_live_market_instead_of_the_answers_is_caught(
     )
     transcript = _run_script(narrowed, _clicks_to(narrowed, decisions, prefix), tmp_path)
     on_the_track = _buildings_on_the_track(narrowed)
-    assert [value for value in transcript["offered"][-1] if value in on_the_track] == []
+    assert [value for value in transcript["offered"][-1] if value in on_the_track] == list(only_one)
 
 
 @needs_node
@@ -5910,23 +6241,31 @@ def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
 
     _exactly_one_prompt_is_visible(transcript)
     assert transcript["asking"][0] == [
+        f"{server.payload['state']['active_player']}: choose a space to lift acolytes from."
+    ], "setup sow did not name the pickup question it was asking"
+    assert transcript["offered"][0] == [0], "setup sow did not offer the City pickup"
+    assert transcript["counterShown"][0] == [], "the route counter appeared before pickup"
+    assert transcript["resetShown"][0] is False, "reset lit before any acolytes were picked up"
+
+    after_pickup = _run_script(server, [_at(0)], tmp_path)
+    assert after_pickup["asking"][-1] == [
         f"{server.payload['state']['active_player']}: follow an arrow."
-    ], "setup sow did not name the route question it was asking"
-    assert transcript["offered"][0] == ["city->north", "city->south"], (
+    ], "setup sow did not name the route question after pickup"
+    assert after_pickup["offered"][-1] == ["city->north", "city->south"], (
         f"setup sow offered {transcript['offered'][0]} instead of the two City arrows"
     )
-    assert transcript["counterShown"][0] == ["5"], "the counter did not open on five in hand"
-    assert transcript["resetShown"][0] is False, "reset lit before any arrow was followed"
-    assert transcript["controls"][0]["confirm"] == "false", "confirm lit before a turn was settled"
-    assert transcript["controls"][0]["action"] == "false"
-    assert transcript["controls"][0]["tithe"] == "false"
-    assert transcript["shownPanel"][0] == -1, "nothing was settled, so no summary was up"
+    assert after_pickup["counterShown"][-1] == ["5"], "the counter did not open on five in hand"
+    assert after_pickup["resetShown"][-1] is True, "reset stayed dark after pickup"
+    assert after_pickup["controls"][-1]["confirm"] == "false", "confirm lit before a turn was settled"
+    assert after_pickup["controls"][-1]["action"] == "false"
+    assert after_pickup["controls"][-1]["tithe"] == "false"
+    assert after_pickup["shownPanel"][-1] == -1, "nothing was settled, so no summary was up"
 
 
 @needs_node
 def test_reset_lights_only_after_following_an_arrow(tmp_path: Path) -> None:
     server = _served(tmp_path)
-    transcript = _run_script(server, [_follow("city->north")], tmp_path)
+    transcript = _run_script(server, [_at(0), _follow("city->north")], tmp_path)
     _reset_waits_for_a_followed_arrow(transcript)
 
 
@@ -5973,7 +6312,7 @@ def test_turn_prompt_lines_name_the_acting_seat_by_colour(tmp_path: Path) -> Non
 def test_reset_restores_every_cube_to_its_opening_opacity(tmp_path: Path) -> None:
     """Reset returns to the same opening setup-sow snapshot the page started from."""
     server = _served(tmp_path)
-    transcript = _run_script(server, [_follow("city->north")], tmp_path, reset=True)
+    transcript = _run_script(server, [_at(0), _follow("city->north")], tmp_path, reset=True)
     opening = _snapshot_at(transcript, 0)
 
     assert transcript["afterReset"] == opening, (
@@ -5995,13 +6334,20 @@ def test_preview_cubes_follow_the_non_first_branch_back_through_the_city(
         "east->city",
         "city->south",
     ]
-    clicks = [_follow("city->north"), _follow("east->city"), _follow("city->south")]
+    clicks = [
+        _at(0),
+        _follow("city->north"),
+        _follow("north->north_east"),
+        _follow("north_east->east"),
+        _follow("east->city"),
+        _follow("city->south"),
+    ]
     transcript = _run_script(server, clicks, tmp_path)
-    before = transcript["cubes"][0]
+    before = transcript["cubes"][1]
     after = transcript["cubes"][-1]
 
-    assert transcript["offered"][2] == ["city->north", "city->south"]
-    assert clicks[-1]["value"] == transcript["offered"][2][1], (
+    assert transcript["offered"][5] == ["city->north", "city->south"]
+    assert clicks[-1]["value"] == transcript["offered"][5][1], (
         "the branch taken was not the non-first one"
     )
     _assert_preview_matches_route(before, after, active, route)
@@ -6030,7 +6376,7 @@ def test_after_any_setup_answers_preview_matches_the_route_those_answers_name(
         clicks = _clicks_to(server, decisions, _values(route))
         transcript = _run_script(server, clicks, tmp_path)
         _assert_preview_matches_route(
-            transcript["cubes"][0], transcript["cubes"][-1], active, route_edges
+            transcript["cubes"][1], transcript["cubes"][-1], active, route_edges
         )
 
 
@@ -6060,24 +6406,19 @@ def test_taken_origin_clears_its_ring_and_duty_candidates_match_the_engine_offer
     opening = _run_script(server, [], tmp_path)
     assert opening["startCandidates"][-1], "no origin spaces were marked at turn start"
 
-    chosen_origin = None
-    after_origin = None
-    for origin in opening["startCandidates"][-1]:
-        candidate = _run_script(server, [_at(origin)], tmp_path)
-        if candidate["dutyCandidates"][-1]:
-            chosen_origin = origin
-            after_origin = candidate
-            break
-    assert chosen_origin is not None and after_origin is not None, (
-        "no clicked origin reached a duty-choice state to check"
+    route_prefix = next(
+        _values(steps)[:index]
+        for steps in decisions
+        for index, step in enumerate(steps)
+        if step["kind"] == "duty"
     )
-
-    prefix = _forced_prefix(decisions, [chosen_origin])
-    expected = sorted(step["value"] for step in _next_steps(decisions, prefix))
+    after_route = _run_script(server, _clicks_to(server, decisions, route_prefix), tmp_path)
+    chosen_origin = route_prefix[0]
+    expected = sorted(step["value"] for step in _next_steps(decisions, route_prefix))
     assert expected, "the engine offered no duties at this point"
-    assert chosen_origin not in after_origin["startCandidates"][-1]
-    assert chosen_origin not in after_origin["dutyCandidates"][-1]
-    assert sorted(after_origin["dutyCandidates"][-1]) == expected
+    assert chosen_origin not in after_route["startCandidates"][-1]
+    assert chosen_origin not in after_route["dutyCandidates"][-1]
+    assert sorted(after_route["dutyCandidates"][-1]) == expected
 
 
 @needs_node
@@ -6147,7 +6488,14 @@ def test_restoring_first_survivor_destination_lookup_is_caught(tmp_path: Path) -
         "east->city",
         "city->south",
     ]
-    clicks = [_follow("city->north"), _follow("east->city"), _follow("city->south")]
+    clicks = [
+        _at(0),
+        _follow("city->north"),
+        _follow("north->north_east"),
+        _follow("north_east->east"),
+        _follow("east->city"),
+        _follow("city->south"),
+    ]
     regressed = _run_script(
         server,
         clicks,
@@ -6172,7 +6520,7 @@ def test_restoring_first_survivor_destination_lookup_is_caught(tmp_path: Path) -
     )
 
     with pytest.raises(AssertionError, match="south_east"):
-        _assert_preview_matches_route(regressed["cubes"][0], regressed["cubes"][-1], active, route)
+        _assert_preview_matches_route(regressed["cubes"][1], regressed["cubes"][-1], active, route)
 
 
 @needs_node
@@ -6182,7 +6530,7 @@ def test_a_preview_overflow_is_recorded_and_stops_further_preview(tmp_path: Path
     active = server.payload["state"]["active_player"]
     overflowed = _run_script(
         server,
-        [_follow("city->north")],
+        [_at(0), _follow("city->north")],
         tmp_path,
         mutate=lambda code: code.replace(
             "if (!slot) { return null; }",
@@ -6271,7 +6619,9 @@ def test_end_turn_phase_is_painted_in_server_html_before_the_script_runs() -> No
 
     page = render_play_view_from_payload(payload)
 
+    assert payload["phase_column"]["prompts"] == {}
     assert page.count('data-turn-phase="') == 3
+    assert 'data-turn-phase-prompt=' not in page
     assert len(re.findall(r'<div class="phase-row"[^>]*data-phase-current="true"', page)) == 1
     assert (
         '<div class="phase-row" data-turn-phase="end" data-phase-current="true">End of Turn</div>'
@@ -6324,7 +6674,7 @@ def test_dimming_reset_after_origin_is_taken_is_caught(tmp_path: Path) -> None:
     server = _served(tmp_path)
     counted = _run_script(
         server,
-        [_follow("city->north")],
+        [_at(0), _follow("city->north")],
         tmp_path,
         mutate=lambda code: code.replace(
             "setControl('reset', preview.resettable, false);",
