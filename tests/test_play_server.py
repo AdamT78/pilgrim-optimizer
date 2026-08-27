@@ -101,6 +101,12 @@ SPACE_QUESTION_KINDS = frozenset(
         "duty",
     }
 )
+TURN_SCRIPT_RELOCATION_BUILDING_LITERAL_EXEMPTIONS = (
+    "dormitory",
+    "inquisition",
+    "library",
+    "dormitory",
+)
 
 
 @pytest.fixture(scope="module")
@@ -797,6 +803,102 @@ def test_pulpit_playtest_offers_the_hired_step_for_hand_exercise() -> None:
     assert pulpit["source"] == "market"
     assert pulpit["hire_payment"] == "wheat"
     assert pulpit["ability"]["status_text"] == "Usable: pay 1 wheat to bank."
+    assert pulpit["answers"] == [
+        {"field": "building", "label": "Pulpit", "value": "pulpit"},
+        {"field": "hire_payment", "label": "wheat", "value": "wheat"},
+    ]
+    assert pulpit["hire_text"] == "Hire Pulpit from market for 1 wheat."
+
+
+def test_turn_step_answers_put_hire_payment_before_conversion_and_piety_destination() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    player_two_turn = replace(scenario.state, active_player=PlayerId.PLAYER_TWO)
+    steps = play_server.turn_steps_payload(player_two_turn, scenario.config)
+
+    stone_yard = [step for step in steps if step["building_id"] == "stone_yard"]
+    assert len(stone_yard) == 4
+    assert {
+        tuple(answer["field"] for answer in step["answers"])
+        for step in stone_yard
+    } == {("building", "hire_payment", "direction", "amount")}
+    assert {step["hire_text"] for step in stone_yard} == {
+        "Hire Stone Yard from Red for 1 resource of your choice."
+    }
+
+    indulgences = [step for step in steps if step["building_id"] == "indulgences"]
+    assert indulgences
+    assert {
+        tuple(answer["field"] for answer in step["answers"])
+        for step in indulgences
+    } == {("building", "direction", "piety_destination")}
+
+
+def test_cornucopia_ability_status_names_a_resource_choice_not_a_horn() -> None:
+    source = BuildingAbilitySource(
+        building_key="test_building",
+        source_type="opponent_active_hire",
+        owner="player_one",
+        hire_resource="cornucopia",
+        hire_cost=1,
+        payable_to="player_one",
+        usable=True,
+    )
+
+    assert play_server._building_ability_status_text(source) == (
+        "Usable: pay 1 resource of your choice to Red."
+    )
+
+
+def test_opponent_hire_sentence_names_the_owner_as_its_source() -> None:
+    source = BuildingAbilitySource(
+        building_key="kogge",
+        source_type="opponent_active_hire",
+        owner="player_two",
+        hire_resource="silver",
+        hire_cost=1,
+        payable_to="player_two",
+        usable=True,
+    )
+
+    assert play_server._building_hire_sentence("Kogge", source) == (
+        "Hire Kogge from Yellow for 1 silver."
+    )
+
+
+def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
+    source = BuildingAbilitySource(
+        building_key="library",
+        source_type="live_market_hire",
+        hire_resource="silver",
+        hire_cost=1,
+        payable_to="bank",
+        usable=True,
+    )
+
+    assert play_server._building_hire_sentence("Library", source) == (
+        "Hire Library from market for 1 silver."
+    )
+
+
+def test_turn_script_never_names_a_building_to_order_answers() -> None:
+    script = Path("tools/ui_debug/play_view_turn.js").read_text(encoding="utf-8")
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    catalogue_ids = {building.id for building in scenario.config.buildings.catalogue}
+    script_literals = re.findall(r'''(?<![A-Za-z0-9_])['"]([a-z][a-z0-9_]*)['"]''', script)
+    named_buildings = {literal for literal in script_literals if literal in catalogue_ids}
+
+    # These relocation previews need their visual treatment until the renderer carries it. The
+    # subset means their exception can shrink, but a newly hardcoded building cannot slip in.
+    assert named_buildings <= set(TURN_SCRIPT_RELOCATION_BUILDING_LITERAL_EXEMPTIONS)
+
+
+def test_turn_script_control_updates_do_not_set_offered_attributes() -> None:
+    script = Path("tools/ui_debug/play_view_turn.js").read_text(encoding="utf-8")
+    control_updates = script[
+        script.index("function setControl"):script.index("function setConfirmLabel")
+    ]
+
+    assert "data-turn-offered" not in control_updates
 
 
 def test_cloisters_reach_playtest_position_has_expected_action_totals() -> None:

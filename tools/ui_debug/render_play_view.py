@@ -802,39 +802,38 @@ def _ordination_action_keys(candidates: list[dict]) -> str:
     )
 
 
-def _turn_step_direction_label(direction: str) -> str:
-    return direction.replace("_", " ").capitalize()
-
-
 def _turn_step_controls(steps: list[dict]) -> str:
     """The client-side controls for the engine's committed building steps."""
-    directions = []
+    directions: dict[str, str] = {}
     for step in steps:
-        if step["kind"] != "conversion":
-            continue
-        direction = str(step["direction"])
-        if direction not in directions:
-            directions.append(direction)
+        for answer in step.get("answers", ()):
+            if answer.get("field") == "direction":
+                directions.setdefault(str(answer["value"]), str(answer["label"]))
     direction_buttons = "".join(
         f'<button type="button" class="turn-step-direction"'
         f' data-turn-step-direction="{escape(direction)}" data-turn-step-offered="false"'
-        f' data-turn-step-selected="false">{say(_turn_step_direction_label(direction))}</button>'
-        for direction in directions
+        f' data-turn-step-selected="false">{say(label)}</button>'
+        for direction, label in directions.items()
     )
-    hire_payments = []
+    hire_payments: dict[str, str] = {}
     for step in steps:
-        payment = step.get("hire_payment")
-        if payment is not None and payment not in hire_payments:
-            hire_payments.append(payment)
+        for answer in step.get("answers", ()):
+            if answer.get("field") == "hire_payment":
+                hire_payments.setdefault(str(answer["value"]), str(answer["label"]))
     hire_buttons = "".join(
         f'<button type="button" class="turn-step-hire"'
         f' data-turn-step-hire-payment="{escape(str(payment))}"'
         ' data-turn-step-hire-offered="false" data-turn-step-hire-selected="false">'
-        f"{say(str(payment))}</button>"
-        for payment in hire_payments
+        f"{say(label)}</button>"
+        for payment, label in hire_payments.items()
     )
     return (
         '<div class="turn-step-controls" data-component="turn-step-controls">'
+        '<div class="turn-step-hire-row" data-turn-step-hire-row="true"'
+        ' data-turn-step-row-active="false">'
+        '<span class="turn-step-label">Hire payment</span>'
+        '<span data-turn-step-hire-text="true"></span>'
+        f"{hire_buttons}</div>"
         '<div class="turn-step-direction-row" data-turn-step-direction-row="true"'
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label">Conversion</span>'
@@ -846,10 +845,6 @@ def _turn_step_controls(steps: list[dict]) -> str:
         '<span class="turn-step-label" data-turn-step-answer-label="true">Amount</span>'
         '<span class="turn-step-amount-total" data-turn-step-amount-total="true"></span>'
         '<span class="turn-step-resource-hint" data-turn-step-resource-hint="true"></span></div>'
-        '<div class="turn-step-hire-row" data-turn-step-hire-row="true"'
-        ' data-turn-step-row-active="false">'
-        '<span class="turn-step-label">Hire payment</span>'
-        f"{hire_buttons}</div>"
         "</div>"
     )
 
