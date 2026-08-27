@@ -16,6 +16,7 @@ import contextlib
 import json
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import urllib.error
@@ -47,7 +48,6 @@ from pilgrim.model.enums import (
     CANONICAL_POSITION_NAMES,
     EventType,
     PlayerId,
-    TurnPhase,
     TurnResolutionType,
 )
 from pilgrim.rules.buildings import (
@@ -317,6 +317,15 @@ def test_the_read_routes_answer_and_none_of_them_change_anything(tmp_path: Path)
     assert actions["state_token"] == state_token(server.state_payload)
     # Nothing was applied: the position the server holds is the one it was handed.
     assert server.state is before
+
+
+def test_a_second_server_on_an_occupied_address_keeps_the_os_error() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen()
+
+        with pytest.raises(OSError):
+            PlayServer(occupied.getsockname())
 
 
 def test_the_page_the_server_serves_is_the_page_the_file_writer_writes(tmp_path: Path) -> None:
@@ -879,9 +888,7 @@ def _distinct_frontier_options(frontier: dict[str, Any]) -> dict[tuple[Any, Any]
     }
 
 
-def _assert_auto_advance_frontiers(
-    scenario_name: str, candidates: list[dict], *, auto_advance_is_active: bool
-) -> int:
+def _assert_auto_advance_frontiers(scenario_name: str, candidates: list[dict]) -> int:
     """Check the metadata whose only consumer is the generic page loop."""
     frontiers = _turn_candidate_frontiers(candidates)
     for frontier in frontiers:
@@ -897,12 +904,11 @@ def _assert_auto_advance_frontiers(
                 f"{frontier['prefix']!r}: {list(options)!r}"
             )
             assert all(step["auto_advance"] is True for step in marked)
-        if auto_advance_is_active:
-            expected = len(options) == 1 and next(iter(options.values()))["kind"] == "edge"
-            assert len(marked) == (len(frontier["steps"]) if expected else 0), (
-                f"{scenario_name} auto_advance did not match its frontier at "
-                f"{frontier['prefix']!r}: {list(options)!r}"
-            )
+        expected = len(options) == 1 and next(iter(options.values()))["kind"] == "edge"
+        assert len(marked) == (len(frontier["steps"]) if expected else 0), (
+            f"{scenario_name} auto_advance did not match its frontier at "
+            f"{frontier['prefix']!r}: {list(options)!r}"
+        )
     return len(frontiers)
 
 
@@ -914,14 +920,7 @@ def test_auto_advance_is_exactly_the_unambiguous_edge_at_every_corpus_frontier()
     for scenario_path in [*top_level_paths, *playtest_paths]:
         scenario = load_scenario(str(scenario_path))
         candidates = play_server.turn_candidates(scenario.state, scenario.config)
-        checked += _assert_auto_advance_frontiers(
-            scenario_path.name,
-            candidates,
-            auto_advance_is_active=(
-                scenario.state.phase is TurnPhase.SOW
-                and not scenario.state.turn_progress.resolution_committed
-            ),
-        )
+        checked += _assert_auto_advance_frontiers(scenario_path.name, candidates)
 
     assert len(top_level_paths) >= 314, f"only {len(top_level_paths)} top-level scenarios were checked"
     assert [path.name for path in playtest_paths] == sorted(PLAYTEST_POSITION_NAMES)

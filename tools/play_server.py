@@ -2294,7 +2294,7 @@ def turn_candidates(
             # Once every decision in a full turn is named, its resolution is still only previewed.
             # Confirm is the engine boundary that replaces this page with the End of Turn window.
             candidate["settled_turn_phase"] = "sow"
-        _mark_unambiguous_edge_steps(candidates)
+    _mark_unambiguous_edge_steps(candidates)
     return candidates
 
 
@@ -2795,14 +2795,20 @@ class PlayServer(ThreadingHTTPServer):
         name is only ever used to fill in a default Host header, so the literal we were given is
         both faster and more accurate than whatever the resolver would eventually have said.
         """
-        socketserver.TCPServer.server_bind(self)
+        try:
+            socketserver.TCPServer.server_bind(self)
+        except OSError as exc:
+            exc.add_note(f"PlayServer could not bind {self.server_address!r}.")
+            raise
         self.server_name, self.server_port = self.server_address[:2]
 
     def server_close(self) -> None:
         try:
             super().server_close()
         finally:
-            self._session_workspace.cleanup()
+            session_workspace = getattr(self, "_session_workspace", None)
+            if session_workspace is not None:
+                session_workspace.cleanup()
 
 
 class PlayHandler(BaseHTTPRequestHandler):
