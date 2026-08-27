@@ -55,6 +55,7 @@ from pilgrim.rules.buildings import (
     BuildingAbilityReason,
     BuildingAbilitySource,
 )
+from pilgrim.rules import transition
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
 from pilgrim.rules.transition import TaxationMajorityUnlock, apply_action, legal_actions
@@ -1846,6 +1847,9 @@ def _run_script(
                 # the script's rendered value back, so a future fallback or client-side reason
                 # translation cannot hide behind a browser-only tooltip test.
                 "buildingAbilityTargets": server.payload.get("building_abilities", []),
+                # These are the tiles the page actually makes into committed-step affordances,
+                # including unavailable ones that need to show why they cannot be used.
+                "turnStepBuildings": _turn_step_buildings_on_payload(server.payload),
                 # Every seat, with the page's own word for which one is on, so the script has four
                 # boards to choose wrongly between rather than one it cannot help but get right.
                 # Always four, however many are playing, because the page always draws four and
@@ -2016,25 +2020,81 @@ def _buildings_on_payload(payload: dict) -> list[str]:
     return re.findall(r'data-building-choice-key="([a-z_]+)"', page)
 
 
+def _turn_step_buildings_on_payload(payload: dict) -> list[str]:
+    page = render_play_view_from_payload(payload)
+    return sorted(set(re.findall(r'data-turn-step-building-id="([a-z_]+)"', page)))
+
+
 @needs_node
 def test_building_ability_reason_is_rendered_and_missing_reason_stays_blank(tmp_path: Path) -> None:
     """The script copies the engine sentence; it does not invent one for an absent reason."""
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
     try:
         opening = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
-        assert opening["mill"] == "Not usable: this building was not selected for this game."
+        assert opening["mill"] == "Cannot be hired: this building was not selected for this game."
         assert opening["kogge"] == "Usable: pay 1 silver to Yellow."
 
-        server.payload["building_abilities"] = [
-            (
-                {**ability, "reason": None, "status_text": None}
-                if ability["building_id"] == "mill"
-                else ability
+        def without_mill_reason(abilities: list[dict]) -> list[dict]:
+            return [
+                (
+                    {**ability, "reason": None, "status_text": None}
+                    if ability["building_id"] == "mill"
+                    else ability
+                )
+                for ability in abilities
+            ]
+
+        server.payload["building_abilities"] = without_mill_reason(
+            server.payload["building_abilities"]
+        )
+        server.payload["building_ability_windows"]["beginning"]["abilities"] = (
+            without_mill_reason(
+                server.payload["building_ability_windows"]["beginning"]["abilities"]
             )
-            for ability in server.payload["building_abilities"]
-        ]
+        )
         without_reason = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
         assert without_reason["mill"] == ""
+    finally:
+        server.server_close()
+
+
+@needs_node
+def test_building_steps_close_during_the_server_described_sow_window(tmp_path: Path) -> None:
+    """A candidate's server-named Sow cursor takes every building affordance out at once."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        candidate = next(
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if len(candidate["steps"]) > 1 and candidate["steps"][1]["turn_phase"] == "sow"
+        )
+        clicks = _clicks_to(server, _engine_decisions(server), [candidate["steps"][0]["value"]])
+        transcript = _run_script(server, clicks, tmp_path)
+        opening = sorted({step["building_id"] for step in server.payload["turn_steps"]})
+        sow_greyed = {
+            ability["building_id"]
+            for ability in server.payload["building_ability_windows"]["sow"]["abilities"]
+            if ability["greyed"]
+        }
+        sow_reason_census = Counter(
+            str(ability["reason"])
+            for ability in server.payload["building_ability_windows"]["sow"]["abilities"]
+        )
+        assert {
+            "offers": transcript["turnStepOffers"],
+            "greyed": {
+                building_id
+                for building_id, greyed in transcript["buildingAbilityGreyscale"][-1].items()
+                if greyed
+            },
+            "own_building_status": transcript["buildingAbilityTexts"][-1]["dormitory"],
+            "reason_census": sow_reason_census,
+        } == {
+            "offers": [opening, []],
+            "greyed": sow_greyed,
+            "own_building_status": "Cannot be used: sowing is in progress.",
+            "reason_census": Counter({"not_selected": 18, "mid_sow": 6}),
+        }
     finally:
         server.server_close()
 
@@ -4788,6 +4848,8 @@ def test_building_ability_payload_carries_each_engine_source_field_and_refreshes
             "payable_to": None,
             "usable": True,
             "reason": None,
+            "greyed": False,
+            "map_tile": False,
             "status_text": "Usable: no payment.",
         }
         assert abilities["kogge"]["owner"] == "player_two"
@@ -4803,11 +4865,143 @@ def test_building_ability_payload_carries_each_engine_source_field_and_refreshes
             if ability["building_id"] == "kogge"
         )
         assert refreshed["reason"] == "insufficient_resource"
-        assert refreshed["status_text"] == (
-            "Not usable: insufficient silver to pay 1 silver to Yellow."
+        assert (refreshed["greyed"], refreshed["status_text"]) == (
+            True,
+            "Cannot be hired: insufficient silver to pay 1 silver to Yellow.",
         )
     finally:
         server.server_close()
+
+
+def test_merchant_without_a_hire_resource_greys_hires_but_not_own_buildings() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    no_hire_resource = replace(scenario.state, merchant_board_position=1)
+    abilities = {
+        ability["building_id"]: ability
+        for ability in play_server.building_abilities_payload(no_hire_resource, scenario.config)
+    }
+
+    assert {
+        building_id: (ability["reason"], ability["greyed"])
+        for building_id, ability in abilities.items()
+        if building_id in {"dormitory", "kogge"}
+    } == {
+        "dormitory": (None, False),
+        "kogge": ("merchant_resource_none", True),
+    }
+
+
+def test_building_ability_payload_marks_only_an_already_used_dormitory() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    baseline = {
+        ability["building_id"]: ability
+        for ability in play_server.building_abilities_payload(scenario.state, scenario.config)
+    }
+    state = replace(
+        scenario.state,
+        turn_progress=replace(scenario.state.turn_progress, used_buildings=frozenset({"dormitory"})),
+    )
+    abilities = {
+        ability["building_id"]: ability
+        for ability in play_server.building_abilities_payload(state, scenario.config)
+    }
+    windows = play_server.building_ability_windows_payload(state, scenario.config)
+    window_dormitory = {
+        window: next(
+            ability
+            for ability in payload["abilities"]
+            if ability["building_id"] == "dormitory"
+        )
+        for window, payload in windows.items()
+    }
+
+    assert {
+        "dormitory": {
+            "payload": tuple(
+                abilities["dormitory"][field]
+                for field in ("usable", "reason", "greyed", "status_text")
+            ),
+            "beginning": tuple(
+                window_dormitory["beginning"][field]
+                for field in ("usable", "reason", "greyed", "status_text")
+            ),
+            "sow": tuple(
+                window_dormitory["sow"][field]
+                for field in ("usable", "reason", "greyed", "status_text")
+            ),
+            "end": tuple(
+                window_dormitory["end"][field]
+                for field in ("usable", "reason", "greyed", "status_text")
+            ),
+        },
+        "unchanged": {
+            building_id: abilities[building_id] == baseline[building_id]
+            for building_id in ("guild", "inquisition", "kogge")
+        },
+    } == {
+        "dormitory": {
+            "payload": (False, "already_used", True, "Cannot be used: already used this turn."),
+            "beginning": (False, "already_used", True, "Cannot be used: already used this turn."),
+            "sow": (False, "mid_sow", True, "Cannot be used: sowing is in progress."),
+            "end": (False, "already_used", True, "Cannot be used: already used this turn."),
+        },
+        "unchanged": {"guild": True, "inquisition": True, "kogge": True},
+    }
+
+
+def test_committed_conversion_marks_its_building_already_used_in_the_ability_payload() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
+    step = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if step.building_id == "grain_store"
+    )
+    after_step = apply_turn_step(scenario.state, scenario.config, step)
+    grain_store = next(
+        ability
+        for ability in play_server.building_abilities_payload(after_step, scenario.config)
+        if ability["building_id"] == "grain_store"
+    )
+
+    assert {
+        "conversion": isinstance(step, BuildingConversionStep),
+        "used": after_step.turn_progress.used_buildings,
+        "payload": tuple(
+            grain_store[field] for field in ("usable", "reason", "greyed", "status_text")
+        ),
+    } == {
+        "conversion": True,
+        "used": frozenset({"grain_store"}),
+        "payload": (False, "already_used", True, "Cannot be used: already used this turn."),
+    }
+
+
+def test_hired_kogge_remains_a_usable_route_source_while_its_tile_is_greyed() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    step = next(
+        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "kogge"
+    )
+    after_step = apply_turn_step(scenario.state, scenario.config, step)
+    route_source = transition._route_building_source_available_this_turn(
+        after_step,
+        scenario.config,
+        building_id="kogge",
+    )
+    kogge = next(
+        ability
+        for ability in play_server.building_abilities_payload(after_step, scenario.config)
+        if ability["building_id"] == "kogge"
+    )
+
+    assert {
+        "route_source": None
+        if route_source is None
+        else (route_source.source_type, route_source.usable, route_source.reason),
+        "tile": tuple(kogge[field] for field in ("usable", "reason", "greyed", "status_text")),
+    } == {
+        "route_source": ("opponent_active_hire", True, ""),
+        "tile": (False, "already_used", True, "Cannot be used: already used this turn."),
+    }
 
 
 def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
@@ -4827,7 +5021,7 @@ def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
         )
         assert statuses[reason], reason
     assert statuses[BuildingAbilityReason.DONATED] == (
-        "Not usable: this building was donated by Yellow."
+        "Cannot be hired: this building was donated by Yellow."
     )
 
 
@@ -5710,6 +5904,18 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
         )
         .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
         .replace("__BUILDING_ABILITIES__", json.dumps(payload.get("building_abilities") or []))
+        .replace(
+            "__BUILDING_ABILITY_WINDOWS__",
+            json.dumps(payload.get("building_ability_windows") or {}),
+        )
+        .replace(
+            "__BUILDING_ABILITY_WINDOW__",
+            json.dumps(
+                "end"
+                if payload.get("state", {}).get("turn_progress", {}).get("resolution_committed")
+                else "beginning"
+            ),
+        )
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),

@@ -3,7 +3,8 @@
 //
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
-// arrangementPointerRules, buildingAbilityTargets, phaseColumn, phaseOnly, phaseCandidateRuns }.
+// arrangementPointerRules, buildingAbilityTargets, turnStepBuildings, phaseColumn, phaseOnly,
+// phaseCandidateRuns }.
 //
 // A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
 // |'combination'|'resource'|'seat'|'building'
@@ -226,6 +227,16 @@ const buildings = (job.buildings || []).map((id) =>
 const buildingAbilityTargets = (job.buildingAbilityTargets || []).map((ability) =>
   makeElement('g', { 'data-building-id': ability.building_id }, [])
 );
+const turnStepBuildings = (job.turnStepBuildings || []).map((id) =>
+  makeElement(
+    'g',
+    {
+      'data-turn-step-building-id': id,
+      'data-turn-step-offered': 'false',
+    },
+    []
+  )
+);
 
 function abbeyTokensFor(count) {
   const visible = Math.max(0, Math.min(8, Number(count) || 0));
@@ -340,7 +351,7 @@ const aside = makeElement(
 const root = makeElement(
   'document',
   {},
-  [].concat([board, aside], buildings, buildingAbilityTargets, seats)
+  [].concat([board, aside], buildings, buildingAbilityTargets, turnStepBuildings, seats)
 );
 
 const transcript = {
@@ -362,6 +373,8 @@ const transcript = {
   arrangements: [],
   confirmLabels: [],
   buildingAbilityTexts: [],
+  buildingAbilityGreyscale: [],
+  turnStepOffers: [],
   overflow: [],
   posted: null,
   rewritten: false,
@@ -785,9 +798,13 @@ function snapshot() {
   });
   const overflow = board.getAttribute('data-turn-preview-overflow') === 'true';
   const buildingAbilityTexts = {};
+  const buildingAbilityGreyscale = {};
   buildingAbilityTargets.forEach((target) => {
-    buildingAbilityTexts[target.getAttribute('data-building-id')] =
+    const buildingId = target.getAttribute('data-building-id');
+    buildingAbilityTexts[buildingId] =
       target.getAttribute('data-building-ability-text') || '';
+    buildingAbilityGreyscale[buildingId] =
+      target.getAttribute('data-building-ability-greyed') === 'true';
   });
   return {
     offered,
@@ -808,6 +825,10 @@ function snapshot() {
     cubes: cubeSnapshot(),
     arrangements: arrangementSnapshot(),
     buildingAbilityTexts,
+    buildingAbilityGreyscale,
+    turnStepOffers: turnStepBuildings
+      .filter((building) => building.getAttribute('data-turn-step-offered') === 'true')
+      .map((building) => building.getAttribute('data-turn-step-building-id')),
     overflow,
   };
 }
@@ -839,6 +860,8 @@ function record() {
     confirmLabel ? confirmLabel.getAttribute('data-turn-control-label') : null
   );
   transcript.buildingAbilityTexts.push(snap.buildingAbilityTexts);
+  transcript.buildingAbilityGreyscale.push(snap.buildingAbilityGreyscale);
+  transcript.turnStepOffers.push(snap.turnStepOffers);
   transcript.overflow.push(snap.overflow);
 }
 

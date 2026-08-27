@@ -1169,6 +1169,7 @@ def turn_styles(route_color: str) -> str:
     visibility: visible !important; pointer-events: all; cursor: pointer;
   }}
   [data-turn-step-building-id][data-turn-step-used="true"] {{ opacity: 0.42; }}
+  [data-building-ability-greyed="true"] {{ filter: grayscale(1); }}
 
   svg :focus:not(:focus-visible) {{ outline: none; }}
 
@@ -1297,6 +1298,7 @@ def render_play_view_html(
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
     building_abilities = payload.get("building_abilities") or []
+    building_ability_windows = payload.get("building_ability_windows") or {}
     turn_surface = bool(candidates or turn_steps)
     # The phase column remains in place even when no turn surface is active.
     turn_panel_visible = True
@@ -1367,7 +1369,9 @@ def render_play_view_html(
             choice_keys=bool(candidates),
             ship_hex=ship_hex_for(payload),
             conversion_building_ids={
-                step["building_id"] for step in turn_steps if step.get("building_id")
+                str(ability["building_id"])
+                for ability in building_abilities
+                if ability.get("map_tile") is True
             },
         ),
         scale.crop["map"],
@@ -1419,6 +1423,11 @@ def render_play_view_html(
         _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
         .replace("__BUILDING_ABILITIES__", json.dumps(building_abilities))
+        .replace("__BUILDING_ABILITY_WINDOWS__", json.dumps(building_ability_windows))
+        .replace(
+            "__BUILDING_ABILITY_WINDOW__",
+            json.dumps("end" if payload.get("state", {}).get("turn_progress", {}).get("resolution_committed") else "beginning"),
+        )
         .replace(
             "__USED_BUILDINGS__",
             json.dumps(payload.get("state", {}).get("turn_progress", {}).get("used_buildings", [])),
