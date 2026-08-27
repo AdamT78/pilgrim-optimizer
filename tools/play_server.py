@@ -344,11 +344,16 @@ def _building_hire_sentence(building_name: str, source: Any) -> str:
     """
     if source.source_type == "own_active":
         return ""
-    payee = _building_ability_party_name(source.payable_to)
-    cost_phrase = _building_hire_cost_phrase(source)
-    if cost_phrase is None or not payee:
+    if source.source_type == "live_market_hire":
+        hire_source = "market"
+    elif source.source_type == "opponent_active_hire":
+        hire_source = _building_ability_party_name(source.owner)
+    else:
         return ""
-    return f"Hire {building_name} from {payee} for {cost_phrase}."
+    cost_phrase = _building_hire_cost_phrase(source)
+    if cost_phrase is None or not hire_source:
+        return ""
+    return f"Hire {building_name} from {hire_source} for {cost_phrase}."
 
 
 def _turn_step_direction_label(direction: str) -> str:

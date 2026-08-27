@@ -2128,6 +2128,49 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
     _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-committed.png")
 
 
+@pytest.mark.parametrize(
+    ("building_id", "answer_count", "target_delta", "city_delta"),
+    (
+        ("dormitory", 2, -1, 1),
+        ("inquisition", 3, 1, -1),
+    ),
+)
+def test_relocation_preview_waits_for_every_server_answer(
+    page, serve, building_id, answer_count, target_delta, city_delta
+) -> None:
+    """A preview follows the server's answer list, not the old two-answer relocation shape."""
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    relocation_steps = [
+        step for step in server.payload["turn_steps"] if step["building_id"] == building_id
+    ]
+    assert {len(step["answers"]) for step in relocation_steps} == {answer_count}
+
+    page.goto(base_url, wait_until="networkidle")
+    building = page.locator(
+        f'[data-turn-step-building-id="{building_id}"][data-turn-step-offered="true"]'
+    ).first
+    assert building.count() == 1
+    _click_handle_centre(page, building.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+
+    target = page.locator(
+        '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
+    ).first
+    assert target.count() == 1
+    position = int(target.get_attribute("data-board-position-index"))
+    player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    assert player_id is not None
+    target_before = _lit_acolytes_at(page, player_id, position)
+    city_before = _lit_city_slots_for_player(page, player_id)
+
+    _click_handle_centre(page, target.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+
+    assert _confirm_enabled(page)
+    assert _lit_acolytes_at(page, player_id, position) == target_before + target_delta
+    assert _lit_city_slots_for_player(page, player_id) == city_before + city_delta
+
+
 def test_library_step_stages_and_confirms_duty_with_preview_and_reset(page, serve) -> None:
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
@@ -3537,7 +3580,7 @@ def test_merchant_named_hire_states_its_price_without_a_payment_click(page, serv
     _click_handle_centre(page, pulpit.element_handle(), require_hit=True)
 
     assert page.locator('[data-turn-step-hire-text="true"]').inner_text() == (
-        "Hire Pulpit from bank for 1 wheat."
+        "Hire Pulpit from market for 1 wheat."
     )
     assert page.locator(
         '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
@@ -3826,6 +3869,10 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
         '[data-turn-step-building-id="indulgences"][data-turn-step-offered="true"]'
     )
     _click_handle_centre(page, building.element_handle(), require_hit=True)
+    payment = page.locator(
+        '[data-turn-step-hire-payment="wheat"][data-turn-step-hire-offered="true"]'
+    )
+    _click_handle_centre(page, payment.element_handle(), require_hit=True)
 
     sell = page.locator('[data-turn-step-direction="sell_piety"][data-turn-step-offered="true"]')
     _click_handle_centre(page, sell.element_handle(), require_hit=True)
@@ -3860,6 +3907,10 @@ def test_piety_destination_pills_follow_the_chosen_direction(page, serve) -> Non
 
     page.locator('[data-turn-control="reset"]').click()
     _click_handle_centre(page, building.element_handle(), require_hit=True)
+    payment = page.locator(
+        '[data-turn-step-hire-payment="wheat"][data-turn-step-hire-offered="true"]'
+    )
+    _click_handle_centre(page, payment.element_handle(), require_hit=True)
     buy = page.locator('[data-turn-step-direction="buy_piety"][data-turn-step-offered="true"]')
     _click_handle_centre(page, buy.element_handle(), require_hit=True)
     buy_pills = page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]')

@@ -282,9 +282,10 @@
     var availableBuildings = buildingWindow.turn_steps_offered === true
       ? offeredTurnStepValues(0, TURN_STEPS)
       : [];
-    var activation = conversionChosen.length === 1
-      && live.length === 1 && live[0].kind === 'activation';
+    var activation = live.length === 1 && live[0].kind === 'activation'
+      && conversionChosen.length === (live[0].answers || []).length;
     var nextField = turnStepNextField(live);
+    var buildingIndex = turnStepAnswerIndex(live, 'building');
     var directionIndex = turnStepAnswerIndex(live, 'direction');
     var hireIndex = turnStepAnswerIndex(live, 'hire_payment');
     var pietyIndex = turnStepAnswerIndex(live, 'piety_destination');
@@ -342,7 +343,8 @@
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        directionIndex !== -1 && conversionChosen.length >= 1 ? 'true' : 'false'
+        directionIndex !== -1 && buildingIndex !== -1 && conversionChosen.length > buildingIndex
+          ? 'true' : 'false'
       );
     }
     if (turnStepActivationPrompt) {
@@ -1502,13 +1504,13 @@
 
   function applyTurnStepRelocationPreview() {
     var live = survivingTurnSteps();
+    var step = live.length === 1 ? live[0] : null;
     if (
-      conversionChosen.length !== 2
-      || live.length !== 1
-      || live[0].kind !== 'relocation'
+      !step
+      || conversionChosen.length !== step.answers.length
+      || step.kind !== 'relocation'
       || !activePlayer
     ) { return; }
-    var step = live[0];
     if (
       step.building_id !== 'dormitory'
       && step.building_id !== 'inquisition'

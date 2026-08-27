@@ -807,7 +807,7 @@ def test_pulpit_playtest_offers_the_hired_step_for_hand_exercise() -> None:
         {"field": "building", "label": "Pulpit", "value": "pulpit"},
         {"field": "hire_payment", "label": "wheat", "value": "wheat"},
     ]
-    assert pulpit["hire_text"] == "Hire Pulpit from bank for 1 wheat."
+    assert pulpit["hire_text"] == "Hire Pulpit from market for 1 wheat."
 
 
 def test_turn_step_answers_put_hire_payment_before_conversion_and_piety_destination() -> None:
@@ -849,7 +849,7 @@ def test_cornucopia_ability_status_names_a_resource_choice_not_a_horn() -> None:
     )
 
 
-def test_merchant_named_hire_sentence_keeps_its_named_resource() -> None:
+def test_opponent_hire_sentence_names_the_owner_as_its_source() -> None:
     source = BuildingAbilitySource(
         building_key="kogge",
         source_type="opponent_active_hire",
@@ -862,6 +862,21 @@ def test_merchant_named_hire_sentence_keeps_its_named_resource() -> None:
 
     assert play_server._building_hire_sentence("Kogge", source) == (
         "Hire Kogge from Yellow for 1 silver."
+    )
+
+
+def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
+    source = BuildingAbilitySource(
+        building_key="library",
+        source_type="live_market_hire",
+        hire_resource="silver",
+        hire_cost=1,
+        payable_to="bank",
+        usable=True,
+    )
+
+    assert play_server._building_hire_sentence("Library", source) == (
+        "Hire Library from market for 1 silver."
     )
 
 
