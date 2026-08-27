@@ -57,7 +57,7 @@ from pilgrim.rules.buildings import (
 )
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
-from pilgrim.rules.transition import apply_action, legal_actions
+from pilgrim.rules.transition import TaxationMajorityUnlock, apply_action, legal_actions
 from pilgrim.rules.transition import apply_turn_step, turn_steps
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
@@ -4499,8 +4499,8 @@ def test_a_mix_is_offered_in_english_and_never_as_a_tuple() -> None:
     assert "take stone and silver" in labels
 
 
-def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
-    scenario = load_scenario("scenarios/taxation_three_bonus_types_001.json")
+def test_taxation_step_two_prompt_hides_real_count_majorities() -> None:
+    scenario = load_scenario("scenarios/tithe_counter_choice_001.json")
     candidates = play_server.turn_candidates(
         scenario.state,
         scenario.config,
@@ -4510,18 +4510,12 @@ def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
         step
         for candidate in candidates
         for step in candidate["steps"]
-        if step["kind"] == "combination" and step.get("resource_allocation")
+        if step["kind"] == "combination" and step.get("resource_total") == 2
     ]
 
     assert taxation_steps
     assert {step["prompt"] for step in taxation_steps} == {
-        "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-        "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
-        "real count makes it a majority (1 vs 0). Choose two resources",
-        "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-        "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
-        "real count makes it a majority (1 vs 0); north west (produce) unlocks wheat: "
-        "real count makes it a majority (1 vs 0). Choose two resources"
+        "player_one: Taxation step 2. Choose two resources."
     }
     step_two = taxation_steps[0]
     assert step_two["resource_delta"] == {"stone": 2, "silver": 0, "wheat": 0}
@@ -4553,7 +4547,7 @@ def test_taxation_step_two_without_a_majority_has_no_zero_resource_instruction()
         if step["kind"] == "combination" and step.get("resource_total") == 0
     }
 
-    assert prompts == {"player_one: Taxation step 2: no other Duty tile is a majority."}
+    assert prompts == {"player_one: Taxation step 2. No other Duty tile is a majority."}
 
 
 @pytest.mark.parametrize(
@@ -4561,17 +4555,13 @@ def test_taxation_step_two_without_a_majority_has_no_zero_resource_instruction()
     (
         (
             "scenarios/scriptorium_taxation_majority_other_tiles_001.json",
-            "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-            "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) "
-            "unlocks stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). "
-            "Choose two resources",
+            "player_one: Taxation step 2. The Scriptorium makes south west and west majorities. "
+            "Choose two resources.",
         ),
         (
             "scenarios/customs_house_active_taxation_majority_001.json",
-            "player_one: Taxation step 2: south west (ordination) unlocks silver: "
-            "Customs House makes this occupied tile a majority (1 vs 1); west (allocation) "
-            "unlocks stone: Customs House makes this occupied tile a majority (1 vs 1). "
-            "Choose two resources",
+            "player_one: Taxation step 2. The Customs House makes your occupied tiles majorities. "
+            "Choose two resources.",
         ),
     ),
 )
@@ -4593,6 +4583,35 @@ def test_taxation_step_two_prompt_explains_building_majorities(
     }
 
     assert prompts == {expected}
+
+
+def test_taxation_step_two_prompt_names_one_scriptorium_majority(monkeypatch) -> None:
+    scenario = load_scenario("scenarios/playtest/cloisters_loop_2p.json")
+    action = next(
+        candidate
+        for candidate in legal_actions(scenario.state, scenario.config)
+        if candidate.resolution is TurnResolutionType.TAXATION
+        and len(candidate.taxation_step2_resources) == 2
+    )
+    north_east = scenario.config.board.positions.index("north_east")
+    unlock = TaxationMajorityUnlock(
+        duty_position=north_east,
+        duty_category="give_alms",
+        resources=("wheat",),
+        majority_reason="scriptorium",
+        player_acolytes=1,
+        effective_player_acolytes=2,
+        competing_acolytes=1,
+    )
+    monkeypatch.setattr(
+        play_server,
+        "taxation_majority_unlocks_for_action",
+        lambda _state, _config, _action: (unlock,),
+    )
+
+    assert play_server._taxation_step_two_prompt(action, scenario.state, scenario.config) == (
+        "Taxation step 2. The Scriptorium makes north east a majority. Choose two resources."
+    )
 
 
 def test_cornucopia_tithe_resource_step_carries_engine_delta() -> None:
