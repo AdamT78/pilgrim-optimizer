@@ -4,6 +4,7 @@ from dataclasses import fields, replace
 
 import pytest
 
+from pilgrim.io.event_text import format_event_for_players
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import BuildingRelocationStep, FullTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId
@@ -276,6 +277,48 @@ def test_start_turn_relocation_events_are_only_emitted_by_a_committed_step() -> 
         dict(event.details).get("building") in {"dormitory", "inquisition"}
         for event in _events_of_type(result.events, EventType.BUILDING_BONUS)
     )
+
+
+@pytest.mark.parametrize(
+    ("scenario_path", "building_id", "selected_position_name", "expected"),
+    (
+        (
+            "scenarios/dormitory_active_return_duty_to_city_001.json",
+            "dormitory",
+            "east",
+            "player_one used the Dormitory to return an acolyte from East to the City.",
+        ),
+        (
+            "scenarios/inquisition_active_city_to_duty_001.json",
+            "inquisition",
+            "north",
+            "player_one used the Inquisition to move an acolyte from the City to North.",
+        ),
+    ),
+)
+def test_start_turn_building_bonus_owns_the_only_player_relocation_line(
+    scenario_path: str,
+    building_id: str,
+    selected_position_name: str,
+    expected: str,
+) -> None:
+    scenario, steps = _relocation_steps(scenario_path, building_id)
+    selected_position = scenario.config.board.index_for_name(selected_position_name)
+    after = apply_turn_step(
+        scenario.state,
+        scenario.config,
+        _first(steps, lambda step: step.selected_position == selected_position),
+    )
+    bonus = _events_of_type(after.turn_progress.events, EventType.BUILDING_BONUS)[0]
+    relocation = _events_of_type(after.turn_progress.events, EventType.START_TURN_RELOCATION)[0]
+    player_lines = [
+        line
+        for event in (bonus, relocation)
+        if (line := format_event_for_players(event, scenario.config)) is not None
+    ]
+
+    assert player_lines == [expected]
+    assert dict(relocation.details)["player_line_suppressed"] is True
 
 
 def test_committed_relocation_events_precede_the_following_sowing_and_preserve_invariants() -> None:

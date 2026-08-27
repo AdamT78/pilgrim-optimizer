@@ -895,6 +895,41 @@ def _bonus_delta_is_zero(details: dict) -> bool:
     return seen
 
 
+def _bonus_location_label(value: str) -> str:
+    label = _title_words(value)
+    return f"the {label}" if value == "city" else label
+
+
+def _building_conversion_for_players(
+    actor: str,
+    *,
+    building_name: str,
+    details: dict,
+) -> str | None:
+    direction = str(details.get("conversion_direction", "")).strip()
+    if not direction:
+        return None
+
+    conversions = {
+        "buy_wheat": ("buy", "wheat", "silver", 1),
+        "sell_wheat": ("sell", "wheat", "silver", 1),
+        "buy_stone": ("buy", "stone", "silver", 1),
+        "sell_stone": ("sell", "stone", "silver", 1),
+        "buy_piety": ("buy", "piety", "silver", 1),
+        "sell_piety": ("sell", "piety", "silver", 1),
+        "sell_wheat_for_silver": ("sell", "wheat", "silver", 2),
+    }
+    conversion = conversions.get(direction)
+    if conversion is None:
+        return None
+    verb, spent, received, rate = conversion
+    amount = int(details.get("amount", 1))
+    return (
+        f"{actor} used the {building_name} to {verb} {amount} {spent} "
+        f"for {amount * rate} {received}."
+    )
+
+
 def _building_bonus_for_players(actor: str, details: dict) -> str | None:
     if bool(details.get("player_line_suppressed", False)):
         return None
@@ -929,6 +964,53 @@ def _building_bonus_for_players(actor: str, details: dict) -> str | None:
             f"\u2014 {due} due, {waived} waived by the {source_name}."
         )
 
+    conversion_line = _building_conversion_for_players(
+        actor,
+        building_name=source_name,
+        details=details,
+    )
+    if conversion_line is not None:
+        return conversion_line
+
+    if building == "bank" and action_name == "payment_substitution":
+        replaced = str(details.get("replaced_resource", "resource")).strip()
+        silver = int(details.get("silver_amount", 0))
+        if silver > 0:
+            return f"{actor} used the Bank to pay {silver} silver instead of {silver} {replaced}."
+
+    if building == "chapter_house" and details.get("second_acolyte") is True:
+        activity = _title_words(str(details.get("activity", "Special Activity")).strip())
+        return f"{actor} used the Chapter House to place a second acolyte on the {activity}."
+
+    if building == "scriptorium" and action_name == "effective_acolyte_bonus":
+        return (
+            f"{actor} used the Scriptorium to count one extra acolyte "
+            "on each occupied Duty tile."
+        )
+
+    if building == "customs_house" and action_name == "taxation_majority_override":
+        return f"{actor} used the Customs House to make occupied Duty tiles a Taxation majority."
+
+    if building == "guild" and action_name == "merchant_advance":
+        return f"{actor} used the Guild to move the Merchant one space clockwise."
+
+    if building == "pulpit" and action_name == "workforce_move":
+        return f"{actor} used the Pulpit to move a serf from the Village to the Abbey."
+
+    if building in {"dormitory", "inquisition"} and "start_turn_from" in details:
+        origin = _bonus_location_label(str(details.get("start_turn_from", "unknown")).strip())
+        destination = _bonus_location_label(str(details.get("start_turn_to", "unknown")).strip())
+        verb = "return" if building == "dormitory" else "move"
+        return (
+            f"{actor} used the {source_name} to {verb} an acolyte "
+            f"from {origin} to {destination}."
+        )
+
+    if building == "library" and "end_turn_from" in details:
+        origin = _bonus_location_label(str(details.get("end_turn_from", "unknown")).strip())
+        destination = _bonus_location_label(str(details.get("end_turn_to", "unknown")).strip())
+        return f"{actor} used the Library to move an acolyte from {origin} to {destination}."
+
     resource_line = _resource_bonus_player_line(
         actor=actor,
         details=details,
@@ -953,6 +1035,12 @@ def _special_activity_bonus_for_players(actor: str, details: dict) -> str | None
     activity = str(details.get("activity", "")).strip()
     source_name = _title_words(activity) if activity else "Special Activity"
     action_name = str(details.get("action", "")).strip()
+
+    if activity == "road_engineer" and "construct_extra_roads" in details:
+        extra_roads = int(details.get("construct_extra_roads", 0))
+        if extra_roads > 0:
+            noun = "road" if extra_roads == 1 else "roads"
+            return f"{actor} used the Road Engineer to build {extra_roads} additional {noun}."
 
     resource_line = _resource_bonus_player_line(
         actor=actor,
@@ -1007,15 +1095,23 @@ _PLAYER_DROPPED_EVENT_TYPES: set[EventType] = {
     EventType.CONFESSION_BOX_PHASE,
 }
 
+_PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES: set[EventType] = {
+    EventType.START_TURN_RELOCATION,
+    EventType.END_TURN_RELOCATION,
+    EventType.WORKFORCE_MOVE,
+}
+
 _PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
     EventType.SETUP_COMPLETE,
     *_PLAYER_TURN_STEP_EVENT_TYPES,
     EventType.BUILDING_DONATION,
     EventType.BUILDING_CONSTRUCTED,
+    EventType.BUILDING_HIRED,
     EventType.ALLOCATION,
     EventType.BUILDING_BONUS,
     EventType.SPECIAL_ACTIVITY_BONUS,
     *_PLAYER_ROUND_END_EVENT_TYPES,
+    *_PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES,
 }
 
 PLAYER_EVENT_FALLBACK_TYPES: tuple[EventType, ...] = tuple(
@@ -1032,6 +1128,14 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
     event_type = event.event_type
 
     if event_type in _PLAYER_DROPPED_EVENT_TYPES:
+        return None
+    if event_type in _PLAYER_BUILDING_ANNOUNCED_TRANSCRIPT_EVENT_TYPES:
+        if bool(details.get("player_line_suppressed", False)):
+            return None
+        raise AssertionError(
+            f"{event_type.value} needs a player sentence unless its building bonus announces it."
+        )
+    if bool(details.get("player_line_suppressed", False)):
         return None
 
     if event_type is EventType.SETUP_COMPLETE:
@@ -1139,6 +1243,26 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         stone_cost = int(details.get("stone_cost", 0))
         return f"{actor} constructed {built_label} from {source} for {stone_cost} stone."
 
+    if event_type is EventType.BUILDING_HIRED:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        hired_label = building_name if building_name else _title_words(building_id)
+        source = str(details.get("source", "unknown")).strip()
+        source_phrase = "the market" if source == "market" else source
+        if bool(details.get("free_with_wagon_yard", False)):
+            return f"{actor} hired {hired_label} from {source_phrase} for free with Wagon Yard."
+
+        amount = int(details.get("amount", 0))
+        resource = str(details.get("resource", "none")).strip()
+        payee = str(details.get("payee", "")).strip()
+        if amount <= 0 or not resource or resource == "none":
+            return f"{actor} hired {hired_label} from {source_phrase}."
+
+        payment = f" and paid {amount} {resource}"
+        if payee and payee not in {"none", source}:
+            payment += f" to {'the bank' if payee == 'bank' else payee}"
+        return f"{actor} hired {hired_label} from {source_phrase}{payment}."
+
     if event_type is EventType.ALLOCATION:
         from_pool = _title_words(str(details.get("from_pool", "unknown")))
         to_pool = _title_words(str(details.get("to_pool", "unknown")))
@@ -1187,11 +1311,13 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         step = str(details.get("step", "")).strip()
         amount = int(details.get("amount", 1))
         if step == "ordain":
-            noun = "serf" if amount == 1 else "serfs"
-            return f"{actor} ordained {amount} {noun} into the Abbey."
+            if amount == 1:
+                return f"{actor} ordained a serf. It is now an acolyte in the Abbey."
+            return f"{actor} ordained {amount} serfs. They are now acolytes in the Abbey."
         if step == "mission":
-            noun = "acolyte" if amount == 1 else "acolytes"
-            return f"{actor} sent {amount} {noun} on mission to the City."
+            if amount == 1:
+                return f"{actor} sent an acolyte on a mission. It is now in the City."
+            return f"{actor} sent {amount} acolytes on a mission. They are now in the City."
         return None
 
     if event_type is EventType.SHIP_ADVANCE:
@@ -1240,8 +1366,6 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         return f"Round {round_number} ended."
 
     if event_type is EventType.BUILDING_BONUS:
-        if bool(details.get("player_line_suppressed", False)):
-            return None
         line = _building_bonus_for_players(actor, details)
         if line is not None:
             return line
@@ -1249,17 +1373,18 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
             return None
         if "enabled_route" in details or "skipped_location" in details:
             return None
-        return format_event(event, config)
+        # This is an explicit player event. An unfamiliar bonus must not inherit the developer
+        # formatter merely because it shares its event type; the corpus guard names the missing
+        # player sentence before it can reach the page.
+        return None
 
     if event_type is EventType.SPECIAL_ACTIVITY_BONUS:
-        if bool(details.get("player_line_suppressed", False)):
-            return None
         line = _special_activity_bonus_for_players(actor, details)
         if line is not None:
             return line
         if _bonus_delta_is_zero(details):
             return None
-        return format_event(event, config)
+        return None
 
     if event_type in PLAYER_EVENT_FALLBACK_TYPES:
         return format_event(event, config)

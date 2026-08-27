@@ -70,8 +70,8 @@ def test_ordination_step_lines_follow_the_current_player_wording_on_real_action(
     )
     result = apply_action(scenario.state, action, scenario.config)
     lines = _player_lines(result.events, scenario.config)
-    assert "player_one ordained 1 serf into the Abbey." in lines
-    assert "player_one sent 1 acolyte on mission to the City." in lines
+    assert "player_one ordained a serf. It is now an acolyte in the Abbey." in lines
+    assert "player_one sent an acolyte on a mission. It is now in the City." in lines
 
 
 def test_zero_delta_bonus_event_produces_no_player_clause(config) -> None:
@@ -93,3 +93,90 @@ def test_zero_delta_bonus_event_produces_no_player_clause(config) -> None:
     )
     assert format_event_for_players(fields_zero, config) is None
     assert format_event_for_players(mill_zero, config) == "player_one paid 2 wheat for Ordination."
+
+
+@pytest.mark.parametrize(
+    ("event_type", "details", "expected"),
+    (
+        (
+            EventType.BUILDING_BONUS,
+            {
+                "building": "bank",
+                "action": "payment_substitution",
+                "replaced_resource": "wheat",
+                "silver_amount": 2,
+            },
+            "player_one used the Bank to pay 2 silver instead of 2 wheat.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "grain_store", "conversion_direction": "buy_wheat", "amount": 2},
+            "player_one used the Grain Store to buy 2 wheat for 2 silver.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "stone_yard", "conversion_direction": "sell_stone", "amount": 2},
+            "player_one used the Stone Yard to sell 2 stone for 2 silver.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "indulgences", "conversion_direction": "buy_piety", "amount": 2},
+            "player_one used the Indulgences to buy 2 piety for 2 silver.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "brewery", "conversion_direction": "sell_wheat_for_silver", "amount": 1},
+            "player_one used the Brewery to sell 1 wheat for 2 silver.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "chapter_house", "activity": "fields", "second_acolyte": True},
+            "player_one used the Chapter House to place a second acolyte on the Fields.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "customs_house", "action": "taxation_majority_override"},
+            "player_one used the Customs House to make occupied Duty tiles a Taxation majority.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "scriptorium", "action": "effective_acolyte_bonus"},
+            "player_one used the Scriptorium to count one extra acolyte "
+            "on each occupied Duty tile.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "guild", "action": "merchant_advance"},
+            "player_one used the Guild to move the Merchant one space clockwise.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "pulpit", "action": "workforce_move"},
+            "player_one used the Pulpit to move a serf from the Village to the Abbey.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "dormitory", "start_turn_from": "east", "start_turn_to": "city"},
+            "player_one used the Dormitory to return an acolyte from East to the City.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "inquisition", "start_turn_from": "city", "start_turn_to": "north"},
+            "player_one used the Inquisition to move an acolyte from the City to North.",
+        ),
+        (
+            EventType.BUILDING_BONUS,
+            {"building": "library", "end_turn_from": "abbey", "end_turn_to": "city"},
+            "player_one used the Library to move an acolyte from Abbey to the City.",
+        ),
+        (
+            EventType.SPECIAL_ACTIVITY_BONUS,
+            {"activity": "road_engineer", "construct_extra_roads": 2},
+            "player_one used the Road Engineer to build 2 additional roads.",
+        ),
+    ),
+)
+def test_non_resource_bonus_subcases_use_player_sentences(
+    config, event_type: EventType, details: dict, expected: str
+) -> None:
+    assert format_event_for_players(_event(event_type, **details), config) == expected

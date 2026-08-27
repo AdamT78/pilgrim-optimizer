@@ -55,6 +55,7 @@
   var phasePrompts = aside.querySelectorAll('[data-turn-phase-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
+  var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
@@ -1696,6 +1697,11 @@
     });
     showArrangement(arrangementValues || []);
     showOrdination(ordinationValues || []);
+    Array.prototype.forEach.call(ordinationActions, function (button) {
+      var action = button.getAttribute('data-ordination-action');
+      var offered = ordinationValues && ordinationValues.length && ordinationCanAdvance(action);
+      button.setAttribute('data-turn-offered', offered ? 'true' : 'false');
+    });
     renderTurnSteps();
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
@@ -2054,6 +2060,12 @@
   answers(keys, 'data-resolution-key');
   answers(pairs, 'data-combination-key');
   answers(buildings, 'data-building-choice-key');
+  Array.prototype.forEach.call(ordinationActions, function (button) {
+    button.addEventListener('click', function () {
+      if (requestInFlight || button.getAttribute('data-turn-offered') !== 'true') { return; }
+      ordinationClick(button.getAttribute('data-ordination-action'));
+    });
+  });
   Array.prototype.forEach.call(seats, function (seat) {
     answers(seat.querySelectorAll('[data-seat-choice-key]'), 'data-seat-choice-key');
   });

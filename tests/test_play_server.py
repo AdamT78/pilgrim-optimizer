@@ -2768,8 +2768,8 @@ def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path
         assert edge.get("auto_advance") is True
         assert duty.get("auto_advance") is None
         expected = (
-            ([], "choose a space to lift acolytes from.", [1]),
-            ([_at(1)], "choose a duty to take.", [2]),
+            ([], "Choose a space to lift acolytes from.", [1]),
+            ([_at(1)], "Choose a duty to take.", [2]),
         )
         for clicks, prompt_end, offered in expected:
             transcript = _run_script(server, clicks, tmp_path)
@@ -3820,17 +3820,22 @@ def test_turn_window_prompt_names_only_available_building_kinds() -> None:
     assert play_server._turn_window_prompt(
         resolution_committed=False,
         available_turn_steps=[{"hire_payment": "silver"}, {"hire_payment": None}],
-    ) == (
-        "Pick up acolytes for sowing. A building can be hired. "
-        "A building can be activated without payment."
-    )
+    ) == "Pick up acolytes for sowing. Buildings can be used here — some free, some hired."
     assert play_server._turn_window_prompt(
         resolution_committed=True, available_turn_steps=[]
     ) == ""
     assert play_server._turn_window_prompt(
         resolution_committed=True,
         available_turn_steps=[{"hire_payment": "silver"}, {"hire_payment": None}],
-    ) == "A building can be hired. A building can be activated without payment."
+    ) == "Buildings can be used here — some free, some hired."
+    assert play_server._turn_window_prompt(
+        resolution_committed=True,
+        available_turn_steps=[{"hire_payment": "silver"}],
+    ) == "A building can be hired here."
+    assert play_server._turn_window_prompt(
+        resolution_committed=True,
+        available_turn_steps=[{"hire_payment": None}],
+    ) == "A building can be used here, free."
 
 
 def test_movement_turn_window_counts_each_available_hire() -> None:
@@ -3843,10 +3848,7 @@ def test_movement_turn_window_counts_each_available_hire() -> None:
         [],
         available_turn_steps=steps,
     )["prompts"] == {
-        "beginning": (
-            "Pick up acolytes for sowing. Buildings can be hired. "
-            "A building can be activated without payment."
-        )
+        "beginning": "Pick up acolytes for sowing. Buildings can be used here — some free, some hired."
     }
 
 
@@ -4515,11 +4517,11 @@ def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
     assert {step["prompt"] for step in taxation_steps} == {
         "player_one: Taxation step 2: south west (ordination) unlocks silver: "
         "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
-        "real count makes it a majority (1 vs 0). Choose 2 resources.",
+        "real count makes it a majority (1 vs 0). Choose two resources",
         "player_one: Taxation step 2: south west (ordination) unlocks silver: "
         "real count makes it a majority (1 vs 0); west (allocation) unlocks stone: "
         "real count makes it a majority (1 vs 0); north west (produce) unlocks wheat: "
-        "real count makes it a majority (1 vs 0). Choose 2 resources."
+        "real count makes it a majority (1 vs 0). Choose two resources"
     }
     step_two = taxation_steps[0]
     assert step_two["resource_delta"] == {"stone": 2, "silver": 0, "wheat": 0}
@@ -4528,10 +4530,12 @@ def test_taxation_step_two_prompt_explains_real_count_majorities() -> None:
         "silver": 0,
         "wheat": 1,
     }
-    assert play_server.COMBINATION_PROMPT == "choose one."
+    assert not hasattr(play_server, "COMBINATION_PROMPT")
     assert (
-        play_server._combination_step("pay", [("silver", 1), ("wheat", 1)])["prompt"]
-        == play_server.COMBINATION_PROMPT
+        play_server._combination_step(
+            "pay", [("silver", 1), ("wheat", 1)], prompt=play_server.ALMS_PAYMENT_PROMPT
+        )["prompt"]
+        == "Choose payment."
     )
 
 
@@ -4560,14 +4564,14 @@ def test_taxation_step_two_without_a_majority_has_no_zero_resource_instruction()
             "player_one: Taxation step 2: south west (ordination) unlocks silver: "
             "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) "
             "unlocks stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). "
-            "Choose 2 resources.",
+            "Choose two resources",
         ),
         (
             "scenarios/customs_house_active_taxation_majority_001.json",
             "player_one: Taxation step 2: south west (ordination) unlocks silver: "
             "Customs House makes this occupied tile a majority (1 vs 1); west (allocation) "
             "unlocks stone: Customs House makes this occupied tile a majority (1 vs 1). "
-            "Choose 2 resources.",
+            "Choose two resources",
         ),
     ),
 )
@@ -4835,7 +4839,7 @@ def test_committed_hire_adds_the_engine_event_line_to_the_player_log() -> None:
         )
         server.apply_turn_step(kogge["step_id"], server.payload["state_token"])
         assert server.payload["log_blocks"][-1]["lines"] == [
-            "BUILDING_HIRED: player_one hired Kogge from player_two; paid silver 1 to player_two"
+            "player_one hired Kogge from player_two and paid 1 silver."
         ]
         assert server.payload["log_blocks"][-1]["event_types"] == ["building_hired"]
     finally:
@@ -5212,7 +5216,7 @@ def test_start_player_selection_prompt_says_this_round(tmp_path: Path) -> None:
     transcript = _run_script(server, [], tmp_path)
     active = server.payload["state"]["active_player"]
 
-    assert transcript["asking"][0] == [f"{active}: choose first player for this round."]
+    assert transcript["asking"][0] == [f"{active}: Choose first player for this round."]
 
 
 @needs_node
@@ -6107,6 +6111,12 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
             or attribute.startswith("data-turn-step-hire-")
         ) and not server.payload.get("turn_steps"):
             continue
+        if attribute == "data-ordination-action" and not any(
+            step["kind"] == "ordination"
+            for candidate in server.payload["turn_candidates"]
+            for step in candidate["steps"]
+        ):
+            continue
         carrying = [node for node in _every_element(tree.root) if attribute in node["attrs"]]
         # Every one of them has to be ON the page as well as reachable. An attribute the script
         # asks for and the renderer never draws would otherwise pass this test by being absent,
@@ -6240,7 +6250,7 @@ def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
 
     _exactly_one_prompt_is_visible(transcript)
     assert transcript["asking"][0] == [
-        f"{server.payload['state']['active_player']}: choose a space to lift acolytes from."
+        f"{server.payload['state']['active_player']}: Choose a space to lift acolytes from."
     ], "setup sow did not name the pickup question it was asking"
     assert transcript["offered"][0] == [0], "setup sow did not offer the City pickup"
     assert transcript["counterShown"][0] == [], "the route counter appeared before pickup"
@@ -6248,7 +6258,7 @@ def test_setup_sow_is_asked_with_arrows_and_a_counter(tmp_path: Path) -> None:
 
     after_pickup = _run_script(server, [_at(0)], tmp_path)
     assert after_pickup["asking"][-1] == [
-        f"{server.payload['state']['active_player']}: follow an arrow."
+        f"{server.payload['state']['active_player']}: Follow an arrow."
     ], "setup sow did not name the route question after pickup"
     assert after_pickup["offered"][-1] == ["city->north", "city->south"], (
         f"setup sow offered {transcript['offered'][0]} instead of the two City arrows"
@@ -6697,7 +6707,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                     {
                         "kind": "origin",
                         "value": 1,
-                        "prompt": f"{active}: choose a space to lift acolytes from.",
+                        "prompt": f"{active}: Choose a space to lift acolytes from.",
                         "counter": 1,
                     }
                 ],
@@ -6712,7 +6722,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                     {
                         "kind": "origin",
                         "value": 2,
-                        "prompt": f"{active}: choose a duty to take.",
+                        "prompt": f"{active}: Choose a duty to take.",
                         "counter": 1,
                     }
                 ],

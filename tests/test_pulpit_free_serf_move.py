@@ -4,6 +4,7 @@ from dataclasses import fields, replace
 
 import pytest
 
+from pilgrim.io.event_text import format_event_for_players
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import BuildingActivationStep, FullTurnAction
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
@@ -164,12 +165,32 @@ def test_apply_own_active_pulpit_moves_exactly_one_serf_before_sowing_without_wh
         "to_pool": "abbey",
         "unit": "serf",
         "wheat_paid": 0,
+        "player_line_suppressed": True,
     }
     assert result.events.index(bonus_event) < result.events.index(workforce_event) < result.events.index(
         sowing_event
     )
     invariant_event = _events_of_type(result.events, EventType.INVARIANT_CHECK)[-1]
     assert dict(invariant_event.details)["acolytes_conserved"] is True
+
+
+def test_pulpit_bonus_owns_the_only_player_line_for_its_workforce_move() -> None:
+    scenario, _actions, steps = _pulpit_steps("scenarios/pulpit_active_move_serf_001.json")
+    _step_state, result = _commit_and_resolve(scenario, steps[0], TurnResolutionType.TITHE)
+    bonus_event = _first(
+        _events_of_type(result.events, EventType.BUILDING_BONUS),
+        lambda event: dict(event.details).get("building") == "pulpit",
+    )
+    workforce_event = _events_of_type(result.events, EventType.WORKFORCE_MOVE)[0]
+    player_lines = [
+        line
+        for event in (bonus_event, workforce_event)
+        if (line := format_event_for_players(event, scenario.config)) is not None
+    ]
+
+    assert player_lines == [
+        "player_one used the Pulpit to move a serf from the Village to the Abbey."
+    ]
 
 
 def test_hired_market_pulpit_pays_bank_before_free_move() -> None:
