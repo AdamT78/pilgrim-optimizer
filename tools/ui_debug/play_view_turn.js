@@ -14,12 +14,22 @@
   var TOKEN = __TOKEN__;
   var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
   var BUILDING_ABILITIES = __BUILDING_ABILITIES__;
+  var BUILDING_ABILITY_WINDOWS = __BUILDING_ABILITY_WINDOWS__;
+  var currentTurnPhase = __BUILDING_ABILITY_WINDOW__;
   var buildingAbilityTargets = document.querySelectorAll('[data-building-id]');
 
+  function buildingAbilityWindow() {
+    return BUILDING_ABILITY_WINDOWS[currentTurnPhase] || {
+      turn_steps_offered: false,
+      abilities: BUILDING_ABILITIES
+    };
+  }
+
   function buildingAbilityFor(buildingId) {
-    for (var index = 0; index < BUILDING_ABILITIES.length; index += 1) {
-      if (BUILDING_ABILITIES[index].building_id === buildingId) {
-        return BUILDING_ABILITIES[index];
+    var abilities = buildingAbilityWindow().abilities || BUILDING_ABILITIES;
+    for (var index = 0; index < abilities.length; index += 1) {
+      if (abilities[index].building_id === buildingId) {
+        return abilities[index];
       }
     }
     return null;
@@ -35,6 +45,10 @@
       target.setAttribute(
         'data-building-ability-text',
         ability && typeof ability.status_text === 'string' ? ability.status_text : ''
+      );
+      target.setAttribute(
+        'data-building-ability-greyed',
+        ability && ability.greyed === true ? 'true' : 'false'
       );
     });
   }
@@ -127,6 +141,7 @@
   function renderPhase(current) {
     if (PHASE_COLUMN_SCOPE !== 'turn') { return; }
     if (current === null) { return; }
+    currentTurnPhase = current;
     Array.prototype.forEach.call(phaseRows, function (row) {
       if (row.getAttribute('data-turn-phase') === current) {
         row.setAttribute('data-phase-current', 'true');
@@ -226,7 +241,10 @@
 
   function renderTurnSteps() {
     var live = survivingTurnSteps();
-    var availableBuildings = offeredTurnStepValues(0, TURN_STEPS);
+    var buildingWindow = buildingAbilityWindow();
+    var availableBuildings = buildingWindow.turn_steps_offered === true
+      ? offeredTurnStepValues(0, TURN_STEPS)
+      : [];
     var activation = conversionChosen.length === 1
       && live.length === 1 && live[0].kind === 'activation';
     var relocation = conversionChosen.length >= 1
@@ -264,6 +282,11 @@
         conversionChosen.length > 0 && conversionChosen[0] === buildingId ? 'true' : 'false'
       );
       building.setAttribute('data-turn-step-used', used ? 'true' : 'false');
+      var ability = buildingAbilityFor(buildingId);
+      building.setAttribute(
+        'data-building-ability-greyed',
+        ability && ability.greyed === true ? 'true' : 'false'
+      );
     });
     Array.prototype.forEach.call(turnStepDirections, function (button) {
       var value = button.getAttribute('data-turn-step-direction');

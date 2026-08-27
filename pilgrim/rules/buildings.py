@@ -45,6 +45,8 @@ class BuildingAbilityReason(StrEnum):
     DONATED = "donated"
     INSUFFICIENT_RESOURCE = "insufficient_resource"
     MERCHANT_RESOURCE_NONE = "merchant_resource_none"
+    MID_SOW = "mid_sow"
+    ALREADY_USED = "already_used"
 
 
 BUILDING_ABILITY_REASONS: frozenset[BuildingAbilityReason] = frozenset(BuildingAbilityReason)

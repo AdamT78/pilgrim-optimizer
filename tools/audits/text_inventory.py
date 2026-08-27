@@ -30,10 +30,9 @@ else:
     from audit_helpers import project_root
 
 from tools.play_server import (  # noqa: E402
-    _building_ability_status_text,
     _turn_window_prompt,
     building_abilities_payload,
-    building_ability_source,
+    building_ability_windows_payload,
     turn_candidates,
     turn_steps_payload,
 )
@@ -139,17 +138,21 @@ def _record_building_statuses(
 ) -> None:
     for ability in building_abilities_payload(state, config):
         building_id = str(ability["building_id"])
-        source = building_ability_source(
-            state,
-            config,
-            acting_player=state.active_player,
-            building_key=building_id,
-        )
         _record(
             rows,
             source="_building_ability_status_text",
-            situation=f"{building_id}: {source.reason or 'usable'}",
-            text=_building_ability_status_text(source),
+            situation=f"{building_id}: {ability['reason'] or 'usable'}",
+            text=str(ability["status_text"]),
+            position=position,
+        )
+    for ability in building_ability_windows_payload(state, config)["sow"]["abilities"]:
+        if ability["reason"] != "mid_sow":
+            continue
+        _record(
+            rows,
+            source="_building_ability_status_text",
+            situation=f"{ability['building_id']}: mid_sow",
+            text=str(ability["status_text"]),
             position=position,
         )
 

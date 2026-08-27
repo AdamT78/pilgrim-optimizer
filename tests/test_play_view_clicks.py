@@ -3381,9 +3381,37 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
         server.config,
     ).state
     _click_handle_centre(page, origin, require_hit=True)
-    page.wait_for_timeout(40)
+    page.wait_for_function(
+        """() => document.querySelector('[data-turn-phase="sow"]')
+          ?.getAttribute('data-phase-current') === 'true'"""
+    )
 
     _assert_painted_turn_phase(page, "sow")
+    assert page.evaluate(
+        """() => {
+          const market = document.querySelector('.setup-building-fill[data-building-id="brewery"]');
+          const own = document.querySelector(
+            '[data-active-seat="true"] [data-player-board-slot][data-building-id="grain_store"]'
+          );
+          return {
+            offered: document.querySelectorAll(
+              '[data-turn-step-building-id][data-turn-step-offered="true"]'
+            ).length,
+            market: market && {
+              greyed: market.getAttribute('data-building-ability-greyed'),
+              filter: getComputedStyle(market).filter,
+            },
+            own: own && {
+              greyed: own.getAttribute('data-building-ability-greyed'),
+              filter: getComputedStyle(own).filter,
+            },
+          };
+        }"""
+    ) == {
+        "offered": 0,
+        "market": {"greyed": "true", "filter": "grayscale(1)"},
+        "own": {"greyed": "true", "filter": "grayscale(1)"},
+    }
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-sow.png")
 
     for step in tithe_candidate["steps"]:

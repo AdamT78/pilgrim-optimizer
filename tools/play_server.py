@@ -82,6 +82,7 @@ from pilgrim.rules.buildings import (  # noqa: E402
     BuildingAbilityReason,
     building_ability_source,
     building_by_id,
+    is_building_live,
 )
 from pilgrim.rules.transition import (  # noqa: E402
     turn_step_id,
@@ -289,24 +290,38 @@ def _building_ability_status_text(source: Any) -> str:
     if reason not in BUILDING_ABILITY_REASONS:
         raise ValueError(f"Unknown building ability reason: {reason!r}")
     if reason == BuildingAbilityReason.NOT_LIVE:
-        return "Not usable: this building is not live yet."
+        return "Cannot be hired: this building is not live yet."
     if reason == BuildingAbilityReason.NOT_SELECTED:
-        return "Not usable: this building was not selected for this game."
+        return "Cannot be hired: this building was not selected for this game."
     if reason == BuildingAbilityReason.DONATED:
         owner_name = _building_ability_party_name(source.owner)
         owner = f" by {owner_name}" if owner_name else ""
-        return f"Not usable: this building was donated{owner}."
+        return f"Cannot be hired: this building was donated{owner}."
     if reason == BuildingAbilityReason.INSUFFICIENT_RESOURCE:
         payee = _building_ability_party_name(source.payable_to)
         if source.hire_cost > 0 and source.hire_resource is not None and payee:
             return (
-                f"Not usable: insufficient {source.hire_resource} to pay {source.hire_cost} "
+                f"Cannot be hired: insufficient {source.hire_resource} to pay {source.hire_cost} "
                 f"{source.hire_resource} to {payee}."
             )
-        return "Not usable: the hire payment cannot be afforded."
+        return "Cannot be hired: the hire payment cannot be afforded."
     if reason == BuildingAbilityReason.MERCHANT_RESOURCE_NONE:
-        return "Not usable: the Merchant names no hire resource."
+        return "Cannot be hired: the Merchant names no hire resource."
+    if reason == BuildingAbilityReason.MID_SOW:
+        return "Cannot be used: sowing is in progress."
+    if reason == BuildingAbilityReason.ALREADY_USED:
+        return "Cannot be used: already used this turn."
     raise AssertionError(f"Known building ability reason has no player-facing status: {reason!r}")
+
+
+def _building_ability_is_greyed(source: Any) -> bool:
+    """Whether this source needs the page's unavailable-building treatment."""
+    return source.reason in {
+        BuildingAbilityReason.INSUFFICIENT_RESOURCE,
+        BuildingAbilityReason.MERCHANT_RESOURCE_NONE,
+        BuildingAbilityReason.MID_SOW,
+        BuildingAbilityReason.ALREADY_USED,
+    }
 
 
 def _building_ability_source_payload(source: Any) -> dict[str, Any]:
@@ -321,25 +336,100 @@ def _building_ability_source_payload(source: Any) -> dict[str, Any]:
         "payable_to": source.payable_to,
         "usable": source.usable,
         "reason": source.reason or None,
+        # This is an affordance state settled beside the source, not a browser-side reading of a
+        # reason code. The page applies the supplied treatment to every rendering of this tile.
+        "greyed": _building_ability_is_greyed(source),
         # This is deliberately a value, not a browser-side mapping from `reason`: an absent
         # engine reason produces no sentence instead of a helpful-looking fiction.
         "status_text": _building_ability_status_text(source),
     }
 
 
+def _building_is_live_market_tile(state: Any, config: Any, building_key: str) -> bool:
+    """Whether this ability source is drawn on a usable building tile in the live market."""
+    return building_key in state.building_market and is_building_live(state, building_key)
+
+
+def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
+    """Keep a completed building step unavailable on the page without changing engine lookups."""
+    if not source.usable or source.building_key not in state.turn_progress.used_buildings:
+        return source
+    return dataclasses.replace(
+        source,
+        usable=False,
+        reason=BuildingAbilityReason.ALREADY_USED,
+    )
+
+
 def building_abilities_payload(state: Any, config: Any) -> list[dict[str, Any]]:
     """Resolve every catalogue building for the active player in this exact window."""
     return [
         _building_ability_source_payload(
+            _building_ability_source_after_turn_use(
+                state,
+                building_ability_source(
+                    state,
+                    config,
+                    acting_player=state.active_player,
+                    building_key=building.id,
+                ),
+            )
+        )
+        | {"map_tile": _building_is_live_market_tile(state, config, building.id)}
+        for building in config.buildings.catalogue
+    ]
+
+
+def building_ability_windows_payload(state: Any, config: Any) -> dict[str, dict[str, Any]]:
+    """Describe the building availability the page may reveal at each server-named turn window.
+
+    The sow itself is held in browser preview state until Confirm. Its availability therefore has
+    to travel alongside the candidate phases: a browser that inferred the restriction from its
+    local cursor would be holding a second copy of the turn rule.
+    """
+    sources = tuple(
+        _building_ability_source_after_turn_use(
+            state,
             building_ability_source(
                 state,
                 config,
                 acting_player=state.active_player,
                 building_key=building.id,
-            )
+            ),
         )
         for building in config.buildings.catalogue
-    ]
+    )
+    static_reasons = {
+        BuildingAbilityReason.NOT_LIVE,
+        BuildingAbilityReason.NOT_SELECTED,
+        BuildingAbilityReason.DONATED,
+    }
+    sow_sources = tuple(
+        source
+        if source.reason in static_reasons
+        else dataclasses.replace(
+            source,
+            usable=False,
+            reason=BuildingAbilityReason.MID_SOW,
+        )
+        for source in sources
+    )
+
+    def window(*, offered: bool, entries: tuple[Any, ...]) -> dict[str, Any]:
+        return {
+            "turn_steps_offered": offered,
+            "abilities": [
+                _building_ability_source_payload(source)
+                | {"map_tile": _building_is_live_market_tile(state, config, source.building_key)}
+                for source in entries
+            ],
+        }
+
+    return {
+        "beginning": window(offered=True, entries=sources),
+        "sow": window(offered=False, entries=sow_sources),
+        "end": window(offered=True, entries=sources),
+    }
 
 
 def _turn_step_ability_payload(state: Any, config: Any, step: Any, result: Any) -> dict[str, Any]:
@@ -2652,12 +2742,14 @@ class PlayServer(ThreadingHTTPServer):
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
         available_turn_steps = turn_steps_payload(self.state, self.config)
+        building_abilities = building_abilities_payload(self.state, self.config)
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
             turn_candidates=turn_candidates(self.state, self.config),
             turn_steps=available_turn_steps,
-            building_abilities=building_abilities_payload(self.state, self.config),
+            building_abilities=building_abilities,
+            building_ability_windows=building_ability_windows_payload(self.state, self.config),
             log=list(self.log_lines),
             log_blocks=[
                 dict(
