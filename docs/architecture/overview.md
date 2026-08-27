@@ -1,740 +1,171 @@
 # Architecture Overview
 
-## Current Layering
-
-- `pilgrim.model`: immutable/hashable domain models and config representations.
-- `pilgrim.rules`: deterministic transition logic, legal action generation, and invariants.
-- `pilgrim.io`: JSON scenario loading and event/replay serialization helpers.
-- `pilgrim.search`: optimization routines that call rules APIs only.
-- `pilgrim.cli`: thin command-line entrypoint over scenario loading + engine/search calls.
-
-## Design Constraints
-
-- Rules code must be deterministic and side-effect free.
-- Search must not embed game rules; it consumes `legal_actions()` and `apply_action()`.
-- Static game data should live in `configs/` JSON files.
-- Every transition emits structured events to support replay and debugging.
-
-## Related Architecture Docs
-
-- `docs/architecture/player_choice_model.md`: inventory of player choices, flattened action
-  representation, and current simplifications/deferred choice areas.
-- `docs/architecture/search_and_pruning_model.md`: search contract and current legal-branch
-  pruning/canonicalization rules.
-- `docs/rules/Scoring.md`: official derived score-sheet categories and deferred scoring scope.
-
-## Search Perspective Model (v0.3)
-
-- **Game state**: immutable snapshot with active player, resources, piety position, and mancala vectors.
-- **Active player**: the player whose turn is currently being simulated.
-- **Root player**: the player whose outcome the solve call optimizes.
-- **Opponent model**: placeholder policy for how non-root decisions are selected during search.
-- **Evaluator**: computes sandbox score breakdown for a chosen player perspective.
-- **Search algorithm**: expands full-turn actions via rules APIs and chooses lines according to the configured opponent model.
-
-Current default opponent model is `sandbox_active_player_max`: each active player picks locally favorable actions, while terminal/cutoff score reporting remains root-player-based.
-
-## Workforce Pools (v0.4)
-
-- `PlayerState` now contains explicit workforce pools.
-- Mancala acolytes are only one workforce component.
-- Additional pools are represented for future systems: village, abbey, and committed pools (roads, shrines, market ports, pilgrimage sites, alms table).
-- Transition validation enforces workforce non-negativity and conservation.
-
-## Alms Subsystem (v0.5)
-
-- Alms adds per-player track state (`alms_position`) plus VP scoring from committed `alms_table` acolytes.
-- Give Alms is the first sandbox subsystem that moves workforce across pools:
-  - `village -> abbey`
-  - `abbey -> city` (mancala city position)
-  - `village -> city`
-- Season-end Alms helper adds a deterministic tie-breaked leader reward:
-  - potential `abbey -> committed.alms_table` move
-  - then Alms-position reset for all players
-- Search remains rules-agnostic: it still consumes `legal_actions()` and `apply_action()` only.
-
-## Evaluation Breakdown Cleanup (v0.6)
-
-- Evaluation is now centralized in `pilgrim.evaluation` and remains separate from rules.
-- The canonical model is `EvaluationBreakdown` (player identity + scoring components + total).
-- Current sandbox-only formula:
-  - `victory_points + piety_track_vp + alms_table_vp + resource_total`
-- Exact search now supports selectable leaf-scoring objectives:
-  - `sandbox` (default)
-  - `implemented_official_score`
-  - `sandbox_with_official_terminal`
-- Search objective selection does not change rules transitions or official scoring rules.
-- CLI `solve --verbose` and `apply --verbose` use the same evaluation breakdown formatter.
-- This is still an early proxy objective, not full Pilgrim final scoring.
-
-## Round and Season Timing (v0.7)
-
-- `GameState` now carries explicit timing state:
-  - absolute turn number
-  - round number
-  - season number
-  - turn index within round
-- Active player progression is independent from root-player optimization perspective:
-  - **active player** = whose full turn is being simulated now
-  - **root player** = whose `EvaluationBreakdown.total` search optimizes
-- Post-turn timing advancement is centralized in `pilgrim.rules.timing`.
-- After each full turn the transition pipeline now:
-  - advances active player and absolute timing
-  - detects whether the turn closed the round
-  - runs extra round-end phases only when needed
-
-## Merchant Context (v0.8)
-
-- `GameState` includes `merchant_board_position`, a board ring position of `1..8`; `0` is the City
-  and is never valid.
-- The Merchant rides the eight duty tiles clockwise along the ring derived from `configs/board.json`
-  and provides the tithe counter on the tile it occupies. `configs/merchant.json` now carries only
-  the advancement timing.
-- Round-end transition flow advances Merchant position once per completed round.
-- Merchant context is reusable infrastructure for future systems:
-  - building-hire payment resource
-  - trade-route income resource
-- At `taxation`, Merchant resource context is intentionally `None` (no resource).
-
-## Dummy Acolytes (v0.9)
-
-- `GameState` now tracks neutral dummy acolytes as two internal groups:
-  - `north_group`
-  - `south_group`
-- Dummy setup is table-size dependent (`player_count`):
-  - 2 players: 3+3 seeded dummies
-  - 3 players: 2+2 seeded dummies
-  - 4 players: no dummies
-- Dummy totals are included in Duty strength comparison as neutral competition.
-- End-of-season dummy movement helper remains available in rules helpers; automatic round-end
-  dummy movement is deferred for a later milestone.
-- Search remains rules-agnostic: dummy behavior is encapsulated in rules/state transition code.
-
-## Round-End Phase Pipeline (v1.0)
-
-- Round-end orchestration is now explicit in `pilgrim.rules.transition` and helper modules:
-  - `pilgrim.rules.round_end` for excess caps and start-player policy
-  - `pilgrim.rules.ship` for abstract Ship marker movement and site checks
-- `GameState` now tracks:
-  - `start_player`
-  - `ship_position`
-  - `completed_rounds`
-  - `game_over`
-- Normal round length now follows real players in `GameState.players` (`2..4`), while
-  `table_player_count` remains independent for dummy-group setup.
-- Round-end sequence is tightened in v4.5:
-  - excess cap
-  - ship advance / legacy NW game-end short-circuit
-  - round advance
-  - metadata-driven Alms season-end scoring/reset on pilgrimage rounds
-  - immediate game end on fourth season-end pilgrimage site
-  - merchant advance
-  - start-player selection
-  - final `TURN_ADVANCE` event when play continues
-- Legacy NW-return game end remains for full-loop scenarios without metadata-driven final-season end.
-- When `game_over` becomes true, `legal_actions()` returns no actions, keeping search/CLI behavior deterministic.
-
-## Building Catalogue and Slots (v1.1)
-
-- `GameConfig` now includes static building metadata loaded from `configs/buildings.json`.
-- Building config now captures:
-  - 24-entry catalogue
-  - per-level pool metadata
-  - per-game draw shape (4/4/4)
-  - player-board slot limit
-- `GameState` now tracks:
-  - `building_market` (12 stable ids for current game)
-  - per-player board-slot occupancy (`active_buildings`, `donated_buildings`, `cardinal_favor_tiles`)
-- Scenario loading stays deterministic:
-  - explicit `building_market` is accepted
-  - missing market falls back to first 4 ids per level from catalogue order
-- Transition/search are still rules-agnostic with no building actions yet; this milestone adds data and validation only.
-
-## Player Board Workforce and Special Activities (v1.2)
-
-- `PlayerState` now carries per-player `special_activities` occupancy counts.
-- Player-board workforce semantics are now explicit in CLI/docs:
-  - Village workers (Serfs) via `workforce.village`
-  - Abbey acolytes via `workforce.abbey`
-  - City/Duty acolytes via `workforce.mancala`
-- New rules helper module `pilgrim.rules.special_activities` centralizes:
-  - occupancy queries and formatting
-  - allocation helpers (Abbey <-> Special Activity and Special -> Special)
-  - current activity bonus hooks
-- Transition layer now supports:
-  - `allocation` duty resolution
-  - `ALLOCATION` events
-  - `SPECIAL_ACTIVITY_BONUS` events for active effects
-  - optional Alms House give-alms payment-ceiling boost
-- Search remains decoupled from these details and still consumes `legal_actions()` + `apply_action()`.
-
-## Duty Tile Identity Framework (v1.3)
-
-- Duty identity is now scenario-defined via a deterministic `duty_tiles` layout.
-- Physical board position and duty category are explicitly separated:
-  - physical: non-city mancala positions
-  - identity: one of eight duty categories
-- `GameConfig` now resolves duty category by selected position at runtime.
-- Legal action generation and duty resolution use category-based option mapping, removing
-  hardcoded position semantics like "south always means give_alms".
-- Deferred categories remain valid in layout.
-- `construct` currently exposes no non-tithe action.
-- `build_roads` now exposes a deterministic scaffold action (`build_roads_deferred`) that
-  resolves duty relation/cost/recall without spatial map effects.
-
-## Seeded Setup Generator (v1.9)
-
-- Setup randomization is now available as an explicit CLI file-generation step only.
-- `generate-setup` uses a local seeded RNG to produce deterministic scenario JSON from:
-  - player count
-  - seed
-  - output path
-- Generated files include:
-  - randomized duty layout
-  - randomized Tithe counters (with Taxation tile excluded)
-  - randomized 12-building market draw (4 per level)
-  - explicit dummy setup by player count
-  - turn-0 scaffold state plus setup metadata
-- Runtime determinism boundary is unchanged:
-  - no randomization inside scenario loading
-  - no randomization inside transition/apply logic
-  - no randomization inside search/solve
-
-## Setup Sow Phase (v2.0)
-
-- `GameState` now tracks explicit setup progression:
-  - `setup_sow_required`
-  - `setup_sow_complete`
-  - `setup_sow_completed_by`
-- Top-level phase now includes `setup_sow` for pre-game actions.
-- Legal-action generation is phase-aware:
-  - `setup_sow` phase generates setup-only sow actions
-  - `sow` phase generates normal full-turn duty/tithe actions
-- Setup sow transitions are isolated from normal turn advancement:
-  - no duty resolution/tithe flow
-  - no recall
-  - no turn/round/season advancement
-  - no Merchant/Ship movement
-- Setup completion transition is explicit:
-  - marks all players complete
-  - returns to normal `sow` phase
-  - resets active player to `start_player`
-  - preserves turn-0 timing scaffold
-- Validation includes setup-state invariants so malformed setup progression fails fast.
-
-## Duty Enhancement Registry (v2.3)
-
-- `pilgrim.rules.duty_enhancements` now provides a deterministic metadata registry of Duty
-  enhancements by:
-  - duty category + action key
-  - source type/key (Special Activity or building)
-  - effect text and implementation status
-- This registry is intentionally non-executable documentation/scaffolding:
-  - gameplay transitions do not auto-consume it
-  - existing duty-specific hooks remain authoritative runtime behavior
-  - known unimplemented building effects are tracked without changing rules execution
-
-## Construct Building Acquisition (v2.5)
-
-- Construct now includes explicit acquisition actions:
-  - `construct_building`
-  - `construct_building_and_road_deferred`
-  - `construct_road_deferred` (road-only scaffold retained)
-- Building acquisition transition behavior is now stateful:
-  - validates market presence, stone affordability, and free player-board slot
-  - applies stone payment (plus normal minority silver cost when applicable)
-  - removes the acquired building from `building_market`
-  - adds the building to acting player's `active_buildings`
-  - emits `BUILDING_CONSTRUCTED` explainability event
-- Mixed Construct (`building + road`) is partially implemented:
-  - building resolves now
-  - road part stays deferred with `DUTY_DEFERRED`
-  - Road Engineer still uses Construct-specific extra-road semantics only
-- Runtime market validation now supports shrinking `building_market` during play while preserving
-  deterministic id/level constraints.
-
-## Infirmary Duty Bonuses (v2.6)
-
-- Infirmary building effects are implemented in explicit duty-specific transition/generation paths
-  (not via generic registry execution):
-  - Allocation: active Infirmary adds `+1 effective Duty Value`
-  - Ordination: active Infirmary allows one additional paid step and contributes
-    `+1 effective Duty Value` only when that extra step is actually used
-- Legal-action generation now incorporates Infirmary caps where relevant:
-  - Allocation move-sequence generation uses `base + 1` when Infirmary is active
-  - Ordination sequence generation can explore one extra step when Infirmary is active, while
-    step-level wheat/workforce legality is still enforced by Ordination rules
-- Event semantics stay consistent with existing duty-value policy:
-  - true duty-value modifiers surface via `effective_duty_value` in `DUTY_RESOLUTION`
-  - Infirmary emits `BUILDING_BONUS` duty-value events
-  - direct output bonuses (Well/Quarry/Mint/Chapel and matching Special Activities) remain
-    separate output bonuses and do not alter `effective_duty_value`
-
-## Chapter House Special Activity Capacity (v2.7)
-
-- Special Activity occupancy is now count-based (`0..2`) with immutable state semantics.
-- Scenario loading now supports legacy boolean/list forms and count mappings for
-  `special_activities`.
-- Chapter House behavior is implemented through explicit transition/helpers (not via generic
-  registry execution):
-  - active Chapter House raises Special Activity capacity from `1` to `2`
-  - second-acolyte placements are still ordinary Allocation moves
-  - donated/inactive Chapter House does not apply
-- Allocation legal generation/apply now uses capacity-aware move validation:
-  - `abbey -> special_activity`
-  - `special_activity -> abbey`
-  - `special_activity -> special_activity`
-  - source counts decrement by 1; destination counts increment by 1
-- Special Activity bonuses now scale by occupancy count:
-  - Fields / Stone Mason / Engraver / Vestry output bonuses
-  - Alms House paid Give Alms payment-ceiling bonus (`+1`/`+2` by occupancy)
-  - Road Engineer Build Roads duty-value bonus (`+1`/`+2`)
-  - Road Engineer Construct deferred extra-road scaffold count (`+1`/`+2`)
-
-## Building Availability Timeline (v2.9)
-
-- `GameState` now carries deterministic `building_availability` metadata:
-  - tuple of `(building_id, live_round)` entries
-  - live rounds constrained to `2..26`
-- Scenario-loading behavior:
-  - explicit `initial_state.building_availability` is parsed and validated
-  - legacy scenarios without it default selected market buildings to live round `2`
-- Validation now enforces:
-  - all current market buildings have availability entries
-  - availability keys reference selected in-game buildings
-  - round bounds and uniqueness constraints
-- Rules helpers now expose:
-  - `building_live_round(...)`
-  - `is_building_live(...)`
-  - `live_buildings(...)`
-  - `future_buildings(...)`
-- Construct integration:
-  - legal Construct purchase actions are now gated to live market buildings
-  - apply-time validation rejects attempts to construct non-live market buildings
-- Setup generator integration:
-  - generated setups now include explicit live rounds for selected buildings using seeded local RNG
-- At the v2.9 milestone, hiring remained deferred. Later milestones implement
-  market/opponent hire behavior for supported building effects.
-
-## Abstract Setup Timeline (v4.3)
-
-- Seeded setup generation now derives building live rounds from an abstract 26-round border
-  timeline in `pilgrim.setup.timeline`:
-  - pilgrimage d6 rolls: `NW`, `NE`, `SE`, `SW` (`1..6` each)
-  - pilgrimage rounds computed from fixed quadrant offsets (`0`, `6`, `13`, `19`)
-  - timeline slots reserve:
-    - pilgrimage rounds
-    - post-pilgrimage empty rounds
-    - post-level empty rounds
-    - building placements
-- Building placement sequencing remains level-ordered:
-  - all selected Level 1 buildings
-  - then Level 2
-  - then Level 3
-  - market order within each level is preserved
-- Level-start gates are explicit:
-  - Level 1 starts after site 1 gap
-  - Level 2 starts after Level 1 gap and site 2 gap
-  - Level 3 starts after Level 2 gap and site 3 gap
-- Runtime semantics remain unchanged:
-  - scenarios still use `initial_state.building_availability`
-  - loader fallback for missing availability remains live round `2` per selected market building
-  - no spatial road/map system is introduced by this abstraction
-
-## Building Hire Infrastructure (v3.0)
-
-- Rules now include a deterministic building-ability source resolver:
-  - `own_active`
-  - `live_market_hire`
-  - `opponent_active_hire`
-  - `unavailable`
-- Resolver semantics include unavailable reasons (`donated`, `not_live`,
-  `merchant_resource_none`, `insufficient_resource`, `not_selected`).
-- Merchant-based hire-cost infrastructure is now explicit:
-  - cost is `1` Merchant resource
-  - Taxation has no Tithe resource, so Merchant resource is `none` there
-  - live market hire pays bank
-  - opponent active hire pays owner
-  - own active use pays nothing
-- Turn-hire tracking infrastructure is now explicit:
-  - same building cannot be hired twice in one player turn
-  - different buildings can each be hired once in same turn
-  - implemented as pure immutable helper/context scaffolding (not persisted in `GameState`)
-- Payment routing helpers now support pure description + state application for transfers.
-- Transition wiring now consumes this infrastructure for:
-  - Well/Quarry/Mint/Chapel (direct-output bonuses)
-  - Infirmary (`allocation` + `ordination` duty-value cap effects)
-  - Mill (`give_alms_paid` + `ordination` wheat-cost waiver)
-
-## Hire Sources for Simple Building Bonuses (v3.1a)
-
-- Transition/runtime wiring now consumes hire sources for four direct-output bonuses:
-  - Well -> `produce_wheat`
-  - Quarry -> `produce_stone`
-  - Mint -> `clerical_silversmith`
-  - Chapel -> `clerical_devotion`
-- Source resolution remains deterministic:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable
-- Taxation clarification is now fully enforced in these wired actions:
-  - Taxation has no Tithe resource
-  - Merchant resource is `none`
-  - hired variants are unavailable while own-active variants still work
-- Event ordering for hired sources is explicit:
-  - `BUILDING_HIRED` then `BUILDING_BONUS`
-- Chapter House remains outside hire-source wiring in this milestone.
-
-## Hire Sources for Infirmary Duty Bonuses (v3.1b)
-
-- Transition/runtime wiring now consumes hire sources for Infirmary in:
-  - `allocation` (`+1 effective Duty Value`)
-  - `ordination` (`+1 effective Duty Value` only when the extra paid step is used)
-- Source resolution remains deterministic:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable
-- Legal-action generation now:
-  - preserves base Allocation/Ordination actions without forced hire
-  - emits hired Infirmary variants only when the extra cap is actually used
-  - enforces joint affordability (minority silver + step wheat + hire payment)
-- Apply-time ordering for hired Infirmary paths:
-  - `DUTY_RESOLUTION`
-  - `BUILDING_HIRED`
-  - `BUILDING_BONUS`
-  - `ALLOCATION` / `ORDINATION` step events
-- Scope boundary remains:
-  - Chapter House hire wiring is still deferred
-  - no standalone "hire action" exists; hiring is attached to consuming actions
-
-## Mill Wheat-Cost Rule (v3.2)
-
-- Transition/runtime wiring now consumes hire sources for Mill in:
-  - `give_alms_paid`
-  - `ordination`
-- Source resolution remains deterministic:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable
-- Wheat-cost transform:
-  - `mill_waiver = min(2, required_wheat)`
-  - `actual_wheat_spent = max(0, required_wheat - 2)`
-- Scope behavior:
-  - waives only action wheat costs (`give_alms_paid` wheat, Ordination step
-    wheat)
-  - does not waive silver costs, minority silver, tithe, or Mill hire payment
-- Apply-time ordering for hired Mill paths:
-  - `DUTY_RESOLUTION`
-  - `BUILDING_HIRED`
-  - `BUILDING_BONUS`
-  - action-specific events (`ORDINATION` steps / Alms events)
-
-## Grain Store Wheat/Silver Conversion (v4.0)
-
-- Transition/runtime wiring now supports Grain Store as an optional full-turn economic modifier.
-- Source resolution reuses the shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none, insufficient payment resource)
-- Conversion semantics:
-  - `sell_wheat`: `wheat -X`, `silver +X`
-  - `buy_wheat`: `silver -X`, `wheat +X`
-  - `X >= 1`, fixed `1:1` rate
-- Legal-action generation adds deterministic variants:
-  - sell `1..available_wheat_after_hire`
-  - buy `1..available_silver_after_hire`
-  - no zero-amount variants
-- Apply-time ordering for Grain Store modifier:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (conversion description)
-  - conversion `RESOURCE_DELTA`
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Converted resources are available to the selected Duty resolution in the same action because
-  conversion applies before sowing/duty resolution.
-
-## Indulgences Piety/Silver Conversion (v5.0)
-
-- Transition/runtime wiring now supports Indulgences as an optional full-turn piety/resource modifier.
-- Source resolution reuses the shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none, insufficient payment resource)
-- Conversion semantics:
-  - `sell_piety`: `piety -X`, `silver +X`
-  - `buy_piety`: `silver -X`, `piety +X`
-  - `X >= 1`, fixed `1:1` rate
-- Piety bounds are enforced both in legal generation and apply-time validation:
-  - sell `1..current_piety_after_hire`
-  - buy `1..min(available_silver_after_hire, piety_track_remaining_space_after_hire)`
-  - no buy variants at piety cap
-- Apply-time ordering for the Indulgences modifier:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (conversion description)
-  - conversion `RESOURCE_DELTA` (including piety delta)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Converted piety/silver is available to later same-turn effects because conversion resolves
-  pre-sowing.
-
-## Stone Yard Stone/Silver Conversion (v5.1)
-
-- Transition/runtime wiring now supports Stone Yard as an optional full-turn resource modifier.
-- Source resolution reuses the shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none, insufficient payment resource)
-- Conversion semantics:
-  - `sell_stone`: `stone -X`, `silver +X`
-  - `buy_stone`: `silver -X`, `stone +X`
-  - `X >= 1`, fixed `1:1` rate
-- Resource bounds are enforced in legal generation and apply-time validation:
-  - sell `1..available_stone_after_hire`
-  - buy `1..available_silver_after_hire`
-  - no zero-amount variants
-- Stone can exceed 6 during turn resolution; existing round-end excess-cap logic still applies
-  later in the pipeline.
-- Apply-time ordering for the Stone Yard modifier:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (conversion description)
-  - conversion `RESOURCE_DELTA`
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Converted stone/silver is available to later same-turn effects because conversion resolves
-  pre-sowing (for example, Construct affordability checks on the selected action).
-
-## Brewery Wheat-to-Silver Conversion (v5.2)
-
-- Transition/runtime wiring now supports Brewery as an optional full-turn economic modifier.
-- Source resolution reuses the shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none, insufficient payment resource)
-- Conversion semantics:
-  - `sell_wheat_for_silver`: `wheat -1`, `silver +2`
-  - fixed exact amount (`1`) and one-way direction (no buy path)
-- Legal-action generation adds at most one Brewery variant per eligible base action:
-  - generated only when wheat remains at least `1` after any required hire payment
-  - non-Brewery actions remain available unchanged
-- Apply-time ordering for the Brewery modifier:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (conversion description)
-  - conversion `RESOURCE_DELTA`
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Converted silver is available to later same-turn effects because conversion resolves
-  pre-sowing.
-
-## Guild Merchant Advance (v5.3)
-
-- Transition/runtime wiring now supports Guild as an optional pre-sow Merchant-position modifier.
-- Source resolution reuses the shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none, insufficient payment resource)
-- Guild semantics:
-  - no amount/direction payload
-  - move Merchant exactly one step clockwise on the configured Merchant path
-  - update Merchant resource context for the resulting post-action state
-- Apply-time ordering for the Guild modifier:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (`guild moved Merchant clockwise +1`)
-  - `MERCHANT_ADVANCE` (with `cause=guild`)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Round-end interaction:
-  - Guild movement is separate from round-end Merchant movement.
-  - On a round-ending Guild turn, Merchant can move twice total (Guild pre-sow + round-end phase).
-- Conservative composition in this milestone:
-  - Guild is generated for ordinary full-turn variants.
-  - Mixed Guild + other same-turn hire-dependent building modifiers are deferred.
-
-## Pulpit Free Serf Move (v5.4)
-
-- Transition/runtime wiring now supports Pulpit as an optional pre-sow workforce modifier.
-- Source resolution reuses shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none for hired sources, insufficient payment resource)
-- Pulpit semantics:
-  - no amount/direction payload
-  - move exactly `1` serf `village -> abbey`
-  - no wheat payment for the Pulpit move
-- Apply-time ordering for Pulpit:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (`pulpit moved 1 serf village -> abbey for free`)
-  - `WORKFORCE_MOVE` (`serf village -> abbey`, `wheat_paid=0`)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Infirmary interaction boundary:
-  - Pulpit is not modeled as a Duty Value modifier.
-  - Infirmary does not boost Pulpit movement count.
-  - Infirmary can still modify the separate Ordination resolution path (extra paid step) when legal.
-- Conservative composition in this milestone:
-  - mixed Pulpit + other pre-sow hire-order-sensitive modifiers remain deferred.
-
-## Scriptorium Effective Acolyte Modifier (v5.5)
-
-- Transition/runtime wiring now supports Scriptorium as an optional pre-sow duty-relation modifier.
-- Source resolution reuses shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none for hired sources, insufficient payment resource)
-- Scriptorium semantics:
-  - no amount/direction payload
-  - no physical workforce movement
-  - for this action only, occupied Duty tiles for the acting player count as `+1` effective
-    acolyte
-- Relation and Taxation integration:
-  - selected Duty strength (majority/parity/minority) uses effective counts
-  - Taxation majority checks on other Duty tiles use the same effective-count context
-  - tiles with `0` acting-player real acolytes do not receive the virtual `+1`
-- Apply-time ordering for Scriptorium:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (`scriptorium added +1 effective acolyte on occupied Duty tiles this turn`)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Virtual-only boundary:
-  - no temporary acolytes are added to board state
-  - sowing/recall/workforce totals and conservation invariants continue to use real counts only
-- Conservative composition in this milestone:
-  - mixed Scriptorium + other pre-sow hire-order-sensitive modifiers remain deferred.
-
-## Customs House Taxation Majority Override (v5.6)
-
-- Transition/runtime wiring now supports Customs House as an optional pre-sow Taxation-only
-  relation modifier.
-- Source resolution reuses shared building source/hire infrastructure:
-  - own active (free)
-  - live market hire (pay bank)
-  - opponent active hire (pay owner)
-  - unavailable (donated, not live, merchant none for hired sources, insufficient payment resource)
-- Customs House semantics:
-  - no amount/direction payload
-  - no physical workforce movement
-  - for this action only, any occupied Duty tile for the acting player is treated as
-    majority-controlled for Taxation purposes
-- Taxation integration:
-  - selected Taxation relation/value uses this majority override
-  - Taxation majority checks on other Duty tiles use the same override scope
-  - non-Taxation relation checks remain unchanged
-- Apply-time ordering for Customs House:
-  - `BUILDING_HIRED` (if hired)
-  - `BUILDING_BONUS` (`customs_house claimed Taxation majority on occupied Duty tiles this turn`)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Virtual-only boundary:
-  - no temporary acolytes are added to board state
-  - sowing/recall/workforce totals and conservation invariants continue to use real counts only
-- Conservative composition in this milestone:
-  - mixed Customs House + other pre-sow hire-order-sensitive modifiers remain deferred.
-
-## Wagon Yard Free Hire (v5.7)
-
-- Transition/runtime wiring now supports Wagon Yard as an optional pre-sow free-hire enabler.
-- Wagon Yard source behavior in this scope:
-  - own active Wagon Yard is usable
-  - market/opponent Wagon Yard does not generate Wagon Yard effect variants
-  - donated/not-live Wagon Yard is unavailable
-- Wagon Yard target behavior:
-  - choose one eligible live target building from:
-    - live market
-    - opponent active
-  - target cannot be:
-    - acting player's own building
-    - donated or not live
-    - Wagon Yard itself
-- Implemented target-effect support in this milestone:
-  - Grain Store, Indulgences, Stone Yard, Brewery, Guild, Pulpit, Scriptorium, Customs House
-- Merchant interaction:
-  - Wagon Yard free hire ignores Merchant resource/position
-  - variants remain legal when Merchant is on Taxation (`resource=none`)
-- Payment semantics:
-  - selected target hire cost is `0`
-  - no bank payment and no opponent-owner payment
-- Apply-time ordering for Wagon Yard free-hire target actions:
-  - `BUILDING_HIRED` (`... for free with Wagon Yard`)
-  - target building `BUILDING_BONUS` (and conversion `RESOURCE_DELTA` where applicable)
-  - `SOWING`
-  - `DUTY_RESOLUTION` and later normal turn events
-- Conservative composition in this milestone:
-  - supported shape is own active Wagon Yard + exactly one target building effect
-  - nested hire chains and mixed Wagon Yard + additional paid-hire modifier paths are deferred
-
-## Building Turn-Modifier Registry (v3.3-v3.9)
-
-- Added a dedicated metadata registry in `pilgrim/rules/building_turn_modifiers.py` for
-  non-duty-output building effects that target movement/turn phases.
-- Registry entries:
-  - during sow route modifiers: `kogge`, `cloisters`
-  - start-of-turn relocations: `dormitory`, `inquisition`
-  - end-of-turn relocation: `library`
-- Runtime status in v3.9:
-  - `kogge` is implemented as an explicit sow-route modifier
-    (`city -> east` and `city -> west` starts from City)
-  - `cloisters` is implemented as an explicit sow-route skip modifier
-    (generate candidate placements length `N+1`, omit one City/Duty placement, place on the
-    remaining `N`)
-  - `dormitory` and `inquisition` are implemented as optional start-turn relocation prefixes
-    attached to a normal full-turn action
-  - `library` is implemented as an optional end-turn relocation suffix attached to a normal
-    full-turn action
-- Kogge/Cloisters/Dormitory/Inquisition/Library source/payment semantics reuse existing
-  building-hire
-  infrastructure:
-  - own active (free)
-  - opponent active hire (pay owner)
-  - live market hire (pay bank)
-  - unavailable when donated, not live, merchant none, or insufficient hire resource
-- During-sow ordering for Cloisters:
-  - `BUILDING_HIRED` (if hired) -> `BUILDING_BONUS` -> `SOWING`
-- Route-calculation refactor in v3.8:
-  - sow-route generation/validation helpers are factored into `pilgrim/rules/sow_routes.py`
-  - `transition.py` remains the orchestration layer for full-turn legal generation and apply
-- Combined Kogge + Cloisters in v3.9:
-  - one action may include both route modifiers
-  - Kogge provides City-start candidate route edges (`city -> east` / `city -> west`)
-  - Cloisters applies one omission on the Kogge candidate (`N+1` candidate placements -> `N`
-    actual placements)
-  - source and hire resolution stays independent per building
-  - when both are hired, two deterministic `BUILDING_HIRED` events are emitted before route bonus
-    events
-- Start-turn relocation timing:
-  - relocation applies before sowing
-  - hired path ordering is `BUILDING_HIRED` -> `BUILDING_BONUS` -> `START_TURN_RELOCATION` -> `SOWING`
-- End-turn relocation timing (Library):
-  - relocation applies after `ACOLYTE_RECALL` and before `TURN_ADVANCE`
-  - hired path ordering is `ACOLYTE_RECALL` -> `BUILDING_HIRED` -> `BUILDING_BONUS` ->
-    `END_TURN_RELOCATION` -> `TURN_ADVANCE`
-- Separation of concerns remains:
-  - Duty-output modifiers stay in `duty_enhancements`
-  - turn-phase movement modifiers live in `building_turn_modifiers`
-
-## Developer Audits (v4.2)
-
-- Added reporting-only audit script:
-  - `tools/audits/building_status_branching_audit.py`
-- Added scripted multi-turn branching audit:
-  - `tools/audits/multi_turn_branching_audit.py`
-- Audit output includes:
-  - building implementation-status grouping (best effort from catalogue + runtime registries)
-  - safe-next-candidate guidance
-  - legal-action branching counts for representative scenarios
-- See: `docs/audits/building_status_branching_audit.md`
-- See: `docs/audits/multi_turn_branching_audit.md`
-
-## Intentionally Deferred
-
-- Full Pilgrim rule set and board systems.
-- Rich replay visualizations.
-- Performance tuning and parallelized search strategies.
+This is the map of the running engine: use it to decide where a change belongs. It deliberately
+describes current responsibilities, not the order in which features arrived. The versioned record
+is in [Feature notes](feature_notes.md).
+
+## Reading guarantees
+
+A claim marked **Guard:** names the test that should fail if it stops being true. A focused guard
+is evidence for the stated behavior, not proof of an unstated universal property. Claims without a
+guard are collected in [Known unguarded claims](#known-unguarded-claims).
+
+## Current layering
+
+| Area | Responsibility | Guard |
+| --- | --- | --- |
+| `pilgrim.model` | Immutable state, action, event, and configuration shapes. It makes a position safe to compare, replay, and use as a search key; it does not decide rules. | `tests/test_turn_steps.py::test_apply_turn_step_is_pure_and_leaves_a_hashable_state` |
+| `pilgrim.rules` | The authoritative rules boundary: enumerate legal choices, apply one choice, validate the result, and emit structured facts about what happened. New game logic belongs here, not in a caller. | `tests/test_legal_actions_apply.py::test_every_legal_action_applies` |
+| `pilgrim.io` | Load a scenario into model values and serialize state/events for replay or other adapters. It translates formats, not rules. | `tests/test_turn_steps.py::test_turn_progress_is_serialised_and_end_of_turn_resets_it` |
+| `pilgrim.search` | Select among engine-provided choices and evaluate the resulting states. It owns search policy and objectives, never a second game-rule implementation. | `tests/test_library_end_turn_relocation.py::test_exact_search_refuses_library_in_the_end_of_turn_window` |
+| `pilgrim.cli` | A thin command-line boundary over loading, rules, and search. It should report engine results, not repair them. | `tests/test_cli_output_contracts.py::test_cli_scriptorium_legal_actions_contract_prunes_no_op_variants_output` |
+
+The play server is an adapter alongside these layers. It turns engine decisions and events into
+player-facing words and publishes them to the page; it is not a rules layer.
+
+## The decision boundary
+
+The central rule is: **the engine decides, the play server explains, and the page renders what it
+is given.** The server may choose clear player language, but it must receive the decided candidates,
+settled payments, previews, and events from the engine. The browser may filter and reveal those
+published choices; it must never derive legality, routes, adjacency, or another rule locally.
+
+**Guard:** `tests/test_play_server.py::test_what_is_offered_is_what_the_engine_says_may_come_next`
+checks that offered choices are engine choices, and
+`tests/test_play_server.py::test_the_script_may_filter_and_reveal_and_nothing_else` rejects
+rule-looking browser code. The mutation guard
+`tests/test_play_server.py::test_a_rule_computed_in_the_script_is_caught` proves the latter
+guard can fail.
+
+This boundary matters even when a recomputation would appear equivalent. At the Cornucopia, the
+engine enumerates the exact resource that pays for a hire. Re-resolving the hire source later only
+finds the Merchant's wildcard, not that settled payment. A page that guesses again can render a
+legal-looking but different decision. **Guard:**
+`tests/test_merchant_cornucopia.py::test_a_conversion_step_records_its_cornucopia_payment` and
+`tests/test_play_server.py::test_cornucopia_turn_step_payload_keeps_the_enumerated_payment_resource`.
+
+## Design constraints
+
+- Rule transitions are deterministic and do not mutate the input position. The focused
+  purity/hashability guard is
+  `tests/test_turn_steps.py::test_apply_turn_step_is_pure_and_leaves_a_hashable_state`; it does
+  not prove this property for every rules function.
+- Search must not embed game rules. Its complete current contract is
+  `legal_actions()` + `apply_action()` for full turns, plus a `turn_steps()` check that
+  refuses positions it cannot yet search. A future step-aware search must consume
+  `turn_steps()` + `apply_turn_step()` as well. **Guard:**
+  `tests/test_library_end_turn_relocation.py::test_exact_search_refuses_library_in_the_end_of_turn_window`.
+- Static game data belongs in `configs/`; this placement is a convention, not presently protected
+  by an architecture-level test.
+- Structured events are the engine's replay/debug facts, while the server owns their wording.
+  Event ordering is covered for representative paths by
+  `tests/test_library_end_turn_relocation.py::test_library_step_moves_after_recall_and_before_turn_advance`.
+  No test establishes that every possible transition emits an event.
+
+## One turn, two windows
+
+Normal play is in `TurnPhase.SOW` throughout both optional building windows. The discriminator is
+`turn_progress.resolution_committed`, not a second phase:
+
+1. **Beginning-of-turn window** — `phase == TurnPhase.SOW` and
+   `resolution_committed == False`. `turn_steps()` can offer committed starts such as
+   conversions, activations, and pre-sow relocations.
+2. **Sow and resolution** — choose a `FullTurnAction` through `legal_actions()`; it carries the
+   sow and the selected action or tithe. `apply_action()` resolves it and commits the resolution.
+3. **End-of-turn window** — still `TurnPhase.SOW`, now
+   `resolution_committed == True`. Post-resolution steps such as Library may be available.
+   In `legal_actions()`, `EndTurnAction` is the only legal `GameAction`; any offered
+   `TurnStep` must be committed separately before it is applied.
+4. **Pass** — apply `EndTurnAction` to run the end-of-turn/round work, advance the turn, and
+   reset progress for the next beginning-of-turn window.
+
+**Guard:** `tests/test_post_resolution_conversion_window.py::test_devotion_keeps_the_turn_open_for_a_conversion_then_end_turn_passes`
+checks the shared phase, commit flag, post-resolution step, sole `EndTurnAction`, and reset;
+`tests/test_library_end_turn_relocation.py::test_relocation_steps_are_offered_in_their_respective_windows`
+checks the window split.
+
+## Two decision-generation paths
+
+| Path | It represents | Where a change belongs | Guard |
+| --- | --- | --- | --- |
+| `legal_actions()` / `apply_action()` | Whole normal-turn decisions: sow, route, selected Duty, resolution, and resolution-specific choices. It also serves setup and marker-decision phases. | Add a legal player choice that is resolved atomically with the sow/Duty action. Resolution-specific hires such as Well remain on this path. | `tests/test_legal_actions_apply.py::test_every_legal_action_applies`; `tests/test_hired_simple_building_bonuses.py::test_market_well_hire_variant_exists_for_produce_wheat` |
+| `turn_steps()` / `apply_turn_step()` | A building decision committed during the current turn, so later choices are generated from the altered state. | Add an optional building effect whose timing changes later availability, payment, resources, workforce, or movement. | `tests/test_turn_steps.py::test_two_active_conversion_buildings_remain_independently_available` |
+
+Conversions (Grain Store, Indulgences, Stone Yard, Brewery), Guild and Pulpit activations, and
+Dormitory/Inquisition/Library relocations are committed steps. Paid route/modifier hires such as
+Kogge, Cloisters, Scriptorium, Customs House, Bank, and Wagon Yard are also committed before they
+can widen a later action set. **Guard:**
+`tests/test_pulpit_free_serf_move.py::test_full_turn_actions_carry_no_pulpit_modifier_fields`,
+`tests/test_start_turn_relocations.py::test_full_turn_actions_and_ids_carry_no_start_turn_relocation_fields`,
+and `tests/test_hired_route_buildings_as_turn_steps.py::test_hired_kogge_routes_only_appear_after_its_committed_hire`.
+
+`full_turn_actions()` is a lazy composition helper that walks reachable pre-resolution step
+prefixes with full-turn actions; it is useful for generation/audits, not the contract exact search
+currently implements. **Guard:** `tests/test_turn_steps.py::test_full_turn_actions_collapses_conversion_order_transpositions`.
+
+## Building taxonomy
+
+Treat a building's effect type and its source as separate questions.
+
+- A **doer** changes state by an explicit click/step: a conversion, activation, or relocation. It
+  must be represented by a `TurnStep` when its commitment changes what can happen later.
+  **Guard:** `tests/test_pulpit_free_serf_move.py::test_own_active_pulpit_generates_one_free_beginning_of_turn_step`.
+- A **passive** affects an applicable resolution without a separate question. It is never offered
+  merely to acknowledge ownership. **Guard:**
+  `tests/test_passive_buildings.py::test_simple_passive_applies_only_on_its_owned_duty_and_not_other_locations`.
+- A **permitter** widens the legal action set. An owned permitter is free and invisible as a
+  separate choice; the actions it permits simply appear. **Guard:**
+  `tests/test_hired_route_buildings_as_turn_steps.py::test_owned_route_buildings_are_free_immediate_and_offer_no_step`.
+- **Hiring is an orthogonal source axis, not a fourth effect type.** A hired building costs a
+  resource and can pay another player, so its use must remain an explicit decision. Depending on
+  timing it is either a settled field on the atomic full-turn resolution or a committed step that
+  enables later choices. **Guard:**
+  `tests/test_hired_simple_building_bonuses.py::test_opponent_well_hire_pays_owner_and_adds_bonus`
+  and `tests/test_hired_modifier_buildings_as_turn_steps.py::test_hired_scriptorium_only_changes_actions_after_its_step`.
+
+## What exact search can do today
+
+`pilgrim/search/exact.py` searches only `legal_actions()` and applies only
+`apply_action()`. Before each node, and before it passes a committed resolution window,
+`_refuse_unsearched_turn_steps` asks `turn_steps()`; if any are available, exact search raises
+instead of silently skipping them. It therefore does **not** search a position with available
+committed steps, pre- or post-resolution. **Guard:**
+`tests/test_library_end_turn_relocation.py::test_exact_search_refuses_library_in_the_end_of_turn_window`.
+
+## Instruments
+
+- `python tools/capture_legal_actions.py <dir>` is the full-turn refactor tripwire. It writes
+  every scenario's action IDs in generation order, so a saved search cannot be silently churned.
+- `python tools/capture_turn_steps.py <dir>` is the corresponding committed-step tripwire. It
+  writes step IDs in generation order for top-level and playtest scenarios.
+- `tools/audits/building_status_branching_audit.py` reports the current building-status
+  classification and one-position action/step branching measurements. It keeps pre-resolution
+  counts distinct from an unmeasured post-resolution window. **Guard:**
+  `tests/test_building_status_branching_audit.py::test_branching_rows_are_deterministic_for_representative_subset`
+  and `tests/test_building_status_branching_audit.py::test_library_row_marks_its_post_resolution_window_unmeasured`.
+- `tools/audits/multi_turn_branching_audit.py` traces fixed multi-turn lines, recording
+  generation and committed steps before actions and after resolution, so movement of an effect
+  between representations remains visible. **Guard:**
+  `tests/test_multi_turn_branching_audit.py::test_post_resolution_turn_steps_are_recorded_before_end_turn`
+  and `tests/test_multi_turn_branching_audit.py::test_trace_rows_are_deterministic_and_have_no_duplicate_action_ids`.
+
+The capture tools themselves do not have dedicated automated tests. Their required before/after
+diff use is a repository workflow rule in `AGENTS.md`, not a test-proven runtime invariant.
+
+## Known unguarded claims
+
+- No test enforces the package ownership boundaries in the layering table.
+- No architecture-level test enforces that all static game data lives in `configs/`.
+- No exhaustive test proves all rules transitions are pure/deterministic or all transitions emit
+  structured events.
+- No exhaustive test proves that every engine decision has every player-facing payload field the
+  page will need. The play-server guards cover the exercised controls and reject browser rule
+  derivation, but they are not a complete schema proof.
+
+## Related documents
+
+- [Feature notes](feature_notes.md) — chronological historical record; not current architecture.
+- [Search and pruning model](search_and_pruning_model.md) — exact-search scope and pruning.
+- [Player choice model](player_choice_model.md) — older inventory; assess it against the committed
+  step model before treating its flattened-action claims as current.
+- [Official scoring](../rules/Scoring.md) — implemented score-sheet categories and deferred scope.
