@@ -52,6 +52,7 @@
   var merchantTokens = board.querySelectorAll('[data-token="merchant"]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var phaseRows = aside.querySelectorAll('[data-turn-phase]');
+  var phasePrompts = aside.querySelectorAll('[data-turn-phase-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
@@ -76,7 +77,6 @@
   var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
   var answered = [];
-  var autoAdvance = true;
   var resolutionSplit = null;
   var baseline = [];
   var resourceBaseline = [];
@@ -123,14 +123,21 @@
     return candidates[0].action_id;
   }
 
-  function renderPhase() {
+  function renderPhase(current) {
     if (PHASE_COLUMN_SCOPE !== 'turn') { return; }
-    var current = RESOLUTION_COMMITTED ? 'end' : (answered.length ? 'sow' : 'beginning');
+    if (current === null) { return; }
     Array.prototype.forEach.call(phaseRows, function (row) {
       if (row.getAttribute('data-turn-phase') === current) {
         row.setAttribute('data-phase-current', 'true');
       } else {
         row.removeAttribute('data-phase-current');
+      }
+    });
+    Array.prototype.forEach.call(phasePrompts, function (prompt) {
+      if (prompt.getAttribute('data-turn-phase-prompt') === current) {
+        prompt.setAttribute('data-turn-phase-prompt-current', 'true');
+      } else {
+        prompt.removeAttribute('data-turn-phase-prompt-current');
       }
     });
   }
@@ -705,7 +712,6 @@
         return;
       }
     }
-    autoAdvance = true;
     render();
   }
 
@@ -869,7 +875,6 @@
     } else {
       return;
     }
-    autoAdvance = true;
     render();
   }
 
@@ -1729,8 +1734,8 @@
   }
 
   function render() {
-    renderPhase();
     if (!CANDIDATES.length) {
+      renderPhase(RESOLUTION_COMMITTED ? 'end' : null);
       restoreBaseline();
       applyTurnStepRelocationPreview();
       renderTurnSteps();
@@ -1744,24 +1749,21 @@
       return;
     }
     var live = surviving(chosen);
-    /* A step every survivor agrees on is not a choice, so it is taken rather than asked about.
-       Which steps those are is not written down anywhere; it falls out of the candidates. */
-    if (autoAdvance) {
-      while (stepsAt(chosen.length, live).length === 1) {
-        var forced = stepsAt(chosen.length, live)[0];
-        if (
-          forced.resource_allocation
-          && (
-            forced.resource_allocation_any_total === true
-            || Number(forced.resource_total || 0) > 0
-          )
-        ) { break; }
-        if (forced.kind === 'resolution') { break; }
-        chosen.push(forced.value);
-        live = surviving(chosen);
-      }
-    }
     var offered = stepsAt(chosen.length, live);
+    /* The server marks the exceptional route continuations it has already found unambiguous. */
+    while (offered.length && offered[0].auto_advance === true) {
+      chosen.push(offered[0].value);
+      live = surviving(chosen);
+      offered = stepsAt(chosen.length, live);
+    }
+    var phase = RESOLUTION_COMMITTED ? 'end' : null;
+    if (phase === null && offered.length) {
+      phase = offered[0].turn_phase;
+    }
+    if (phase === null && live.length) {
+      phase = live[0].settled_turn_phase;
+    }
+    renderPhase(phase || null);
     var allocationSteps = resourceAllocationSteps(offered);
     var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
     if (!allocationSteps.length) {
@@ -1811,7 +1813,13 @@
         return step !== undefined && step.kind === 'ordination' && step.value === ordinationPicked;
       });
     }
-    var resolutions = offeredByKind(offered, 'resolution');
+    var directConfirm = offered.filter(function (step) {
+      return step.direct_confirm === true;
+    });
+    var directConfirmActionId = directConfirm.length === 1 ? onlyActionId(live) : null;
+    var resolutions = offeredByKind(offered, 'resolution').filter(function (value) {
+      return !directConfirm.some(function (step) { return step.value === value; });
+    });
     if (!resolutions.length) {
       resolutionSplit = null;
     } else if (resolutionSplit === 'tithe' && resolutions.indexOf('tithe') !== -1) {
@@ -1819,7 +1827,6 @@
       chosen.push('tithe');
       answered.push('tithe');
       resolutionSplit = null;
-      autoAdvance = true;
       render();
       return;
     } else if (resolutionSplit === 'action') {
@@ -1833,7 +1840,6 @@
         chosen.push(actionResolutions[0]);
         answered.push(actionResolutions[0]);
         resolutionSplit = null;
-        autoAdvance = true;
         render();
         return;
       }
@@ -1842,11 +1848,15 @@
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
        would be committed as, or what is still undecided about
        it -- and the player says so. */
+    var currentQuestionIsAnswered = !offered.length
+      || (arrangements.length && arrangementPicked !== null)
+      || (ordinations.length && ordinationPicked !== null);
     if (
       narrowed.length === 1
       && !allocationActive
       && (!arrangements.length || arrangementPicked !== null)
       && (!ordinations.length || ordinationPicked !== null)
+      && currentQuestionIsAnswered
     ) {
       var shownOffered = (arrangements.length || ordinations.length) ? offered : [];
       show(
@@ -1860,7 +1870,7 @@
       );
       return;
     }
-    var confirmActionId = null;
+    var confirmActionId = directConfirmActionId;
     if (allocationActive && allocationComplete) {
       confirmActionId = onlyActionId(allocationAnyTotal ? allocationExactLive : narrowed);
     }
@@ -1939,7 +1949,6 @@
         chosen.push(value);
         answered.push(value);
         resolutionSplit = null;
-        autoAdvance = true;
         render();
         return;
       }
@@ -2007,7 +2016,6 @@
       chosen.push(value);
       answered.push(value);
       resolutionSplit = null;
-      autoAdvance = true;
       render();
     });
   });
@@ -2020,7 +2028,6 @@
       chosen.push(edge);
       answered.push(edge);
       resolutionSplit = null;
-      autoAdvance = true;
       render();
     });
   });
@@ -2039,7 +2046,6 @@
         chosen.push(value);
         answered.push(value);
         resolutionSplit = null;
-        autoAdvance = true;
         render();
       });
     });
@@ -2164,7 +2170,6 @@
       conversionChosen = [];
       conversionStepId = null;
       resolutionSplit = null;
-      autoAdvance = true;
       render();
     });
   });
@@ -2182,7 +2187,6 @@
       if (!resolutions.filter(function (value) { return value !== 'tithe'; }).length) { return; }
       resolutionSplit = 'action';
     }
-    autoAdvance = true;
     render();
   }
 
