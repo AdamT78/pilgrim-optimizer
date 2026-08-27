@@ -12,7 +12,6 @@ def test_the_event_types_still_using_developer_fallback_are_explicit() -> None:
         "start_turn_relocation",
         "end_turn_relocation",
         "workforce_move",
-        "building_hired",
         "alms_season_end",
         "alms_season_reward",
         "alms_reset",

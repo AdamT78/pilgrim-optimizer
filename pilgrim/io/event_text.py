@@ -1012,6 +1012,7 @@ _PLAYER_EXPLICIT_EVENT_TYPES: set[EventType] = {
     *_PLAYER_TURN_STEP_EVENT_TYPES,
     EventType.BUILDING_DONATION,
     EventType.BUILDING_CONSTRUCTED,
+    EventType.BUILDING_HIRED,
     EventType.ALLOCATION,
     EventType.BUILDING_BONUS,
     EventType.SPECIAL_ACTIVITY_BONUS,
@@ -1139,6 +1140,26 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         stone_cost = int(details.get("stone_cost", 0))
         return f"{actor} constructed {built_label} from {source} for {stone_cost} stone."
 
+    if event_type is EventType.BUILDING_HIRED:
+        building_name = str(details.get("building_name", "")).strip()
+        building_id = str(details.get("building_id", "")).strip()
+        hired_label = building_name if building_name else _title_words(building_id)
+        source = str(details.get("source", "unknown")).strip()
+        source_phrase = "the market" if source == "market" else source
+        if bool(details.get("free_with_wagon_yard", False)):
+            return f"{actor} hired {hired_label} from {source_phrase} for free with Wagon Yard."
+
+        amount = int(details.get("amount", 0))
+        resource = str(details.get("resource", "none")).strip()
+        payee = str(details.get("payee", "")).strip()
+        if amount <= 0 or not resource or resource == "none":
+            return f"{actor} hired {hired_label} from {source_phrase}."
+
+        payment = f" and paid {amount} {resource}"
+        if payee and payee not in {"none", source}:
+            payment += f" to {'the bank' if payee == 'bank' else payee}"
+        return f"{actor} hired {hired_label} from {source_phrase}{payment}."
+
     if event_type is EventType.ALLOCATION:
         from_pool = _title_words(str(details.get("from_pool", "unknown")))
         to_pool = _title_words(str(details.get("to_pool", "unknown")))
@@ -1187,11 +1208,13 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
         step = str(details.get("step", "")).strip()
         amount = int(details.get("amount", 1))
         if step == "ordain":
-            noun = "serf" if amount == 1 else "serfs"
-            return f"{actor} ordained {amount} {noun} into the Abbey."
+            if amount == 1:
+                return f"{actor} ordained a serf. It is now an acolyte in the Abbey."
+            return f"{actor} ordained {amount} serfs. They are now acolytes in the Abbey."
         if step == "mission":
-            noun = "acolyte" if amount == 1 else "acolytes"
-            return f"{actor} sent {amount} {noun} on mission to the City."
+            if amount == 1:
+                return f"{actor} sent an acolyte on a mission. It is now in the City."
+            return f"{actor} sent {amount} acolytes on a mission. They are now in the City."
         return None
 
     if event_type is EventType.SHIP_ADVANCE:

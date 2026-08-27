@@ -786,6 +786,22 @@ def _combination_keys(candidates: list[dict]) -> str:
     )
 
 
+def _ordination_action_keys(candidates: list[dict]) -> str:
+    """The server-labelled Ordination controls, kept distinct from whole-turn outcomes."""
+    seen: dict[str, str] = {}
+    for candidate in candidates:
+        for step in candidate["steps"]:
+            if step["kind"] != "ordination":
+                continue
+            for choice in step.get("choices", ()):
+                seen.setdefault(str(choice["value"]), str(choice["label"]))
+    return "".join(
+        f'<button type="button" class="turn-key" data-ordination-action="{escape(value)}"'
+        f' data-turn-offered="false">{say(label)}</button>'
+        for value, label in seen.items()
+    )
+
+
 def _turn_step_direction_label(direction: str) -> str:
     return direction.replace("_", " ").capitalize()
 
@@ -939,7 +955,7 @@ def render_turn_panel(payload: dict) -> str:
         f"{_turn_phase_column(payload)}"
         f"{_prompt_lines(candidates)}"
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
-        f"{_combination_keys(candidates)}</div>"
+        f"{_combination_keys(candidates)}{_ordination_action_keys(candidates)}</div>"
         f"{_turn_step_controls(turn_steps)}"
         f"{_turn_panels(candidates)}"
         f"{_box_turn_controls()}"

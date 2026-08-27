@@ -756,19 +756,28 @@ _ROUTE_BUILDING_KOGGE = "kogge"
 #
 # These are sentence tails. The actor is prefixed in `decision_steps` from `state.active_player`,
 # so the visible line is always "player_id: <question>" and the page never composes one itself.
-ORIGIN_PROMPT = "choose a space to lift acolytes from."
-ROUTE_PROMPT = "follow an arrow."
-DUTY_PROMPT = "choose a duty to take."
-SKIP_PROMPT = "choose the City or Duty space on your route to leave unsown."
+ORIGIN_PROMPT = "Choose a space to lift acolytes from."
+ROUTE_PROMPT = "Follow an arrow."
+DUTY_PROMPT = "Choose a duty to take."
+SKIP_PROMPT = "Choose the City or Duty space on your route to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
-RESOURCE_PROMPT = "choose a resource."
-BUILDING_PROMPT = "choose a building."
-COMBINATION_PROMPT = "choose one."
-SEAT_PROMPT = "choose first player for this round."
-ARRANGEMENT_PROMPT = (
-    "move acolytes from the Abbey to Special Activity and/or between Special Activities."
+RESOURCE_PROMPT = "Choose a resource."
+BUILDING_PROMPT = "Choose a building."
+HIRE_PROMPT = "Choose whether to hire a building."
+CONFESSION_BOX_PROMPT = "Choose whether to use the Confession Box."
+ALMS_PAYMENT_PROMPT = "Choose payment."
+SEAT_PROMPT = "Choose first player for this round."
+ORDINATION_PROMPT = "Choose Duty Action"
+ORDINATION_CHOICES: tuple[dict[str, str], ...] = (
+    {
+        "value": "ordain",
+        "label": "Move a serf from the Village to the Abbey",
+    },
+    {
+        "value": "mission",
+        "label": "Move an Acolyte from the Abbey to the City",
+    },
 )
-ORDINATION_PROMPT = "choose a serf to ordain, or an acolyte to send on mission."
 
 _NUMBER_WORDS: tuple[str, ...] = ("zero", "one", "two", "three", "four", "five", "six")
 
@@ -798,7 +807,7 @@ def _combination_step(
     verb: str,
     amounts: list[tuple[str, int]],
     *,
-    prompt: str = COMBINATION_PROMPT,
+    prompt: str,
 ) -> dict:
     """One whole combination as a step: a scalar to match it by and a sentence to read."""
     return {
@@ -808,10 +817,8 @@ def _combination_step(
         # at zero, so two mixes cannot collide by one of them leaving a stock out.
         "value": ",".join(f"{noun}={amount}" for noun, amount in amounts),
         "label": _amounts_in_words(verb, amounts),
-        # The label already says what each option does, so the prompt only has to say that one of
-        # them is what is wanted. Naming the resolution here would be a second description of the
-        # thing the labels are describing, kept in step by hand. Taxation's pill question is the
-        # exception: its pills have no labels, so its prompt names the resource count instead.
+        # The label says what each option does, but the prompt still names the choice itself.  The
+        # browser cannot infer that question from a generic combination kind.
         "prompt": prompt,
     }
 
@@ -859,10 +866,26 @@ def _taxation_step_two_prompt(
             raise ValueError(f"Unknown Taxation majority reason: {unlock.majority_reason!r}")
         clauses.append(f"{position} ({duty}) unlocks {resource_text}: {reason}")
 
+    return "Taxation step 2: " + "; ".join(clauses) + ". " + _resource_choice_prompt(
+        resource_count
+    )
+
+
+def _number_in_words(number: int) -> str:
+    return _NUMBER_WORDS[number] if number < len(_NUMBER_WORDS) else str(number)
+
+
+def _resource_choice_prompt(resource_count: int) -> str:
+    noun = "resource" if resource_count == 1 else "resources"
+    return f"Choose {_number_in_words(resource_count)} {noun}"
+
+
+def _arrangement_prompt(action: FullTurnAction) -> str:
+    move_count = len(action.allocation_moves)
+    noun = "acolyte" if move_count == 1 else "acolytes"
     return (
-        "Taxation step 2: "
-        + "; ".join(clauses)
-        + f". Choose {resource_count} resources."
+        f"Move {_number_in_words(move_count)} {noun} from the Abbey to Special Activity "
+        "and/or between Special Activities"
     )
 
 
@@ -1190,7 +1213,7 @@ def _hire_step(
                 "kind": "hire",
                 "value": "none",
                 "label": "Don't hire",
-                "prompt": COMBINATION_PROMPT,
+                "prompt": HIRE_PROMPT,
             },
             HIRE_FIELDS,
         )
@@ -1214,7 +1237,7 @@ def _hire_step(
                 f"Hire the {building_name} from {_hire_source_phrase(source_label)}"
                 f" - {source.hire_cost} {payment_resource}"
             ),
-            "prompt": COMBINATION_PROMPT,
+            "prompt": HIRE_PROMPT,
         },
         HIRE_FIELDS,
     )
@@ -1327,7 +1350,7 @@ def _presented(
                     "kind": "combination",
                     "value": "decline" if not action.use else f"use:{action.source}",
                     "label": _confession_in_words(action),
-                    "prompt": COMBINATION_PROMPT,
+                    "prompt": CONFESSION_BOX_PROMPT,
                 },
                 ("use", "source"),
             )
@@ -1401,7 +1424,7 @@ def _presented(
         step = _combination_step(
             verb,
             amounts,
-            prompt=("choose payment." if resolution == "give_alms_paid" else COMBINATION_PROMPT),
+            prompt=ALMS_PAYMENT_PROMPT,
         )
         if resolution == "give_alms_paid":
             step["resource_allocation"] = True
@@ -1412,7 +1435,7 @@ def _presented(
             continue
         taken = tuple(getattr(action, name, ()) or ())
         amounts = [(noun, taken.count(noun)) for noun in COMBINATION_STOCKS]
-        prompt = f"choose {len(taken)} resources."
+        prompt = _resource_choice_prompt(len(taken))
         if resolution == "taxation" and state is not None and config is not None:
             if not isinstance(action, FullTurnAction):
                 raise ValueError("Taxation step-II presentation requires a full turn action.")
@@ -1432,7 +1455,7 @@ def _presented(
                 {
                     "kind": "arrangement",
                     "value": _arrangement_value(action),
-                    "prompt": ARRANGEMENT_PROMPT,
+                    "prompt": _arrangement_prompt(action),
                 },
                 ("allocation_moves",),
             )
@@ -1444,6 +1467,7 @@ def _presented(
                     "kind": "ordination",
                     "value": _ordination_value(action),
                     "prompt": ORDINATION_PROMPT,
+                    "choices": ORDINATION_CHOICES,
                 },
                 ("ordination_steps",),
             )
@@ -2336,28 +2360,32 @@ def _turn_window_prompt(
 
     hire_sentence = availability_sentence(
         hire_count,
-        "A building can be hired.",
-        "Buildings can be hired.",
+        "A building can be hired here.",
+        "Buildings can be hired here.",
     )
     activation_sentence = availability_sentence(
         free_activation_count,
-        "A building can be activated without payment.",
-        "Buildings can be activated without payment.",
+        "A building can be used here, free.",
+        "Buildings can be used here, free.",
     )
+    both_sentence = "Buildings can be used here — some free, some hired."
     if not resolution_committed:
         sentences = ["Pick up acolytes for sowing."]
-        if can_hire:
+        if can_hire and can_activate_for_free:
+            sentences.append(both_sentence)
+        elif can_hire:
             sentences.append(hire_sentence)
-        if can_activate_for_free:
+        elif can_activate_for_free:
             sentences.append(activation_sentence)
         return " ".join(sentences)
 
-    available = []
+    if can_hire and can_activate_for_free:
+        return both_sentence
     if can_hire:
-        available.append(hire_sentence)
+        return hire_sentence
     if can_activate_for_free:
-        available.append(activation_sentence)
-    return " ".join(available)
+        return activation_sentence
+    return ""
 
 
 def phase_column_payload(

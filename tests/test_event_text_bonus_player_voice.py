@@ -70,8 +70,8 @@ def test_ordination_step_lines_follow_the_current_player_wording_on_real_action(
     )
     result = apply_action(scenario.state, action, scenario.config)
     lines = _player_lines(result.events, scenario.config)
-    assert "player_one ordained 1 serf into the Abbey." in lines
-    assert "player_one sent 1 acolyte on mission to the City." in lines
+    assert "player_one ordained a serf. It is now an acolyte in the Abbey." in lines
+    assert "player_one sent an acolyte on a mission. It is now in the City." in lines
 
 
 def test_zero_delta_bonus_event_produces_no_player_clause(config) -> None:

@@ -732,7 +732,7 @@ def test_taxation_step_two_renders_the_server_scriptorium_explanation(page, serv
     assert prompt.text_content() == (
         "Red: Taxation step 2: south west (ordination) unlocks silver: "
         "Scriptorium changes 1 to 2, making a majority (2 vs 1); west (allocation) unlocks "
-        "stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). Choose 2 resources."
+        "stone: Scriptorium changes 1 to 2, making a majority (2 vs 1). Choose two resources"
     )
 
 
@@ -2928,7 +2928,7 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
 
     assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver + 1
     assert page.locator(".log-event").all_inner_texts() == [
-        "BUILDING_HIRED: Red hired Kogge from Yellow; paid silver 1 to Yellow"
+        "Red hired Kogge from Yellow and paid 1 silver."
     ]
     assert choose_city_and_count_reversed_arrows() > 0
     _click_handle_centre(
@@ -3092,8 +3092,8 @@ def test_an_offered_stock_pill_receives_the_click_on_the_asking_seat(page, serve
     )
 
 
-def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page, serve) -> None:
-    """Catches ordination regressions where Village/Abbey looked live but a real click missed them."""
+def test_ordination_controls_are_mouse_reachable_and_light_city_then_confirm(page, serve) -> None:
+    """Catches Ordination controls that look live but cannot make their encoded selection."""
     base_url, server = serve(SCENARIOS / "ordination_mill_active_three_steps_one_wheat_001.json")
     candidate = next(
         (
@@ -3136,6 +3136,11 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
     abbey_before = _visible_active_token_count(page, "abbey")
     city_before = _lit_city_slots_for_player(page, active_player)
 
+    ordain_button = page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]')
+    assert ordain_button.inner_text() == "Move a serf from the Village to the Abbey"
+    mission_button = page.locator('[data-ordination-action="mission"]')
+    assert mission_button.inner_text() == "Move an Acolyte from the Abbey to the City"
+
     village_token = page.query_selector(
         '[data-active-seat="true"] [data-token="village"]'
         '[opacity="1"][data-ordination-can-ordain="true"]'
@@ -3147,7 +3152,7 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
     assert pointer_events == "all"
     assert _is_hit_target(page, village_token, *_centre(page, village_token))
 
-    _click_handle_centre(page, village_token, require_hit=True)
+    ordain_button.click()
     page.wait_for_timeout(20)
     assert _visible_active_token_count(page, "village") == village_before - 1
     assert _visible_active_token_count(page, "abbey") == abbey_before + 1
@@ -3162,7 +3167,8 @@ def test_ordination_tokens_are_mouse_reachable_and_light_city_then_confirm(page,
     assert visibility == "visible"
     assert pointer_events == "all"
     assert _is_hit_target(page, abbey_token, *_centre(page, abbey_token))
-    _click_handle_centre(page, abbey_token, require_hit=True)
+    mission_button = page.locator('[data-ordination-action="mission"][data-turn-offered="true"]')
+    mission_button.click()
     page.wait_for_timeout(20)
     assert _lit_city_slots_for_player(page, active_player) == city_before + 1
 
@@ -3428,7 +3434,7 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
         "Beginning of Turn</div>"
     ) in server_html
     assert server.payload["phase_column"]["prompts"] == {
-        "beginning": "Pick up acolytes for sowing. A building can be hired."
+        "beginning": "Pick up acolytes for sowing. A building can be hired here."
     }
     assert [
         step["turn_phase"] for step in server.payload["turn_candidates"][0]["steps"][:3]
@@ -3437,17 +3443,17 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
     page.goto(base_url, wait_until="networkidle")
     _assert_painted_turn_phase(page, "beginning")
     assert page.locator('[data-turn-phase-prompt="beginning"]').inner_text() == (
-        "Pick up acolytes for sowing. A building can be hired."
+        "Pick up acolytes for sowing. A building can be hired here."
     )
 
     for selector, prompt in (
         (
             '[data-board-position-index="1"][data-turn-start-candidate="true"]',
-            "Red: choose a space to lift acolytes from.",
+            "Red: Choose a space to lift acolytes from.",
         ),
         (
             '[data-board-position-index="2"][data-turn-duty-candidate="true"]',
-            "Red: choose a duty to take.",
+            "Red: Choose a duty to take.",
         ),
     ):
         assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == prompt
