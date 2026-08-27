@@ -67,6 +67,7 @@ from pilgrim.rules.sow_routes import (  # noqa: E402
 )
 from pilgrim.model.actions import (  # noqa: E402
     BuildingActivationStep,
+    BuildingConversionStep,
     BuildingRelocationStep,
     EndTurnAction,
     FullTurnAction,
@@ -84,6 +85,7 @@ from pilgrim.rules.buildings import (  # noqa: E402
     building_by_id,
     is_building_live,
 )
+from pilgrim.rules.merchant import CORNUCOPIA_COUNTER  # noqa: E402
 from pilgrim.rules.transition import (  # noqa: E402
     turn_step_id,
     apply_action,
@@ -199,6 +201,13 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
     for step in turn_steps(state, config):
         result = apply_engine_turn_step(state, config, step)
         after_step = result.player_state(player)
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=state.active_player,
+            building_key=step.building_id,
+        )
+        building_name = building_by_id(config.buildings, step.building_id).name
         total_silver_delta = after_step.resources.silver - before.resources.silver
         hire_silver_delta = sum(
             -int(dict(event.details).get("amount", 0))
@@ -212,13 +221,19 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             "building_id": step.building_id,
             "source": step.source,
             "hire_payment": step.hire_payment,
+            # This is the complete sequence the page may ask about this committed step. It is
+            # deliberately ordered here so the browser narrows engine variants without deciding
+            # whether a hire, direction, or amount comes first.
+            "answers": _turn_step_answers(step, building_name, after_step),
+            # A hire is described before any of its answer controls are drawn. In particular, a
+            # Merchant-named payment is stated rather than turned into a one-option question.
+            "hire_text": _building_hire_sentence(building_name, source),
             # Applying the exact enumerated step is what carries a Cornucopia payer's concrete
             # stock choice. Looking the source up again would find the Merchant's wildcard, so
             # hand the page this applied source rather than asking it to reconstruct a payment.
             "ability": _turn_step_ability_payload(state, config, step, result),
         }
         if isinstance(step, BuildingActivationStep):
-            building_name = building_by_id(config.buildings, step.building_id).name
             prompt = (
                 "Activate Guild: move the Merchant clockwise +1 Duty tile."
                 if step.building_id == "guild"
@@ -231,7 +246,6 @@ def turn_steps_payload(state: Any, config: Any) -> list[dict[str, Any]]:
                 prompt=prompt,
             )
         elif isinstance(step, BuildingRelocationStep):
-            building_name = building_by_id(config.buildings, step.building_id).name
             if step.building_id == "dormitory":
                 prompt = (
                     f"{building_name}: return an acolyte to City from the selected Duty space."
@@ -269,6 +283,15 @@ def _building_ability_party_name(party: str | None) -> str | None:
     return SEAT_COLOURS.get(party, party)
 
 
+def _building_hire_cost_phrase(source: Any) -> str | None:
+    """Render the price an engine-resolved building source asks the player to pay."""
+    if source.hire_cost <= 0 or source.hire_resource is None:
+        return None
+    if source.hire_resource == CORNUCOPIA_COUNTER and not source.hire_resource_chosen:
+        return f"{source.hire_cost} resource of your choice"
+    return f"{source.hire_cost} {source.hire_resource}"
+
+
 def _building_ability_status_text(source: Any) -> str:
     """One player-facing status sentence from an engine-resolved ability source.
 
@@ -277,11 +300,9 @@ def _building_ability_status_text(source: Any) -> str:
     """
     if source.usable:
         payee = _building_ability_party_name(source.payable_to)
-        if source.hire_cost > 0 and source.hire_resource is not None and payee:
-            return (
-                f"Usable: pay {source.hire_cost} {source.hire_resource} to "
-                f"{payee}."
-            )
+        cost_phrase = _building_hire_cost_phrase(source)
+        if cost_phrase is not None and payee:
+            return f"Usable: pay {cost_phrase} to {payee}."
         return "Usable: no payment."
 
     reason = source.reason or None
@@ -312,6 +333,92 @@ def _building_ability_status_text(source: Any) -> str:
     if reason == BuildingAbilityReason.ALREADY_USED:
         return "Cannot be used: already used this turn."
     raise AssertionError(f"Known building ability reason has no player-facing status: {reason!r}")
+
+
+def _building_hire_sentence(building_name: str, source: Any) -> str:
+    """State an offered building hire without asking the page to write the price.
+
+    A Cornucopia still names its price here, but not a false resource: its later answer is the
+    payer's choice. The concrete turn steps each carry are not allowed to leak that future choice
+    into the sentence shown when the building is first selected.
+    """
+    if source.source_type == "own_active":
+        return ""
+    payee = _building_ability_party_name(source.payable_to)
+    cost_phrase = _building_hire_cost_phrase(source)
+    if cost_phrase is None or not payee:
+        return ""
+    return f"Hire {building_name} from {payee} for {cost_phrase}."
+
+
+def _turn_step_direction_label(direction: str) -> str:
+    """The server's player-facing label for an engine conversion direction."""
+    return direction.replace("_", " ").capitalize()
+
+
+def _conversion_amount_resource(direction: str) -> str:
+    """The stock surface an amount answer uses, read from the engine's direction value."""
+    verb, separator, resource = direction.partition("_")
+    if verb not in {"buy", "sell"} or not separator or not resource:
+        raise ValueError(f"Conversion direction has no amount resource: {direction!r}")
+    return resource.split("_", 1)[0]
+
+
+def _turn_step_answers(
+    step: Any,
+    building_name: str,
+    after_step: Any,
+) -> list[dict[str, str | int]]:
+    """Ordered, server-owned answers for exactly one committed building step."""
+    answers: list[dict[str, str | int]] = [
+        {"field": "building", "label": building_name, "value": step.building_id}
+    ]
+    if step.hire_payment is not None:
+        answers.append(
+            {
+                "field": "hire_payment",
+                "label": str(step.hire_payment),
+                "value": str(step.hire_payment),
+            }
+        )
+    if isinstance(step, BuildingActivationStep):
+        return answers
+    if isinstance(step, BuildingRelocationStep):
+        answers.append(
+            {
+                "field": "selected_position",
+                "label": str(step.selected_position),
+                "value": str(step.selected_position),
+            }
+        )
+        return answers
+    if not isinstance(step, BuildingConversionStep):
+        raise TypeError(f"Unsupported turn step type: {type(step)!r}")
+
+    answers.append(
+        {
+            "field": "direction",
+            "label": _turn_step_direction_label(step.direction),
+            "value": step.direction,
+        }
+    )
+    if step.direction.endswith("_piety"):
+        answers.append(
+            {
+                "field": "piety_destination",
+                "label": str(after_step.piety),
+                "value": after_step.piety,
+            }
+        )
+    else:
+        answers.append(
+            {
+                "field": "amount",
+                "label": _conversion_amount_resource(step.direction),
+                "value": step.amount,
+            }
+        )
+    return answers
 
 
 def _building_ability_is_greyed(source: Any) -> bool:

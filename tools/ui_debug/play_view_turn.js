@@ -73,6 +73,7 @@
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
+  var turnStepHireText = aside.querySelector('[data-turn-step-hire-text]');
   var turnStepHireButtons = aside.querySelectorAll('[data-turn-step-hire-payment]');
   var turnStepDirectionRow = aside.querySelector('[data-turn-step-direction-row]');
   var turnStepActivationPrompt = aside.querySelector('[data-turn-step-activation-prompt]');
@@ -111,7 +112,6 @@
   var ordinationStartCounts = null;
   var ordinationOffered = [];
   var conversionChosen = [];
-  var conversionStepId = null;
   var resourceAllocation = {};
   var resourceAllocationTotal = null;
   var requestInFlight = false;
@@ -158,22 +158,50 @@
     });
   }
 
+  function turnStepAnswer(step, index) {
+    return step.answers && step.answers[index] ? step.answers[index] : null;
+  }
+
   function turnStepField(step, index) {
-    if (index === 0) { return step.building_id; }
-    if (step.kind === 'activation') { return null; }
-    if (step.kind === 'relocation') {
-      return index === 1 ? step.selected_position : null;
-    }
-    if (index === 1) { return step.direction; }
-    if (step.building_id === 'indulgences') { return step.piety_destination; }
-    return String(step.amount);
+    var answer = turnStepAnswer(step, index);
+    return answer ? answer.value : null;
+  }
+
+  function turnStepAnswerIndex(live, field) {
+    if (!live.length) { return -1; }
+    var index = -1;
+    var inconsistent = false;
+    live.forEach(function (step) {
+      var answers = step.answers || [];
+      answers.forEach(function (answer, answerIndex) {
+        if (answer.field !== field) { return; }
+        if (index === -1) { index = answerIndex; }
+        else if (index !== answerIndex) { inconsistent = true; }
+      });
+    });
+    return inconsistent ? -1 : index;
+  }
+
+  function turnStepNextField(live) {
+    var index = conversionChosen.length;
+    var field = null;
+    live.forEach(function (step) {
+      var answer = turnStepAnswer(step, index);
+      if (!answer) { return; }
+      if (field === null) { field = answer.field; }
+      else if (field !== answer.field) {
+        throw new Error('turn-step answer field changed across surviving steps');
+      }
+    });
+    return field;
   }
 
   function survivingTurnSteps(prefix) {
     var answers = prefix || conversionChosen;
     return TURN_STEPS.filter(function (step) {
       return answers.every(function (answer, index) {
-        return String(turnStepField(step, index)) === String(answer);
+        var field = turnStepField(step, index);
+        return field !== null && String(field) === String(answer);
       });
     });
   }
@@ -187,15 +215,11 @@
     return values;
   }
 
-  function pietyHirePayment(step) {
-    return step.hire_payment === undefined || step.hire_payment === null
-      ? null : String(step.hire_payment);
-  }
-
   function pietySilverFor(destination, live) {
     var values = [];
     live.forEach(function (step) {
-      if (String(step.piety_destination) !== String(destination)) { return; }
+      var index = turnStepAnswerIndex([step], 'piety_destination');
+      if (index === -1 || String(turnStepField(step, index)) !== String(destination)) { return; }
       var value = Number(step.silver_delta);
       if (values.indexOf(value) === -1) { values.push(value); }
     });
@@ -219,24 +243,37 @@
 
   function conversionReady() {
     var live = survivingTurnSteps();
-    if (conversionChosen.length === 1 && live.length === 1 && live[0].kind === 'activation') {
-      return true;
+    return live.length === 1 && conversionChosen.length === (live[0].answers || []).length;
+  }
+
+  function autoAdvanceHirePayment() {
+    while (true) {
+      var live = survivingTurnSteps();
+      var field = turnStepNextField(live);
+      var values = field === 'hire_payment'
+        ? offeredTurnStepValues(conversionChosen.length, live)
+        : [];
+      if (values.length !== 1) { return; }
+      conversionChosen.push(values[0]);
     }
-    if (conversionChosen.length === 2 && live.length === 1 && live[0].kind === 'relocation') {
-      return true;
-    }
-    if (conversionChosen.length !== 3) { return false; }
-    if (conversionChosen[0] === 'indulgences') {
-      return conversionStepId !== null
-        && live.some(function (step) { return step.step_id === conversionStepId; })
-        && live.filter(function (step) { return step.step_id === conversionStepId; }).length === 1;
-    }
-    return live.length === 1;
+  }
+
+  function chooseTurnStepAnswer(field, value) {
+    var live = survivingTurnSteps();
+    if (turnStepNextField(live) !== field) { return false; }
+    conversionChosen.push(String(value));
+    autoAdvanceHirePayment();
+    return true;
+  }
+
+  function conversionNeedsAmountResource() {
+    var live = survivingTurnSteps();
+    var amountIndex = turnStepAnswerIndex(live, 'amount');
+    return amountIndex !== -1 && conversionChosen.length >= amountIndex;
   }
 
   function abandonConversion() {
     conversionChosen = [];
-    conversionStepId = null;
   }
 
   function renderTurnSteps() {
@@ -247,24 +284,29 @@
       : [];
     var activation = conversionChosen.length === 1
       && live.length === 1 && live[0].kind === 'activation';
-    var relocation = conversionChosen.length >= 1
-      && live.some(function (step) { return step.kind === 'relocation'; });
-    var directions = conversionChosen.length >= 1
-      && !activation && !relocation ? offeredTurnStepValues(1, live)
-      : [];
-    var relocationTargets = relocation ? offeredTurnStepValues(1, live) : [];
-    var piety = !activation && !relocation && conversionChosen.length >= 2
-      && conversionChosen[0] === 'indulgences';
-    var resource = !activation && !relocation && conversionChosen.length >= 2 && !piety;
-    var pietyAmount = piety && conversionChosen.length > 2
+    var nextField = turnStepNextField(live);
+    var directionIndex = turnStepAnswerIndex(live, 'direction');
+    var hireIndex = turnStepAnswerIndex(live, 'hire_payment');
+    var pietyIndex = turnStepAnswerIndex(live, 'piety_destination');
+    var amountIndex = turnStepAnswerIndex(live, 'amount');
+    var directions = nextField === 'direction'
+      ? offeredTurnStepValues(conversionChosen.length, live)
+      : directionIndex !== -1 && conversionChosen.length > directionIndex
+        ? [String(conversionChosen[directionIndex])]
+        : [];
+    var relocation = nextField === 'selected_position';
+    var relocationTargets = relocation ? offeredTurnStepValues(conversionChosen.length, live) : [];
+    var piety = pietyIndex !== -1 && conversionChosen.length >= pietyIndex;
+    var resource = amountIndex !== -1 && conversionChosen.length >= amountIndex;
+    var pietyAmount = piety && conversionChosen.length > pietyIndex
       ? pietyAmountFor(live) : null;
     var resourceId = null;
     if (resource) {
-      resourceId = conversionChosen[0] === 'stone_yard' ? 'stone' : 'wheat';
+      resourceId = String(turnStepAnswer(live[0], amountIndex).label);
     }
-    if (resource) {
+    if (conversionChosen.length > 0) {
       Array.prototype.forEach.call(seats, function (seat) {
-        if (seat.getAttribute('data-active-seat') === 'true') {
+        if (resource && seat.getAttribute('data-active-seat') === 'true') {
           seat.setAttribute('data-resource-choice', 'true');
         } else {
           seat.removeAttribute('data-resource-choice');
@@ -293,13 +335,14 @@
       button.setAttribute('data-turn-step-offered', directions.indexOf(value) === -1 ? 'false' : 'true');
       button.setAttribute(
         'data-turn-step-selected',
-        conversionChosen.length > 1 && conversionChosen[1] === value ? 'true' : 'false'
+        directionIndex !== -1 && conversionChosen.length > directionIndex
+          && conversionChosen[directionIndex] === value ? 'true' : 'false'
       );
     });
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        conversionChosen.length >= 1 && !activation && !relocation ? 'true' : 'false'
+        directionIndex !== -1 && conversionChosen.length >= 1 ? 'true' : 'false'
       );
     }
     if (turnStepActivationPrompt) {
@@ -333,9 +376,9 @@
     var pietyPreviewed = pietyTrack
       && pietyTrack.getAttribute('data-piety-preview-position') !== null;
     var pietyHasOffer = piety && (
-      conversionChosen.length > 2
+      conversionChosen.length > pietyIndex
       || (!pietyPreviewed && live.some(function (step) {
-        return step.piety_destination !== undefined && step.piety_destination !== null;
+        return turnStepField(step, pietyIndex) !== null;
       }))
     );
     if (turnStepAnswerLabel) {
@@ -349,37 +392,36 @@
       turnStepResourceHint.textContent = relocation
         ? (live.length ? live[0].prompt : '') : '';
     }
-    var hirePayments = [];
-    if (piety && conversionChosen.length >= 3) {
-      live.forEach(function (step) {
-        var payment = pietyHirePayment(step);
-        if (payment !== null && hirePayments.indexOf(payment) === -1) {
-          hirePayments.push(payment);
-        }
-      });
-    }
+    var hireText = conversionChosen.length && live.length ? live[0].hire_text || '' : '';
+    var hirePayments = nextField === 'hire_payment'
+      ? offeredTurnStepValues(conversionChosen.length, live)
+      : [];
     if (turnStepHireRow) {
       turnStepHireRow.setAttribute(
         'data-turn-step-row-active',
-        piety && conversionChosen.length >= 3 && hirePayments.length > 1 ? 'true' : 'false'
+        hireText ? 'true' : 'false'
       );
     }
+    if (turnStepHireText) { turnStepHireText.textContent = hireText; }
     Array.prototype.forEach.call(turnStepHireButtons, function (button) {
       var payment = button.getAttribute('data-turn-step-hire-payment');
       var offered = hirePayments.length > 1 && hirePayments.indexOf(payment) !== -1;
       button.setAttribute('data-turn-step-hire-offered', offered ? 'true' : 'false');
       button.setAttribute(
         'data-turn-step-hire-selected',
-        conversionStepId !== null && live.some(function (step) {
-          return step.step_id === conversionStepId && pietyHirePayment(step) === payment;
-        }) ? 'true' : 'false'
+        hireIndex !== -1 && conversionChosen.length > hireIndex
+          && conversionChosen[hireIndex] === payment ? 'true' : 'false'
       );
     });
-    if (conversionChosen.length >= 2) {
+    if (conversionChosen.length > 0) {
       Array.prototype.forEach.call(turnStepResourceKeys, function (key) {
+        var amountCandidates = amountIndex === -1
+          ? [] : survivingTurnSteps(conversionChosen.slice(0, amountIndex));
+        var currentAmount = amountIndex !== -1 && conversionChosen.length > amountIndex
+          ? Number(conversionChosen[amountIndex]) : 0;
         var offered = resource && key.getAttribute('data-resource-choice-key') === resourceId
-          && survivingTurnSteps(conversionChosen.slice(0, 2)).some(function (step) {
-            return Number(step.amount) > Number(conversionChosen[2] || 0);
+          && amountCandidates.some(function (step) {
+            return Number(turnStepField(step, amountIndex)) > currentAmount;
           });
         key.setAttribute('data-turn-offered', offered ? 'true' : 'false');
       });
@@ -387,7 +429,7 @@
     Array.prototype.forEach.call(pietyChoicePills, function (choice) {
       var destination = choice.getAttribute('data-piety-choice-destination');
       var offered = piety && !pietyPreviewed && live.some(function (step) {
-        return String(step.piety_destination) === String(destination);
+        return String(turnStepField(step, pietyIndex)) === String(destination);
       });
       if (offered) {
         choice.setAttribute('data-piety-choice-pill', 'true');
@@ -398,7 +440,8 @@
       choice.setAttribute('visibility', offered ? 'visible' : 'hidden');
       choice.setAttribute(
         'data-piety-choice-selected',
-        conversionChosen.length >= 3 && String(conversionChosen[2]) === String(destination)
+        conversionChosen.length > pietyIndex
+          && String(conversionChosen[pietyIndex]) === String(destination)
           ? 'true' : 'false'
       );
       if (offered) {
@@ -411,8 +454,8 @@
       }
     });
     if (turnStepAmountTotal) {
-      turnStepAmountTotal.textContent = resource && conversionChosen.length > 2
-        ? conversionChosen[2]
+      turnStepAmountTotal.textContent = resource && conversionChosen.length > amountIndex
+        ? conversionChosen[amountIndex]
         : pietyAmount === null ? '' : pietyAmount;
     }
     renderBuildingAbilityTexts(live);
@@ -1697,8 +1740,7 @@
        three are not merely unlit: their keys are marked unoffered too, so a key that something
        else revealed still cannot be pressed. Nobody reaches across the table. */
     Array.prototype.forEach.call(seats, function (seat) {
-      var conversionResourceChoice = conversionChosen.length >= 2
-        && conversionChosen[0] !== 'indulgences';
+      var conversionResourceChoice = conversionNeedsAmountResource();
       var asking = (stocks.length || conversionResourceChoice)
         && seat.getAttribute('data-active-seat') === 'true';
       if (asking) { seat.setAttribute('data-resource-choice', 'true'); }
@@ -1923,7 +1965,7 @@
         event.stopImmediatePropagation();
       }
       conversionChosen = [building.getAttribute('data-turn-step-building-id')];
-      conversionStepId = null;
+      autoAdvanceHirePayment();
       render();
     });
   });
@@ -1932,11 +1974,9 @@
     button.addEventListener('click', function () {
       if (requestInFlight) { return; }
       if (button.getAttribute('data-turn-step-offered') !== 'true') { return; }
-      conversionChosen = [
-        conversionChosen[0],
-        button.getAttribute('data-turn-step-direction')
-      ];
-      conversionStepId = null;
+      if (!chooseTurnStepAnswer('direction', button.getAttribute('data-turn-step-direction'))) {
+        return;
+      }
       render();
     });
   });
@@ -1981,19 +2021,18 @@
         render();
         return;
       }
-      var live = survivingTurnSteps(conversionChosen.slice(0, 2));
-      var current = Number(conversionChosen[2] || 0);
-      var next = live
-        .map(function (step) { return Number(step.amount); })
+      var live = survivingTurnSteps();
+      var amountIndex = turnStepAnswerIndex(live, 'amount');
+      if (amountIndex === -1 || conversionChosen.length < amountIndex) { return; }
+      var amountCandidates = survivingTurnSteps(conversionChosen.slice(0, amountIndex));
+      var current = conversionChosen.length > amountIndex
+        ? Number(conversionChosen[amountIndex]) : 0;
+      var next = amountCandidates
+        .map(function (step) { return Number(turnStepField(step, amountIndex)); })
         .filter(function (amount) { return amount > current; })
         .sort(function (left, right) { return left - right; })[0];
       if (next === undefined) { return; }
-      conversionChosen = [
-        conversionChosen[0],
-        conversionChosen[1],
-        String(next)
-      ];
-      conversionStepId = null;
+      conversionChosen = conversionChosen.slice(0, amountIndex).concat([String(next)]);
       render();
     });
   });
@@ -2002,13 +2041,9 @@
     choice.addEventListener('click', function () {
       if (requestInFlight) { return; }
       if (choice.getAttribute('data-piety-choice-offered') !== 'true') { return; }
-      conversionChosen = [
-        conversionChosen[0],
-        conversionChosen[1],
-        String(choice.getAttribute('data-piety-choice-destination'))
-      ];
-      var live = survivingTurnSteps(conversionChosen);
-      conversionStepId = live.length === 1 ? live[0].step_id : null;
+      if (!chooseTurnStepAnswer(
+        'piety_destination', choice.getAttribute('data-piety-choice-destination')
+      )) { return; }
       render();
     });
   });
@@ -2017,11 +2052,9 @@
     button.addEventListener('click', function () {
       if (requestInFlight) { return; }
       if (button.getAttribute('data-turn-step-hire-offered') !== 'true') { return; }
-      var payment = button.getAttribute('data-turn-step-hire-payment');
-      var live = survivingTurnSteps(conversionChosen).filter(function (step) {
-        return pietyHirePayment(step) === payment;
-      });
-      conversionStepId = live.length === 1 ? live[0].step_id : null;
+      if (!chooseTurnStepAnswer('hire_payment', button.getAttribute('data-turn-step-hire-payment'))) {
+        return;
+      }
       render();
     });
   });
@@ -2037,8 +2070,7 @@
       ) { return; }
       var value = Number(space.getAttribute('data-board-position-index'));
       if (space.getAttribute('data-turn-step-relocation-candidate') === 'true') {
-        conversionChosen = [conversionChosen[0], String(value)];
-        conversionStepId = null;
+        if (!chooseTurnStepAnswer('selected_position', String(value))) { return; }
         render();
         return;
       }
@@ -2103,8 +2135,7 @@
       token.addEventListener('click', function () {
         if (requestInFlight) { return; }
         if (activeSeat.getAttribute('data-end-relocation-choice') === 'true') {
-          conversionChosen = [conversionChosen[0], 'abbey'];
-          conversionStepId = null;
+          if (!chooseTurnStepAnswer('selected_position', 'abbey')) { return; }
           render();
           return;
         }
@@ -2203,7 +2234,6 @@
       resourceAllocation = {};
       resourceAllocationTotal = null;
       conversionChosen = [];
-      conversionStepId = null;
       resolutionSplit = null;
       render();
     });

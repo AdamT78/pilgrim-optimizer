@@ -16,7 +16,7 @@ import pytest
 from PIL import Image
 
 from pilgrim.model.actions import EndTurnAction, action_id
-from pilgrim.model.enums import PlayerId, TurnResolutionType
+from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
 from tools.play_server import PlayServer
 
@@ -385,10 +385,14 @@ def _visible_role_count(page, role_id: str) -> int:
     )
 
 
-def _confirm_enabled(page) -> bool:
-    return (
-        page.get_attribute('[data-turn-control="confirm"]', "data-turn-control-enabled") == "true"
+def _confirm_enabled_attribute(page) -> str | None:
+    return page.get_attribute(
+        '[data-turn-control="confirm"]', "data-turn-control-enabled"
     )
+
+
+def _confirm_enabled(page) -> bool:
+    return _confirm_enabled_attribute(page) == "true"
 
 
 def _painted_confirm_label(page) -> str:
@@ -1266,6 +1270,11 @@ def test_every_conversion_pair_has_a_painted_answer_or_no_answer_row(
             )
         assert building is not None, f"missing conversion pair {building_id}/{direction}"
         _click_handle_centre(page, building, require_hit=True)
+        hire_payment = page.query_selector(
+            '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
+        )
+        if hire_payment is not None:
+            _click_handle_centre(page, hire_payment, require_hit=True)
         direction_key = page.query_selector(
             f'[data-turn-step-direction="{direction}"][data-turn-step-offered="true"]'
         )
@@ -1661,6 +1670,12 @@ def _choose_conversion(page, building_id: str, direction: str, amount: int) -> N
         )
     assert building is not None, f"{building_id} conversion building was not offered"
     _click_handle_centre(page, building, require_hit=True)
+
+    hire_payment = page.query_selector(
+        '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
+    )
+    if hire_payment is not None:
+        _click_handle_centre(page, hire_payment, require_hit=True)
 
     direction_key = page.query_selector(
         f'[data-turn-step-direction="{direction}"][data-turn-step-offered="true"]'
@@ -3513,6 +3528,24 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
     assert page.locator('[data-turn-phase-prompt="end"]').count() == 0
 
 
+def test_merchant_named_hire_states_its_price_without_a_payment_click(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_PULPIT)
+    page.goto(base_url, wait_until="networkidle")
+
+    pulpit = page.locator('[data-turn-step-building-id="pulpit"][data-turn-step-offered="true"]')
+    assert pulpit.count() == 1
+    _click_handle_centre(page, pulpit.element_handle(), require_hit=True)
+
+    assert page.locator('[data-turn-step-hire-text="true"]').inner_text() == (
+        "Hire Pulpit from bank for 1 wheat."
+    )
+    assert page.locator(
+        '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
+    ).count() == 0
+    assert _confirm_enabled(page)
+    assert _confirm_enabled_attribute(page) == "true"
+
+
 def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve) -> None:
     """A continuation arrow is automatic only until a duty or another route can be chosen."""
     base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
@@ -4575,6 +4608,16 @@ def test_brewery_hire_and_convert_click_still_selects_conversion(page, serve) ->
     assert brewery.count() == 1
     _click_handle_centre(page, brewery.element_handle(), require_hit=True)
     assert brewery.get_attribute("data-turn-step-selected") == "true"
+    hire_pills = page.locator(
+        '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
+    )
+    assert {
+        pill.get_attribute("data-turn-step-hire-payment") for pill in hire_pills.all()
+    } == {"stone", "silver", "wheat"}
+    wheat_payment = page.locator(
+        '[data-turn-step-hire-payment="wheat"][data-turn-step-hire-offered="true"]'
+    )
+    _click_handle_centre(page, wheat_payment.element_handle(), require_hit=True)
 
     direction = page.locator(
         '[data-turn-step-direction="sell_wheat_for_silver"][data-turn-step-offered="true"]'
@@ -4584,11 +4627,118 @@ def test_brewery_hire_and_convert_click_still_selects_conversion(page, serve) ->
     resource = page.locator('[data-resource-choice-key="wheat"][data-turn-offered="true"]').first
     assert resource.count() == 1
     _click_handle_centre(page, resource.element_handle(), require_hit=True)
-    # Brewery is a market hire with three legal hire-payment variants.  The
-    # building and conversion are selected, but confirmation correctly waits
-    # for the separate hire-payment answer.
+    # Brewery is a market hire with three legal hire-payment variants. The payment narrows the
+    # conversion before its direction and amount are asked.
     assert page.locator('[data-turn-step-amount-total="true"]').inner_text() == "1"
     assert brewery.get_attribute("data-turn-step-selected") == "true"
+
+
+def test_cornucopia_hire_payment_is_first_and_every_stone_yard_step_commits(page, serve) -> None:
+    """The four concrete payments stay four page-reachable commits, never one stuck frontier."""
+    expected_directions = {
+        "stone": {"buy_stone"},
+        "silver": {"sell_stone"},
+        "wheat": {"buy_stone", "sell_stone"},
+    }
+    paths = (
+        ("stone", "buy_stone"),
+        ("silver", "sell_stone"),
+        ("wheat", "buy_stone"),
+        ("wheat", "sell_stone"),
+    )
+
+    for payment, direction in paths:
+        # Each path needs its own server: a committed step in a shared server can make a later
+        # path look good despite no longer starting from the four-way payment frontier.
+        base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+        server.state = replace(server.state, active_player=PlayerId.PLAYER_TWO)
+        server._refresh()
+        server._capture_turn_start()
+        initial_steps = [
+            step for step in server.payload["turn_steps"] if step["building_id"] == "stone_yard"
+        ]
+        assert len(initial_steps) == 4
+        by_path = {
+            (step["hire_payment"], step["direction"]): step for step in initial_steps
+        }
+
+        page.goto(base_url, wait_until="networkidle")
+        assert _confirm_enabled_attribute(page) == "false"
+        assert page.get_attribute('[data-turn-control="confirm"]', "data-turn-offered") is None
+        building = page.locator(
+            '[data-turn-step-building-id="stone_yard"][data-turn-step-offered="true"]'
+        ).first
+        assert building.count() == 1
+        _click_handle_centre(page, building.element_handle(), require_hit=True)
+
+        hire_row = page.locator('[data-turn-step-hire-row="true"]')
+        assert hire_row.get_attribute("data-turn-step-row-active") == "true"
+        assert page.locator('[data-turn-step-hire-text="true"]').inner_text() == (
+            "Hire Stone Yard from Red for 1 resource of your choice."
+        )
+        assert {
+            pill.get_attribute("data-turn-step-hire-payment")
+            for pill in page.locator(
+                '[data-turn-step-hire-payment][data-turn-step-hire-offered="true"]'
+            ).all()
+        } == {"stone", "silver", "wheat"}
+        assert not _confirm_enabled(page)
+        assert _confirm_enabled_attribute(page) == "false"
+
+        hire = page.locator(
+            f'[data-turn-step-hire-payment="{payment}"][data-turn-step-hire-offered="true"]'
+        )
+        _click_handle_centre(page, hire.element_handle(), require_hit=True)
+        assert _confirm_enabled_attribute(page) == "false"
+        offered_directions = {
+            button.get_attribute("data-turn-step-direction")
+            for button in page.locator(
+                '[data-turn-step-direction][data-turn-step-offered="true"]'
+            ).all()
+        }
+        assert offered_directions == expected_directions[payment]
+
+        direction_button = page.locator(
+            f'[data-turn-step-direction="{direction}"][data-turn-step-offered="true"]'
+        )
+        _click_handle_centre(page, direction_button.element_handle(), require_hit=True)
+        assert not _confirm_enabled(page)
+        assert _confirm_enabled_attribute(page) == "false"
+
+        amount = page.locator(
+            '[data-active-seat="true"] [data-resource-choice-key="stone"]'
+            '[data-turn-offered="true"]'
+        )
+        _click_handle_centre(page, amount.element_handle(), require_hit=True)
+        assert _confirm_enabled(page)
+        assert _confirm_enabled_attribute(page) == "true"
+
+        page.locator('[data-turn-control="confirm"]').click()
+        page.wait_for_selector(
+            '[data-turn-step-building-id="stone_yard"][data-turn-step-used="true"]'
+        )
+        step = by_path[payment, direction]
+        hired = next(
+            event
+            for event in server.state.events
+            if event.action_id == step["step_id"] and event.event_type is EventType.BUILDING_HIRED
+        )
+        assert {
+            name: dict(hired.details)[name]
+            for name in ("building_id", "resource", "amount", "payee")
+        } == {
+            "building_id": "stone_yard",
+            "resource": payment,
+            "amount": 1,
+            "payee": "player_one",
+        }
+        verb = "buy" if direction == "buy_stone" else "sell"
+        delta = "Yellow stone +1; silver -1" if verb == "buy" else "Yellow stone -1; silver +1"
+        assert page.locator(".log-event").all_inner_texts() == [
+            f"Yellow hired Stone Yard from Red and paid 1 {payment}.",
+            f"Yellow used the Stone Yard to {verb} 1 stone for 1 silver.",
+            delta,
+        ]
 
 
 def test_two_active_conversions_leave_the_other_building_offered(page, serve) -> None:
