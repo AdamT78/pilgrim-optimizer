@@ -200,23 +200,6 @@ def _is_rule(body: str) -> bool:
     return 'stroke-opacity="0.55"' in body
 
 
-def _without_kogge_city_spoke_reversals(svg: str) -> str:
-    """Drop the four Kogge-only City-spoke reversal arrows from a wheel SVG string.
-
-    The prototype baseline predates those four edges, so parity checks against it remove them and
-    compare the rest of the board element-for-element.
-    """
-    return re.sub(
-        (
-            r'<g[^>]*data-middle-arrow="'
-            r'(city_to_(east|west)_kogge|(north|south)_to_city_kogge)'
-            r'"[^>]*>.*?</g>'
-        ),
-        "",
-        svg,
-    )
-
-
 def drawing_elements(svg: str, without_cubes: bool = False) -> list[tuple[str, tuple[float, ...]]]:
     """Every drawn element as its tag plus the numbers in its attributes, in document order.
 
@@ -451,23 +434,27 @@ def test_rendered_svg_names_the_city_every_duty_and_both_arrow_families() -> Non
     assert 'aria-label="Middle directional arrows"' in svg
 
 
-def test_rendered_svg_draws_nine_spaces_eight_ring_arrows_and_eight_middle_arrows() -> None:
+def test_rendered_svg_draws_nine_spaces_eight_ring_arrows_and_four_map_middle_arrows() -> None:
     svg = generated_svg()
 
     assert svg.count('class="board-circle"') == 9
     assert len(re.findall(r'data-ring-arrow="', svg)) == 8
-    assert len(re.findall(r'data-middle-arrow="', svg)) == 8
+    assert set(
+        re.findall(r'<g[^>]*data-middle-arrow="[^"]+"[^>]*data-arrow="([^"]+)"', svg)
+    ) == {"city->north", "city->south", "east->city", "west->city"}
     # Each arrow is drawn twice: a black outline with the white interior on top.
-    assert svg.count('class="arrow-border"') == 16
-    assert svg.count('class="arrow-interior"') == 16
+    assert svg.count('class="arrow-border"') == 12
+    assert svg.count('class="arrow-interior"') == 12
 
 
-def test_city_spoke_reversal_arrows_can_be_omitted_without_hiding_elements() -> None:
-    svg = render_duty_wheel_svg(layout(), city_spoke_reversals=())
+def test_city_spoke_reversal_arrows_draw_only_when_their_kogge_edges_are_passed() -> None:
+    requested = {"city->east", "north->city"}
+    svg = render_duty_wheel_svg(layout(), city_spoke_reversals=requested)
 
-    assert len(re.findall(r'data-middle-arrow="', svg)) == 4
-    assert len(re.findall(r'data-arrow="', svg)) == 12
-    for edge in CITY_SPOKE_REVERSAL_ARROWS:
+    assert set(
+        re.findall(r'<g[^>]*data-middle-arrow="[^"]+"[^>]*data-arrow="([^"]+)"', svg)
+    ) == {"city->north", "city->south", "east->city", "west->city", *requested}
+    for edge in CITY_SPOKE_REVERSAL_ARROWS - requested:
         assert f'data-arrow="{edge}"' not in svg
 
 
@@ -1036,8 +1023,8 @@ def test_the_arrows_drawn_on_the_board_are_the_moves_the_engine_allows() -> None
 
     The ring arrows are one shape turned around the board, so nothing in the markup said which
     pair each stood between; it is worked out from how far each has been turned and then named in
-    the engine's terms. Cloisters drops placements rather than drawing edges, and Kogge's four
-    City-spoke reversals are drawn explicitly so they can be offered when legal.
+    the engine's terms. Cloisters drops placements rather than drawing edges. Kogge's four
+    City-spoke reversals are separate elements, supplied only by a play-view route candidate.
     """
     svg = generated_svg()
     drawn: dict[str, set[str]] = {}
@@ -1047,9 +1034,6 @@ def test_the_arrows_drawn_on_the_board_are_the_moves_the_engine_allows() -> None
         drawn.setdefault(origin, set()).add(target)
 
     expected = {position: set(ways) for position, ways in board_edges().items()}
-    expected["city"] |= {"east", "west"}
-    expected["north"] |= {"city"}
-    expected["south"] |= {"city"}
     assert drawn == expected
     assert sum(len(ways) for ways in drawn.values()) == len(
         re.findall(r"data-from-position=", svg)
@@ -1065,7 +1049,7 @@ def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
         svg,
     )
 
-    assert len(indexed) == RING_ARROW_COUNT + len(layout()["middle_arrows"]) + 4
+    assert len(indexed) == RING_ARROW_COUNT + len(layout()["middle_arrows"])
     for origin, target, origin_index, target_index in indexed:
         assert BOARD_POSITIONS[int(origin_index)] == origin
         assert BOARD_POSITIONS[int(target_index)] == target
@@ -1085,8 +1069,8 @@ def test_an_arrow_carries_the_numbers_the_rules_move_cubes_by() -> None:
 
 
 def test_ring_arrows_stay_on_the_layout_anchors_and_kogge_companions_exist() -> None:
-    """Ring anchors stay fixed while middle arrows gain one Kogge companion per spoke."""
-    svg = generated_svg()
+    """Ring anchors stay fixed while a Kogge rendering gains one companion per spoke."""
+    svg = render_duty_wheel_svg(layout(), city_spoke_reversals=CITY_SPOKE_REVERSAL_ARROWS)
     data = layout()
     cx, cy = data["board"]["center"]
     step = 360 // RING_ARROW_COUNT
@@ -1127,7 +1111,7 @@ def test_branching_positions_stay_engine_derived_even_as_drawn_graph_adds_kogge_
     A position with one arrow leaving it offers no choice at all. The base board has three branches
     (City/east/west); drawing Kogge's reversible City spokes adds north/south as drawn branches too.
     """
-    svg = generated_svg()
+    svg = render_duty_wheel_svg(layout(), city_spoke_reversals=CITY_SPOKE_REVERSAL_ARROWS)
     drawn: dict[str, set[str]] = {}
     for origin, target in re.findall(
         r'data-from-position="(\w+)" data-to-position="(\w+)"', svg
@@ -1316,14 +1300,12 @@ def test_the_board_around_the_cubes_is_still_the_baseline_element_for_element() 
     everything the tally does not touch: the spaces, the baseline arrows, the capsules, the titles
     and the ornaments, the same shapes at the same coordinates in the same order. The one tolerated
     gap is the Allocation title, which the baseline puts 0.1px above the offset its other eight
-    titles share; the renderer uses the shared offset instead. Kogge's four City-spoke reversals are
-    deliberate renderer extension and are removed for this baseline comparison.
+    titles share; the renderer uses the shared offset instead. Kogge's four City-spoke reversals
+    require route state, so this state-free rendering matches the baseline's four City spokes.
     """
     data = layout()
     generated = drawing_elements(
-        _without_kogge_city_spoke_reversals(
-            render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"])
-        ),
+        render_duty_wheel_svg(data, merchant_on=data["merchant_token"]["baseline_position"]),
         without_cubes=True,
     )
     baseline = drawing_elements(baseline_svg(), without_cubes=True)

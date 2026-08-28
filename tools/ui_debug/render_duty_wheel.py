@@ -1,7 +1,7 @@
 """Structured renderer for the duty wheel debug view.
 
 The duty wheel holds the duty tiles away from the map so the map stays readable: eight duty
-spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and six
+spaces ringed around a central City on a green hexagon, joined by clockwise ring arrows and four
 arrows running to and from the middle. Each space shows the cubes standing on it as one column per
 seat on a shared baseline, and most of the duties carry a capsule with a Tithe token icon.
 
@@ -869,11 +869,12 @@ def _city_spoke_reversal_arrows(
 ) -> set[str]:
     """Which Kogge-only City-spoke reversals to draw on this board rendering.
 
-    A plain board has all four so the catalogue pages show the full artwork. The play view passes
-    only the reversals that some candidate uses in this position, and those are the only ones drawn.
+    A board without candidate data cannot say Kogge is available, so it draws none. The play view
+    passes only the reversals that some candidate uses in this position, and those are the only
+    ones drawn.
     """
     if city_spoke_reversals is None:
-        return set(CITY_SPOKE_REVERSAL_ARROWS)
+        return set()
     requested = {str(edge) for edge in city_spoke_reversals}
     unknown = sorted(requested - CITY_SPOKE_REVERSAL_ARROWS)
     if unknown:
@@ -1267,7 +1268,7 @@ def render_duty_wheel_svg(
     pre-drawn counter rather than writing text into one. `turn_control_names` narrows the plaques
     drawn without changing the counter. `city_spoke_reversals` narrows the Kogge-only reversal
     arrows (`north->city`, `south->city`, `city->east`, `city->west`) to just the listed subset.
-    Left as `None`, all four are drawn.
+    Left as `None`, no Kogge-only arrows are drawn because the renderer has no route state.
     """
     board = layout["board"]
     palette = layout["palette"]
@@ -1527,13 +1528,12 @@ def render_duty_wheel_panel(
     it and a host page may want the one without the other.
     """
     controls = render_duty_wheel_controls_html(layout) if include_controls else ""
-    # Catalogue/debug wheel: keep the full middle-arrow artwork visible.
+    # The standalone/debug wheel has no route state, so it shows only the map's native spokes.
     board = render_duty_wheel_svg(
         layout,
         board_state,
         interactive=include_controls,
         turn_controls=turn_controls,
-        city_spoke_reversals=CITY_SPOKE_REVERSAL_ARROWS,
     )
     return f"{controls}{board}"
 

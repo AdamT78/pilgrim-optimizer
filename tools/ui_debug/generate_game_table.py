@@ -97,7 +97,6 @@ from tools.ui_debug.render_donated_buildings import (  # noqa: E402
     load_donated_building_tiles,
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
-    CITY_SPOKE_REVERSAL_ARROWS,
     CITY_STACK_HEIGHT,
     CORNUCOPIA_TOKEN,
     duty_setups,
@@ -2422,7 +2421,6 @@ def render_game_table_html(
                 duty_seated,
                 interactive=True,
                 turn_controls=True,
-                city_spoke_reversals=CITY_SPOKE_REVERSAL_ARROWS,
             ),
             hexagon,
         ),
