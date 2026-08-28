@@ -36,6 +36,7 @@ from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
 from pilgrim.model.actions import (
+    BuildingActivationStep,
     BuildingConversionStep,
     EndTurnAction,
     FullTurnAction,
@@ -5102,8 +5103,125 @@ def test_hired_kogge_remains_a_usable_route_source_while_its_tile_is_greyed() ->
         "tile": tuple(kogge[field] for field in ("usable", "reason", "greyed", "status_text")),
     } == {
         "route_source": ("opponent_active_hire", True, ""),
-        "tile": (False, "already_used", True, "Cannot be used: already used this turn."),
+        "tile": (
+            False,
+            "effect_applies_for_rest_of_turn",
+            True,
+            "Hired or activated this turn: acolytes may move against the river to enter or leave "
+            "the City.",
+        ),
     }
+
+
+_PERMITTER_COMMITTED_STEP_CASES = (
+    (
+        "scenarios/kogge_hire_opponent_city_to_west_001.json",
+        "kogge",
+        "Hired or activated this turn: acolytes may move against the river to enter or leave "
+        "the City.",
+    ),
+    (
+        "scenarios/cloisters_hire_opponent_skip_city_001.json",
+        "cloisters",
+        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
+        "action.",
+    ),
+    (
+        "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
+        "scriptorium",
+        "Hired or activated this turn: for Duty relations, each occupied tile counts as an extra "
+        "acolyte.",
+    ),
+    (
+        "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
+        "customs_house",
+        "Hired or activated this turn: your occupied Duty tiles count as majorities for Taxation.",
+    ),
+    (
+        "scenarios/bank_hire_opponent_ordination_001.json",
+        "bank",
+        "Hired or activated this turn: you may pay silver in place of one required resource type.",
+    ),
+)
+
+
+def _committed_activation_tile(scenario_path: str, building_id: str) -> dict[str, object]:
+    scenario = load_scenario(scenario_path)
+    step = next(
+        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == building_id
+    )
+    assert isinstance(step, BuildingActivationStep)
+    after_step = apply_turn_step(scenario.state, scenario.config, step)
+    return next(
+        ability
+        for ability in play_server.building_abilities_payload(after_step, scenario.config)
+        if ability["building_id"] == building_id
+    )
+
+
+def test_committed_permitter_tiles_name_the_effect_that_remains_available() -> None:
+    rendered = {
+        building_id: _committed_activation_tile(scenario_path, building_id)
+        for scenario_path, building_id, _expected_status in _PERMITTER_COMMITTED_STEP_CASES
+    }
+
+    assert {
+        building_id: tuple(tile[field] for field in ("reason", "greyed", "status_text"))
+        for building_id, tile in rendered.items()
+    } == {
+        building_id: ("effect_applies_for_rest_of_turn", True, expected_status)
+        for _scenario_path, building_id, expected_status in _PERMITTER_COMMITTED_STEP_CASES
+    }
+    assert len({tile["status_text"] for tile in rendered.values()}) == len(rendered)
+
+
+@pytest.mark.parametrize(
+    ("scenario_path", "building_id"),
+    (
+        ("scenarios/guild_active_move_merchant_001.json", "guild"),
+        (
+            "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json",
+            "wagon_yard",
+        ),
+    ),
+)
+def test_committed_spent_activation_tiles_keep_the_already_used_status(
+    scenario_path: str, building_id: str
+) -> None:
+    tile = _committed_activation_tile(scenario_path, building_id)
+
+    assert tuple(tile[field] for field in ("reason", "greyed", "status_text")) == (
+        "already_used",
+        True,
+        "Cannot be used: already used this turn.",
+    )
+
+
+def test_permitter_reason_partitions_the_reviewed_engine_building_tuples() -> None:
+    assert transition._ROUTE_BUILDING_IDS == ("kogge", "cloisters")
+    assert transition._HIRED_MODIFIER_BUILDING_IDS == (
+        "scriptorium",
+        "customs_house",
+        "bank",
+        "wagon_yard",
+    )
+
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    tuple_buildings = set(transition._ROUTE_BUILDING_IDS) | set(
+        transition._HIRED_MODIFIER_BUILDING_IDS
+    )
+    permitters = {
+        building.id
+        for building in scenario.config.buildings.catalogue
+        if play_server._used_building_ability_reason(building.id)
+        is BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN
+    }
+
+    assert permitters == tuple_buildings - {"wagon_yard"}
+    non_tuple_buildings = {
+        building.id for building in scenario.config.buildings.catalogue
+    } - tuple_buildings
+    assert not permitters & non_tuple_buildings
 
 
 def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
@@ -5111,7 +5229,11 @@ def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
     for reason in BUILDING_ABILITY_REASONS:
         statuses[reason] = play_server._building_ability_status_text(
             BuildingAbilitySource(
-                building_key="test_building",
+                building_key=(
+                    "kogge"
+                    if reason is BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN
+                    else "test_building"
+                ),
                 source_type="unavailable",
                 owner="player_two",
                 hire_resource="silver",
@@ -5125,6 +5247,18 @@ def test_every_engine_building_ability_reason_has_player_facing_text() -> None:
     assert statuses[BuildingAbilityReason.DONATED] == (
         "Cannot be hired: this building was donated by Yellow."
     )
+
+
+def test_permitter_reason_requires_a_specific_player_facing_sentence() -> None:
+    with pytest.raises(AssertionError, match="Permitter has no player-facing status"):
+        play_server._building_ability_status_text(
+            BuildingAbilitySource(
+                building_key="unmapped_permitter",
+                source_type="unavailable",
+                usable=False,
+                reason=BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN,
+            )
+        )
 
 
 def test_cornucopia_turn_step_payload_keeps_the_enumerated_payment_resource() -> None:

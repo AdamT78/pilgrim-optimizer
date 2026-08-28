@@ -87,6 +87,8 @@ from pilgrim.rules.buildings import (  # noqa: E402
 )
 from pilgrim.rules.merchant import CORNUCOPIA_COUNTER  # noqa: E402
 from pilgrim.rules.transition import (  # noqa: E402
+    _HIRED_MODIFIER_BUILDING_IDS,
+    _ROUTE_BUILDING_IDS,
     turn_step_id,
     apply_action,
     apply_turn_step as apply_engine_turn_step,
@@ -114,6 +116,41 @@ SCENARIO_PATH_FIELDS: tuple[str, ...] = (
     "buildings_file",
 )
 PLAYTEST_SCENARIOS_DIR = Path(__file__).resolve().parents[1] / "scenarios" / "playtest"
+_WAGON_YARD_ONE_SHOT_FREE_HIRE_BUILDING_ID = "wagon_yard"
+_REVIEWED_ROUTE_BUILDING_IDS = ("kogge", "cloisters")
+_REVIEWED_HIRED_MODIFIER_BUILDING_IDS = ("scriptorium", "customs_house", "bank", "wagon_yard")
+
+if _ROUTE_BUILDING_IDS != _REVIEWED_ROUTE_BUILDING_IDS:
+    raise RuntimeError("Review permitter tile wording after changing the route-building tuple.")
+if _HIRED_MODIFIER_BUILDING_IDS != _REVIEWED_HIRED_MODIFIER_BUILDING_IDS:
+    raise RuntimeError("Review permitter tile wording after changing the modifier-building tuple.")
+
+_PERMITTER_BUILDING_IDS = frozenset(
+    (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
+) - {_WAGON_YARD_ONE_SHOT_FREE_HIRE_BUILDING_ID}
+_PERMITTER_STATUS_TEXT_BY_BUILDING_ID = {
+    "kogge": (
+        "Hired or activated this turn: acolytes may move against the river to enter or leave "
+        "the City."
+    ),
+    "cloisters": (
+        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
+        "action."
+    ),
+    "scriptorium": (
+        "Hired or activated this turn: for Duty relations, each occupied tile counts as an extra "
+        "acolyte."
+    ),
+    "customs_house": (
+        "Hired or activated this turn: your occupied Duty tiles count as majorities for Taxation."
+    ),
+    "bank": (
+        "Hired or activated this turn: you may pay silver in place of one required resource type."
+    ),
+}
+
+if frozenset(_PERMITTER_STATUS_TEXT_BY_BUILDING_ID) != _PERMITTER_BUILDING_IDS:
+    raise RuntimeError("Review permitter tile wording after changing the permitter-building set.")
 
 
 @dataclasses.dataclass(slots=True)
@@ -332,6 +369,13 @@ def _building_ability_status_text(source: Any) -> str:
         return "Cannot be used: sowing is in progress."
     if reason == BuildingAbilityReason.ALREADY_USED:
         return "Cannot be used: already used this turn."
+    if reason == BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN:
+        try:
+            return _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[source.building_key]
+        except KeyError as exc:
+            raise AssertionError(
+                f"Permitter has no player-facing status: {source.building_key!r}"
+            ) from exc
     raise AssertionError(f"Known building ability reason has no player-facing status: {reason!r}")
 
 
@@ -433,6 +477,7 @@ def _building_ability_is_greyed(source: Any) -> bool:
         BuildingAbilityReason.MERCHANT_RESOURCE_NONE,
         BuildingAbilityReason.MID_SOW,
         BuildingAbilityReason.ALREADY_USED,
+        BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN,
     }
 
 
@@ -462,14 +507,27 @@ def _building_is_live_market_tile(state: Any, config: Any, building_key: str) ->
     return building_key in state.building_market and is_building_live(state, building_key)
 
 
+def _used_building_ability_reason(building_id: str) -> BuildingAbilityReason:
+    """Name whether a completed tile is spent or continues to permit its turn effect."""
+    if building_id in _PERMITTER_BUILDING_IDS:
+        return BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN
+    return BuildingAbilityReason.ALREADY_USED
+
+
 def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
-    """Keep a completed building step unavailable on the page without changing engine lookups."""
-    if not source.usable or source.building_key not in state.turn_progress.used_buildings:
+    """Keep a completed building step unavailable on the page without changing engine lookups.
+
+    The lookup after a hire can report its source unaffordable because the committed step paid its
+    fee, so this cannot rely on `source.usable`. Corpus measurement currently finds no committed
+    step that overwrites a `DONATED`, `NOT_LIVE`, or `NOT_SELECTED` source; that is an observed
+    invariant, not one this function constructs.
+    """
+    if source.building_key not in state.turn_progress.used_buildings:
         return source
     return dataclasses.replace(
         source,
         usable=False,
-        reason=BuildingAbilityReason.ALREADY_USED,
+        reason=_used_building_ability_reason(source.building_key),
     )
 
 

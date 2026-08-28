@@ -38,7 +38,7 @@ _HIRE_COST = 1
 
 
 class BuildingAbilityReason(StrEnum):
-    """The complete engine vocabulary for an unavailable building ability."""
+    """The complete engine vocabulary for an unavailable or completed building ability."""
 
     NOT_LIVE = "not_live"
     NOT_SELECTED = "not_selected"
@@ -47,6 +47,7 @@ class BuildingAbilityReason(StrEnum):
     MERCHANT_RESOURCE_NONE = "merchant_resource_none"
     MID_SOW = "mid_sow"
     ALREADY_USED = "already_used"
+    EFFECT_APPLIES_FOR_REST_OF_TURN = "effect_applies_for_rest_of_turn"
 
 
 BUILDING_ABILITY_REASONS: frozenset[BuildingAbilityReason] = frozenset(BuildingAbilityReason)
