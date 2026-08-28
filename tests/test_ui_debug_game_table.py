@@ -1684,11 +1684,13 @@ def test_reset_puts_the_board_back_the_way_sow_found_it(page: str) -> None:
 
 
 def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
-    """The wheel draws the board graph plus Kogge's four City-spoke reversals, and reads them.
+    """The wheel draws the board graph it reads to find a branch.
 
     Nothing lists which positions branch: a position with one arrow leaving it offers no choice,
     and the City, east and west are simply the three with more than one. That stays true however
-    the tiles are turned, which is the whole reason for keying any of this to positions.
+    the tiles are turned, which is the whole reason for keying any of this to positions. Kogge's
+    City-spoke reversals are deliberately absent: `tools/ui_debug/README.md:834-837` says route
+    buildings modify this graph on top of its edges, and neither is drawn on the static table.
     """
     action = _block(page, "panel p-action")
     leaving: dict[str, set[str]] = {}
@@ -1698,15 +1700,10 @@ def test_the_table_moves_on_the_graph_the_engine_moves_on(page: str) -> None:
         leaving.setdefault(origin, set()).add(target)
 
     expected = {position: set(ways) for position, ways in board_edges().items()}
-    expected["city"] |= {"east", "west"}
-    expected["north"] |= {"city"}
-    expected["south"] |= {"city"}
     assert leaving == expected
     assert {position: sorted(ways) for position, ways in leaving.items() if len(ways) > 1} == {
-        "city": ["east", "north", "south", "west"],
+        "city": ["north", "south"],
         "east": ["city", "south_east"],
-        "north": ["city", "north_east"],
-        "south": ["city", "south_west"],
         "west": ["city", "north_west"],
     }
     assert "dutyPanel.querySelectorAll('[data-from-position][data-to-position]')" in page
