@@ -15,6 +15,7 @@
   var TOKEN = __TOKEN__;
   var ALMS_POSITION_TARGETS = __ALMS_POSITION_TARGETS__;
   var BUILDING_ABILITIES = __BUILDING_ABILITIES__;
+  var FAMILY_ARROW_TEMPLATES = __FAMILY_ARROW_TEMPLATES__;
   var BUILDING_ABILITY_WINDOWS = __BUILDING_ABILITY_WINDOWS__;
   var currentTurnPhase = __BUILDING_ABILITY_WINDOW__;
   var buildingAbilityTargets = document.querySelectorAll('[data-building-id]');
@@ -45,9 +46,15 @@
       if (conversionChosen && conversionChosen[0] === buildingId && liveSteps.length === 1) {
         ability = liveSteps[0].ability || ability;
       }
-      var abilityText = inEffect.indexOf(buildingId) !== -1
+      var abilityText = ability && ability.family_visibility === 'in_effect'
+          && typeof ability.in_effect_status_text === 'string'
+          ? ability.in_effect_status_text
+          : inEffect.indexOf(buildingId) !== -1
           && ability && typeof ability.in_effect_status_text === 'string'
           ? ability.in_effect_status_text
+          : ability && ability.family_visibility === 'always'
+            && typeof ability.owned_status_text === 'string'
+          ? ability.owned_status_text
           : !familyOriginChosen && ability && typeof ability.toggle_waiting_text === 'string'
           ? ability.toggle_waiting_text
           : ability && target.getAttribute('data-turn-family-state') === 'on'
@@ -81,6 +88,7 @@
   var spaces = board.querySelectorAll('[data-board-position-index]');
   var ornaments = board.querySelectorAll('.ornament-header g');
   var arrows = board.querySelectorAll('[data-arrow]');
+  var arrowLayer = board.querySelector('[data-duty-wheel-arrow-layer="true"]');
   var counters = board.querySelectorAll('[data-turn-counter]');
   var merchantTokens = board.querySelectorAll('[data-token="merchant"]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
@@ -169,7 +177,9 @@
 
   function enabledFamiliesAllow(candidate) {
     return familyBuildingIds(candidate).every(function (buildingId) {
-      return enabledFamilies.indexOf(buildingId) !== -1;
+      var ability = buildingAbilityFor(buildingId);
+      return ability && ability.family_visibility === 'always'
+        || enabledFamilies.indexOf(buildingId) !== -1;
     });
   }
 
@@ -224,6 +234,11 @@
     resolutionSplit = null;
   }
 
+  function resetTurnPreview() {
+    resetPreview();
+    enabledFamilies = [];
+  }
+
   function renderFamilies() {
     var available = familyBuildingIdsOn(matchingCandidates());
     var inEffect = familiesInEffect();
@@ -236,11 +251,15 @@
         return;
       }
       var effect = inEffect.indexOf(buildingId) !== -1;
+      var ability = buildingAbilityFor(buildingId);
+      var alwaysVisible = ability && ability.family_visibility === 'always';
       target.setAttribute(
-        'data-turn-family-state', effect ? 'in_effect' : enabledFamilies.indexOf(buildingId) !== -1 ? 'on' : 'off'
+        'data-turn-family-state', effect
+          ? 'in_effect'
+          : alwaysVisible ? 'owned' : enabledFamilies.indexOf(buildingId) !== -1 ? 'on' : 'off'
       );
       target.setAttribute(
-        'data-turn-family-available', effect || !familyOriginChosen ? 'false' : 'true'
+        'data-turn-family-available', effect || alwaysVisible || !familyOriginChosen ? 'false' : 'true'
       );
       target.setAttribute('data-building-ability-greyed', 'false');
     });
@@ -409,6 +428,9 @@
         ? [String(conversionChosen[directionIndex])]
         : [];
     var relocation = nextField === 'selected_position';
+    // A relocation is a committed-step question too. Its server-written prompt belongs in the
+    // grown prompt row, not a fixed-height answer row where it would escape into the controls.
+    var stepPrompt = activation || relocation;
     var relocationTargets = relocation ? offeredTurnStepValues(conversionChosen.length, live) : [];
     var piety = pietyIndex !== -1 && conversionChosen.length >= pietyIndex;
     var resource = amountIndex !== -1 && conversionChosen.length >= amountIndex;
@@ -458,21 +480,21 @@
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        directionActive || activation ? 'true' : 'false'
+        directionActive || stepPrompt ? 'true' : 'false'
       );
       turnStepDirectionRow.setAttribute(
-        'data-turn-step-activation-companion', activation ? 'true' : 'false'
+        'data-turn-step-activation-companion', stepPrompt ? 'true' : 'false'
       );
     }
     if (turnStepDirectionLabel) {
       turnStepDirectionLabel.setAttribute(
-        'data-turn-step-direction-label-visible', activation ? 'false' : 'true'
+        'data-turn-step-direction-label-visible', stepPrompt ? 'false' : 'true'
       );
     }
     if (turnStepActivationPrompt) {
-      turnStepActivationPrompt.textContent = activation && live.length ? live[0].prompt : '';
+      turnStepActivationPrompt.textContent = stepPrompt && live.length ? live[0].prompt : '';
       turnStepActivationPrompt.setAttribute(
-        'data-turn-step-activation-active', activation ? 'true' : 'false'
+        'data-turn-step-activation-active', stepPrompt ? 'true' : 'false'
       );
     }
     Array.prototype.forEach.call(spaces, function (space) {
@@ -493,7 +515,7 @@
     if (turnStepResourceRow) {
       turnStepResourceRow.setAttribute(
         'data-turn-step-row-active',
-        piety || resource || relocation ? 'true' : 'false'
+        piety || resource ? 'true' : 'false'
       );
     }
     var pietyTrack = document.querySelector('[data-component="piety-track-v2"]');
@@ -513,8 +535,7 @@
       );
     }
     if (turnStepResourceHint) {
-      turnStepResourceHint.textContent = relocation
-        ? (live.length ? live[0].prompt : '') : '';
+      turnStepResourceHint.textContent = '';
     }
     var hireText = conversionChosen.length && live.length ? live[0].hire_text || '' : '';
     var hirePayments = nextField === 'hire_payment'
@@ -1802,10 +1823,53 @@
     return paint;
   }
 
+  function bindArrow(arrow) {
+    if (arrow.getAttribute('data-turn-arrow-bound') === 'true') { return; }
+    arrow.setAttribute('data-turn-arrow-bound', 'true');
+    arrow.addEventListener('click', function () {
+      if (requestInFlight) { return; }
+      if (arrow.getAttribute('data-turn-offered') !== 'true') { return; }
+      var edge = arrow.getAttribute('data-arrow');
+      chosen.push(edge);
+      answered.push(edge);
+      resolutionSplit = null;
+      render();
+    });
+  }
+
+  function setNativeArrowTransforms(transforms) {
+    Object.keys(transforms || {}).forEach(function (arrowId) {
+      var arrow = board.querySelector('[data-middle-arrow="' + arrowId + '"]');
+      if (arrow) { arrow.setAttribute('transform', transforms[arrowId]); }
+    });
+  }
+
+  function syncFamilyArrows() {
+    if (!arrowLayer || typeof arrowLayer.insertAdjacentHTML !== 'function') { return; }
+    Object.keys(FAMILY_ARROW_TEMPLATES || {}).forEach(function (buildingId) {
+      var template = FAMILY_ARROW_TEMPLATES[buildingId];
+      var selector = '[data-family-arrow="' + buildingId + '"]';
+      var shown = enabledFamilies.indexOf(buildingId) !== -1;
+      var present = arrowLayer.querySelector(selector);
+      if (shown && !present) {
+        arrowLayer.insertAdjacentHTML('beforeend', template.markup || '');
+        setNativeArrowTransforms(template.on_transforms);
+        Array.prototype.forEach.call(arrowLayer.querySelectorAll(selector), bindArrow);
+      } else if (!shown && present) {
+        Array.prototype.forEach.call(arrowLayer.querySelectorAll(selector), function (arrow) {
+          arrow.parentNode.removeChild(arrow);
+        });
+        setNativeArrowTransforms(template.off_transforms);
+      }
+    });
+    arrows = board.querySelectorAll('[data-arrow]');
+  }
+
   function show(
     offered, resolutionOptions, settled, confirmActionId, preview, arrangementValues, ordinationValues,
     allocationOptions
   ) {
+    syncFamilyArrows();
     var origins = offeredByKind(offered, 'origin');
     var skips = offeredByKind(offered, 'skip');
     var duties = offeredByKind(offered, 'duty');
@@ -2277,17 +2341,7 @@
     });
   });
 
-  Array.prototype.forEach.call(arrows, function (arrow) {
-    arrow.addEventListener('click', function () {
-      if (requestInFlight) { return; }
-      if (arrow.getAttribute('data-turn-offered') !== 'true') { return; }
-      var edge = arrow.getAttribute('data-arrow');
-      chosen.push(edge);
-      answered.push(edge);
-      resolutionSplit = null;
-      render();
-    });
-  });
+  Array.prototype.forEach.call(arrows, bindArrow);
 
   /* Five key surfaces are answered the same way: press one that is offered and it becomes the next
      answer. What the key stands for is the attribute it carries, and this does not read it. */
@@ -2423,7 +2477,7 @@
         submitReset();
         return;
       }
-      resetPreview();
+      resetTurnPreview();
       render();
     });
   });

@@ -55,6 +55,7 @@ from pilgrim.rules.buildings import (
     BUILDING_ABILITY_REASONS,
     BuildingAbilityReason,
     BuildingAbilitySource,
+    building_ability_source,
 )
 from pilgrim.rules import transition
 from pilgrim.rules.ordination import ordination_outcome
@@ -118,14 +119,27 @@ def scenario():
 def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
     """Build one uncached page payload from a shared state/action load."""
     state_payload = view_payload(scenario.state, scenario.config)
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=actions,
+        include_preview_effects=False,
+    )
+    route_family_building_ids = play_server._route_family_building_ids(candidates)
     return dict(
         state_payload,
         state_token=state_token(state_payload),
-        turn_candidates=play_server.turn_candidates(
+        turn_candidates=candidates,
+        families=play_server._ROUTE_BUILDING_PRESENTATION,
+        building_abilities=play_server.building_abilities_payload(
             scenario.state,
             scenario.config,
-            actions=actions,
-            include_preview_effects=False,
+            route_family_building_ids=route_family_building_ids,
+        ),
+        building_ability_windows=play_server.building_ability_windows_payload(
+            scenario.state,
+            scenario.config,
+            route_family_building_ids=route_family_building_ids,
         ),
         log=[],
         log_blocks=[],
@@ -2326,7 +2340,10 @@ def test_building_ability_reason_is_rendered_and_missing_reason_stays_blank(tmp_
     try:
         opening = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
         assert opening["mill"] == "Cannot be hired: this building was not selected for this game."
-        assert opening["kogge"] == "Choose a space to lift acolytes from first."
+        assert opening["kogge"] == (
+            "Pick up acolytes first, then show the routes it opens — "
+            "1 silver to Yellow if you use one."
+        )
 
         def without_mill_reason(abilities: list[dict]) -> list[dict]:
             return [
@@ -2584,7 +2601,10 @@ def _prompts_drawn(candidates: list[dict]) -> list[str]:
 
 
 def _arrows_drawn(page: str) -> list[str]:
-    return sorted(set(re.findall(r'data-arrow="([^"]+)"', page)))
+    # Hired Kogge companions are server-rendered SVG kept as JSON-escaped markup until the player
+    # turns on that already-offered family. Treat those supplied elements as drawn for the seam
+    # audit without mistaking an inactive template for a wheel element in the browser.
+    return sorted(set(re.findall(r'data-arrow="([^"]+)"', page.replace(r'\"', '"'))))
 
 
 def _candidate_edges(candidates: list[dict]) -> set[str]:
@@ -3014,6 +3034,10 @@ def _route_toggle_ids_for_edge(server, prefix: list, step: dict) -> tuple[str, .
     """The server-described tile toggles needed to make this particular edge visible."""
     assert step["kind"] == "edge"
     index = len(prefix)
+    visibility_by_building_id = {
+        ability["building_id"]: ability.get("family_visibility")
+        for ability in server.payload["building_abilities"]
+    }
     route_building_ids = {
         server.payload["families"][building_index]["building_id"]
         for candidate in server.payload["turn_candidates"]
@@ -3023,7 +3047,13 @@ def _route_toggle_ids_for_edge(server, prefix: list, step: dict) -> tuple[str, .
         and candidate["steps"][index]["value"] == step["value"]
         for building_index in candidate.get("family", ())
     }
-    return tuple(sorted(route_building_ids))
+    return tuple(
+        sorted(
+            building_id
+            for building_id in route_building_ids
+            if visibility_by_building_id.get(building_id) == "toggle"
+        )
+    )
 
 
 def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
@@ -5189,6 +5219,73 @@ def test_building_ability_payload_carries_each_engine_source_field_and_refreshes
         server.server_close()
 
 
+def test_route_family_ability_payload_uses_resolved_ownership_not_board_placement() -> None:
+    def kogge_ability(scenario_path: str) -> dict:
+        scenario = load_scenario(scenario_path)
+        candidates = play_server.turn_candidates(scenario.state, scenario.config)
+        abilities = play_server.building_abilities_payload(
+            scenario.state,
+            scenario.config,
+            route_family_building_ids=play_server._route_family_building_ids(candidates),
+        )
+        return next(ability for ability in abilities if ability["building_id"] == "kogge")
+
+    hired = kogge_ability(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    owned = kogge_ability("scenarios/kogge_active_city_to_east_001.json")
+    donated = kogge_ability("scenarios/kogge_donated_no_extra_routes_001.json")
+
+    assert {
+        "hired": {
+            field: hired[field]
+            for field in (
+                "source_type",
+                "family_visibility",
+                "toggle_waiting_text",
+                "toggle_off_text",
+                "toggle_on_text",
+            )
+        },
+        "owned": {
+            field: owned[field]
+            for field in ("source_type", "family_visibility", "owned_status_text")
+        },
+        "donated": {
+            field: donated.get(field)
+            for field in ("source_type", "family_visibility", "status_text")
+        },
+    } == {
+        "hired": {
+            "source_type": "opponent_active_hire",
+            "family_visibility": "toggle",
+            "toggle_waiting_text": (
+                "Pick up acolytes first, then show the routes it opens — "
+                "1 silver to Yellow if you use one."
+            ),
+            "toggle_off_text": (
+                "After choosing an origin, show the routes it opens — "
+                "1 silver to Yellow if you use one."
+            ),
+            "toggle_on_text": (
+                "Routes shown — click to hide and restart your sow. "
+                "Nothing is paid until you use one."
+            ),
+        },
+        "owned": {
+            "source_type": "own_active",
+            "family_visibility": "always",
+            "owned_status_text": (
+                "Yours: acolytes may move against the river to enter or leave the City. "
+                "These routes are free."
+            ),
+        },
+        "donated": {
+            "source_type": "unavailable",
+            "family_visibility": None,
+            "status_text": "Cannot be hired: this building was donated by Yellow.",
+        },
+    }
+
+
 def test_merchant_without_a_hire_resource_greys_hires_but_not_own_buildings() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
     no_hire_resource = replace(scenario.state, merchant_board_position=1)
@@ -5262,6 +5359,175 @@ def test_building_ability_payload_marks_only_an_already_used_dormitory() -> None
             "end": (False, "already_used", True, "Cannot be used: already used this turn."),
         },
         "unchanged": {"guild": True, "inquisition": True, "kogge": True},
+    }
+
+
+def test_building_window_tiles_only_supply_a_phase_reason_when_the_other_window_offers_it() -> None:
+    """A phase reason means this is the building's other committed-step window."""
+    checked_scenarios = 0
+    paths = [*sorted(SCENARIOS.glob("*.json")), *sorted(PLAYTEST_SCENARIOS.glob("*.json"))]
+    for scenario_path in paths:
+        scenario = load_scenario(str(scenario_path))
+        windows = play_server.building_ability_windows_payload(scenario.state, scenario.config)
+        offered_by_window = {}
+        for window, resolution_committed in (("beginning", False), ("end", True)):
+            window_state = replace(
+                scenario.state,
+                turn_progress=replace(
+                    scenario.state.turn_progress,
+                    resolution_committed=resolution_committed,
+                ),
+            )
+            offered_by_window[window] = {
+                step.building_id for step in turn_steps(window_state, scenario.config)
+            }
+
+        for window, other_window in (("beginning", "end"), ("end", "beginning")):
+            for ability in windows[window]["abilities"]:
+                if ability["reason"] in {
+                    BuildingAbilityReason.END_OF_TURN_NOT_REACHED,
+                    BuildingAbilityReason.BEGINNING_OF_TURN_PASSED,
+                }:
+                    assert ability["building_id"] in offered_by_window[other_window], (
+                        f"{scenario_path.name} {window} supplied a phase reason for "
+                        f"{ability['building_id']} without an opposite-window step"
+                    )
+        checked_scenarios += 1
+
+    assert checked_scenarios >= 320, f"only {checked_scenarios} scenarios checked"
+
+
+def test_building_window_tiles_preserve_sources_without_a_committed_step_in_either_window() -> None:
+    """Sow abilities and independently unavailable sources do not acquire phase reasons."""
+    checked_scenarios = 0
+    paths = [*sorted(SCENARIOS.glob("*.json")), *sorted(PLAYTEST_SCENARIOS.glob("*.json"))]
+    for scenario_path in paths:
+        scenario = load_scenario(str(scenario_path))
+        windows = play_server.building_ability_windows_payload(scenario.state, scenario.config)
+        offered_by_window = {}
+        for window, resolution_committed in (("beginning", False), ("end", True)):
+            window_state = replace(
+                scenario.state,
+                turn_progress=replace(
+                    scenario.state.turn_progress,
+                    resolution_committed=resolution_committed,
+                ),
+            )
+            offered_by_window[window] = {
+                step.building_id for step in turn_steps(window_state, scenario.config)
+            }
+
+        sources = {
+            building.id: building_ability_source(
+                scenario.state,
+                scenario.config,
+                acting_player=scenario.state.active_player,
+                building_key=building.id,
+            )
+            for building in scenario.config.buildings.catalogue
+        }
+        absent_from_steps = set(sources) - (
+            offered_by_window["beginning"] | offered_by_window["end"]
+        )
+        for window in ("beginning", "end"):
+            abilities = {
+                ability["building_id"]: ability for ability in windows[window]["abilities"]
+            }
+            for building_id in absent_from_steps:
+                source = sources[building_id]
+                assert (
+                    abilities[building_id]["usable"],
+                    abilities[building_id]["reason"],
+                ) == (source.usable, source.reason or None), (
+                    f"{scenario_path.name} {window} {building_id}"
+                )
+        checked_scenarios += 1
+
+    assert checked_scenarios >= 320, f"only {checked_scenarios} scenarios checked"
+
+
+def test_window_tiles_keep_sow_sources_and_no_target_reasons() -> None:
+    well_scenario = load_scenario(str(SCENARIOS / "building_hire_live_market_001.json"))
+    well_windows = play_server.building_ability_windows_payload(
+        well_scenario.state, well_scenario.config
+    )
+    assert next(
+        ability
+        for ability in well_windows["beginning"]["abilities"]
+        if ability["building_id"] == "well"
+    )["usable"] is True
+
+    kogge_scenario = load_scenario(str(SCENARIOS / "kogge_active_city_to_east_001.json"))
+    kogge_windows = play_server.building_ability_windows_payload(
+        kogge_scenario.state, kogge_scenario.config
+    )
+    assert next(
+        ability
+        for ability in kogge_windows["beginning"]["abilities"]
+        if ability["building_id"] == "kogge"
+    )["usable"] is True
+
+    dormitory_scenario = load_scenario(
+        str(SCENARIOS / "dormitory_no_duty_acolyte_no_modifier_001.json")
+    )
+    dormitory_windows = play_server.building_ability_windows_payload(
+        dormitory_scenario.state, dormitory_scenario.config
+    )
+    dormitory = next(
+        ability
+        for ability in dormitory_windows["beginning"]["abilities"]
+        if ability["building_id"] == "dormitory"
+    )
+    assert dormitory["reason"] not in {
+        BuildingAbilityReason.END_OF_TURN_NOT_REACHED,
+        BuildingAbilityReason.BEGINNING_OF_TURN_PASSED,
+    }
+
+
+def test_movement_window_tiles_name_the_unavailable_turn_window() -> None:
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    windows = play_server.building_ability_windows_payload(scenario.state, scenario.config)
+    relevant = {
+        window: {
+            ability["building_id"]: (
+                ability["usable"],
+                ability["reason"],
+                ability["greyed"],
+                ability["status_text"],
+            )
+            for ability in payload["abilities"]
+            if ability["building_id"] in {"dormitory", "inquisition", "library"}
+        }
+        for window, payload in windows.items()
+        if window in {"beginning", "end"}
+    }
+
+    assert relevant == {
+        "beginning": {
+            "dormitory": (True, None, False, "Usable: no payment."),
+            "inquisition": (True, None, False, "Usable: pay 1 silver to bank."),
+            "library": (
+                False,
+                "end_of_turn_not_reached",
+                True,
+                "Cannot be used: End of Turn has not begun.",
+            ),
+        },
+        "end": {
+            "dormitory": (
+                False,
+                "beginning_of_turn_passed",
+                True,
+                "Cannot be used: Beginning of Turn has passed.",
+            ),
+            "inquisition": (
+                False,
+                "beginning_of_turn_passed",
+                True,
+                "Cannot be used: Beginning of Turn has passed.",
+            ),
+            "library": (True, None, False, "Usable: pay 1 silver to bank."),
+        },
     }
 
 
@@ -6362,6 +6628,11 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
     carries the action candidates, committed turn steps, resolved building abilities, used-building
     set, resolution-window flag, and server-decided phase-column scope as separate data.
     """
+    _owned_reversals, family_arrow_templates = render_play_view._route_family_arrow_templates(
+        payload.get("turn_candidates") or [],
+        payload.get("building_abilities") or [],
+        render_play_view.load_duty_wheel_layout(),
+    )
     expected = (
         render_play_view._TURN_SCRIPT.replace(
             "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
@@ -6369,6 +6640,7 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
         .replace("__FAMILIES__", json.dumps(payload.get("families") or []))
         .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
         .replace("__BUILDING_ABILITIES__", json.dumps(payload.get("building_abilities") or []))
+        .replace("__FAMILY_ARROW_TEMPLATES__", json.dumps(family_arrow_templates))
         .replace(
             "__BUILDING_ABILITY_WINDOWS__",
             json.dumps(payload.get("building_ability_windows") or {}),
@@ -6547,6 +6819,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert render_play_view._TURN_SCRIPT.count("__FAMILIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__BUILDING_ABILITIES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__FAMILY_ARROW_TEMPLATES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__RESOLUTION_COMMITTED__") == 1
     assert render_play_view._TURN_SCRIPT.count("__PHASE_COLUMN_SCOPE__") == 1

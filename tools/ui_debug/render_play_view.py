@@ -88,6 +88,7 @@ from tools.ui_debug.render_donated_buildings import (  # noqa: E402
 )
 from tools.ui_debug.render_duty_wheel import (  # noqa: E402
     CITY_SPOKE_REVERSAL_ARROWS,
+    city_spoke_reversal_arrow_template,
     load_duty_wheel_layout,
     render_duty_wheel_svg,
 )
@@ -992,6 +993,34 @@ def _city_spoke_reversals_used(candidates: list[dict]) -> tuple[str, ...]:
     return tuple(sorted(used))
 
 
+def _route_family_arrow_templates(
+    candidates: list[dict], building_abilities: list[dict], duty_wheel_layout: dict
+) -> tuple[tuple[str, ...], dict[str, dict[str, object]]]:
+    """Separate always-usable Kogge spokes from server-rendered hire templates.
+
+    `source_type` is the resolved engine fact. In particular, it must be `own_active`, not a
+    visual guess that the tile is on the acting player's board: donated buildings retain that
+    drawing but resolve unavailable before their former owner's active-building branch.
+    """
+    reversals = _city_spoke_reversals_used(candidates)
+    if not reversals:
+        return (), {}
+    kogge = next(
+        (ability for ability in building_abilities if ability.get("building_id") == "kogge"),
+        None,
+    )
+    if kogge is None:
+        return (), {}
+    if kogge.get("source_type") == "own_active":
+        return reversals, {}
+    if kogge.get("family_visibility") != "toggle":
+        return (), {}
+    template = city_spoke_reversal_arrow_template(
+        duty_wheel_layout, reversals, route_family="kogge"
+    )
+    return (), {"kogge": template} if template else {}
+
+
 def log_styles() -> str:
     return """  /* The play box stands in the slack under the Alms Table. */
   .play-log {
@@ -1320,8 +1349,11 @@ def render_play_view_html(
     turn_surface = bool(candidates or turn_steps)
     # The phase column remains in place even when no turn surface is active.
     turn_panel_visible = True
-    # One-time draw choice from the full candidate set; do not recalculate as the turn narrows.
-    city_spoke_reversals = _city_spoke_reversals_used(candidates)
+    # The full candidate set says which Kogge spokes exist; the resolved source says whether they
+    # are already usable or must wait in a server-rendered hire template.
+    city_spoke_reversals, route_family_arrow_templates = _route_family_arrow_templates(
+        candidates, building_abilities, duty_wheel_layout
+    )
     scenario_duty = duty_layout_for(payload, duty_wheel_layout)
     piety_variant = piety_variant_for(seated)
 
@@ -1442,6 +1474,7 @@ def render_play_view_html(
         .replace("__FAMILIES__", json.dumps(families))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
         .replace("__BUILDING_ABILITIES__", json.dumps(building_abilities))
+        .replace("__FAMILY_ARROW_TEMPLATES__", json.dumps(route_family_arrow_templates))
         .replace("__BUILDING_ABILITY_WINDOWS__", json.dumps(building_ability_windows))
         .replace(
             "__BUILDING_ABILITY_WINDOW__",

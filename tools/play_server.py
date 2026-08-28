@@ -148,9 +148,10 @@ _PERMITTER_STATUS_TEXT_BY_BUILDING_ID = {
         "Hired or activated this turn: you may pay silver in place of one required resource type."
     ),
 }
-_ROUTE_TOGGLE_WAITING_TEXT = "Choose a space to lift acolytes from first."
-_ROUTE_TOGGLE_OFF_TEXT = "Routes hidden — click to show."
-_ROUTE_TOGGLE_ON_TEXT = "Routes shown — click to hide."
+_ROUTE_OWNED_TEXT = (
+    "Yours: acolytes may move against the river to enter or leave the City. "
+    "These routes are free."
+)
 
 if frozenset(_PERMITTER_STATUS_TEXT_BY_BUILDING_ID) != _PERMITTER_BUILDING_IDS:
     raise RuntimeError("Review permitter tile wording after changing the permitter-building set.")
@@ -368,6 +369,10 @@ def _building_ability_status_text(source: Any) -> str:
         return "Cannot be hired: the hire payment cannot be afforded."
     if reason == BuildingAbilityReason.MERCHANT_RESOURCE_NONE:
         return "Cannot be hired: the Merchant names no hire resource."
+    if reason == BuildingAbilityReason.END_OF_TURN_NOT_REACHED:
+        return "Cannot be used: End of Turn has not begun."
+    if reason == BuildingAbilityReason.BEGINNING_OF_TURN_PASSED:
+        return "Cannot be used: Beginning of Turn has passed."
     if reason == BuildingAbilityReason.MID_SOW:
         return "Cannot be used: sowing is in progress."
     if reason == BuildingAbilityReason.ALREADY_USED:
@@ -505,6 +510,8 @@ def _building_ability_is_greyed(source: Any) -> bool:
     return source.reason in {
         BuildingAbilityReason.INSUFFICIENT_RESOURCE,
         BuildingAbilityReason.MERCHANT_RESOURCE_NONE,
+        BuildingAbilityReason.END_OF_TURN_NOT_REACHED,
+        BuildingAbilityReason.BEGINNING_OF_TURN_PASSED,
         BuildingAbilityReason.MID_SOW,
         BuildingAbilityReason.ALREADY_USED,
         BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN,
@@ -561,21 +568,55 @@ def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
     )
 
 
-def _route_toggle_ability_fields(
-    building_id: str, route_toggle_building_ids: set[str] | None
+def _route_family_ability_fields(
+    source: Any, route_family_building_ids: set[str] | None
 ) -> dict[str, Any]:
-    """Server-written state text for a route family the sow preview can expose."""
-    if not route_toggle_building_ids or building_id not in route_toggle_building_ids:
+    """Server-written interaction state for an offered Kogge or Cloisters route family."""
+    if (
+        not route_family_building_ids
+        or source.building_key not in route_family_building_ids
+    ):
         return {}
+    in_effect = _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[source.building_key]
+    if source.reason == BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN:
+        return {
+            "family_visibility": "in_effect",
+            "in_effect_status_text": in_effect,
+        }
+    if source.source_type == "own_active":
+        return {
+            # Ownership is a source fact, not a visual deduction from where the tile was drawn.
+            # `building_ability_source` resolves donation before this branch, so a donated tile
+            # remains unavailable even though it still sits on its former owner's board.
+            "family_visibility": "always",
+            "owned_status_text": _ROUTE_OWNED_TEXT,
+            "in_effect_status_text": in_effect,
+            "greyed": False,
+        }
+    cost_phrase = _building_hire_cost_phrase(source)
+    payee = _building_ability_party_name(source.payable_to)
+    if cost_phrase is None or payee is None:
+        raise AssertionError(
+            "An offered hired route family must carry a resolved hire cost and payee."
+        )
+    payment = f"{cost_phrase} to {payee}"
     return {
-        # These are deliberately state instructions rather than another description of the tile's
-        # effect, which the catalogue already supplies alongside this line in the tooltip.
-        "toggle_waiting_text": _ROUTE_TOGGLE_WAITING_TEXT,
-        "toggle_off_text": _ROUTE_TOGGLE_OFF_TEXT,
-        "toggle_on_text": _ROUTE_TOGGLE_ON_TEXT,
-        # Once an offered edge has selected this family, the committed-turn sentence replaces
-        # the toggle instruction.  The page still receives the words from the server.
-        "in_effect_status_text": _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[building_id],
+        "family_visibility": "toggle",
+        # The page switches among these finished server sentences; its only local fact is which
+        # already-offered family the player clicked.
+        "toggle_waiting_text": (
+            "Pick up acolytes first, then show the routes it opens — "
+            f"{payment} if you use one."
+        ),
+        "toggle_off_text": (
+            "After choosing an origin, show the routes it opens — "
+            f"{payment} if you use one."
+        ),
+        "toggle_on_text": (
+            "Routes shown — click to hide and restart your sow. "
+            "Nothing is paid until you use one."
+        ),
+        "in_effect_status_text": in_effect,
         # The toggle controls a candidate family, rather than activating the building at this
         # cursor. Its usable route is still open during sow, so the server keeps its tile vivid.
         "greyed": False,
@@ -586,11 +627,15 @@ def building_abilities_payload(
     state: Any,
     config: Any,
     *,
-    route_toggle_building_ids: set[str] | None = None,
+    route_family_building_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve every catalogue building for the active player in this exact window."""
     return [
-        _building_ability_source_payload(
+        _building_ability_source_payload(source)
+        | {"map_tile": _building_is_live_market_tile(state, config, building.id)}
+        | _route_family_ability_fields(source, route_family_building_ids)
+        for building in config.buildings.catalogue
+        for source in (
             _building_ability_source_after_turn_use(
                 state,
                 building_ability_source(
@@ -599,11 +644,8 @@ def building_abilities_payload(
                     acting_player=state.active_player,
                     building_key=building.id,
                 ),
-            )
+            ),
         )
-        | {"map_tile": _building_is_live_market_tile(state, config, building.id)}
-        | _route_toggle_ability_fields(building.id, route_toggle_building_ids)
-        for building in config.buildings.catalogue
     ]
 
 
@@ -611,7 +653,7 @@ def building_ability_windows_payload(
     state: Any,
     config: Any,
     *,
-    route_toggle_building_ids: set[str] | None = None,
+    route_family_building_ids: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Describe the building availability the page may reveal at each server-named turn window.
 
@@ -647,23 +689,63 @@ def building_ability_windows_payload(
         for source in sources
     )
 
+    window_states = {
+        "beginning": dataclasses.replace(
+            state,
+            turn_progress=dataclasses.replace(state.turn_progress, resolution_committed=False),
+        ),
+        "end": dataclasses.replace(
+            state,
+            turn_progress=dataclasses.replace(state.turn_progress, resolution_committed=True),
+        ),
+    }
+    window_reasons = {
+        "beginning": BuildingAbilityReason.END_OF_TURN_NOT_REACHED,
+        "end": BuildingAbilityReason.BEGINNING_OF_TURN_PASSED,
+    }
+    offered_by_window = {
+        window_name: {
+            step.building_id for step in turn_steps(window_state, config)
+        }
+        for window_name, window_state in window_states.items()
+    }
+    opposite_window = {"beginning": "end", "end": "beginning"}
+
+    def entries_for_window(window_name: str) -> tuple[Any, ...]:
+        """Project sources onto one engine-enumerated turn window."""
+        entries = []
+        for source in sources:
+            if source.building_key in offered_by_window[window_name]:
+                # Some legacy step enumerators know a free activation that the generic source
+                # lookup cannot price. The enumerated step is the authority for this window.
+                entries.append(dataclasses.replace(source, usable=True, reason=None))
+            elif source.building_key in offered_by_window[opposite_window[window_name]]:
+                entries.append(
+                    dataclasses.replace(
+                        source,
+                        usable=False,
+                        reason=window_reasons[window_name],
+                    )
+                )
+            else:
+                entries.append(source)
+        return tuple(entries)
+
     def window(*, offered: bool, entries: tuple[Any, ...]) -> dict[str, Any]:
         return {
             "turn_steps_offered": offered,
             "abilities": [
                 _building_ability_source_payload(source)
                 | {"map_tile": _building_is_live_market_tile(state, config, source.building_key)}
-                | _route_toggle_ability_fields(
-                    source.building_key, route_toggle_building_ids
-                )
+                | _route_family_ability_fields(source, route_family_building_ids)
                 for source in entries
             ],
         }
 
     return {
-        "beginning": window(offered=True, entries=sources),
+        "beginning": window(offered=True, entries=entries_for_window("beginning")),
         "sow": window(offered=False, entries=sow_sources),
-        "end": window(offered=True, entries=sources),
+        "end": window(offered=True, entries=entries_for_window("end")),
     }
 
 
@@ -2619,7 +2701,7 @@ def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
             step["auto_advance"] = True
 
 
-def _route_toggle_building_ids(candidates: list[dict]) -> set[str]:
+def _route_family_building_ids(candidates: list[dict]) -> set[str]:
     """The route-building families that the server has offered in this turn's candidates."""
     return {
         _ROUTE_BUILDING_PRESENTATION[index]["building_id"]
@@ -3099,11 +3181,11 @@ class PlayServer(ThreadingHTTPServer):
         self.token = state_token(self.state_payload)
         available_turn_steps = turn_steps_payload(self.state, self.config)
         candidates = turn_candidates(self.state, self.config)
-        route_toggle_building_ids = _route_toggle_building_ids(candidates)
+        route_family_building_ids = _route_family_building_ids(candidates)
         building_abilities = building_abilities_payload(
             self.state,
             self.config,
-            route_toggle_building_ids=route_toggle_building_ids,
+            route_family_building_ids=route_family_building_ids,
         )
         self.payload = dict(
             self.state_payload,
@@ -3115,7 +3197,7 @@ class PlayServer(ThreadingHTTPServer):
             building_ability_windows=building_ability_windows_payload(
                 self.state,
                 self.config,
-                route_toggle_building_ids=route_toggle_building_ids,
+                route_family_building_ids=route_family_building_ids,
             ),
             log=list(self.log_lines),
             log_blocks=[
