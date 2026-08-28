@@ -217,6 +217,10 @@ def test_ordination_and_hire_log_lines_read_as_player_sentences() -> None:
     ) == "player_one hired Chapel from the market and paid 1 wheat to the bank."
 
 
+def test_player_facing_inventory_never_names_a_cornucopia(inventory_texts: set[str]) -> None:
+    assert not {text for text in inventory_texts if "cornucopia" in text}
+
+
 @pytest.mark.parametrize("expected", _CHANGED_TEXTS)
 def test_changed_player_text_is_covered_by_the_generated_inventory(
     expected: str, inventory_texts: set[str]

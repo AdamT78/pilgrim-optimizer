@@ -881,6 +881,77 @@ def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("scenario_name", "expected_labels"),
+    (
+        (
+            "allocation_hire_infirmary_market_001.json",
+            {"Don't hire", "Hire Infirmary from market for 1 wheat"},
+        ),
+        (
+            "allocation_hire_infirmary_opponent_001.json",
+            {"Don't hire", "Hire Infirmary from player_two for 1 wheat"},
+        ),
+        (
+            "deep_round_eighteen_seed_seven_two_player_001.json",
+            {
+                "Don't hire",
+                "Hire Infirmary from market for 1 resource of your choice",
+                "Hire Well from market for 1 resource of your choice",
+            },
+        ),
+    ),
+)
+def test_sow_hire_options_use_turn_step_wording(
+    scenario_name: str, expected_labels: set[str]
+) -> None:
+    scenario = load_scenario(str(SCENARIOS / scenario_name))
+    labels = {
+        step["label"]
+        for candidate in play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            include_preview_effects=False,
+        )
+        for step in candidate["steps"]
+        if step["kind"] == "hire"
+    }
+
+    assert labels == expected_labels
+
+
+def test_sow_and_turn_step_cornucopia_hires_share_the_cost_phrase_helper(monkeypatch) -> None:
+    scenario = load_scenario(str(SCENARIOS / "allocation_hire_infirmary_market_001.json"))
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction) and action.hired_building_id == "infirmary"
+    )
+    source = BuildingAbilitySource(
+        building_key="infirmary",
+        source_type="live_market_hire",
+        hire_resource="cornucopia",
+        hire_cost=1,
+        payable_to="bank",
+        usable=True,
+    )
+    seen: list[BuildingAbilitySource] = []
+
+    def shared_cost_phrase(resolved_source: BuildingAbilitySource) -> str:
+        seen.append(resolved_source)
+        return "the helper's shared price"
+
+    monkeypatch.setattr(play_server, "building_ability_source", lambda *_args, **_kwargs: source)
+    monkeypatch.setattr(play_server, "_building_hire_cost_phrase", shared_cost_phrase)
+
+    sow_step, _fields = play_server._hire_step(action, scenario.state, scenario.config)
+    turn_step_sentence = play_server._building_hire_sentence("Infirmary", source)
+
+    assert sow_step["label"] == "Hire Infirmary from market for the helper's shared price"
+    assert turn_step_sentence == "Hire Infirmary from market for the helper's shared price."
+    assert seen == [source, source]
+
+
 def test_turn_script_never_names_a_building_to_order_answers() -> None:
     script = Path("tools/ui_debug/play_view_turn.js").read_text(encoding="utf-8")
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_CONVERSIONS))
