@@ -136,7 +136,6 @@ def test_cloisters_hire_blocked_for_merchant_none_insufficient_donated_and_not_l
         "scenarios/cloisters_donated_no_modifier_001.json",
         "scenarios/cloisters_not_live_no_modifier_001.json",
     ):
-        scenario = load_scenario(path)
         assert not _cloisters_actions(path)[1]
 
 
