@@ -107,33 +107,24 @@ def test_cloisters_different_omissions_produce_distinct_action_ids() -> None:
     assert f":skip:{second_action.sow_route_omitted_location}" in second_id
 
 
-def test_combined_kogge_cloisters_action_id_has_no_hire_source() -> None:
+def test_combined_kogge_cloisters_action_id_carries_both_route_hire_sources() -> None:
     scenario = load_scenario("scenarios/kogge_cloisters_hire_both_market_001.json")
-    after_kogge = apply_turn_step(
-        scenario.state,
-        scenario.config,
-        _first_action(turn_steps(scenario.state, scenario.config), lambda step: step.building_id == "kogge"),
-    )
-    after_both = apply_turn_step(
-        after_kogge,
-        scenario.config,
-        _first_action(turn_steps(after_kogge, scenario.config), lambda step: step.building_id == "cloisters"),
-    )
     combined_action = _first_action(
-        legal_actions(after_both, scenario.config),
+        legal_actions(scenario.state, scenario.config),
         lambda candidate: (
             candidate.sow_route_building_id == "kogge"
-            and candidate.sow_route_building_source is None
+            and candidate.sow_route_building_source == "market"
             and candidate.sow_route_secondary_building_id == "cloisters"
-            and candidate.sow_route_secondary_building_source is None
+            and candidate.sow_route_secondary_building_source == "market"
         ),
     )
     combined_id = action_id(combined_action)
 
     assert ":sow_route_building:kogge" in combined_id
     assert ":secondary_building:cloisters" in combined_id
-    assert ":from:market" not in combined_id
-    assert ":secondary_from:market" not in combined_id
+    assert ":from:market" in combined_id
+    assert ":secondary_from:market" in combined_id
+    assert ":hire_payments:cloisters=wheat,kogge=wheat" in combined_id
     assert combined_action.sow_route_omitted_location is not None
     assert f":skip:{combined_action.sow_route_omitted_location}" in combined_id
     assert action_id(combined_action) == combined_id
@@ -242,21 +233,21 @@ def test_apply_rejects_forced_combined_fields_on_non_kogge_city_route() -> None:
         apply_action(scenario.state, invalid_action, scenario.config)
 
 
-def test_hired_cloisters_step_is_absent_when_hire_source_is_unavailable() -> None:
+def test_unavailable_cloisters_has_no_route_actions() -> None:
     merchant_none_scenario = load_scenario("scenarios/cloisters_merchant_none_no_hire_001.json")
     assert not [
-        step
-        for step in turn_steps(merchant_none_scenario.state, merchant_none_scenario.config)
-        if step.building_id == "cloisters"
+        action
+        for action in legal_actions(merchant_none_scenario.state, merchant_none_scenario.config)
+        if action.sow_route_building_id == "cloisters"
     ]
 
     insufficient_scenario = load_scenario(
         "scenarios/cloisters_insufficient_resource_no_hire_001.json"
     )
     assert not [
-        step
-        for step in turn_steps(insufficient_scenario.state, insufficient_scenario.config)
-        if step.building_id == "cloisters"
+        action
+        for action in legal_actions(insufficient_scenario.state, insufficient_scenario.config)
+        if action.sow_route_building_id == "cloisters"
     ]
 
 

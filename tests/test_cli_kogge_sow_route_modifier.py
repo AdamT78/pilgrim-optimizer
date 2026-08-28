@@ -51,31 +51,33 @@ def test_cli_apply_own_active_kogge_route_shows_bonus_before_sowing(capsys) -> N
     )
 
 
-def test_cli_does_not_offer_an_uncommitted_market_kogge_hire(capsys) -> None:
+def test_cli_offers_market_kogge_hires_only_on_reversed_city_routes(capsys) -> None:
     scenario_path = "scenarios/kogge_hire_market_city_to_east_001.json"
     scenario = load_scenario(scenario_path)
     exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "hire building: kogge from market" not in output
-    assert not [
+    assert "hire building: kogge from market" in output
+    assert [
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "kogge"
+        and action.sow_route_building_source == "market"
     ]
 
 
-def test_cli_does_not_offer_an_uncommitted_opponent_kogge_hire(capsys) -> None:
+def test_cli_offers_opponent_kogge_hires_only_on_reversed_city_routes(capsys) -> None:
     scenario_path = "scenarios/kogge_hire_opponent_city_to_west_001.json"
     scenario = load_scenario(scenario_path)
     exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "hire building: kogge from player_two" not in output
-    assert not [
+    assert "hire building: kogge from player_two" in output
+    assert [
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "kogge"
+        and action.sow_route_building_source == "player_two"
     ]

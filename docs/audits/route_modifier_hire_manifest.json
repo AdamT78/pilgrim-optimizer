@@ -1431,17 +1431,15 @@
         "turn_steps": "cloisters_hire_market_skip_duty_tile_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 5,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "cloisters"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 29,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
     },
@@ -1459,17 +1457,15 @@
         "turn_steps": "cloisters_hire_opponent_skip_city_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 2,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "cloisters"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 11,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/cloisters_hire_opponent_skip_city_001.json"
     },
@@ -2337,17 +2333,15 @@
         "turn_steps": "deep_round_eighteen_seed_seven_two_player_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 126,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "cloisters"
-        ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 11
+        "legal_actions_count": 715,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 9
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 46
+        "states_examined": 18
       },
       "scenario": "scenarios/deep_round_eighteen_seed_seven_two_player_001.json"
     },
@@ -3781,18 +3775,15 @@
         "turn_steps": "kogge_cloisters_hire_both_market_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 12,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge",
-          "cloisters"
-        ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 2
+        "legal_actions_count": 343,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 4
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_cloisters_hire_both_market_001.json"
     },
@@ -3810,18 +3801,15 @@
         "turn_steps": "kogge_cloisters_hire_both_opponent_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 12,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge",
-          "cloisters"
-        ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 2
+        "legal_actions_count": 343,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 4
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_cloisters_hire_both_opponent_001.json"
     },
@@ -3839,17 +3827,15 @@
         "turn_steps": "kogge_cloisters_hire_kogge_own_cloisters_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 53,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 363,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_cloisters_hire_kogge_own_cloisters_001.json"
     },
@@ -3867,18 +3853,15 @@
         "turn_steps": "kogge_cloisters_insufficient_for_two_hires_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 12,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge",
-          "cloisters"
-        ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 2
+        "legal_actions_count": 75,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 3
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_cloisters_insufficient_for_two_hires_001.json"
     },
@@ -3918,17 +3901,15 @@
         "turn_steps": "kogge_cloisters_own_kogge_hire_cloisters_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 43,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "cloisters"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 361,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_cloisters_own_kogge_hire_cloisters_001.json"
     },
@@ -3992,19 +3973,18 @@
         "turn_steps": "kogge_donated_no_extra_routes_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 7,
+        "legal_actions_count": 15,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "cloisters",
           "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 3,
-        "turn_steps_count": 13
+        "target_hire_step_count": 2,
+        "turn_steps_count": 12
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 37
+        "states_examined": 34
       },
       "scenario": "scenarios/kogge_donated_no_extra_routes_001.json"
     },
@@ -4022,17 +4002,15 @@
         "turn_steps": "kogge_hire_market_city_to_east_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 6,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 15,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/kogge_hire_market_city_to_east_001.json"
     },
@@ -4052,20 +4030,18 @@
         "turn_steps": "kogge_hire_opponent_city_to_west_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 7,
+        "legal_actions_count": 24,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "kogge",
-          "cloisters",
           "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 4,
-        "turn_steps_count": 14
+        "target_hire_step_count": 2,
+        "turn_steps_count": 12
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 40
+        "states_examined": 34
       },
       "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json"
     },
@@ -4999,17 +4975,15 @@
         "turn_steps": "movement_2p.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 63,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "kogge"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 11
+        "legal_actions_count": 190,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 10
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 100
+        "states_examined": 50
       },
       "scenario": "scenarios/playtest/movement_2p.json"
     },
@@ -6375,20 +6349,18 @@
         "turn_steps": "stone_yard_buy_then_construct_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 10,
+        "legal_actions_count": 27,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "kogge",
-          "cloisters",
           "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 4,
-        "turn_steps_count": 7
+        "target_hire_step_count": 2,
+        "turn_steps_count": 5
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 32
+        "states_examined": 21
       },
       "scenario": "scenarios/stone_yard_buy_then_construct_001.json"
     },
@@ -7302,8 +7274,8 @@
   ],
   "scope": {
     "baseline_affected_scenario_count": 27,
-    "current_capture_snapshot_affected_scenario_count": 27,
-    "current_capture_snapshot_matches_reviewed_baseline": true,
+    "current_capture_snapshot_affected_scenario_count": 17,
+    "current_capture_snapshot_matches_reviewed_baseline": false,
     "expected_changed_capture_files": {
       "legal_actions": [
         "bank_hire_market_ordination_001.txt",
@@ -7362,6 +7334,58 @@
         "wagon_yard_market_not_hireable_001.txt",
         "wagon_yard_opponent_not_hireable_001.txt"
       ]
+    },
+    "route_hire_step_group": {
+      "baseline_affected_scenarios": [
+        "scenarios/cloisters_hire_market_skip_duty_tile_001.json",
+        "scenarios/cloisters_hire_opponent_skip_city_001.json",
+        "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
+        "scenarios/kogge_cloisters_hire_both_market_001.json",
+        "scenarios/kogge_cloisters_hire_both_opponent_001.json",
+        "scenarios/kogge_cloisters_hire_kogge_own_cloisters_001.json",
+        "scenarios/kogge_cloisters_insufficient_for_two_hires_001.json",
+        "scenarios/kogge_cloisters_own_kogge_hire_cloisters_001.json",
+        "scenarios/kogge_donated_no_extra_routes_001.json",
+        "scenarios/kogge_hire_market_city_to_east_001.json",
+        "scenarios/kogge_hire_opponent_city_to_west_001.json",
+        "scenarios/playtest/movement_2p.json",
+        "scenarios/stone_yard_buy_then_construct_001.json"
+      ],
+      "building_ids": [
+        "kogge",
+        "cloisters"
+      ],
+      "expected_changed_capture_files": {
+        "legal_actions": [
+          "cloisters_hire_market_skip_duty_tile_001.txt",
+          "cloisters_hire_opponent_skip_city_001.txt",
+          "deep_round_eighteen_seed_seven_two_player_001.txt",
+          "kogge_cloisters_hire_both_market_001.txt",
+          "kogge_cloisters_hire_both_opponent_001.txt",
+          "kogge_cloisters_hire_kogge_own_cloisters_001.txt",
+          "kogge_cloisters_insufficient_for_two_hires_001.txt",
+          "kogge_cloisters_own_kogge_hire_cloisters_001.txt",
+          "kogge_donated_no_extra_routes_001.txt",
+          "kogge_hire_market_city_to_east_001.txt",
+          "kogge_hire_opponent_city_to_west_001.txt",
+          "stone_yard_buy_then_construct_001.txt"
+        ],
+        "turn_steps": [
+          "cloisters_hire_market_skip_duty_tile_001.txt",
+          "cloisters_hire_opponent_skip_city_001.txt",
+          "deep_round_eighteen_seed_seven_two_player_001.txt",
+          "kogge_cloisters_hire_both_market_001.txt",
+          "kogge_cloisters_hire_both_opponent_001.txt",
+          "kogge_cloisters_hire_kogge_own_cloisters_001.txt",
+          "kogge_cloisters_insufficient_for_two_hires_001.txt",
+          "kogge_cloisters_own_kogge_hire_cloisters_001.txt",
+          "kogge_donated_no_extra_routes_001.txt",
+          "kogge_hire_market_city_to_east_001.txt",
+          "kogge_hire_opponent_city_to_west_001.txt",
+          "movement_2p.txt",
+          "stone_yard_buy_then_construct_001.txt"
+        ]
+      }
     }
   },
   "sow_carried_hire_group": {
@@ -8231,7 +8255,7 @@
             "infirmary",
             "well"
           ],
-          "turn_steps_count": 11
+          "turn_steps_count": 9
         },
         "reachable_committed_step_scan": {
           "first_later_hire_window": {
@@ -8405,9 +8429,9 @@
                 ]
               }
             ],
-            "turn_steps_count": 10
+            "turn_steps_count": 8
           },
-          "states_examined": 46
+          "states_examined": 18
         },
         "scenario": "scenarios/deep_round_eighteen_seed_seven_two_player_001.json"
       },
@@ -8621,7 +8645,7 @@
           "sow_carried_hire_building_ids": [
             "mill"
           ],
-          "turn_steps_count": 13
+          "turn_steps_count": 12
         },
         "reachable_committed_step_scan": {
           "first_later_hire_window": {
@@ -8665,9 +8689,9 @@
                 ]
               }
             ],
-            "turn_steps_count": 12
+            "turn_steps_count": 11
           },
-          "states_examined": 37
+          "states_examined": 34
         },
         "scenario": "scenarios/kogge_donated_no_extra_routes_001.json"
       },
@@ -8737,7 +8761,7 @@
           "sow_carried_hire_building_ids": [
             "mill"
           ],
-          "turn_steps_count": 14
+          "turn_steps_count": 12
         },
         "reachable_committed_step_scan": {
           "first_later_hire_window": {
@@ -8781,9 +8805,9 @@
                 ]
               }
             ],
-            "turn_steps_count": 13
+            "turn_steps_count": 11
           },
-          "states_examined": 40
+          "states_examined": 34
         },
         "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json"
       },
@@ -9529,10 +9553,10 @@
               ]
             }
           ],
-          "turn_steps_count": 10
+          "turn_steps_count": 8
         },
         "scenario": "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
-        "states_examined": 46
+        "states_examined": 18
       },
       {
         "first_later_hire_window": {
@@ -9576,10 +9600,10 @@
               ]
             }
           ],
-          "turn_steps_count": 12
+          "turn_steps_count": 11
         },
         "scenario": "scenarios/kogge_donated_no_extra_routes_001.json",
-        "states_examined": 37
+        "states_examined": 34
       },
       {
         "first_later_hire_window": {
@@ -9623,25 +9647,23 @@
               ]
             }
           ],
-          "turn_steps_count": 13
+          "turn_steps_count": 11
         },
         "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json",
-        "states_examined": 40
+        "states_examined": 34
       },
       {
         "first_later_hire_window": {
           "after_turn_step_ids": [
             "turn_step:building_conversion:stone_yard:from:own_active:direction:sell_stone:amount:1",
-            "turn_step:building_activation:cloisters:from:market:pay:silver"
+            "turn_step:building_relocation:dormitory:from:market:selected:3:pay:silver"
           ],
           "hire_frontiers": [
             {
-              "candidate_hire_step_index": 6,
+              "candidate_hire_step_index": 4,
               "candidate_step_prefix": [
-                "origin=3",
-                "edge=\"east->city\"",
+                "origin=0",
                 "edge=\"city->north\"",
-                "skip=0",
                 "duty=1",
                 "resolution=\"produce_stone\""
               ],
@@ -9658,12 +9680,10 @@
               "offers_opt_out": false
             },
             {
-              "candidate_hire_step_index": 6,
+              "candidate_hire_step_index": 4,
               "candidate_step_prefix": [
-                "origin=3",
-                "edge=\"east->city\"",
+                "origin=0",
                 "edge=\"city->north\"",
-                "skip=0",
                 "duty=1",
                 "resolution=\"produce_wheat\""
               ],
@@ -9680,7 +9700,7 @@
               "offers_opt_out": false
             }
           ],
-          "legal_actions_count": 13,
+          "legal_actions_count": 6,
           "new_since_initial_building_ids": [
             "well",
             "quarry"
@@ -9690,7 +9710,7 @@
               "action_count": 1,
               "building_id": "well",
               "candidate_hire_step_indices": [
-                6
+                4
               ],
               "hire_option_labels": [
                 "Hire Well from market for 1 silver"
@@ -9700,17 +9720,17 @@
               "action_count": 1,
               "building_id": "quarry",
               "candidate_hire_step_indices": [
-                6
+                4
               ],
               "hire_option_labels": [
                 "Hire Quarry from market for 1 silver"
               ]
             }
           ],
-          "turn_steps_count": 4
+          "turn_steps_count": 10
         },
         "scenario": "scenarios/stone_yard_buy_then_construct_001.json",
-        "states_examined": 32
+        "states_examined": 21
       }
     ],
     "overlap_with_target_hire_step_group": [

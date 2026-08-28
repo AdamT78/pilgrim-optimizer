@@ -400,6 +400,30 @@ def _building_hire_sentence(building_name: str, source: Any) -> str:
     return f"Hire {building_name} from {hire_source} for {cost_phrase}."
 
 
+def _route_hire_sentence(action: FullTurnAction, state: Any, config: Any) -> str:
+    """State the hires an already-chosen route carries; the page only reads this engine fact."""
+    sentences: list[str] = []
+    for building_id, source_label in (
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
+    ):
+        if building_id is None or source_label in (None, "own_active"):
+            continue
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=state.active_player,
+            building_key=building_id,
+        )
+        sentence = _building_hire_sentence(
+            building_by_id(config.buildings, building_id).name,
+            source,
+        )
+        if sentence:
+            sentences.append(sentence)
+    return " ".join(sentences)
+
+
 def _turn_step_direction_label(direction: str) -> str:
     """The server's player-facing label for an engine conversion direction."""
     return direction.replace("_", " ").capitalize()
@@ -959,9 +983,18 @@ RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_res
 BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
 HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
 HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
+ROUTE_HIRE_FIELDS: tuple[str, ...] = (
+    "sow_route_building_id",
+    "sow_route_building_source",
+    "sow_route_secondary_building_id",
+    "sow_route_secondary_building_source",
+    "hire_payments",
+)
 # Action fields that identify one potentially hired building and where it is sourced from.
 HIRE_PAYMENT_OWNER_FIELDS: tuple[tuple[str, str], ...] = (
     ("hired_building_id", "hired_building_source"),
+    ("sow_route_building_id", "sow_route_building_source"),
+    ("sow_route_secondary_building_id", "sow_route_secondary_building_source"),
     ("building_conversion_id", "building_conversion_source"),
     ("bank_payment_building_id", "bank_payment_building_source"),
     ("free_hire_target_building_id", "free_hire_target_building_source"),
@@ -1996,15 +2029,13 @@ def _steps_before_hire_payment_questions(
             "counter": counter,
         }
     )
-    steps += [
-        {
-            "kind": "edge",
-            "value": value,
-            "prompt": ROUTE_PROMPT,
-            "counter": edge_counters[index],
-        }
-        for index, value in enumerate(edge_values)
-    ]
+    steps += _route_edge_steps(
+        action,
+        edge_values=edge_values,
+        edge_counters=edge_counters,
+        state=state,
+        config=config,
+    )
     if isinstance(action, SetupSowAction):
         return _address_steps(steps, player_id)
     if action.sow_route_omitted_location is not None:
@@ -2158,6 +2189,30 @@ def _edge_counters(
     return tuple(values)
 
 
+def _route_edge_steps(
+    action: Any,
+    *,
+    edge_values: tuple[str, ...],
+    edge_counters: tuple[int, ...],
+    state: Any,
+    config: Any,
+) -> list[dict]:
+    """Return route decisions, with a hired route's server-written cost on its first hop."""
+    hire_text = (
+        _route_hire_sentence(action, state, config) if isinstance(action, FullTurnAction) else ""
+    )
+    return [
+        {
+            "kind": "edge",
+            "value": value,
+            "prompt": ROUTE_PROMPT,
+            "counter": edge_counters[index],
+            **({"hire_text": hire_text} if index == 0 and hire_text else {}),
+        }
+        for index, value in enumerate(edge_values)
+    ]
+
+
 def _covered_fields(
     action: Any,
     state: Any,
@@ -2184,6 +2239,8 @@ def _covered_fields(
         )
         for name in fields
     }
+    if isinstance(action, FullTurnAction) and action.sow_route_building_id is not None:
+        covered.update(ROUTE_HIRE_FIELDS)
     if isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None:
         covered.add("sow_route_omitted_location")
     return covered
@@ -2270,16 +2327,13 @@ def decision_steps(
             "counter": counter,
         }
     ]
-    steps += [
-        {
-            "kind": "edge",
-            "value": value,
-            "prompt": ROUTE_PROMPT,
-            # Read by the page verbatim. No counting in JavaScript.
-            "counter": edge_counters[index],
-        }
-        for index, value in enumerate(edge_values)
-    ]
+    steps += _route_edge_steps(
+        action,
+        edge_values=edge_values,
+        edge_counters=edge_counters,
+        state=state,
+        config=config,
+    )
     if isinstance(action, SetupSowAction):
         return _address_steps(steps, player_id)
     if action.sow_route_omitted_location is not None:
@@ -2443,7 +2497,14 @@ def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
         offered = {
             (step["kind"], _frontier_value(step["value"])): step for step in steps
         }
-        if len(offered) != 1 or next(iter(offered.values()))["kind"] != "edge":
+        sole_option = next(iter(offered.values())) if len(offered) == 1 else None
+        if (
+            sole_option is None
+            or sole_option["kind"] != "edge"
+            # An action-carried hire is a player choice even when its route continuation is
+            # otherwise forced: following it is what commits to paying on Confirm.
+            or "hire_text" in sole_option
+        ):
             continue
         for step in steps:
             step["auto_advance"] = True

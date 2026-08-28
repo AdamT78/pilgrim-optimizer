@@ -682,6 +682,12 @@ def action_summary(action: GameAction, config: GameConfig) -> str:
         summary += f" | deferred plan: {action.construct_plan or 'none'}"
     if uses_kogge and not has_combined_kogge_cloisters:
         summary += " | use building: kogge"
+    for building_id, source in (
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
+    ):
+        if building_id is not None and source is not None and source != "own_active":
+            summary += f" | hire building: {building_id} from {source}"
     if action.hired_building_id and action.hired_building_source:
         summary += (
             f" | hire building: {action.hired_building_id} from {action.hired_building_source}"

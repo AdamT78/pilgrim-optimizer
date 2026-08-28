@@ -65,6 +65,7 @@
   var counters = board.querySelectorAll('[data-turn-counter]');
   var merchantTokens = board.querySelectorAll('[data-token="merchant"]');
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
+  var hireFact = aside.querySelector('[data-turn-hire-fact]');
   var phaseRows = aside.querySelectorAll('[data-turn-phase]');
   var phasePrompts = aside.querySelectorAll('[data-turn-phase-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
@@ -1551,9 +1552,25 @@
     var skip = null;
     var duty = null;
     var resolution = null;
+    var hireFactText = '';
     var placedAlongRoute = {};
     var prefix = [];
     var remaining = chosen.slice();
+
+    function sharedHireText(candidates) {
+      var text = null;
+      for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+        var steps = candidates[candidateIndex].steps;
+        var factStep = steps.find(function (candidateStep) {
+          return candidateStep.hire_text;
+        });
+        if (!factStep) { return ''; }
+        if (text !== null && text !== factStep.hire_text) { return ''; }
+        text = factStep.hire_text;
+      }
+      return text || '';
+    }
+
     restoreBaseline();
     while (remaining.length) {
       var answer = remaining[0];
@@ -1609,6 +1626,13 @@
       }
       if (step.kind === 'resource' && step.resource_delta) { continue; }
       if (step.kind !== 'edge') { continue; }
+      var matched = CANDIDATES.filter(function (candidate) {
+        return prefix.every(function (value, index) {
+          var candidateStep = candidate.steps[index];
+          return candidateStep !== undefined && candidateStep.value === value;
+        });
+      });
+      hireFactText = sharedHireText(matched);
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
       if (destination && activePlayer) {
@@ -1637,7 +1661,8 @@
       origin: origin,
       skip: skip,
       duty: duty,
-      resolution: resolution
+      resolution: resolution,
+      hire_fact_text: hireFactText
     };
   }
 
@@ -1722,6 +1747,12 @@
     mark(counters, 'data-turn-counter', preview.count === null ? [] : [String(preview.count)]);
     board.setAttribute('data-turn-preview-overflow', preview.overflow ? 'true' : 'false');
     mark(prompts, 'data-turn-prompt', promptsOf(offered));
+    if (hireFact) {
+      hireFact.textContent = preview.hire_fact_text || '';
+      hireFact.setAttribute(
+        'data-turn-hire-fact-active', preview.hire_fact_text ? 'true' : 'false'
+      );
+    }
     mark(keys, 'data-resolution-key', shownResolutions);
     mark(
       pairs,

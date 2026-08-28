@@ -182,6 +182,9 @@ class _SowRouteOption:
     """One legal sow-route option with optional route-modifier metadata."""
 
     route: tuple[int, ...]
+    # Enumeration spends a route hire only in this private branch state.  The action it produces
+    # still records the source and payment and does not move stock until Confirm applies it.
+    state: GameState
     building_id: str | None = None
     source: BuildingAbilitySource | None = None
     secondary_building_id: str | None = None
@@ -535,7 +538,6 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         for source, _state_after_hire in _legal_guild_activation_sources(state, config)
     )
     pulpit_steps = _legal_pulpit_workforce_move_steps(state, config)
-    route_hires = _legal_route_building_hire_steps(state, config)
     modifier_hires = _legal_modifier_building_hire_steps(state, config)
     relocations = (
         _legal_library_relocation_steps(state, config)
@@ -546,7 +548,6 @@ def turn_steps(state: GameState, config: GameConfig) -> tuple[TurnStep, ...]:
         *conversions,
         *guild_steps,
         *pulpit_steps,
-        *route_hires,
         *modifier_hires,
         *relocations,
     )
@@ -690,7 +691,6 @@ def _apply_building_activation_step(
     if step.building_id not in (
         _BUILDING_GUILD,
         _BUILDING_PULPIT,
-        *_ROUTE_BUILDING_IDS,
         *_HIRED_MODIFIER_BUILDING_IDS,
     ):
         raise TransitionValidationError(
@@ -698,7 +698,7 @@ def _apply_building_activation_step(
         )
     if (
         step.building_id
-        in (_BUILDING_PULPIT, *_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
+        in (_BUILDING_PULPIT, *_HIRED_MODIFIER_BUILDING_IDS)
         and state.turn_progress.resolution_committed
     ):
         raise TransitionValidationError(
@@ -725,7 +725,7 @@ def _apply_building_activation_step(
         or (source.source_type != "own_active" and not _is_hired_source(source))
     ):
         raise TransitionValidationError(f"{step.building_id.title()} is unavailable in current state.")
-    if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS) and not _is_hired_source(source):
+    if step.building_id in _HIRED_MODIFIER_BUILDING_IDS and not _is_hired_source(source):
         raise TransitionValidationError(
             f"{step.building_id.title()} activation hires require a hired building source."
         )
@@ -786,7 +786,7 @@ def _apply_building_activation_step(
             f"Own-active {step.building_id.title()} does not take a hire payment."
         )
 
-    if step.building_id in (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS):
+    if step.building_id in _HIRED_MODIFIER_BUILDING_IDS:
         return replace(
             next_state,
             turn_progress=replace(
@@ -1392,7 +1392,7 @@ def _legal_full_turn_actions_for_state(
             picked_up=picked_up,
         ):
             route = route_option.route
-            route_state = state
+            route_state = route_option.state
 
             uses_kogge = (
                 route_option.building_id == _ROUTE_BUILDING_KOGGE
@@ -2367,6 +2367,33 @@ def _apply_full_turn_action(
         player=player,
         action=action,
     )
+    route_hired_sources = tuple(
+        source
+        for source in (
+            kogge_source,
+            cloisters_route.source if cloisters_route is not None else None,
+        )
+        if source is not None and _is_hired_source(source)
+    )
+    route_hired_buildings = frozenset(source.building_key for source in route_hired_sources)
+    for route_hire_source in route_hired_sources:
+        try:
+            state_for_sow, hire_payment = apply_building_hire_payment(
+                state_for_sow,
+                acting_player=player,
+                source=route_hire_source,
+            )
+        except ValueError as exc:
+            raise TransitionValidationError(str(exc)) from exc
+        pre_sowing_events.append(
+            _building_hired_event(
+                source=route_hire_source,
+                payment=hire_payment,
+                actor=player,
+                action_id=transition_action_id,
+                config=config,
+            )
+        )
     if kogge_source is not None:
         pre_sowing_events.append(
             _kogge_route_bonus_event(
@@ -2661,25 +2688,16 @@ def _apply_full_turn_action(
             )
         has_route_building_id = action.sow_route_building_id is not None
         has_secondary_route_building_id = action.sow_route_secondary_building_id is not None
-        if (
-            action.sow_route_building_source is not None
-            and (
-                not has_route_building_id
-                or action.sow_route_building_source != "own_active"
-            )
-        ):
+        if action.sow_route_building_source is not None and not has_route_building_id:
             raise TransitionValidationError(
-                "sow_route_building_source may only name an own-active route building."
+                "sow_route_building_source requires sow_route_building_id."
             )
         if (
             action.sow_route_secondary_building_source is not None
-            and (
-                not has_secondary_route_building_id
-                or action.sow_route_secondary_building_source != "own_active"
-            )
+            and not has_secondary_route_building_id
         ):
             raise TransitionValidationError(
-                "sow_route_secondary_building_source may only name an own-active route building."
+                "sow_route_secondary_building_source requires sow_route_secondary_building_id."
             )
         if has_secondary_route_building_id and not has_route_building_id:
             raise TransitionValidationError(
@@ -2940,6 +2958,18 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=action.hired_building_id,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        for building_id in _route_hired_building_ids(action):
+            if not can_hire_building_this_turn(hire_context, building_key=building_id):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=building_id,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4329,6 +4359,15 @@ def _apply_full_turn_action(
             )
         )
 
+    if route_hired_buildings:
+        updated_state = replace(
+            updated_state,
+            turn_progress=replace(
+                updated_state.turn_progress,
+                used_buildings=updated_state.turn_progress.used_buildings | route_hired_buildings,
+            ),
+        )
+
     if not updated_state.game_over:
         _validate_transition_state(state, updated_state, config)
         events.append(
@@ -4742,34 +4781,6 @@ def _legal_start_turn_relocation_steps(
     )
 
 
-def _legal_route_building_hire_steps(
-    state: GameState,
-    config: GameConfig,
-) -> tuple[BuildingActivationStep, ...]:
-    """Return the paid pre-resolution hires that make a route building usable this turn."""
-    if state.turn_progress.resolution_committed:
-        return ()
-    steps: list[BuildingActivationStep] = []
-    for building_id in _ROUTE_BUILDING_IDS:
-        source = building_ability_source(
-            state,
-            config,
-            acting_player=state.active_player,
-            building_key=building_id,
-        )
-        if not source.usable or not _is_hired_source(source):
-            continue
-        steps.extend(
-            BuildingActivationStep(
-                building_id=building_id,
-                source=_hired_building_source_label(hire_source),
-                hire_payment=hire_source.hire_resource,
-            )
-            for hire_source, _state_after_hire in _hire_payment_states(state, source)
-        )
-    return tuple(steps)
-
-
 def _legal_modifier_building_hire_steps(
     state: GameState,
     config: GameConfig,
@@ -4911,15 +4922,15 @@ def _legal_sow_routes_for_origin(
     if picked_up <= 0:
         return ()
 
-    kogge_source = _route_building_source_available_this_turn(
+    for kogge_source, state_after_kogge_hire in _route_building_source_variants(
         state,
         config,
         building_id=_ROUTE_BUILDING_KOGGE,
-    )
-    if kogge_source is not None:
+    ):
         routes.extend(
             _SowRouteOption(
                 route=route,
+                state=state_after_kogge_hire,
                 building_id=_ROUTE_BUILDING_KOGGE,
                 source=kogge_source,
             )
@@ -4936,7 +4947,7 @@ def _legal_sow_routes_for_origin(
         )
 
     routes.extend(
-        _SowRouteOption(route=route)
+        _SowRouteOption(route=route, state=state)
         for route in normal_sow_routes(
             origin=origin,
             picked_up=picked_up,
@@ -4962,39 +4973,24 @@ def _legal_sow_routes_for_origin(
     return tuple(routes)
 
 
-def _route_building_source_available_this_turn(
+def _route_building_source_variants(
     state: GameState,
     config: GameConfig,
     *,
     building_id: str,
-) -> BuildingAbilitySource | None:
-    """Resolve a route building that is free to use now or was explicitly hired this turn."""
+) -> tuple[tuple[BuildingAbilitySource, GameState], ...]:
+    """Return action-carried route sources with the stock each candidate has left to spend."""
     source = building_ability_source(
         state,
         config,
         acting_player=state.active_player,
         building_key=building_id,
     )
-    if source.usable and source.source_type == "own_active":
-        return source
-    if building_id in state.turn_progress.used_buildings and (
-        _is_hired_source(source)
-        or (
-            source.reason in {"insufficient_resource", "merchant_resource_none"}
-            and source.payable_to is not None
-        )
-    ):
-        # The source becomes unavailable once its fee leaves the player's stock, but that is the
-        # completed step's point: it made this route ability available for the rest of this turn.
-        return replace(
-            source,
-            source_type=(
-                "live_market_hire" if source.payable_to == "bank" else "opponent_active_hire"
-            ),
-            usable=True,
-            reason="",
-        )
-    return None
+    if not source.usable or (source.source_type != "own_active" and not _is_hired_source(source)):
+        return ()
+    if source.source_type == "own_active":
+        return ((source, state),)
+    return _hire_payment_states(state, source)
 
 
 def _modifier_building_source_available_this_turn(
@@ -5076,20 +5072,18 @@ def _legal_cloisters_route_options(
     if picked_up <= 0:
         return ()
 
-    source = _route_building_source_available_this_turn(
-        state,
-        config,
-        building_id=_ROUTE_BUILDING_CLOISTERS,
-    )
-    if source is None:
-        return ()
-
     return tuple(
         _SowRouteOption(
             route=variant.route,
+            state=state_after_cloisters_hire,
             building_id=_ROUTE_BUILDING_CLOISTERS,
-            source=source,
+            source=cloisters_source,
             omitted_location=variant.omitted_location,
+        )
+        for cloisters_source, state_after_cloisters_hire in _route_building_source_variants(
+            state,
+            config,
+            building_id=_ROUTE_BUILDING_CLOISTERS,
         )
         for variant in cloisters_route_variants(
             origin=origin,
@@ -5109,30 +5103,25 @@ def _legal_combined_kogge_cloisters_route_options(
     if picked_up <= 0:
         return ()
 
-    kogge_source = _route_building_source_available_this_turn(
-        state,
-        config,
-        building_id=_ROUTE_BUILDING_KOGGE,
-    )
-    if kogge_source is None:
-        return ()
-
-    cloisters_source = _route_building_source_available_this_turn(
-        state,
-        config,
-        building_id=_ROUTE_BUILDING_CLOISTERS,
-    )
-    if cloisters_source is None:
-        return ()
-
     return tuple(
         _SowRouteOption(
             route=variant.route,
+            state=state_after_cloisters_hire,
             building_id=_ROUTE_BUILDING_KOGGE,
             source=kogge_source,
             secondary_building_id=_ROUTE_BUILDING_CLOISTERS,
             secondary_source=cloisters_source,
             omitted_location=variant.omitted_location,
+        )
+        for kogge_source, state_after_kogge_hire in _route_building_source_variants(
+            state,
+            config,
+            building_id=_ROUTE_BUILDING_KOGGE,
+        )
+        for cloisters_source, state_after_cloisters_hire in _route_building_source_variants(
+            state_after_kogge_hire,
+            config,
+            building_id=_ROUTE_BUILDING_CLOISTERS,
         )
         for variant in combined_kogge_cloisters_route_variants(
             origin=origin,
@@ -5198,13 +5187,12 @@ def _with_kogge_route_fields(
     source: BuildingAbilitySource,
 ) -> FullTurnAction:
     if source.source_type == "own_active" or _is_hired_source(source):
-        return replace(
+        action = replace(
             action,
             sow_route_building_id="kogge",
-            sow_route_building_source=(
-                "own_active" if source.source_type == "own_active" else None
-            ),
+            sow_route_building_source=_own_or_hired_building_source_label(source),
         )
+        return _with_hire_payment_for_source(action, source=source)
     raise ValueError("Kogge route source must be own-active or hired.")
 
 
@@ -5215,14 +5203,13 @@ def _with_cloisters_route_fields(
     omitted_location: int,
 ) -> FullTurnAction:
     if source.source_type == "own_active" or _is_hired_source(source):
-        return replace(
+        action = replace(
             action,
             sow_route_building_id=_ROUTE_BUILDING_CLOISTERS,
-            sow_route_building_source=(
-                "own_active" if source.source_type == "own_active" else None
-            ),
+            sow_route_building_source=_own_or_hired_building_source_label(source),
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(action, source=source)
     raise ValueError("Cloisters route source must be own-active or hired.")
 
 
@@ -5233,14 +5220,13 @@ def _with_secondary_cloisters_route_fields(
     omitted_location: int,
 ) -> FullTurnAction:
     if source.source_type == "own_active" or _is_hired_source(source):
-        return replace(
+        action = replace(
             action,
             sow_route_secondary_building_id=_ROUTE_BUILDING_CLOISTERS,
-            sow_route_secondary_building_source=(
-                "own_active" if source.source_type == "own_active" else None
-            ),
+            sow_route_secondary_building_source=_own_or_hired_building_source_label(source),
             sow_route_omitted_location=omitted_location,
         )
+        return _with_hire_payment_for_source(action, source=source)
     raise ValueError("Cloisters secondary route source must be own-active or hired.")
 
 
@@ -5702,9 +5688,24 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
     """Building ids this action says are hired (source set and not own_active)."""
     candidates = (
         (action.hired_building_id, action.hired_building_source),
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
         (action.effective_acolyte_building_id, action.effective_acolyte_building_source),
         (action.taxation_majority_building_id, action.taxation_majority_building_source),
         (action.bank_payment_building_id, action.bank_payment_building_source),
+    )
+    return tuple(
+        building_id
+        for building_id, source_label in candidates
+        if building_id is not None and source_label is not None and source_label != "own_active"
+    )
+
+
+def _route_hired_building_ids(action: FullTurnAction) -> tuple[str, ...]:
+    """Route buildings this action hires exactly where it consumes their movement permission."""
+    candidates = (
+        (action.sow_route_building_id, action.sow_route_building_source),
+        (action.sow_route_secondary_building_id, action.sow_route_secondary_building_source),
     )
     return tuple(
         building_id
@@ -6761,21 +6762,21 @@ def _resolved_cloisters_route_for_action(
     if omitted_location is None:
         raise TransitionValidationError("Cloisters actions must set sow_route_omitted_location.")
 
-    source = _route_building_source_available_this_turn(
+    source = building_ability_source(
         state,
         config,
-        building_id=_ROUTE_BUILDING_CLOISTERS,
+        acting_player=player,
+        building_key=_ROUTE_BUILDING_CLOISTERS,
     )
-    if source is None:
+    source = _hire_source_for_action(source, action)
+    if not source.usable:
         raise TransitionValidationError("Cloisters is unavailable in current state.")
 
-    if source.source_type == "own_active" and source_label != "own_active":
+    expected_source_label = _own_or_hired_building_source_label(source)
+    if source_label != expected_source_label:
         raise TransitionValidationError(
-            "Own-active Cloisters route must set sow_route_building_source=own_active."
-        )
-    if _is_hired_source(source) and source_label is not None:
-        raise TransitionValidationError(
-            "Hired Cloisters route must be enabled by its committed hire step, not action fields."
+            "Cloisters route source does not match the action's available building source: "
+            f"expected {expected_source_label}."
         )
 
     action_uses_kogge = _action_has_route_building(action, _ROUTE_BUILDING_KOGGE)
@@ -6833,12 +6834,14 @@ def _resolved_kogge_source_for_action(
             )
         return None
 
-    source = _route_building_source_available_this_turn(
+    source = building_ability_source(
         state,
         config,
-        building_id=_ROUTE_BUILDING_KOGGE,
+        acting_player=player,
+        building_key=_ROUTE_BUILDING_KOGGE,
     )
-    if source is None:
+    source = _hire_source_for_action(source, action)
+    if not source.usable:
         raise TransitionValidationError(
             "Route requires Kogge-reversed City spokes, but Kogge is unavailable."
         )
@@ -6846,27 +6849,15 @@ def _resolved_kogge_source_for_action(
         action,
         building_id=_ROUTE_BUILDING_KOGGE,
     )
-    if source.source_type == "own_active":
-        if source_label != "own_active":
-            raise TransitionValidationError(
-                "Own-active Kogge route must set sow_route_building_source=own_active."
-            )
-        return source
-
-    if _is_hired_source(source):
-        if not action_has_kogge_fields:
-            raise TransitionValidationError(
-                "Hired Kogge route must include its sow-route building id."
-            )
-        if source_label is not None:
-            raise TransitionValidationError(
-                "Hired Kogge route must be enabled by its committed hire step, not action fields."
-            )
-        return source
-
-    raise TransitionValidationError(
-        "Route requires Kogge-reversed City spokes, but Kogge is unavailable."
-    )
+    if not action_has_kogge_fields:
+        raise TransitionValidationError("Kogge route must include its sow-route building id.")
+    expected_source_label = _own_or_hired_building_source_label(source)
+    if source_label != expected_source_label:
+        raise TransitionValidationError(
+            "Kogge route source does not match the action's available building source: "
+            f"expected {expected_source_label}."
+        )
+    return source
 
 
 def _resolved_simple_bonus_source_for_action(

@@ -949,6 +949,8 @@ def render_turn_panel(payload: dict) -> str:
         '<div class="play-turn" data-component="play-turn">'
         f"{_turn_phase_column(payload)}"
         f"{_prompt_lines(candidates)}"
+        '<div class="turn-hire-fact" data-turn-hire-fact="true" '
+        'data-turn-hire-fact-active="false"></div>'
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}{_ordination_action_keys(candidates)}</div>"
         f"{_turn_step_controls(turn_steps)}"
@@ -1262,6 +1264,8 @@ def turn_styles(route_color: str) -> str:
   .turn-panel {{ display: none; }}
   .turn-panel[data-turn-shown="true"] {{ display: block; }}
   .turn-summary {{ margin: 8px 0; color: #F2EEDF; }}
+  .turn-hire-fact {{ display: none; margin: 6px 0; color: #E0C36A; }}
+  .turn-hire-fact[data-turn-hire-fact-active="true"] {{ display: block; }}
   .turn-blocked {{ margin: 8px 0; color: #E0C36A; }}
   .turn-fields {{ margin: 0 0 4px 0; padding-left: 18px; color: #C9C4B4; }}
   .turn-field {{ font-family: Menlo, monospace; font-size: 12px; }}

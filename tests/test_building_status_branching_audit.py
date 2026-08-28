@@ -112,16 +112,17 @@ def test_branching_rows_are_deterministic_for_representative_subset() -> None:
     assert grain_store.action_distinct_state_product == 12
 
     movement, deep = first[-2:]
-    assert movement.legal_action_count == 63
-    assert movement.reachable_step_sequences == 541
-    assert movement.distinct_reachable_states == 100
-    assert movement.action_step_sequence_product == 34_083
-    assert movement.action_distinct_state_product == 6_300
-    assert deep.legal_action_count == 126
-    assert deep.reachable_step_sequences == 99
-    assert deep.distinct_reachable_states == 46
-    assert deep.action_step_sequence_product == 12_474
-    assert deep.action_distinct_state_product == 5_796
+    # Kogge and Cloisters now branch in the action population rather than in committed steps.
+    assert movement.legal_action_count == 190
+    assert movement.reachable_step_sequences == 121
+    assert movement.distinct_reachable_states == 50
+    assert movement.action_step_sequence_product == 22_990
+    assert movement.action_distinct_state_product == 9_500
+    assert deep.legal_action_count == 715
+    assert deep.reachable_step_sequences == 22
+    assert deep.distinct_reachable_states == 18
+    assert deep.action_step_sequence_product == 15_730
+    assert deep.action_distinct_state_product == 12_870
 
 
 def test_step_sequence_cap_reports_dropped_prefixes() -> None:

@@ -16,8 +16,13 @@ def test_manifest_covers_the_full_corpus_and_reviewed_initial_hire_boundary() ->
     target_rows = tuple(row for row in rows if row.offered_building_ids)
 
     assert len(rows) == 320
-    assert tuple(row.scenario_path for row in target_rows) == manifest.SCOPED_SCENARIO_PATHS
-    assert len(target_rows) == 27
+    assert {row.scenario_path for row in target_rows} < set(manifest.SCOPED_SCENARIO_PATHS)
+    assert len(target_rows) == 17
+    assert not {
+        building_id
+        for row in target_rows
+        for building_id in row.offered_building_ids
+    } & set(manifest.ROUTE_HIRE_BUILDING_IDS)
     assert target_rows[-1].scenario_path == "scenarios/wagon_yard_opponent_not_hireable_001.json"
     assert target_rows[0].legal_actions_count == 2
     assert target_rows[0].turn_steps_count == 1
@@ -79,6 +84,43 @@ def test_capture_file_change_helper_rejects_a_missing_manifest_file() -> None:
         manifest.assert_capture_file_changes_match_manifest(
             changed,
             capture=manifest.TURN_STEPS_CAPTURE,
+        )
+
+
+@pytest.mark.parametrize(
+    ("capture", "expected_count"),
+    (
+        (manifest.LEGAL_ACTIONS_CAPTURE, 12),
+        (manifest.TURN_STEPS_CAPTURE, 13),
+    ),
+)
+def test_route_hire_capture_subset_is_exactly_the_reviewed_kogge_cloisters_boundary(
+    capture: str, expected_count: int
+) -> None:
+    changed = manifest.expected_capture_files(manifest.ROUTE_HIRE_STEP_GROUP)[capture]
+
+    assert len(changed) == expected_count
+    assert manifest.manifest_expected_capture_files(
+        capture, group=manifest.ROUTE_HIRE_STEP_GROUP
+    ) == changed
+    manifest.assert_capture_file_changes_match_manifest(
+        changed,
+        capture=capture,
+        group=manifest.ROUTE_HIRE_STEP_GROUP,
+    )
+
+
+def test_route_hire_capture_subset_rejects_a_sow_carried_file_outside_its_boundary() -> None:
+    changed = set(manifest.expected_capture_files(manifest.ROUTE_HIRE_STEP_GROUP)[
+        manifest.LEGAL_ACTIONS_CAPTURE
+    ])
+    changed.add("allocation_hire_infirmary_market_001.txt")
+
+    with pytest.raises(AssertionError, match="Unexpected changed files"):
+        manifest.assert_capture_file_changes_match_manifest(
+            changed,
+            capture=manifest.LEGAL_ACTIONS_CAPTURE,
+            group=manifest.ROUTE_HIRE_STEP_GROUP,
         )
 
 

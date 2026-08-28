@@ -321,11 +321,7 @@ def _pass_movement_red_turn_to_yellow(page) -> None:
     page.wait_for_function(
         """() => {
           const active = document.querySelector('[data-active-seat="true"]');
-          const cloisters = document.querySelector(
-            '[data-player="player_one"] [data-turn-step-building-id="cloisters"]'
-          );
-          return active && active.getAttribute('data-player') === 'player_two'
-            && cloisters && cloisters.getAttribute('data-turn-step-offered') === 'true';
+          return active && active.getAttribute('data-player') === 'player_two';
         }"""
     )
 
@@ -2924,10 +2920,10 @@ def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions
     ), "route using both east-axis directions did not advance to a duty choice"
 
 
-def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_removes_them(
+def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
     page, serve
 ) -> None:
-    """A hired route is unavailable until its committed step, and Reset returns to that truth."""
+    """Choosing a hired arrow previews its cost; only Confirm transfers the payment."""
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
     turn_start = server.state
@@ -2950,28 +2946,27 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
             for arrow in ("city->east", "city->west", "north->city", "south->city")
         )
 
-    assert choose_city_and_count_reversed_arrows() == 0
-    _click_handle_centre(
-        page,
-        page.locator('[data-turn-control="reset"]').element_handle(),
-        require_hit=True,
-    )
-    wait_for_turn_start()
-
-    kogge = page.locator(
-        '[data-player="player_two"] '
-        '[data-turn-step-building-id="kogge"][data-turn-step-offered="true"]'
-    ).first
-    assert kogge.count() == 1, "Yellow's Kogge hire step was not offered"
-    kogge.hover()
-    tooltip = page.locator('[data-building-tooltip="true"]')
-    assert tooltip.get_attribute("data-building-tooltip-visible") == "true"
-    assert tooltip.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Usable: pay 1 silver to Yellow."
-    )
-    _click_handle_centre(page, kogge.element_handle(), require_hit=True)
+    assert choose_city_and_count_reversed_arrows() > 0
+    kogge_edge = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
+    assert kogge_edge is not None, "Kogge's reversed arrow was not offered from City"
+    _click_handle_centre(page, kogge_edge, require_hit=True)
     page.wait_for_timeout(20)
-    assert _confirm_enabled(page), "Kogge's complete hire step did not enable Confirm"
+    assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
+        "Hire Kogge from Yellow for 1 silver."
+    )
+    assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver
+
+    for selector in (
+        '[data-board-position-index="3"][data-turn-duty-candidate="true"]',
+        '[data-turn-control="action"][data-turn-control-enabled="true"]',
+        '[data-resolution-key="produce_wheat"][data-turn-offered="true"]',
+    ):
+        target = page.query_selector(selector)
+        assert target is not None, f"missing Kogge route target {selector}"
+        _click_handle_centre(page, target, require_hit=True)
+        page.wait_for_timeout(20)
+
+    assert _confirm_enabled(page), "Kogge route did not enable Confirm"
     _click_handle_point(
         page,
         page.locator('[data-turn-control="confirm"]').element_handle(),
@@ -2979,15 +2974,15 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
         0.2,
     )
     page.wait_for_function(
-        """() => document.querySelector('[data-turn-step-building-id="kogge"]')
-          .getAttribute('data-turn-step-used') === 'true'"""
+        """() => Array.from(document.querySelectorAll('.log-event')).some(
+          event => event.textContent === 'Red hired Kogge from Yellow and paid 1 silver.'
+        )"""
     )
 
     assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver + 1
-    assert page.locator(".log-event").all_inner_texts() == [
-        "Red hired Kogge from Yellow and paid 1 silver."
-    ]
-    assert choose_city_and_count_reversed_arrows() > 0
+    assert "Red hired Kogge from Yellow and paid 1 silver." in page.locator(
+        ".log-event"
+    ).all_inner_texts()
     _click_handle_centre(
         page,
         page.locator('[data-turn-control="reset"]').element_handle(),
@@ -2996,53 +2991,39 @@ def test_hired_kogge_step_reveals_reversed_arrows_pays_its_owner_and_reset_remov
     # The committed hire makes Reset replace the document; the old page has no City origin marker.
     wait_for_turn_start()
     assert server.state == turn_start
-    assert choose_city_and_count_reversed_arrows() == 0
+    assert choose_city_and_count_reversed_arrows() > 0
 
 
-def test_hired_cloisters_step_reveals_its_extension_and_reaches_the_skip_question(
+def test_hired_cloisters_arrow_reveals_its_extension_and_reaches_the_skip_question(
     page, serve
 ) -> None:
     """A paid Cloisters route stays painted through its extra edge and then asks what to skip."""
-    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
     _pass_movement_red_turn_to_yellow(page)
-
-    cloisters = page.query_selector(
-        '[data-player="player_one"] [data-turn-step-building-id="cloisters"]'
-        '[data-turn-step-offered="true"]'
-    )
-    assert cloisters is not None, "Yellow could not choose Red's Cloisters hire"
-    _click_handle_centre(page, cloisters, require_hit=True)
-    assert _confirm_enabled(page), "a complete Cloisters hire step did not enable Confirm"
-    _click_handle_point(
-        page,
-        page.locator('[data-turn-control="confirm"]').element_handle(),
-        0.5,
-        0.2,
-    )
-    page.wait_for_function(
-        """() => document.querySelector('[data-turn-step-building-id="cloisters"]')
-          .getAttribute('data-turn-step-used') === 'true'"""
-    )
+    red_silver = server.state.player_state(PlayerId.PLAYER_ONE).resources.silver
 
     for selector in (
         '[data-board-position-index="3"][data-turn-start-candidate="true"]',
-        '[data-arrow="east->city"][data-turn-offered="true"]',
-        '[data-arrow="city->north"][data-turn-offered="true"]',
+        '[data-arrow="east->south_east"][data-turn-offered="true"]',
     ):
         target = page.query_selector(selector)
         assert target is not None, f"missing painted Cloisters route target {selector}"
         _click_handle_centre(page, target, require_hit=True)
         page.wait_for_timeout(20)
 
-    extension = page.query_selector('[data-arrow="north->north_east"][data-turn-offered="true"]')
+    extension = page.query_selector('[data-arrow="south->south_west"][data-turn-offered="true"]')
     assert extension is not None, "hired Cloisters did not paint its extra route edge"
     _click_handle_centre(page, extension, require_hit=True)
     page.wait_for_timeout(20)
+    assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
+        "Hire Cloisters from Red for 1 silver."
+    )
+    assert server.state.player_state(PlayerId.PLAYER_ONE).resources.silver == red_silver
     skip_spaces = page.locator('[data-turn-skip-candidate="true"]').evaluate_all(
         '(spaces) => spaces.map(space => space.getAttribute("data-board-position"))'
     )
-    assert set(skip_spaces) == {"city", "north", "north_east"}, (
+    assert {"south_east", "south", "south_west"} <= set(skip_spaces), (
         "walking the Cloisters extension did not reach its skip question"
     )
 
