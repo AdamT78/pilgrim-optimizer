@@ -148,6 +148,9 @@ _PERMITTER_STATUS_TEXT_BY_BUILDING_ID = {
         "Hired or activated this turn: you may pay silver in place of one required resource type."
     ),
 }
+_ROUTE_TOGGLE_WAITING_TEXT = "Choose a space to lift acolytes from first."
+_ROUTE_TOGGLE_OFF_TEXT = "Routes hidden — click to show."
+_ROUTE_TOGGLE_ON_TEXT = "Routes shown — click to hide."
 
 if frozenset(_PERMITTER_STATUS_TEXT_BY_BUILDING_ID) != _PERMITTER_BUILDING_IDS:
     raise RuntimeError("Review permitter tile wording after changing the permitter-building set.")
@@ -415,13 +418,16 @@ def _route_hire_sentence(action: FullTurnAction, state: Any, config: Any) -> str
             acting_player=state.active_player,
             building_key=building_id,
         )
-        sentence = _building_hire_sentence(
-            building_by_id(config.buildings, building_id).name,
-            source,
-        )
-        if sentence:
-            sentences.append(sentence)
-    return " ".join(sentences)
+        cost_phrase = _building_hire_cost_phrase(source)
+        payee = _building_ability_party_name(source.payable_to)
+        if cost_phrase is None or not payee:
+            continue
+        building_name = building_by_id(config.buildings, building_id).name
+        if not sentences:
+            sentences.append(f"This route uses {building_name} — {cost_phrase} to {payee}.")
+        else:
+            sentences.append(f"and the {building_name} — {cost_phrase} to {payee}.")
+    return "\n".join(sentences)
 
 
 def _turn_step_direction_label(direction: str) -> str:
@@ -555,7 +561,33 @@ def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
     )
 
 
-def building_abilities_payload(state: Any, config: Any) -> list[dict[str, Any]]:
+def _route_toggle_ability_fields(
+    building_id: str, route_toggle_building_ids: set[str] | None
+) -> dict[str, Any]:
+    """Server-written state text for a route family the sow preview can expose."""
+    if not route_toggle_building_ids or building_id not in route_toggle_building_ids:
+        return {}
+    return {
+        # These are deliberately state instructions rather than another description of the tile's
+        # effect, which the catalogue already supplies alongside this line in the tooltip.
+        "toggle_waiting_text": _ROUTE_TOGGLE_WAITING_TEXT,
+        "toggle_off_text": _ROUTE_TOGGLE_OFF_TEXT,
+        "toggle_on_text": _ROUTE_TOGGLE_ON_TEXT,
+        # Once an offered edge has selected this family, the committed-turn sentence replaces
+        # the toggle instruction.  The page still receives the words from the server.
+        "in_effect_status_text": _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[building_id],
+        # The toggle controls a candidate family, rather than activating the building at this
+        # cursor. Its usable route is still open during sow, so the server keeps its tile vivid.
+        "greyed": False,
+    }
+
+
+def building_abilities_payload(
+    state: Any,
+    config: Any,
+    *,
+    route_toggle_building_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Resolve every catalogue building for the active player in this exact window."""
     return [
         _building_ability_source_payload(
@@ -570,11 +602,17 @@ def building_abilities_payload(state: Any, config: Any) -> list[dict[str, Any]]:
             )
         )
         | {"map_tile": _building_is_live_market_tile(state, config, building.id)}
+        | _route_toggle_ability_fields(building.id, route_toggle_building_ids)
         for building in config.buildings.catalogue
     ]
 
 
-def building_ability_windows_payload(state: Any, config: Any) -> dict[str, dict[str, Any]]:
+def building_ability_windows_payload(
+    state: Any,
+    config: Any,
+    *,
+    route_toggle_building_ids: set[str] | None = None,
+) -> dict[str, dict[str, Any]]:
     """Describe the building availability the page may reveal at each server-named turn window.
 
     The sow itself is held in browser preview state until Confirm. Its availability therefore has
@@ -615,6 +653,9 @@ def building_ability_windows_payload(state: Any, config: Any) -> dict[str, dict[
             "abilities": [
                 _building_ability_source_payload(source)
                 | {"map_tile": _building_is_live_market_tile(state, config, source.building_key)}
+                | _route_toggle_ability_fields(
+                    source.building_key, route_toggle_building_ids
+                )
                 for source in entries
             ],
         }
@@ -1038,6 +1079,20 @@ COUNTED_COMBINATION_STEPS: tuple[tuple[str, str, str], ...] = (
 COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 _ROUTE_BUILDING_CLOISTERS = "cloisters"
 _ROUTE_BUILDING_KOGGE = "kogge"
+_ROUTE_BUILDING_PRESENTATION_BY_ID = {
+    _ROUTE_BUILDING_KOGGE: (0, "route-opening", 1),
+    _ROUTE_BUILDING_CLOISTERS: (1, "route-extra-step", 2),
+}
+_ROUTE_BUILDING_PRESENTATION = tuple(
+    {
+        "building_id": building_id,
+        "paint": paint,
+        "priority": priority,
+    }
+    for building_id, (index, paint, priority) in sorted(
+        _ROUTE_BUILDING_PRESENTATION_BY_ID.items(), key=lambda item: item[1][0]
+    )
+)
 
 # WHAT EACH QUESTION IS ASKING, IN WORDS. One per construction site below, and each is written
 # beside the step it belongs to.
@@ -2032,6 +2087,7 @@ def _steps_before_hire_payment_questions(
     steps += _route_edge_steps(
         action,
         edge_values=edge_values,
+        edge_destinations=edge_destinations,
         edge_counters=edge_counters,
         state=state,
         config=config,
@@ -2189,10 +2245,56 @@ def _edge_counters(
     return tuple(values)
 
 
+def _route_building_ids(action: Any) -> tuple[str, ...]:
+    """The route permitters an action uses, in the action's own primary/secondary order."""
+    if not isinstance(action, FullTurnAction):
+        return tuple()
+    return tuple(
+        building_id
+        for building_id in (
+            action.sow_route_building_id,
+            action.sow_route_secondary_building_id,
+        )
+        if building_id is not None
+    )
+
+
+def _route_edge_metadata(
+    action: Any,
+    *,
+    edge_destinations: tuple[int, ...],
+    index: int,
+    config: Any,
+) -> dict[str, Any]:
+    """Describe the route building this exact edge needs, without asking the page to infer it."""
+    route_building_ids = _route_building_ids(action)
+    if not route_building_ids:
+        return {}
+
+    building_id = None
+    # The extra candidate hop is Cloisters' effect. It wins over a Kogge reversal at that hop
+    # because the player is using their extra movement there, not merely crossing the river.
+    if _ROUTE_BUILDING_CLOISTERS in route_building_ids and index == len(edge_destinations) - 1:
+        building_id = _ROUTE_BUILDING_CLOISTERS
+    elif _ROUTE_BUILDING_KOGGE in route_building_ids:
+        origin = action.origin if index == 0 else edge_destinations[index - 1]
+        if edge_destinations[index] not in config.board.neighbors(origin):
+            building_id = _ROUTE_BUILDING_KOGGE
+
+    if building_id is None:
+        return {}
+    route_building_index, _paint, _priority = _ROUTE_BUILDING_PRESENTATION_BY_ID[building_id]
+    # The compact index points into the server-written palette on the page payload. Repeating the
+    # full id, paint, and priority on every route candidate pushed the largest play page past its
+    # established size ceiling.
+    return {"family": route_building_index}
+
+
 def _route_edge_steps(
     action: Any,
     *,
     edge_values: tuple[str, ...],
+    edge_destinations: tuple[int, ...],
     edge_counters: tuple[int, ...],
     state: Any,
     config: Any,
@@ -2208,6 +2310,12 @@ def _route_edge_steps(
             "prompt": ROUTE_PROMPT,
             "counter": edge_counters[index],
             **({"hire_text": hire_text} if index == 0 and hire_text else {}),
+            **_route_edge_metadata(
+                action,
+                edge_destinations=edge_destinations,
+                index=index,
+                config=config,
+            ),
         }
         for index, value in enumerate(edge_values)
     ]
@@ -2330,6 +2438,7 @@ def decision_steps(
     steps += _route_edge_steps(
         action,
         edge_values=edge_values,
+        edge_destinations=edge_destinations,
         edge_counters=edge_counters,
         state=state,
         config=config,
@@ -2510,6 +2619,15 @@ def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
             step["auto_advance"] = True
 
 
+def _route_toggle_building_ids(candidates: list[dict]) -> set[str]:
+    """The route-building families that the server has offered in this turn's candidates."""
+    return {
+        _ROUTE_BUILDING_PRESENTATION[index]["building_id"]
+        for candidate in candidates
+        for index in candidate.get("family", ())
+    }
+
+
 def turn_candidates(
     state: Any,
     config: Any,
@@ -2608,9 +2726,17 @@ def turn_candidates(
                 ]
                 if not values or any(value != values[0] for value in values[1:]):
                     step.pop(effect_field, None)
+        route_buildings = [
+            _ROUTE_BUILDING_PRESENTATION_BY_ID[building_id][0]
+            for building_id in _route_building_ids(members[0])
+        ]
         candidates.append(
             {
                 "steps": steps,
+                # The page uses this server-known action property only to decide which optional
+                # route families a toggle reveals. Individual edge dependencies stay on their
+                # exact edge below, so an arrow never needs to infer a cost from its endpoints.
+                **({"family": route_buildings} if route_buildings else {}),
                 # The count before any route step is followed. The page reads this value directly
                 # rather than deriving it from route length.
                 "counter_start": _counter_start(members[0]),
@@ -2972,14 +3098,25 @@ class PlayServer(ThreadingHTTPServer):
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
         available_turn_steps = turn_steps_payload(self.state, self.config)
-        building_abilities = building_abilities_payload(self.state, self.config)
+        candidates = turn_candidates(self.state, self.config)
+        route_toggle_building_ids = _route_toggle_building_ids(candidates)
+        building_abilities = building_abilities_payload(
+            self.state,
+            self.config,
+            route_toggle_building_ids=route_toggle_building_ids,
+        )
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
-            turn_candidates=turn_candidates(self.state, self.config),
+            turn_candidates=candidates,
+            families=_ROUTE_BUILDING_PRESENTATION,
             turn_steps=available_turn_steps,
             building_abilities=building_abilities,
-            building_ability_windows=building_ability_windows_payload(self.state, self.config),
+            building_ability_windows=building_ability_windows_payload(
+                self.state,
+                self.config,
+                route_toggle_building_ids=route_toggle_building_ids,
+            ),
             log=list(self.log_lines),
             log_blocks=[
                 dict(

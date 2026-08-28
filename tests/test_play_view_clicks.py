@@ -144,6 +144,21 @@ def _click_handle_point(page, handle, x_fraction: float, y_fraction: float) -> N
     page.mouse.click(point["x"], point["y"])
 
 
+def _toggle_route_building(page, building_id: str) -> None:
+    targets = page.locator(
+        f'[data-building-id="{building_id}"][data-turn-family-available="true"]'
+    )
+    for index in range(targets.count()):
+        target = targets.nth(index).element_handle()
+        assert target is not None
+        x, y = _centre(page, target)
+        if not _is_hit_target(page, target, x, y):
+            continue
+        page.mouse.click(x, y)
+        return
+    raise AssertionError(f"{building_id} route toggle was not available to click")
+
+
 def _next_offered_from_dom(
     page,
     *,
@@ -262,7 +277,9 @@ def _click_candidate_step(page, step: dict) -> None:
     page.wait_for_timeout(40)
 
 
-def _click_candidate_prefix(page, candidate: dict, *, before_kind: str) -> None:
+def _click_candidate_prefix(
+    page, candidate: dict, *, before_kind: str, route_toggles: tuple[str, ...] = ()
+) -> None:
     """Walk every player question before `before_kind`.
 
     The server may mark a sole continuation arrow automatic; it remains in the candidate path
@@ -274,6 +291,9 @@ def _click_candidate_prefix(page, candidate: dict, *, before_kind: str) -> None:
         if step.get("auto_advance") is True:
             continue
         _click_candidate_step(page, step)
+        if step["kind"] == "origin":
+            for building_id in route_toggles:
+                _toggle_route_building(page, building_id)
     raise AssertionError(f"candidate has no {before_kind!r} step")
 
 
@@ -326,7 +346,9 @@ def _pass_movement_red_turn_to_yellow(page) -> None:
     )
 
 
-def _walk_until_skip_step_by_preferring_edges(page, *, target: str, max_clicks: int = 80) -> None:
+def _walk_until_skip_step_by_preferring_edges(
+    page, *, target: str, route_toggle: str | None = None, max_clicks: int = 80
+) -> None:
     """Advance toward a Cloisters skip prompt without taking duty/resolution branches first."""
     for _ in range(max_clicks):
         if page.locator('[data-board-position-index][data-turn-skip-candidate="true"]').count() > 0:
@@ -337,6 +359,8 @@ def _walk_until_skip_step_by_preferring_edges(page, *, target: str, max_clicks: 
         if origin is not None:
             _click_handle_centre(page, origin, require_hit=True)
             page.wait_for_timeout(20)
+            if route_toggle is not None:
+                _toggle_route_building(page, route_toggle)
             continue
         edge = page.query_selector('[data-arrow][data-turn-offered="true"]')
         if edge is not None:
@@ -1560,6 +1584,40 @@ def _stage_guild(page):
     return guild
 
 
+def _visible_turn_text_boxes(page) -> list[dict[str, float | str]]:
+    """Every directly written, visible line in the turn box, with its actual painted bounds."""
+    return page.locator('[data-component="play-turn"]').evaluate(
+        """turn => Array.from(turn.querySelectorAll('*')).filter(node => {
+            const directText = Array.from(node.childNodes).some(child =>
+              child.nodeType === Node.TEXT_NODE && child.textContent.trim());
+            const style = getComputedStyle(node);
+            const box = node.getBoundingClientRect();
+            return directText && style.display !== 'none' && style.visibility !== 'hidden'
+              && box.width > 0 && box.height > 0;
+          }).map(node => {
+            const box = node.getBoundingClientRect();
+            return {
+              text: node.textContent.trim().replace(/\\s+/g, ' '),
+              left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+            };
+          })"""
+    )
+
+
+def _assert_visible_turn_text_lines_do_not_overlap(page) -> None:
+    boxes = _visible_turn_text_boxes(page)
+    collisions = [
+        (left, right)
+        for index, left in enumerate(boxes)
+        for right in boxes[index + 1 :]
+        if left["left"] < right["right"]
+        and right["left"] < left["right"]
+        and left["top"] < right["bottom"]
+        and right["top"] < left["bottom"]
+    ]
+    assert not collisions, f"visible turn-box text overlaps: {collisions!r}"
+
+
 def _commit_guild(page, server) -> int:
     step = next(
         step for step in turn_steps(server.state, server.config) if step.building_id == "guild"
@@ -1571,6 +1629,20 @@ def _commit_guild(page, server) -> int:
     assert server.state.merchant_board_position == expected_position
     assert _merchant_visible_at(page, expected_position)
     return expected_position
+
+
+def test_turn_box_visible_text_lines_do_not_overlap(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    _stage_guild(page)
+    assert page.locator('[data-turn-step-hire-row="true"]').get_attribute(
+        "data-turn-step-row-active"
+    ) == "true"
+    assert page.locator('[data-turn-step-activation-prompt="true"]').get_attribute(
+        "data-turn-step-activation-active"
+    ) == "true"
+    _assert_visible_turn_text_lines_do_not_overlap(page)
 
 
 def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn(
@@ -1585,11 +1657,9 @@ def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn
 
     _stage_guild(page)
     _assert_painted_turn_phase(page, "beginning")
-    assert (
-        page.locator("[data-turn-step-direction-row]").get_attribute("data-turn-step-row-active")
-        == "false"
-    )
-    assert not page.locator("[data-turn-step-direction-row]").is_visible()
+    assert page.locator("[data-turn-step-direction-row]").get_attribute(
+        "data-turn-step-row-active"
+    ) == "true"
     assert page.locator('[data-turn-step-direction][data-turn-step-offered="true"]').count() == 0
     assert (
         page.locator("[data-turn-step-resource-row]").get_attribute("data-turn-step-row-active")
@@ -1604,7 +1674,9 @@ def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn
     )
     staged_box = page.locator('[data-component="play-turn"]').bounding_box()
     assert staged_box is not None
-    assert staged_box["height"] == before_box["height"]
+    # The two independent sentences now reserve their wrapped line height instead of occupying
+    # one 24px slot. Keeping the old fixed height would restore their overlap.
+    assert staged_box["height"] >= before_box["height"]
     _screenshot_turn_prompt(page, SCREENSHOTS / "guild-prompt-staged.png")
 
     _commit_guild(page, server)
@@ -1904,6 +1976,7 @@ def test_setup_test_position_dropdown_selects_and_starts_that_game(page, serve) 
     _walk_until_skip_step_by_preferring_edges(
         page,
         target="cloisters skip step from selected test position",
+        route_toggle="cloisters",
     )
     skip_target = page.query_selector(
         '[data-board-position-index][data-turn-skip-candidate="true"]'
@@ -1996,6 +2069,7 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
     assert city_origin is not None, "city should be offered as a start origin"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
+    _toggle_route_building(page, "cloisters")
 
     for edge_value in edge_values:
         edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
@@ -2624,7 +2698,6 @@ def test_kogge_and_cloisters_play_view_city_east_reversal_is_present_hit_testabl
 ) -> None:
     base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
     page.goto(base_url, wait_until="networkidle")
-
     city_east = page.query_selector('[data-arrow="city->east"]')
     assert city_east is not None, "city->east reversal arrow was not drawn"
     x, y = _centre(page, city_east)
@@ -2636,6 +2709,7 @@ def test_kogge_and_cloisters_play_view_city_east_reversal_is_present_hit_testabl
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
+    _toggle_route_building(page, "kogge")
 
     offered_city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
     assert offered_city_east is not None, "city->east was not offered after lifting from city"
@@ -2691,6 +2765,8 @@ def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_t
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
+    _toggle_route_building(page, "kogge")
+    _toggle_route_building(page, "cloisters")
 
     for edge_value in edge_values:
         edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
@@ -2772,6 +2848,7 @@ def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(
     )
     assert origin_target is not None, f"origin {origin} is not offered"
     _click_handle_centre(page, origin_target, require_hit=True)
+    _toggle_route_building(page, "cloisters")
 
     for edge in plain_edges:
         edge_target = page.query_selector(f'[data-arrow="{edge}"][data-turn-offered="true"]')
@@ -2905,7 +2982,9 @@ def test_kogge_axis_arrows_have_distinct_hit_targets_and_support_both_directions
     assert west_out["cy"] > city_center_y, "city->west must sit below the west spoke axis"
     assert west_in["cy"] < city_center_y, "west->city must sit above the west spoke axis"
 
-    _click_candidate_prefix(page, candidate, before_kind="edge")
+    _click_candidate_prefix(
+        page, candidate, before_kind="edge", route_toggles=("kogge", "cloisters")
+    )
     first = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
     assert first is not None, "city->east was not offered on the opening Kogge step"
     _click_handle_centre(page, first, require_hit=True)
@@ -2941,6 +3020,10 @@ def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
         assert city is not None, "City was not offered as a sow origin"
         _click_handle_centre(page, city, require_hit=True)
         page.wait_for_timeout(20)
+        if page.locator('[data-building-id="kogge"]').first.get_attribute(
+            "data-turn-family-state"
+        ) == "off":
+            _toggle_route_building(page, "kogge")
         return sum(
             page.locator(f'[data-arrow="{arrow}"][data-turn-offered="true"]').count()
             for arrow in ("city->east", "city->west", "north->city", "south->city")
@@ -2952,7 +3035,7 @@ def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
     _click_handle_centre(page, kogge_edge, require_hit=True)
     page.wait_for_timeout(20)
     assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
-        "Hire Kogge from Yellow for 1 silver."
+        "This route uses Kogge — 1 silver to Yellow."
     )
     assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver
 
@@ -3003,21 +3086,24 @@ def test_hired_cloisters_arrow_reveals_its_extension_and_reaches_the_skip_questi
     _pass_movement_red_turn_to_yellow(page)
     red_silver = server.state.player_state(PlayerId.PLAYER_ONE).resources.silver
 
-    for selector in (
-        '[data-board-position-index="3"][data-turn-start-candidate="true"]',
-        '[data-arrow="east->south_east"][data-turn-offered="true"]',
-    ):
-        target = page.query_selector(selector)
-        assert target is not None, f"missing painted Cloisters route target {selector}"
-        _click_handle_centre(page, target, require_hit=True)
-        page.wait_for_timeout(20)
+    origin = page.query_selector(
+        '[data-board-position-index="3"][data-turn-start-candidate="true"]'
+    )
+    assert origin is not None, "east was not offered as the Cloisters route origin"
+    _click_handle_centre(page, origin, require_hit=True)
+    page.wait_for_timeout(20)
+    _toggle_route_building(page, "cloisters")
+    edge = page.query_selector('[data-arrow="east->south_east"][data-turn-offered="true"]')
+    assert edge is not None, "east->south_east was not offered for the Cloisters route"
+    _click_handle_centre(page, edge, require_hit=True)
+    page.wait_for_timeout(20)
 
     extension = page.query_selector('[data-arrow="south->south_west"][data-turn-offered="true"]')
     assert extension is not None, "hired Cloisters did not paint its extra route edge"
     _click_handle_centre(page, extension, require_hit=True)
     page.wait_for_timeout(20)
     assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
-        "Hire Cloisters from Red for 1 silver."
+        "This route uses Cloisters — 1 silver to Red."
     )
     assert server.state.player_state(PlayerId.PLAYER_ONE).resources.silver == red_silver
     skip_spaces = page.locator('[data-turn-skip-candidate="true"]').evaluate_all(
@@ -3025,6 +3111,146 @@ def test_hired_cloisters_arrow_reveals_its_extension_and_reaches_the_skip_questi
     )
     assert {"south_east", "south", "south_west"} <= set(skip_spaces), (
         "walking the Cloisters extension did not reach its skip question"
+    )
+
+
+def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+    tile = page.locator('[data-building-id="kogge"]').first
+
+    assert tile.get_attribute("data-turn-family-state") == "off"
+    assert tile.get_attribute("data-turn-family-available") == "false"
+    assert tile.get_attribute("data-building-ability-greyed") == "false"
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Choose a space to lift acolytes from first."
+    )
+
+    def offered_route_state() -> dict[str, set[str]]:
+        origin_ids = page.locator(
+            '[data-board-position-index][data-turn-start-candidate="true"]'
+        ).evaluate_all(
+            'spaces => spaces.map(space => space.getAttribute("data-board-position-index"))'
+        )
+        arrow_ids = page.locator('[data-arrow][data-turn-offered="true"]').evaluate_all(
+            'arrows => arrows.map(arrow => arrow.getAttribute("data-arrow"))'
+        )
+        return {
+            "origins": set(origin_ids),
+            "arrows": set(arrow_ids),
+        }
+
+    def take_city() -> set[str]:
+        city = page.locator(
+            '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+        ).first
+        _click_handle_centre(page, city.element_handle(), require_hit=True)
+        return offered_arrows()
+
+    def offered_arrows() -> set[str]:
+        return set(page.locator('[data-arrow][data-turn-offered="true"]').evaluate_all(
+            'arrows => arrows.map(arrow => arrow.getAttribute("data-arrow"))'
+        ))
+
+    initially_offered = offered_route_state()
+    initially_offered_arrows = take_city()
+    assert "city->east" not in initially_offered_arrows
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Routes hidden — click to show."
+    )
+    _toggle_route_building(page, "kogge")
+    assert tile.get_attribute("data-turn-family-state") == "on"
+    assert tile.get_attribute("data-building-ability-text") == "Routes shown — click to hide."
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Routes shown — click to hide."
+    )
+    first_on = offered_arrows()
+    assert "city->east" in first_on
+
+    _toggle_route_building(page, "kogge")
+    assert tile.get_attribute("data-turn-family-state") == "off"
+    assert tile.get_attribute("data-turn-family-available") == "false"
+    assert offered_route_state() == initially_offered
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Choose a space to lift acolytes from first."
+    )
+
+    assert take_city() == initially_offered_arrows
+    _toggle_route_building(page, "kogge")
+    assert offered_arrows() == first_on
+
+    kogge_edge = page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first
+    _click_handle_centre(page, kogge_edge.element_handle(), require_hit=True)
+    assert tile.get_attribute("data-turn-family-state") == "in_effect"
+    assert tile.get_attribute("data-turn-family-available") == "false"
+    assert tile.get_attribute("data-building-ability-greyed") == "false"
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Hired or activated this turn: acolytes may move against the river to enter or leave the "
+        "City."
+    )
+
+
+def test_route_edge_paints_and_cost_facts_follow_server_metadata(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "kogge_cloisters_hire_both_market_001.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    def take_city() -> None:
+        city = page.locator(
+            '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+        ).first
+        _click_handle_centre(page, city.element_handle(), require_hit=True)
+
+    def paint(arrow) -> dict[str, str]:
+        return arrow.evaluate(
+            """node => ({
+                fill: getComputedStyle(node.querySelector('.arrow-interior')).fill,
+                borderWidth: getComputedStyle(node.querySelector('.arrow-border')).strokeWidth,
+            })"""
+        )
+
+    take_city()
+    _toggle_route_building(page, "kogge")
+    _toggle_route_building(page, "cloisters")
+    assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
+    city_east = page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first
+    assert paint(city_east) == {"fill": "rgb(122, 79, 181)", "borderWidth": "6px"}
+    _click_handle_centre(page, city_east.element_handle(), require_hit=True)
+    assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
+        "This route uses Kogge — 1 wheat to bank."
+    )
+    _click_handle_centre(
+        page,
+        page.locator('[data-turn-control="reset"]').element_handle(),
+        require_hit=True,
+    )
+
+    take_city()
+    for edge_name in ("city->north", "north->city"):
+        edge = page.locator(f'[data-arrow="{edge_name}"][data-turn-offered="true"]').first
+        _click_handle_centre(page, edge.element_handle(), require_hit=True)
+    _toggle_route_building(page, "cloisters")
+    assert page.locator(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    ).count() == 1
+    assert page.locator('[data-arrow][data-turn-offered="true"]').count() == 0
+
+    take_city()
+    _toggle_route_building(page, "cloisters")
+    for edge_name in ("city->north", "north->city"):
+        edge = page.locator(f'[data-arrow="{edge_name}"][data-turn-offered="true"]').first
+        _click_handle_centre(page, edge.element_handle(), require_hit=True)
+    city_east = page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first
+    assert paint(city_east) == {"fill": "rgb(14, 155, 166)", "borderWidth": "8px"}
+    _click_handle_centre(page, city_east.element_handle(), require_hit=True)
+
+    assert page.locator('[data-turn-hire-fact="true"]').inner_text() == (
+        "This route uses Kogge — 1 wheat to bank.\n"
+        "and the Cloisters — 1 wheat to bank."
     )
 
 
@@ -3054,6 +3280,7 @@ def test_kogge_route_can_enter_city_against_arrows_from_ring_and_continue(page, 
     assert origin is not None, "north-west origin was not offered for the ring-start Kogge route"
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(20)
+    _toggle_route_building(page, "kogge")
 
     north_to_city = page.query_selector('[data-arrow="north->city"][data-turn-offered="true"]')
     assert north_to_city is not None, "north->city was not offered after reaching North"
@@ -3075,7 +3302,9 @@ def test_a_cloisters_skip_target_receives_a_real_centre_click(page, serve) -> No
     base_url, _server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
     page.goto(base_url, wait_until="networkidle")
 
-    _walk_until_skip_step_by_preferring_edges(page, target="cloisters skip step")
+    _walk_until_skip_step_by_preferring_edges(
+        page, target="cloisters skip step", route_toggle="cloisters"
+    )
 
     skip_target = page.query_selector(
         '[data-board-position-index][data-turn-skip-candidate="true"]'
@@ -3575,10 +3804,13 @@ def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve)
     base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
     page.goto(base_url, wait_until="networkidle")
 
-    origin = page.query_selector('[data-board-position-index="1"][data-turn-start-candidate="true"]')
+    origin = page.query_selector(
+        '[data-board-position-index="1"][data-turn-start-candidate="true"]'
+    )
     assert origin is not None, "Cloisters Reach did not ask the player to lift acolytes"
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(40)
+    _toggle_route_building(page, "cloisters")
 
     _assert_painted_turn_phase(page, "sow")
     duties = page.locator('[data-turn-duty-candidate="true"]').evaluate_all(

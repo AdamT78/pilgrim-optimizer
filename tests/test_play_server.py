@@ -884,10 +884,13 @@ def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
 @pytest.mark.parametrize(
     ("scenario_name", "expected_hire_text"),
     (
-        ("kogge_hire_market_city_to_east_001.json", "Hire Kogge from market for 1 wheat."),
+        (
+            "kogge_hire_market_city_to_east_001.json",
+            "This route uses Kogge — 1 wheat to bank.",
+        ),
         (
             "kogge_hire_opponent_city_to_west_001.json",
-            "Hire Kogge from Yellow for 1 wheat.",
+            "This route uses Kogge — 1 wheat to Yellow.",
         ),
     ),
 )
@@ -907,6 +910,26 @@ def test_route_hire_arrow_carries_the_server_written_cost_fact(
     }
 
     assert expected_hire_text in hire_texts
+
+
+def test_city_to_east_candidates_share_kogge_cost_before_cloisters_is_settled() -> None:
+    scenario = load_scenario(str(SCENARIOS / "kogge_cloisters_hire_both_market_001.json"))
+    city_to_east_candidates = [
+        candidate
+        for candidate in play_server.turn_candidates(
+            scenario.state, scenario.config, include_preview_effects=False
+        )
+        if [step["value"] for step in candidate["steps"][:2]] == [0, "city->east"]
+    ]
+
+    assert len(city_to_east_candidates) == 58
+    assert {
+        next(step["hire_text"] for step in candidate["steps"] if "hire_text" in step)
+        for candidate in city_to_east_candidates
+    } == {
+        "This route uses Kogge — 1 wheat to bank.",
+        "This route uses Kogge — 1 wheat to bank.\nand the Cloisters — 1 wheat to bank.",
+    }
 
 
 def test_route_hire_cost_fact_reuses_the_turn_step_sentence_helper(monkeypatch) -> None:
@@ -936,9 +959,34 @@ def test_route_hire_cost_fact_reuses_the_turn_step_sentence_helper(monkeypatch) 
     route_sentence = play_server._route_hire_sentence(action, scenario.state, scenario.config)
     turn_step_sentence = play_server._building_hire_sentence("Kogge", source)
 
-    assert route_sentence == "Hire Kogge from market for the helper's shared price."
-    assert turn_step_sentence == route_sentence
+    assert route_sentence == "This route uses Kogge — the helper's shared price to bank."
+    assert turn_step_sentence == "Hire Kogge from market for the helper's shared price."
     assert seen == [source, source]
+
+
+def test_route_edge_metadata_states_each_building_dependency_for_the_page() -> None:
+    scenario = load_scenario(str(SCENARIOS / "kogge_cloisters_hire_both_market_001.json"))
+    candidates = play_server.turn_candidates(
+        scenario.state, scenario.config, include_preview_effects=False
+    )
+    candidate = next(
+        candidate
+        for candidate in candidates
+        if [step["value"] for step in candidate["steps"] if step["kind"] == "edge"]
+        == ["city->north", "north->city", "city->east"]
+    )
+    edges = [step for step in candidate["steps"] if step["kind"] == "edge"]
+
+    assert candidate["family"] == [0, 1]
+    route_buildings = play_server._ROUTE_BUILDING_PRESENTATION
+    assert [
+        None if step.get("family") is None else route_buildings[step["family"]]
+        for step in edges
+    ] == [
+        None,
+        {"building_id": "kogge", "paint": "route-opening", "priority": 1},
+        {"building_id": "cloisters", "paint": "route-extra-step", "priority": 2},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1023,6 +1071,7 @@ def test_turn_script_never_names_a_building_to_order_answers() -> None:
     # These relocation previews need their visual treatment until the renderer carries it. The
     # subset means their exception can shrink, but a newly hardcoded building cannot slip in.
     assert named_buildings <= set(TURN_SCRIPT_RELOCATION_BUILDING_LITERAL_EXEMPTIONS)
+    assert not {"kogge", "cloisters"} & named_buildings
 
 
 def test_turn_script_control_updates_do_not_set_offered_attributes() -> None:
@@ -2272,12 +2321,12 @@ def _turn_step_buildings_on_payload(payload: dict) -> list[str]:
 
 @needs_node
 def test_building_ability_reason_is_rendered_and_missing_reason_stays_blank(tmp_path: Path) -> None:
-    """The script copies the engine sentence; it does not invent one for an absent reason."""
+    """The script copies the server-written tile text; it does not invent an absent reason."""
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
     try:
         opening = _run_script(server, [], tmp_path)["buildingAbilityTexts"][-1]
         assert opening["mill"] == "Cannot be hired: this building was not selected for this game."
-        assert opening["kogge"] == "Usable: pay 1 silver to Yellow."
+        assert opening["kogge"] == "Choose a space to lift acolytes from first."
 
         def without_mill_reason(abilities: list[dict]) -> list[dict]:
             return [
@@ -2961,6 +3010,22 @@ def _page_auto_advances(server, prefix: list, step: dict) -> bool:
     return all(current.get("auto_advance") is True for current in matching)
 
 
+def _route_toggle_ids_for_edge(server, prefix: list, step: dict) -> tuple[str, ...]:
+    """The server-described tile toggles needed to make this particular edge visible."""
+    assert step["kind"] == "edge"
+    index = len(prefix)
+    route_building_ids = {
+        server.payload["families"][building_index]["building_id"]
+        for candidate in server.payload["turn_candidates"]
+        if len(candidate["steps"]) > index
+        and [previous["value"] for previous in candidate["steps"][:index]] == prefix
+        and candidate["steps"][index]["kind"] == "edge"
+        and candidate["steps"][index]["value"] == step["value"]
+        for building_index in candidate.get("family", ())
+    }
+    return tuple(sorted(route_building_ids))
+
+
 def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
     """The clicks that reach one particular move, except server-marked route continuations.
 
@@ -2969,6 +3034,7 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
     """
     clicks: list[dict] = []
     prefix: list = []
+    enabled_route_toggles: set[str] = set()
     while True:
         if len(prefix) >= len(target):
             return clicks
@@ -3002,6 +3068,11 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
                     clicks.append(_do(value))
             prefix.append(value)
             continue
+        if step["kind"] == "edge":
+            for building_id in _route_toggle_ids_for_edge(server, prefix, step):
+                if building_id not in enabled_route_toggles:
+                    clicks.append({"kind": "route_toggle", "value": building_id})
+                    enabled_route_toggles.add(building_id)
         prefix.append(value)
         clicks.append(_click_for(server, step))
 
@@ -6295,6 +6366,7 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
         render_play_view._TURN_SCRIPT.replace(
             "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
         )
+        .replace("__FAMILIES__", json.dumps(payload.get("families") or []))
         .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
         .replace("__BUILDING_ABILITIES__", json.dumps(payload.get("building_abilities") or []))
         .replace(
@@ -6472,6 +6544,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # The template is the whole of the code, and these assertions are what make that a fact
     # rather than an assumption the greps rest on.
     assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__FAMILIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__BUILDING_ABILITIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__USED_BUILDINGS__") == 1
