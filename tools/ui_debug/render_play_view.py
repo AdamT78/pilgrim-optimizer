@@ -416,6 +416,7 @@ def building_tooltip_script() -> str:
 
     function hide() {
       tooltip.removeAttribute('data-building-tooltip-visible');
+      tooltip.removeAttribute('data-building-tooltip-for');
       tooltip.setAttribute('aria-hidden', 'true');
       tooltip.innerHTML = '';
     }
@@ -457,6 +458,7 @@ def building_tooltip_script() -> str:
         ability.remove();
       }
       tooltip.setAttribute('data-building-tooltip-visible', 'true');
+      tooltip.setAttribute('data-building-tooltip-for', id);
       tooltip.setAttribute('aria-hidden', 'false');
       var targetBox = canonicalAnchor(target, id).getBoundingClientRect();
       var tooltipBox = tooltip.getBoundingClientRect();
@@ -836,10 +838,11 @@ def _turn_step_controls(steps: list[dict]) -> str:
         f"{hire_buttons}</div>"
         '<div class="turn-step-direction-row" data-turn-step-direction-row="true"'
         ' data-turn-step-row-active="false">'
-        '<span class="turn-step-label">Conversion</span>'
-        f"{direction_buttons}</div>"
+        '<span class="turn-step-label" data-turn-step-direction-label="true"'
+        ' data-turn-step-direction-label-visible="true">Conversion</span>'
+        f"{direction_buttons}"
         '<span class="turn-step-activation-prompt" data-turn-step-activation-prompt="true"'
-        ' data-turn-step-activation-active="false"></span>'
+        ' data-turn-step-activation-active="false"></span></div>'
         '<div class="turn-step-resource-row" data-turn-step-resource-row="true"'
         ' data-turn-step-row-active="false">'
         '<span class="turn-step-label" data-turn-step-answer-label="true">Amount</span>'
@@ -1079,6 +1082,17 @@ def turn_styles(route_color: str) -> str:
   }}
   [data-arrow][data-turn-offered="true"] {{ cursor: pointer; }}
   [data-arrow][data-turn-offered="true"] .arrow-interior {{ fill: rgb(30, 122, 52); }}
+  [data-arrow][data-turn-offered="true"][data-turn-family-paint="route-opening"]
+    .arrow-interior {{ fill: #7A4FB5; }}
+  [data-arrow][data-turn-offered="true"][data-turn-family-paint="route-extra-step"]
+    .arrow-interior {{ fill: #0E9BA6; }}
+  [data-arrow][data-turn-offered="true"][data-turn-family-paint="route-extra-step"]
+    .arrow-border {{ stroke-width: 8; }}
+  [data-building-id][data-turn-family-available="true"] {{ cursor: pointer; }}
+  [data-building-id][data-turn-family-state="on"],
+  [data-building-id][data-turn-family-state="in_effect"] {{
+    filter: drop-shadow(0 0 3px #E0C36A);
+  }}
 
   .play-turn {{
     position: relative; z-index: 20;
@@ -1126,12 +1140,16 @@ def turn_styles(route_color: str) -> str:
     display: flex; align-items: center; gap: 6px; margin-top: 5px; height: 24px;
     box-sizing: border-box; overflow: visible;
   }}
+  [data-turn-step-hire-row][data-turn-step-activation-companion="true"],
+  [data-turn-step-direction-row][data-turn-step-activation-companion="true"] {{
+    height: auto; min-height: 24px;
+  }}
   [data-turn-step-row-active="false"] {{ visibility: hidden; }}
   [data-turn-step-answer-label-visible="false"] {{ visibility: hidden; }}
+  [data-turn-step-direction-label-visible="false"] {{ display: none; }}
   .turn-step-label {{ min-width: 72px; color: #E0C36A; }}
   .turn-step-activation-prompt {{
-    display: none; position: absolute; top: 5px; left: 0; right: 0; line-height: 24px;
-    color: #C9C4B4;
+    display: none; line-height: 24px; color: #C9C4B4;
   }}
   .turn-step-activation-prompt[data-turn-step-activation-active="true"] {{ display: block; }}
   .turn-step-direction {{
@@ -1264,7 +1282,7 @@ def turn_styles(route_color: str) -> str:
   .turn-panel {{ display: none; }}
   .turn-panel[data-turn-shown="true"] {{ display: block; }}
   .turn-summary {{ margin: 8px 0; color: #F2EEDF; }}
-  .turn-hire-fact {{ display: none; margin: 6px 0; color: #E0C36A; }}
+  .turn-hire-fact {{ display: none; margin: 6px 0; color: #E0C36A; white-space: pre-line; }}
   .turn-hire-fact[data-turn-hire-fact-active="true"] {{ display: block; }}
   .turn-blocked {{ margin: 8px 0; color: #E0C36A; }}
   .turn-fields {{ margin: 0 0 4px 0; padding-left: 18px; color: #C9C4B4; }}
@@ -1295,6 +1313,7 @@ def render_play_view_html(
     catalog = _catalog_with_engine_metadata(catalog)
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
+    families = payload.get("families") or []
     turn_steps = payload.get("turn_steps") or []
     building_abilities = payload.get("building_abilities") or []
     building_ability_windows = payload.get("building_ability_windows") or {}
@@ -1420,6 +1439,7 @@ def render_play_view_html(
     # affordances that can never appear on it.
     script = (
         _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
+        .replace("__FAMILIES__", json.dumps(families))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
         .replace("__BUILDING_ABILITIES__", json.dumps(building_abilities))
         .replace("__BUILDING_ABILITY_WINDOWS__", json.dumps(building_ability_windows))

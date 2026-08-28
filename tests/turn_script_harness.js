@@ -7,7 +7,7 @@
 // phaseCandidateRuns }.
 //
 // A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
-// |'combination'|'resource'|'seat'|'building'
+// |'combination'|'resource'|'seat'|'building'|'route_toggle'
 // |'control'|'village'|'abbey'|'role', value }; a resource click also carries { seat }, a seat
 // click names the player whose board is pressed, a building click names the building whose hex on
 // the round track is pressed, and a control click presses one board plaque by name. `village` clicks
@@ -23,8 +23,8 @@
 const fs = require('fs');
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const phaseCandidateTemplate = input.script.replace(
-  /var CANDIDATES = [\s\S]*?;\n  var TURN_STEPS/,
-  'var CANDIDATES = __HARNESS_PHASE_CANDIDATES__;\n  var TURN_STEPS'
+  /var CANDIDATES = [\s\S]*?;\n  var FAMILIES/,
+  'var CANDIDATES = __HARNESS_PHASE_CANDIDATES__;\n  var FAMILIES'
 );
 
 function runJob(job) {
@@ -984,6 +984,12 @@ job.clicks.forEach((click) => {
   } else if (click.kind === 'building') {
     const target = buildings.find((key) => key.getAttribute('data-building-choice-key') === click.value);
     clickReachable(target, 'building ' + click.value);
+  } else if (click.kind === 'route_toggle') {
+    const target = buildingAbilityTargets.find((ability) =>
+      ability.getAttribute('data-building-id') === click.value
+      && ability.getAttribute('data-turn-family-available') === 'true'
+    );
+    clickReachable(target, 'route toggle ' + click.value);
   } else if (click.kind === 'village') {
     pressVillage();
   } else if (click.kind === 'abbey') {

@@ -7,6 +7,7 @@
      a step is allowed, and never derives the hand count: each count is read off a step the seam
      already provided. */
   var CANDIDATES = __CANDIDATES__;
+  var FAMILIES = __FAMILIES__;
   var TURN_STEPS = __TURN_STEPS__;
   var USED_BUILDINGS = __USED_BUILDINGS__;
   var RESOLUTION_COMMITTED = __RESOLUTION_COMMITTED__;
@@ -36,16 +37,34 @@
   }
 
   function renderBuildingAbilityTexts(liveSteps) {
+    var inEffect = Array.isArray(chosen) ? familiesInEffect() : [];
+    var familyOriginChosen = Array.isArray(chosen) && familyOriginIsChosen();
     Array.prototype.forEach.call(buildingAbilityTargets, function (target) {
       var buildingId = target.getAttribute('data-building-id');
       var ability = buildingAbilityFor(buildingId);
       if (conversionChosen && conversionChosen[0] === buildingId && liveSteps.length === 1) {
         ability = liveSteps[0].ability || ability;
       }
-      target.setAttribute(
-        'data-building-ability-text',
-        ability && typeof ability.status_text === 'string' ? ability.status_text : ''
-      );
+      var abilityText = inEffect.indexOf(buildingId) !== -1
+          && ability && typeof ability.in_effect_status_text === 'string'
+          ? ability.in_effect_status_text
+          : !familyOriginChosen && ability && typeof ability.toggle_waiting_text === 'string'
+          ? ability.toggle_waiting_text
+          : ability && target.getAttribute('data-turn-family-state') === 'on'
+            && typeof ability.toggle_on_text === 'string'
+          ? ability.toggle_on_text
+          : ability && typeof ability.toggle_off_text === 'string'
+          ? ability.toggle_off_text
+          : ability && typeof ability.status_text === 'string' ? ability.status_text : '';
+      target.setAttribute('data-building-ability-text', abilityText);
+      var visibleTooltip = document.querySelector('[data-building-tooltip="true"]');
+      if (
+        visibleTooltip
+        && visibleTooltip.getAttribute('data-building-tooltip-for') === buildingId
+      ) {
+        var tooltipAbility = visibleTooltip.querySelector('[data-building-tooltip-ability="true"]');
+        if (tooltipAbility) { tooltipAbility.textContent = abilityText; }
+      }
       target.setAttribute(
         'data-building-ability-greyed',
         ability && ability.greyed === true ? 'true' : 'false'
@@ -77,6 +96,7 @@
   var turnStepHireText = aside.querySelector('[data-turn-step-hire-text]');
   var turnStepHireButtons = aside.querySelectorAll('[data-turn-step-hire-payment]');
   var turnStepDirectionRow = aside.querySelector('[data-turn-step-direction-row]');
+  var turnStepDirectionLabel = aside.querySelector('[data-turn-step-direction-label]');
   var turnStepActivationPrompt = aside.querySelector('[data-turn-step-activation-prompt]');
   var turnStepResourceKeys = document.querySelectorAll('[data-resource-choice-key]');
   var pietyChoicePills = document.querySelectorAll('[data-piety-choice-template]');
@@ -94,6 +114,7 @@
   var buildings = document.querySelectorAll('[data-building-choice-key]');
   var chosen = [];
   var answered = [];
+  var enabledFamilies = [];
   var resolutionSplit = null;
   var baseline = [];
   var resourceBaseline = [];
@@ -124,13 +145,104 @@
     }
   });
 
-  function surviving(prefix) {
+  function matchingCandidates(prefix) {
     var answers = prefix || chosen;
     return CANDIDATES.filter(function (candidate) {
       return answers.every(function (answer, index) {
         var step = candidate.steps[index];
         return step !== undefined && step.value === answer;
       });
+    });
+  }
+
+  function familyBuildingIds(candidate) {
+    return (candidate.family || []).map(function (index) {
+      var building = FAMILIES[index];
+      return building ? building.building_id : null;
+    }).filter(function (buildingId) { return buildingId !== null; });
+  }
+
+  function familyForStep(step) {
+    var buildingIndex = step.family;
+    return buildingIndex === undefined ? null : FAMILIES[buildingIndex] || null;
+  }
+
+  function enabledFamiliesAllow(candidate) {
+    return familyBuildingIds(candidate).every(function (buildingId) {
+      return enabledFamilies.indexOf(buildingId) !== -1;
+    });
+  }
+
+  function surviving(prefix) {
+    return matchingCandidates(prefix).filter(enabledFamiliesAllow);
+  }
+
+  function familyBuildingIdsOn(candidates) {
+    var ids = [];
+    candidates.forEach(function (candidate) {
+      familyBuildingIds(candidate).forEach(function (buildingId) {
+        if (ids.indexOf(buildingId) === -1) { ids.push(buildingId); }
+      });
+    });
+    return ids;
+  }
+
+  function familiesInEffect() {
+    var effects = [];
+    var prefix = [];
+    chosen.forEach(function (answer) {
+      var live = surviving(prefix);
+      live.forEach(function (candidate) {
+        var step = candidate.steps[prefix.length];
+        var building = step && step.value === answer ? familyForStep(step) : null;
+        if (!building) { return; }
+        if (effects.indexOf(building.building_id) === -1) {
+          effects.push(building.building_id);
+        }
+      });
+      prefix.push(answer);
+    });
+    return effects;
+  }
+
+  function familyOriginIsChosen() {
+    if (!chosen.length) { return false; }
+    return matchingCandidates().some(function (candidate) {
+      var firstStep = candidate.steps[0];
+      return familyBuildingIds(candidate).length > 0 && firstStep && firstStep.kind === 'origin';
+    });
+  }
+
+  function resetPreview() {
+    restoreArrangementBaseline();
+    restoreOrdinationBaseline();
+    chosen = [];
+    answered = [];
+    resourceAllocation = {};
+    resourceAllocationTotal = null;
+    conversionChosen = [];
+    resolutionSplit = null;
+  }
+
+  function renderFamilies() {
+    var available = familyBuildingIdsOn(matchingCandidates());
+    var inEffect = familiesInEffect();
+    var familyOriginChosen = familyOriginIsChosen();
+    Array.prototype.forEach.call(buildingAbilityTargets, function (target) {
+      var buildingId = target.getAttribute('data-building-id');
+      if (available.indexOf(buildingId) === -1) {
+        target.removeAttribute('data-turn-family-state');
+        target.removeAttribute('data-turn-family-available');
+        return;
+      }
+      var effect = inEffect.indexOf(buildingId) !== -1;
+      target.setAttribute(
+        'data-turn-family-state', effect ? 'in_effect' : enabledFamilies.indexOf(buildingId) !== -1 ? 'on' : 'off'
+      );
+      target.setAttribute(
+        'data-turn-family-available', effect || !familyOriginChosen ? 'false' : 'true'
+      );
+      target.setAttribute('data-building-ability-greyed', 'false');
     });
   }
 
@@ -341,11 +453,20 @@
           && conversionChosen[directionIndex] === value ? 'true' : 'false'
       );
     });
+    var directionActive = directionIndex !== -1 && buildingIndex !== -1
+      && conversionChosen.length > buildingIndex;
     if (turnStepDirectionRow) {
       turnStepDirectionRow.setAttribute(
         'data-turn-step-row-active',
-        directionIndex !== -1 && buildingIndex !== -1 && conversionChosen.length > buildingIndex
-          ? 'true' : 'false'
+        directionActive || activation ? 'true' : 'false'
+      );
+      turnStepDirectionRow.setAttribute(
+        'data-turn-step-activation-companion', activation ? 'true' : 'false'
+      );
+    }
+    if (turnStepDirectionLabel) {
+      turnStepDirectionLabel.setAttribute(
+        'data-turn-step-direction-label-visible', activation ? 'false' : 'true'
       );
     }
     if (turnStepActivationPrompt) {
@@ -404,6 +525,9 @@
         'data-turn-step-row-active',
         hireText ? 'true' : 'false'
       );
+      turnStepHireRow.setAttribute(
+        'data-turn-step-activation-companion', activation ? 'true' : 'false'
+      );
     }
     if (turnStepHireText) { turnStepHireText.textContent = hireText; }
     Array.prototype.forEach.call(turnStepHireButtons, function (button) {
@@ -461,6 +585,7 @@
         ? conversionChosen[amountIndex]
         : pietyAmount === null ? '' : pietyAmount;
     }
+    renderFamilies();
     renderBuildingAbilityTexts(live);
   }
 
@@ -1558,29 +1683,30 @@
     var remaining = chosen.slice();
 
     function sharedHireText(candidates) {
-      var text = null;
+      var sharedLines = null;
       for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
         var steps = candidates[candidateIndex].steps;
         var factStep = steps.find(function (candidateStep) {
           return candidateStep.hire_text;
         });
-        if (!factStep) { return ''; }
-        if (text !== null && text !== factStep.hire_text) { return ''; }
-        text = factStep.hire_text;
+        if (!factStep) { continue; }
+        var lines = factStep.hire_text.split('\n');
+        if (sharedLines === null) {
+          sharedLines = lines;
+          continue;
+        }
+        sharedLines = sharedLines.filter(function (line) {
+          return lines.indexOf(line) !== -1;
+        });
       }
-      return text || '';
+      return sharedLines ? sharedLines.join('\n') : '';
     }
 
     restoreBaseline();
     while (remaining.length) {
       var answer = remaining[0];
       remaining = remaining.slice(1);
-      var live = CANDIDATES.filter(function (candidate) {
-        return prefix.every(function (value, index) {
-          var step = candidate.steps[index];
-          return step !== undefined && step.value === value;
-        });
-      });
+      var live = surviving(prefix);
       if (!live.length) { break; }
       var stepIndex = prefix.length;
       var step = null;
@@ -1626,12 +1752,7 @@
       }
       if (step.kind === 'resource' && step.resource_delta) { continue; }
       if (step.kind !== 'edge') { continue; }
-      var matched = CANDIDATES.filter(function (candidate) {
-        return prefix.every(function (value, index) {
-          var candidateStep = candidate.steps[index];
-          return candidateStep !== undefined && candidateStep.value === value;
-        });
-      });
+      var matched = surviving(prefix);
       hireFactText = sharedHireText(matched);
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
@@ -1664,6 +1785,21 @@
       resolution: resolution,
       hire_fact_text: hireFactText
     };
+  }
+
+  function familyPaint(edge, offered) {
+    var paint = null;
+    var priority = -1;
+    offered.forEach(function (step) {
+      var building = step.kind === 'edge' && step.value === edge ? familyForStep(step) : null;
+      if (!building) { return; }
+      var candidatePriority = Number(building.priority);
+      if (candidatePriority > priority) {
+        paint = building.paint;
+        priority = candidatePriority;
+      }
+    });
+    return paint;
   }
 
   function show(
@@ -1744,6 +1880,14 @@
       }
     });
     mark(arrows, 'data-arrow', edges);
+    Array.prototype.forEach.call(arrows, function (arrow) {
+      var paint = familyPaint(arrow.getAttribute('data-arrow'), offered);
+      if (paint === null) {
+        arrow.removeAttribute('data-turn-family-paint');
+      } else {
+        arrow.setAttribute('data-turn-family-paint', paint);
+      }
+    });
     mark(counters, 'data-turn-counter', preview.count === null ? [] : [String(preview.count)]);
     board.setAttribute('data-turn-preview-overflow', preview.overflow ? 'true' : 'false');
     mark(prompts, 'data-turn-prompt', promptsOf(offered));
@@ -1854,7 +1998,7 @@
     }
     var live = surviving(chosen);
     var offered = stepsAt(chosen.length, live);
-    /* The server marks the exceptional route continuations it has already found unambiguous. */
+    /* The server marks exceptional continuations it has already found unambiguous. */
     while (offered.length && offered[0].auto_advance === true) {
       chosen.push(offered[0].value);
       live = surviving(chosen);
@@ -2114,6 +2258,25 @@
     });
   });
 
+  Array.prototype.forEach.call(buildingAbilityTargets, function (target) {
+    target.addEventListener('click', function (event) {
+      if (requestInFlight) { return; }
+      if (target.getAttribute('data-turn-family-available') !== 'true') { return; }
+      if (event && event.stopImmediatePropagation) { event.stopImmediatePropagation(); }
+      var buildingId = target.getAttribute('data-building-id');
+      var enabled = enabledFamilies.indexOf(buildingId) !== -1;
+      if (enabled) {
+        enabledFamilies = enabledFamilies.filter(function (candidate) {
+          return candidate !== buildingId;
+        });
+        if (chosen.length > 0) { resetPreview(); }
+      } else {
+        enabledFamilies.push(buildingId);
+      }
+      render();
+    });
+  });
+
   Array.prototype.forEach.call(arrows, function (arrow) {
     arrow.addEventListener('click', function () {
       if (requestInFlight) { return; }
@@ -2260,14 +2423,7 @@
         submitReset();
         return;
       }
-      restoreArrangementBaseline();
-      restoreOrdinationBaseline();
-      chosen = [];
-      answered = [];
-      resourceAllocation = {};
-      resourceAllocationTotal = null;
-      conversionChosen = [];
-      resolutionSplit = null;
+      resetPreview();
       render();
     });
   });
