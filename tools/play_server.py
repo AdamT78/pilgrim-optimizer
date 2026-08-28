@@ -1459,7 +1459,7 @@ def _resource_step_metadata(
 
 def _hire_source_phrase(source: str) -> str:
     if source == "market":
-        return "the market"
+        return "market"
     if source == "own_active":
         return "your board"
     return source
@@ -1489,16 +1489,15 @@ def _hire_step(
         acting_player=state.active_player,
         building_key=building_id,
     )
-    payment_resource = source.hire_resource or "unknown"
     building_name = building_by_id(config.buildings, building_id).name
+    cost_phrase = _building_hire_cost_phrase(source)
     return (
         {
             "kind": "hire",
             # One scalar so the page can match with `===`.
             "value": f"{building_id}:{source_label}",
             "label": (
-                f"Hire the {building_name} from {_hire_source_phrase(source_label)}"
-                f" - {source.hire_cost} {payment_resource}"
+                f"Hire {building_name} from {_hire_source_phrase(source_label)} for {cost_phrase}"
             ),
             "prompt": HIRE_PROMPT,
         },

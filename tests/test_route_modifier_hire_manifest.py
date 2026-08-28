@@ -119,10 +119,10 @@ def test_sow_carried_hire_group_records_candidate_index_and_player_labels() -> N
 
     assert infirmary.options[0].candidate_hire_step_indices == (4,)
     assert infirmary.options[0].hire_option_labels == (
-        "Hire the Infirmary from the market - 1 wheat",
+        "Hire Infirmary from market for 1 wheat",
     )
     assert well.options[0].candidate_hire_step_indices == (6,)
-    assert well.options[0].hire_option_labels == ("Hire the Well from the market - 1 wheat",)
+    assert well.options[0].hire_option_labels == ("Hire Well from market for 1 wheat",)
 
 
 def test_sow_carried_hire_group_records_every_frontier_and_its_complete_options() -> None:
@@ -145,12 +145,12 @@ def test_sow_carried_hire_group_records_every_frontier_and_its_complete_options(
     assert infirmary.hire_frontiers[0].offers_opt_out
     assert infirmary.hire_frontiers[0].complete_option_labels == (
         "Don't hire",
-        "Hire the Infirmary from the market - 1 wheat",
+        "Hire Infirmary from market for 1 wheat",
     )
     assert well.hire_frontiers[0].hire_kind == "enabling"
     assert not well.hire_frontiers[0].offers_opt_out
     assert well.hire_frontiers[0].complete_option_labels == (
-        "Hire the Well from the market - 1 wheat",
+        "Hire Well from market for 1 wheat",
     )
     assert len(deep.hire_frontiers) == 7
     assert sum(frontier.hire_kind == "enabling" for frontier in deep.hire_frontiers) == 6

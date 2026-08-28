@@ -7553,10 +7553,10 @@
           "complete_turn_without_hire_count": 7,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Infirmary from the market - 1 wheat"
+            "Hire Infirmary from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Infirmary from the market - 1 wheat"
+            "Hire Infirmary from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7569,11 +7569,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -7590,7 +7590,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ]
             }
           ],
@@ -7625,10 +7625,10 @@
           "complete_turn_without_hire_count": 7,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Infirmary from player_two - 1 wheat"
+            "Hire Infirmary from player_two for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Infirmary from player_two - 1 wheat"
+            "Hire Infirmary from player_two for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7641,11 +7641,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -7662,7 +7662,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ]
             }
           ],
@@ -7696,10 +7696,10 @@
           "complete_turn_action_count": 20,
           "complete_turn_without_hire_count": 19,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7713,11 +7713,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "well"
@@ -7734,7 +7734,7 @@
                 6
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ]
             }
           ],
@@ -7768,10 +7768,10 @@
           "complete_turn_action_count": 20,
           "complete_turn_without_hire_count": 19,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Well from player_two - 1 wheat"
+            "Hire Well from player_two for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Well from player_two - 1 wheat"
+            "Hire Well from player_two for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7785,11 +7785,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ],
               "hired_building_ids": [
                 "well"
@@ -7806,7 +7806,7 @@
                 6
               ],
               "hire_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ]
             }
           ],
@@ -7840,10 +7840,10 @@
           "complete_turn_action_count": 5,
           "complete_turn_without_hire_count": 4,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Chapel from the market - 1 wheat"
+            "Hire Chapel from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Chapel from the market - 1 wheat"
+            "Hire Chapel from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7855,11 +7855,11 @@
                 "resolution=\"clerical_devotion\""
               ],
               "complete_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "chapel"
@@ -7876,7 +7876,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ]
             }
           ],
@@ -7910,10 +7910,10 @@
           "complete_turn_action_count": 5,
           "complete_turn_without_hire_count": 4,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Chapel from the market - 1 wheat"
+            "Hire Chapel from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Chapel from the market - 1 wheat"
+            "Hire Chapel from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7925,11 +7925,11 @@
                 "resolution=\"clerical_devotion\""
               ],
               "complete_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "chapel"
@@ -7946,7 +7946,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Chapel from the market - 1 wheat"
+                "Hire Chapel from market for 1 wheat"
               ]
             }
           ],
@@ -7980,10 +7980,10 @@
           "complete_turn_action_count": 5,
           "complete_turn_without_hire_count": 4,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Mint from the market - 1 wheat"
+            "Hire Mint from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mint from the market - 1 wheat"
+            "Hire Mint from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -7995,11 +7995,11 @@
                 "resolution=\"clerical_silversmith\""
               ],
               "complete_option_labels": [
-                "Hire the Mint from the market - 1 wheat"
+                "Hire Mint from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Mint from the market - 1 wheat"
+                "Hire Mint from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mint"
@@ -8016,7 +8016,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mint from the market - 1 wheat"
+                "Hire Mint from market for 1 wheat"
               ]
             }
           ],
@@ -8053,12 +8053,12 @@
           "complete_turn_without_hire_count": 70,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Infirmary from the market - 1 cornucopia",
-            "Hire the Well from the market - 1 cornucopia"
+            "Hire Infirmary from market for 1 resource of your choice",
+            "Hire Well from market for 1 resource of your choice"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Infirmary from the market - 1 cornucopia",
-            "Hire the Well from the market - 1 cornucopia"
+            "Hire Infirmary from market for 1 resource of your choice",
+            "Hire Well from market for 1 resource of your choice"
           ],
           "hire_frontiers": [
             {
@@ -8070,11 +8070,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8090,11 +8090,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8110,11 +8110,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8130,11 +8130,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8150,11 +8150,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8170,11 +8170,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -8191,11 +8191,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -8212,7 +8212,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ]
             },
             {
@@ -8222,7 +8222,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ]
             }
           ],
@@ -8248,11 +8248,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8268,11 +8268,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8288,11 +8288,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8308,11 +8308,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8328,11 +8328,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8348,11 +8348,11 @@
                   "resolution=\"produce_wheat\""
                 ],
                 "complete_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hire_kind": "enabling",
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "well"
@@ -8369,11 +8369,11 @@
                 ],
                 "complete_option_labels": [
                   "Don't hire",
-                  "Hire the Infirmary from the market - 1 cornucopia"
+                  "Hire Infirmary from market for 1 resource of your choice"
                 ],
                 "hire_kind": "improving",
                 "hire_option_labels": [
-                  "Hire the Infirmary from the market - 1 cornucopia"
+                  "Hire Infirmary from market for 1 resource of your choice"
                 ],
                 "hired_building_ids": [
                   "infirmary"
@@ -8391,7 +8391,7 @@
                   4
                 ],
                 "hire_option_labels": [
-                  "Hire the Infirmary from the market - 1 cornucopia"
+                  "Hire Infirmary from market for 1 resource of your choice"
                 ]
               },
               {
@@ -8401,7 +8401,7 @@
                   4
                 ],
                 "hire_option_labels": [
-                  "Hire the Well from the market - 1 cornucopia"
+                  "Hire Well from market for 1 resource of your choice"
                 ]
               }
             ],
@@ -8430,10 +8430,10 @@
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8446,11 +8446,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -8467,7 +8467,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -8502,10 +8502,10 @@
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from player_two - 1 silver"
+            "Hire Mill from player_two for 1 silver"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from player_two - 1 silver"
+            "Hire Mill from player_two for 1 silver"
           ],
           "hire_frontiers": [
             {
@@ -8518,11 +8518,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from player_two - 1 silver"
+                "Hire Mill from player_two for 1 silver"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from player_two - 1 silver"
+                "Hire Mill from player_two for 1 silver"
               ],
               "hired_building_ids": [
                 "mill"
@@ -8539,7 +8539,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from player_two - 1 silver"
+                "Hire Mill from player_two for 1 silver"
               ]
             }
           ],
@@ -8576,10 +8576,10 @@
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8592,11 +8592,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -8613,7 +8613,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -8639,11 +8639,11 @@
                 ],
                 "complete_option_labels": [
                   "Don't hire",
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ],
                 "hire_kind": "improving",
                 "hire_option_labels": [
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ],
                 "hired_building_ids": [
                   "mill"
@@ -8661,7 +8661,7 @@
                   4
                 ],
                 "hire_option_labels": [
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ]
               }
             ],
@@ -8692,10 +8692,10 @@
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8708,11 +8708,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -8729,7 +8729,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -8755,11 +8755,11 @@
                 ],
                 "complete_option_labels": [
                   "Don't hire",
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ],
                 "hire_kind": "improving",
                 "hire_option_labels": [
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ],
                 "hired_building_ids": [
                   "mill"
@@ -8777,7 +8777,7 @@
                   4
                 ],
                 "hire_option_labels": [
-                  "Hire the Mill from the market - 1 wheat"
+                  "Hire Mill from market for 1 wheat"
                 ]
               }
             ],
@@ -8806,10 +8806,10 @@
           "complete_turn_without_hire_count": 2,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Infirmary from the market - 1 wheat"
+            "Hire Infirmary from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Infirmary from the market - 1 wheat"
+            "Hire Infirmary from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8822,11 +8822,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -8843,7 +8843,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 wheat"
+                "Hire Infirmary from market for 1 wheat"
               ]
             }
           ],
@@ -8878,10 +8878,10 @@
           "complete_turn_without_hire_count": 2,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Infirmary from player_two - 1 wheat"
+            "Hire Infirmary from player_two for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Infirmary from player_two - 1 wheat"
+            "Hire Infirmary from player_two for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8894,11 +8894,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -8915,7 +8915,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from player_two - 1 wheat"
+                "Hire Infirmary from player_two for 1 wheat"
               ]
             }
           ],
@@ -8950,10 +8950,10 @@
           "complete_turn_without_hire_count": 4,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from the market - 1 wheat"
+            "Hire Mill from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -8966,11 +8966,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -8987,7 +8987,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -9022,10 +9022,10 @@
           "complete_turn_without_hire_count": 4,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
-            "Hire the Mill from player_two - 1 wheat"
+            "Hire Mill from player_two for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Mill from player_two - 1 wheat"
+            "Hire Mill from player_two for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -9038,11 +9038,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from player_two - 1 wheat"
+                "Hire Mill from player_two for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from player_two - 1 wheat"
+                "Hire Mill from player_two for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -9059,7 +9059,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from player_two - 1 wheat"
+                "Hire Mill from player_two for 1 wheat"
               ]
             }
           ],
@@ -9093,10 +9093,10 @@
           "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Quarry from the market - 1 wheat"
+            "Hire Quarry from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Quarry from the market - 1 wheat"
+            "Hire Quarry from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -9108,11 +9108,11 @@
                 "resolution=\"produce_stone\""
               ],
               "complete_option_labels": [
-                "Hire the Quarry from the market - 1 wheat"
+                "Hire Quarry from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Quarry from the market - 1 wheat"
+                "Hire Quarry from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "quarry"
@@ -9129,7 +9129,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Quarry from the market - 1 wheat"
+                "Hire Quarry from market for 1 wheat"
               ]
             }
           ],
@@ -9163,10 +9163,10 @@
           "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -9178,11 +9178,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "well"
@@ -9199,7 +9199,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ]
             }
           ],
@@ -9233,10 +9233,10 @@
           "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Well from the market - 1 wheat"
+            "Hire Well from market for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -9248,11 +9248,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "well"
@@ -9269,7 +9269,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 wheat"
+                "Hire Well from market for 1 wheat"
               ]
             }
           ],
@@ -9303,10 +9303,10 @@
           "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
-            "Hire the Well from player_two - 1 wheat"
+            "Hire Well from player_two for 1 wheat"
           ],
           "distinct_hire_option_labels": [
-            "Hire the Well from player_two - 1 wheat"
+            "Hire Well from player_two for 1 wheat"
           ],
           "hire_frontiers": [
             {
@@ -9318,11 +9318,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ],
               "hired_building_ids": [
                 "well"
@@ -9339,7 +9339,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Well from player_two - 1 wheat"
+                "Hire Well from player_two for 1 wheat"
               ]
             }
           ],
@@ -9372,11 +9372,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9392,11 +9392,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9412,11 +9412,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9432,11 +9432,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9452,11 +9452,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9472,11 +9472,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "well"
@@ -9493,11 +9493,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ],
               "hired_building_ids": [
                 "infirmary"
@@ -9515,7 +9515,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Infirmary from the market - 1 cornucopia"
+                "Hire Infirmary from market for 1 resource of your choice"
               ]
             },
             {
@@ -9525,7 +9525,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 cornucopia"
+                "Hire Well from market for 1 resource of your choice"
               ]
             }
           ],
@@ -9550,11 +9550,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -9572,7 +9572,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -9597,11 +9597,11 @@
               ],
               "complete_option_labels": [
                 "Don't hire",
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hire_kind": "improving",
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ],
               "hired_building_ids": [
                 "mill"
@@ -9619,7 +9619,7 @@
                 4
               ],
               "hire_option_labels": [
-                "Hire the Mill from the market - 1 wheat"
+                "Hire Mill from market for 1 wheat"
               ]
             }
           ],
@@ -9646,11 +9646,11 @@
                 "resolution=\"produce_stone\""
               ],
               "complete_option_labels": [
-                "Hire the Quarry from the market - 1 silver"
+                "Hire Quarry from market for 1 silver"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Quarry from the market - 1 silver"
+                "Hire Quarry from market for 1 silver"
               ],
               "hired_building_ids": [
                 "quarry"
@@ -9668,11 +9668,11 @@
                 "resolution=\"produce_wheat\""
               ],
               "complete_option_labels": [
-                "Hire the Well from the market - 1 silver"
+                "Hire Well from market for 1 silver"
               ],
               "hire_kind": "enabling",
               "hire_option_labels": [
-                "Hire the Well from the market - 1 silver"
+                "Hire Well from market for 1 silver"
               ],
               "hired_building_ids": [
                 "well"
@@ -9693,7 +9693,7 @@
                 6
               ],
               "hire_option_labels": [
-                "Hire the Well from the market - 1 silver"
+                "Hire Well from market for 1 silver"
               ]
             },
             {
@@ -9703,7 +9703,7 @@
                 6
               ],
               "hire_option_labels": [
-                "Hire the Quarry from the market - 1 silver"
+                "Hire Quarry from market for 1 silver"
               ]
             }
           ],
