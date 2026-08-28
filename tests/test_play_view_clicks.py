@@ -159,6 +159,14 @@ def _toggle_route_building(page, building_id: str) -> None:
     raise AssertionError(f"{building_id} route toggle was not available to click")
 
 
+def _show_hired_route_building_if_available(page, building_id: str) -> None:
+    """Turn on a route family only when the server described it as a hire toggle."""
+    if page.locator(
+        f'[data-building-id="{building_id}"][data-turn-family-available="true"]'
+    ).count():
+        _toggle_route_building(page, building_id)
+
+
 def _next_offered_from_dom(
     page,
     *,
@@ -293,7 +301,7 @@ def _click_candidate_prefix(
         _click_candidate_step(page, step)
         if step["kind"] == "origin":
             for building_id in route_toggles:
-                _toggle_route_building(page, building_id)
+                _show_hired_route_building_if_available(page, building_id)
     raise AssertionError(f"candidate has no {before_kind!r} step")
 
 
@@ -360,7 +368,7 @@ def _walk_until_skip_step_by_preferring_edges(
             _click_handle_centre(page, origin, require_hit=True)
             page.wait_for_timeout(20)
             if route_toggle is not None:
-                _toggle_route_building(page, route_toggle)
+                _show_hired_route_building_if_available(page, route_toggle)
             continue
         edge = page.query_selector('[data-arrow][data-turn-offered="true"]')
         if edge is not None:
@@ -1596,9 +1604,16 @@ def _visible_turn_text_boxes(page) -> list[dict[str, float | str]]:
               && box.width > 0 && box.height > 0;
           }).map(node => {
             const box = node.getBoundingClientRect();
+            const row = node.closest(
+              '[data-turn-step-hire-row], [data-turn-step-direction-row], '
+              + '[data-turn-step-resource-row]'
+            );
+            const rowBox = row && row.getBoundingClientRect();
             return {
               text: node.textContent.trim().replace(/\\s+/g, ' '),
               left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+              row: row ? row.getAttribute('data-turn-step-row-active') : null,
+              rowTop: rowBox ? rowBox.top : null, rowBottom: rowBox ? rowBox.bottom : null,
             };
           })"""
     )
@@ -1616,6 +1631,17 @@ def _assert_visible_turn_text_lines_do_not_overlap(page) -> None:
         and right["top"] < left["bottom"]
     ]
     assert not collisions, f"visible turn-box text overlaps: {collisions!r}"
+    orphaned = [
+        box
+        for box in boxes
+        if box["row"] is not None
+        and (
+            box["row"] != "true"
+            or box["top"] < box["rowTop"]
+            or box["bottom"] > box["rowBottom"]
+        )
+    ]
+    assert not orphaned, f"visible turn-box text escaped its active row: {orphaned!r}"
 
 
 def _commit_guild(page, server) -> int:
@@ -1642,6 +1668,19 @@ def test_turn_box_visible_text_lines_do_not_overlap(page, serve) -> None:
     assert page.locator('[data-turn-step-activation-prompt="true"]').get_attribute(
         "data-turn-step-activation-active"
     ) == "true"
+    _assert_visible_turn_text_lines_do_not_overlap(page)
+
+
+def test_dormitory_prompt_stays_inside_its_active_turn_step_row(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(base_url, wait_until="networkidle")
+
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+
     _assert_visible_turn_text_lines_do_not_overlap(page)
 
 
@@ -2112,7 +2151,8 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
         '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
     )
     assert relocation_targets.count() == 1, "Dormitory did not offer its occupied Duty target"
-    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    # The prompt now grows its own row rather than escaping the fixed-height answer row below it.
+    assert prompt.bounding_box()["height"] >= height_before
     _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-staged.png")
     _click_handle_centre(
         page,
@@ -2661,7 +2701,7 @@ def test_pointer_focused_svg_buildings_have_no_mouse_focus_outline(page, serve) 
     )
 
 
-def test_relocation_answer_row_shows_only_its_step_prompt_without_changing_height(page, serve) -> None:
+def test_relocation_prompt_grows_its_own_step_row(page, serve) -> None:
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
     prompt = page.locator('[data-component="play-turn"]')
@@ -2679,10 +2719,11 @@ def test_relocation_answer_row_shows_only_its_step_prompt_without_changing_heigh
     page.wait_for_timeout(20)
 
     answer_row = page.locator('[data-turn-step-resource-row="true"]')
-    assert answer_row.inner_text() == expected
-    assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
-    assert not page.locator('[data-turn-step-activation-prompt]').is_visible()
-    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
+    step_prompt = page.locator('[data-turn-step-activation-prompt]')
+    assert not answer_row.is_visible()
+    assert step_prompt.inner_text() == expected
+    assert step_prompt.is_visible()
+    assert prompt.bounding_box()["height"] >= height_before
 
 
 def test_cloisters_reach_play_view_does_not_draw_city_east_reversal_arrow(page, serve) -> None:
@@ -2709,7 +2750,7 @@ def test_kogge_and_cloisters_play_view_city_east_reversal_is_present_hit_testabl
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
-    _toggle_route_building(page, "kogge")
+    _show_hired_route_building_if_available(page, "kogge")
 
     offered_city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
     assert offered_city_east is not None, "city->east was not offered after lifting from city"
@@ -2765,8 +2806,8 @@ def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_t
     assert city_origin is not None, "city origin was not offered"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
-    _toggle_route_building(page, "kogge")
-    _toggle_route_building(page, "cloisters")
+    _show_hired_route_building_if_available(page, "kogge")
+    _show_hired_route_building_if_available(page, "cloisters")
 
     for edge_value in edge_values:
         edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
@@ -3122,9 +3163,11 @@ def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serv
     assert tile.get_attribute("data-turn-family-state") == "off"
     assert tile.get_attribute("data-turn-family-available") == "false"
     assert tile.get_attribute("data-building-ability-greyed") == "false"
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 12
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Choose a space to lift acolytes from first."
+        "Pick up acolytes first, then show the routes it opens — "
+        "1 silver to Yellow if you use one."
     )
 
     def offered_route_state() -> dict[str, set[str]]:
@@ -3156,17 +3199,21 @@ def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serv
     initially_offered = offered_route_state()
     initially_offered_arrows = take_city()
     assert "city->east" not in initially_offered_arrows
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 12
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Routes hidden — click to show."
+        "After choosing an origin, show the routes it opens — 1 silver to Yellow if you use one."
     )
-    _toggle_route_building(page, "kogge")
+    _show_hired_route_building_if_available(page, "kogge")
     assert tile.get_attribute("data-turn-family-state") == "on"
-    assert tile.get_attribute("data-building-ability-text") == "Routes shown — click to hide."
+    assert tile.get_attribute("data-building-ability-text") == (
+        "Routes shown — click to hide and restart your sow. Nothing is paid until you use one."
+    )
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Routes shown — click to hide."
+        "Routes shown — click to hide and restart your sow. Nothing is paid until you use one."
     )
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 16
     first_on = offered_arrows()
     assert "city->east" in first_on
 
@@ -3174,9 +3221,11 @@ def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serv
     assert tile.get_attribute("data-turn-family-state") == "off"
     assert tile.get_attribute("data-turn-family-available") == "false"
     assert offered_route_state() == initially_offered
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 12
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Choose a space to lift acolytes from first."
+        "Pick up acolytes first, then show the routes it opens — "
+        "1 silver to Yellow if you use one."
     )
 
     assert take_city() == initially_offered_arrows
@@ -3193,6 +3242,79 @@ def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serv
         "Hired or activated this turn: acolytes may move against the river to enter or leave the "
         "City."
     )
+
+
+def test_reset_restores_hired_and_owned_route_family_visibility(page, serve) -> None:
+    hired_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(hired_url, wait_until="networkidle")
+    hired_tile = page.locator('[data-building-id="kogge"]').first
+
+    _click_handle_centre(
+        page,
+        page.locator('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+        .first.element_handle(),
+        require_hit=True,
+    )
+    _toggle_route_building(page, "kogge")
+    _click_handle_centre(
+        page,
+        page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first.element_handle(),
+        require_hit=True,
+    )
+    page.locator('[data-turn-control="reset"]').click()
+
+    assert hired_tile.get_attribute("data-turn-family-state") == "off"
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 12
+
+    owned_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    page.goto(owned_url, wait_until="networkidle")
+    owned_tile = page.locator('[data-building-id="kogge"]').first
+    _click_handle_centre(
+        page,
+        page.locator('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+        .first.element_handle(),
+        require_hit=True,
+    )
+    _click_handle_centre(
+        page,
+        page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first.element_handle(),
+        require_hit=True,
+    )
+    page.locator('[data-turn-control="reset"]').click()
+
+    assert owned_tile.get_attribute("data-turn-family-state") == "owned"
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 16
+
+
+def test_owned_kogge_keeps_its_spokes_drawn_without_a_clickable_toggle(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    page.goto(base_url, wait_until="networkidle")
+    tile = page.locator('[data-building-id="kogge"]').first
+
+    assert tile.get_attribute("data-turn-family-state") == "owned"
+    assert tile.get_attribute("data-turn-family-available") == "false"
+    assert tile.evaluate("node => getComputedStyle(node).cursor") != "pointer"
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Yours: acolytes may move against the river to enter or leave the City. "
+        "These routes are free."
+    )
+    assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 16
+
+    city = page.locator(
+        '[data-board-position-index="0"][data-turn-start-candidate="true"]'
+    ).first
+    _click_handle_centre(page, city.element_handle(), require_hit=True)
+    assert tile.get_attribute("data-turn-family-state") == "owned"
+    assert tile.get_attribute("data-turn-family-available") == "false"
+    assert page.locator('[data-arrow="city->east"][data-turn-offered="true"]').count() == 1
+
+    _click_handle_centre(
+        page,
+        page.locator('[data-arrow="city->east"][data-turn-offered="true"]').first.element_handle(),
+        require_hit=True,
+    )
+    assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
 
 
 def test_route_edge_paints_and_cost_facts_follow_server_metadata(page, serve) -> None:
@@ -3280,7 +3402,7 @@ def test_kogge_route_can_enter_city_against_arrows_from_ring_and_continue(page, 
     assert origin is not None, "north-west origin was not offered for the ring-start Kogge route"
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(20)
-    _toggle_route_building(page, "kogge")
+    _show_hired_route_building_if_available(page, "kogge")
 
     north_to_city = page.query_selector('[data-arrow="north->city"][data-turn-offered="true"]')
     assert north_to_city is not None, "north->city was not offered after reaching North"

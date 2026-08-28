@@ -882,43 +882,21 @@ def _city_spoke_reversal_arrows(
     return requested
 
 
-def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
-    """The middle arrows, tagged with the pair of positions each one joins.
+def _middle_arrow_specs(
+    layout: dict, city_spoke_reversals: set[str]
+) -> list[dict[str, float | str | bool]]:
+    """Describe the City spokes, including the paired lanes Kogge companions require.
 
-    The four spokes are fixed to north/east/south/west, exactly as the painted board is. Their
-    legacy ids mention default duty categories (`produce`, `clerical`, `taxation`, `construct`);
-    those names are interpreted as those fixed spokes and never as whichever tile currently carries
-    that category. Kogge makes all four City spokes passable in both directions, so a companion
-    arrow is drawn for each spoke's opposite direction as its own edge element.
+    Keeping the lane geometry in the renderer lets the play view receive an exact server-rendered
+    companion later, rather than calculating how either side of a two-way spoke should move.
     """
-    path = layout["artwork"]["middle_arrow_path"]
-    board = load_board_config()
     spoke_by_default_tile = {
         "produce": "north",
         "clerical": "east",
         "taxation": "south",
         "construct": "west",
     }
-    arrows = []
     middle_specs: list[dict[str, float | str]] = []
-
-    def append_arrow(
-        *,
-        arrow_id: str,
-        x: float,
-        y: float,
-        rotate: float,
-        origin: str,
-        destination: str,
-    ) -> None:
-        transform = f"translate({_num(x)} {_num(y)})"
-        if rotate:
-            transform += f" rotate({rotate:g})"
-        arrows.append(
-            f'<g transform="{transform}" data-middle-arrow="{arrow_id}"'
-            f"{_arrow_ends_markup(origin, destination, board)}>"
-            f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
-        )
 
     for arrow in layout["middle_arrows"]:
         x, y = arrow["at"]
@@ -968,6 +946,7 @@ def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
                 "origin": counterpart_origin,
                 "destination": counterpart_destination,
                 "spoke": spoke,
+                "reversal": True,
             }
         )
 
@@ -979,6 +958,7 @@ def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
         raise ValueError(f"middle spoke has more than two directional arrows: {arrows_per_spoke}")
 
     half_pitch = MIDDLE_SPOKE_ARROW_LANE_PITCH / 2.0
+    positioned_specs: list[dict[str, float | str | bool]] = []
     for spec in middle_specs:
         x = float(spec["x"])
         y = float(spec["y"])
@@ -988,16 +968,83 @@ def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
             theta = math.radians(rotate)
             x += math.sin(theta) * half_pitch
             y += -math.cos(theta) * half_pitch
-        append_arrow(
-            arrow_id=str(spec["arrow_id"]),
-            x=x,
-            y=y,
-            rotate=rotate,
-            origin=str(spec["origin"]),
-            destination=str(spec["destination"]),
+        transform = f"translate({_num(x)} {_num(y)})"
+        if rotate:
+            transform += f" rotate({rotate:g})"
+        positioned_specs.append(
+            {
+                **spec,
+                "transform": transform,
+                "reversal": bool(spec.get("reversal", False)),
+            }
         )
+    return positioned_specs
 
-    return '<g aria-label="Middle directional arrows">' + "".join(arrows) + "</g>"
+
+def _render_middle_arrow(
+    spec: dict[str, float | str | bool],
+    *,
+    path: str,
+    route_family: str | None = None,
+) -> str:
+    """Render one pre-positioned City spoke, optionally as a deferred route-family arrow."""
+    family = f' data-family-arrow="{escape(route_family)}"' if route_family else ""
+    return (
+        f'<g transform="{spec["transform"]}" data-middle-arrow="{spec["arrow_id"]}"{family}'
+        f'{_arrow_ends_markup(str(spec["origin"]), str(spec["destination"]), load_board_config())}>'
+        f'<path d="{path}" class="arrow-border"/><path d="{path}" class="arrow-interior"/></g>'
+    )
+
+
+def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
+    """The visible middle arrows, tagged with the pair of positions each one joins."""
+    path = layout["artwork"]["middle_arrow_path"]
+    return '<g aria-label="Middle directional arrows">' + "".join(
+        _render_middle_arrow(spec, path=path)
+        for spec in _middle_arrow_specs(layout, city_spoke_reversals)
+    ) + "</g>"
+
+
+def city_spoke_reversal_arrow_template(
+    layout: dict,
+    city_spoke_reversals: Collection[str] | None,
+    *,
+    route_family: str,
+) -> dict[str, object]:
+    """Server-rendered Kogge companions and native-spoke positions for one optional family.
+
+    The page may insert or remove this exact markup as its already-offered family is toggled. It
+    receives both transforms from the renderer, so it never derives an edge or where a two-way
+    spoke should sit.
+    """
+    reversals = _city_spoke_reversal_arrows(city_spoke_reversals)
+    if not reversals:
+        return {}
+    path = layout["artwork"]["middle_arrow_path"]
+    base_specs = {
+        str(spec["arrow_id"]): spec
+        for spec in _middle_arrow_specs(layout, set())
+    }
+    paired_specs = _middle_arrow_specs(layout, reversals)
+    companions = [spec for spec in paired_specs if bool(spec["reversal"])]
+    paired_native = {
+        str(spec["arrow_id"]): str(spec["transform"])
+        for spec in paired_specs
+        if not bool(spec["reversal"])
+        and str(spec["transform"])
+        != str(base_specs[str(spec["arrow_id"])]["transform"])
+    }
+    return {
+        "markup": "".join(
+            _render_middle_arrow(spec, path=path, route_family=route_family)
+            for spec in companions
+        ),
+        "on_transforms": paired_native,
+        "off_transforms": {
+            arrow_id: str(base_specs[arrow_id]["transform"])
+            for arrow_id in paired_native
+        },
+    }
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1323,7 +1370,9 @@ def render_duty_wheel_svg(
         f' scale({_num(board["scale"])}) translate({_num(-cx)} {_num(-cy)})">'
         f'<path d="{board["ground_path"]}" fill="url(#hex-gradient)"'
         f' stroke="{palette["ground_edge"]}" stroke-width="4" stroke-linejoin="round"/>'
+        '<g data-duty-wheel-arrow-layer="true">'
         f"{_render_ring_arrows(layout)}{_render_middle_arrows(layout, reversal_arrows)}"
+        "</g>"
         f'<g aria-label="Board spaces">{"".join(spaces)}</g>'
         "</g>"
         # Outside the scaled group: the corners are measured on the canvas the page is cropped

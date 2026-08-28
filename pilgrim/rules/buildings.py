@@ -45,6 +45,8 @@ class BuildingAbilityReason(StrEnum):
     DONATED = "donated"
     INSUFFICIENT_RESOURCE = "insufficient_resource"
     MERCHANT_RESOURCE_NONE = "merchant_resource_none"
+    END_OF_TURN_NOT_REACHED = "end_of_turn_not_reached"
+    BEGINNING_OF_TURN_PASSED = "beginning_of_turn_passed"
     MID_SOW = "mid_sow"
     ALREADY_USED = "already_used"
     EFFECT_APPLIES_FOR_REST_OF_TURN = "effect_applies_for_rest_of_turn"
