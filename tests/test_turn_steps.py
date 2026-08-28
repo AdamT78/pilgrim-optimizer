@@ -131,7 +131,6 @@ def test_two_active_conversion_buildings_remain_independently_available() -> Non
         ("scenarios/grain_store_active_sell_wheat_001.json", "grain_store"),
         ("scenarios/guild_active_move_merchant_001.json", "guild"),
         ("scenarios/pulpit_active_move_serf_001.json", "pulpit"),
-        ("scenarios/kogge_hire_market_city_to_east_001.json", "kogge"),
         ("scenarios/scriptorium_hire_market_majority_selected_duty_001.json", "scriptorium"),
         ("scenarios/dormitory_active_return_duty_to_city_001.json", "dormitory"),
     ),

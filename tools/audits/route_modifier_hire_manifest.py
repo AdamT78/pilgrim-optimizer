@@ -33,9 +33,15 @@ LEGAL_ACTIONS_CAPTURE = "legal_actions"
 TURN_STEPS_CAPTURE = "turn_steps"
 CAPTURE_NAMES = (LEGAL_ACTIONS_CAPTURE, TURN_STEPS_CAPTURE)
 TARGET_HIRE_STEP_GROUP = "target_hire_steps"
+ROUTE_HIRE_STEP_GROUP = "route_hire_steps"
 SOW_CARRIED_HIRE_GROUP = "sow_carried_hires"
 UNION_HIRE_GROUP = "target_and_sow_carried_hires"
-CHANGE_GROUPS = (TARGET_HIRE_STEP_GROUP, SOW_CARRIED_HIRE_GROUP, UNION_HIRE_GROUP)
+CHANGE_GROUPS = (
+    TARGET_HIRE_STEP_GROUP,
+    ROUTE_HIRE_STEP_GROUP,
+    SOW_CARRIED_HIRE_GROUP,
+    UNION_HIRE_GROUP,
+)
 TARGET_BUILDING_IDS = (
     "kogge",
     "cloisters",
@@ -52,6 +58,7 @@ SOW_CARRIED_HIRE_BUILDING_IDS = (
     "mint",
     "quarry",
 )
+ROUTE_HIRE_BUILDING_IDS = ("kogge", "cloisters")
 
 # This is a deliberately fixed pre-refactor boundary, not a fresh prediction from the changed
 # engine.  The next branch must compare its capture diff to this reviewed baseline before it
@@ -84,6 +91,25 @@ SCOPED_SCENARIO_PATHS = (
     "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json",
     "scenarios/wagon_yard_market_not_hireable_001.json",
     "scenarios/wagon_yard_opponent_not_hireable_001.json",
+)
+
+# The reviewed Kogge/Cloisters subset of the target-hire baseline above.  It is fixed for this
+# refactor: once the route hires leave committed steps, deriving it from the current engine would
+# erase the very capture boundary the before/after comparison needs to check.
+ROUTE_HIRE_SCENARIO_PATHS = (
+    "scenarios/cloisters_hire_market_skip_duty_tile_001.json",
+    "scenarios/cloisters_hire_opponent_skip_city_001.json",
+    "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
+    "scenarios/kogge_cloisters_hire_both_market_001.json",
+    "scenarios/kogge_cloisters_hire_both_opponent_001.json",
+    "scenarios/kogge_cloisters_hire_kogge_own_cloisters_001.json",
+    "scenarios/kogge_cloisters_insufficient_for_two_hires_001.json",
+    "scenarios/kogge_cloisters_own_kogge_hire_cloisters_001.json",
+    "scenarios/kogge_donated_no_extra_routes_001.json",
+    "scenarios/kogge_hire_market_city_to_east_001.json",
+    "scenarios/kogge_hire_opponent_city_to_west_001.json",
+    "scenarios/playtest/movement_2p.json",
+    "scenarios/stone_yard_buy_then_construct_001.json",
 )
 
 # Like the target scope, this is a reviewed pre-refactor boundary.  It remains fixed while the
@@ -257,6 +283,27 @@ def _sow_carried_hire_actions(
         for action in current_actions
         if isinstance(action, FullTurnAction)
         and action.hired_building_id in SOW_CARRIED_HIRE_BUILDING_IDS
+        and not _action_carries_route_hire(action)
+    )
+
+
+def _action_carries_route_hire(action: FullTurnAction) -> bool:
+    """Keep this audit on the six existing hire choices, not their new route-hire cross-product."""
+    return any(
+        source not in (None, "own_active")
+        for source in (
+            action.sow_route_building_source,
+            action.sow_route_secondary_building_source,
+        )
+    )
+
+
+def _actions_without_route_hires(actions: Collection[object]) -> tuple[object, ...]:
+    """Retain ordinary and own-active routes while excluding this branch's paid route variants."""
+    return tuple(
+        action
+        for action in actions
+        if not isinstance(action, FullTurnAction) or not _action_carries_route_hire(action)
     )
 
 
@@ -273,7 +320,8 @@ def _sow_carried_hire_details(
     actions: Collection[object],
 ) -> tuple[tuple[SowCarriedHireOption, ...], tuple[SowCarriedHireFrontier, ...]]:
     """Read action-carried hire questions and all answers at each visible frontier."""
-    hired_actions = _sow_carried_hire_actions(state, config, actions=actions)
+    sow_scope_actions = _actions_without_route_hires(actions)
+    hired_actions = _sow_carried_hire_actions(state, config, actions=sow_scope_actions)
     values_to_buildings = {
         f"{action.hired_building_id}:{action.hired_building_source or 'unknown'}": (
             action.hired_building_id
@@ -292,7 +340,7 @@ def _sow_carried_hire_details(
     for candidate in turn_candidates(
         state,
         config,
-        actions=list(actions),
+        actions=list(sow_scope_actions),
         include_preview_effects=False,
     ):
         for index, step in enumerate(candidate["steps"]):
@@ -388,20 +436,21 @@ def collect_sow_carried_hire_snapshot_rows(
     for path in corpus_scenario_paths(root=base):
         scenario = load_scenario(path)
         actions = legal_actions(scenario.state, scenario.config)
+        sow_scope_actions = _actions_without_route_hires(actions)
         hired_actions = _sow_carried_hire_actions(
             scenario.state,
             scenario.config,
-            actions=actions,
+            actions=sow_scope_actions,
         )
         if not hired_actions:
             continue
         options, hire_frontiers = _sow_carried_hire_details(
             scenario.state,
             scenario.config,
-            actions,
+            sow_scope_actions,
         )
         complete_turn_actions = tuple(
-            action for action in actions if isinstance(action, FullTurnAction)
+            action for action in sow_scope_actions if isinstance(action, FullTurnAction)
         )
         rows.append(
             SowCarriedHireSnapshotRow(
@@ -409,7 +458,7 @@ def collect_sow_carried_hire_snapshot_rows(
                 captured_by=tuple(
                     capture for capture in CAPTURE_NAMES if path in captured_paths[capture]
                 ),
-                legal_actions_count=len(actions),
+                legal_actions_count=len(sow_scope_actions),
                 turn_steps_count=len(turn_steps(scenario.state, scenario.config)),
                 complete_turn_action_count=len(complete_turn_actions),
                 complete_turn_without_hire_count=sum(
@@ -509,10 +558,15 @@ def collect_sow_carried_hire_reachability_rows(
             if not step_ids or first_later_hire_window is not None:
                 continue
             actions = legal_actions(state, scenario.config)
-            hired_actions = _sow_carried_hire_actions(state, scenario.config, actions=actions)
+            sow_scope_actions = _actions_without_route_hires(actions)
+            hired_actions = _sow_carried_hire_actions(
+                state, scenario.config, actions=sow_scope_actions
+            )
             if not hired_actions:
                 continue
-            options, hire_frontiers = _sow_carried_hire_details(state, scenario.config, actions)
+            options, hire_frontiers = _sow_carried_hire_details(
+                state, scenario.config, sow_scope_actions
+            )
             offered_buildings = {option.building_id for option in options}
             first_later_hire_window = SowCarriedHireWindow(
                 step_ids=step_ids,
@@ -521,7 +575,7 @@ def collect_sow_carried_hire_reachability_rows(
                     for building_id in SOW_CARRIED_HIRE_BUILDING_IDS
                     if building_id in offered_buildings and building_id not in initial_buildings
                 ),
-                legal_actions_count=len(actions),
+                legal_actions_count=len(sow_scope_actions),
                 turn_steps_count=len(turn_steps(state, scenario.config)),
                 options=options,
                 hire_frontiers=hire_frontiers,
@@ -541,6 +595,8 @@ def scoped_scenario_paths(group: str) -> tuple[str, ...]:
     """Return one reviewed pre-refactor scope, or the union a broader change must reach."""
     if group == TARGET_HIRE_STEP_GROUP:
         return SCOPED_SCENARIO_PATHS
+    if group == ROUTE_HIRE_STEP_GROUP:
+        return ROUTE_HIRE_SCENARIO_PATHS
     if group == SOW_CARRIED_HIRE_GROUP:
         return SOW_CARRIED_HIRE_SCENARIO_PATHS
     if group == UNION_HIRE_GROUP:
@@ -744,6 +800,14 @@ def generate_manifest(root: Path | None = None) -> str:
                 capture: sorted(expected_capture_files(TARGET_HIRE_STEP_GROUP)[capture])
                 for capture in CAPTURE_NAMES
             },
+            "route_hire_step_group": {
+                "building_ids": list(ROUTE_HIRE_BUILDING_IDS),
+                "baseline_affected_scenarios": list(ROUTE_HIRE_SCENARIO_PATHS),
+                "expected_changed_capture_files": {
+                    capture: sorted(expected_capture_files(ROUTE_HIRE_STEP_GROUP)[capture])
+                    for capture in CAPTURE_NAMES
+                },
+            },
         },
         "sow_carried_hire_group": {
             "building_ids": list(SOW_CARRIED_HIRE_BUILDING_IDS),
@@ -841,6 +905,12 @@ def manifest_expected_capture_files(
             scope = payload["scope"]
             assert isinstance(scope, dict)
             changed_files = scope["expected_changed_capture_files"]
+        elif group == ROUTE_HIRE_STEP_GROUP:
+            scope = payload["scope"]
+            assert isinstance(scope, dict)
+            route_group = scope["route_hire_step_group"]
+            assert isinstance(route_group, dict)
+            changed_files = route_group["expected_changed_capture_files"]
         else:
             sow_group = payload["sow_carried_hire_group"]
             assert isinstance(sow_group, dict)

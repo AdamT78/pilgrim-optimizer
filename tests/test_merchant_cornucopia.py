@@ -354,24 +354,18 @@ def test_two_hires_on_the_cornucopia_can_pay_different_resources(deep_actions) -
 
 
 @pytest.mark.slow
-def test_plain_merchant_resource_records_and_spends_that_resource_for_each_hire() -> None:
+def test_plain_merchant_resource_records_and_spends_route_hire_resource() -> None:
     scenario = load_scenario(DEEP_SCENARIO)
     config = _with_counter_under_the_merchant(scenario, "stone")
-    state = apply_turn_step(
-        scenario.state,
-        config,
-        next(step for step in turn_steps(scenario.state, config) if step.building_id == "cloisters"),
-    )
-    actions = legal_actions(state, config)
     action = next(
         action
-        for action in actions
+        for action in legal_actions(scenario.state, config)
         if isinstance(action, FullTurnAction)
-        and action.hire_payments == (("infirmary", "stone"),)
+        and action.hire_payments == (("cloisters", "stone"),)
     )
 
-    result = apply_action(state, action, config)
-    assert _hire_event_resources(result.events) == Counter({"stone": 2})
+    result = apply_action(scenario.state, action, config)
+    assert _hire_event_resources(result.events) == Counter({"stone": 1})
 
 
 def test_a_late_library_hire_can_pay_from_turn_earnings() -> None:
@@ -417,14 +411,9 @@ def test_hire_payments_must_match_hired_sources_exactly(deep_actions) -> None:
 
 def test_a_building_named_in_two_route_slots_is_rejected() -> None:
     scenario = load_scenario("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
-    state = apply_turn_step(
-        scenario.state,
-        scenario.config,
-        next(step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "cloisters"),
-    )
     base = next(
         action
-        for action in legal_actions(state, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction)
         and action.sow_route_building_id == "cloisters"
         and action.sow_route_secondary_building_id is None
@@ -435,7 +424,7 @@ def test_a_building_named_in_two_route_slots_is_rejected() -> None:
         sow_route_secondary_building_source=base.sow_route_building_source,
     )
     with pytest.raises(TransitionValidationError, match="cannot be the same"):
-        apply_action(state, duplicated, scenario.config)
+        apply_action(scenario.state, duplicated, scenario.config)
 
 
 def test_action_id_differs_when_hire_payments_differ() -> None:

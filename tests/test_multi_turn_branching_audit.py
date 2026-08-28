@@ -5,7 +5,7 @@ import pytest
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import BuildingConversionStep, FullTurnAction
 from pilgrim.model.enums import TurnResolutionType
-from pilgrim.rules.transition import apply_turn_step, legal_actions, turn_steps
+from pilgrim.rules.transition import legal_actions, turn_steps
 from tools.audits import multi_turn_branching_audit as audit
 
 
@@ -27,33 +27,22 @@ def test_audit_report_contains_expected_headings() -> None:
 def test_classification_helpers_flag_expected_action_features() -> None:
     combined_scenario = load_scenario("scenarios/kogge_cloisters_hire_both_market_001.json")
     state = combined_scenario.state
-    for building_id in ("kogge", "cloisters"):
-        step = next(
-            step
-            for step in turn_steps(state, combined_scenario.config)
-            if step.building_id == building_id
-        )
-        state = apply_turn_step(
-            state,
-            combined_scenario.config,
-            step,
-        )
     combined_action = _find_action(
         legal_actions(state, combined_scenario.config),
         lambda action: (
             isinstance(action, FullTurnAction)
             and action.sow_route_building_id == "kogge"
             and action.sow_route_secondary_building_id == "cloisters"
-            and action.sow_route_building_source is None
-            and action.sow_route_secondary_building_source is None
+            and action.sow_route_building_source == "market"
+            and action.sow_route_secondary_building_source == "market"
         ),
     )
     assert audit.action_has_route_modifier(combined_action) is True
     assert audit.action_has_kogge(combined_action) is True
     assert audit.action_has_cloisters(combined_action) is True
     assert audit.action_has_combined_kogge_cloisters(combined_action) is True
-    assert audit.action_hired_building_count(combined_action) == 0
-    assert audit.action_has_hire(combined_action) is False
+    assert audit.action_hired_building_count(combined_action) == 2
+    assert audit.action_has_hire(combined_action) is True
 
     grain_scenario = load_scenario("scenarios/grain_store_hire_market_sell_wheat_001.json")
     grain_steps = turn_steps(grain_scenario.state, grain_scenario.config)

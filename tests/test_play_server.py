@@ -882,6 +882,66 @@ def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
 
 
 @pytest.mark.parametrize(
+    ("scenario_name", "expected_hire_text"),
+    (
+        ("kogge_hire_market_city_to_east_001.json", "Hire Kogge from market for 1 wheat."),
+        (
+            "kogge_hire_opponent_city_to_west_001.json",
+            "Hire Kogge from Yellow for 1 wheat.",
+        ),
+    ),
+)
+def test_route_hire_arrow_carries_the_server_written_cost_fact(
+    scenario_name: str, expected_hire_text: str
+) -> None:
+    scenario = load_scenario(str(SCENARIOS / scenario_name))
+    hire_texts = {
+        step["hire_text"]
+        for candidate in play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            include_preview_effects=False,
+        )
+        for step in candidate["steps"]
+        if "hire_text" in step
+    }
+
+    assert expected_hire_text in hire_texts
+
+
+def test_route_hire_cost_fact_reuses_the_turn_step_sentence_helper(monkeypatch) -> None:
+    scenario = load_scenario(str(SCENARIOS / "kogge_hire_market_city_to_east_001.json"))
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction) and action.sow_route_building_id == "kogge"
+    )
+    source = BuildingAbilitySource(
+        building_key="kogge",
+        source_type="live_market_hire",
+        hire_resource="cornucopia",
+        hire_cost=1,
+        payable_to="bank",
+        usable=True,
+    )
+    seen: list[BuildingAbilitySource] = []
+
+    def shared_cost_phrase(resolved_source: BuildingAbilitySource) -> str:
+        seen.append(resolved_source)
+        return "the helper's shared price"
+
+    monkeypatch.setattr(play_server, "building_ability_source", lambda *_args, **_kwargs: source)
+    monkeypatch.setattr(play_server, "_building_hire_cost_phrase", shared_cost_phrase)
+
+    route_sentence = play_server._route_hire_sentence(action, scenario.state, scenario.config)
+    turn_step_sentence = play_server._building_hire_sentence("Kogge", source)
+
+    assert route_sentence == "Hire Kogge from market for the helper's shared price."
+    assert turn_step_sentence == route_sentence
+    assert seen == [source, source]
+
+
+@pytest.mark.parametrize(
     ("scenario_name", "expected_labels"),
     (
         (
@@ -897,6 +957,7 @@ def test_market_hire_sentence_names_the_market_not_its_bank_payee() -> None:
             {
                 "Don't hire",
                 "Hire Infirmary from market for 1 resource of your choice",
+                "Hire Mint from market for 1 resource of your choice",
                 "Hire Well from market for 1 resource of your choice",
             },
         ),
@@ -1079,7 +1140,17 @@ def _assert_auto_advance_frontiers(scenario_name: str, candidates: list[dict]) -
                 f"{frontier['prefix']!r}: {list(options)!r}"
             )
             assert all(step["auto_advance"] is True for step in marked)
-        expected = len(options) == 1 and next(iter(options.values()))["kind"] == "edge"
+        sole_edge = next(iter(options.values())) if len(options) == 1 else None
+        if sole_edge is not None and sole_edge["kind"] == "edge":
+            assert all("hire_text" not in step for step in marked), (
+                f"{scenario_name} would auto-advance a route hire at {frontier['prefix']!r}: "
+                f"{sole_edge!r}"
+            )
+        expected = (
+            sole_edge is not None
+            and sole_edge["kind"] == "edge"
+            and "hire_text" not in sole_edge
+        )
         assert len(marked) == (len(frontier["steps"]) if expected else 0), (
             f"{scenario_name} auto_advance did not match its frontier at "
             f"{frontier['prefix']!r}: {list(options)!r}"
@@ -4076,7 +4147,7 @@ def test_movement_turn_window_counts_each_available_hire() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
     steps = play_server.turn_steps_payload(scenario.state, scenario.config)
 
-    assert sum(step["hire_payment"] is not None for step in steps) == 10
+    assert sum(step["hire_payment"] is not None for step in steps) == 9
     assert play_server.phase_column_payload(
         scenario.state,
         [],
@@ -5150,30 +5221,27 @@ def test_committed_conversion_marks_its_building_already_used_in_the_ability_pay
     }
 
 
-def test_hired_kogge_remains_a_usable_route_source_while_its_tile_is_greyed() -> None:
+def test_hired_kogge_route_action_leaves_its_tile_showing_the_active_effect() -> None:
     scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
-    step = next(
-        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "kogge"
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.sow_route_building_id == "kogge"
+        and action.sow_route_building_source == "player_two"
     )
-    after_step = apply_turn_step(scenario.state, scenario.config, step)
-    route_source = transition._route_building_source_available_this_turn(
-        after_step,
-        scenario.config,
-        building_id="kogge",
-    )
+    after_action = apply_action(scenario.state, action, scenario.config).state
     kogge = next(
         ability
-        for ability in play_server.building_abilities_payload(after_step, scenario.config)
+        for ability in play_server.building_abilities_payload(after_action, scenario.config)
         if ability["building_id"] == "kogge"
     )
 
     assert {
-        "route_source": None
-        if route_source is None
-        else (route_source.source_type, route_source.usable, route_source.reason),
+        "route_hire": (action.sow_route_building_source, action.hire_payments),
         "tile": tuple(kogge[field] for field in ("usable", "reason", "greyed", "status_text")),
     } == {
-        "route_source": ("opponent_active_hire", True, ""),
+        "route_hire": ("player_two", (("kogge", "silver"),)),
         "tile": (
             False,
             "effect_applies_for_rest_of_turn",
@@ -5218,11 +5286,25 @@ _PERMITTER_COMMITTED_STEP_CASES = (
 
 def _committed_activation_tile(scenario_path: str, building_id: str) -> dict[str, object]:
     scenario = load_scenario(scenario_path)
-    step = next(
-        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == building_id
-    )
-    assert isinstance(step, BuildingActivationStep)
-    after_step = apply_turn_step(scenario.state, scenario.config, step)
+    if building_id in transition._ROUTE_BUILDING_IDS:
+        action = next(
+            action
+            for action in legal_actions(scenario.state, scenario.config)
+            if isinstance(action, FullTurnAction)
+            and building_id
+            in {action.sow_route_building_id, action.sow_route_secondary_building_id}
+            and (
+                action.sow_route_building_source not in {None, "own_active"}
+                or action.sow_route_secondary_building_source not in {None, "own_active"}
+            )
+        )
+        after_step = apply_action(scenario.state, action, scenario.config).state
+    else:
+        step = next(
+            step for step in turn_steps(scenario.state, scenario.config) if step.building_id == building_id
+        )
+        assert isinstance(step, BuildingActivationStep)
+        after_step = apply_turn_step(scenario.state, scenario.config, step)
     return next(
         ability
         for ability in play_server.building_abilities_payload(after_step, scenario.config)
@@ -5355,13 +5437,17 @@ def test_committed_hire_adds_the_engine_event_line_to_the_player_log() -> None:
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
     try:
         kogge = next(
-            step for step in server.payload["turn_steps"] if step["building_id"] == "kogge"
+            action
+            for action in legal_actions(server.state, server.config)
+            if isinstance(action, FullTurnAction)
+            and action.sow_route_building_id == "kogge"
+            and action.sow_route_building_source == "player_two"
         )
-        server.apply_turn_step(kogge["step_id"], server.payload["state_token"])
-        assert server.payload["log_blocks"][-1]["lines"] == [
-            "player_one hired Kogge from player_two and paid 1 silver."
-        ]
-        assert server.payload["log_blocks"][-1]["event_types"] == ["building_hired"]
+        server.apply(action_id(kogge), server.payload["state_token"])
+        assert "player_one hired Kogge from player_two and paid 1 silver." in server.payload[
+            "log_blocks"
+        ][-1]["lines"]
+        assert "building_hired" in server.payload["log_blocks"][-1]["event_types"]
     finally:
         server.server_close()
 

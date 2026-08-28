@@ -30,14 +30,6 @@ def _first_action(actions, predicate):
     return next(action for action in actions if predicate(action))
 
 
-def _commit_cloisters_hire(state, config):
-    return apply_turn_step(
-        state,
-        config,
-        _first_action(turn_steps(state, config), lambda step: step.building_id == "cloisters"),
-    )
-
-
 def test_own_active_cloisters_generates_skip_duty_and_skip_city_variants() -> None:
     duty_scenario, duty_actions = _cloisters_actions(
         "scenarios/cloisters_active_skip_duty_tile_001.json"
@@ -56,28 +48,21 @@ def test_own_active_cloisters_generates_skip_duty_and_skip_city_variants() -> No
     assert any(action.sow_route_omitted_location == city for action in city_actions)
 
 
-def test_cloisters_market_hire_generates_variants_after_its_step() -> None:
-    scenario = load_scenario("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
-    _scenario, before_actions = _cloisters_actions(
+def test_cloisters_market_hire_generates_only_skip_route_variants() -> None:
+    _scenario, actions = _cloisters_actions(
         "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
     )
-    actions = [
-        action
-        for action in legal_actions(_commit_cloisters_hire(scenario.state, scenario.config), scenario.config)
-        if action.sow_route_building_id == "cloisters"
-    ]
 
-    assert not before_actions
     assert actions
-    assert all(action.sow_route_building_source is None for action in actions)
+    assert all(action.sow_route_building_source == "market" for action in actions)
+    assert all(action.hire_payments == (("cloisters", "wheat"),) for action in actions)
 
 
 def test_cloisters_opponent_hire_pays_owner_and_skips_city_before_sowing() -> None:
     scenario = load_scenario("scenarios/cloisters_hire_opponent_skip_city_001.json")
-    hired_state = _commit_cloisters_hire(scenario.state, scenario.config)
     actions = [
         action
-        for action in legal_actions(hired_state, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "cloisters"
     ]
     city = scenario.config.board.index_for_name("city")
@@ -86,14 +71,14 @@ def test_cloisters_opponent_hire_pays_owner_and_skips_city_before_sowing() -> No
     action = _first_action(
         actions,
         lambda candidate: (
-            candidate.sow_route_building_source is None
+            candidate.sow_route_building_source == "player_two"
             and candidate.sow_route_omitted_location == city
             and candidate.origin == east
             and candidate.selected_duty == north
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(hired_state, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
 
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _first_action(
@@ -119,10 +104,9 @@ def test_cloisters_opponent_hire_pays_owner_and_skips_city_before_sowing() -> No
 
 def test_cloisters_hire_market_pays_bank() -> None:
     scenario = load_scenario("scenarios/cloisters_hire_market_skip_duty_tile_001.json")
-    hired_state = _commit_cloisters_hire(scenario.state, scenario.config)
     actions = [
         action
-        for action in legal_actions(hired_state, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "cloisters"
     ]
     north_east = scenario.config.board.index_for_name("north_east")
@@ -130,13 +114,13 @@ def test_cloisters_hire_market_pays_bank() -> None:
     action = _first_action(
         actions,
         lambda candidate: (
-            candidate.sow_route_building_source is None
+            candidate.sow_route_building_source == "market"
             and candidate.sow_route_omitted_location == north_east
             and candidate.selected_duty == east
             and candidate.resolution is TurnResolutionType.TITHE
         ),
     )
-    result = apply_action(hired_state, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
 
     assert hired_details["source"] == "market"
@@ -152,10 +136,7 @@ def test_cloisters_hire_blocked_for_merchant_none_insufficient_donated_and_not_l
         "scenarios/cloisters_donated_no_modifier_001.json",
         "scenarios/cloisters_not_live_no_modifier_001.json",
     ):
-        scenario = load_scenario(path)
-        assert not [
-            step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "cloisters"
-        ]
+        assert not _cloisters_actions(path)[1]
 
 
 def test_cloisters_apply_omitted_duty_receives_no_acolyte_and_counts_match_pickup() -> None:

@@ -68,31 +68,33 @@ def test_cli_apply_own_active_cloisters_shows_bonus_before_sowing(capsys) -> Non
     )
 
 
-def test_cli_does_not_offer_an_uncommitted_market_cloisters_hire(capsys) -> None:
+def test_cli_offers_market_cloisters_hires_only_on_routes_that_skip(capsys) -> None:
     scenario_path = "scenarios/cloisters_hire_market_skip_duty_tile_001.json"
     scenario = load_scenario(scenario_path)
     exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "hire building: cloisters from market" not in output
-    assert not [
+    assert "hire building: cloisters from market" in output
+    assert [
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "cloisters"
+        and action.sow_route_building_source == "market"
     ]
 
 
-def test_cli_does_not_offer_an_uncommitted_opponent_cloisters_hire(capsys) -> None:
+def test_cli_offers_opponent_cloisters_hires_only_on_routes_that_skip(capsys) -> None:
     scenario_path = "scenarios/cloisters_hire_opponent_skip_city_001.json"
     scenario = load_scenario(scenario_path)
     exit_code = main(["legal-actions", scenario_path])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "hire building: cloisters from player_two" not in output
-    assert not [
+    assert "hire building: cloisters from player_two" in output
+    assert [
         action
         for action in legal_actions(scenario.state, scenario.config)
         if action.sow_route_building_id == "cloisters"
+        and action.sow_route_building_source == "player_two"
     ]
