@@ -29,6 +29,9 @@ PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
 PLAYTEST_CONVERSIONS = "conversions_2p.json"
 PLAYTEST_PULPIT = "pulpit_2p.json"
+# 1280px is the narrowest width the page supports, so geometry guards must not inherit a
+# Playwright default that can hide a wrap which appears in CI.
+LAYOUT_VIEWPORT = {"width": 1280, "height": 720}
 
 
 @pytest.fixture(scope="session")
@@ -52,7 +55,7 @@ def chromium_browser():
 
 @pytest.fixture
 def page(chromium_browser):
-    context = chromium_browser.new_context()
+    context = chromium_browser.new_context(viewport=LAYOUT_VIEWPORT)
     page = context.new_page()
     try:
         yield page
@@ -2106,9 +2109,11 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
         '[data-board-position-index="0"][data-turn-start-candidate="true"]'
     )
     assert city_origin is not None, "city should be offered as a start origin"
+    cloisters = page.locator('[data-building-id="cloisters"]').first
+    assert cloisters.get_attribute("data-turn-family-state") == "owned"
+    assert cloisters.get_attribute("data-turn-family-available") == "false"
     _click_handle_centre(page, city_origin, require_hit=True)
     page.wait_for_timeout(20)
-    _toggle_route_building(page, "cloisters")
 
     for edge_value in edge_values:
         edge = page.query_selector(f'[data-arrow="{edge_value}"][data-turn-offered="true"]')
@@ -2321,15 +2326,15 @@ def test_library_step_stages_and_confirms_duty_with_preview_and_reset(page, serv
 
     _reach_movement_library_window(page)
 
-    prompt = page.locator('[data-component="play-turn"]')
-    height_before = prompt.bounding_box()["height"]
     expected_prompt = next(
         step["prompt"] for step in server.payload["turn_steps"] if step["building_id"] == "library"
     )
     active_player, city_before = stage_library()
-    assert page.locator('[data-turn-step-resource-row="true"]').inner_text() == expected_prompt
+    assert page.locator('[data-turn-step-activation-prompt="true"]').inner_text() == expected_prompt
+    assert page.locator('[data-turn-step-resource-row="true"]').get_attribute(
+        "data-turn-step-row-active"
+    ) == "false"
     assert not page.locator('[data-turn-step-answer-label="true"]').is_visible()
-    assert prompt.bounding_box()["height"] == pytest.approx(height_before, abs=0.1)
     duty_targets = page.locator(
         '[data-board-position-index][data-turn-step-relocation-candidate="true"]'
     )
@@ -2421,6 +2426,13 @@ def test_library_step_stages_and_confirms_abbey_with_preview_and_reset(page, ser
 
     _reach_movement_library_window(page)
     active_player, city_before = stage_library()
+    expected_prompt = next(
+        step["prompt"] for step in server.payload["turn_steps"] if step["building_id"] == "library"
+    )
+    assert page.locator('[data-turn-step-activation-prompt="true"]').inner_text() == expected_prompt
+    assert page.locator('[data-turn-step-resource-row="true"]').get_attribute(
+        "data-turn-step-row-active"
+    ) == "false"
     abbey_before = _visible_active_token_count(page, "abbey")
     abbey = page.locator(
         '[data-active-seat="true"][data-end-relocation-choice="true"] '
@@ -2583,7 +2595,6 @@ def test_confirm_paints_the_action_that_its_next_press_will_take(page, serve) ->
         "the End-of-Turn Confirm did not say what its next press would do"
     )
     assert _confirm_enabled(page), "the direct End-of-Turn Confirm was not enabled"
-    end_turn_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
     full_page = page.evaluate(
         """() => ({
             width: document.documentElement.scrollWidth,
@@ -2604,10 +2615,24 @@ def test_confirm_paints_the_action_that_its_next_press_will_take(page, serve) ->
     assert _painted_confirm_label(page) == "Confirm", (
         "a staged End of Turn step still painted the pass label"
     )
-    staged_height = page.locator('[data-component="play-turn"]').bounding_box()["height"]
-    assert staged_height == pytest.approx(end_turn_height, abs=0.1), (
-        "switching Confirm's rendered caption changed the prompt box height"
-    )
+    turn_box = page.locator('[data-component="play-turn"]').bounding_box()
+    activation_prompt = page.locator('[data-turn-step-activation-prompt="true"]').bounding_box()
+    assert turn_box is not None and activation_prompt is not None
+    for index in range(page.locator('[data-turn-control]').count()):
+        control = page.locator('[data-turn-control]').nth(index).bounding_box()
+        assert control is not None
+        assert (
+            turn_box["x"] <= control["x"]
+            and turn_box["y"] <= control["y"]
+            and control["x"] + control["width"] <= turn_box["x"] + turn_box["width"]
+            and control["y"] + control["height"] <= turn_box["y"] + turn_box["height"]
+        ), "a turn control escaped the turn box after the Library prompt wrapped"
+        assert (
+            activation_prompt["x"] + activation_prompt["width"] <= control["x"]
+            or control["x"] + control["width"] <= activation_prompt["x"]
+            or activation_prompt["y"] + activation_prompt["height"] <= control["y"]
+            or control["y"] + control["height"] <= activation_prompt["y"]
+        ), "the Library activation prompt overlapped a turn control"
 
 
 def test_two_rapid_real_confirm_clicks_send_one_request(page, serve) -> None:
@@ -2888,8 +2913,10 @@ def test_plain_route_prefix_keeps_extending_cloisters_routes_live_and_clickable(
         f'[data-board-position-index="{origin}"][data-turn-start-candidate="true"]'
     )
     assert origin_target is not None, f"origin {origin} is not offered"
+    cloisters = page.locator('[data-building-id="cloisters"]').first
+    assert cloisters.get_attribute("data-turn-family-state") == "owned"
+    assert cloisters.get_attribute("data-turn-family-available") == "false"
     _click_handle_centre(page, origin_target, require_hit=True)
-    _toggle_route_building(page, "cloisters")
 
     for edge in plain_edges:
         edge_target = page.query_selector(f'[data-arrow="{edge}"][data-turn-offered="true"]')
@@ -3320,6 +3347,7 @@ def test_owned_kogge_keeps_its_spokes_drawn_without_a_clickable_toggle(page, ser
 def test_route_edge_paints_and_cost_facts_follow_server_metadata(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "kogge_cloisters_hire_both_market_001.json")
     page.goto(base_url, wait_until="networkidle")
+    kogge = page.locator('[data-building-id="kogge"]').first
 
     def take_city() -> None:
         city = page.locator(
@@ -3350,8 +3378,12 @@ def test_route_edge_paints_and_cost_facts_follow_server_metadata(page, serve) ->
         page.locator('[data-turn-control="reset"]').element_handle(),
         require_hit=True,
     )
+    assert kogge.get_attribute("data-turn-family-state") == "off"
+    assert page.locator('[data-arrow="north->city"][data-turn-offered="true"]').count() == 0
 
     take_city()
+    _toggle_route_building(page, "kogge")
+    _toggle_route_building(page, "cloisters")
     for edge_name in ("city->north", "north->city"):
         edge = page.locator(f'[data-arrow="{edge_name}"][data-turn-offered="true"]').first
         _click_handle_centre(page, edge.element_handle(), require_hit=True)
@@ -3930,9 +3962,11 @@ def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve)
         '[data-board-position-index="1"][data-turn-start-candidate="true"]'
     )
     assert origin is not None, "Cloisters Reach did not ask the player to lift acolytes"
+    cloisters = page.locator('[data-building-id="cloisters"]').first
+    assert cloisters.get_attribute("data-turn-family-state") == "owned"
+    assert cloisters.get_attribute("data-turn-family-available") == "false"
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(40)
-    _toggle_route_building(page, "cloisters")
 
     _assert_painted_turn_phase(page, "sow")
     duties = page.locator('[data-turn-duty-candidate="true"]').evaluate_all(
