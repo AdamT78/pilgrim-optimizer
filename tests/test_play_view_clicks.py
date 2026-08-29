@@ -1577,6 +1577,10 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
     _screenshot_active_board(page, SCREENSHOTS / "construction-preview-before.png")
     building = page.query_selector('[data-building-choice-key="well"][data-turn-offered="true"]')
     assert building is not None
+    building.hover()
+    assert "Construct for 1 stone." in page.locator(
+        '[data-building-tooltip-ability="true"]'
+    ).inner_text()
     _click_handle_centre(page, building, require_hit=True)
     page.wait_for_timeout(60)
     _screenshot_active_board(page, SCREENSHOTS / "construction-preview-after.png")
@@ -1634,6 +1638,12 @@ def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
         == 1
     )
     assert "well" in server.state.player_state(acting_player).player_board_slots.active_buildings
+    page.locator(
+        f'[data-player="{active_player_id}"] [data-player-board-slot][data-building-id="well"]'
+    ).hover()
+    assert "Construct for 1 stone." not in page.locator(
+        '[data-building-tooltip-ability="true"]'
+    ).inner_text()
 
 
 def _merchant_visible_at(page, position: int) -> bool:
@@ -3382,8 +3392,7 @@ def test_used_cloisters_route_tile_greys_only_when_the_server_reports_its_effect
     ) == "rgb(189, 184, 172)"
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
-        "action."
+        "In effect for the rest of this turn."
     )
 
 
@@ -3473,8 +3482,7 @@ def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serv
     assert tile.get_attribute("data-building-ability-greyed") == "false"
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Hired or activated this turn: acolytes may move against the river to enter or leave the "
-        "City."
+        "In effect for the rest of this turn."
     )
 
 
@@ -3530,8 +3538,7 @@ def test_owned_kogge_keeps_its_spokes_drawn_without_a_clickable_toggle(page, ser
     assert tile.evaluate("node => getComputedStyle(node).cursor") != "pointer"
     tile.hover()
     assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
-        "Yours: acolytes may move against the river to enter or leave the City. "
-        "These routes are free."
+        "Yours: in effect every turn."
     )
     assert page.locator('[data-component="duty-wheel"] [data-arrow]').count() == 16
 

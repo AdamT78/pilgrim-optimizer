@@ -344,7 +344,10 @@ def _building_tooltip_templates(catalog: dict) -> str:
             f'<span class="building-tooltip-category">{escape(str(building["category"]))}</span>'
             "</div>"
             f'<div class="building-tooltip-description">{description}</div>'
-            '<div class="building-tooltip-ability" data-building-tooltip-ability="true"></div>'
+            '<div class="building-tooltip-ability" data-building-tooltip-ability="true">'
+            '<div data-building-tooltip-status="true"></div>'
+            '<div data-building-tooltip-construct-cost="true"></div>'
+            "</div>"
             "</div>"
             + _tooltip_deckle_layer("building-tooltip-shadow")
             + _tooltip_deckle_layer("building-tooltip-halo")
@@ -424,6 +427,7 @@ def building_tooltip_styles() -> str:
     max-width: 340px; margin-top: 8px; padding-top: 7px; border-top: 1px solid #B39B72;
     color: #5F442B; font-size: 11px; font-weight: 700; line-height: 1.38; overflow-wrap: break-word;
   }
+  [data-building-tooltip-construct-cost="true"] { margin-top: 3px; }
   .building-tooltip-resource {
     display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .04em;
     vertical-align: -.22em; overflow: visible;
@@ -486,10 +490,21 @@ def building_tooltip_script() -> str:
       if (!template) { return; }
       tooltip.innerHTML = template.innerHTML;
       var ability = tooltip.querySelector('[data-building-tooltip-ability="true"]');
+      var status = tooltip.querySelector('[data-building-tooltip-status="true"]');
+      var cost = tooltip.querySelector('[data-building-tooltip-construct-cost="true"]');
       var abilityText = target.getAttribute('data-building-ability-text');
-      if (ability && abilityText) {
-        ability.textContent = abilityText;
-      } else if (ability) {
+      var constructCostText = target.getAttribute('data-building-construct-cost-text');
+      if (status && abilityText) {
+        status.textContent = abilityText;
+      } else if (status) {
+        status.remove();
+      }
+      if (cost && constructCostText) {
+        cost.textContent = constructCostText;
+      } else if (cost) {
+        cost.remove();
+      }
+      if (ability && !abilityText && !constructCostText) {
         ability.remove();
       }
       tooltip.setAttribute('data-building-tooltip-visible', 'true');
