@@ -126,10 +126,7 @@ def test_rendered_route_family_mapping_agrees_with_server_and_candidates(page, s
         family["i"]: family["building_id"] for family in rendered["families"]
     }
     declared_by_index = {
-        index: building_id
-        for building_id, (index, _paint, _priority) in (
-            play_server._ROUTE_BUILDING_PRESENTATION_BY_ID.items()
-        )
+        family.i: family.building_id for family in play_server._ROUTE_FAMILIES
     }
     candidate_indexes = {
         index
@@ -142,13 +139,6 @@ def test_rendered_route_family_mapping_agrees_with_server_and_candidates(page, s
     disagreements = []
     if len(page_by_index) != len(rendered["families"]):
         disagreements.append("rendered families repeated an index")
-    if set(page_by_index) != set(range(len(page_by_index))):
-        disagreements.append(
-            {
-                "rendered_indexes": set(page_by_index),
-                "expected_compact_indexes": set(range(len(page_by_index))),
-            }
-        )
     if page_by_index != declared_by_index:
         disagreements.append(
             {"server_declaration": declared_by_index, "rendered_page": page_by_index}
@@ -3403,7 +3393,9 @@ def test_used_cloisters_route_tile_greys_only_when_the_server_reports_its_effect
 
 
 def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serve) -> None:
-    base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    # `i`, not this transport order, is the candidate and automatic-mask identifier.
+    server.payload["families"] = tuple(reversed(server.payload["families"]))
     page.goto(base_url, wait_until="networkidle")
     tile = page.locator('[data-building-id="kogge"]').first
 

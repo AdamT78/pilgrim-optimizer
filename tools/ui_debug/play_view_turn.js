@@ -165,16 +165,20 @@
     });
   }
 
+  function familyByIndex(index) {
+    return FAMILIES.filter(function (family) { return family.i === index; })[0] || null;
+  }
+
   function familyBuildingIds(candidate) {
     return (candidate.family || []).map(function (index) {
-      var building = FAMILIES[index];
+      var building = familyByIndex(index);
       return building ? building.building_id : null;
     }).filter(function (buildingId) { return buildingId !== null; });
   }
 
   function familyForStep(step) {
     var buildingIndex = step.family;
-    return buildingIndex === undefined ? null : FAMILIES[buildingIndex] || null;
+    return buildingIndex === undefined ? null : familyByIndex(buildingIndex);
   }
 
   function enabledFamiliesAllow(candidate) {
@@ -191,13 +195,13 @@
 
   function enabledFamilyMask() {
     var enabledIndexes = {};
-    FAMILIES.forEach(function (family, index) {
+    FAMILIES.forEach(function (family) {
       var ability = buildingAbilityFor(family.building_id);
       if (
         ability && ability.family_visibility === 'always'
         || enabledFamilies.indexOf(family.building_id) !== -1
       ) {
-        enabledIndexes[index] = true;
+        enabledIndexes[family.i] = true;
       }
     });
     Object.keys(enabledIndexes).forEach(function (index) {

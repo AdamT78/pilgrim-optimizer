@@ -88,7 +88,7 @@ from pilgrim.rules.buildings import (  # noqa: E402
 from pilgrim.rules.merchant import CORNUCOPIA_COUNTER  # noqa: E402
 from pilgrim.rules.transition import (  # noqa: E402
     _HIRED_MODIFIER_BUILDING_IDS,
-    _ROUTE_BUILDING_IDS,
+    _ROUTE_BUILDING_IDS as _ENGINE_ROUTE_BUILDING_IDS,
     turn_step_id,
     apply_action,
     apply_turn_step as apply_engine_turn_step,
@@ -117,10 +117,44 @@ SCENARIO_PATH_FIELDS: tuple[str, ...] = (
 )
 PLAYTEST_SCENARIOS_DIR = Path(__file__).resolve().parents[1] / "scenarios" / "playtest"
 _WAGON_YARD_ONE_SHOT_FREE_HIRE_BUILDING_ID = "wagon_yard"
-_REVIEWED_ROUTE_BUILDING_IDS = ("kogge", "cloisters")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _RouteFamilyDeclaration:
+    """The complete server-owned identity and presentation of one route family."""
+
+    building_id: str
+    i: int
+    paint: str
+    priority: int
+
+    @property
+    def mask(self) -> int:
+        """Return this family's bit in the compact, server-written selection masks."""
+        return 1 << self.i
+
+
+# Add a route family here, then re-read its permitter wording below.  The payload palette, compact
+# candidate indexes, offered-building lookup, and automatic-mask bits all derive from this list.
+_ROUTE_FAMILIES = (
+    _RouteFamilyDeclaration("kogge", i=0, paint="route-opening", priority=1),
+    _RouteFamilyDeclaration("cloisters", i=1, paint="route-extra-step", priority=2),
+)
+_ROUTE_FAMILY_BY_BUILDING_ID = {family.building_id: family for family in _ROUTE_FAMILIES}
+_ROUTE_FAMILY_BY_INDEX = {family.i: family for family in _ROUTE_FAMILIES}
+_ROUTE_BUILDING_IDS = tuple(family.building_id for family in _ROUTE_FAMILIES)
+_ROUTE_BUILDING_PRESENTATION = tuple(
+    {
+        "i": family.i,
+        "building_id": family.building_id,
+        "paint": family.paint,
+        "priority": family.priority,
+    }
+    for family in _ROUTE_FAMILIES
+)
 _REVIEWED_HIRED_MODIFIER_BUILDING_IDS = ("scriptorium", "customs_house", "bank", "wagon_yard")
 
-if _ROUTE_BUILDING_IDS != _REVIEWED_ROUTE_BUILDING_IDS:
+if _ENGINE_ROUTE_BUILDING_IDS != _ROUTE_BUILDING_IDS:
     raise RuntimeError("Review permitter tile wording after changing the route-building tuple.")
 if _HIRED_MODIFIER_BUILDING_IDS != _REVIEWED_HIRED_MODIFIER_BUILDING_IDS:
     raise RuntimeError("Review permitter tile wording after changing the modifier-building tuple.")
@@ -568,6 +602,18 @@ def _route_buildings_used_by_committed_sow(state: Any) -> frozenset[str]:
     )
 
 
+def _buildings_with_spent_turn_abilities(state: Any) -> frozenset[str]:
+    """Name buildings whose allowance was spent by either committed turn representation.
+
+    ``used_buildings`` records ordinary committed turn steps.  Route buildings instead travel on
+    a sow action, so their committed ``BUILDING_BONUS`` events are the second source; widening
+    ``used_buildings`` would erase that distinction from the engine state.
+    """
+    return frozenset(
+        state.turn_progress.used_buildings | _route_buildings_used_by_committed_sow(state)
+    )
+
+
 def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
     """Keep a completed building effect unavailable on the page without changing engine lookups.
 
@@ -576,9 +622,7 @@ def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
     step that overwrites a `DONATED`, `NOT_LIVE`, or `NOT_SELECTED` source; that is an observed
     invariant, not one this function constructs.
     """
-    if source.building_key not in (
-        state.turn_progress.used_buildings | _route_buildings_used_by_committed_sow(state)
-    ):
+    if source.building_key not in _buildings_with_spent_turn_abilities(state):
         return source
     return dataclasses.replace(
         source,
@@ -1178,23 +1222,6 @@ COUNTED_COMBINATION_STEPS: tuple[tuple[str, str, str], ...] = (
 # The order amounts are spoken and encoded in. A display order only -- what may be taken is the
 # engine's business, and every mix it offers is offered whichever way round this reads.
 COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
-_ROUTE_BUILDING_CLOISTERS = "cloisters"
-_ROUTE_BUILDING_KOGGE = "kogge"
-_ROUTE_BUILDING_PRESENTATION_BY_ID = {
-    _ROUTE_BUILDING_KOGGE: (0, "route-opening", 1),
-    _ROUTE_BUILDING_CLOISTERS: (1, "route-extra-step", 2),
-}
-_ROUTE_BUILDING_PRESENTATION = tuple(
-    {
-        "i": index,
-        "building_id": building_id,
-        "paint": paint,
-        "priority": priority,
-    }
-    for building_id, (index, paint, priority) in sorted(
-        _ROUTE_BUILDING_PRESENTATION_BY_ID.items(), key=lambda item: item[1][0]
-    )
-)
 
 # WHAT EACH QUESTION IS ASKING, IN WORDS. One per construction site below, and each is written
 # beside the step it belongs to.
@@ -2057,8 +2084,8 @@ def _route_destinations_for_steps(action: Any, config: Any) -> tuple[tuple[int, 
     if not (isinstance(action, FullTurnAction) and action.sow_route_omitted_location is not None):
         return route, None
     combined_with_kogge = (
-        action.sow_route_building_id == _ROUTE_BUILDING_KOGGE
-        and action.sow_route_secondary_building_id == _ROUTE_BUILDING_CLOISTERS
+        action.sow_route_building_id == "kogge"
+        and action.sow_route_secondary_building_id == "cloisters"
     )
     return _cloisters_candidate_walk_lookup(
         origin=action.origin,
@@ -2376,16 +2403,16 @@ def _route_edge_metadata(
     building_id = None
     # The extra candidate hop is Cloisters' effect. It wins over a Kogge reversal at that hop
     # because the player is using their extra movement there, not merely crossing the river.
-    if _ROUTE_BUILDING_CLOISTERS in route_building_ids and index == len(edge_destinations) - 1:
-        building_id = _ROUTE_BUILDING_CLOISTERS
-    elif _ROUTE_BUILDING_KOGGE in route_building_ids:
+    if "cloisters" in route_building_ids and index == len(edge_destinations) - 1:
+        building_id = "cloisters"
+    elif "kogge" in route_building_ids:
         origin = action.origin if index == 0 else edge_destinations[index - 1]
         if edge_destinations[index] not in config.board.neighbors(origin):
-            building_id = _ROUTE_BUILDING_KOGGE
+            building_id = "kogge"
 
     if building_id is None:
         return {}
-    route_building_index, _paint, _priority = _ROUTE_BUILDING_PRESENTATION_BY_ID[building_id]
+    route_building_index = _ROUTE_FAMILY_BY_BUILDING_ID[building_id].i
     # The compact index points into the server-written palette on the page payload. Repeating the
     # full id, paint, and priority on every route candidate pushed the largest play page past its
     # established size ceiling.
@@ -2690,20 +2717,27 @@ def _frontier_value(value: Any) -> Any:
     return value
 
 
-def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
+def _mark_unambiguous_edge_steps(candidates: list[dict]) -> list[int]:
     """Name the family selections that make a movement continuation automatic.
 
     The page filters route candidates by the family's current visibility before it offers an
     answer.  A marker made from every candidate would therefore describe a different frontier
     from the one the player sees.  Enumerating the (at most two) offered route families keeps the
     decision on the server while letting the page match its current selection to an explicit
-    server-written set.
+    server-written set.  The returned indexes are that exact enumeration, for the payload to carry
+    instead of scanning candidates again.
     """
-    offered_families = _auto_advance_family_indexes(candidates)
+    offered_families = sorted(
+        {
+            family
+            for candidate in candidates
+            for family in candidate.get("family", ())
+        }
+    )
     selections = [
         (
             sum(
-                1 << family
+                _ROUTE_FAMILY_BY_INDEX[family].mask
                 for index, family in enumerate(offered_families)
                 if mask & (1 << index)
             ),
@@ -2750,35 +2784,24 @@ def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
                 # candidate in the largest play payload, where repeating long key names or nested
                 # family lists breaches the page-size ceiling.
                 step.setdefault("auto", []).append(selection_mask)
+    return offered_families
 
 
-def _auto_advance_family_indexes(candidates: list[dict]) -> list[int]:
-    """The route-family indexes whose subsets the automatic-marker evaluates."""
-    return sorted(
-        {
-            family
-            for candidate in candidates
-            for family in candidate.get("family", ())
-        }
-    )
-
-
-def _route_family_building_ids(candidates: list[dict]) -> set[str]:
-    """The route-building families that the server has offered in this turn's candidates."""
+def _route_family_building_ids(family_indexes: list[int]) -> set[str]:
+    """Map the automatic marker's exact offered-family list to its building IDs."""
     return {
-        _ROUTE_BUILDING_PRESENTATION[index]["building_id"]
-        for candidate in candidates
-        for index in candidate.get("family", ())
+        _ROUTE_FAMILY_BY_INDEX[index].building_id
+        for index in family_indexes
     }
 
 
-def turn_candidates(
+def _turn_candidates_and_auto_family_indexes(
     state: Any,
     config: Any,
     *,
     actions: tuple[Any, ...] | list[Any] | None = None,
     include_preview_effects: bool = True,
-) -> list[dict]:
+) -> tuple[list[dict], list[int]]:
     """The moves on offer, grouped by the decisions the page can actually put to a player.
 
     One candidate per distinct answer to the currently askable questions, which is not one per legal
@@ -2871,7 +2894,7 @@ def turn_candidates(
                 if not values or any(value != values[0] for value in values[1:]):
                     step.pop(effect_field, None)
         route_buildings = [
-            _ROUTE_BUILDING_PRESENTATION_BY_ID[building_id][0]
+            _ROUTE_FAMILY_BY_BUILDING_ID[building_id].i
             for building_id in _route_building_ids(members[0])
         ]
         candidates.append(
@@ -2911,7 +2934,24 @@ def turn_candidates(
             # Once every decision in a full turn is named, its resolution is still only previewed.
             # Confirm is the engine boundary that replaces this page with the End of Turn window.
             candidate["settled_turn_phase"] = "sow"
-    _mark_unambiguous_edge_steps(candidates)
+    auto_family_indexes = _mark_unambiguous_edge_steps(candidates)
+    return candidates, auto_family_indexes
+
+
+def turn_candidates(
+    state: Any,
+    config: Any,
+    *,
+    actions: tuple[Any, ...] | list[Any] | None = None,
+    include_preview_effects: bool = True,
+) -> list[dict]:
+    """Return the candidate list without exposing the payload-only automatic-mask metadata."""
+    candidates, _auto_family_indexes = _turn_candidates_and_auto_family_indexes(
+        state,
+        config,
+        actions=actions,
+        include_preview_effects=include_preview_effects,
+    )
     return candidates
 
 
@@ -2928,17 +2968,17 @@ def route_family_payload(
     automatic-mask indexes must come from that same candidate set, so callers cannot safely build
     any one of these fields in isolation.
     """
-    candidates = turn_candidates(
+    candidates, auto_family_indexes = _turn_candidates_and_auto_family_indexes(
         state,
         config,
         actions=actions,
         include_preview_effects=include_preview_effects,
     )
-    route_family_building_ids = _route_family_building_ids(candidates)
+    route_family_building_ids = _route_family_building_ids(auto_family_indexes)
     return {
         "turn_candidates": candidates,
         "families": _ROUTE_BUILDING_PRESENTATION,
-        "auto_family_indexes": _auto_advance_family_indexes(candidates),
+        "auto_family_indexes": auto_family_indexes,
         "building_abilities": building_abilities_payload(
             state,
             config,
