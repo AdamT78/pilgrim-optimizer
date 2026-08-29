@@ -119,29 +119,16 @@ def scenario():
 def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
     """Build one uncached page payload from a shared state/action load."""
     state_payload = view_payload(scenario.state, scenario.config)
-    candidates = play_server.turn_candidates(
+    route_payload = play_server.route_family_payload(
         scenario.state,
         scenario.config,
         actions=actions,
         include_preview_effects=False,
     )
-    route_family_building_ids = play_server._route_family_building_ids(candidates)
     return dict(
         state_payload,
         state_token=state_token(state_payload),
-        turn_candidates=candidates,
-        families=play_server._ROUTE_BUILDING_PRESENTATION,
-        auto_family_indexes=play_server._auto_advance_family_indexes(candidates),
-        building_abilities=play_server.building_abilities_payload(
-            scenario.state,
-            scenario.config,
-            route_family_building_ids=route_family_building_ids,
-        ),
-        building_ability_windows=play_server.building_ability_windows_payload(
-            scenario.state,
-            scenario.config,
-            route_family_building_ids=route_family_building_ids,
-        ),
+        **route_payload,
         log=[],
         log_blocks=[],
         phase_column=play_server.phase_column_payload(scenario.state, []),
@@ -150,6 +137,19 @@ def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
 
 def _all_corpus_actions(corpus_actions, playtest_actions):
     return (*corpus_actions, *playtest_actions)
+
+
+@pytest.fixture(scope="module")
+def play_payload_corpus(corpus_actions, playtest_actions):
+    """The page-facing route-family payload for every committed scenario, built once per module."""
+    corpus = tuple(
+        (scenario_path, _payload_from_corpus(scenario, actions))
+        for scenario_path, scenario, actions in _all_corpus_actions(
+            corpus_actions, playtest_actions
+        )
+    )
+    assert len(corpus) >= 320, f"only {len(corpus)} scenarios reached the play payload"
+    return corpus
 
 
 # ---------------------------------------------------------------------------------------------
@@ -999,8 +999,8 @@ def test_route_edge_metadata_states_each_building_dependency_for_the_page() -> N
         for step in edges
     ] == [
         None,
-        {"building_id": "kogge", "paint": "route-opening", "priority": 1},
-        {"building_id": "cloisters", "paint": "route-extra-step", "priority": 2},
+        {"i": 0, "building_id": "kogge", "paint": "route-opening", "priority": 1},
+        {"i": 1, "building_id": "cloisters", "paint": "route-extra-step", "priority": 2},
     ]
 
 
@@ -1318,6 +1318,71 @@ def test_auto_advance_is_exactly_the_unambiguous_edge_at_every_corpus_frontier()
     assert [path.name for path in playtest_paths] == sorted(PLAYTEST_POSITION_NAMES)
     # This now counts every offered family selection, each with its own page-visible frontier.
     assert checked >= 9000, f"only {checked} corpus selection-frontiers were checked"
+
+
+def test_every_auto_mask_uses_only_server_enumerated_family_bits(play_payload_corpus) -> None:
+    """A mask with an unknown bit makes the page silently discard an automatic continuation."""
+    checked_masks = 0
+    unknown_masks: list[tuple[str, str | None, int, int, tuple[int, ...]]] = []
+    for scenario_path, payload in play_payload_corpus:
+        family_indexes = payload["auto_family_indexes"]
+        allowed_mask = sum(1 << index for index in family_indexes)
+        for candidate in payload["turn_candidates"]:
+            for step in candidate["steps"]:
+                for mask in step.get("auto", ()):
+                    checked_masks += 1
+                    unknown_bits = mask & ~allowed_mask
+                    if unknown_bits:
+                        unknown_masks.append(
+                            (
+                                scenario_path.name,
+                                candidate["action_id"],
+                                mask,
+                                unknown_bits,
+                                tuple(family_indexes),
+                            )
+                        )
+
+    assert checked_masks > 0 and not unknown_masks, (
+        f"checked {checked_masks} automatic masks; masks with unknown family bits: "
+        f"{unknown_masks[:10]}"
+    )
+
+
+def test_family_visibility_appears_only_on_offered_route_family_buildings(
+    play_payload_corpus,
+) -> None:
+    """The page must never receive a route toggle for a building this turn did not offer."""
+    checked_visibility = 0
+    unexpected_visibility: list[tuple[str, str, str, tuple[str, ...]]] = []
+    for scenario_path, payload in play_payload_corpus:
+        offered_buildings = tuple(
+            sorted(play_server._route_family_building_ids(payload["turn_candidates"]))
+        )
+        ability_groups = [("current", payload["building_abilities"])]
+        ability_groups.extend(
+            (window, payload["building_ability_windows"][window]["abilities"])
+            for window in ("beginning", "sow", "end")
+        )
+        for window, abilities in ability_groups:
+            for ability in abilities:
+                if "family_visibility" not in ability:
+                    continue
+                checked_visibility += 1
+                if ability["building_id"] not in offered_buildings:
+                    unexpected_visibility.append(
+                        (
+                            scenario_path.name,
+                            window,
+                            ability["building_id"],
+                            offered_buildings,
+                        )
+                    )
+
+    assert checked_visibility > 0 and not unexpected_visibility, (
+        f"checked {checked_visibility} family-visibility fields; unexpected fields: "
+        f"{unexpected_visibility[:10]}"
+    )
 
 
 def _movement_candidates_after_relocation(building_id: str, selected_position: int) -> list[dict]:

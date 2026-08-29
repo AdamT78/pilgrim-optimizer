@@ -1186,6 +1186,7 @@ _ROUTE_BUILDING_PRESENTATION_BY_ID = {
 }
 _ROUTE_BUILDING_PRESENTATION = tuple(
     {
+        "i": index,
         "building_id": building_id,
         "paint": paint,
         "priority": priority,
@@ -2914,6 +2915,43 @@ def turn_candidates(
     return candidates
 
 
+def route_family_payload(
+    state: Any,
+    config: Any,
+    *,
+    actions: tuple[Any, ...] | list[Any] | None = None,
+    include_preview_effects: bool = True,
+) -> dict[str, Any]:
+    """Assemble the server-written route-family data a play page consumes together.
+
+    Candidates decide which route building families are offered.  The matching ability state and
+    automatic-mask indexes must come from that same candidate set, so callers cannot safely build
+    any one of these fields in isolation.
+    """
+    candidates = turn_candidates(
+        state,
+        config,
+        actions=actions,
+        include_preview_effects=include_preview_effects,
+    )
+    route_family_building_ids = _route_family_building_ids(candidates)
+    return {
+        "turn_candidates": candidates,
+        "families": _ROUTE_BUILDING_PRESENTATION,
+        "auto_family_indexes": _auto_advance_family_indexes(candidates),
+        "building_abilities": building_abilities_payload(
+            state,
+            config,
+            route_family_building_ids=route_family_building_ids,
+        ),
+        "building_ability_windows": building_ability_windows_payload(
+            state,
+            config,
+            route_family_building_ids=route_family_building_ids,
+        ),
+    }
+
+
 _TURN_PHASE_ROWS = (
     ("beginning", "Beginning of Turn"),
     ("sow", "Sow"),
@@ -3241,26 +3279,12 @@ class PlayServer(ThreadingHTTPServer):
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
         available_turn_steps = turn_steps_payload(self.state, self.config)
-        candidates = turn_candidates(self.state, self.config)
-        route_family_building_ids = _route_family_building_ids(candidates)
-        building_abilities = building_abilities_payload(
-            self.state,
-            self.config,
-            route_family_building_ids=route_family_building_ids,
-        )
+        route_payload = route_family_payload(self.state, self.config)
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
-            turn_candidates=candidates,
-            families=_ROUTE_BUILDING_PRESENTATION,
-            auto_family_indexes=_auto_advance_family_indexes(candidates),
+            **route_payload,
             turn_steps=available_turn_steps,
-            building_abilities=building_abilities,
-            building_ability_windows=building_ability_windows_payload(
-                self.state,
-                self.config,
-                route_family_building_ids=route_family_building_ids,
-            ),
             log=list(self.log_lines),
             log_blocks=[
                 dict(
