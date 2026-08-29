@@ -1,33 +1,35 @@
 # Route Hire Design
 
-How hiring a route building will work once its hire moves off the committed-step path and
-onto the sow action. This is the design record for that change: each decision with the
-measurement that settled it, and the two questions still open. It describes intent, not
-current behaviour — nothing here is implemented yet.
+How route hiring works now that its hire has moved off the committed-step path and onto the
+sow action. This is the design record for that change: each decision with the measurement that
+settled it, and the implementation that carries it.
 
 Read `design_principles.md` first. This document is that document applied to one change.
 
 ## The change
 
-Today a route hire is a committed step taken before the sow. You pay, and then the map
-widens. Measured on `kogge_hire_market_city_to_east_001`, the Kogge takes a position from
+Before this change, a route hire was a committed step taken before the sow. You paid, and then the
+map widened. Measured on `kogge_hire_market_city_to_east_001`, the Kogge took a position from
 6 candidates to 14, and those eight extra routes are invisible until the silver is spent.
-That is the shape `design_principles.md` calls buying blind, and it is also how a player
-can pay for a route and then walk somewhere else — on `movement_2p`, all 63 pre-hire
-actions remain legal after the Kogge is bought.
+That is the shape `design_principles.md` calls buying blind, and it also let a player pay for a
+route and then walk somewhere else — on `movement_2p`, all 63 pre-hire actions remained legal
+after the Kogge was bought.
 
-The hire moves onto the `FullTurnAction`, where the Mill, Infirmary and Well already carry
-theirs. Choosing a route that needs the Kogge is what buys it; choosing any other route
-buys nothing. Paying for something you do not use stops being a rule to enforce and
-becomes a state that cannot be described.
+The hire is now on the `FullTurnAction`, where the Mill, Infirmary and Well already carry theirs.
+Choosing a route that needs the Kogge buys it; choosing any other route buys nothing. Paying for
+something not used has stopped being a rule to enforce and has become a state that cannot be
+described.
 
-This is the first branch in this sequence whose capture diffs are expected to move.
-`docs/audits/route_modifier_hire_manifest.json` exists to say which files may change.
+The route-hire move was the first branch in this sequence whose capture diffs moved.
+`docs/audits/route_modifier_hire_manifest.json` records the files that changed with it.
 
 ## The tile is a toggle
 
-The building tile stops being a control that commits a purchase and becomes one that shows
-what the purchase would buy. Three states.
+The building tile is no longer a control that commits a purchase; it shows what the purchase would
+buy. The page carries four `data-turn-family-state` values: `off`, `on`, `owned`, and `in_effect`.
+The server writes `toggle_waiting_text`, `toggle_off_text`, and `toggle_on_text`; the page chooses
+among those finished sentences as the already-offered candidates are narrowed, but never composes
+the wording.
 
 Off. The tile is in play, its arrows are not drawn, and nothing has been spent.
 
@@ -56,8 +58,8 @@ buildings hired, 18 of 28 routes need both.
 
 ## What the arrows say
 
-Three states, painted as a fill on `.arrow-interior`, which is the mechanism that already
-paints offered arrows green.
+Three states are live in `turn_styles`, painted as a fill on `.arrow-interior`, which is the
+mechanism that already paints offered arrows green.
 
     ordinary move           rgb(30, 122, 52)   unchanged
     Kogge-opened edge       #7A4FB5            violet
@@ -80,11 +82,15 @@ matters is that this is the bought extra step, so the teal wins.
 
 ## The price is per route, not per arrow
 
-An arrow does not carry a price. The turn box accumulates as the route is assembled, one
-line per purchase:
+An arrow does not carry a price. The server accumulates the hire lines as the route is assembled,
+one line per route building the route uses. It ships them as one newline-separated `hire_text`
+string on the first route edge; the page has no hire-line state to append. The corpus has two
+multi-line variants with the same shape: each line names the building and its price and payee; one
+pays the bank and the other pays an opponent seat.
 
-    This route uses the Kogge — 1 silver to Red
-    and the Cloisters — 1 wheat to bank
+`sharedHireText` intersects the lines already present in surviving candidates. It therefore shows
+the hires every remaining route still needs; it never builds a combined sentence by appending lines
+in the browser.
 
 A single arrow cannot state its cost, because the cost depends on the route so far rather
 than on the arrow. It also cannot be attributed to one building by asking: where both are
@@ -109,22 +115,15 @@ future position or a new route building creates one.
 
 ## Scope
 
-The Kogge and the Cloisters move first. The Bank, Scriptorium and Customs House follow in
-a separate branch; their effects modify a resolution rather than a movement, so their hire
-attaches after the resolution is chosen, where the Infirmary's question already sits at
-index 4 of 6.
+The Kogge and the Cloisters are the route families. The Bank, Scriptorium and Customs House modify
+a resolution rather than a movement, so their hire belongs after the resolution choice, where the
+Infirmary's question already sits at index 4 of 6.
 
 The Wagon Yard does not move. It buys a single free hire rather than a standing permission,
 its effect is consumed by another committed step rather than by the sow, and "buy it where
 it is consumed" therefore points somewhere else for it.
 
-## Open questions
+## Resolved detail
 
-Whether the turn box carries a standing line naming the price while the arrows are showing,
-or says nothing until an arrow is taken. Dropping the per-arrow price leaves a window in
-which a player can click a paid arrow without having seen a number. The price does appear
-the moment the arrow is taken and Reset costs nothing, so the current intention is to ship
-without the line and add it if play proves it ambiguous.
-
-Where exactly the modifier hires attach, which belongs to the second branch and is written
-above as an expectation rather than a decision.
+The turn box does not carry a standing price line while arrows are merely shown. The server supplies
+the route's `hire_text` once a selected route contains a hire, and Reset still costs nothing.
