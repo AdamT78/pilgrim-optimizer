@@ -6,7 +6,27 @@
      decisions that reaches it. This narrows that list. It never invents a move, never asks whether
      a step is allowed, and never derives the hand count: each count is read off a step the seam
      already provided. */
-  var CANDIDATES = __CANDIDATES__;
+  var CANDIDATE_WIRE = __CANDIDATE_WIRE__;
+
+  function expandCandidateWire(wire) {
+    var fields = { '$p': 'prompt', '$t': 'turn_phase', '$k': 'kind' };
+    return wire.c.map(function (candidate) {
+      var expanded = Object.assign({}, candidate);
+      expanded.steps = candidate.steps.map(function (step) {
+        var expandedStep = {};
+        Object.keys(step).forEach(function (field) {
+          expandedStep[fields[field] || field] = fields[field]
+            ? wire[field][step[field]]
+            : step[field];
+        });
+        return expandedStep;
+      });
+      return expanded;
+    });
+  }
+
+  // This only restores strings the renderer interned; no turn rule is encoded in the wire format.
+  var CANDIDATES = expandCandidateWire(CANDIDATE_WIRE);
   var FAMILIES = __FAMILIES__;
   var AUTO_FAMILY_INDEXES = __AUTO_FAMILY_INDEXES__;
   var TURN_STEPS = __TURN_STEPS__;

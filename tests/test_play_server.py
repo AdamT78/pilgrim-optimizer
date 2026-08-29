@@ -2408,6 +2408,22 @@ def _run_script(
     return json.loads(finished.stdout)
 
 
+@needs_node
+def test_kogge_and_cloisters_page_expands_candidates_to_the_server_payload(tmp_path: Path) -> None:
+    """The transport compaction must disappear before the turn script reads a candidate."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
+    try:
+        expanded = _run_script(
+            server,
+            [],
+            tmp_path,
+            job_fields={"expandedCandidates": True},
+        )
+        assert expanded == json.loads(json.dumps(server.payload["turn_candidates"]))
+    finally:
+        server.server_close()
+
+
 def _phase_column_at_cursor(column: dict, current: str) -> dict:
     """Keep the server's phase rows, changing only which supplied cursor names as current."""
     return {
@@ -6987,7 +7003,12 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
     )
     expected = (
         render_play_view._TURN_SCRIPT.replace(
-            "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
+            "__CANDIDATE_WIRE__",
+            json.dumps(
+                render_play_view._compact_turn_candidates_for_page(
+                    payload.get("turn_candidates") or []
+                )
+            ),
         )
         .replace("__FAMILIES__", json.dumps(payload.get("families") or []))
         .replace("__AUTO_FAMILY_INDEXES__", json.dumps(payload.get("auto_family_indexes") or []))
@@ -7168,7 +7189,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
 
     # The template is the whole of the code, and these assertions are what make that a fact
     # rather than an assumption the greps rest on.
-    assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__CANDIDATE_WIRE__") == 1
     assert render_play_view._TURN_SCRIPT.count("__FAMILIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__AUTO_FAMILY_INDEXES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1

@@ -96,7 +96,7 @@ def _candidate_with_step(server: PlayServer, kind: str, *, value: str | None = N
 
 
 def _rendered_route_family_data(page) -> dict:
-    """Read the candidate and family data embedded in the served turn script."""
+    """Read the server-written route-family data embedded in the served turn script."""
     return page.evaluate(
         r"""() => {
             const source = Array.from(document.scripts, script => script.textContent).find(
@@ -104,21 +104,16 @@ def _rendered_route_family_data(page) -> dict:
                     && script.includes('var FAMILIES = ')
             );
             if (!source) { throw new Error('rendered turn script was missing'); }
-            const match = source.match(
-                new RegExp(
-                    'var CANDIDATES = ([\\s\\S]*?);\\n  var FAMILIES = '
-                    + '([\\s\\S]*?);\\n  var AUTO_FAMILY_INDEXES'
-                )
-            );
+            const match = source.match(/var FAMILIES = ([\s\S]*?);\n  var AUTO_FAMILY_INDEXES/);
             if (!match) { throw new Error('rendered turn script payload was unreadable'); }
-            return {candidates: JSON.parse(match[1]), families: JSON.parse(match[2])};
+            return {families: JSON.parse(match[1])};
         }"""
     )
 
 
 def test_rendered_route_family_mapping_agrees_with_server_and_candidates(page, serve) -> None:
     """The compact indexes the browser receives must retain the server's building mapping."""
-    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
     page.goto(base_url, wait_until="networkidle")
 
     rendered = _rendered_route_family_data(page)
@@ -130,7 +125,7 @@ def test_rendered_route_family_mapping_agrees_with_server_and_candidates(page, s
     }
     candidate_indexes = {
         index
-        for candidate in rendered["candidates"]
+        for candidate in server.payload["turn_candidates"]
         for index in (
             *candidate.get("family", ()),
             *(step["family"] for step in candidate["steps"] if "family" in step),
