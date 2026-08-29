@@ -1167,6 +1167,23 @@ def _render_board_page(payload: dict, *, allow_reset_to_setup: bool) -> str:
 
 DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
 
+# An undecided candidate is a server-owned explanation for why the page refuses to choose. These
+# are not labels the renderer may invent: a new residue field must stop payload construction until
+# it gets player wording, rather than exposing an engine identifier at the table.
+UNRESOLVED_FIELD_TEXT = {
+    "donate_building_id": "which building to donate",
+    "construct_plan": "which roads to build",
+    "effective_acolyte_building_id": "which building adds the extra acolytes",
+    "effective_acolyte_building_source": "where that building is hired from",
+    "free_hire_enabler_building_id": "which building grants the free hire",
+    "free_hire_target_building_id": "which building to hire for free",
+    "free_hire_target_building_source": "where the free-hired building comes from",
+    "bank_payment_building_id": "which building the Bank pays for",
+    "bank_payment_building_source": "where that building is hired from",
+    "bank_payment_replaced_resource": "which resource the silver replaces",
+    "bank_payment_silver_amount": "how much silver to pay",
+}
+
 # Fields answered by picking one stock out of the three. "Which stock grows" is the same question
 # whichever field is asking it, so both are the same KIND of step and the page reveals the same
 # affordance for either. A `None` here means this action has no such choice to make -- the field is
@@ -2676,6 +2693,14 @@ def _unresolved_fields(
     return unresolved
 
 
+def _unresolved_field_text(name: str) -> str:
+    """Return the server-written player name for one field blocking a candidate."""
+    try:
+        return UNRESOLVED_FIELD_TEXT[name]
+    except KeyError as error:
+        raise RuntimeError(f"Unresolved field {name!r} has no player-facing name.") from error
+
+
 def _align_implicit_taxation_step_two_prompts(candidates: list[dict]) -> None:
     """Give one UI frontier the positive engine explanation when a passive branch is implicit.
 
@@ -2930,6 +2955,11 @@ def _turn_candidates_and_auto_family_indexes(
                     else None
                 ),
                 "unresolved": unresolved,
+                **(
+                    {"unresolved_text": [_unresolved_field_text(name) for name in unresolved]}
+                    if unresolved
+                    else {}
+                ),
                 "variants": len(members),
             }
         )

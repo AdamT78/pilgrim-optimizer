@@ -928,7 +928,7 @@ def _turn_panels(candidates: list[dict]) -> str:
             body = f'<div class="turn-summary">{say(candidate["summary"])}</div>'
         else:
             fields = "".join(
-                f'<li class="turn-field">{say(name)}</li>' for name in candidate["unresolved"]
+                f'<li class="turn-field">{say(text)}</li>' for text in candidate["unresolved_text"]
             )
             body = (
                 '<div class="turn-blocked">This turn is not decided yet. '

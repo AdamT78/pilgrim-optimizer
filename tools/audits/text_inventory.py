@@ -79,6 +79,16 @@ def _record_turn_candidates(
     position: str,
 ) -> None:
     for candidate in turn_candidates(state, config, include_preview_effects=False):
+        for field, text in zip(
+            candidate["unresolved"], candidate.get("unresolved_text", ()), strict=True
+        ):
+            _record(
+                rows,
+                source="turn_candidates",
+                situation=f"unresolved field: {field}",
+                text=text,
+                position=position,
+            )
         for step in candidate["steps"]:
             prompt = step.get("prompt")
             if isinstance(prompt, str):

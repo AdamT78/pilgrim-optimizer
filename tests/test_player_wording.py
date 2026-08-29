@@ -98,6 +98,7 @@ def test_ordination_prompt_and_buttons_name_the_duty_actions() -> None:
                     "action_id": None,
                     "summary": None,
                     "unresolved": [],
+                    "unresolved_text": [],
                     "variants": 1,
                 }
             ]

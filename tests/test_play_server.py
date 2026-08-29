@@ -1800,6 +1800,55 @@ def test_no_refused_candidate_names_a_decided_field(corpus_actions, playtest_act
     )
 
 
+def test_every_unresolved_field_has_server_written_player_text(
+    corpus_actions, playtest_actions
+) -> None:
+    """The page may receive an engine field only beside the sentence it is to show."""
+    scenarios_checked = 0
+    fields_seen: set[str] = set()
+    unnamed: list[tuple[str, str]] = []
+    for scenario_path, scenario, actions in _all_corpus_actions(corpus_actions, playtest_actions):
+        scenarios_checked += 1
+        payload = _payload_from_corpus(scenario, actions)
+        for candidate in payload["turn_candidates"]:
+            unresolved = candidate["unresolved"]
+            unresolved_text = candidate.get("unresolved_text", [])
+            if len(unresolved) != len(unresolved_text):
+                unnamed.append((scenario_path.name, ", ".join(unresolved)))
+                continue
+            fields_seen.update(unresolved)
+            for field, text in zip(unresolved, unresolved_text, strict=True):
+                if not isinstance(text, str) or not text:
+                    unnamed.append((scenario_path.name, field))
+
+    assert scenarios_checked == 320, "the player-wording check no longer walks the full corpus"
+    assert not unnamed, f"unresolved fields without player text: {unnamed[:10]}"
+    assert fields_seen == set(play_server.UNRESOLVED_FIELD_TEXT)
+
+
+def test_an_unmapped_unresolved_field_stops_candidate_construction(monkeypatch) -> None:
+    """MUTATION. A new residue field needs wording before a player can encounter it."""
+    monkeypatch.delitem(play_server.UNRESOLVED_FIELD_TEXT, "donate_building_id")
+    scenario = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+
+    with pytest.raises(RuntimeError, match="donate_building_id.*no player-facing name"):
+        play_server.turn_candidates(scenario.state, scenario.config)
+
+
+def test_an_undecided_turn_renders_the_server_written_field_name() -> None:
+    """The renderer reads the completed sentence, never the field that led to it."""
+    scenario = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    candidate = next(
+        candidate
+        for candidate in play_server.turn_candidates(scenario.state, scenario.config)
+        if "donate_building_id" in candidate["unresolved"]
+    )
+    page = render_play_view.render_turn_panel({"turn_candidates": [candidate]})
+
+    assert "which building to donate" in page
+    assert "donate_building_id" not in page
+
+
 @pytest.mark.parametrize(
     ("position_name", "expected_refused"),
     [
@@ -2166,6 +2215,11 @@ def _one_field_gone_unasked(monkeypatch):
         play_server,
         "RESOURCE_CHOICE_FIELDS",
         tuple(name for name in play_server.RESOURCE_CHOICE_FIELDS if name != UNPRESENTED),
+    )
+    monkeypatch.setitem(
+        play_server.UNRESOLVED_FIELD_TEXT,
+        UNPRESENTED,
+        "which resource to tithe",
     )
     yield
 
@@ -6731,6 +6785,16 @@ def test_offering_the_mix_one_stock_at_a_time_is_caught(monkeypatch) -> None:
     assert both in _mixes_the_engine_allows(server, prefix), "stone and silver is not legal here"
 
     monkeypatch.setattr(play_server, "_presented", one_at_a_time)
+    monkeypatch.setitem(
+        play_server.UNRESOLVED_FIELD_TEXT,
+        "alms_payment_silver",
+        "how much silver to give as alms",
+    )
+    monkeypatch.setitem(
+        play_server.UNRESOLVED_FIELD_TEXT,
+        "alms_payment_wheat",
+        "how much wheat to give as alms",
+    )
     server._refresh()
 
     # Every split turn that starts its bonus by taking silver, and what it may take second.
@@ -6926,6 +6990,16 @@ def test_setting_the_two_alms_amounts_one_at_a_time_is_caught(monkeypatch) -> No
         ]
 
     monkeypatch.setattr(play_server, "_presented", independently)
+    monkeypatch.setitem(
+        play_server.UNRESOLVED_FIELD_TEXT,
+        "tithe_resource",
+        "which resource to tithe",
+    )
+    monkeypatch.setitem(
+        play_server.UNRESOLVED_FIELD_TEXT,
+        "taxation_step1_resource",
+        "which resource to collect from Taxation",
+    )
     server = _reference_server()
 
     with pytest.raises(AssertionError, match="not the pairs the engine allows"):
@@ -6958,6 +7032,9 @@ def test_a_turn_the_page_cannot_finish_is_refused_with_the_open_fields_named(
         assert candidate["summary"] is None, "an undecided turn was described as if it were one"
         assert candidate["variants"] > 1
         assert all(isinstance(name, str) and name for name in candidate["unresolved"])
+        assert candidate["unresolved_text"] == [
+            play_server.UNRESOLVED_FIELD_TEXT[name] for name in candidate["unresolved"]
+        ]
 
     # The fields named are really the ones the survivors differ on, checked against the actions.
     candidate = open_ended[0]
@@ -8128,6 +8205,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                 "action_id": None,
                 "summary": None,
                 "unresolved": [],
+                "unresolved_text": [],
                 "variants": 1,
             },
             {
@@ -8143,6 +8221,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                 "action_id": None,
                 "summary": None,
                 "unresolved": [],
+                "unresolved_text": [],
                 "variants": 1,
             },
         ],
