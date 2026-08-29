@@ -9,9 +9,16 @@
   var CANDIDATE_WIRE = __CANDIDATE_WIRE__;
 
   function expandCandidateWire(wire) {
-    var fields = { '$p': 'prompt', '$t': 'turn_phase', '$k': 'kind' };
+    var fields = { '$p': 'prompt', '$t': 'turn_phase', '$k': 'kind', '$s': 'summary' };
+    var candidateFields = { 'summary': '$s' };
     return wire.c.map(function (candidate) {
-      var expanded = Object.assign({}, candidate);
+      var expanded = {};
+      Object.keys(candidate).forEach(function (field) {
+        var wireField = candidateFields[field];
+        expanded[field] = wireField && candidate[field] !== null
+          ? wire[wireField][candidate[field]]
+          : candidate[field];
+      });
       expanded.steps = candidate.steps.map(function (step) {
         var expandedStep = {};
         Object.keys(step).forEach(function (field) {

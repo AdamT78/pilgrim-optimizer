@@ -821,6 +821,7 @@ def _payload_with_turn_candidates(active_player: str) -> dict:
             "summary": "sample summary",
             "variants": 1,
             "unresolved": [],
+            "unresolved_text": [],
         }
     ]
     return payload
