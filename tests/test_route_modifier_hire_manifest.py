@@ -17,14 +17,14 @@ def test_manifest_covers_the_full_corpus_and_reviewed_initial_hire_boundary() ->
 
     assert len(rows) == 320
     assert {row.scenario_path for row in target_rows} < set(manifest.SCOPED_SCENARIO_PATHS)
-    assert len(target_rows) == 17
+    assert len(target_rows) == 15
     assert not {
         building_id
         for row in target_rows
         for building_id in row.offered_building_ids
     } & set(manifest.ROUTE_HIRE_BUILDING_IDS)
     assert target_rows[-1].scenario_path == "scenarios/wagon_yard_opponent_not_hireable_001.json"
-    assert target_rows[0].legal_actions_count == 2
+    assert target_rows[0].legal_actions_count == 15
     assert target_rows[0].turn_steps_count == 1
 
 

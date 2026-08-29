@@ -174,59 +174,69 @@ def test_customs_house_hire_window_closes_after_resolution() -> None:
     assert not [step for step in turn_steps(_pre_resolution_state(scenario), scenario.config) if step.building_id == "customs_house"]
 
 
-def test_hired_bank_only_changes_actions_after_its_step() -> None:
+def test_paid_bank_hire_is_carried_by_the_substitution_action() -> None:
     scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
 
-    assert not any(
-        action.bank_payment_building_id == "bank"
-        for action in legal_actions(scenario.state, scenario.config)
-        if isinstance(action, FullTurnAction)
-    )
-
-    after = apply_turn_step(
-        scenario.state,
-        scenario.config,
-        _activation_step(scenario.state, scenario.config, "bank"),
-    )
+    assert not [step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank"]
     enabled = [
         action
-        for action in legal_actions(after, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction) and action.bank_payment_building_id == "bank"
     ]
     assert enabled
-    assert all(action.bank_payment_building_source is None for action in enabled)
+    assert all(action.bank_payment_building_source == "player_two" for action in enabled)
+    assert all(dict(action.hire_payments) == {"bank": "silver"} for action in enabled)
 
 
-def test_hired_bank_pays_its_opponent_and_market_sources() -> None:
+def test_paid_bank_hire_pays_its_opponent_and_market_sources_on_the_action() -> None:
     opponent = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
-    after_opponent = apply_turn_step(
-        opponent.state,
-        opponent.config,
-        _activation_step(opponent.state, opponent.config, "bank"),
+    opponent_action = next(
+        action
+        for action in legal_actions(opponent.state, opponent.config)
+        if isinstance(action, FullTurnAction)
+        and action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source == "player_two"
     )
+    after_opponent = apply_action(opponent.state, opponent_action, opponent.config).state
     _assert_opponent_hire_payment(opponent.state, after_opponent, building_id="bank")
 
     market = load_scenario("scenarios/bank_hire_market_ordination_001.json")
-    after_market = apply_turn_step(
-        market.state,
-        market.config,
-        _activation_step(market.state, market.config, "bank"),
+    market_action = next(
+        action
+        for action in legal_actions(market.state, market.config)
+        if isinstance(action, FullTurnAction)
+        and action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source == "market"
     )
+    after_market = apply_action(market.state, market_action, market.config).state
     _assert_market_hire_pays_bank(after_market, building_id="bank")
+
+
+def test_free_wagon_yard_bank_hire_remains_a_step() -> None:
+    scenario = load_scenario(
+        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json"
+    )
+
+    step = _activation_step(scenario.state, scenario.config, "bank")
+    assert step.source == "market"
+    assert step.hire_payment is None
 
 
 def test_owned_bank_is_free_immediate_and_step_free() -> None:
     scenario = load_scenario("scenarios/bank_active_ordination_substitution_001.json")
 
-    assert not [step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank"]
+    assert not [
+        step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank"
+    ]
     assert any(
-        action.bank_payment_building_id == "bank" and action.bank_payment_building_source == "own_active"
+        action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source == "own_active"
         for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction)
     )
 
 
-def test_unaffordable_bank_hire_is_not_offered() -> None:
+def test_unaffordable_paid_bank_hire_is_not_offered() -> None:
     scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
     player = scenario.state.player_state(PlayerId.PLAYER_ONE)
     without_silver = scenario.state.with_player_state(
@@ -234,30 +244,37 @@ def test_unaffordable_bank_hire_is_not_offered() -> None:
         replace(player, resources=replace(player.resources, silver=0)),
     )
 
-    assert not [step for step in turn_steps(without_silver, scenario.config) if step.building_id == "bank"]
-
-
-def test_bank_hire_window_closes_after_resolution() -> None:
-    scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
-
-    assert not [step for step in turn_steps(_pre_resolution_state(scenario), scenario.config) if step.building_id == "bank"]
-
-
-def test_hired_bank_pays_first_then_changes_the_later_transaction() -> None:
-    scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
-    after_hire = apply_turn_step(
-        scenario.state,
-        scenario.config,
-        _activation_step(scenario.state, scenario.config, "bank"),
+    assert not [
+        step for step in turn_steps(without_silver, scenario.config) if step.building_id == "bank"
+    ]
+    assert not any(
+        isinstance(action, FullTurnAction) and action.bank_payment_building_source == "player_two"
+        for action in legal_actions(without_silver, scenario.config)
     )
+
+
+def test_paid_bank_hire_window_closes_after_resolution() -> None:
+    scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
+
+    state = _pre_resolution_state(scenario)
+    assert not [step for step in turn_steps(state, scenario.config) if step.building_id == "bank"]
+    assert not any(
+        isinstance(action, FullTurnAction) and action.bank_payment_building_source == "player_two"
+        for action in legal_actions(state, scenario.config)
+    )
+
+
+def test_paid_bank_hire_pays_first_then_changes_the_later_transaction() -> None:
+    scenario = load_scenario("scenarios/bank_hire_opponent_ordination_001.json")
     action = next(
         action
-        for action in legal_actions(after_hire, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction)
         and action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source == "player_two"
         and action.bank_payment_replaced_resource == "wheat"
     )
-    result = apply_action(after_hire, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
     events = _building_hires(result.state)
 
     assert dict(events[0].details)["building_id"] == "bank"

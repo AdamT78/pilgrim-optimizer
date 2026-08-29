@@ -545,9 +545,31 @@ def _building_ability_is_greyed(source: Any) -> bool:
     }
 
 
-def _building_ability_source_payload(source: Any) -> dict[str, Any]:
+_PAID_BANK_TILE_STATUS_TEXT = "Usable: choose it when an action asks how to pay."
+_BANK_WITHOUT_PAYMENT_ACTION_STATUS_TEXT = "Cannot be used: no action this turn can use the Bank."
+
+
+def _paid_bank_hire_source(source: Any) -> bool:
+    """Whether this is the paid Bank source now selected inside a full-turn action.
+
+    Wagon Yard's free Bank hire remains a committed step. It resolves as an ``unavailable``
+    generic source while its enumerated step is the authority, so it deliberately does not enter
+    this inline-payment presentation.
+    """
+    return (
+        source.building_key == "bank"
+        and source.source_type in {"live_market_hire", "opponent_active_hire"}
+        and source.hire_cost > 0
+    )
+
+
+def _building_ability_source_payload(
+    source: Any,
+    *,
+    paid_bank_payment_on_offer: bool = False,
+) -> dict[str, Any]:
     """Serialize every fact the browser needs to describe one resolved building source."""
-    return {
+    payload = {
         "building_id": source.building_key,
         "source_type": source.source_type,
         "owner": source.owner,
@@ -563,6 +585,25 @@ def _building_ability_source_payload(source: Any) -> dict[str, Any]:
         # This is deliberately a value, not a browser-side mapping from `reason`: an absent
         # engine reason produces no sentence instead of a helpful-looking fiction.
         "status_text": _building_ability_status_text(source),
+    }
+    if (
+        source.building_key == "bank"
+        and source.reason == BuildingAbilityReason.INSUFFICIENT_RESOURCE
+    ):
+        return payload | {"status_text": _BANK_WITHOUT_PAYMENT_ACTION_STATUS_TEXT}
+    if not _paid_bank_hire_source(source) or source.reason == BuildingAbilityReason.MID_SOW:
+        return payload
+    if paid_bank_payment_on_offer:
+        return payload | {"status_text": _PAID_BANK_TILE_STATUS_TEXT}
+
+    # A paid Bank source is useful only through an enumerated full-turn payment choice. Its
+    # generic source may still be affordable even when no action asks for a replaceable resource,
+    # so the tile's affordance has to follow that action set rather than quote the stale hire fee.
+    return payload | {
+        "usable": False,
+        "reason": None,
+        "greyed": True,
+        "status_text": _BANK_WITHOUT_PAYMENT_ACTION_STATUS_TEXT,
     }
 
 
@@ -697,10 +738,16 @@ def building_abilities_payload(
     config: Any,
     *,
     route_family_building_ids: set[str] | None = None,
+    actions: tuple[Any, ...] | list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve every catalogue building for the active player in this exact window."""
+    available_actions = tuple(legal_actions(state, config) if actions is None else actions)
+    paid_bank_payment_on_offer = _paid_bank_payment_on_offer(available_actions)
     return [
-        _building_ability_source_payload(source)
+        _building_ability_source_payload(
+            source,
+            paid_bank_payment_on_offer=paid_bank_payment_on_offer,
+        )
         | _building_ability_map_fields(state, config, building)
         | _route_family_ability_fields(source, route_family_building_ids)
         for building in config.buildings.catalogue
@@ -723,6 +770,7 @@ def building_ability_windows_payload(
     config: Any,
     *,
     route_family_building_ids: set[str] | None = None,
+    actions: tuple[Any, ...] | list[Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Describe the building availability the page may reveal at each server-named turn window.
 
@@ -730,6 +778,8 @@ def building_ability_windows_payload(
     to travel alongside the candidate phases: a browser that inferred the restriction from its
     local cursor would be holding a second copy of the turn rule.
     """
+    available_actions = tuple(legal_actions(state, config) if actions is None else actions)
+    paid_bank_payment_on_offer = _paid_bank_payment_on_offer(available_actions)
     sources = tuple(
         _building_ability_source_after_turn_use(
             state,
@@ -804,7 +854,10 @@ def building_ability_windows_payload(
         return {
             "turn_steps_offered": offered,
             "abilities": [
-                _building_ability_source_payload(source)
+                _building_ability_source_payload(
+                    source,
+                    paid_bank_payment_on_offer=paid_bank_payment_on_offer,
+                )
                 | _building_ability_map_fields(
                     state,
                     config,
@@ -1196,6 +1249,14 @@ RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_res
 BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
 HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
 HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
+BANK_PAYMENT_FIELDS: tuple[str, ...] = (
+    "bank_payment_building_id",
+    "bank_payment_building_source",
+    "bank_payment_replaced_resource",
+    "bank_payment_silver_amount",
+    "hire_payments",
+)
+BANK_PAYMENT_PROMPT = "Choose how to pay."
 ROUTE_HIRE_FIELDS: tuple[str, ...] = (
     "sow_route_building_id",
     "sow_route_building_source",
@@ -1818,12 +1879,108 @@ def _confession_in_words(action: Any) -> str:
     return f"hire the Confession Box from {action.source}"
 
 
+def _resource_payment_label(action: FullTurnAction, state: Any, config: Any) -> str:
+    """Read this action's ordinary resource cost from the engine transaction it enumerated."""
+    result = apply_action(state, action, config)
+    resource_costs = {resource: 0 for resource in COMBINATION_STOCKS}
+    for event in result.events:
+        if event.event_type is not EventType.RESOURCE_DELTA or event.action_id != action_id(action):
+            continue
+        for resource in COMBINATION_STOCKS:
+            resource_costs[resource] += max(0, -int(dict(event.details).get(resource, 0)))
+
+    before_player = state.player_state(state.active_player)
+    after_player = result.state.player_state(state.active_player)
+    piety_cost = max(0, before_player.piety - after_player.piety)
+    costs = [
+        f"{amount} {resource}"
+        for resource, amount in resource_costs.items()
+        if amount > 0
+    ]
+    if piety_cost:
+        costs.append(f"{piety_cost} piety")
+    if not costs:
+        raise AssertionError(
+            "A Bank payment choice must have an engine-reported ordinary resource cost."
+        )
+    return ", ".join(costs)
+
+
+def _bank_hire_silver_amount(action: FullTurnAction) -> int:
+    """Read the Bank hire's silver from the payment tuple carried by this exact action."""
+    amount = sum(
+        building_id == "bank" and resource == "silver"
+        for building_id, resource in tuple(action.hire_payments or ())
+    )
+    if amount <= 0:
+        raise AssertionError("A paid Bank action must carry its silver hire payment.")
+    return amount
+
+
+def _bank_hire_fact(action: FullTurnAction) -> str:
+    """State the Bank hire and substitution with the source and amounts the action selected."""
+    source = action.bank_payment_building_source
+    replaced_resource = action.bank_payment_replaced_resource
+    substitution_silver = action.bank_payment_silver_amount
+    if source is None or replaced_resource is None or substitution_silver is None:
+        raise AssertionError("A Bank hire fact requires its source, replaced resource, and silver.")
+    hire_source = "the market" if source == "market" else _building_ability_party_name(source)
+    if not hire_source:
+        raise AssertionError("A Bank hire fact requires a player-facing hire source.")
+    hire_silver = _bank_hire_silver_amount(action)
+    return (
+        "This action uses the Bank — "
+        f"{hire_silver} silver to hire it from {hire_source}, and "
+        f"{substitution_silver} silver in place of {substitution_silver} {replaced_resource}."
+    )
+
+
+def _bank_payment_step(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> tuple[dict, tuple[str, ...]]:
+    """Present the ordinary cost or the atomic Bank hire-and-substitution it replaces."""
+    if action.bank_payment_building_id is None:
+        value = "none"
+        label = _resource_payment_label(action, state, config)
+        hire_text = ""
+    else:
+        source = action.bank_payment_building_source
+        replaced_resource = action.bank_payment_replaced_resource
+        substitution_silver = action.bank_payment_silver_amount
+        if source is None or replaced_resource is None or substitution_silver is None:
+            raise AssertionError("A Bank payment action must carry its complete payment choice.")
+        value = ":".join(
+            (
+                source,
+                replaced_resource,
+                str(substitution_silver),
+            )
+        )
+        total_silver = _bank_hire_silver_amount(action) + substitution_silver
+        label = f"{total_silver} silver, hires the Bank"
+        hire_text = _bank_hire_fact(action)
+    return (
+        {
+            "kind": "combination",
+            "value": value,
+            "label": label,
+            "prompt": BANK_PAYMENT_PROMPT,
+            **({"hire_text": hire_text} if hire_text else {}),
+        },
+        BANK_PAYMENT_FIELDS,
+    )
+
+
 def _presented(
     action: Any,
     *,
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
@@ -1978,6 +2135,10 @@ def _presented(
                 ("ordination_steps",),
             )
         )
+    if offer_bank_payment and isinstance(action, FullTurnAction):
+        if state is None or config is None:
+            raise ValueError("state and config are required to present Bank payment choices.")
+        presented.append(_bank_payment_step(action, state=state, config=config))
     return presented
 
 
@@ -1987,6 +2148,7 @@ def _presented_rows(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     include_preview_effects: bool = True,
 ) -> list[tuple[dict, tuple[str, ...]]]:
@@ -1997,6 +2159,7 @@ def _presented_rows(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_bank_payment=offer_bank_payment,
             hire_payment_buildings=hire_payment_buildings,
             include_preview_effects=include_preview_effects,
         )
@@ -2012,6 +2175,7 @@ def _presented_steps(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     include_preview_effects: bool = True,
 ) -> list[dict]:
@@ -2022,6 +2186,7 @@ def _presented_steps(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_bank_payment=offer_bank_payment,
             hire_payment_buildings=hire_payment_buildings,
             include_preview_effects=include_preview_effects,
         )
@@ -2196,6 +2361,29 @@ def _hire_contexts(actions: list[Any], config: Any) -> set[tuple[Any, ...]]:
         for action in actions
         if isinstance(action, FullTurnAction) and _action_hires_building(action)
     }
+
+
+def _bank_payment_context_key(action: FullTurnAction) -> tuple[Any, ...]:
+    """Identify one complete action apart from the atomic Bank payment choice it may add."""
+    return tuple(
+        getattr(action, field.name)
+        for field in dataclasses.fields(FullTurnAction)
+        if field.name not in {*BANK_PAYMENT_FIELDS, "action_type"}
+    )
+
+
+def _is_paid_bank_payment_action(action: Any) -> bool:
+    """Whether a full-turn action atomically hires the Bank and uses its payment effect."""
+    return (
+        isinstance(action, FullTurnAction)
+        and action.bank_payment_building_id == "bank"
+        and action.bank_payment_building_source not in (None, "own_active")
+    )
+
+
+def _paid_bank_payment_on_offer(actions: tuple[Any, ...] | list[Any]) -> bool:
+    """Whether this exact action list contains a paid Bank payment choice."""
+    return any(_is_paid_bank_payment_action(action) for action in actions)
 
 
 def _steps_before_hire_payment_questions(
@@ -2483,6 +2671,7 @@ def _covered_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     include_preview_effects: bool = True,
 ) -> set[str]:
@@ -2498,6 +2687,7 @@ def _covered_fields(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_bank_payment=offer_bank_payment,
             hire_payment_buildings=hire_payment_buildings,
             include_preview_effects=include_preview_effects,
         )
@@ -2531,6 +2721,7 @@ def decision_steps(
     state: Any,
     config: Any,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     preview_effects: dict[str, Any] | None = None,
     include_preview_effects: bool = True,
@@ -2566,6 +2757,7 @@ def decision_steps(
                 state=state,
                 config=config,
                 offer_hire=offer_hire,
+                offer_bank_payment=offer_bank_payment,
                 hire_payment_buildings=hire_payment_buildings,
                 include_preview_effects=include_preview_effects,
             ),
@@ -2622,6 +2814,7 @@ def decision_steps(
         state=state,
         config=config,
         offer_hire=offer_hire,
+        offer_bank_payment=offer_bank_payment,
         hire_payment_buildings=hire_payment_buildings,
         include_preview_effects=include_preview_effects,
     )
@@ -2639,6 +2832,7 @@ def _unresolved_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    offer_bank_payment: bool = False,
     hire_payment_buildings: tuple[str, ...] = (),
     include_preview_effects: bool = True,
 ) -> list[str]:
@@ -2660,6 +2854,7 @@ def _unresolved_fields(
         state,
         config,
         offer_hire=offer_hire,
+        offer_bank_payment=offer_bank_payment,
         hire_payment_buildings=hire_payment_buildings,
         include_preview_effects=include_preview_effects,
     )
@@ -2855,8 +3050,14 @@ def _turn_candidates_and_auto_family_indexes(
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config) if actions is None else actions)
     hire_contexts = _hire_contexts(actions, config)
+    bank_payment_contexts = {
+        _bank_payment_context_key(action)
+        for action in actions
+        if _is_paid_bank_payment_action(action)
+    }
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
+    offer_bank_payment_by_action_id: dict[str, bool] = {}
     preview_effects_by_action_id: dict[str, dict[str, Any]] = {}
     preview_effect_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
@@ -2866,6 +3067,9 @@ def _turn_candidates_and_auto_family_indexes(
             _resolution_context_key(action, config) in hire_contexts
         )
         offer_hire_by_action_id[move_id] = offered_hire
+        offer_bank_payment_by_action_id[move_id] = isinstance(action, FullTurnAction) and (
+            _bank_payment_context_key(action) in bank_payment_contexts
+        )
         preview_effects_by_action_id[move_id] = (
             _turn_action_preview_effects(action, state, config, cache=preview_effect_cache)
             if include_preview_effects and isinstance(action, FullTurnAction)
@@ -2887,6 +3091,7 @@ def _turn_candidates_and_auto_family_indexes(
             state=state,
             config=config,
             offer_hire=offer_hire_by_action_id[move_id],
+            offer_bank_payment=offer_bank_payment_by_action_id[move_id],
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             preview_effects=preview_effects_by_action_id[move_id],
             include_preview_effects=include_preview_effects,
@@ -2909,6 +3114,7 @@ def _turn_candidates_and_auto_family_indexes(
                 state,
                 config,
                 offer_hire=offer_hire_by_action_id[move_id],
+                offer_bank_payment=offer_bank_payment_by_action_id[move_id],
                 hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
                 include_preview_effects=include_preview_effects,
             )
@@ -3008,10 +3214,11 @@ def route_family_payload(
     automatic-mask indexes must come from that same candidate set, so callers cannot safely build
     any one of these fields in isolation.
     """
+    available_actions = tuple(legal_actions(state, config) if actions is None else actions)
     candidates, auto_family_indexes = _turn_candidates_and_auto_family_indexes(
         state,
         config,
-        actions=actions,
+        actions=available_actions,
         include_preview_effects=include_preview_effects,
     )
     route_family_building_ids = _route_family_building_ids(auto_family_indexes)
@@ -3023,11 +3230,13 @@ def route_family_payload(
             state,
             config,
             route_family_building_ids=route_family_building_ids,
+            actions=available_actions,
         ),
         "building_ability_windows": building_ability_windows_payload(
             state,
             config,
             route_family_building_ids=route_family_building_ids,
+            actions=available_actions,
         ),
     }
 

@@ -5,8 +5,10 @@ from dataclasses import replace
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
-from pilgrim.model.actions import FullTurnAction, action_summary
+from pilgrim.model.actions import BuildingActivationStep, FullTurnAction, action_summary
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
+from pilgrim.rules import transition
+from pilgrim.rules.buildings import building_ability_source
 from pilgrim.rules.merchant import taxation_board_position
 from pilgrim.rules.transition import (
     TransitionValidationError,
@@ -37,16 +39,55 @@ def _bank_actions(path: str):
     return scenario, actions, bank_actions
 
 
-def _hired_bank_actions(path: str):
+def _inline_hired_bank_actions(path: str):
     scenario = load_scenario(path)
-    step = next(step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank")
-    state = apply_turn_step(scenario.state, scenario.config, step)
     actions = [
         action
-        for action in legal_actions(state, scenario.config)
+        for action in legal_actions(scenario.state, scenario.config)
         if isinstance(action, FullTurnAction)
     ]
-    return scenario, state, actions, [action for action in actions if action.bank_payment_building_id == "bank"]
+    bank_actions = [action for action in actions if action.bank_payment_building_id == "bank"]
+    return scenario, actions, bank_actions
+
+
+def _legacy_paid_bank_step(scenario) -> BuildingActivationStep:
+    """Build the retired paid Bank step so its outcome set remains directly comparable."""
+    source = building_ability_source(
+        scenario.state,
+        scenario.config,
+        acting_player=scenario.state.active_player,
+        building_key="bank",
+    )
+    assert source.source_type in {"live_market_hire", "opponent_active_hire"}
+    assert source.hire_resource is not None
+    return BuildingActivationStep(
+        building_id="bank",
+        source="market" if source.source_type == "live_market_hire" else source.owner or "unknown",
+        hire_payment=source.hire_resource,
+    )
+
+
+def _outcome_without_action_id_spellings(state):
+    """Compare event content while allowing the retired step's action IDs to change."""
+    return replace(
+        state,
+        turn_progress=replace(
+            state.turn_progress,
+            # The event list's sort order also follows its action ID, so normalize that ordering
+            # after clearing the spelling that changes when the committed step becomes an action.
+            events=tuple(
+                sorted(
+                    (replace(event, action_id="") for event in state.turn_progress.events),
+                    key=repr,
+                )
+            ),
+        ),
+    )
+
+
+def _physical_outcome(state):
+    """Compare board and player state without treating two audit traces as distinct endpoints."""
+    return replace(state, turn_progress=replace(state.turn_progress, events=()))
 
 
 def test_own_active_bank_generates_partial_and_full_ordination_substitution_variants() -> None:
@@ -224,7 +265,7 @@ def test_bank_variants_only_exist_for_supported_payment_resolutions() -> None:
 
 
 def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant_none() -> None:
-    scenario, state, _actions, bank_actions = _hired_bank_actions(
+    scenario, _actions, bank_actions = _inline_hired_bank_actions(
         "scenarios/bank_hire_market_ordination_001.json"
     )
     action = _first_action(
@@ -232,12 +273,12 @@ def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant
         lambda candidate: (
             candidate.resolution is TurnResolutionType.ORDINATION
             and candidate.ordination_steps == ("ordain", "ordain")
-            and candidate.bank_payment_building_source is None
+            and candidate.bank_payment_building_source == "market"
             and candidate.bank_payment_replaced_resource == "wheat"
             and candidate.bank_payment_silver_amount == 1
         ),
     )
-    result = apply_action(state, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
     hired_event = _events_of_type(result.events, EventType.BUILDING_HIRED)[0]
     bonus_event = _first_action(
         _events_of_type(result.events, EventType.BUILDING_BONUS),
@@ -262,7 +303,7 @@ def test_hired_market_bank_pays_hire_before_substitution_and_cannot_use_merchant
 
 
 def test_hired_opponent_bank_pays_owner_before_substitution() -> None:
-    scenario, state, _actions, bank_actions = _hired_bank_actions(
+    scenario, _actions, bank_actions = _inline_hired_bank_actions(
         "scenarios/bank_hire_opponent_ordination_001.json"
     )
     action = _first_action(
@@ -270,12 +311,12 @@ def test_hired_opponent_bank_pays_owner_before_substitution() -> None:
         lambda candidate: (
             candidate.resolution is TurnResolutionType.ORDINATION
             and candidate.ordination_steps == ("ordain", "ordain")
-            and candidate.bank_payment_building_source is None
+            and candidate.bank_payment_building_source == "player_two"
             and candidate.bank_payment_replaced_resource == "wheat"
             and candidate.bank_payment_silver_amount == 1
         ),
     )
-    result = apply_action(state, action, scenario.config)
+    result = apply_action(scenario.state, action, scenario.config)
     hired_details = dict(_events_of_type(result.events, EventType.BUILDING_HIRED)[0].details)
     assert hired_details["building_id"] == "bank"
     assert hired_details["source"] == "player_two"
@@ -285,8 +326,123 @@ def test_hired_opponent_bank_pays_owner_before_substitution() -> None:
     assert result.state.player_state(PlayerId.PLAYER_TWO).resources.silver == 1
 
 
+def test_paid_bank_hire_outcomes_are_atomic_and_the_paid_non_use_outcomes_are_removed() -> None:
+    paid_hire_scenarios = (
+        "bank_hire_market_ordination_001.json",
+        "bank_hire_opponent_ordination_001.json",
+        "kogge_donated_no_extra_routes_001.json",
+        "kogge_hire_opponent_city_to_west_001.json",
+        "stone_yard_buy_then_construct_001.json",
+    )
+    preserved_non_bank_outcomes = 0
+    preserved_paid_bank_outcomes = 0
+    removed_paid_non_use_actions = 0
+    removed_paid_non_use_end_states = 0
+    added_actions: list[FullTurnAction] = []
+
+    for scenario_name in paid_hire_scenarios:
+        scenario = load_scenario(f"scenarios/{scenario_name}")
+        legacy_step = _legacy_paid_bank_step(scenario)
+        assert legacy_step.hire_payment is not None
+        legacy_state = apply_turn_step(
+            scenario.state,
+            scenario.config,
+            legacy_step,
+        )
+        legacy_actions = [
+            action
+            for action in legal_actions(legacy_state, scenario.config)
+            if isinstance(action, FullTurnAction)
+        ]
+        legacy_bank_use_outcomes = {
+            _outcome_without_action_id_spellings(
+                apply_action(legacy_state, action, scenario.config).state
+            )
+            for action in legacy_actions
+            if action.bank_payment_building_id == "bank"
+        }
+        legacy_paid_non_use_outcomes = {
+            _physical_outcome(apply_action(legacy_state, action, scenario.config).state)
+            for action in legacy_actions
+            if action.bank_payment_building_id is None
+        }
+
+        baseline_actions = [
+            action
+            for action in transition._legal_full_turn_actions_for_state(
+                scenario.state,
+                scenario.config,
+                allow_scriptorium_modifier=True,
+                allow_customs_house_modifier=True,
+                allow_wagon_yard_modifier=True,
+                allow_bank_modifier=False,
+                uses_scriptorium_effective_counts=False,
+                uses_customs_house_taxation_override=False,
+            )
+            if isinstance(action, FullTurnAction)
+        ]
+        current_actions = [
+            action
+            for action in legal_actions(scenario.state, scenario.config)
+            if isinstance(action, FullTurnAction)
+        ]
+        inline_bank_actions = [
+            action
+            for action in current_actions
+            if action.bank_payment_building_id == "bank"
+            and action.bank_payment_building_source not in (None, "own_active")
+        ]
+        current_non_bank_actions = [
+            action for action in current_actions if action not in inline_bank_actions
+        ]
+
+        assert {
+            apply_action(scenario.state, action, scenario.config).state
+            for action in current_non_bank_actions
+        } == {
+            apply_action(scenario.state, action, scenario.config).state
+            for action in baseline_actions
+        }
+        assert {
+            _outcome_without_action_id_spellings(
+                apply_action(scenario.state, action, scenario.config).state
+            )
+            for action in inline_bank_actions
+        } == legacy_bank_use_outcomes
+        assert legacy_paid_non_use_outcomes.isdisjoint(
+            {
+                _physical_outcome(apply_action(scenario.state, action, scenario.config).state)
+                for action in current_actions
+            }
+        )
+
+        added_actions.extend(action for action in current_actions if action not in baseline_actions)
+        preserved_non_bank_outcomes += len(baseline_actions)
+        preserved_paid_bank_outcomes += len(legacy_bank_use_outcomes)
+        removed_paid_non_use_actions += sum(
+            action.bank_payment_building_id is None for action in legacy_actions
+        )
+        removed_paid_non_use_end_states += len(legacy_paid_non_use_outcomes)
+
+    assert preserved_non_bank_outcomes == 70
+    assert preserved_paid_bank_outcomes == 6
+    assert removed_paid_non_use_actions == 24
+    assert removed_paid_non_use_end_states == 20
+    assert all(action.bank_payment_building_id == "bank" for action in added_actions)
+    assert all(
+        action.bank_payment_building_source in {"market", "player_two"}
+        for action in added_actions
+    )
+    assert all(action.bank_payment_replaced_resource is not None for action in added_actions)
+    assert all(action.bank_payment_silver_amount is not None for action in added_actions)
+    assert all(dict(action.hire_payments).get("bank") is not None for action in added_actions)
+    assert len(added_actions) == 6
+
+
 def test_wagon_yard_can_free_hire_bank_and_apply_substitution() -> None:
-    scenario = load_scenario("scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json")
+    scenario = load_scenario(
+        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json"
+    )
     free_hire = next(
         step for step in turn_steps(scenario.state, scenario.config) if step.building_id == "bank"
     )

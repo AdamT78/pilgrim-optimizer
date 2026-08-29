@@ -3,7 +3,7 @@ from __future__ import annotations
 from pilgrim.cli import main
 
 
-def test_cli_legal_actions_show_bank_substitution_only_for_own_source(capsys) -> None:
+def test_cli_legal_actions_show_bank_substitution_for_own_and_paid_market_sources(capsys) -> None:
     own_exit = main(["legal-actions", "scenarios/bank_active_ordination_substitution_001.json"])
     own_output = capsys.readouterr().out
     market_exit = main(["legal-actions", "scenarios/bank_hire_market_ordination_001.json"])
@@ -12,17 +12,20 @@ def test_cli_legal_actions_show_bank_substitution_only_for_own_source(capsys) ->
     assert own_exit == 0
     assert market_exit == 0
     assert "use building: bank to replace 1 wheat with 1 silver for this transaction" in own_output
-    assert "use building: bank to replace 1 wheat with 1 silver for this transaction" not in market_output
-    assert "hire building: bank from market" not in market_output
+    assert (
+        "use building: bank to replace 1 wheat with 1 silver for this transaction"
+        in market_output
+    )
+    assert "hire building: bank from market" in market_output
 
 
-def test_cli_legal_actions_do_not_fold_market_bank_hire_into_an_action(capsys) -> None:
+def test_cli_legal_actions_fold_paid_market_bank_hire_into_the_substitution_action(capsys) -> None:
     exit_code = main(["legal-actions", "scenarios/bank_hire_market_ordination_001.json"])
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "use building: bank to replace" not in output
-    assert "hire building: bank from market" not in output
+    assert "use building: bank to replace" in output
+    assert "hire building: bank from market" in output
 
 
 def test_cli_legal_actions_do_not_fold_wagon_yard_free_bank_hire_into_an_action(capsys) -> None:

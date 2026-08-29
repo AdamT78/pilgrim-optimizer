@@ -3,6 +3,13 @@
 The legal-action and turn-step captures stop at the engine boundary.  The play server reshapes
 those results into candidate families, automatic-route masks, and building interaction state, so
 an empty diff from either engine capture cannot prove the page payload was preserved.
+
+Candidate records retain their action id and family, plus each step's ``kind``, ``value``,
+``family``, ``auto``, ``label``, ``prompt``, and ``hire_text``.  The last three are the
+server-written player copy; leaving them out would make a wording change invisible to this
+tripwire.  Adding or removing a captured field rewrites the baseline for nearly every scenario,
+so captures made before that widening are not comparable to captures made after it.  Rebaseline
+first, then compare behaviour with the field set held constant.
 """
 
 from __future__ import annotations
@@ -20,7 +27,7 @@ from tools import play_server
 
 REPO = Path(__file__).resolve().parents[1]
 WINDOWS = ("beginning", "sow", "end")
-STEP_FIELDS = ("kind", "value", "family", "auto", "hire_text")
+STEP_FIELDS = ("kind", "value", "family", "auto", "label", "prompt", "hire_text")
 
 
 def _capture_value(value: Any) -> Any:

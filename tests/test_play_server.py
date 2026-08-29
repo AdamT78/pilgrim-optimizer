@@ -32,6 +32,7 @@ from typing import Any
 
 import pytest
 
+from pilgrim.io.event_text import format_event_for_players
 from pilgrim.io.logs import state_to_record
 from pilgrim.io.scenarios import load_scenario
 from pilgrim.io.view import duty_tiles_record, view_payload
@@ -4426,6 +4427,229 @@ def test_ordination_hire_step_precedes_ordination_and_controls_step_count() -> N
     assert 3 not in no_hire_steps
 
 
+@pytest.mark.parametrize(
+    ("scenario_name", "bank_value", "expected_hire_text"),
+    (
+        (
+            "bank_hire_market_ordination_001.json",
+            "market:wheat:1",
+            "This action uses the Bank — 1 silver to hire it from the market, and "
+            "1 silver in place of 1 wheat.",
+        ),
+        (
+            "bank_hire_opponent_ordination_001.json",
+            "player_two:wheat:1",
+            "This action uses the Bank — 1 silver to hire it from Yellow, and "
+            "1 silver in place of 1 wheat.",
+        ),
+    ),
+)
+def test_paid_bank_hire_is_an_action_payment_option_with_player_copy(
+    scenario_name: str,
+    bank_value: str,
+    expected_hire_text: str,
+) -> None:
+    scenario = load_scenario(SCENARIOS / scenario_name)
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    bank_steps = [
+        step
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step.get("prompt") == "player_one: Choose how to pay."
+    ]
+
+    assert {step["value"] for step in bank_steps} == {"none", bank_value}
+    assert {step["label"] for step in bank_steps} == {"1 wheat", "2 silver, hires the Bank"}
+    assert {step.get("hire_text") for step in bank_steps} == {
+        None,
+        expected_hire_text,
+    }
+    assert all(candidate["action_id"] is not None for candidate in candidates)
+
+
+@pytest.mark.parametrize(
+    ("scenario_name", "expected"),
+    (
+        (
+            "bank_hire_market_ordination_001.json",
+            (True, None, False, "Usable: choose it when an action asks how to pay."),
+        ),
+        (
+            "kogge_donated_no_extra_routes_001.json",
+            (False, None, True, "Cannot be used: no action this turn can use the Bank."),
+        ),
+    ),
+)
+def test_paid_bank_tile_follows_whether_an_action_offers_its_payment(
+    scenario_name: str,
+    expected: tuple[bool, None, bool, str],
+) -> None:
+    scenario = load_scenario(SCENARIOS / scenario_name)
+    actions = list(legal_actions(scenario.state, scenario.config))
+    tile = next(
+        ability
+        for ability in play_server.building_abilities_payload(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+        )
+        if ability["building_id"] == "bank"
+    )
+
+    assert tuple(tile[field] for field in ("usable", "reason", "greyed", "status_text")) == expected
+    assert play_server._paid_bank_payment_on_offer(actions) is expected[0]
+
+
+def test_wagon_yard_free_bank_hire_keeps_its_committed_step_wording() -> None:
+    scenario = load_scenario(
+        SCENARIOS / "wagon_yard_active_free_hire_market_bank_ordination_001.json"
+    )
+    tile = next(
+        ability
+        for ability in play_server.building_abilities_payload(scenario.state, scenario.config)
+        if ability["building_id"] == "bank"
+    )
+    free_step = next(
+        step
+        for step in play_server.turn_steps_payload(scenario.state, scenario.config)
+        if step["building_id"] == "bank"
+    )
+
+    assert tuple(tile[field] for field in ("usable", "reason", "greyed", "status_text")) == (
+        False,
+        BuildingAbilityReason.MERCHANT_RESOURCE_NONE,
+        True,
+        "Cannot be hired: the Merchant names no hire resource.",
+    )
+    assert (free_step["hire_payment"], free_step["ability"]["status_text"]) == (
+        None,
+        "Usable: no payment.",
+    )
+
+
+def _bank_player_texts_at_state(
+    state: Any,
+    config: Any,
+    *,
+    actions: list[Any],
+) -> tuple[set[str], bool]:
+    """Collect every Bank-specific sentence the page can show in one exact state."""
+    bank_texts: set[str] = set()
+    ability_payloads = [
+        play_server.building_abilities_payload(state, config, actions=actions),
+        *(
+            window["abilities"]
+            for window in play_server.building_ability_windows_payload(
+                state,
+                config,
+                actions=actions,
+            ).values()
+        ),
+    ]
+    bank_texts.update(
+        str(ability["status_text"])
+        for abilities in ability_payloads
+        for ability in abilities
+        if ability["building_id"] == "bank" and ability["status_text"]
+    )
+    bank_texts.update(
+        str(value)
+        for step in play_server.turn_steps_payload(state, config)
+        if step["building_id"] == "bank"
+        for value in (
+            step["prompt"],
+            step["hire_text"],
+            step["ability"]["status_text"],
+            *(answer["label"] for answer in step["answers"]),
+        )
+        if value
+    )
+    for candidate in play_server.turn_candidates(state, config, actions=actions):
+        if not any(
+            step.get("hire_text", "").startswith("This action uses the Bank")
+            for step in candidate["steps"]
+        ):
+            continue
+        bank_texts.update(
+            str(value)
+            for step in candidate["steps"]
+            for value in (step.get("prompt"), step.get("label"), step.get("hire_text"))
+            if value
+        )
+        if candidate["summary"]:
+            bank_texts.add(str(candidate["summary"]))
+    return (
+        bank_texts,
+        any(
+            ability["building_id"] == "bank"
+            and ability["reason"] == BuildingAbilityReason.INSUFFICIENT_RESOURCE
+            for abilities in ability_payloads
+            for ability in abilities
+        ),
+    )
+
+
+def test_bank_player_text_never_names_the_supply_as_its_payee() -> None:
+    """Walk every Bank-specific play surface, including every one-transition-derived tile state."""
+    bank_texts: set[str] = set()
+    saw_insufficient_bank_tile = False
+    checked_scenarios = 0
+    paths = [*sorted(SCENARIOS.glob("*.json")), *sorted(PLAYTEST_SCENARIOS.glob("*.json"))]
+    for scenario_path in paths:
+        scenario = load_scenario(scenario_path)
+        actions = list(legal_actions(scenario.state, scenario.config))
+        state_texts, insufficient_bank_tile = _bank_player_texts_at_state(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+        )
+        bank_texts.update(state_texts)
+        saw_insufficient_bank_tile |= insufficient_bank_tile
+        for action in actions:
+            result = apply_action(scenario.state, action, scenario.config)
+            state_texts, insufficient_bank_tile = _bank_player_texts_at_state(
+                result.state,
+                scenario.config,
+                actions=list(legal_actions(result.state, scenario.config)),
+            )
+            bank_texts.update(state_texts)
+            saw_insufficient_bank_tile |= insufficient_bank_tile
+            bank_texts.update(
+                text
+                for event in result.events
+                if dict(event.details).get("building_id") == "bank"
+                or dict(event.details).get("building") == "bank"
+                if (text := format_event_for_players(event, scenario.config)) is not None
+            )
+        for step in turn_steps(scenario.state, scenario.config):
+            after_step = apply_turn_step(scenario.state, scenario.config, step)
+            state_texts, insufficient_bank_tile = _bank_player_texts_at_state(
+                after_step,
+                scenario.config,
+                actions=list(legal_actions(after_step, scenario.config)),
+            )
+            bank_texts.update(state_texts)
+            saw_insufficient_bank_tile |= insufficient_bank_tile
+            bank_texts.update(
+                text
+                for event in after_step.events
+                if event.action_id == play_server.turn_step_id(step)
+                and (
+                    dict(event.details).get("building_id") == "bank"
+                    or dict(event.details).get("building") == "bank"
+                )
+                if (text := format_event_for_players(event, scenario.config)) is not None
+            )
+        checked_scenarios += 1
+
+    assert checked_scenarios >= 320, f"only {checked_scenarios} scenarios checked"
+    assert saw_insufficient_bank_tile
+    assert bank_texts
+    assert not {
+        text for text in bank_texts if re.search(r"\bto (?:the )?bank\b", text.lower())
+    }
+
+
 @needs_node
 def test_a_cloisters_turn_is_playable_end_to_end_with_skip_then_duty(tmp_path: Path) -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_cloisters_own_own_skip_duty_001.json")
@@ -5788,7 +6012,12 @@ def test_building_window_tiles_preserve_sources_without_a_committed_step_in_eith
     paths = [*sorted(SCENARIOS.glob("*.json")), *sorted(PLAYTEST_SCENARIOS.glob("*.json"))]
     for scenario_path in paths:
         scenario = load_scenario(str(scenario_path))
-        windows = play_server.building_ability_windows_payload(scenario.state, scenario.config)
+        actions = list(legal_actions(scenario.state, scenario.config))
+        windows = play_server.building_ability_windows_payload(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+        )
         offered_by_window = {}
         for window, resolution_committed in (("beginning", False), ("end", True)):
             window_state = replace(
@@ -5820,6 +6049,20 @@ def test_building_window_tiles_preserve_sources_without_a_committed_step_in_eith
             }
             for building_id in absent_from_steps:
                 source = sources[building_id]
+                if (
+                    play_server._paid_bank_hire_source(source)
+                    and not play_server._paid_bank_payment_on_offer(actions)
+                ):
+                    assert tuple(
+                        abilities[building_id][field]
+                        for field in ("usable", "reason", "greyed", "status_text")
+                    ) == (
+                        False,
+                        None,
+                        True,
+                        "Cannot be used: no action this turn can use the Bank.",
+                    ), f"{scenario_path.name} {window} {building_id}"
+                    continue
                 assert (
                     abilities[building_id]["usable"],
                     abilities[building_id]["reason"],
@@ -6044,7 +6287,7 @@ _PERMITTER_COMMITTED_STEP_CASES = (
         "In effect for the rest of this turn.",
     ),
     (
-        "scenarios/bank_hire_opponent_ordination_001.json",
+        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json",
         "bank",
         "In effect for the rest of this turn.",
     ),

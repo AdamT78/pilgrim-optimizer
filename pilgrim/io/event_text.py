@@ -1259,7 +1259,11 @@ def format_event_for_players(event: GameEvent, config: GameConfig) -> str | None
             return f"{actor} hired {hired_label} from {source_phrase}."
 
         payment = f" and paid {amount} {resource}"
-        if payee and payee not in {"none", source}:
+        # The Bank is a building and the supply. Naming the supply as the Bank's payee reads as
+        # though the building were paid, so Bank hire copy states the resource without that payee.
+        if payee and payee not in {"none", source} and not (
+            building_id == "bank" and payee == "bank"
+        ):
             payment += f" to {'the bank' if payee == 'bank' else payee}"
         return f"{actor} hired {hired_label} from {source_phrase}{payment}."
 

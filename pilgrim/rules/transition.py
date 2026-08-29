@@ -1370,18 +1370,23 @@ def _legal_full_turn_actions_for_state(
             return
         if not _is_bank_modifier_eligible_action(action):
             return
-        bank_options = _legal_bank_payment_options_for_action(
-            state=state_for_action,
-            config=config,
-            required_stone=required_stone,
-            required_silver=required_silver,
-            required_wheat=required_wheat,
-            required_piety=required_piety,
-            hired_source=hired_source,
-        )
-        for bank_option in bank_options:
-            bank_action = _with_bank_payment_fields(action, option=bank_option)
-            actions.add_if_new(bank_action)
+        for bank_source, state_after_bank_hire in _bank_payment_source_variants(
+            state_for_action,
+            config,
+        ):
+            bank_options = _legal_bank_payment_options_for_action(
+                state=state_after_bank_hire,
+                config=config,
+                source=bank_source,
+                required_stone=required_stone,
+                required_silver=required_silver,
+                required_wheat=required_wheat,
+                required_piety=required_piety,
+                hired_source=hired_source,
+            )
+            for bank_option in bank_options:
+                bank_action = _with_bank_payment_fields(action, option=bank_option)
+                actions.add_if_new(bank_action)
 
     for origin in occupied_positions(player_vector):
         picked_up = player_vector[origin]
@@ -2449,12 +2454,36 @@ def _apply_full_turn_action(
         )
 
     bank_payment = _resolved_bank_payment_for_action(
-        state=state_for_sow,
+        state=state,
         config=config,
         player=player,
         action=action,
     )
     if bank_payment is not None:
+        if (
+            _is_hired_source(bank_payment.source)
+            and action.bank_payment_building_source is not None
+        ):
+            try:
+                state_for_sow, hire_payment = apply_building_hire_payment(
+                    state_for_sow,
+                    acting_player=player,
+                    source=bank_payment.source,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+            pre_sowing_events.append(
+                _building_hired_event(
+                    source=bank_payment.source,
+                    payment=hire_payment,
+                    actor=player,
+                    action_id=transition_action_id,
+                    config=config,
+                )
+            )
+            # A hired-building event already records this payment. Keep the resolution delta on
+            # the action's own transaction, as it was when the Bank hire was a committed step.
+            resolution_resource_delta_baseline = state_for_sow.player_state(player).resources
         pre_sowing_events.append(
             _bank_payment_bonus_event(
                 actor=player,
@@ -2767,13 +2796,6 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Only Bank is supported for bank_payment_building fields."
                 )
-            if (
-                action.bank_payment_building_source is not None
-                and action.bank_payment_building_source != "own_active"
-            ):
-                raise TransitionValidationError(
-                    "bank_payment_building_source may only name an own-active Bank."
-                )
             if action.bank_payment_replaced_resource not in _BANK_REPLACED_RESOURCES:
                 replaced_text = ", ".join(_BANK_REPLACED_RESOURCES)
                 raise TransitionValidationError(
@@ -2970,6 +2992,18 @@ def _apply_full_turn_action(
                 hire_context = record_hired_building_this_turn(
                     hire_context,
                     building_key=building_id,
+                )
+            except ValueError as exc:
+                raise TransitionValidationError(str(exc)) from exc
+        if _action_declares_hire_for_building(action, _BUILDING_BANK):
+            if not can_hire_building_this_turn(hire_context, building_key=_BUILDING_BANK):
+                raise TransitionValidationError(
+                    "Same building cannot be hired more than once in one turn."
+                )
+            try:
+                hire_context = record_hired_building_this_turn(
+                    hire_context,
+                    building_key=_BUILDING_BANK,
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
@@ -4359,12 +4393,19 @@ def _apply_full_turn_action(
             )
         )
 
-    if route_hired_buildings:
+    hired_buildings = route_hired_buildings
+    if (
+        bank_payment is not None
+        and _is_hired_source(bank_payment.source)
+        and action.bank_payment_building_source is not None
+    ):
+        hired_buildings = hired_buildings | {_BUILDING_BANK}
+    if hired_buildings:
         updated_state = replace(
             updated_state,
             turn_progress=replace(
                 updated_state.turn_progress,
-                used_buildings=updated_state.turn_progress.used_buildings | route_hired_buildings,
+                used_buildings=updated_state.turn_progress.used_buildings | hired_buildings,
             ),
         )
 
@@ -4802,6 +4843,10 @@ def _legal_modifier_building_hire_steps(
             building_id=building_id,
             source=source,
         )
+        if building_id == _BUILDING_BANK and not free_with_wagon_yard:
+            # A paid Bank hire belongs on the action that spends its substitution. Keeping the
+            # free Wagon Yard activation as a step preserves that separate committed effect.
+            continue
         if not _is_hired_source(source) and not free_with_wagon_yard:
             continue
         if not source.usable and not free_with_wagon_yard:
@@ -5773,6 +5818,7 @@ def _legal_bank_payment_options_for_action(
     *,
     state: GameState,
     config: GameConfig,
+    source: BuildingAbilitySource,
     required_stone: int = 0,
     required_silver: int = 0,
     required_wheat: int = 0,
@@ -5780,14 +5826,6 @@ def _legal_bank_payment_options_for_action(
     hired_source: BuildingAbilitySource | None = None,
 ) -> tuple[_BankPaymentOption, ...]:
     if max(required_stone, required_wheat, required_piety) <= 0:
-        return ()
-
-    source = _modifier_building_source_available_this_turn(
-        state,
-        config,
-        building_id=_BUILDING_BANK,
-    )
-    if source is None:
         return ()
 
     substitutions: list[_BankPaymentOption] = []
@@ -5834,6 +5872,30 @@ def _legal_bank_payment_options_for_action(
             )
 
     return tuple(substitutions)
+
+
+def _bank_payment_source_variants(
+    state: GameState,
+    config: GameConfig,
+) -> tuple[tuple[BuildingAbilitySource, GameState], ...]:
+    """Return Bank sources with any paid hire already reflected in the affordability state."""
+    source = _modifier_building_source_available_this_turn(
+        state,
+        config,
+        building_id=_BUILDING_BANK,
+    )
+    if source is not None:
+        return ((source, state),)
+
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key=_BUILDING_BANK,
+    )
+    if not _is_hired_source(source) or not source.usable:
+        return ()
+    return _hire_payment_states(state, source)
 
 
 def _legal_guild_activation_sources(
@@ -6267,11 +6329,13 @@ def _with_bank_payment_fields(
     *,
     option: _BankPaymentOption,
 ) -> FullTurnAction:
-    source_label = (
-        "own_active"
-        if option.source.source_type == "own_active"
-        else None
+    source_label = _own_or_hired_building_source_label(option.source)
+    paid_in_a_prior_step = (
+        _is_hired_source(option.source)
+        and _BUILDING_BANK in option.state.turn_progress.used_buildings
     )
+    if paid_in_a_prior_step:
+        source_label = None
     updated = replace(
         action,
         bank_payment_building_id=option.building_id,
@@ -6279,7 +6343,9 @@ def _with_bank_payment_fields(
         bank_payment_replaced_resource=option.replaced_resource,
         bank_payment_silver_amount=option.silver_amount,
     )
-    return updated
+    if paid_in_a_prior_step:
+        return updated
+    return _with_hire_payment_for_source(updated, source=option.source)
 
 
 def _legal_action_variants_for_resolution(
@@ -6570,17 +6636,36 @@ def _resolved_bank_payment_for_action(
         building_id=_BUILDING_BANK,
     )
     if source is None:
-        raise TransitionValidationError("Bank is unavailable in current state.")
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=player,
+            building_key=_BUILDING_BANK,
+        )
+    if _is_hired_source(source):
+        if source_label is None:
+            if _BUILDING_BANK not in state.turn_progress.used_buildings:
+                raise TransitionValidationError(
+                    "A hired Bank must name its source on the action that pays for it."
+                )
+        else:
+            source = _hire_source_for_action(source, action)
+            expected_source_label = _hired_building_source_label(source)
+            if source_label != expected_source_label:
+                raise TransitionValidationError(
+                    "Bank payment source does not match the resolved Bank source: "
+                    f"expected {expected_source_label}."
+                )
     if source.source_type == "own_active":
         if source_label != "own_active":
             raise TransitionValidationError(
                 "Own-active Bank payment substitution must set source=own_active."
             )
     elif _is_hired_source(source):
-        if source_label is not None:
-            raise TransitionValidationError(
-                "Hired Bank modifier must be enabled by its committed hire step, not action fields."
-            )
+        if source_label is None and _BUILDING_BANK not in state.turn_progress.used_buildings:
+            raise TransitionValidationError("Bank is unavailable in current state.")
+        if source_label is not None and not source.usable:
+            raise TransitionValidationError("Bank is unavailable in current state.")
     else:
         raise TransitionValidationError("Bank is unavailable in current state.")
 
