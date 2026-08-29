@@ -18,6 +18,7 @@ from PIL import Image
 from pilgrim.model.actions import EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
+from tools import play_server
 from tools.play_server import PlayServer
 
 pytestmark = pytest.mark.slow
@@ -92,6 +93,72 @@ def _candidate_with_step(server: PlayServer, kind: str, *, value: str | None = N
                 continue
             return candidate
     raise AssertionError(f"no candidate asks kind={kind!r} value={value!r}")
+
+
+def _rendered_route_family_data(page) -> dict:
+    """Read the candidate and family data embedded in the served turn script."""
+    return page.evaluate(
+        r"""() => {
+            const source = Array.from(document.scripts, script => script.textContent).find(
+                script => script.includes('var CANDIDATES = ')
+                    && script.includes('var FAMILIES = ')
+            );
+            if (!source) { throw new Error('rendered turn script was missing'); }
+            const match = source.match(
+                new RegExp(
+                    'var CANDIDATES = ([\\s\\S]*?);\\n  var FAMILIES = '
+                    + '([\\s\\S]*?);\\n  var AUTO_FAMILY_INDEXES'
+                )
+            );
+            if (!match) { throw new Error('rendered turn script payload was unreadable'); }
+            return {candidates: JSON.parse(match[1]), families: JSON.parse(match[2])};
+        }"""
+    )
+
+
+def test_rendered_route_family_mapping_agrees_with_server_and_candidates(page, serve) -> None:
+    """The compact indexes the browser receives must retain the server's building mapping."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    page.goto(base_url, wait_until="networkidle")
+
+    rendered = _rendered_route_family_data(page)
+    page_by_index = {
+        family["i"]: family["building_id"] for family in rendered["families"]
+    }
+    declared_by_index = {
+        index: building_id
+        for building_id, (index, _paint, _priority) in (
+            play_server._ROUTE_BUILDING_PRESENTATION_BY_ID.items()
+        )
+    }
+    candidate_indexes = {
+        index
+        for candidate in rendered["candidates"]
+        for index in (
+            *candidate.get("family", ()),
+            *(step["family"] for step in candidate["steps"] if "family" in step),
+        )
+    }
+    disagreements = []
+    if len(page_by_index) != len(rendered["families"]):
+        disagreements.append("rendered families repeated an index")
+    if set(page_by_index) != set(range(len(page_by_index))):
+        disagreements.append(
+            {
+                "rendered_indexes": set(page_by_index),
+                "expected_compact_indexes": set(range(len(page_by_index))),
+            }
+        )
+    if page_by_index != declared_by_index:
+        disagreements.append(
+            {"server_declaration": declared_by_index, "rendered_page": page_by_index}
+        )
+    if candidate_indexes != set(page_by_index):
+        disagreements.append(
+            {"candidate_indexes": candidate_indexes, "rendered_indexes": set(page_by_index)}
+        )
+
+    assert not disagreements, f"route-family mapping disagreement: {disagreements!r}"
 
 
 def _centre(page, handle) -> tuple[float, float]:
@@ -310,9 +377,10 @@ def _click_candidate_prefix(
 
 def _page_matches_auto_advance_family_selection(page, step: dict) -> bool:
     """Read the page's visible family state against the server's automatic selections."""
-    family_indexes = {"kogge": 0, "cloisters": 1}
     selected = 0
-    for building_id, index in family_indexes.items():
+    for family in _rendered_route_family_data(page)["families"]:
+        building_id = family["building_id"]
+        index = family["i"]
         target = page.locator(f'[data-building-id="{building_id}"]').first
         if target.count() and target.get_attribute("data-turn-family-state") in {
             "owned",
