@@ -133,6 +133,7 @@ _CANDIDATE_STEP_WIRE_FIELDS = {
     "turn_phase": "$t",
     "kind": "$k",
 }
+_CANDIDATE_WIRE_FIELDS = {"summary": "$s"}
 TOOLTIP_DECKLE_POINTS = (
     (0, 13),
     (6, 7),
@@ -166,16 +167,25 @@ TURN_PHASE_CURRENT_COLOR = "#5FBF6E"
 
 
 def _compact_turn_candidates_for_page(candidates: list[dict]) -> dict:
-    """Intern repeated step strings only in the page's transport representation.
+    """Intern repeated candidate strings only in the page's transport representation.
 
     The play payload remains the readable server contract.  The script expands this wire once at
     load before any turn reader sees a step, so the browser continues to consume those full strings.
     """
-    tables = {wire_key: [] for wire_key in _CANDIDATE_STEP_WIRE_FIELDS.values()}
-    indexes = {wire_key: {} for wire_key in _CANDIDATE_STEP_WIRE_FIELDS.values()}
+    wire_fields = _CANDIDATE_STEP_WIRE_FIELDS | _CANDIDATE_WIRE_FIELDS
+    tables = {wire_key: [] for wire_key in wire_fields.values()}
+    indexes = {wire_key: {} for wire_key in wire_fields.values()}
     compact_candidates = []
     for candidate in candidates:
         compact_candidate = dict(candidate)
+        for field, wire_key in _CANDIDATE_WIRE_FIELDS.items():
+            value = candidate.get(field)
+            if value is None:
+                continue
+            index = indexes[wire_key].setdefault(value, len(tables[wire_key]))
+            if index == len(tables[wire_key]):
+                tables[wire_key].append(value)
+            compact_candidate[field] = index
         compact_steps = []
         for step in candidate["steps"]:
             compact_step = {}

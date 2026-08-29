@@ -2424,6 +2424,23 @@ def test_kogge_and_cloisters_page_expands_candidates_to_the_server_payload(tmp_p
         server.server_close()
 
 
+def test_candidate_summaries_share_one_wire_entry() -> None:
+    """A repeated player sentence stays one string until the page restores the candidates."""
+    scenario = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    wire = render_play_view._compact_turn_candidates_for_page(candidates)
+    summaries = [
+        candidate["summary"] for candidate in candidates if candidate["summary"] is not None
+    ]
+
+    assert len(wire["$s"]) == len(set(summaries))
+    assert all(
+        wire["$s"][compact["summary"]] == candidate["summary"]
+        for compact, candidate in zip(wire["c"], candidates, strict=True)
+        if candidate["summary"] is not None
+    )
+
+
 def _phase_column_at_cursor(column: dict, current: str) -> dict:
     """Keep the server's phase rows, changing only which supplied cursor names as current."""
     return {
