@@ -1213,7 +1213,11 @@ def turn_styles(route_color: str) -> str:
     visibility: visible !important; pointer-events: all; cursor: pointer;
   }}
   [data-turn-step-building-id][data-turn-step-used="true"] {{ opacity: 0.42; }}
-  [data-building-ability-greyed="true"] {{ filter: grayscale(1); }}
+  /* A used building is one neutral visual fact, regardless of the level colour it had before.
+     Target the tile's paint and lettering rather than filtering its whole group: the group also
+     carries its hit target, and a filter turns the three level fills into three different greys. */
+  [data-building-ability-greyed="true"] .tile-fill {{ fill: #BDB8AC; }}
+  [data-building-ability-greyed="true"] .tile-label {{ fill: #5C574E; }}
 
   svg :focus:not(:focus-visible) {{ outline: none; }}
 
@@ -1472,6 +1476,7 @@ def render_play_view_html(
     script = (
         _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
         .replace("__FAMILIES__", json.dumps(families))
+        .replace("__AUTO_FAMILY_INDEXES__", json.dumps(payload.get("auto_family_indexes") or []))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
         .replace("__BUILDING_ABILITIES__", json.dumps(building_abilities))
         .replace("__FAMILY_ARROW_TEMPLATES__", json.dumps(route_family_arrow_templates))

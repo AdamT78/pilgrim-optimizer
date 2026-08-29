@@ -299,13 +299,28 @@ def _click_candidate_prefix(
     for step in candidate["steps"]:
         if step["kind"] == before_kind:
             return
-        if step.get("auto_advance") is True:
+        if _page_matches_auto_advance_family_selection(page, step):
             continue
         _click_candidate_step(page, step)
         if step["kind"] == "origin":
             for building_id in route_toggles:
                 _show_hired_route_building_if_available(page, building_id)
     raise AssertionError(f"candidate has no {before_kind!r} step")
+
+
+def _page_matches_auto_advance_family_selection(page, step: dict) -> bool:
+    """Read the page's visible family state against the server's automatic selections."""
+    family_indexes = {"kogge": 0, "cloisters": 1}
+    selected = 0
+    for building_id, index in family_indexes.items():
+        target = page.locator(f'[data-building-id="{building_id}"]').first
+        if target.count() and target.get_attribute("data-turn-family-state") in {
+            "owned",
+            "on",
+            "in_effect",
+        }:
+            selected |= 1 << index
+    return selected in step.get("auto", [])
 
 
 def _narrow_movement_library_turn_to_confirm(page) -> None:
@@ -2243,6 +2258,60 @@ def test_dormitory_step_stages_a_target_confirms_and_reset_restores_it(page, ser
     _screenshot_turn_prompt(page, SCREENSHOTS / "dormitory-prompt-committed.png")
 
 
+def test_dormitory_preview_removes_the_top_acolyte_from_a_multi_cube_source(page, serve) -> None:
+    """The preview removes from the same stack end that its destination placement fills."""
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    dormitory_step = next(
+        step for step in server.payload["turn_steps"] if step["building_id"] == "dormitory"
+    )
+    source = int(dormitory_step["selected_position"])
+    active_player = server.state.active_player
+    vector = list(server.state.player_vector(active_player))
+    vector[source] += 1
+    server.state = server.state.with_player_vector(active_player, tuple(vector))
+    server._refresh()
+
+    page.goto(base_url, wait_until="networkidle")
+    player_id = page.get_attribute('[data-active-seat="true"]', "data-player")
+    assert player_id is not None
+
+    def source_cubes() -> list[dict[str, object]]:
+        return page.locator(
+            f'[data-board-position-index="{source}"] '
+            f'[data-cube-tally] rect[data-player="{player_id}"]'
+        ).evaluate_all(
+            """cubes => cubes.map((cube, index) => ({
+              index,
+              y: Number(cube.getAttribute('y')),
+              opacity: cube.getAttribute('opacity'),
+            }))"""
+        )
+
+    before = source_cubes()
+    visible_before = [cube for cube in before if cube["opacity"] != "0"]
+    assert len(visible_before) >= 2, "fixture did not stage a multi-acolyte Dormitory source"
+
+    dormitory = page.locator(
+        '[data-turn-step-building-id="dormitory"][data-turn-step-offered="true"]'
+    ).first
+    _click_handle_centre(page, dormitory.element_handle(), require_hit=True)
+    relocation_target = page.locator(
+        f'[data-board-position-index="{source}"][data-turn-step-relocation-candidate="true"]'
+    ).first
+    _click_handle_centre(page, relocation_target.element_handle(), require_hit=True)
+    page.wait_for_timeout(20)
+
+    after = source_cubes()
+    hidden = [
+        before_cube
+        for before_cube, after_cube in zip(before, after, strict=True)
+        if before_cube["opacity"] != "0" and after_cube["opacity"] == "0"
+    ]
+    assert hidden == [min(visible_before, key=lambda cube: cube["y"])], (
+        "Dormitory preview hid a bottom cube instead of the stack's top visible cube"
+    )
+
+
 @pytest.mark.parametrize(
     ("building_id", "answer_count", "target_delta", "city_delta"),
     (
@@ -3182,6 +3251,89 @@ def test_hired_cloisters_arrow_reveals_its_extension_and_reaches_the_skip_questi
     )
 
 
+def test_used_cloisters_route_tile_greys_only_when_the_server_reports_its_effect(
+    page, serve
+) -> None:
+    """A committed owned Cloisters sow gets its in-effect state from the server event."""
+    owned_url, _owned_server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
+    page.goto(owned_url, wait_until="networkidle")
+    tile = page.locator('[data-building-id="cloisters"]').first
+
+    assert tile.get_attribute("data-turn-family-state") == "owned"
+    assert tile.get_attribute("data-building-ability-greyed") == "false"
+
+    used_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    page.goto(used_url, wait_until="networkidle")
+    tile = page.locator('[data-building-id="cloisters"]').first
+
+    def commit_relocation(building_id: str) -> None:
+        building = page.locator(
+            f'[data-turn-step-building-id="{building_id}"][data-turn-step-offered="true"]'
+        ).first
+        _click_handle_centre(page, building.element_handle(), require_hit=True)
+        target = page.locator(
+            '[data-board-position-index="4"][data-turn-step-relocation-candidate="true"]'
+        ).first
+        _click_handle_centre(page, target.element_handle(), require_hit=True)
+        assert _confirm_enabled(page), f"{building_id} relocation did not settle"
+        _click_handle_point(
+            page,
+            page.locator('[data-turn-control="confirm"]').element_handle(),
+            0.5,
+            0.2,
+        )
+        page.wait_for_function(
+            f"""() => document.querySelector('[data-turn-step-building-id="{building_id}"]')
+              .getAttribute('data-turn-step-used') === 'true'"""
+        )
+
+    commit_relocation("inquisition")
+    commit_relocation("dormitory")
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if (candidate.get("action_id") or "").endswith(
+            "action:give_alms_paid:pay_silver:1:pay_wheat:0:"
+            "sow_route_building:cloisters:from:own_active:skip:1"
+        )
+    )
+    for step in candidate["steps"]:
+        if _page_matches_auto_advance_family_selection(page, step):
+            continue
+        if step.get("resource_allocation"):
+            _click_alms_silver(page)
+            continue
+        _click_candidate_step(page, step)
+        if step["kind"] == "edge" and step["value"] == "north->north_east":
+            assert tile.get_attribute("data-turn-family-state") == "in_effect"
+            assert tile.get_attribute("data-building-ability-greyed") == "false"
+
+    assert _confirm_enabled(page), "the exact owned Cloisters sow did not settle"
+    _click_handle_point(
+        page,
+        page.locator('[data-turn-control="confirm"]').element_handle(),
+        0.5,
+        0.2,
+    )
+    page.wait_for_function(
+        """() => {
+          const tile = document.querySelector('[data-building-id="cloisters"]');
+          return tile && tile.getAttribute('data-building-ability-greyed') === 'true';
+        }"""
+    )
+
+    assert "cloisters" not in server.state.turn_progress.used_buildings
+    assert tile.get_attribute("data-building-ability-greyed") == "true"
+    assert tile.locator(".tile-fill").evaluate(
+        "tile => getComputedStyle(tile).fill"
+    ) == "rgb(189, 184, 172)"
+    tile.hover()
+    assert page.locator('[data-building-tooltip-ability="true"]').inner_text() == (
+        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
+        "action."
+    )
+
+
 def test_route_tile_toggles_are_off_on_then_in_effect_without_greying(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
@@ -3811,6 +3963,18 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     _assert_painted_turn_phase(page, "sow")
     assert page.evaluate(
         """() => {
+          const tilePaint = (buildingId) => {
+            const fill = document.querySelector(
+              `.setup-building-fill[data-building-id="${buildingId}"] .tile-fill`
+            );
+            const label = document.querySelector(
+              `.setup-building-label[data-building-id="${buildingId}"] .tile-label`
+            );
+            return {
+              fill: fill && getComputedStyle(fill).fill,
+              label: label && getComputedStyle(label).fill,
+            };
+          };
           const market = document.querySelector('.setup-building-fill[data-building-id="brewery"]');
           const own = document.querySelector(
             '[data-active-seat="true"] [data-player-board-slot][data-building-id="grain_store"]'
@@ -3819,25 +3983,33 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
             offered: document.querySelectorAll(
               '[data-turn-step-building-id][data-turn-step-offered="true"]'
             ).length,
-            market: market && {
+            market: {
               greyed: market.getAttribute('data-building-ability-greyed'),
-              filter: getComputedStyle(market).filter,
+              paint: tilePaint('brewery'),
             },
-            own: own && {
+            own: {
               greyed: own.getAttribute('data-building-ability-greyed'),
-              filter: getComputedStyle(own).filter,
+              fill: getComputedStyle(own.querySelector('.tile-fill')).fill,
+              label: getComputedStyle(own.querySelector('.tile-label')).fill,
             },
           };
         }"""
     ) == {
         "offered": 0,
-        "market": {"greyed": "true", "filter": "grayscale(1)"},
-        "own": {"greyed": "true", "filter": "grayscale(1)"},
+        "market": {
+            "greyed": "true",
+            "paint": {"fill": "rgb(189, 184, 172)", "label": "rgb(92, 87, 78)"},
+        },
+        "own": {
+            "greyed": "true",
+            "fill": "rgb(189, 184, 172)",
+            "label": "rgb(92, 87, 78)",
+        },
     }
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-sow.png")
 
     for step in tithe_candidate["steps"]:
-        if step.get("auto_advance") is True:
+        if _page_matches_auto_advance_family_selection(page, step):
             continue
         if step["kind"] == "edge":
             selector = f'[data-arrow="{step["value"]}"][data-turn-offered="true"]'
@@ -3872,6 +4044,40 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     assert server.state.turn_progress.resolution_committed is True
     _assert_painted_turn_phase(page, "end")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-end.png")
+
+
+def test_greyed_building_tiles_use_one_palette_across_all_three_level_colours(page, serve) -> None:
+    """The server's greying attribute paints every level with the same fill and label colours."""
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
+    page.goto(base_url, wait_until="networkidle")
+
+    colours = page.evaluate(
+        """() => {
+          const ids = ['confession_box', 'brewery', 'mill'];
+          ids.forEach(id => {
+            document.querySelectorAll(`[data-building-id="${id}"]`).forEach(target => {
+              target.setAttribute('data-building-ability-greyed', 'true');
+            });
+          });
+          return ids.map(id => {
+            const fill = document.querySelector(
+              `.setup-building-fill[data-building-id="${id}"] .tile-fill`
+            );
+            const label = document.querySelector(
+              `.setup-building-label[data-building-id="${id}"] .tile-label`
+            );
+            return {
+              fill: getComputedStyle(fill).fill,
+              label: getComputedStyle(label).fill,
+            };
+          });
+        }"""
+    )
+    assert colours == [
+        {"fill": "rgb(189, 184, 172)", "label": "rgb(92, 87, 78)"},
+        {"fill": "rgb(189, 184, 172)", "label": "rgb(92, 87, 78)"},
+        {"fill": "rgb(189, 184, 172)", "label": "rgb(92, 87, 78)"},
+    ]
 
 
 def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page, serve) -> None:

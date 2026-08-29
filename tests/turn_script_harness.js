@@ -376,6 +376,7 @@ const transcript = {
   buildingAbilityGreyscale: [],
   turnStepOffers: [],
   overflow: [],
+  consoleErrors: [],
   posted: null,
   rewritten: false,
 };
@@ -393,7 +394,12 @@ global.document = {
   },
   close() {},
 };
-global.window = { alert(message) { transcript.alerted = message; } };
+global.window = {
+  alert(message) { transcript.alerted = message; },
+  console: {
+    error(message) { transcript.consoleErrors.push(String(message)); },
+  },
+};
 global.XMLHttpRequest = function XMLHttpRequestStub() {
   this.open = () => {};
   this.setRequestHeader = () => {};

@@ -284,15 +284,16 @@ def setup_placements(
     return placements
 
 
-def _hex_polygon(map_layout: dict, fill: str) -> str:
+def _hex_polygon(map_layout: dict, fill: str, *, class_name: str | None = None) -> str:
     """The map's own hex shape around the origin, filled and unstroked."""
     points = " ".join(f"{x:.2f},{y:.2f}" for x, y in hex_vertices(0.0, 0.0, map_layout["hex_size"]))
-    return f'<polygon points="{points}" fill="{fill}" stroke="none"/>'
+    class_attribute = f' class="{class_name}"' if class_name is not None else ""
+    return f'<polygon points="{points}"{class_attribute} fill="{fill}" stroke="none"/>'
 
 
 def render_setup_building_fill(map_layout: dict, building: dict) -> str:
     """A building slot recolours its hex; it does not lay a second hex on top of it."""
-    return _hex_polygon(map_layout, palette_for(building).fill)
+    return _hex_polygon(map_layout, palette_for(building).fill, class_name="tile-fill")
 
 
 def render_setup_site_fill(map_layout: dict) -> str:
@@ -325,6 +326,7 @@ def render_building_label(building: dict, hex_size: float) -> str:
         text_y = ratio * (TILE_NAME_CENTER_Y_OFFSET + index * TILE_NAME_LINE_HEIGHT)
         lines.append(
             f'<text x="0" y="{text_y:.1f}" text-anchor="middle"'
+            ' class="tile-label"'
             ' font-family="Helvetica, Arial, sans-serif"'
             f' font-size="{ratio * TILE_NAME_FONT_SIZE:.1f}" font-weight="600"'
             f' fill="{palette.stroke}">{escape(line)}</text>'
@@ -650,13 +652,17 @@ def donated_content_id(level: int) -> str:
     return f"donated-level-{level}"
 
 
-def render_board_slot_fill(fill: str, size: float = BOARD_HEX_SIZE) -> str:
+def render_board_slot_fill(
+    fill: str, size: float = BOARD_HEX_SIZE, *, class_name: str | None = None
+) -> str:
     """A building recolours the slot it stands in; it does not lay a tile on top of it.
 
     Like a setup slot on the map, the fill takes the slot's own hex shape and draws no border of
     its own: the board's dashed outline, drawn over this, stays the slot's only boundary.
     """
-    return f'<path d="{hex_path_data(0.0, 0.0, size)}" fill="{fill}" stroke="none"/>'
+    class_attribute = f' class="{class_name}"' if class_name is not None else ""
+    path = hex_path_data(0.0, 0.0, size)
+    return f'<path d="{path}"{class_attribute} fill="{fill}" stroke="none"/>'
 
 
 def render_board_slot_building(building: dict, size: float = BOARD_HEX_SIZE) -> str:
@@ -665,7 +671,9 @@ def render_board_slot_building(building: dict, size: float = BOARD_HEX_SIZE) -> 
     The label sits in the lower half of the slot, exactly as it does on a map hex, so a building
     reads the same whether it is still on the map or already bought.
     """
-    return render_board_slot_fill(palette_for(building).fill, size) + render_building_label(
+    return render_board_slot_fill(
+        palette_for(building).fill, size, class_name="tile-fill"
+    ) + render_building_label(
         building, size
     )
 

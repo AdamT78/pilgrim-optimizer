@@ -459,7 +459,7 @@ def test_building_fills_take_the_map_hex_shape_and_draw_no_outline(page: str) ->
 
     fill = render_setup_building_fill(layout, building)
     assert fill == (
-        f'<polygon points="{points}" fill="'
+        f'<polygon points="{points}" class="tile-fill" fill="'
         f'{COLOR_GROUP_PALETTES[building["color_group"]].fill}" stroke="none"/>'
     )
     assert fill in page
@@ -1038,7 +1038,8 @@ def test_bought_slot_content_is_the_tile_colour_and_label_only() -> None:
     palette = COLOR_GROUP_PALETTES[building["color_group"]]
     content = render_board_slot_building(building)
 
-    assert content.startswith(render_board_slot_fill(palette.fill))
+    assert content.startswith(render_board_slot_fill(palette.fill, class_name="tile-fill"))
+    assert 'class="tile-label"' in content
     assert f'stroke="{palette.stroke}"' not in content
     assert f">{building['name']}</text>" in content
 

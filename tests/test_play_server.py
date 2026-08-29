@@ -131,6 +131,7 @@ def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
         state_token=state_token(state_payload),
         turn_candidates=candidates,
         families=play_server._ROUTE_BUILDING_PRESENTATION,
+        auto_family_indexes=play_server._auto_advance_family_indexes(candidates),
         building_abilities=play_server.building_abilities_payload(
             scenario.state,
             scenario.config,
@@ -1132,31 +1133,37 @@ def test_sow_payload_auto_advances_only_unambiguous_cloisters_edges() -> None:
         step["kind"]
         for candidate in candidates
         for step in candidate["steps"]
-        if step.get("auto_advance") is True
+        if step.get("auto")
     } == {"edge"}
 
-    def offered(prefix: list[object]) -> set[tuple[object, object, object]]:
+    def offered(prefix: list[object]) -> set[tuple[object, object, tuple[int, ...]]]:
         index = len(prefix)
         return {
             (
                 candidate["steps"][index]["kind"],
                 candidate["steps"][index]["value"],
-                candidate["steps"][index].get("auto_advance"),
+                tuple(candidate["steps"][index].get("auto", [])),
             )
             for candidate in candidates
             if len(candidate["steps"]) > index
             and [step["value"] for step in candidate["steps"][:index]] == prefix
         }
 
-    assert offered([1]) == {("edge", "north->north_east", True)}
-    assert offered([1, "north->north_east"]) == {("edge", "north_east->east", True)}
+    assert offered([1]) == {
+        ("edge", "north->north_east", (0, 2)),
+        ("edge", "north->north_east", (2,)),
+    }
+    assert offered([1, "north->north_east"]) == {
+        ("edge", "north_east->east", (0, 2)),
+        ("edge", "north_east->east", (2,)),
+    }
     assert offered([1, "north->north_east", "north_east->east"]) == {
-        ("duty", 2, None),
-        ("duty", 3, None),
-        ("duty", 4, None),
-        ("duty", 7, None),
-        ("edge", "east->city", None),
-        ("edge", "east->south_east", None),
+        ("duty", 2, ()),
+        ("duty", 3, ()),
+        ("duty", 4, ()),
+        ("duty", 7, ()),
+        ("edge", "east->city", ()),
+        ("edge", "east->south_east", ()),
     }
 
 
@@ -1187,38 +1194,99 @@ def _distinct_frontier_options(frontier: dict[str, Any]) -> dict[tuple[Any, Any]
     }
 
 
+def _route_family_selections(candidates: list[dict]) -> list[frozenset[int]]:
+    """Every enabled-family combination the server evaluates for this candidate set."""
+    families = play_server._auto_advance_family_indexes(candidates)
+    return [
+        frozenset(family for index, family in enumerate(families) if mask & (1 << index))
+        for mask in range(1 << len(families))
+    ]
+
+
+def _candidate_is_reachable_with_families(candidate: dict, selection: frozenset[int]) -> bool:
+    return set(candidate.get("family", ())).issubset(selection)
+
+
+def _auto_advance_for_families(step: dict, selection: frozenset[int]) -> bool:
+    selection_mask = sum(1 << family for family in selection)
+    return selection_mask in step.get("auto", [])
+
+
+def _auto_advance_selection_masks(family_indexes: list[int]) -> set[int]:
+    """The masks the server can publish for the exact family index list it named."""
+    return {
+        sum(1 << family for index, family in enumerate(family_indexes) if mask & (1 << index))
+        for mask in range(1 << len(family_indexes))
+    }
+
+
+def _resting_auto_advance_family_mask(
+    abilities: list[dict[str, Any]], families: tuple[dict[str, str], ...], family_indexes: list[int]
+) -> int:
+    """Read the route visibility the page starts from, using only server-written ability state."""
+    visibility = {
+        ability["building_id"]: ability.get("family_visibility") for ability in abilities
+    }
+    return sum(
+        1 << index
+        for index in family_indexes
+        if visibility.get(families[index]["building_id"]) == "always"
+    )
+
+
 def _assert_auto_advance_frontiers(scenario_name: str, candidates: list[dict]) -> int:
-    """Check the metadata whose only consumer is the generic page loop."""
-    frontiers = _turn_candidate_frontiers(candidates)
-    for frontier in frontiers:
-        options = _distinct_frontier_options(frontier)
-        marked = [step for step in frontier["steps"] if "auto_advance" in step]
-        if marked:
-            assert all(step["kind"] == "edge" for step in marked), (
-                f"{scenario_name} marked a non-edge automatic at {frontier['prefix']!r}: "
-                f"{[(step['kind'], step['value']) for step in marked]!r}"
+    """Check the metadata whose only consumer is the generic page loop.
+
+    A route toggle changes which candidate families the page can show, so its automatic marker is
+    correct only relative to that exact server-enumerated selection.
+    """
+    checked = 0
+    for selection in _route_family_selections(candidates):
+        reachable = [
+            candidate
+            for candidate in candidates
+            if _candidate_is_reachable_with_families(candidate, selection)
+        ]
+        frontiers = _turn_candidate_frontiers(reachable)
+        for frontier in frontiers:
+            options = _distinct_frontier_options(frontier)
+            marked = [
+                step
+                for step in frontier["steps"]
+                if _auto_advance_for_families(step, selection)
+            ]
+            if marked:
+                assert all(step["kind"] == "edge" for step in marked), (
+                    f"{scenario_name} marked a non-edge automatic for {sorted(selection)!r} at "
+                    f"{frontier['prefix']!r}: "
+                    f"{[(step['kind'], step['value']) for step in marked]!r}"
+                )
+                assert len(options) == 1, (
+                    f"{scenario_name} marked an edge automatic for {sorted(selection)!r} at its "
+                    f"multi-option frontier {frontier['prefix']!r}: {list(options)!r}"
+                )
+            sole_steps = next(iter(options.values())) if len(options) == 1 else None
+            offered_sole_steps = (
+                [
+                    step
+                    for step in frontier["steps"]
+                    if (step["kind"], play_server._frontier_value(step["value"]))
+                    == (sole_steps["kind"], play_server._frontier_value(sole_steps["value"]))
+                ]
+                if sole_steps is not None
+                else []
             )
-            assert len(options) == 1, (
-                f"{scenario_name} marked an edge automatic at its multi-option frontier "
-                f"{frontier['prefix']!r}: {list(options)!r}"
+            expected = (
+                sole_steps is not None
+                and sole_steps["kind"] == "edge"
+                and not any("hire_text" in step for step in offered_sole_steps)
             )
-            assert all(step["auto_advance"] is True for step in marked)
-        sole_edge = next(iter(options.values())) if len(options) == 1 else None
-        if sole_edge is not None and sole_edge["kind"] == "edge":
-            assert all("hire_text" not in step for step in marked), (
-                f"{scenario_name} would auto-advance a route hire at {frontier['prefix']!r}: "
-                f"{sole_edge!r}"
+            assert len(marked) == (len(frontier["steps"]) if expected else 0), (
+                f"{scenario_name} auto_advance did not match family selection "
+                f"{sorted(selection)!r} at {frontier['prefix']!r}: {list(options)!r}"
             )
-        expected = (
-            sole_edge is not None
-            and sole_edge["kind"] == "edge"
-            and "hire_text" not in sole_edge
-        )
-        assert len(marked) == (len(frontier["steps"]) if expected else 0), (
-            f"{scenario_name} auto_advance did not match its frontier at "
-            f"{frontier['prefix']!r}: {list(options)!r}"
-        )
-    return len(frontiers)
+        checked += len(frontiers)
+    return checked
 
 
 def test_auto_advance_is_exactly_the_unambiguous_edge_at_every_corpus_frontier() -> None:
@@ -1229,11 +1297,98 @@ def test_auto_advance_is_exactly_the_unambiguous_edge_at_every_corpus_frontier()
     for scenario_path in [*top_level_paths, *playtest_paths]:
         scenario = load_scenario(str(scenario_path))
         candidates = play_server.turn_candidates(scenario.state, scenario.config)
+        family_indexes = play_server._auto_advance_family_indexes(candidates)
+        abilities = play_server.building_abilities_payload(
+            scenario.state,
+            scenario.config,
+            route_family_building_ids=play_server._route_family_building_ids(candidates),
+        )
+        resting_mask = _resting_auto_advance_family_mask(
+            abilities, play_server._ROUTE_BUILDING_PRESENTATION, family_indexes
+        )
+        assert resting_mask in _auto_advance_selection_masks(family_indexes), (
+            f"{scenario_path.name} resting family visibility produced {resting_mask}, outside "
+            f"the server's selections for {family_indexes!r}"
+        )
         checked += _assert_auto_advance_frontiers(scenario_path.name, candidates)
 
-    assert len(top_level_paths) >= 314, f"only {len(top_level_paths)} top-level scenarios were checked"
+    assert len(top_level_paths) >= 314, (
+        f"only {len(top_level_paths)} top-level scenarios were checked"
+    )
     assert [path.name for path in playtest_paths] == sorted(PLAYTEST_POSITION_NAMES)
-    assert checked >= 5400, f"only {checked} corpus frontiers were checked"
+    # This now counts every offered family selection, each with its own page-visible frontier.
+    assert checked >= 9000, f"only {checked} corpus selection-frontiers were checked"
+
+
+def _movement_candidates_after_relocation(building_id: str, selected_position: int) -> list[dict]:
+    """Apply one committed relocation so route metadata is measured on its resulting sow."""
+    scenario = load_scenario(str(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT))
+    relocation = next(
+        step
+        for step in turn_steps(scenario.state, scenario.config)
+        if step.building_id == building_id and step.selected_position == selected_position
+    )
+    state = apply_turn_step(scenario.state, scenario.config, relocation)
+    return play_server.turn_candidates(state, scenario.config)
+
+
+def _frontier_steps_for_families(
+    candidates: list[dict], prefix: tuple[object, ...], selection: frozenset[int]
+) -> list[dict]:
+    return [
+        candidate["steps"][len(prefix)]
+        for candidate in candidates
+        if _candidate_is_reachable_with_families(candidate, selection)
+        and len(candidate["steps"]) > len(prefix)
+        and tuple(step["value"] for step in candidate["steps"][: len(prefix)]) == prefix
+    ]
+
+
+def test_dormitory_relocation_auto_advance_respects_the_kogge_toggle() -> None:
+    """A hidden Kogge reversal cannot make the free City continuations look ambiguous."""
+    candidates = _movement_candidates_after_relocation("dormitory", selected_position=4)
+    empty = frozenset()
+    kogge = frozenset({play_server._ROUTE_BUILDING_PRESENTATION_BY_ID["kogge"][0]})
+    full = frozenset(
+        family for selection in _route_family_selections(candidates) for family in selection
+    )
+
+    for prefix, expected_edge in (
+        ((0, "city->south"), "south->south_west"),
+        ((0, "city->north"), "north->north_east"),
+    ):
+        free_steps = _frontier_steps_for_families(candidates, prefix, empty)
+        assert {step["value"] for step in free_steps} == {expected_edge}
+        assert all(_auto_advance_for_families(step, empty) for step in free_steps)
+
+        for selection in (kogge, full):
+            steps = _frontier_steps_for_families(candidates, prefix, selection)
+            assert len({step["value"] for step in steps}) == 2
+            assert not any(_auto_advance_for_families(step, selection) for step in steps)
+
+
+def test_inquisition_relocation_auto_advance_respects_the_kogge_toggle() -> None:
+    """The free Construct sow advances twice, but a Kogge selection keeps both decisions visible."""
+    candidates = _movement_candidates_after_relocation("inquisition", selected_position=4)
+    empty = frozenset()
+    kogge = frozenset({play_server._ROUTE_BUILDING_PRESENTATION_BY_ID["kogge"][0]})
+    full = frozenset(
+        family for selection in _route_family_selections(candidates) for family in selection
+    )
+
+    first_prefix = (4,)
+    second_prefix = (4, "south_east->south")
+    for prefix, expected_edge in (
+        (first_prefix, "south_east->south"),
+        (second_prefix, "south->south_west"),
+    ):
+        free_steps = _frontier_steps_for_families(candidates, prefix, empty)
+        assert {step["value"] for step in free_steps} == {expected_edge}
+        assert all(_auto_advance_for_families(step, empty) for step in free_steps)
+
+        for selection in (kogge, full):
+            steps = _frontier_steps_for_families(candidates, prefix, selection)
+            assert not any(_auto_advance_for_families(step, selection) for step in steps)
 
 
 def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> None:
@@ -2210,7 +2365,7 @@ def _phase_named_at_frontier(frontier: dict[str, Any]) -> str:
 
 
 def _phase_after_the_page_follows_automatic_steps(
-    candidates: list[dict], cursor: dict[str, int]
+    candidates: list[dict], cursor: dict[str, int], selection: frozenset[int]
 ) -> str:
     """Read the next phase from the payload after its marked automatic continuation."""
     selected = candidates[cursor["candidateIndex"]]["steps"][: cursor["depth"]]
@@ -2228,7 +2383,9 @@ def _phase_after_the_page_follows_automatic_steps(
             if len(candidate["steps"]) > len(prefix)
             for step in [candidate["steps"][len(prefix)]]
         }
-        if len(offered) == 1 and next(iter(offered.values())).get("auto_advance") is True:
+        if len(offered) == 1 and _auto_advance_for_families(
+            next(iter(offered.values())), selection
+        ):
             prefix.append(next(iter(offered.values()))["value"])
             continue
         if offered:
@@ -2249,6 +2406,20 @@ def _candidates_at_cursor(candidates: list[dict], cursor: dict[str, int]) -> lis
         if len(candidate["steps"]) >= len(prefix)
         and [step["value"] for step in candidate["steps"][: len(prefix)]] == prefix
     ]
+
+
+def _always_visible_route_families(payload: dict) -> frozenset[int]:
+    """The route-family indices that are live without one of the page's toggle clicks."""
+    visibility = {
+        ability["building_id"]: ability.get("family_visibility")
+        for ability in payload["building_abilities"]
+    }
+    return frozenset(
+        index
+        for index in payload.get("auto_family_indexes", [])
+        for family in [payload["families"][index]]
+        if visibility.get(family["building_id"]) == "always"
+    )
 
 
 def _run_phase_cursors(
@@ -2292,9 +2463,10 @@ def test_every_playtest_frontier_paints_the_phase_its_payload_names(tmp_path: Pa
 
             painted = _run_phase_cursors(server, candidates, cursors, tmp_path)
             assert len(painted) == len(frontiers)
+            selection = _always_visible_route_families(server.payload)
             for frontier, observed in zip(frontiers, painted, strict=True):
                 expected_phase = _phase_after_the_page_follows_automatic_steps(
-                    candidates, frontier["cursor"]
+                    candidates, frontier["cursor"], selection
                 )
                 assert observed["phaseRows"] == [expected_phase], (
                     f"{scenario_path.name} client painted {observed['phaseRows']!r} at "
@@ -3015,19 +3187,31 @@ def _next_values(decisions: list[list[dict]], prefix: list) -> list:
     return _values(_next_steps(decisions, prefix))
 
 
-def _page_auto_advances(server, prefix: list, step: dict) -> bool:
+def _page_auto_advances(
+    server, prefix: list, step: dict, enabled_route_toggles: set[str] | None = None
+) -> bool:
     """Whether this engine step is one the payload says the page has already followed."""
+    enabled_route_toggles = enabled_route_toggles or set()
+    selection = _always_visible_route_families(server.payload) | frozenset(
+        index
+        for index, family in enumerate(server.payload["families"])
+        if (
+            index in server.payload.get("auto_family_indexes", [])
+            and family["building_id"] in enabled_route_toggles
+        )
+    )
     index = len(prefix)
     matching = [
         candidate["steps"][index]
         for candidate in server.payload["turn_candidates"]
-        if len(candidate["steps"]) > index
+        if _candidate_is_reachable_with_families(candidate, selection)
+        and len(candidate["steps"]) > index
         and [previous["value"] for previous in candidate["steps"][:index]] == prefix
         and candidate["steps"][index]["kind"] == step["kind"]
         and candidate["steps"][index]["value"] == step["value"]
     ]
     assert matching, f"no page candidate matched engine step {step!r} after {prefix!r}"
-    return all(current.get("auto_advance") is True for current in matching)
+    return all(_auto_advance_for_families(current, selection) for current in matching)
 
 
 def _route_toggle_ids_for_edge(server, prefix: list, step: dict) -> tuple[str, ...]:
@@ -3070,7 +3254,7 @@ def _clicks_to(server, decisions: list[list[dict]], target: list) -> list[dict]:
             return clicks
         value = target[len(prefix)]
         step = next(s for s in _next_steps(decisions, prefix) if s["value"] == value)
-        if _page_auto_advances(server, prefix, step):
+        if _page_auto_advances(server, prefix, step, enabled_route_toggles):
             prefix.append(value)
             continue
         if step["kind"] == "arrangement":
@@ -3170,9 +3354,9 @@ def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_PULPIT)
     try:
         origin, edge, duty = server.payload["turn_candidates"][0]["steps"][:3]
-        assert origin.get("auto_advance") is None
-        assert edge.get("auto_advance") is True
-        assert duty.get("auto_advance") is None
+        assert origin.get("auto") is None
+        assert edge["auto"] == [0]
+        assert duty.get("auto") is None
         expected = (
             ([], "Choose a space to lift acolytes from.", [1]),
             ([_at(1)], "Choose a duty to take.", [2]),
@@ -3181,6 +3365,56 @@ def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path
             transcript = _run_script(server, clicks, tmp_path)
             assert transcript["asking"][-1][0].endswith(prompt_end)
             assert transcript["offered"][-1] == offered
+    finally:
+        server.server_close()
+
+
+@needs_node
+def test_enabled_kogge_keeps_the_dormitory_sow_route_choice_visible(tmp_path: Path) -> None:
+    """The page consumes the server's Kogge selection marker instead of auto-following a fork."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        dormitory = next(
+            step
+            for step in server.payload["turn_steps"]
+            if step["building_id"] == "dormitory" and step.get("selected_position") == 4
+        )
+        server.apply_turn_step(dormitory["step_id"], server.payload["state_token"])
+
+        transcript = _run_script(
+            server,
+            [
+                {"kind": "position", "value": 0},
+                {"kind": "route_toggle", "value": "kogge"},
+                {"kind": "edge", "value": "city->south"},
+            ],
+            tmp_path,
+        )
+        assert transcript["offered"][-1] == ["south->city", "south->south_west"]
+    finally:
+        server.server_close()
+
+
+@needs_node
+def test_page_reports_an_enabled_route_family_missing_from_the_server_mask_list(
+    tmp_path: Path,
+) -> None:
+    """A payload drift must be loud instead of merely disabling all automatic continuations."""
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    try:
+        server.payload["auto_family_indexes"] = []
+        transcript = _run_script(
+            server,
+            [
+                {"kind": "position", "value": 0},
+                {"kind": "route_toggle", "value": "kogge"},
+            ],
+            tmp_path,
+        )
+        assert any(
+            error.startswith("auto-advance family mask mismatch: enabled family index 0")
+            for error in transcript["consoleErrors"]
+        )
     finally:
         server.server_close()
 
@@ -5589,6 +5823,57 @@ def test_hired_kogge_route_action_leaves_its_tile_showing_the_active_effect() ->
     }
 
 
+@pytest.mark.parametrize(
+    ("scenario_path", "building_id", "expected_status"),
+    (
+        (
+            "scenarios/kogge_active_city_to_east_001.json",
+            "kogge",
+            "Hired or activated this turn: acolytes may move against the river to enter or leave "
+            "the City.",
+        ),
+        (
+            "scenarios/cloisters_active_skip_duty_tile_001.json",
+            "cloisters",
+            "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
+            "action.",
+        ),
+    ),
+)
+def test_owned_route_sow_event_leaves_its_tile_showing_the_active_effect(
+    scenario_path: str, building_id: str, expected_status: str
+) -> None:
+    """Owned route effects persist in the committed sow event, not the turn-step-only set."""
+    scenario = load_scenario(scenario_path)
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.sow_route_building_id == building_id
+        and action.sow_route_building_source == "own_active"
+    )
+    after_action = apply_action(scenario.state, action, scenario.config).state
+    tile = next(
+        ability
+        for ability in play_server.building_abilities_payload(after_action, scenario.config)
+        if ability["building_id"] == building_id
+    )
+
+    assert building_id not in after_action.turn_progress.used_buildings
+    assert any(
+        event.event_type is EventType.BUILDING_BONUS
+        and dict(event.details).get("building") == building_id
+        and dict(event.details).get("action") == "sowing"
+        for event in after_action.turn_progress.events
+    )
+    assert tuple(tile[field] for field in ("usable", "reason", "greyed", "status_text")) == (
+        False,
+        "effect_applies_for_rest_of_turn",
+        True,
+        expected_status,
+    )
+
+
 _PERMITTER_COMMITTED_STEP_CASES = (
     (
         "scenarios/kogge_hire_opponent_city_to_west_001.json",
@@ -6638,6 +6923,7 @@ def _the_script_is_the_template_with_only_its_values_filled_in(page: str, payloa
             "__CANDIDATES__", json.dumps(payload.get("turn_candidates") or [])
         )
         .replace("__FAMILIES__", json.dumps(payload.get("families") or []))
+        .replace("__AUTO_FAMILY_INDEXES__", json.dumps(payload.get("auto_family_indexes") or []))
         .replace("__TURN_STEPS__", json.dumps(payload.get("turn_steps") or []))
         .replace("__BUILDING_ABILITIES__", json.dumps(payload.get("building_abilities") or []))
         .replace("__FAMILY_ARROW_TEMPLATES__", json.dumps(family_arrow_templates))
@@ -6817,6 +7103,7 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     # rather than an assumption the greps rest on.
     assert render_play_view._TURN_SCRIPT.count("__CANDIDATES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__FAMILIES__") == 1
+    assert render_play_view._TURN_SCRIPT.count("__AUTO_FAMILY_INDEXES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__TURN_STEPS__") == 1
     assert render_play_view._TURN_SCRIPT.count("__BUILDING_ABILITIES__") == 1
     assert render_play_view._TURN_SCRIPT.count("__FAMILY_ARROW_TEMPLATES__") == 1
