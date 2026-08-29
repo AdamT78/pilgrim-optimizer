@@ -4,7 +4,7 @@
 // Reads a JSON job on argv: { script, prompts, resolutions, combinations, seats, panels, clicks,
 // reset, confirm, spaces, arrows, counters, controls, cubes, playerCount,
 // arrangementPointerRules, buildingAbilityTargets, turnStepBuildings, phaseColumn, phaseOnly,
-// phaseCandidateRuns }.
+// phaseCandidateRuns, expandedCandidates }.
 //
 // A click is { kind: 'position'|'origin'|'skip'|'duty'|'edge'|'resolution'
 // |'combination'|'resource'|'seat'|'building'|'route_toggle'
@@ -23,7 +23,7 @@
 const fs = require('fs');
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const phaseCandidateTemplate = input.script.replace(
-  /var CANDIDATES = [\s\S]*?;\n  var FAMILIES/,
+  /var CANDIDATE_WIRE = [\s\S]*?;\n  var FAMILIES/,
   'var CANDIDATES = __HARNESS_PHASE_CANDIDATES__;\n  var FAMILIES'
 );
 
@@ -877,6 +877,15 @@ let source = job.phaseCandidateRuns
     JSON.stringify(job.phaseCandidateRuns[0])
   )
   : job.script;
+if (job.expandedCandidates) {
+  const beforeExpansionHook = source;
+  source = source.replace(
+    '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();',
+    '  window.__expandedCandidates = CANDIDATES;\n\n'
+      + '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();'
+  );
+  if (source === beforeExpansionHook) throw new Error('candidate expansion harness did not expose data');
+}
 if (job.phaseCandidateRuns) {
   const beforePhaseHook = source;
   source = source.replace(
@@ -893,6 +902,8 @@ if (job.phaseCandidateRuns) {
 
 // eslint-disable-next-line no-eval
 eval(source);
+
+if (job.expandedCandidates) return window.__expandedCandidates;
 
 if (job.phaseOnly) {
   const phaseSnapshot = () => ({

@@ -6,7 +6,27 @@
      decisions that reaches it. This narrows that list. It never invents a move, never asks whether
      a step is allowed, and never derives the hand count: each count is read off a step the seam
      already provided. */
-  var CANDIDATES = __CANDIDATES__;
+  var CANDIDATE_WIRE = __CANDIDATE_WIRE__;
+
+  function expandCandidateWire(wire) {
+    var fields = { '$p': 'prompt', '$t': 'turn_phase', '$k': 'kind' };
+    return wire.c.map(function (candidate) {
+      var expanded = Object.assign({}, candidate);
+      expanded.steps = candidate.steps.map(function (step) {
+        var expandedStep = {};
+        Object.keys(step).forEach(function (field) {
+          expandedStep[fields[field] || field] = fields[field]
+            ? wire[field][step[field]]
+            : step[field];
+        });
+        return expandedStep;
+      });
+      return expanded;
+    });
+  }
+
+  // This only restores strings the renderer interned; no turn rule is encoded in the wire format.
+  var CANDIDATES = expandCandidateWire(CANDIDATE_WIRE);
   var FAMILIES = __FAMILIES__;
   var AUTO_FAMILY_INDEXES = __AUTO_FAMILY_INDEXES__;
   var TURN_STEPS = __TURN_STEPS__;
@@ -165,16 +185,20 @@
     });
   }
 
+  function familyByIndex(index) {
+    return FAMILIES.filter(function (family) { return family.i === index; })[0] || null;
+  }
+
   function familyBuildingIds(candidate) {
     return (candidate.family || []).map(function (index) {
-      var building = FAMILIES[index];
+      var building = familyByIndex(index);
       return building ? building.building_id : null;
     }).filter(function (buildingId) { return buildingId !== null; });
   }
 
   function familyForStep(step) {
     var buildingIndex = step.family;
-    return buildingIndex === undefined ? null : FAMILIES[buildingIndex] || null;
+    return buildingIndex === undefined ? null : familyByIndex(buildingIndex);
   }
 
   function enabledFamiliesAllow(candidate) {
@@ -191,13 +215,13 @@
 
   function enabledFamilyMask() {
     var enabledIndexes = {};
-    FAMILIES.forEach(function (family, index) {
+    FAMILIES.forEach(function (family) {
       var ability = buildingAbilityFor(family.building_id);
       if (
         ability && ability.family_visibility === 'always'
         || enabledFamilies.indexOf(family.building_id) !== -1
       ) {
-        enabledIndexes[index] = true;
+        enabledIndexes[family.i] = true;
       }
     });
     Object.keys(enabledIndexes).forEach(function (index) {

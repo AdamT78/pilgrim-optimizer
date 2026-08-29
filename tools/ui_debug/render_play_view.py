@@ -128,6 +128,11 @@ PAGE_TITLE = "Pilgrim — Play View"
 
 ENGINE_BUILDINGS_PATH = Path(__file__).resolve().parents[2] / "configs" / "buildings.json"
 RESOURCE_TOKEN_ICONS = {"wheat": "wheat", "stone": "cube", "silver": "coin"}
+_CANDIDATE_STEP_WIRE_FIELDS = {
+    "prompt": "$p",
+    "turn_phase": "$t",
+    "kind": "$k",
+}
 TOOLTIP_DECKLE_POINTS = (
     (0, 13),
     (6, 7),
@@ -158,6 +163,35 @@ TWO_PLAYER_VARIANT = "2_player"
 WIDE_VARIANT = "3_4_player"
 TURN_PHASE_DIM_COLOR = "#6B675E"
 TURN_PHASE_CURRENT_COLOR = "#5FBF6E"
+
+
+def _compact_turn_candidates_for_page(candidates: list[dict]) -> dict:
+    """Intern repeated step strings only in the page's transport representation.
+
+    The play payload remains the readable server contract.  The script expands this wire once at
+    load before any turn reader sees a step, so the browser continues to consume those full strings.
+    """
+    tables = {wire_key: [] for wire_key in _CANDIDATE_STEP_WIRE_FIELDS.values()}
+    indexes = {wire_key: {} for wire_key in _CANDIDATE_STEP_WIRE_FIELDS.values()}
+    compact_candidates = []
+    for candidate in candidates:
+        compact_candidate = dict(candidate)
+        compact_steps = []
+        for step in candidate["steps"]:
+            compact_step = {}
+            for field, value in step.items():
+                wire_key = _CANDIDATE_STEP_WIRE_FIELDS.get(field)
+                if wire_key is None:
+                    compact_step[field] = value
+                    continue
+                index = indexes[wire_key].setdefault(value, len(tables[wire_key]))
+                if index == len(tables[wire_key]):
+                    tables[wire_key].append(value)
+                compact_step[wire_key] = index
+            compact_steps.append(compact_step)
+        compact_candidate["steps"] = compact_steps
+        compact_candidates.append(compact_candidate)
+    return {"c": compact_candidates} | tables
 
 
 def default_output_path() -> Path:
@@ -1346,6 +1380,7 @@ def render_play_view_html(
     catalog = _catalog_with_engine_metadata(catalog)
     seated = seated_player_ids(payload)
     candidates = payload.get("turn_candidates") or []
+    candidate_wire = _compact_turn_candidates_for_page(candidates)
     families = payload.get("families") or []
     turn_steps = payload.get("turn_steps") or []
     building_abilities = payload.get("building_abilities") or []
@@ -1474,7 +1509,7 @@ def render_play_view_html(
     # decide is a page with nothing to press, and it should not be carrying the styles for
     # affordances that can never appear on it.
     script = (
-        _TURN_SCRIPT.replace("__CANDIDATES__", json.dumps(candidates))
+        _TURN_SCRIPT.replace("__CANDIDATE_WIRE__", json.dumps(candidate_wire))
         .replace("__FAMILIES__", json.dumps(families))
         .replace("__AUTO_FAMILY_INDEXES__", json.dumps(payload.get("auto_family_indexes") or []))
         .replace("__TURN_STEPS__", json.dumps(turn_steps))
