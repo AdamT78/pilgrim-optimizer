@@ -108,6 +108,15 @@ def _record_turn_candidates(
                     text=label,
                     position=position,
                 )
+            hire_text = step.get("hire_text")
+            if isinstance(hire_text, str) and hire_text.startswith("This action uses the Bank"):
+                _record(
+                    rows,
+                    source="turn_candidates",
+                    situation=f"step hire fact: {step['kind']}",
+                    text=hire_text,
+                    position=position,
+                )
             for choice in step.get("choices", ()):
                 _record(
                     rows,

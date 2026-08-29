@@ -2,9 +2,9 @@
   "buildings": [
     {
       "after_committing_totals": {
-        "does_not_use_effect_count": 25,
-        "full_turn_action_count": 34,
-        "uses_effect_count": 9
+        "does_not_use_effect_count": 1,
+        "full_turn_action_count": 4,
+        "uses_effect_count": 3
       },
       "building_id": "bank",
       "building_name": "Bank",
@@ -14,526 +14,58 @@
         "source_field": "bank_payment_building_source"
       },
       "inline_hire_and_use": {
-        "action_count": 0,
+        "action_count": 6,
         "criterion": "the effect building-id field names this building and its paired source field is neither null nor own_active in the initial scenario state",
-        "examples": [],
-        "exists": false
+        "examples": [
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "market",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_market_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "market",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_market_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "market",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_market_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:player_two:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "player_two",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_opponent_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:player_two:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "player_two",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_opponent_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:player_two:replace:wheat:silver:1:hire_payments:bank=silver",
+            "effect_source": "player_two",
+            "hire_payment": "silver",
+            "scenario": "scenarios/bank_hire_opponent_ordination_001.json"
+          }
+        ],
+        "exists": true
       },
       "same_frontier_opt_out": {
         "classification": "improving",
-        "declining_full_turn_action_count": 71,
-        "frontier_count": 6,
+        "declining_full_turn_action_count": 1,
+        "frontier_count": 1,
         "no_opt_out_frontier_count": 0,
-        "opt_out_frontier_count": 6
+        "opt_out_frontier_count": 1
       },
       "standalone_hire_step": {
-        "scenario_count": 6,
+        "scenario_count": 1,
         "scenarios": [
-          {
-            "after_committing_standalone_hire": {
-              "does_not_use_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "does_not_use_effect_count": 2,
-              "effect_source_values": [
-                null
-              ],
-              "full_turn_action_count": 5,
-              "uses_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "uses_effect_count": 3
-            },
-            "full_turn_action_outcome_comparison": {
-              "only_through_step_action_count": 3,
-              "only_through_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "only_through_step_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 0,
-              "only_without_step_action_ids": [],
-              "outcome_identity": "FullTurnAction action_id",
-              "shared_action_count": 2,
-              "shared_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "through_step_action_count": 5,
-              "through_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "without_step_action_count": 2,
-              "without_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ]
-            },
-            "same_frontier_opt_out": {
-              "classification": "improving",
-              "declining_full_turn_action_count": 2,
-              "declining_full_turn_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "full_turn_action_count": 2
-            },
-            "scenario": "scenarios/bank_hire_market_ordination_001.json",
-            "standalone_hire_step": {
-              "hire_payment": "silver",
-              "source": "market",
-              "step_id": "turn_step:building_activation:bank:from:market:pay:silver"
-            }
-          },
-          {
-            "after_committing_standalone_hire": {
-              "does_not_use_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "does_not_use_effect_count": 2,
-              "effect_source_values": [
-                null
-              ],
-              "full_turn_action_count": 5,
-              "uses_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "uses_effect_count": 3
-            },
-            "full_turn_action_outcome_comparison": {
-              "only_through_step_action_count": 3,
-              "only_through_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "only_through_step_effect_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1"
-              ],
-              "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 0,
-              "only_without_step_action_ids": [],
-              "outcome_identity": "FullTurnAction action_id",
-              "shared_action_count": 2,
-              "shared_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "through_step_action_count": 5,
-              "through_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,mission:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain,ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain:bank_payment_building:bank:from:unknown:replace:wheat:silver:1",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "without_step_action_count": 2,
-              "without_step_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ]
-            },
-            "same_frontier_opt_out": {
-              "classification": "improving",
-              "declining_full_turn_action_count": 2,
-              "declining_full_turn_action_ids": [
-                "turn:sow:5:6:duty:6:action:ordination:steps:ordain",
-                "turn:sow:5:6:duty:6:action:tithe:gain:stone"
-              ],
-              "full_turn_action_count": 2
-            },
-            "scenario": "scenarios/bank_hire_opponent_ordination_001.json",
-            "standalone_hire_step": {
-              "hire_payment": "silver",
-              "source": "player_two",
-              "step_id": "turn_step:building_activation:bank:from:player_two:pay:silver"
-            }
-          },
-          {
-            "after_committing_standalone_hire": {
-              "does_not_use_effect_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "does_not_use_effect_count": 5,
-              "effect_source_values": [],
-              "full_turn_action_count": 5,
-              "uses_effect_action_ids": [],
-              "uses_effect_count": 0
-            },
-            "full_turn_action_outcome_comparison": {
-              "only_through_step_action_count": 0,
-              "only_through_step_action_ids": [],
-              "only_through_step_effect_action_ids": [],
-              "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 10,
-              "only_without_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone"
-              ],
-              "outcome_identity": "FullTurnAction action_id",
-              "shared_action_count": 5,
-              "shared_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "through_step_action_count": 5,
-              "through_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "without_step_action_count": 15,
-              "without_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone"
-              ]
-            },
-            "same_frontier_opt_out": {
-              "classification": "improving",
-              "declining_full_turn_action_count": 15,
-              "declining_full_turn_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone"
-              ],
-              "full_turn_action_count": 15
-            },
-            "scenario": "scenarios/kogge_donated_no_extra_routes_001.json",
-            "standalone_hire_step": {
-              "hire_payment": "wheat",
-              "source": "market",
-              "step_id": "turn_step:building_activation:bank:from:market:pay:wheat"
-            }
-          },
-          {
-            "after_committing_standalone_hire": {
-              "does_not_use_effect_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "does_not_use_effect_count": 5,
-              "effect_source_values": [],
-              "full_turn_action_count": 5,
-              "uses_effect_action_ids": [],
-              "uses_effect_count": 0
-            },
-            "full_turn_action_outcome_comparison": {
-              "only_through_step_action_count": 0,
-              "only_through_step_action_ids": [],
-              "only_through_step_effect_action_ids": [],
-              "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 19,
-              "only_without_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>alms_house:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>engraver:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>fields:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>road_engineer:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>stone_mason:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>vestry:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:silver"
-              ],
-              "outcome_identity": "FullTurnAction action_id",
-              "shared_action_count": 5,
-              "shared_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "through_step_action_count": 5,
-              "through_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
-              ],
-              "without_step_action_count": 24,
-              "without_step_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>alms_house:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>engraver:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>fields:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>road_engineer:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>stone_mason:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>vestry:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:silver"
-              ]
-            },
-            "same_frontier_opt_out": {
-              "classification": "improving",
-              "declining_full_turn_action_count": 24,
-              "declining_full_turn_action_ids": [
-                "turn:sow:0:1:duty:1:action:produce_stone",
-                "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat",
-                "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
-                "turn:sow:0:1:duty:1:action:tithe:gain:wheat",
-                "turn:sow:0:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:2:duty:2:action:clerical_devotion:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
-                "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
-                "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
-                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
-                "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
-                "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
-                "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>alms_house:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>engraver:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>fields:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>road_engineer:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>stone_mason:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>vestry:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
-                "turn:sow:0:7:duty:7:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:silver"
-              ],
-              "full_turn_action_count": 24
-            },
-            "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json",
-            "standalone_hire_step": {
-              "hire_payment": "wheat",
-              "source": "market",
-              "step_id": "turn_step:building_activation:bank:from:market:pay:wheat"
-            }
-          },
-          {
-            "after_committing_standalone_hire": {
-              "does_not_use_effect_action_ids": [
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:tithe:gain:silver"
-              ],
-              "does_not_use_effect_count": 10,
-              "effect_source_values": [],
-              "full_turn_action_count": 10,
-              "uses_effect_action_ids": [],
-              "uses_effect_count": 0
-            },
-            "full_turn_action_outcome_comparison": {
-              "only_through_step_action_count": 0,
-              "only_through_step_action_ids": [],
-              "only_through_step_effect_action_ids": [],
-              "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 17,
-              "only_without_step_action_ids": [
-                "turn:sow:3:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver:gain:silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver:gain:wheat"
-              ],
-              "outcome_identity": "FullTurnAction action_id",
-              "shared_action_count": 10,
-              "shared_action_ids": [
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:tithe:gain:silver"
-              ],
-              "through_step_action_count": 10,
-              "through_step_action_ids": [
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:tithe:gain:silver"
-              ],
-              "without_step_action_count": 27,
-              "without_step_action_ids": [
-                "turn:sow:3:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:tithe:gain:silver",
-                "turn:sow:3:4:duty:4:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver:gain:silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver:gain:wheat"
-              ]
-            },
-            "same_frontier_opt_out": {
-              "classification": "improving",
-              "declining_full_turn_action_count": 27,
-              "declining_full_turn_action_ids": [
-                "turn:sow:3:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:1:duty:1:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:chapel:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:mint:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:quarry:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well",
-                "turn:sow:3:4:duty:4:action:construct_building:construct_building:well:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:chapel:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:mint:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:quarry:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_building_and_road_deferred:construct_building:well:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road",
-                "turn:sow:3:4:duty:4:action:construct_road_deferred:construct_plan:road:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver",
-                "turn:sow:3:4:duty:4:action:tithe:gain:silver",
-                "turn:sow:3:4:duty:4:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=silver:gain:silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:give_alms_donate_building:building:stone_yard:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:0:hire_payments:cloisters=silver:gain:wheat",
-                "turn:sow:3:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:4:hire_payments:cloisters=silver:gain:wheat"
-              ],
-              "full_turn_action_count": 27
-            },
-            "scenario": "scenarios/stone_yard_buy_then_construct_001.json",
-            "standalone_hire_step": {
-              "hire_payment": "silver",
-              "source": "market",
-              "step_id": "turn_step:building_activation:bank:from:market:pay:silver"
-            }
-          },
           {
             "after_committing_standalone_hire": {
               "does_not_use_effect_action_ids": [
@@ -599,24 +131,20 @@
             }
           }
         ],
-        "step_count": 6
+        "step_count": 0
       },
       "standalone_step_removal_safety": {
         "all_only_through_step_actions_use_the_effect": true,
         "comparison_basis": "sum of per-scenario FullTurnAction action_id sets",
-        "only_through_step_action_count": 9,
-        "only_through_step_effect_action_count": 9,
+        "only_through_step_action_count": 3,
+        "only_through_step_effect_action_count": 3,
         "only_through_step_unused_action_count": 0,
-        "only_without_step_action_count": 46,
+        "only_without_step_action_count": 0,
         "safe_without_first_adding_inline_actions": false,
-        "scenarios_with_only_through_step_actions": [
-          "scenarios/bank_hire_market_ordination_001.json",
-          "scenarios/bank_hire_opponent_ordination_001.json",
-          "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json"
-        ],
-        "shared_action_count": 25,
-        "through_step_action_count": 34,
-        "without_step_action_count": 71
+        "scenarios_with_only_through_step_actions": [],
+        "shared_action_count": 1,
+        "through_step_action_count": 4,
+        "without_step_action_count": 1
       }
     },
     {
@@ -2089,39 +1617,12 @@
   },
   "predicted_capture_impact_if_inline_hire_and_use_replaces_the_step": {
     "legal_actions": {
-      "predicted_changed_file_count": 12,
+      "predicted_changed_file_count": 9,
       "predicted_changed_scenarios": [
-        "scenarios/bank_hire_market_ordination_001.json",
-        "scenarios/bank_hire_opponent_ordination_001.json",
         "scenarios/customs_house_hire_market_taxation_majority_001.json",
         "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
         "scenarios/scriptorium_hire_market_majority_selected_duty_001.json",
         "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
-        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json",
-        "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json",
-        "scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json",
-        "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
-        "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
-        "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
-      ],
-      "predicted_unchanged_file_count": 302,
-      "rough_change": "add source-bearing modifier-use FullTurnAction variants for the currently post-step-only effect choices; existing non-hire actions remain",
-      "total_capture_file_count": 314
-    },
-    "prediction_basis": "current initial-state offers and the effect-use actions visible only after their standalone step; this is a computed scope, not an observed hypothetical diff",
-    "turn_steps": {
-      "predicted_changed_file_count": 15,
-      "predicted_changed_scenarios": [
-        "scenarios/bank_hire_market_ordination_001.json",
-        "scenarios/bank_hire_opponent_ordination_001.json",
-        "scenarios/customs_house_hire_market_taxation_majority_001.json",
-        "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
-        "scenarios/kogge_donated_no_extra_routes_001.json",
-        "scenarios/kogge_hire_opponent_city_to_west_001.json",
-        "scenarios/scriptorium_hire_market_majority_selected_duty_001.json",
-        "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
-        "scenarios/stone_yard_buy_then_construct_001.json",
-        "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json",
         "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json",
         "scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json",
         "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
@@ -2129,8 +1630,29 @@
         "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
       ],
       "predicted_unchanged_file_count": 305,
-      "removed_standalone_activation_step_count": 18,
-      "rough_change": "remove one target BuildingActivationStep per offer; three files each lose both their Bank and Customs House steps",
+      "rough_change": "add source-bearing modifier-use FullTurnAction variants for the currently post-step-only effect choices; existing non-hire actions remain",
+      "total_capture_file_count": 314
+    },
+    "prediction_basis": "current initial-state offers and the effect-use actions visible only after their standalone step; this is a computed scope, not an observed hypothetical diff",
+    "turn_steps": {
+      "predicted_changed_file_count": 12,
+      "predicted_changed_scenarios": [
+        "scenarios/customs_house_hire_market_taxation_majority_001.json",
+        "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
+        "scenarios/kogge_donated_no_extra_routes_001.json",
+        "scenarios/kogge_hire_opponent_city_to_west_001.json",
+        "scenarios/scriptorium_hire_market_majority_selected_duty_001.json",
+        "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
+        "scenarios/stone_yard_buy_then_construct_001.json",
+        "scenarios/wagon_yard_active_free_hire_market_customs_house_001.json",
+        "scenarios/wagon_yard_active_free_hire_market_scriptorium_001.json",
+        "scenarios/wagon_yard_active_free_hire_opponent_customs_house_001.json",
+        "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
+        "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
+      ],
+      "predicted_unchanged_file_count": 308,
+      "removed_standalone_activation_step_count": 12,
+      "rough_change": "remove one paid target BuildingActivationStep per offer; Bank's free Wagon Yard step stays",
       "total_capture_file_count": 320
     }
   }

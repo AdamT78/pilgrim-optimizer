@@ -607,17 +607,15 @@
         "turn_steps": "bank_hire_market_ordination_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 2,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "bank"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 5,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/bank_hire_market_ordination_001.json"
     },
@@ -635,17 +633,15 @@
         "turn_steps": "bank_hire_opponent_ordination_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 2,
-        "offers_target_hire_step": true,
-        "target_hire_step_building_ids": [
-          "bank"
-        ],
-        "target_hire_step_count": 1,
-        "turn_steps_count": 1
+        "legal_actions_count": 5,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 2
+        "states_examined": 1
       },
       "scenario": "scenarios/bank_hire_opponent_ordination_001.json"
     },
@@ -3976,15 +3972,14 @@
         "legal_actions_count": 15,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 12
+        "target_hire_step_count": 1,
+        "turn_steps_count": 11
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 34
+        "states_examined": 31
       },
       "scenario": "scenarios/kogge_donated_no_extra_routes_001.json"
     },
@@ -4033,15 +4028,14 @@
         "legal_actions_count": 24,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 12
+        "target_hire_step_count": 1,
+        "turn_steps_count": 11
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 34
+        "states_examined": 31
       },
       "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json"
     },
@@ -6352,15 +6346,14 @@
         "legal_actions_count": 27,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
-          "bank",
           "customs_house"
         ],
-        "target_hire_step_count": 2,
-        "turn_steps_count": 5
+        "target_hire_step_count": 1,
+        "turn_steps_count": 4
       },
       "reachable_committed_step_scan": {
         "additional_target_hire_windows": [],
-        "states_examined": 21
+        "states_examined": 17
       },
       "scenario": "scenarios/stone_yard_buy_then_construct_001.json"
     },
@@ -7274,7 +7267,7 @@
   ],
   "scope": {
     "baseline_affected_scenario_count": 27,
-    "current_capture_snapshot_affected_scenario_count": 17,
+    "current_capture_snapshot_affected_scenario_count": 15,
     "current_capture_snapshot_matches_reviewed_baseline": false,
     "expected_changed_capture_files": {
       "legal_actions": [
@@ -8645,7 +8638,7 @@
           "sow_carried_hire_building_ids": [
             "mill"
           ],
-          "turn_steps_count": 12
+          "turn_steps_count": 11
         },
         "reachable_committed_step_scan": {
           "first_later_hire_window": {
@@ -8689,9 +8682,9 @@
                 ]
               }
             ],
-            "turn_steps_count": 11
+            "turn_steps_count": 10
           },
-          "states_examined": 34
+          "states_examined": 31
         },
         "scenario": "scenarios/kogge_donated_no_extra_routes_001.json"
       },
@@ -8761,7 +8754,7 @@
           "sow_carried_hire_building_ids": [
             "mill"
           ],
-          "turn_steps_count": 12
+          "turn_steps_count": 11
         },
         "reachable_committed_step_scan": {
           "first_later_hire_window": {
@@ -8805,9 +8798,9 @@
                 ]
               }
             ],
-            "turn_steps_count": 11
+            "turn_steps_count": 10
           },
-          "states_examined": 34
+          "states_examined": 31
         },
         "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json"
       },
@@ -9600,10 +9593,10 @@
               ]
             }
           ],
-          "turn_steps_count": 11
+          "turn_steps_count": 10
         },
         "scenario": "scenarios/kogge_donated_no_extra_routes_001.json",
-        "states_examined": 34
+        "states_examined": 31
       },
       {
         "first_later_hire_window": {
@@ -9647,10 +9640,10 @@
               ]
             }
           ],
-          "turn_steps_count": 11
+          "turn_steps_count": 10
         },
         "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json",
-        "states_examined": 34
+        "states_examined": 31
       },
       {
         "first_later_hire_window": {
@@ -9727,10 +9720,10 @@
               ]
             }
           ],
-          "turn_steps_count": 10
+          "turn_steps_count": 9
         },
         "scenario": "scenarios/stone_yard_buy_then_construct_001.json",
-        "states_examined": 21
+        "states_examined": 17
       }
     ],
     "overlap_with_target_hire_step_group": [

@@ -34,6 +34,7 @@ class ModifierBuilding:
     display_name: str
     effect_building_id_field: str
     effect_building_source_field: str
+    keeps_free_standalone_hires: bool = False
 
 
 MODIFIER_BUILDINGS = (
@@ -42,6 +43,7 @@ MODIFIER_BUILDINGS = (
         display_name="Bank",
         effect_building_id_field="bank_payment_building_id",
         effect_building_source_field="bank_payment_building_source",
+        keeps_free_standalone_hires=True,
     ),
     ModifierBuilding(
         building_id="scriptorium",
@@ -257,6 +259,12 @@ def _aggregate_building(
         assert isinstance(compared, dict)
         assert isinstance(after, dict)
         assert isinstance(frontier, dict)
+        retains_free_step = (
+            building.keeps_free_standalone_hires
+            and row["standalone_hire_step"]["hire_payment"] is None
+        )
+        if retains_free_step:
+            continue
         removed_step_count += 1
         turn_step_capture_scenarios.add(scenario_name)
         if len(compared["only_through_step_effect_action_ids"]) > 0:
@@ -443,8 +451,8 @@ def generate_manifest(root: Path | None = None) -> str:
                 "predicted_changed_scenarios": sorted(turn_step_capture_scenarios),
                 "removed_standalone_activation_step_count": removed_step_count,
                 "rough_change": (
-                    "remove one target BuildingActivationStep per offer; three files each lose "
-                    "both their Bank and Customs House steps"
+                    "remove one paid target BuildingActivationStep per offer; Bank's free Wagon "
+                    "Yard step stays"
                 ),
             },
         },

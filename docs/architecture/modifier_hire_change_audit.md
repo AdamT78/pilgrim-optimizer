@@ -5,61 +5,65 @@ named corpus evidence is in `docs/audits/modifier_hire_change_audit.json`, gener
 `python3 tools/audits/modifier_hire_change_audit.py`. It covers all 320 scenarios without changing
 the engine.
 
-## Decision for a follow-up refactor
+## Bank decision implemented here
 
-Do not delete a standalone modifier-hire step before adding an atomic, source-bearing
-`FullTurnAction` variant. No initial scenario currently has a FullTurnAction that both uses one of
-these effects and names a non-`own_active` source. The current full-turn action IDs reachable only
-after the step are all effect uses: 9 Bank, 10 Scriptorium, and 36 Customs House. Removing the
-step without a replacement therefore loses legal effect outcomes.
+Paid Bank hiring now travels on the `FullTurnAction` that spends its substitution. The two paid
+ordination frontiers enumerate six source-bearing actions: three from market and three from an
+opponent. Their `bank_payment_building_id`, `bank_payment_building_source`, replaced resource,
+silver amount, and `hire_payments` entry travel together.
 
-The unused actions are not safety evidence for the deletion: their action IDs are shared with the
-no-hire position, but the separately committed hire has already recorded its payment in state and
-events. The audit's safety comparison deliberately uses the stable `FullTurnAction` IDs written by
-the legal-actions capture; it records the different final-state interpretation too.
+The old paid steps offered 24 action outcomes that paid to hire Bank but never used its effect.
+They deliberately disappear; the five frontiers collapse to 20 distinct end states because four
+Stone Yard actions share an outcome. The six paid hire-and-use outcomes are compared against the
+retired step-plus-action path in `tests/test_building_bank.py`, ignoring only the event audit's
+action-id spelling. Turns that never hire Bank remain exactly equal.
+
+The Wagon Yard exception stays a committed step. Its market Bank hire is free (`hire_payment` is
+`null`), has three effect uses and one costless non-use action, and is not part of the paid-hire
+refactor.
+
+### Bank market-hire transcript exception
+
+The player transcript omits the supply as payee for a market Bank hire: it says that the player
+hired Bank from the market and paid the resource, but not that it was paid to the bank. `Bank` is
+both the building's name and the supply's name, so naming the payee would make the sentence appear
+to pay the building. This is the one market-hire line that does not name who was paid; all other
+market hires continue to name the bank as payee.
+
+### Deferred Bank-payment distinction
+
+The engine does not yet distinguish an action set with no Bank-payment option from one where an
+otherwise eligible action has no affordable Bank-payment variant. The tile therefore says the
+weaker true sentence, “Cannot be used: no action this turn can use the Bank.” It would need an
+engine-provided Bank-payment availability result for each action, including an explicit
+unaffordable reason and its required payment, before it could honestly say which condition holds.
+The stronger sentence is worth adding once that fact exists: a player who cannot afford a payment
+can change their resources, while a player with no payment opportunity must choose a different
+action instead.
 
 ## Current corpus facts
 
-| Building | Standalone-offer scenarios | After the step: use / do not use | Same-frontier opt-out |
+| Building | Current standalone-offer scenarios | After the step: use / do not use | Same-frontier opt-out |
 | --- | ---: | ---: | --- |
-| Bank | 6 | 9 / 25 | improving: 6 of 6 frontiers |
+| Bank | 1 free Wagon Yard offer | 3 / 1 | improving: 1 of 1 frontiers |
 | Scriptorium | 5 | 10 / 15 | improving: 5 of 5 frontiers |
 | Customs House | 7 | 36 / 78 | improving: 7 of 7 frontiers |
 
-Every offer has a direct non-effect FullTurnAction available on that same initial engine frontier,
-so none is enabling. The aggregate numbers count each offered step separately; three scenarios
-offer both Bank and Customs House:
-`kogge_donated_no_extra_routes_001`, `kogge_hire_opponent_city_to_west_001`, and
-`stone_yard_buy_then_construct_001`. In each of those offers the relevant modifier has zero effect
-uses after hiring, so its standalone step can only be wasted.
+Scriptorium and Customs House remain unchanged. Their post-step effect source fields are `null`,
+which is the engine marker that the earlier committed activation paid for the effect. Bank still
+uses that marker only on the retained free Wagon Yard path.
 
-The supplied examples agree with the full scan: `bank_hire_market_ordination_001` has 3 Bank uses
-and 2 non-uses among 5 actions; `scriptorium_hire_market_majority_selected_duty_001` has 2 and 3;
-and `customs_house_hire_market_taxation_majority_001` has 9 and 14. Post-step effect source fields
-are `null`, which is the engine's marker that the earlier committed activation paid for the effect.
+## What remains for the route modifiers
 
-## What must be preserved
-
-The table compares the stable full-turn action IDs directly available without the step with those
-available after committing it. “Only through” is the blocker for removing the step; every such ID
-uses the indicated modifier. “Only without” reflects choices the step's payment makes unaffordable.
-
-| Building | Without / through step | Shared | Only through | Only without |
-| --- | ---: | ---: | ---: | ---: |
-| Bank | 71 / 34 | 25 | 9 | 46 |
-| Scriptorium | 15 / 25 | 15 | 10 | 0 |
-| Customs House | 126 / 114 | 78 | 36 | 48 |
-
-The manifest names every action ID, per scenario, under
-`full_turn_action_outcome_comparison`. A follow-up should represent those 55 currently
-post-step-only use choices as action-carried hires with a source and payment, then prove the new
-capture diffs rather than treating this audit as a substitute for them.
+The manifest still compares stable full-turn action IDs around each remaining step. The free Bank
+path has three effect IDs only through its step; those are intentionally retained. Scriptorium and
+Customs House still have their original ten and 36 only-through effect IDs respectively. A future
+change to either needs a source-bearing replacement and its own end-state comparison; this Bank
+change does not alter either row.
 
 ## Capture scope for that follow-up
 
-If an atomic hire-and-use form replaces the standalone steps, the computed initial-capture scope is
-12 of 314 legal-action files and 15 of 320 turn-step files. The legal-action files gain the 55
-source-bearing effect-use variants; the turn-step files lose 18 activation lines (three files lose
-both their Bank and Customs House lines). The manifest names the exact 12 and 15 files. This is a
-scope prediction from the present engine, not an observed hypothetical capture diff: the refactor
-must still run both captures and show the actual diffs.
+If atomic hire-and-use forms later replace the remaining Scriptorium and Customs House steps, the
+computed initial-capture scope is 9 of 314 legal-action files and 12 of 320 turn-step files. The
+retained free Bank step is excluded. This is a scope prediction from the present engine, not an
+observed hypothetical diff; any later refactor must still capture and review the actual changes.
