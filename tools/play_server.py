@@ -127,6 +127,10 @@ class _RouteFamilyDeclaration:
     i: int
     paint: str
     priority: int
+    # State-only wording: the description states the effect and the ability line says whether it
+    # is live. Owning the building makes it free by the rules, so the page does not restate what
+    # the board already enforces.
+    owned_status_text: str
 
     @property
     def mask(self) -> int:
@@ -137,8 +141,20 @@ class _RouteFamilyDeclaration:
 # Add a route family here, then re-read its permitter wording below.  The payload palette, compact
 # candidate indexes, offered-building lookup, and automatic-mask bits all derive from this list.
 _ROUTE_FAMILIES = (
-    _RouteFamilyDeclaration("kogge", i=0, paint="route-opening", priority=1),
-    _RouteFamilyDeclaration("cloisters", i=1, paint="route-extra-step", priority=2),
+    _RouteFamilyDeclaration(
+        "kogge",
+        i=0,
+        paint="route-opening",
+        priority=1,
+        owned_status_text="Yours: in effect every turn.",
+    ),
+    _RouteFamilyDeclaration(
+        "cloisters",
+        i=1,
+        paint="route-extra-step",
+        priority=2,
+        owned_status_text="Yours: in effect every turn.",
+    ),
 )
 _ROUTE_FAMILY_BY_BUILDING_ID = {family.building_id: family for family in _ROUTE_FAMILIES}
 _ROUTE_FAMILY_BY_INDEX = {family.i: family for family in _ROUTE_FAMILIES}
@@ -162,32 +178,12 @@ if _HIRED_MODIFIER_BUILDING_IDS != _REVIEWED_HIRED_MODIFIER_BUILDING_IDS:
 _PERMITTER_BUILDING_IDS = frozenset(
     (*_ROUTE_BUILDING_IDS, *_HIRED_MODIFIER_BUILDING_IDS)
 ) - {_WAGON_YARD_ONE_SHOT_FREE_HIRE_BUILDING_ID}
-_PERMITTER_STATUS_TEXT_BY_BUILDING_ID = {
-    "kogge": (
-        "Hired or activated this turn: acolytes may move against the river to enter or leave "
-        "the City."
-    ),
-    "cloisters": (
-        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
-        "action."
-    ),
-    "scriptorium": (
-        "Hired or activated this turn: for Duty relations, each occupied tile counts as an extra "
-        "acolyte."
-    ),
-    "customs_house": (
-        "Hired or activated this turn: your occupied Duty tiles count as majorities for Taxation."
-    ),
-    "bank": (
-        "Hired or activated this turn: you may pay silver in place of one required resource type."
-    ),
-}
-_ROUTE_OWNED_TEXT = (
-    "Yours: acolytes may move against the river to enter or leave the City. "
-    "These routes are free."
+_REVIEWED_PERMITTER_BUILDING_IDS = frozenset(
+    {"kogge", "cloisters", "scriptorium", "customs_house", "bank"}
 )
+_PERMITTER_STATUS_TEXT = "In effect for the rest of this turn."
 
-if frozenset(_PERMITTER_STATUS_TEXT_BY_BUILDING_ID) != _PERMITTER_BUILDING_IDS:
+if _PERMITTER_BUILDING_IDS != _REVIEWED_PERMITTER_BUILDING_IDS:
     raise RuntimeError("Review permitter tile wording after changing the permitter-building set.")
 
 
@@ -412,12 +408,9 @@ def _building_ability_status_text(source: Any) -> str:
     if reason == BuildingAbilityReason.ALREADY_USED:
         return "Cannot be used: already used this turn."
     if reason == BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN:
-        try:
-            return _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[source.building_key]
-        except KeyError as exc:
-            raise AssertionError(
-                f"Permitter has no player-facing status: {source.building_key!r}"
-            ) from exc
+        if source.building_key not in _PERMITTER_BUILDING_IDS:
+            raise AssertionError(f"Permitter has no player-facing status: {source.building_key!r}")
+        return _PERMITTER_STATUS_TEXT
     raise AssertionError(f"Known building ability reason has no player-facing status: {reason!r}")
 
 
@@ -578,6 +571,17 @@ def _building_is_live_market_tile(state: Any, config: Any, building_key: str) ->
     return building_key in state.building_market and is_building_live(state, building_key)
 
 
+def _building_ability_map_fields(state: Any, config: Any, building: Any) -> dict[str, Any]:
+    """Serialize the map-only facts for one building without asking the page where it is."""
+    on_map = building.id in state.building_market
+    fields: dict[str, Any] = {
+        "map_tile": _building_is_live_market_tile(state, config, building.id),
+    }
+    if on_map:
+        fields["construct_cost_text"] = f"Construct for {building.stone_cost} stone."
+    return fields
+
+
 def _used_building_ability_reason(building_id: str) -> BuildingAbilityReason:
     """Name whether a completed tile is spent or continues to permit its turn effect."""
     if building_id in _PERMITTER_BUILDING_IDS:
@@ -640,7 +644,7 @@ def _route_family_ability_fields(
         or source.building_key not in route_family_building_ids
     ):
         return {}
-    in_effect = _PERMITTER_STATUS_TEXT_BY_BUILDING_ID[source.building_key]
+    in_effect = _PERMITTER_STATUS_TEXT
     if source.reason == BuildingAbilityReason.EFFECT_APPLIES_FOR_REST_OF_TURN:
         return {
             "family_visibility": "in_effect",
@@ -652,7 +656,9 @@ def _route_family_ability_fields(
             # `building_ability_source` resolves donation before this branch, so a donated tile
             # remains unavailable even though it still sits on its former owner's board.
             "family_visibility": "always",
-            "owned_status_text": _ROUTE_OWNED_TEXT,
+            "owned_status_text": (
+                _ROUTE_FAMILY_BY_BUILDING_ID[source.building_key].owned_status_text
+            ),
             "in_effect_status_text": in_effect,
             "greyed": False,
         }
@@ -695,7 +701,7 @@ def building_abilities_payload(
     """Resolve every catalogue building for the active player in this exact window."""
     return [
         _building_ability_source_payload(source)
-        | {"map_tile": _building_is_live_market_tile(state, config, building.id)}
+        | _building_ability_map_fields(state, config, building)
         | _route_family_ability_fields(source, route_family_building_ids)
         for building in config.buildings.catalogue
         for source in (
@@ -799,7 +805,11 @@ def building_ability_windows_payload(
             "turn_steps_offered": offered,
             "abilities": [
                 _building_ability_source_payload(source)
-                | {"map_tile": _building_is_live_market_tile(state, config, source.building_key)}
+                | _building_ability_map_fields(
+                    state,
+                    config,
+                    building_by_id(config.buildings, source.building_key),
+                )
                 | _route_family_ability_fields(source, route_family_building_ids)
                 for source in entries
             ],

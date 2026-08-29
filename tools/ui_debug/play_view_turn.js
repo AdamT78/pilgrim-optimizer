@@ -84,14 +84,27 @@
           : ability && typeof ability.toggle_off_text === 'string'
           ? ability.toggle_off_text
           : ability && typeof ability.status_text === 'string' ? ability.status_text : '';
+      var constructCostText = ability && typeof ability.construct_cost_text === 'string'
+        ? ability.construct_cost_text : '';
       target.setAttribute('data-building-ability-text', abilityText);
+      target.setAttribute('data-building-construct-cost-text', constructCostText);
       var visibleTooltip = document.querySelector('[data-building-tooltip="true"]');
       if (
         visibleTooltip
         && visibleTooltip.getAttribute('data-building-tooltip-for') === buildingId
       ) {
         var tooltipAbility = visibleTooltip.querySelector('[data-building-tooltip-ability="true"]');
-        if (tooltipAbility) { tooltipAbility.textContent = abilityText; }
+        var tooltipStatus = visibleTooltip.querySelector('[data-building-tooltip-status="true"]');
+        var tooltipCost = visibleTooltip.querySelector('[data-building-tooltip-construct-cost="true"]');
+        if (tooltipStatus) { tooltipStatus.textContent = abilityText; }
+        if (tooltipCost) {
+          if (constructCostText) {
+            tooltipCost.textContent = constructCostText;
+          } else {
+            tooltipCost.remove();
+          }
+        }
+        if (tooltipAbility && !abilityText && !constructCostText) { tooltipAbility.remove(); }
       }
       target.setAttribute(
         'data-building-ability-greyed',

@@ -5590,10 +5590,7 @@ def test_route_family_ability_payload_uses_resolved_ownership_not_board_placemen
         "owned": {
             "source_type": "own_active",
             "family_visibility": "always",
-            "owned_status_text": (
-                "Yours: acolytes may move against the river to enter or leave the City. "
-                "These routes are free."
-            ),
+            "owned_status_text": "Yours: in effect every turn.",
         },
         "donated": {
             "source_type": "unavailable",
@@ -5900,8 +5897,7 @@ def test_hired_kogge_route_action_leaves_its_tile_showing_the_active_effect() ->
             False,
             "effect_applies_for_rest_of_turn",
             True,
-            "Hired or activated this turn: acolytes may move against the river to enter or leave "
-            "the City.",
+            "In effect for the rest of this turn.",
         ),
     }
 
@@ -5912,14 +5908,12 @@ def test_hired_kogge_route_action_leaves_its_tile_showing_the_active_effect() ->
         (
             "scenarios/kogge_active_city_to_east_001.json",
             "kogge",
-            "Hired or activated this turn: acolytes may move against the river to enter or leave "
-            "the City.",
+            "In effect for the rest of this turn.",
         ),
         (
             "scenarios/cloisters_active_skip_duty_tile_001.json",
             "cloisters",
-            "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
-            "action.",
+            "In effect for the rest of this turn.",
         ),
     ),
 )
@@ -5961,30 +5955,27 @@ _PERMITTER_COMMITTED_STEP_CASES = (
     (
         "scenarios/kogge_hire_opponent_city_to_west_001.json",
         "kogge",
-        "Hired or activated this turn: acolytes may move against the river to enter or leave "
-        "the City.",
+        "In effect for the rest of this turn.",
     ),
     (
         "scenarios/cloisters_hire_opponent_skip_city_001.json",
         "cloisters",
-        "Hired or activated this turn: you may skip one Duty tile or the City to reach a Duty "
-        "action.",
+        "In effect for the rest of this turn.",
     ),
     (
         "scenarios/scriptorium_hire_opponent_majority_selected_duty_001.json",
         "scriptorium",
-        "Hired or activated this turn: for Duty relations, each occupied tile counts as an extra "
-        "acolyte.",
+        "In effect for the rest of this turn.",
     ),
     (
         "scenarios/customs_house_hire_opponent_taxation_majority_001.json",
         "customs_house",
-        "Hired or activated this turn: your occupied Duty tiles count as majorities for Taxation.",
+        "In effect for the rest of this turn.",
     ),
     (
         "scenarios/bank_hire_opponent_ordination_001.json",
         "bank",
-        "Hired or activated this turn: you may pay silver in place of one required resource type.",
+        "In effect for the rest of this turn.",
     ),
 )
 
@@ -6017,7 +6008,7 @@ def _committed_activation_tile(scenario_path: str, building_id: str) -> dict[str
     )
 
 
-def test_committed_permitter_tiles_name_the_effect_that_remains_available() -> None:
+def test_committed_permitter_tiles_state_that_the_effect_remains_available() -> None:
     rendered = {
         building_id: _committed_activation_tile(scenario_path, building_id)
         for scenario_path, building_id, _expected_status in _PERMITTER_COMMITTED_STEP_CASES
@@ -6030,7 +6021,73 @@ def test_committed_permitter_tiles_name_the_effect_that_remains_available() -> N
         building_id: ("effect_applies_for_rest_of_turn", True, expected_status)
         for _scenario_path, building_id, expected_status in _PERMITTER_COMMITTED_STEP_CASES
     }
-    assert len({tile["status_text"] for tile in rendered.values()}) == len(rendered)
+
+
+def test_permitter_ability_lines_do_not_repeat_catalogue_effect_words() -> None:
+    """Descriptions say the effect; the permitter line is only the time-limited state."""
+    catalogue = json.loads(Path("configs/buildings.json").read_text(encoding="utf-8"))["catalogue"]
+    ordinary_connectives = frozenset(
+        {
+            "a",
+            "an",
+            "and",
+            "at",
+            "by",
+            "for",
+            "from",
+            "in",
+            "of",
+            "on",
+            "or",
+            "the",
+            "this",
+            "to",
+        }
+    )
+    # Scriptorium's description and the required shared state sentence both say "turn".
+    allowed_shared_state_words = ordinary_connectives | {"turn"}
+
+    for building in catalogue:
+        building_id = str(building["id"])
+        if building_id not in play_server._PERMITTER_BUILDING_IDS:
+            continue
+        ability_words = set(
+            re.findall(
+                r"[a-z]+",
+                play_server._PERMITTER_STATUS_TEXT.lower(),
+            )
+        )
+        description_words = set(re.findall(r"[a-z]+", str(building["description"]).lower()))
+        repeated_effect_words = ability_words & description_words - allowed_shared_state_words
+
+        assert not repeated_effect_words, (building_id, repeated_effect_words)
+
+
+def test_map_building_payload_carries_its_construct_cost_but_not_after_construction() -> None:
+    scenario = load_scenario("scenarios/construct_building_level1_001.json")
+    building_id = "well"
+    building = next(
+        building for building in scenario.config.buildings.catalogue if building.id == building_id
+    )
+    market_ability = next(
+        ability
+        for ability in play_server.building_abilities_payload(scenario.state, scenario.config)
+        if ability["building_id"] == building_id
+    )
+    action = next(
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction) and action.construct_building_id == building_id
+    )
+    after_construction = apply_action(scenario.state, action, scenario.config).state
+    board_ability = next(
+        ability
+        for ability in play_server.building_abilities_payload(after_construction, scenario.config)
+        if ability["building_id"] == building_id
+    )
+
+    assert market_ability["construct_cost_text"] == f"Construct for {building.stone_cost} stone."
+    assert "construct_cost_text" not in board_ability
 
 
 @pytest.mark.parametrize(
