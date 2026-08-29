@@ -8,6 +8,7 @@
      already provided. */
   var CANDIDATES = __CANDIDATES__;
   var FAMILIES = __FAMILIES__;
+  var AUTO_FAMILY_INDEXES = __AUTO_FAMILY_INDEXES__;
   var TURN_STEPS = __TURN_STEPS__;
   var USED_BUILDINGS = __USED_BUILDINGS__;
   var RESOLUTION_COMMITTED = __RESOLUTION_COMMITTED__;
@@ -123,6 +124,7 @@
   var chosen = [];
   var answered = [];
   var enabledFamilies = [];
+  var reportedAutoFamilyMaskMismatches = [];
   var resolutionSplit = null;
   var baseline = [];
   var resourceBaseline = [];
@@ -185,6 +187,39 @@
 
   function surviving(prefix) {
     return matchingCandidates(prefix).filter(enabledFamiliesAllow);
+  }
+
+  function enabledFamilyMask() {
+    var enabledIndexes = {};
+    FAMILIES.forEach(function (family, index) {
+      var ability = buildingAbilityFor(family.building_id);
+      if (
+        ability && ability.family_visibility === 'always'
+        || enabledFamilies.indexOf(family.building_id) !== -1
+      ) {
+        enabledIndexes[index] = true;
+      }
+    });
+    Object.keys(enabledIndexes).forEach(function (index) {
+      if (AUTO_FAMILY_INDEXES.indexOf(Number(index)) !== -1) { return; }
+      if (reportedAutoFamilyMaskMismatches.indexOf(index) !== -1) { return; }
+      reportedAutoFamilyMaskMismatches.push(index);
+      if (window.console && window.console.error) {
+        window.console.error(
+          'auto-advance family mask mismatch: enabled family index ' + index
+          + ' was absent from the server selection list'
+        );
+      }
+    });
+    return AUTO_FAMILY_INDEXES.reduce(function (mask, index) {
+      if (enabledIndexes[index]) { return mask | (1 << index); }
+      return mask;
+    }, 0);
+  }
+
+  function isAutoAdvanceForEnabledFamilies(step) {
+    var mask = enabledFamilyMask();
+    return Array.isArray(step.auto) && step.auto.indexOf(mask) !== -1;
   }
 
   function familyBuildingIdsOn(candidates) {
@@ -261,7 +296,9 @@
       target.setAttribute(
         'data-turn-family-available', effect || alwaysVisible || !familyOriginChosen ? 'false' : 'true'
       );
-      target.setAttribute('data-building-ability-greyed', 'false');
+      target.setAttribute(
+        'data-building-ability-greyed', ability && ability.greyed === true ? 'true' : 'false'
+      );
     });
   }
 
@@ -1672,7 +1709,8 @@
       var abbeyToken = abbeyTokensOnActiveSeat().filter(function (token) {
         return !tokenVisible(token);
       })[0];
-      var cityCube = visibleColumnAt(source, activePlayer)[0];
+      var cityCubes = visibleColumnAt(source, activePlayer);
+      var cityCube = cityCubes[cityCubes.length - 1];
       if (!abbeyToken || !cityCube) { return; }
       cityCube.setAttribute('opacity', '0');
       abbeyToken.setAttribute('opacity', '1');
@@ -1681,7 +1719,8 @@
       destination = positionName(Number(step.selected_position));
     }
     if (!source || !destination) { return; }
-    var moved = visibleColumnAt(source, activePlayer)[0];
+    var sourceCubes = visibleColumnAt(source, activePlayer);
+    var moved = sourceCubes[sourceCubes.length - 1];
     var placed = placeOneCubeAt(destination, activePlayer);
     if (!moved || !placed) {
       if (placed) { placed.setAttribute('opacity', '0'); }
@@ -2062,8 +2101,8 @@
     }
     var live = surviving(chosen);
     var offered = stepsAt(chosen.length, live);
-    /* The server marks exceptional continuations it has already found unambiguous. */
-    while (offered.length && offered[0].auto_advance === true) {
+    /* The server marks exceptional continuations for each route-family selection. */
+    while (offered.length && isAutoAdvanceForEnabledFamilies(offered[0])) {
       chosen.push(offered[0].value);
       live = surviving(chosen);
       offered = stepsAt(chosen.length, live);

@@ -551,15 +551,34 @@ def _used_building_ability_reason(building_id: str) -> BuildingAbilityReason:
     return BuildingAbilityReason.ALREADY_USED
 
 
+def _route_buildings_used_by_committed_sow(state: Any) -> frozenset[str]:
+    """Read completed route effects from the engine event that records their use.
+
+    Route buildings are chosen as fields of a FullTurnAction, rather than as turn steps, so they
+    intentionally do not enter ``used_buildings``. The transition emits this building-bonus event
+    only while applying that action; a browser preview has no corresponding committed event.
+    """
+    return frozenset(
+        building_id
+        for event in state.turn_progress.events
+        if event.event_type is EventType.BUILDING_BONUS
+        and (details := dict(event.details)).get("action") == "sowing"
+        and isinstance(building_id := details.get("building"), str)
+        and building_id in _ROUTE_BUILDING_IDS
+    )
+
+
 def _building_ability_source_after_turn_use(state: Any, source: Any) -> Any:
-    """Keep a completed building step unavailable on the page without changing engine lookups.
+    """Keep a completed building effect unavailable on the page without changing engine lookups.
 
     The lookup after a hire can report its source unaffordable because the committed step paid its
     fee, so this cannot rely on `source.usable`. Corpus measurement currently finds no committed
     step that overwrites a `DONATED`, `NOT_LIVE`, or `NOT_SELECTED` source; that is an observed
     invariant, not one this function constructs.
     """
-    if source.building_key not in state.turn_progress.used_buildings:
+    if source.building_key not in (
+        state.turn_progress.used_buildings | _route_buildings_used_by_committed_sow(state)
+    ):
         return source
     return dataclasses.replace(
         source,
@@ -2671,34 +2690,76 @@ def _frontier_value(value: Any) -> Any:
 
 
 def _mark_unambiguous_edge_steps(candidates: list[dict]) -> None:
-    """Mark movement that has no player-facing alternative at its frontier.
+    """Name the family selections that make a movement continuation automatic.
 
-    The page must not decide which engine steps are automatic. Grouping the supplied
-    candidates by their already chosen prefix lets the server identify the narrow case
-    where continuing sowing has exactly one available step, and that step is an edge.
+    The page filters route candidates by the family's current visibility before it offers an
+    answer.  A marker made from every candidate would therefore describe a different frontier
+    from the one the player sees.  Enumerating the (at most two) offered route families keeps the
+    decision on the server while letting the page match its current selection to an explicit
+    server-written set.
     """
-    frontiers: collections.defaultdict[tuple[Any, ...], list[dict]] = collections.defaultdict(list)
-    for candidate in candidates:
-        prefix: list[Any] = []
-        for step in candidate["steps"]:
-            frontiers[tuple(prefix)].append(step)
-            prefix.append(_frontier_value(step["value"]))
+    offered_families = _auto_advance_family_indexes(candidates)
+    selections = [
+        (
+            sum(
+                1 << family
+                for index, family in enumerate(offered_families)
+                if mask & (1 << index)
+            ),
+            frozenset(
+                family for index, family in enumerate(offered_families) if mask & (1 << index)
+            ),
+        )
+        for mask in range(1 << len(offered_families))
+    ]
 
-    for steps in frontiers.values():
-        offered = {
-            (step["kind"], _frontier_value(step["value"])): step for step in steps
+    for selection_mask, selection in selections:
+        frontiers: collections.defaultdict[tuple[Any, ...], list[dict]] = collections.defaultdict(
+            list
+        )
+        for candidate in candidates:
+            if not set(candidate.get("family", ())).issubset(selection):
+                continue
+            prefix: list[Any] = []
+            for step in candidate["steps"]:
+                frontiers[tuple(prefix)].append(step)
+                prefix.append(_frontier_value(step["value"]))
+
+        for steps in frontiers.values():
+            offered: collections.defaultdict[tuple[Any, Any], list[dict]] = collections.defaultdict(
+                list
+            )
+            for step in steps:
+                offered[(step["kind"], _frontier_value(step["value"]))].append(step)
+            if len(offered) != 1:
+                continue
+            sole_steps = next(iter(offered.values()))
+            sole_option = sole_steps[0]
+            if (
+                sole_option["kind"] != "edge"
+                # An action-carried hire is a player choice even when its route continuation is
+                # otherwise forced: following it is what commits to paying on Confirm.  This is
+                # deliberately checked among this selection's variants, before no-family routes
+                # can be collapsed with their hired sibling.
+                or any("hire_text" in step for step in sole_steps)
+            ):
+                continue
+            for step in sole_steps:
+                # `auto` is a compact set of route-family bit masks.  This lives on every marked
+                # candidate in the largest play payload, where repeating long key names or nested
+                # family lists breaches the page-size ceiling.
+                step.setdefault("auto", []).append(selection_mask)
+
+
+def _auto_advance_family_indexes(candidates: list[dict]) -> list[int]:
+    """The route-family indexes whose subsets the automatic-marker evaluates."""
+    return sorted(
+        {
+            family
+            for candidate in candidates
+            for family in candidate.get("family", ())
         }
-        sole_option = next(iter(offered.values())) if len(offered) == 1 else None
-        if (
-            sole_option is None
-            or sole_option["kind"] != "edge"
-            # An action-carried hire is a player choice even when its route continuation is
-            # otherwise forced: following it is what commits to paying on Confirm.
-            or "hire_text" in sole_option
-        ):
-            continue
-        for step in steps:
-            step["auto_advance"] = True
+    )
 
 
 def _route_family_building_ids(candidates: list[dict]) -> set[str]:
@@ -3192,6 +3253,7 @@ class PlayServer(ThreadingHTTPServer):
             state_token=self.token,
             turn_candidates=candidates,
             families=_ROUTE_BUILDING_PRESENTATION,
+            auto_family_indexes=_auto_advance_family_indexes(candidates),
             turn_steps=available_turn_steps,
             building_abilities=building_abilities,
             building_ability_windows=building_ability_windows_payload(
