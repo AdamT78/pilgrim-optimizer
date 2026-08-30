@@ -183,6 +183,7 @@
   var ordinationBaseline = [];
   var ordinationStartCounts = null;
   var ordinationOffered = [];
+  var pendingOrdinationAnswer = null;
   var conversionChosen = [];
   var resourceAllocation = {};
   var resourceAllocationTotal = null;
@@ -307,6 +308,7 @@
     restoreOrdinationBaseline();
     chosen = [];
     answered = [];
+    pendingOrdinationAnswer = null;
     resourceAllocation = {};
     resourceAllocationTotal = null;
     conversionChosen = [];
@@ -2248,9 +2250,41 @@
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
        would be committed as, or what is still undecided about
        it -- and the player says so. */
-    var currentQuestionIsAnswered = !offered.length
+    var ordinationPaymentSteps = [];
+    if (ordinations.length && ordinationPicked !== null) {
+      var followingSteps = stepsAt(chosen.length + 1, narrowed);
+      if (
+        followingSteps.length
+        && narrowed.every(function (candidate) {
+          var step = candidate.steps[chosen.length + 1];
+          return step !== undefined
+            && step.kind === 'combination'
+            && step.requires_explicit_answer === true;
+        })
+      ) {
+        ordinationPaymentSteps = followingSteps;
+      }
+    }
+    var currentQuestionIsAnswered = (!offered.length
       || (arrangements.length && arrangementPicked !== null)
-      || (ordinations.length && ordinationPicked !== null);
+      || (ordinations.length && ordinationPicked !== null))
+      && !ordinationPaymentSteps.length;
+    if (ordinationPaymentSteps.length) {
+      /* Ordination can stay extendable while payment answers are visible. A payment settles the
+         currently painted ordination outcome, so the generic key handler can add both values. */
+      pendingOrdinationAnswer = ordinationPicked;
+      show(
+        ordinationPaymentSteps,
+        [],
+        -1,
+        null,
+        preview,
+        arrangements,
+        ordinations
+      );
+      return;
+    }
+    pendingOrdinationAnswer = null;
     if (
       narrowed.length === 1
       && !allocationActive
@@ -2441,6 +2475,11 @@
         var value = key.getAttribute(attribute);
         if (attribute === 'data-resolution-key') {
           abandonConversion();
+        }
+        if (attribute === 'data-combination-key' && pendingOrdinationAnswer !== null) {
+          chosen.push(pendingOrdinationAnswer);
+          answered.push(pendingOrdinationAnswer);
+          pendingOrdinationAnswer = null;
         }
         chosen.push(value);
         answered.push(value);

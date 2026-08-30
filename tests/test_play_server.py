@@ -1824,7 +1824,12 @@ def test_every_unresolved_field_has_server_written_player_text(
 
     assert scenarios_checked == 320, "the player-wording check no longer walks the full corpus"
     assert not unnamed, f"unresolved fields without player text: {unnamed[:10]}"
-    assert fields_seen == set(play_server.UNRESOLVED_FIELD_TEXT)
+    # Own-active Bank variants now have a whole payment step, so these fields are deliberately no
+    # longer part of a corpus-wide unresolved candidate. Keep the corpus walk proving that exact
+    # disappearance rather than letting a stale label-presence assertion call it a regression.
+    assert fields_seen == set(play_server.UNRESOLVED_FIELD_TEXT) - set(
+        play_server.OWN_ACTIVE_BANK_PAYMENT_FIELDS
+    )
 
 
 def test_an_unmapped_unresolved_field_stops_candidate_construction(monkeypatch) -> None:
@@ -2695,7 +2700,7 @@ def test_building_ability_reason_is_rendered_and_missing_reason_stays_blank(tmp_
 
 @needs_node
 def test_building_steps_close_during_the_server_described_sow_window(tmp_path: Path) -> None:
-    """A candidate's server-named Sow cursor takes every building affordance out at once."""
+    """Sow closes doer activations while permitters retain their already-live effects."""
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
     try:
         candidate = next(
@@ -2715,6 +2720,11 @@ def test_building_steps_close_during_the_server_described_sow_window(tmp_path: P
             str(ability["reason"])
             for ability in server.payload["building_ability_windows"]["sow"]["abilities"]
         )
+        mid_sow_buildings = {
+            ability["building_id"]
+            for ability in server.payload["building_ability_windows"]["sow"]["abilities"]
+            if ability["reason"] == "mid_sow"
+        }
         assert {
             "offers": transcript["turnStepOffers"],
             "greyed": {
@@ -2724,11 +2734,13 @@ def test_building_steps_close_during_the_server_described_sow_window(tmp_path: P
             },
             "own_building_status": transcript["buildingAbilityTexts"][-1]["dormitory"],
             "reason_census": sow_reason_census,
+            "mid_sow_buildings": mid_sow_buildings,
         } == {
             "offers": [opening, []],
             "greyed": sow_greyed,
             "own_building_status": "Cannot be used: sowing is in progress.",
-            "reason_census": Counter({"not_selected": 18, "mid_sow": 6}),
+            "reason_census": Counter({"not_selected": 18, "mid_sow": 4, "None": 2}),
+            "mid_sow_buildings": {"dormitory", "guild", "inquisition", "library"},
         }
     finally:
         server.server_close()
@@ -4465,6 +4477,225 @@ def test_paid_bank_hire_is_an_action_payment_option_with_player_copy(
         expected_hire_text,
     }
     assert all(candidate["action_id"] is not None for candidate in candidates)
+
+
+def test_owned_bank_payment_mix_resolves_the_bank_fields_after_ordination() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_ordination_substitution_001.json")
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        include_preview_effects=False,
+    )
+    ordain_one = [
+        candidate
+        for candidate in candidates
+        if any(
+            step["kind"] == "ordination" and step["value"] == "ordain=1"
+            for step in candidate["steps"]
+        )
+    ]
+    payment_steps = [
+        next(
+            step
+            for step in candidate["steps"]
+            if step.get("prompt")
+            == "player_one: The Bank lets you pay in coins instead of wheat. Choose how to pay."
+        )
+        for candidate in ordain_one
+    ]
+
+    assert len(ordain_one) == 2
+    assert all(candidate["variants"] == 1 for candidate in ordain_one)
+    assert all(candidate["action_id"] is not None for candidate in ordain_one)
+    assert all(candidate["unresolved"] == [] for candidate in ordain_one)
+    assert {
+        (step["value"], step["label"])
+        for step in payment_steps
+    } == {
+        ("wheat=1", "Pay 1 wheat."),
+        ("silver=1", "Pay 1 silver."),
+    }
+    assert all(
+        candidate["steps"].index(payment_step)
+        > next(
+            index
+            for index, step in enumerate(candidate["steps"])
+            if step["kind"] == "resolution"
+        )
+        for candidate, payment_step in zip(ordain_one, payment_steps, strict=True)
+    )
+    assert all(
+        step["requires_explicit_answer"] is True
+        and not {"auto", "default", "preselected"}.intersection(step)
+        for step in payment_steps
+    )
+
+
+def test_owned_bank_with_only_silver_still_asks_for_its_single_payment_mix() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_ordination_full_substitution_001.json")
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        include_preview_effects=False,
+    )
+    ordain_two = [
+        candidate
+        for candidate in candidates
+        if any(
+            step["kind"] == "ordination" and step["value"] == "ordain=2"
+            for step in candidate["steps"]
+        )
+    ]
+    payment_steps = [
+        step
+        for candidate in ordain_two
+        for step in candidate["steps"]
+        if step.get("prompt")
+        == "player_one: The Bank lets you pay in coins instead of wheat. Choose how to pay."
+    ]
+
+    assert len(payment_steps) == 1
+    assert payment_steps[0]["value"] == "silver=2"
+    assert payment_steps[0]["label"] == "Pay 2 silver."
+    assert not {"auto", "default", "preselected"}.intersection(payment_steps[0])
+
+
+def test_owned_bank_stays_in_effect_during_the_sow_payment_window() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_ordination_substitution_001.json")
+    windows = play_server.building_ability_windows_payload(scenario.state, scenario.config)
+
+    assert {
+        window: tuple(
+            next(
+                ability
+                for ability in payload["abilities"]
+                if ability["building_id"] == "bank"
+            )[field]
+            for field in ("usable", "reason", "greyed", "status_text")
+        )
+        for window, payload in windows.items()
+    } == {
+        "beginning": (True, None, False, "Usable: no payment."),
+        "sow": (True, None, False, "Usable: no payment."),
+        "end": (True, None, False, "Usable: no payment."),
+    }
+
+
+def test_owned_bank_ordination_summaries_name_each_resource_paid() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_ordination_substitution_001.json")
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+    summaries_by_ordination = {
+        ordination: {
+            candidate["summary"]
+            for candidate in candidates
+            if any(
+                step["kind"] == "ordination" and step["value"] == ordination
+                for step in candidate["steps"]
+            )
+        }
+        for ordination in {
+            step["value"]
+            for candidate in candidates
+            for step in candidate["steps"]
+            if step["kind"] == "ordination"
+        }
+    }
+
+    full_substitution = load_scenario(
+        SCENARIOS / "bank_active_ordination_full_substitution_001.json"
+    )
+    full_candidates = play_server.turn_candidates(full_substitution.state, full_substitution.config)
+    full_summary = next(
+        candidate["summary"]
+        for candidate in full_candidates
+        if any(
+            step["kind"] == "ordination" and step["value"] == "ordain=2"
+            for step in candidate["steps"]
+        )
+    )
+    no_bank = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    ordinary_two_ordination = next(
+        action
+        for action in legal_actions(no_bank.state, no_bank.config)
+        if isinstance(action, FullTurnAction)
+        and action.resolution is TurnResolutionType.ORDINATION
+        and action.ordination_steps == ("ordain", "ordain")
+        and action.bank_payment_building_id is None
+    )
+    assert {
+        "partial_substitution": summaries_by_ordination,
+        "full_substitution": full_summary,
+        "no_bank": action_summary_for_players(
+            ordinary_two_ordination,
+            no_bank.config,
+            actor=no_bank.state.active_player,
+            state=no_bank.state,
+        ),
+    } == {
+        "partial_substitution": {
+            "ordain=1": {
+                "player_one chose Ordination at Ordination — ordained 1 serf into the Abbey; "
+                "paid 1 wheat.",
+                "player_one chose Ordination at Ordination — ordained 1 serf into the Abbey; "
+                "paid 1 silver via the Bank.",
+            },
+            "ordain=2": {
+                "player_one chose Ordination at Ordination — ordained 2 serfs into the Abbey; "
+                "paid 1 wheat and 1 silver via the Bank."
+            },
+            "ordain=1,mission=1": {
+                "player_one chose Ordination at Ordination — ordained 1 serf into the Abbey; "
+                "sent 1 acolyte on mission to the City; paid 1 wheat and 1 silver via the Bank."
+            },
+        },
+        "full_substitution": (
+            "player_one chose Ordination at Ordination — ordained 2 serfs into the Abbey; "
+            "paid 2 silver via the Bank."
+        ),
+        "no_bank": (
+            "player_one chose Ordination at Ordination — ordained 2 serfs into the Abbey; "
+            "paid 2 wheat."
+        ),
+    }
+
+
+def test_owned_bank_construct_payment_names_retained_stone_and_context_resource() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_construct_minority_substitution_001.json")
+    player = scenario.state.player_state(scenario.state.active_player)
+    state = scenario.state.with_player_state(
+        scenario.state.active_player,
+        replace(player, resources=replace(player.resources, stone=2, silver=2)),
+    )
+    candidates = play_server.turn_candidates(state, scenario.config, include_preview_effects=False)
+    payment_steps = [
+        step
+        for candidate in candidates
+        if any(
+            step["kind"] == "building" and step["value"] == "brewery"
+            for step in candidate["steps"]
+        )
+        for step in candidate["steps"]
+        if step["kind"] == "combination"
+    ]
+
+    assert {step["prompt"] for step in payment_steps} == {
+        "player_one: The Bank lets you pay in coins instead of stone. Choose how to pay."
+    }
+    assert {(step["value"], step["label"]) for step in payment_steps} == {
+        ("stone=2,silver=1", "Pay 2 stone and 1 silver."),
+        ("stone=1,silver=2", "Pay 1 stone and 2 silver."),
+    }
+
+
+def test_bank_payment_labels_keep_one_as_an_explicit_price_amount() -> None:
+    assert [
+        play_server._bank_payment_label(amounts)
+        for amounts in (
+            [("wheat", 2), ("silver", 0)],
+            [("wheat", 1), ("silver", 1)],
+            [("wheat", 0), ("silver", 2)],
+        )
+    ] == ["Pay 2 wheat.", "Pay 1 wheat and 1 silver.", "Pay 2 silver."]
 
 
 @pytest.mark.parametrize(
