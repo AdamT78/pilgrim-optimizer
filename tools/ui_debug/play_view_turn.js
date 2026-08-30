@@ -139,6 +139,7 @@
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
+  var ordinationReasons = aside.querySelectorAll('[data-ordination-unavailable-reason]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
@@ -1097,8 +1098,40 @@
     return values.indexOf(encoded) === -1 ? null : encoded;
   }
 
-  function showOrdination(values) {
+  function ordinationValues(steps) {
+    return offeredByKind(steps, 'ordination');
+  }
+
+  function ordinationChoiceStatus(steps, action) {
+    var progress = currentOrdinationProgress();
+    var at = progress ? encodeOrdinationValue(progress.ordain, progress.mission) : 'none';
+    var status = null;
+    var disagreement = false;
+    steps.forEach(function (step) {
+      (step.choices || []).forEach(function (choice) {
+        if (choice.value !== action) { return; }
+        var states = choice.states || [];
+        var matching = states.filter(function (candidate) { return candidate.at === at; })[0];
+        if (!matching && at === 'none') {
+          matching = {available: choice.available, reason: choice.reason};
+        }
+        if (!matching) { return; }
+        if (
+          status !== null
+          && (status.available !== matching.available || status.reason !== matching.reason)
+        ) {
+          disagreement = true;
+          return;
+        }
+        status = matching;
+      });
+    });
+    return disagreement ? null : status;
+  }
+
+  function showOrdination(steps) {
     if (!activeSeat) { return; }
+    var values = ordinationValues(steps);
     if (!values.length) {
       ordinationStartCounts = null;
       ordinationOffered = [];
@@ -1951,7 +1984,7 @@
   }
 
   function show(
-    offered, resolutionOptions, settled, confirmActionId, preview, arrangementValues, ordinationValues,
+    offered, resolutionOptions, settled, confirmActionId, preview, arrangementValues, ordinationSteps,
     allocationOptions
   ) {
     syncFamilyArrows();
@@ -2087,11 +2120,27 @@
            offering ? boards : []);
     });
     showArrangement(arrangementValues || []);
-    showOrdination(ordinationValues || []);
+    showOrdination(ordinationSteps || []);
+    Array.prototype.forEach.call(ordinationReasons, function (reason) {
+      reason.setAttribute('data-ordination-reason-shown', 'false');
+    });
     Array.prototype.forEach.call(ordinationActions, function (button) {
       var action = button.getAttribute('data-ordination-action');
-      var offered = ordinationValues && ordinationValues.length && ordinationCanAdvance(action);
+      var active = ordinationSteps && ordinationSteps.length;
+      var status = active ? ordinationChoiceStatus(ordinationSteps, action) : null;
+      var offered = active && status !== null
+        ? status.available === true
+        : active && ordinationCanAdvance(action);
+      button.setAttribute('data-ordination-active', active ? 'true' : 'false');
       button.setAttribute('data-turn-offered', offered ? 'true' : 'false');
+      button.setAttribute('aria-disabled', offered ? 'false' : 'true');
+      button.disabled = !offered;
+      Array.prototype.forEach.call(ordinationReasons, function (reason) {
+        if (reason.getAttribute('data-ordination-unavailable-reason') !== action) { return; }
+        var shown = !offered && status !== null
+          && reason.getAttribute('data-ordination-reason') === String(status.reason || '');
+        reason.setAttribute('data-ordination-reason-shown', shown ? 'true' : 'false');
+      });
     });
     renderTurnSteps();
     Array.prototype.forEach.call(panels, function (panel) {
@@ -2192,8 +2241,8 @@
     );
     var arrangements = offeredByKind(offered, 'arrangement');
     var arrangementPicked = arrangementSelection(arrangements);
-    var ordinations = offeredByKind(offered, 'ordination');
-    var ordinationPicked = ordinationSelection(ordinations);
+    var ordinations = offered.filter(function (step) { return step.kind === 'ordination'; });
+    var ordinationPicked = ordinationSelection(ordinationValues(ordinations));
     var narrowed = live;
     if (allocationActive) {
       narrowed = allocationLive;
@@ -2582,9 +2631,9 @@
           return step !== undefined && step.kind === 'arrangement' && step.value === picked;
         });
       }
-      var ordinations = offeredByKind(offered, 'ordination');
+      var ordinations = offered.filter(function (step) { return step.kind === 'ordination'; });
       if (ordinations.length) {
-        var chosenOrdination = ordinationSelection(ordinations);
+        var chosenOrdination = ordinationSelection(ordinationValues(ordinations));
         if (chosenOrdination === null) { return; }
         live = live.filter(function (candidate) {
           var step = candidate.steps[chosen.length];

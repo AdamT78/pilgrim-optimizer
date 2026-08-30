@@ -4165,6 +4165,87 @@ def test_ordination_candidate_summary_names_steps_and_cost() -> None:
         server.server_close()
 
 
+def _ordination_choice(step: dict, value: str) -> dict:
+    return next(choice for choice in step["choices"] if choice["value"] == value)
+
+
+def _ordination_choice_state(choice: dict, at: str) -> dict:
+    return next(state for state in choice["states"] if state["at"] == at)
+
+
+def test_ordination_choices_carry_server_availability_and_reasons() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_ordination_substitution_001.json")
+    steps = [
+        step
+        for candidate in play_server.turn_candidates(
+            scenario.state, scenario.config, include_preview_effects=False
+        )
+        for step in candidate["steps"]
+        if step["kind"] == "ordination"
+    ]
+    assert steps, "fixture offered no Ordination choices"
+
+    for step in steps:
+        ordain = _ordination_choice(step, "ordain")
+        mission = _ordination_choice(step, "mission")
+        assert ordain["available"] is True
+        assert "reason" not in ordain
+        assert mission["available"] is False
+        assert mission["reason"] == "No acolyte in the Abbey."
+        assert _ordination_choice_state(ordain, "ordain=1")["available"] is True
+        assert _ordination_choice_state(mission, "ordain=1")["available"] is True
+        assert _ordination_choice_state(ordain, "ordain=2") == {
+            "at": "ordain=2",
+            "available": False,
+            "reason": "The duty value of 2 is used up.",
+        }
+        assert _ordination_choice_state(mission, "ordain=2") == {
+            "at": "ordain=2",
+            "available": False,
+            "reason": "The duty value of 2 is used up.",
+        }
+
+
+def test_ordination_choices_name_an_affordability_block() -> None:
+    scenario = load_scenario(SCENARIOS / "ordination_hire_mill_insufficient_resource_001.json")
+    step = next(
+        step
+        for candidate in play_server.turn_candidates(
+            scenario.state, scenario.config, include_preview_effects=False
+        )
+        for step in candidate["steps"]
+        if step["kind"] == "ordination"
+    )
+
+    assert _ordination_choice_state(_ordination_choice(step, "mission"), "ordain=1") == {
+        "at": "ordain=1",
+        "available": False,
+        "reason": "You cannot afford another move.",
+    }
+
+
+def test_every_unavailable_ordination_choice_in_the_corpus_has_one_reason() -> None:
+    missing: list[tuple[str, str, str]] = []
+    for scenario_path in sorted((*SCENARIOS.glob("*.json"), *PLAYTEST_SCENARIOS.glob("*.json"))):
+        scenario = load_scenario(scenario_path)
+        seen: set[tuple[str, str]] = set()
+        for candidate in play_server.turn_candidates(
+            scenario.state, scenario.config, include_preview_effects=False
+        ):
+            for step in candidate["steps"]:
+                if step["kind"] != "ordination":
+                    continue
+                for choice in step["choices"]:
+                    for status in choice["states"]:
+                        key = (str(choice["value"]), str(status["at"]))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        if not status["available"] and not status.get("reason"):
+                            missing.append((scenario_path.name, *key))
+    assert not missing, f"unexplained unavailable Ordination controls: {missing}"
+
+
 @needs_node
 def test_an_empty_allocation_outcome_lights_confirm_without_moving_cubes(tmp_path: Path) -> None:
     server = PlayServer(("127.0.0.1", 0), SCENARIOS / "allocation_multi_move_001.json")
@@ -8075,7 +8156,10 @@ def test_everything_the_script_reaches_for_can_be_hit_where_it_looks_solid() -> 
             or attribute.startswith("data-turn-step-hire-")
         ) and not server.payload.get("turn_steps"):
             continue
-        if attribute == "data-ordination-action" and not any(
+        if attribute in {
+            "data-ordination-action",
+            "data-ordination-unavailable-reason",
+        } and not any(
             step["kind"] == "ordination"
             for candidate in server.payload["turn_candidates"]
             for step in candidate["steps"]
