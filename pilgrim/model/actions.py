@@ -454,19 +454,27 @@ def _ordination_cost_phrase(
     )
     waived = min(2, due) if has_mill else 0
     after_mill = max(0, due - waived)
-    bank_wheat_replaced = (
+    bank_silver_paid = (
         action.bank_payment_silver_amount
         if (
             action.bank_payment_building_id == "bank"
+            and action.bank_payment_building_source == "own_active"
             and action.bank_payment_replaced_resource == "wheat"
             and action.bank_payment_silver_amount is not None
         )
         else 0
     )
-    paid = max(0, after_mill - bank_wheat_replaced)
+    paid = max(0, after_mill - bank_silver_paid)
+    if bank_silver_paid:
+        if paid:
+            payment = f"paid {paid} wheat and {bank_silver_paid} silver via the Bank"
+        else:
+            payment = f"paid {bank_silver_paid} silver via the Bank"
+    else:
+        payment = f"paid {paid} wheat"
     if waived > 0:
-        return f"paid {paid} wheat ({due} due, {waived} waived by the Mill)"
-    return f"paid {paid} wheat"
+        return f"{payment} ({due} due, {waived} waived by the Mill)"
+    return payment
 
 
 def action_choice_summary_for_players(

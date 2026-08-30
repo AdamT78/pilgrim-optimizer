@@ -3862,6 +3862,72 @@ def test_ordination_preview_only_spends_for_the_serfs_chosen(page, serve) -> Non
     assert _player_holdings(page)["wheat"] == wheat_before - 2
 
 
+def test_owned_bank_ordination_requires_an_explicit_payment_choice(page, serve) -> None:
+    """A Bank mix remains a question even after ordination narrows its action candidates."""
+    base_url, _server = serve(SCENARIOS / "bank_active_ordination_substitution_001.json")
+
+    def reach_ordination() -> None:
+        page.goto(base_url, wait_until="networkidle")
+        _walk_live_dom_until(
+            page,
+            lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+            target="Bank ordination step",
+            preferred_resolution="ordination",
+        )
+
+    reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]')
+    first_ordain_count = ordain.count()
+    ordain.click()
+
+    wheat = page.locator('[data-combination-key="wheat=1"][data-turn-offered="true"]')
+    silver = page.locator('[data-combination-key="silver=1"][data-turn-offered="true"]')
+    wheat_label = wheat.inner_text()
+    silver_label = silver.inner_text()
+    first_confirm_before_payment = _confirm_enabled(page)
+
+    silver.click()
+    first_confirm_after_payment = _confirm_enabled(page)
+
+    reach_ordination()
+    page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]').click()
+    mission = page.locator('[data-ordination-action="mission"][data-turn-offered="true"]')
+    mission_count = mission.count()
+    mission.click()
+
+    full_mix = page.locator(
+        '[data-combination-key="wheat=1,silver=1"][data-turn-offered="true"]'
+    )
+    full_mix_count = full_mix.count()
+    full_mix_label = full_mix.inner_text()
+    second_confirm_before_payment = _confirm_enabled(page)
+
+    full_mix.click()
+    second_confirm_after_payment = _confirm_enabled(page)
+
+    assert {
+        "ordain_count": first_ordain_count,
+        "first_labels": {wheat_label, silver_label},
+        "first_confirm_before_payment": first_confirm_before_payment,
+        "first_confirm_after_payment": first_confirm_after_payment,
+        "mission_count": mission_count,
+        "full_mix_count": full_mix_count,
+        "full_mix_label": full_mix_label,
+        "second_confirm_before_payment": second_confirm_before_payment,
+        "second_confirm_after_payment": second_confirm_after_payment,
+    } == {
+        "ordain_count": 1,
+        "first_labels": {"Pay 1 wheat.", "Pay 1 silver."},
+        "first_confirm_before_payment": False,
+        "first_confirm_after_payment": True,
+        "mission_count": 1,
+        "full_mix_count": 1,
+        "full_mix_label": "Pay 1 wheat and 1 silver.",
+        "second_confirm_before_payment": False,
+        "second_confirm_after_payment": True,
+    }
+
+
 @pytest.mark.parametrize(
     ("scenario_name", "resolution", "hire_key"),
     [
