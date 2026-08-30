@@ -3113,6 +3113,169 @@ def _frontier_value(value: Any) -> Any:
     return value
 
 
+def _ordination_choice_context(steps: list[dict], index: int) -> tuple[tuple[str, Any], ...]:
+    """The already-answered questions that put one Ordination step on screen."""
+    return tuple(
+        (str(step["kind"]), _frontier_value(step["value"])) for step in steps[:index]
+    )
+
+
+def _ordination_counts_from_value(value: str) -> tuple[int, int]:
+    """Read the server's compact Ordination outcome spelling back into its two counts."""
+    if value == "none":
+        return 0, 0
+    counts = {"ordain": 0, "mission": 0}
+    for part in value.split(","):
+        name, amount = part.split("=", 1)
+        if name not in counts:
+            raise AssertionError(f"Unknown Ordination outcome part {name!r}.")
+        counts[name] = int(amount)
+    return counts["ordain"], counts["mission"]
+
+
+def _ordination_duty_value(action: FullTurnAction, state: Any, config: Any) -> int:
+    """Read this action's Ordination capacity from the engine's own resolution event."""
+    result = apply_action(state, action, config)
+    duty_events = [
+        event for event in result.events if event.event_type is EventType.DUTY_RESOLUTION
+    ]
+    if len(duty_events) != 1:
+        raise AssertionError("One Ordination action must resolve exactly one duty event.")
+    details = dict(duty_events[0].details)
+    value = details.get("effective_duty_value")
+    if not isinstance(value, int):
+        raise AssertionError("Ordination's duty event must state its effective duty value.")
+    return value
+
+
+def _ordination_choice_states(
+    outcome_values: set[str],
+    *,
+    state: Any,
+    duty_values: dict[str, int | None],
+) -> list[dict[str, Any]]:
+    """State each Ordination control's server-known status at every reachable outcome.
+
+    The browser previews Ordination one move at a time, but its legal outcomes arrive whole.  These
+    records bridge that presentation gap: availability is read from those existing outcomes, while
+    a reason is attached only when one direct fact explains the absence.  In particular, the page
+    never turns an empty Abbey, a spent duty value, or a short stock into words of its own.
+    """
+    player = state.player_state(state.active_player)
+    start_village = player.workforce.village
+    start_abbey = player.workforce.abbey
+    outcomes = {
+        value: _ordination_counts_from_value(value)
+        for value in outcome_values
+    }
+    states: list[dict[str, Any]] = []
+    for current_value in ("none", *sorted(outcome_values)):
+        ordain_count, mission_count = _ordination_counts_from_value(current_value)
+        current_total = ordain_count + mission_count
+        duty_value = duty_values.get(current_value)
+        village = start_village - ordain_count
+        abbey = start_abbey + ordain_count - mission_count
+        for choice in ORDINATION_CHOICES:
+            name = choice["value"]
+            can_continue = any(
+                target_ordain >= ordain_count
+                and target_mission >= mission_count
+                and (
+                    target_ordain > ordain_count
+                    if name == "ordain"
+                    else target_mission > mission_count
+                )
+                for target_ordain, target_mission in outcomes.values()
+            )
+            source_empty = village <= 0 if name == "ordain" else abbey <= 0
+            available = can_continue and not source_empty
+            status: dict[str, Any] = {"at": current_value, "available": available}
+            if not available:
+                # The capacity is an engine event fact and applies to both controls, so it is the
+                # operative explanation even where a particular source happened to run empty too.
+                if duty_value is not None and current_total >= duty_value:
+                    status["reason"] = f"The duty value of {duty_value} is used up."
+                elif source_empty:
+                    status["reason"] = (
+                        "No serf in the Village."
+                        if name == "ordain"
+                        else "No acolyte in the Abbey."
+                    )
+                elif duty_value is not None and not can_continue:
+                    # With a source and capacity still standing, the engine's offered outcomes
+                    # leave cost as the remaining direct blocker.  A frontier whose actions
+                    # disagree about capacity stays blank rather than guessing between them.
+                    status["reason"] = "You cannot afford another move."
+            states.append({"value": name, **status})
+    return states
+
+
+def _attach_ordination_choice_states(
+    candidates: list[dict],
+    *,
+    actions: list[Any],
+    steps_by_action_id: dict[str, list[dict]],
+    state: Any,
+    config: Any,
+) -> None:
+    """Attach one complete control-status table to every Ordination candidate in its frontier."""
+    actions_by_context: collections.defaultdict[
+        tuple[tuple[str, Any], ...], list[FullTurnAction]
+    ] = collections.defaultdict(list)
+    outcomes_by_context: collections.defaultdict[tuple[tuple[str, Any], ...], set[str]] = (
+        collections.defaultdict(set)
+    )
+    actions_by_context_and_outcome = collections.defaultdict(
+        lambda: collections.defaultdict(list)
+    )
+    for action in actions:
+        if not isinstance(action, FullTurnAction) or action.resolution.value != "ordination":
+            continue
+        steps = steps_by_action_id[action_id(action)]
+        index = next(index for index, step in enumerate(steps) if step["kind"] == "ordination")
+        context = _ordination_choice_context(steps, index)
+        actions_by_context[context].append(action)
+        outcome = str(steps[index]["value"])
+        outcomes_by_context[context].add(outcome)
+        actions_by_context_and_outcome[context][outcome].append(action)
+
+    choices_by_context: dict[tuple[tuple[str, Any], ...], list[dict[str, Any]]] = {}
+    for context in actions_by_context:
+        duty_values = {"none": None}
+        for outcome, outcome_actions in actions_by_context_and_outcome[context].items():
+            values = {_ordination_duty_value(action, state, config) for action in outcome_actions}
+            duty_values[outcome] = values.pop() if len(values) == 1 else None
+        statuses = _ordination_choice_states(
+            outcomes_by_context[context],
+            state=state,
+            duty_values=duty_values,
+        )
+        choices = []
+        for choice in ORDINATION_CHOICES:
+            states = [
+                {key: value for key, value in status.items() if key != "value"}
+                for status in statuses
+                if status["value"] == choice["value"]
+            ]
+            initial = next(status for status in states if status["at"] == "none")
+            choices.append(
+                {
+                    **choice,
+                    **{key: value for key, value in initial.items() if key != "at"},
+                    "states": states,
+                }
+            )
+        choices_by_context[context] = choices
+
+    for candidate in candidates:
+        for index, step in enumerate(candidate["steps"]):
+            if step["kind"] != "ordination":
+                continue
+            context = _ordination_choice_context(candidate["steps"], index)
+            step["choices"] = choices_by_context[context]
+            break
+
+
 def _mark_unambiguous_edge_steps(candidates: list[dict]) -> list[int]:
     """Name the family selections that make a movement continuation automatic.
 
@@ -3384,6 +3547,13 @@ def _turn_candidates_and_auto_family_indexes(
             }
         )
     _align_implicit_taxation_step_two_prompts(candidates)
+    _attach_ordination_choice_states(
+        candidates,
+        actions=actions,
+        steps_by_action_id=steps_by_action_id,
+        state=state,
+        config=config,
+    )
     if state.phase is TurnPhase.SOW and not state.turn_progress.resolution_committed:
         for candidate in candidates:
             for index, step in enumerate(candidate["steps"]):

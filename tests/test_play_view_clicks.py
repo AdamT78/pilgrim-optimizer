@@ -3830,6 +3830,74 @@ def test_ordination_controls_are_mouse_reachable_and_light_city_then_confirm(pag
     )
 
 
+def test_unavailable_ordination_controls_stay_visible_with_server_reasons(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "bank_active_ordination_substitution_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    _walk_live_dom_until(
+        page,
+        lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+        target="Bank Ordination step",
+        preferred_resolution="ordination",
+    )
+
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    assert ordain.is_visible() and mission.is_visible()
+    assert ordain.is_enabled() and not mission.is_enabled()
+    assert mission.evaluate("node => getComputedStyle(node).cursor") == "not-allowed"
+    assert mission.evaluate("node => getComputedStyle(node).backgroundColor") != ordain.evaluate(
+        "node => getComputedStyle(node).backgroundColor"
+    )
+    assert page.locator(
+        '[data-ordination-unavailable-reason="mission"]'
+        '[data-ordination-reason-shown="true"]'
+    ).inner_text() == "No acolyte in the Abbey."
+    hidden_keys = page.locator(
+        '[data-combination-key][data-turn-offered="false"], '
+        '[data-resolution-key][data-turn-offered="false"]'
+    )
+    assert hidden_keys.count() > 0
+    assert all(not hidden_keys.nth(index).is_visible() for index in range(hidden_keys.count()))
+
+    # Native disabling is only one layer: remove it and the existing offered-state guard must still
+    # reject a synthetic press, leaving the Ordination preview where it was.
+    mission.evaluate("node => { node.disabled = false; node.click(); }")
+    assert ordain.is_enabled() and not mission.is_enabled()
+
+    ordain.click()
+    assert ordain.is_visible() and mission.is_visible()
+    assert ordain.is_enabled() and mission.is_enabled()
+    assert page.locator('[data-ordination-reason-shown="true"]').count() == 0
+
+    ordain.click()
+    disabled_reasons = page.locator('[data-ordination-reason-shown="true"]')
+    assert ordain.is_visible() and mission.is_visible()
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert disabled_reasons.all_inner_texts() == [
+        "The duty value of 2 is used up.",
+        "The duty value of 2 is used up.",
+    ]
+
+
+def test_ordination_control_reports_affordability_from_the_server(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "ordination_hire_mill_insufficient_resource_001.json")
+    page.goto(base_url, wait_until="networkidle")
+    _walk_live_dom_until(
+        page,
+        lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+        target="Mill Ordination step",
+        preferred_resolution="ordination",
+    )
+
+    page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]').click()
+    reason = page.locator(
+        '[data-ordination-unavailable-reason="mission"]'
+        '[data-ordination-reason-shown="true"]'
+    )
+    assert reason.inner_text() == "You cannot afford another move."
+    assert not page.locator('[data-ordination-action="mission"]').is_enabled()
+
+
 def test_ordination_preview_only_spends_for_the_serfs_chosen(page, serve) -> None:
     """One ordain is a complete turn even though a second ordain remains available."""
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")

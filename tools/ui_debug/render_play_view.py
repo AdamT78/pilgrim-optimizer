@@ -849,18 +849,36 @@ def _combination_keys(candidates: list[dict]) -> str:
 
 
 def _ordination_action_keys(candidates: list[dict]) -> str:
-    """The server-labelled Ordination controls, kept distinct from whole-turn outcomes."""
-    seen: dict[str, str] = {}
+    """The server-labelled Ordination controls and every server-written unavailable reason."""
+    seen: dict[str, tuple[str, list[str]]] = {}
     for candidate in candidates:
         for step in candidate["steps"]:
             if step["kind"] != "ordination":
                 continue
             for choice in step.get("choices", ()):
-                seen.setdefault(str(choice["value"]), str(choice["label"]))
+                value = str(choice["value"])
+                label = str(choice["label"])
+                reasons = [
+                    str(status["reason"])
+                    for status in (choice, *choice.get("states", ()))
+                    if status.get("reason")
+                ]
+                previous = seen.setdefault(value, (label, []))
+                if previous[0] != label:
+                    raise AssertionError(f"Ordination control {value!r} has conflicting labels.")
+                previous[1].extend(reason for reason in reasons if reason not in previous[1])
     return "".join(
         f'<button type="button" class="turn-key" data-ordination-action="{escape(value)}"'
-        f' data-turn-offered="false">{say(label)}</button>'
-        for value, label in seen.items()
+        ' data-ordination-active="false" data-turn-offered="false"'
+        f' aria-disabled="true" disabled>{say(label)}</button>'
+        + "".join(
+            f'<span class="ordination-unavailable-reason"'
+            f' data-ordination-unavailable-reason="{escape(value)}"'
+            f' data-ordination-reason="{escape(reason)}"'
+            f' data-ordination-reason-shown="false">{say(reason)}</span>'
+            for reason in reasons
+        )
+        for value, (label, reasons) in seen.items()
     )
 
 
@@ -1210,6 +1228,13 @@ def turn_styles(route_color: str) -> str:
      combinations are both keys and both hide the same way. */
   .turn-key {{ display: none; }}
   .turn-key[data-turn-offered="true"] {{ display: inline-block; }}
+  [data-ordination-action][data-ordination-active="true"] {{ display: inline-block; }}
+  [data-ordination-action][data-turn-offered="false"] {{
+    color: #98948A; background: #161616; border-color: #4A4741; cursor: not-allowed; opacity: 0.72;
+  }}
+  .ordination-unavailable-reason {{ display: none; align-self: center; color: #C9C4B4;
+    font-size: 12px; line-height: 1.35; }}
+  .ordination-unavailable-reason[data-ordination-reason-shown="true"] {{ display: inline-block; }}
 
   .turn-controls {{ margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }}
   .turn-control-row {{ display: flex; gap: 6px; }}
