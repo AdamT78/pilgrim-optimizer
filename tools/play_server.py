@@ -1525,12 +1525,29 @@ def _preview_effect_action_key(action: Any) -> tuple[Any, ...] | None:
     )
 
 
+def _can_split_ordination_cost_preview(action: Any, *, offer_bank_payment: bool) -> bool:
+    """Keep every Bank payment path on its existing preview representation."""
+    if offer_bank_payment or not isinstance(action, FullTurnAction):
+        return False
+    bank_fields = (
+        "bank_payment_building_id",
+        "hired_building_id",
+        "free_hire_target_building_id",
+    )
+    if any(getattr(action, field, None) == "bank" for field in bank_fields):
+        return False
+    return not any(
+        building_id == "bank" for building_id, _resource in tuple(action.hire_payments or ())
+    )
+
+
 def _turn_action_preview_effects(
     action: Any,
     state: Any,
     config: Any,
     *,
     cache: dict[tuple[Any, ...], dict[str, Any]] | None = None,
+    split_ordination_cost: bool = False,
 ) -> dict[str, Any]:
     """The state changes this complete action can expose on one of its steps.
 
@@ -1538,7 +1555,8 @@ def _turn_action_preview_effects(
     started from. Round-end consequences are deliberately removed: they happen after the turn's
     choice has resolved and are not part of the preview surface.
     """
-    cache_key = _preview_effect_action_key(action)
+    preview_key = _preview_effect_action_key(action)
+    cache_key = (preview_key, split_ordination_cost) if preview_key is not None else None
     if cache is not None and cache_key is not None and cache_key in cache:
         return dict(cache[cache_key])
 
@@ -1561,6 +1579,21 @@ def _turn_action_preview_effects(
         result.events,
         player_name=player.name.lower(),
     )
+    if split_ordination_cost and action.resolution.value == "ordination":
+        # The Ordination events carry the paid wheat for this exact offered outcome. Keep it
+        # separate from route and hire residue so its preview waits for the player's sequence.
+        ordination_wheat_paid = sum(
+            int(dict(event.details).get("wheat_paid", 0))
+            for event in result.events
+            if event.event_type is EventType.ORDINATION and event.actor is player
+        )
+        if ordination_wheat_paid:
+            effects["ordination_resource_delta"] = {
+                "stone": 0,
+                "silver": 0,
+                "wheat": -ordination_wheat_paid,
+            }
+            resource_delta["wheat"] += ordination_wheat_paid
     if any(resource_delta.values()):
         effects["resource_delta"] = resource_delta
 
@@ -1646,8 +1679,16 @@ def _attach_turn_action_preview_effects(
     """Put effects on the step that settles them, never on the candidate envelope."""
     if not steps:
         return steps
+    ordination_resource_delta = effects.get("ordination_resource_delta")
+    if ordination_resource_delta is not None:
+        for step in steps:
+            if step["kind"] == "ordination":
+                step["resource_delta"] = ordination_resource_delta
+                break
     resource_delta = effects.get("resource_delta")
-    if resource_delta is not None and not any("resource_delta" in step for step in steps):
+    if resource_delta is not None and not any(
+        "resource_delta" in step and step["kind"] != "ordination" for step in steps
+    ):
         for step in reversed(steps):
             if step["kind"] in {
                 "resolution",
@@ -2819,7 +2860,15 @@ def decision_steps(
         include_preview_effects=include_preview_effects,
     )
     if preview_effects is None and include_preview_effects:
-        preview_effects = _turn_action_preview_effects(action, state, config)
+        preview_effects = _turn_action_preview_effects(
+            action,
+            state,
+            config,
+            split_ordination_cost=_can_split_ordination_cost_preview(
+                action,
+                offer_bank_payment=offer_bank_payment,
+            ),
+        )
     if preview_effects is None:
         preview_effects = {}
     _attach_turn_action_preview_effects(steps, preview_effects)
@@ -3071,7 +3120,16 @@ def _turn_candidates_and_auto_family_indexes(
             _bank_payment_context_key(action) in bank_payment_contexts
         )
         preview_effects_by_action_id[move_id] = (
-            _turn_action_preview_effects(action, state, config, cache=preview_effect_cache)
+            _turn_action_preview_effects(
+                action,
+                state,
+                config,
+                cache=preview_effect_cache,
+                split_ordination_cost=_can_split_ordination_cost_preview(
+                    action,
+                    offer_bank_payment=offer_bank_payment_by_action_id[move_id],
+                ),
+            )
             if include_preview_effects and isinstance(action, FullTurnAction)
             else {}
         )

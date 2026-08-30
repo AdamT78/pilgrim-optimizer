@@ -3830,6 +3830,38 @@ def test_ordination_controls_are_mouse_reachable_and_light_city_then_confirm(pag
     )
 
 
+def test_ordination_preview_only_spends_for_the_serfs_chosen(page, serve) -> None:
+    """One ordain is a complete turn even though a second ordain remains available."""
+    base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "ordination" and step["value"] == "ordain=2"
+            for step in candidate["steps"]
+        )
+    )
+    page.goto(base_url, wait_until="networkidle")
+    wheat_before = _player_holdings(page)["wheat"]
+    _click_candidate_prefix(
+        page,
+        candidate,
+        before_kind="ordination",
+        route_toggles=("kogge",),
+    )
+
+    assert _player_holdings(page)["wheat"] == wheat_before
+    ordain = page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]')
+    _click_handle_centre(page, ordain.element_handle(), require_hit=True)
+    assert _confirm_enabled(page)
+    assert _player_holdings(page)["wheat"] == wheat_before - 1
+
+    second_ordain = page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]')
+    _click_handle_centre(page, second_ordain.element_handle(), require_hit=True)
+    assert _confirm_enabled(page)
+    assert _player_holdings(page)["wheat"] == wheat_before - 2
+
+
 @pytest.mark.parametrize(
     ("scenario_name", "resolution", "hire_key"),
     [

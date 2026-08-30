@@ -2240,6 +2240,11 @@
       }
     }
     var preview = applyPreview();
+    /* Ordination stays open after its first move. The exact matching outcome carries the
+       server-derived wheat cost, so replay it after the base preview resets to the turn start. */
+    if (ordinations.length && ordinationPicked !== null && narrowed.length === 1) {
+      applyStepEffects(narrowed[0].steps[chosen.length]);
+    }
     /* Nothing is sent on reaching one candidate. Its panel is revealed -- either the words it
        would be committed as, or what is still undecided about
        it -- and the player says so. */
