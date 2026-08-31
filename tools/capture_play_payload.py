@@ -35,6 +35,7 @@ STEP_FIELDS = (
     "label",
     "prompt",
     "hire_text",
+    "ordination_next_move_consequence",
     "resource_delta",
 )
 

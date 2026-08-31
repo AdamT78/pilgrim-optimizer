@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from pilgrim.io.scenarios import load_scenario
@@ -19,6 +22,37 @@ def test_ship_advances_and_wraps_by_one_per_round() -> None:
     ship = scenario.config.ship
     assert advance_ship_position(0, ship) == 1
     assert advance_ship_position(25, ship) == 0
+
+
+@pytest.mark.parametrize(
+    ("scenario_path", "expected_position", "expected_rounds"),
+    (
+        ("scenarios/dummy_season_move_001.json", 2, 2),
+        ("scenarios/season_end_alms_001.json", 2, 2),
+        ("scenarios/playtest/conversions_2p.json", 1, 1),
+    ),
+)
+def test_ship_fixture_position_matches_its_completed_rounds(
+    scenario_path: str,
+    expected_position: int,
+    expected_rounds: int,
+) -> None:
+    """Fixtures retain the round-marker position that their complete-round count reached."""
+    initial_state = json.loads(Path(scenario_path).read_text(encoding="utf-8"))["initial_state"]
+    scenario = load_scenario(scenario_path)
+
+    assert (
+        int(initial_state["ship_position"]),
+        int(initial_state["completed_rounds"]),
+    ) == (expected_position, expected_rounds)
+    assert (scenario.state.ship_position, scenario.state.completed_rounds) == (
+        expected_position,
+        expected_rounds,
+    )
+    assert scenario.state.ship_position == (
+        scenario.config.ship.start_position
+        + scenario.state.completed_rounds * scenario.config.ship.advance_per_round
+    ) % scenario.config.ship.path_length
 
 
 def test_ship_pilgrimage_site_lookup() -> None:

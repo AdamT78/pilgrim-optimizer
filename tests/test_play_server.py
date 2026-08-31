@@ -4527,43 +4527,173 @@ def test_ordination_hire_step_precedes_ordination_and_controls_step_count() -> N
 
 
 @pytest.mark.parametrize(
-    ("scenario_name", "bank_value", "expected_hire_text"),
+    ("scenario_name", "bank_value", "expected_hire_prompt", "expected_hire_text"),
     (
         (
             "bank_hire_market_ordination_001.json",
-            "market:wheat:1",
+            "bank:market",
+            "player_one: Hire the Bank from the market for 1 silver? "
+            "It lets you pay in coins instead of wheat.",
             "This action uses the Bank — 1 silver to hire it from the market, and "
             "1 silver in place of 1 wheat.",
         ),
         (
             "bank_hire_opponent_ordination_001.json",
-            "player_two:wheat:1",
+            "bank:player_two",
+            "player_one: Hire the Bank from Yellow for 1 silver? "
+            "It lets you pay in coins instead of wheat.",
             "This action uses the Bank — 1 silver to hire it from Yellow, and "
             "1 silver in place of 1 wheat.",
         ),
     ),
 )
-def test_paid_bank_hire_is_an_action_payment_option_with_player_copy(
+def test_paid_bank_hire_asks_before_its_board_payment(
     scenario_name: str,
     bank_value: str,
+    expected_hire_prompt: str,
     expected_hire_text: str,
 ) -> None:
     scenario = load_scenario(SCENARIOS / scenario_name)
     candidates = play_server.turn_candidates(scenario.state, scenario.config)
-    bank_steps = [
+    hire_steps = [
         step
         for candidate in candidates
         for step in candidate["steps"]
-        if step.get("prompt") == "player_one: Choose how to pay."
+        if step.get("ends_ordination") is True
+    ]
+    payment_steps = [
+        step
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step.get("resource_allocation") is True
     ]
 
-    assert {step["value"] for step in bank_steps} == {"none", bank_value}
-    assert {step["label"] for step in bank_steps} == {"1 wheat", "2 silver, hires the Bank"}
-    assert {step.get("hire_text") for step in bank_steps} == {
-        None,
-        expected_hire_text,
+    assert {(step["value"], step["label"], step["prompt"]) for step in hire_steps} == {
+        ("none", "Pay without it", expected_hire_prompt),
+        (bank_value, "Hire the Bank for 1 silver", expected_hire_prompt),
     }
+    assert {step.get("ordination_next_move_consequence") for step in hire_steps} == {
+        "Another move can only be paid by hiring the Bank."
+    }
+    assert all(step.get("hire_text") is None for step in hire_steps)
+    assert {(step["value"], step["resource_total"], step["label"]) for step in payment_steps} == {
+        ("wheat=1", 1, "Pay 1 wheat."),
+        ("silver=2", 2, "Pay 2 silver."),
+        ("silver=2,wheat=1", 3, "Pay 2 silver and 1 wheat."),
+    }
+    assert {step.get("hire_text") for step in payment_steps} == {None, expected_hire_text}
+    assert all(
+        step["resource_allocation_no_undo"] is True
+        and step["requires_explicit_answer"] is True
+        for step in payment_steps
+    )
     assert all(candidate["action_id"] is not None for candidate in candidates)
+
+
+def test_paid_bank_ordination_warning_stays_off_when_another_move_needs_no_hire() -> None:
+    """Extra stock and a serf leave a non-hiring second Ordination move in the frontier."""
+    scenario = load_scenario(SCENARIOS / "bank_hire_market_ordination_001.json")
+
+    def hire_steps_after_one_ordination_move(state) -> list[dict]:
+        return [
+            step
+            for candidate in play_server.turn_candidates(
+                state, scenario.config, include_preview_effects=False
+            )
+            if any(
+                step["kind"] == "ordination" and step["value"] == "ordain=1"
+                for step in candidate["steps"]
+            )
+            for step in candidate["steps"]
+            if step.get("ends_ordination") is True
+        ]
+
+    unmutated_steps = hire_steps_after_one_ordination_move(scenario.state)
+    assert {step["value"] for step in unmutated_steps} == {"none", "bank:market"}
+    assert {step.get("ordination_next_move_consequence") for step in unmutated_steps} == {
+        "Another move can only be paid by hiring the Bank."
+    }
+
+    player_id = scenario.state.active_player
+    player = scenario.state.player_state(player_id)
+    state = scenario.state.with_player_state(
+        player_id,
+        replace(
+            player,
+            resources=replace(player.resources, wheat=3, silver=2),
+            workforce=replace(player.workforce, village=3),
+        ),
+    )
+    mutated_steps = hire_steps_after_one_ordination_move(state)
+    assert {step["value"] for step in mutated_steps} == {"none", "bank:market"}
+    assert {step.get("ordination_next_move_consequence") for step in mutated_steps} == {None}
+
+
+def test_cornucopia_bank_hire_asks_which_stock_pays_before_its_board_payment() -> None:
+    """The Bank's wild hire stock stays an engine choice before the combined payment opens."""
+    scenario = load_scenario(SCENARIOS / "bank_hire_market_ordination_001.json")
+    state = _with_stock(scenario.state, stone=5, silver=5, wheat=5)
+    config = _with_counter_under_the_merchant(scenario, "cornucopia")
+    legal = {action_id(action): action for action in legal_actions(state, config)}
+    candidates = play_server.turn_candidates(state, config)
+    bank_candidates = [
+        candidate
+        for candidate in candidates
+        if any(step["value"] == "bank:market" for step in candidate["steps"])
+    ]
+
+    bank_choices = {
+        step["label"]
+        for candidate in bank_candidates
+        for step in candidate["steps"]
+        if step["value"] == "bank:market"
+    }
+    asked_stocks = {
+        next(step["value"] for step in candidate["steps"] if step["kind"] == "resource")
+        for candidate in bank_candidates
+    }
+    assert bank_choices == {"Hire the Bank for 1 resource of your choice"}
+    assert asked_stocks == {"stone", "silver", "wheat"}
+    assert all(
+        next(step for step in candidate["steps"] if step["kind"] == "resource")[
+            "ends_ordination"
+        ]
+        is True
+        for candidate in bank_candidates
+    )
+    assert all(
+        dict(legal[candidate["action_id"]].hire_payments)["bank"]
+        == next(step["value"] for step in candidate["steps"] if step["kind"] == "resource")
+        for candidate in bank_candidates
+    )
+
+
+def test_taxation_merchant_without_a_resource_does_not_offer_the_bank() -> None:
+    """Taxation leaves the Bank at its engine-recorded Merchant-resource-none source state."""
+    scenario = load_scenario(SCENARIOS / "alms_season_end_fourth_season_game_end_001.json")
+    source = building_ability_source(
+        scenario.state,
+        scenario.config,
+        acting_player=scenario.state.active_player,
+        building_key="bank",
+    )
+    actions = legal_actions(scenario.state, scenario.config)
+
+    assert source.reason is BuildingAbilityReason.MERCHANT_RESOURCE_NONE
+    assert not source.usable
+    assert not any(
+        isinstance(action, FullTurnAction) and action.bank_payment_building_id == "bank"
+        for action in actions
+    )
+    assert not any(
+        step.get("ends_ordination") is True
+        for candidate in play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+        )
+        for step in candidate["steps"]
+    )
 
 
 def test_owned_bank_payment_mix_resolves_the_bank_fields_after_ordination() -> None:

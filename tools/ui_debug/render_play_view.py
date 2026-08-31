@@ -1034,6 +1034,8 @@ def render_turn_panel(payload: dict) -> str:
         'data-turn-hire-fact-active="false"></div>'
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
         f"{_combination_keys(candidates)}{_ordination_action_keys(candidates)}"
+        '<span class="ordination-bank-consequence" data-ordination-bank-consequence="true"'
+        ' data-ordination-bank-consequence-shown="false"></span>'
         '<span class="ordination-payment-cost" data-ordination-payment-cost="true"'
         ' data-ordination-payment-cost-shown="false"></span></div>'
         f"{_turn_step_controls(turn_steps)}"
@@ -1234,10 +1236,12 @@ def turn_styles(route_color: str) -> str:
   [data-ordination-action][data-turn-offered="false"] {{
     color: #98948A; background: #161616; border-color: #4A4741; cursor: not-allowed; opacity: 0.72;
   }}
-  .ordination-unavailable-reason, .ordination-payment-cost {{
+  .ordination-unavailable-reason, .ordination-bank-consequence, .ordination-payment-cost {{
     display: none; align-self: center; color: #C9C4B4;
     font-size: 12px; line-height: 1.35; }}
   .ordination-unavailable-reason[data-ordination-reason-shown="true"] {{ display: inline-block; }}
+  .ordination-bank-consequence {{ flex-basis: 100%; }}
+  .ordination-bank-consequence[data-ordination-bank-consequence-shown="true"] {{ display: block; }}
   .ordination-payment-cost {{ flex-basis: 100%; }}
   .ordination-payment-cost[data-ordination-payment-cost-shown="true"] {{ display: block; }}
 
