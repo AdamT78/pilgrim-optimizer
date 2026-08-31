@@ -4197,13 +4197,12 @@ def test_ordination_choices_carry_server_availability_and_reasons() -> None:
         assert _ordination_choice_state(ordain, "ordain=2") == {
             "at": "ordain=2",
             "available": False,
-            "reason": "The duty value of 2 is used up.",
         }
         assert _ordination_choice_state(mission, "ordain=2") == {
             "at": "ordain=2",
             "available": False,
-            "reason": "The duty value of 2 is used up.",
         }
+        assert step["prompt"] == "player_one: Move serfs and acolytes, up to 2 in total."
 
 
 def test_ordination_choices_name_an_affordability_block() -> None:
@@ -4224,8 +4223,8 @@ def test_ordination_choices_name_an_affordability_block() -> None:
     }
 
 
-def test_every_unavailable_ordination_choice_in_the_corpus_has_one_reason() -> None:
-    missing: list[tuple[str, str, str]] = []
+def test_the_corpus_retains_silent_spent_capacity_ordination_states() -> None:
+    silent: list[tuple[str, str, str]] = []
     for scenario_path in sorted((*SCENARIOS.glob("*.json"), *PLAYTEST_SCENARIOS.glob("*.json"))):
         scenario = load_scenario(scenario_path)
         seen: set[tuple[str, str]] = set()
@@ -4241,9 +4240,16 @@ def test_every_unavailable_ordination_choice_in_the_corpus_has_one_reason() -> N
                         if key in seen:
                             continue
                         seen.add(key)
-                        if not status["available"] and not status.get("reason"):
-                            missing.append((scenario_path.name, *key))
-    assert not missing, f"unexplained unavailable Ordination controls: {missing}"
+                        if status["available"] or status.get("reason"):
+                            continue
+                        silent.append((scenario_path.name, *key))
+    # An Infirmary can make an extra continuation live after the ordinary capacity has been used,
+    # so the capacity controls themselves are silent without requiring the whole frontier to stop.
+    assert len(silent) >= 2, "the corpus no longer reaches silent spent-capacity states"
+    assert {
+        ("bank_active_ordination_substitution_001.json", "ordain", "ordain=2"),
+        ("bank_active_ordination_substitution_001.json", "mission", "ordain=2"),
+    }.issubset(silent)
 
 
 @needs_node
@@ -4589,13 +4595,7 @@ def test_owned_bank_payment_mix_resolves_the_bank_fields_after_ordination() -> N
     assert all(candidate["variants"] == 1 for candidate in ordain_one)
     assert all(candidate["action_id"] is not None for candidate in ordain_one)
     assert all(candidate["unresolved"] == [] for candidate in ordain_one)
-    assert {
-        (step["value"], step["label"])
-        for step in payment_steps
-    } == {
-        ("wheat=1", "Pay 1 wheat."),
-        ("silver=1", "Pay 1 silver."),
-    }
+    assert {step["value"] for step in payment_steps} == {"wheat=1", "silver=1"}
     assert all(
         candidate["steps"].index(payment_step)
         > next(
@@ -4606,7 +4606,15 @@ def test_owned_bank_payment_mix_resolves_the_bank_fields_after_ordination() -> N
         for candidate, payment_step in zip(ordain_one, payment_steps, strict=True)
     )
     assert all(
-        step["requires_explicit_answer"] is True
+        step["resource_allocation"] is True
+        and step["resource_total"] == 1
+        and step["resource_allocation_no_undo"] is True
+        and step["resource_unit_deltas"]["silver"] == {
+            "stone": 0,
+            "silver": -1,
+            "wheat": 0,
+        }
+        and step["requires_explicit_answer"] is True
         and not {"auto", "default", "preselected"}.intersection(step)
         for step in payment_steps
     )
@@ -4637,7 +4645,9 @@ def test_owned_bank_with_only_silver_still_asks_for_its_single_payment_mix() -> 
 
     assert len(payment_steps) == 1
     assert payment_steps[0]["value"] == "silver=2"
-    assert payment_steps[0]["label"] == "Pay 2 silver."
+    assert payment_steps[0]["resource_allocation"] is True
+    assert payment_steps[0]["resource_total"] == 2
+    assert payment_steps[0]["resource_allocation_no_undo"] is True
     assert not {"auto", "default", "preselected"}.intersection(payment_steps[0])
 
 

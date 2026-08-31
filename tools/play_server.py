@@ -1340,7 +1340,7 @@ HIRE_PROMPT = "Choose whether to hire a building."
 CONFESSION_BOX_PROMPT = "Choose whether to use the Confession Box."
 ALMS_PAYMENT_PROMPT = "Choose payment."
 SEAT_PROMPT = "Choose first player for this round."
-ORDINATION_PROMPT = "Choose Duty Action"
+ORDINATION_PROMPT = "Move serfs and acolytes, up to {n} in total."
 ORDINATION_CHOICES: tuple[dict[str, str], ...] = (
     {
         "value": "ordain",
@@ -1983,7 +1983,7 @@ def _own_active_bank_payment_step(
     config: Any,
     replaced_resource: str,
 ) -> tuple[dict, tuple[str, ...]]:
-    """Present one already-affordable Bank mix from the action the engine enumerated."""
+    """Present one engine-enumerated owned-Bank mix in its resolution's existing shape."""
     resource_costs, piety_cost = _resource_payment_costs(action, state, config)
     if piety_cost:
         raise AssertionError("A Bank payment mix cannot include a separate piety cost.")
@@ -2001,21 +2001,41 @@ def _own_active_bank_payment_step(
         for resource in payment_resources
         if resource_costs[resource]
     ]
-    return (
+    step = {
+        "kind": "combination",
+        "value": ",".join(f"{resource}={amount}" for resource, amount in amounts),
+        "prompt": (
+            "The Bank lets you pay in coins instead of "
+            f"{replaced_resource}. Choose how to pay."
+        ),
+        "requires_explicit_answer": True,
+    }
+    if action.resolution.value != "ordination":
+        step["label"] = _bank_payment_label(amounts)
+        return step, OWN_ACTIVE_BANK_PAYMENT_FIELDS
+
+    total = len(action.ordination_steps)
+    if sum(amount for _resource, amount in amounts) != total:
+        raise AssertionError("An Ordination Bank payment must pay once for every move.")
+
+    def one_paid_stock(resource: str) -> dict[str, int]:
+        return {stock: -int(stock == resource) for stock in COMBINATION_STOCKS}
+
+    step.update(
         {
-            "kind": "combination",
-            "value": ",".join(f"{resource}={amount}" for resource, amount in amounts),
-            "label": _bank_payment_label(amounts),
-            "prompt": (
-                "The Bank lets you pay in coins instead of "
-                f"{replaced_resource}. Choose how to pay."
-            ),
-            # The exact mix is a player statement even if only one action carries it. This tells
-            # the page to keep the preceding Ordination preview open until the player names it.
-            "requires_explicit_answer": True,
-        },
-        OWN_ACTIVE_BANK_PAYMENT_FIELDS,
+            "resource_allocation": True,
+            "resource_total": total,
+            # An Ordination payment is settled by its first stock, so a spent stock cannot be
+            # returned independently while the move total remains fixed.
+            "resource_allocation_no_undo": True,
+            "resource_unit_deltas": {
+                resource: one_paid_stock(resource) for resource in COMBINATION_STOCKS
+            },
+            # A first stock fixes the Ordination outcome before its fixed-total allocation opens.
+            # Until then, the page keeps the move controls live for another legal Ordination move.
+        }
     )
+    return step, OWN_ACTIVE_BANK_PAYMENT_FIELDS
 
 
 def _bank_hire_silver_amount(action: FullTurnAction) -> int:
@@ -3191,10 +3211,10 @@ def _ordination_choice_states(
             available = can_continue and not source_empty
             status: dict[str, Any] = {"at": current_value, "available": available}
             if not available:
-                # The capacity is an engine event fact and applies to both controls, so it is the
-                # operative explanation even where a particular source happened to run empty too.
+                # Capacity stays first even though it is now silent: when it is spent, an empty
+                # source is incidental rather than the reason to show for this dead control.
                 if duty_value is not None and current_total >= duty_value:
-                    status["reason"] = f"The duty value of {duty_value} is used up."
+                    pass
                 elif source_empty:
                     status["reason"] = (
                         "No serf in the Village."
@@ -3240,11 +3260,22 @@ def _attach_ordination_choice_states(
         actions_by_context_and_outcome[context][outcome].append(action)
 
     choices_by_context: dict[tuple[tuple[str, Any], ...], list[dict[str, Any]]] = {}
+    prompts_by_context: dict[tuple[tuple[str, Any], ...], str] = {}
     for context in actions_by_context:
         duty_values = {"none": None}
         for outcome, outcome_actions in actions_by_context_and_outcome[context].items():
             values = {_ordination_duty_value(action, state, config) for action in outcome_actions}
             duty_values[outcome] = values.pop() if len(values) == 1 else None
+        reported_values = {value for value in duty_values.values() if value is not None}
+        if not reported_values:
+            raise AssertionError("An Ordination frontier must report a duty value.")
+        # An Infirmary increases the effective value only on an outcome that already uses its
+        # extra move. The opening prompt states the capacity common to the frontier, from the
+        # same engine-reported table that drives the control statuses below.
+        duty_value = min(reported_values)
+        prompts_by_context[context] = _addressed(
+            ORDINATION_PROMPT.format(n=duty_value), _speaking_player_id(state)
+        )
         statuses = _ordination_choice_states(
             outcomes_by_context[context],
             state=state,
@@ -3273,6 +3304,7 @@ def _attach_ordination_choice_states(
                 continue
             context = _ordination_choice_context(candidate["steps"], index)
             step["choices"] = choices_by_context[context]
+            step["prompt"] = prompts_by_context[context]
             break
 
 

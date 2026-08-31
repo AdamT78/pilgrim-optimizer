@@ -140,6 +140,7 @@
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
   var ordinationReasons = aside.querySelectorAll('[data-ordination-unavailable-reason]');
+  var ordinationPaymentCost = aside.querySelector('[data-ordination-payment-cost]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
@@ -185,6 +186,7 @@
   var ordinationStartCounts = null;
   var ordinationOffered = [];
   var pendingOrdinationAnswer = null;
+  var ordinationPaymentStarted = false;
   var conversionChosen = [];
   var resourceAllocation = {};
   var resourceAllocationTotal = null;
@@ -310,6 +312,7 @@
     chosen = [];
     answered = [];
     pendingOrdinationAnswer = null;
+    ordinationPaymentStarted = false;
     resourceAllocation = {};
     resourceAllocationTotal = null;
     conversionChosen = [];
@@ -1264,6 +1267,12 @@
     });
   }
 
+  function resourceAllocationNoUndo(steps) {
+    return steps.some(function (step) {
+      return step.resource_allocation_no_undo === true;
+    });
+  }
+
   function allocationMaximum(resource, options) {
     var maximum = 0;
     options.forEach(function (step) {
@@ -2002,6 +2011,7 @@
     var allocationActive = allocationSteps.length > 0;
     var allocationChoices = allocationOptions || allocationSteps;
     var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
+    var allocationNoUndo = resourceAllocationNoUndo(allocationSteps);
     var allocationComplete = allocationActive && (
       allocationAnyTotal
         ? allocationChoices.some(function (step) {
@@ -2016,7 +2026,7 @@
         var needs_more = allocationChoices.some(function (step) {
           return resourceCounts(step.value)[resource] > selected;
         });
-        var can_reset = !allocationAnyTotal && !allocationComplete
+        var can_reset = !allocationNoUndo && !allocationAnyTotal && !allocationComplete
           && selected > 0
           && selected >= allocationMaximum(resource, allocationChoices);
         return needs_more || can_reset;
@@ -2126,11 +2136,16 @@
     });
     Array.prototype.forEach.call(ordinationActions, function (button) {
       var action = button.getAttribute('data-ordination-action');
-      var active = ordinationSteps && ordinationSteps.length;
-      var status = active ? ordinationChoiceStatus(ordinationSteps, action) : null;
-      var offered = active && status !== null
+      /* Once a Bank stock settles Ordination, the payment step has no Ordination choices of its
+         own. Keep these controls painted as the spent-duty case does: absent controls look like
+         the page lost part of the action, while disabled controls say that moving is over. */
+      var active = ordinationPaymentStarted || (ordinationSteps && ordinationSteps.length);
+      var status = active && !ordinationPaymentStarted
+        ? ordinationChoiceStatus(ordinationSteps, action)
+        : null;
+      var offered = !ordinationPaymentStarted && active && status !== null
         ? status.available === true
-        : active && ordinationCanAdvance(action);
+        : !ordinationPaymentStarted && active && ordinationCanAdvance(action);
       button.setAttribute('data-ordination-active', active ? 'true' : 'false');
       button.setAttribute('data-turn-offered', offered ? 'true' : 'false');
       button.setAttribute('aria-disabled', offered ? 'false' : 'true');
@@ -2142,6 +2157,17 @@
         reason.setAttribute('data-ordination-reason-shown', shown ? 'true' : 'false');
       });
     });
+    if (ordinationPaymentCost) {
+      var costShown = resourceAllocationTotal !== null && (
+        pendingOrdinationAnswer !== null || ordinationPaymentStarted
+      );
+      ordinationPaymentCost.textContent = costShown
+        ? 'Cost ' + resourceAllocationTotal + ' · paid ' + resourceAllocationAmount(resourceAllocation)
+        : '';
+      ordinationPaymentCost.setAttribute(
+        'data-ordination-payment-cost-shown', costShown ? 'true' : 'false'
+      );
+    }
     renderTurnSteps();
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
@@ -2292,7 +2318,7 @@
     }
     var preview = applyPreview();
     /* Ordination stays open after its first move. The exact matching outcome carries the
-       server-derived wheat cost, so replay it after the base preview resets to the turn start. */
+       server-derived payment, so replay it after the base preview resets to the turn start. */
     if (ordinations.length && ordinationPicked !== null && narrowed.length === 1) {
       applyStepEffects(narrowed[0].steps[chosen.length]);
     }
@@ -2308,6 +2334,7 @@
           var step = candidate.steps[chosen.length + 1];
           return step !== undefined
             && step.kind === 'combination'
+            && step.resource_allocation === true
             && step.requires_explicit_answer === true;
         })
       ) {
@@ -2319,9 +2346,10 @@
       || (ordinations.length && ordinationPicked !== null))
       && !ordinationPaymentSteps.length;
     if (ordinationPaymentSteps.length) {
-      /* Ordination can stay extendable while payment answers are visible. A payment settles the
-         currently painted ordination outcome, so the generic key handler can add both values. */
+      /* Ordination can stay extendable while its Bank allocation is visible. The first stock
+         settles the currently painted outcome, then the ordinary allocation path owns payment. */
       pendingOrdinationAnswer = ordinationPicked;
+      resourceAllocationTotal = Number(ordinationPaymentSteps[0].resource_total || 0);
       show(
         ordinationPaymentSteps,
         [],
@@ -2397,6 +2425,12 @@
     key.addEventListener('click', function () {
       if (requestInFlight) { return; }
       if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+      if (pendingOrdinationAnswer !== null) {
+        chosen.push(pendingOrdinationAnswer);
+        answered.push(pendingOrdinationAnswer);
+        pendingOrdinationAnswer = null;
+        ordinationPaymentStarted = true;
+      }
       var allocationCandidates = surviving(chosen).filter(function (candidate) {
         var step = candidate.steps[chosen.length];
         return step !== undefined && allocationMatches(step.value, resourceAllocation);
