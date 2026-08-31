@@ -185,6 +185,7 @@
   var ordinationStartCounts = null;
   var ordinationOffered = [];
   var pendingOrdinationAnswer = null;
+  var ordinationPaymentStarted = false;
   var conversionChosen = [];
   var resourceAllocation = {};
   var resourceAllocationTotal = null;
@@ -310,6 +311,7 @@
     chosen = [];
     answered = [];
     pendingOrdinationAnswer = null;
+    ordinationPaymentStarted = false;
     resourceAllocation = {};
     resourceAllocationTotal = null;
     conversionChosen = [];
@@ -2126,11 +2128,16 @@
     });
     Array.prototype.forEach.call(ordinationActions, function (button) {
       var action = button.getAttribute('data-ordination-action');
-      var active = ordinationSteps && ordinationSteps.length;
-      var status = active ? ordinationChoiceStatus(ordinationSteps, action) : null;
-      var offered = active && status !== null
+      /* Once a Bank stock settles Ordination, the payment step has no Ordination choices of its
+         own. Keep these controls painted as the spent-duty case does: absent controls look like
+         the page lost part of the action, while disabled controls say that moving is over. */
+      var active = ordinationPaymentStarted || (ordinationSteps && ordinationSteps.length);
+      var status = active && !ordinationPaymentStarted
+        ? ordinationChoiceStatus(ordinationSteps, action)
+        : null;
+      var offered = !ordinationPaymentStarted && active && status !== null
         ? status.available === true
-        : active && ordinationCanAdvance(action);
+        : !ordinationPaymentStarted && active && ordinationCanAdvance(action);
       button.setAttribute('data-ordination-active', active ? 'true' : 'false');
       button.setAttribute('data-turn-offered', offered ? 'true' : 'false');
       button.setAttribute('aria-disabled', offered ? 'false' : 'true');
@@ -2402,6 +2409,7 @@
         chosen.push(pendingOrdinationAnswer);
         answered.push(pendingOrdinationAnswer);
         pendingOrdinationAnswer = null;
+        ordinationPaymentStarted = true;
       }
       var allocationCandidates = surviving(chosen).filter(function (candidate) {
         var step = candidate.steps[chosen.length];

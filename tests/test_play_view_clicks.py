@@ -3980,6 +3980,11 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     )
     silver.click()
     assert not ordain.is_enabled() and not mission.is_enabled()
+    assert {
+        action: button.evaluate("node => getComputedStyle(node).display")
+        for action, button in (("ordain", ordain), ("mission", mission))
+    } == {"ordain": "block", "mission": "block"}
+    assert page.locator('[data-ordination-reason-shown="true"]').count() == 0
     assert _player_holdings(page)["silver"] == 0
     assert page.locator('[data-resource-choice-key][data-turn-offered="true"]').count() == 0
     assert _confirm_enabled(page)
@@ -3990,6 +3995,10 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     ordain.click()
     ordain.click()
     assert not ordain.is_enabled() and not mission.is_enabled()
+    assert {
+        action: button.evaluate("node => getComputedStyle(node).display")
+        for action, button in (("ordain", ordain), ("mission", mission))
+    } == {"ordain": "block", "mission": "block"}
     assert page.locator('[data-ordination-reason-shown="true"]').count() == 0
     assert {
         resource: page.locator(
