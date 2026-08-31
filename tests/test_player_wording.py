@@ -22,7 +22,8 @@ _CHANGED_TEXTS: tuple[str, ...] = (
     "player_one: Choose a building.",
     "player_one: Choose whether to hire a building.",
     "player_one: Choose payment.",
-    "player_one: Choose Duty Action",
+    "player_one: Move serfs and acolytes, up to 1 in total.",
+    "player_one: Move serfs and acolytes, up to 2 in total.",
     "Move a serf from the Village to the Abbey",
     "Move an Acolyte from the Abbey to the City",
     "player_one: Move one acolyte from the Abbey to Special Activity and/or between "
@@ -79,7 +80,9 @@ def _event(event_type: EventType, **details) -> GameEvent:
 def test_ordination_prompt_and_buttons_name_the_duty_actions() -> None:
     steps = _candidate_steps("scenarios/ordination_ordain_then_mission_001.json", "ordination")
 
-    assert {step["prompt"] for step in steps} == {"player_one: Choose Duty Action"}
+    assert {step["prompt"] for step in steps} == {
+        "player_one: Move serfs and acolytes, up to 2 in total."
+    }
     choice_sets = {
         tuple((choice["value"], choice["label"]) for choice in step["choices"])
         for step in steps
@@ -177,7 +180,7 @@ def test_combination_questions_name_the_choice_instead_of_saying_choose_one() ->
         (play_server.CONFESSION_BOX_PROMPT, "Choose whether to use the Confession Box."),
         (play_server.ALMS_PAYMENT_PROMPT, "Choose payment."),
         (play_server.SEAT_PROMPT, "Choose first player for this round."),
-        (play_server.ORDINATION_PROMPT, "Choose Duty Action"),
+        (play_server.ORDINATION_PROMPT, "Move serfs and acolytes, up to {n} in total."),
     ),
 )
 def test_changed_prompts_are_capitalised_and_exact(prompt: str, expected: str) -> None:

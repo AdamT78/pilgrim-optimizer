@@ -3873,10 +3873,7 @@ def test_unavailable_ordination_controls_stay_visible_with_server_reasons(page, 
     disabled_reasons = page.locator('[data-ordination-reason-shown="true"]')
     assert ordain.is_visible() and mission.is_visible()
     assert not ordain.is_enabled() and not mission.is_enabled()
-    assert disabled_reasons.all_inner_texts() == [
-        "The duty value of 2 is used up.",
-        "The duty value of 2 is used up.",
-    ]
+    assert disabled_reasons.count() == 0
 
 
 def test_ordination_control_reports_affordability_from_the_server(page, serve) -> None:
@@ -3930,8 +3927,8 @@ def test_ordination_preview_only_spends_for_the_serfs_chosen(page, serve) -> Non
     assert _player_holdings(page)["wheat"] == wheat_before - 2
 
 
-def test_owned_bank_ordination_requires_an_explicit_payment_choice(page, serve) -> None:
-    """A Bank mix remains a question even after ordination narrows its action candidates."""
+def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -> None:
+    """A Bank stock fixes Ordination, then the server-offered mix controls Confirm."""
     base_url, _server = serve(SCENARIOS / "bank_active_ordination_substitution_001.json")
 
     def reach_ordination() -> None:
@@ -3944,56 +3941,76 @@ def test_owned_bank_ordination_requires_an_explicit_payment_choice(page, serve) 
         )
 
     reach_ordination()
-    ordain = page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]')
-    first_ordain_count = ordain.count()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    assert page.locator(
+        '[data-turn-prompt="player_one: Move serfs and acolytes, up to 2 in total."]'
+        '[data-turn-offered="true"]'
+    ).count() == 1
+    assert ordain.is_enabled() and not mission.is_enabled()
+    assert page.locator(
+        '[data-ordination-unavailable-reason="mission"]'
+        '[data-ordination-reason-shown="true"]'
+    ).inner_text() == "No acolyte in the Abbey."
+    assert not _confirm_enabled(page)
+    assert page.locator('[data-resource-choice-key][data-turn-offered="true"]').count() == 0
+
     ordain.click()
+    assert ordain.is_enabled() and mission.is_enabled()
+    assert {
+        resource: page.locator(
+            f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+            '[data-turn-offered="true"]'
+        ).count()
+        for resource in ("wheat", "silver", "stone")
+    } == {"wheat": 1, "silver": 1, "stone": 0}
+    assert page.locator(
+        '[data-component="player-board-v2"]:not([data-active-seat="true"]) '
+        '[data-resource-choice-key][data-turn-offered="true"]'
+    ).count() == 0
+    assert not _confirm_enabled(page)
+    assert all(
+        not page.locator(f'[data-combination-key="{value}"]').is_visible()
+        for value in ("wheat=1", "silver=1", "wheat=1,silver=1")
+    )
 
-    wheat = page.locator('[data-combination-key="wheat=1"][data-turn-offered="true"]')
-    silver = page.locator('[data-combination-key="silver=1"][data-turn-offered="true"]')
-    wheat_label = wheat.inner_text()
-    silver_label = silver.inner_text()
-    first_confirm_before_payment = _confirm_enabled(page)
-
+    silver = page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    )
     silver.click()
-    first_confirm_after_payment = _confirm_enabled(page)
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert _player_holdings(page)["silver"] == 0
+    assert page.locator('[data-resource-choice-key][data-turn-offered="true"]').count() == 0
+    assert _confirm_enabled(page)
 
     reach_ordination()
-    page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]').click()
-    mission = page.locator('[data-ordination-action="mission"][data-turn-offered="true"]')
-    mission_count = mission.count()
-    mission.click()
-
-    full_mix = page.locator(
-        '[data-combination-key="wheat=1,silver=1"][data-turn-offered="true"]'
-    )
-    full_mix_count = full_mix.count()
-    full_mix_label = full_mix.inner_text()
-    second_confirm_before_payment = _confirm_enabled(page)
-
-    full_mix.click()
-    second_confirm_after_payment = _confirm_enabled(page)
-
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    ordain.click()
+    ordain.click()
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert page.locator('[data-ordination-reason-shown="true"]').count() == 0
     assert {
-        "ordain_count": first_ordain_count,
-        "first_labels": {wheat_label, silver_label},
-        "first_confirm_before_payment": first_confirm_before_payment,
-        "first_confirm_after_payment": first_confirm_after_payment,
-        "mission_count": mission_count,
-        "full_mix_count": full_mix_count,
-        "full_mix_label": full_mix_label,
-        "second_confirm_before_payment": second_confirm_before_payment,
-        "second_confirm_after_payment": second_confirm_after_payment,
-    } == {
-        "ordain_count": 1,
-        "first_labels": {"Pay 1 wheat.", "Pay 1 silver."},
-        "first_confirm_before_payment": False,
-        "first_confirm_after_payment": True,
-        "mission_count": 1,
-        "full_mix_count": 1,
-        "full_mix_label": "Pay 1 wheat and 1 silver.",
-        "second_confirm_before_payment": False,
-        "second_confirm_after_payment": True,
-    }
+        resource: page.locator(
+            f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+            '[data-turn-offered="true"]'
+        ).count()
+        for resource in ("wheat", "silver", "stone")
+    } == {"wheat": 1, "silver": 1, "stone": 0}
+    assert not _confirm_enabled(page)
+
+    page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert not _confirm_enabled(page)
+    page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert _confirm_enabled(page)
 
 
 @pytest.mark.parametrize(

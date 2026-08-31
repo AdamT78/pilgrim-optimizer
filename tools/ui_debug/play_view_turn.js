@@ -2292,7 +2292,7 @@
     }
     var preview = applyPreview();
     /* Ordination stays open after its first move. The exact matching outcome carries the
-       server-derived wheat cost, so replay it after the base preview resets to the turn start. */
+       server-derived payment, so replay it after the base preview resets to the turn start. */
     if (ordinations.length && ordinationPicked !== null && narrowed.length === 1) {
       applyStepEffects(narrowed[0].steps[chosen.length]);
     }
@@ -2308,6 +2308,7 @@
           var step = candidate.steps[chosen.length + 1];
           return step !== undefined
             && step.kind === 'combination'
+            && step.resource_allocation === true
             && step.requires_explicit_answer === true;
         })
       ) {
@@ -2319,8 +2320,8 @@
       || (ordinations.length && ordinationPicked !== null))
       && !ordinationPaymentSteps.length;
     if (ordinationPaymentSteps.length) {
-      /* Ordination can stay extendable while payment answers are visible. A payment settles the
-         currently painted ordination outcome, so the generic key handler can add both values. */
+      /* Ordination can stay extendable while its Bank allocation is visible. The first stock
+         settles the currently painted outcome, then the ordinary allocation path owns payment. */
       pendingOrdinationAnswer = ordinationPicked;
       show(
         ordinationPaymentSteps,
@@ -2397,6 +2398,11 @@
     key.addEventListener('click', function () {
       if (requestInFlight) { return; }
       if (key.getAttribute('data-turn-offered') !== 'true') { return; }
+      if (pendingOrdinationAnswer !== null) {
+        chosen.push(pendingOrdinationAnswer);
+        answered.push(pendingOrdinationAnswer);
+        pendingOrdinationAnswer = null;
+      }
       var allocationCandidates = surviving(chosen).filter(function (candidate) {
         var step = candidate.steps[chosen.length];
         return step !== undefined && allocationMatches(step.value, resourceAllocation);
