@@ -209,6 +209,28 @@
     });
   }
 
+  function sharedHireText(candidates) {
+    var sharedLines = null;
+    for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+      var steps = candidates[candidateIndex].steps;
+      var factStep = steps.find(function (candidateStep) {
+        return candidateStep.hire_text;
+      });
+      /* A candidate with no hire fact is the explicit no-hire branch. It disagrees; it does not
+         abstain from the sentence the paid sibling would like to show. */
+      if (!factStep) { return ''; }
+      var lines = factStep.hire_text.split('\n');
+      if (sharedLines === null) {
+        sharedLines = lines;
+        continue;
+      }
+      sharedLines = sharedLines.filter(function (line) {
+        return lines.indexOf(line) !== -1;
+      });
+    }
+    return sharedLines ? sharedLines.join('\n') : '';
+  }
+
   function familyByIndex(index) {
     return FAMILIES.filter(function (family) { return family.i === index; })[0] || null;
   }
@@ -1830,26 +1852,6 @@
     var prefix = [];
     var remaining = chosen.slice();
 
-    function sharedHireText(candidates) {
-      var sharedLines = null;
-      for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
-        var steps = candidates[candidateIndex].steps;
-        var factStep = steps.find(function (candidateStep) {
-          return candidateStep.hire_text;
-        });
-        if (!factStep) { continue; }
-        var lines = factStep.hire_text.split('\n');
-        if (sharedLines === null) {
-          sharedLines = lines;
-          continue;
-        }
-        sharedLines = sharedLines.filter(function (line) {
-          return lines.indexOf(line) !== -1;
-        });
-      }
-      return sharedLines ? sharedLines.join('\n') : '';
-    }
-
     restoreBaseline();
     while (remaining.length) {
       var answer = remaining[0];
@@ -1900,8 +1902,6 @@
       }
       if (step.kind === 'resource' && step.resource_delta) { continue; }
       if (step.kind !== 'edge') { continue; }
-      var matched = surviving(prefix);
-      hireFactText = sharedHireText(matched);
       var ends = String(answer).split('->');
       var destination = ends.length === 2 ? ends[1] : null;
       if (destination && activePlayer) {
@@ -1920,6 +1920,7 @@
         count = step.counter;
       }
     }
+    hireFactText = sharedHireText(surviving(prefix));
     applyPartialResourceAllocation();
     applyTurnStepRelocationPreview();
     return {
@@ -2317,6 +2318,9 @@
       }
     }
     var preview = applyPreview();
+    /* Ordination is picked on the board before its scalar answer enters `chosen`. The current
+       narrowed frontier is therefore the only honest place to read an already-settled hire fact. */
+    preview.hire_fact_text = sharedHireText(narrowed);
     /* Ordination stays open after its first move. The exact matching outcome carries the
        server-derived payment, so replay it after the base preview resets to the turn start. */
     if (ordinations.length && ordinationPicked !== null && narrowed.length === 1) {
@@ -2326,6 +2330,7 @@
        would be committed as, or what is still undecided about
        it -- and the player says so. */
     var ordinationPaymentSteps = [];
+    var ordinationHireSteps = [];
     if (ordinations.length && ordinationPicked !== null) {
       var followingSteps = stepsAt(chosen.length + 1, narrowed);
       if (
@@ -2339,6 +2344,14 @@
         })
       ) {
         ordinationPaymentSteps = followingSteps;
+      } else if (
+        followingSteps.length
+        && narrowed.every(function (candidate) {
+          var step = candidate.steps[chosen.length + 1];
+          return step !== undefined && step.ends_ordination === true;
+        })
+      ) {
+        ordinationHireSteps = followingSteps;
       }
     }
     var currentQuestionIsAnswered = (!offered.length
@@ -2352,6 +2365,22 @@
       resourceAllocationTotal = Number(ordinationPaymentSteps[0].resource_total || 0);
       show(
         ordinationPaymentSteps,
+        [],
+        -1,
+        null,
+        preview,
+        arrangements,
+        ordinations
+      );
+      return;
+    }
+    if (ordinationHireSteps.length) {
+      /* The server says this hire decision ends movement. Keep the controls visible so that the
+         transition reads as a finished move phase, while their existing server statuses remain in
+         force until the player answers. */
+      pendingOrdinationAnswer = ordinationPicked;
+      show(
+        ordinationHireSteps,
         [],
         -1,
         null,
@@ -2563,6 +2592,7 @@
           chosen.push(pendingOrdinationAnswer);
           answered.push(pendingOrdinationAnswer);
           pendingOrdinationAnswer = null;
+          ordinationPaymentStarted = true;
         }
         chosen.push(value);
         answered.push(value);

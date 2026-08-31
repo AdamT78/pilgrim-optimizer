@@ -4060,6 +4060,109 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     assert cost.inner_text() == ""
 
 
+def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> None:
+    """A paid Bank decides its hire before its whole engine cost opens as board pills."""
+    base_url, _server = serve(SCENARIOS / "bank_hire_market_ordination_001.json")
+
+    def reach_ordination() -> None:
+        page.goto(base_url, wait_until="networkidle")
+        _walk_live_dom_until(
+            page,
+            lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+            target="hired Bank Ordination step",
+            preferred_resolution="ordination",
+        )
+
+    def offered_resources() -> dict[str, int]:
+        return {
+            resource: page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).count()
+            for resource in ("wheat", "silver", "stone")
+        }
+
+    reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    cost = page.locator('[data-ordination-payment-cost]')
+    assert page.locator(
+        '[data-turn-prompt="player_one: Move serfs and acolytes, up to 2 in total."]'
+        '[data-turn-offered="true"]'
+    ).count() == 1
+    assert ordain.is_enabled() and not mission.is_enabled()
+    assert page.locator(
+        '[data-ordination-unavailable-reason="mission"]'
+        '[data-ordination-reason-shown="true"]'
+    ).inner_text() == "No acolyte in the Abbey."
+    assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
+    assert cost.get_attribute('data-ordination-payment-cost-shown') == "false"
+    assert offered_resources() == {"wheat": 0, "silver": 0, "stone": 0}
+
+    ordain.click()
+    assert page.locator(
+        '[data-turn-prompt="player_one: Hire the Bank from the market for 1 silver? '
+        'It lets you pay in coins instead of wheat."][data-turn-offered="true"]'
+    ).count() == 1
+    assert {
+        value: page.locator(f'[data-combination-key="{value}"][data-turn-offered="true"]').count()
+        for value in ("none", "bank:market")
+    } == {"none": 1, "bank:market": 1}
+    assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
+    assert cost.get_attribute('data-ordination-payment-cost-shown') == "false"
+    assert offered_resources() == {"wheat": 0, "silver": 0, "stone": 0}
+
+    page.locator('[data-combination-key="none"][data-turn-offered="true"]').click()
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert cost.inner_text() == "Cost 1 · paid 0"
+    assert offered_resources() == {"wheat": 1, "silver": 0, "stone": 0}
+    assert not _confirm_enabled(page)
+    page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert cost.inner_text() == "Cost 1 · paid 1"
+    assert _confirm_enabled(page)
+
+    reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    cost = page.locator('[data-ordination-payment-cost]')
+    ordain.click()
+    page.locator('[data-combination-key="bank:market"][data-turn-offered="true"]').click()
+    assert not ordain.is_enabled() and not mission.is_enabled()
+    assert cost.inner_text() == "Cost 2 · paid 0"
+    assert offered_resources() == {"wheat": 0, "silver": 1, "stone": 0}
+    page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert cost.inner_text() == "Cost 2 · paid 1"
+    assert not _confirm_enabled(page)
+    page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert cost.inner_text() == "Cost 2 · paid 2"
+    assert _confirm_enabled(page)
+
+    reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    cost = page.locator('[data-ordination-payment-cost]')
+    ordain.click()
+    ordain.click()
+    assert page.locator(
+        '[data-turn-prompt="player_one: Hire the Bank from the market for 1 silver? '
+        'It lets you pay in coins instead of wheat."][data-turn-offered="true"]'
+    ).count() == 0
+    assert page.locator('[data-turn-hire-fact-active="true"]').inner_text() == (
+        "This action uses the Bank — 1 silver to hire it from the market, and "
+        "1 silver in place of 1 wheat."
+    )
+    assert cost.inner_text() == "Cost 3 · paid 0"
+    assert offered_resources() == {"wheat": 1, "silver": 1, "stone": 0}
+
+
 @pytest.mark.parametrize(
     ("scenario_name", "resolution", "hire_key"),
     [

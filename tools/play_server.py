@@ -2067,13 +2067,205 @@ def _bank_hire_fact(action: FullTurnAction) -> str:
     )
 
 
-def _bank_payment_step(
+def _paid_bank_hire_step(
+    action: FullTurnAction,
+    *,
+    source: Any,
+    replaced_resource: str,
+) -> tuple[dict, tuple[str, ...]]:
+    """Ask whether this otherwise-identical action hires the Bank before its payment opens."""
+    if source.building_key != "bank" or not _paid_bank_hire_source(source):
+        raise AssertionError("A paid Bank hire question requires the Bank's paid ability record.")
+    if source.hire_cost <= 0 or source.hire_resource is None:
+        raise AssertionError("A paid Bank hire question requires its engine-reported cost.")
+
+    source_label = action.bank_payment_building_source
+    if source_label is None:
+        # The no-Bank half of this choice has no source of its own. Its paired Bank action supplied
+        # the ability record above, while this value is deliberately the player's refusal.
+        return (
+            {
+                "kind": "combination",
+                "value": "none",
+                "label": "Pay without it",
+                "prompt": _paid_bank_hire_prompt(source, replaced_resource=replaced_resource),
+                # A Bank answer settles the Ordination sequence before the payment allocation
+                # opens.  The page reads this seam fact; it does not infer that a hire is final.
+                "ends_ordination": True,
+            },
+            BANK_PAYMENT_FIELDS,
+        )
+
+    if source_label == "market":
+        hire_source = "the market"
+    else:
+        hire_source = _building_ability_party_name(source_label)
+    if not hire_source:
+        raise AssertionError("A paid Bank hire question requires a player-facing source.")
+    return (
+        {
+            "kind": "combination",
+            "value": f"bank:{source_label}",
+            "label": f"Hire the Bank for {_building_hire_cost_phrase(source)}",
+            "prompt": _paid_bank_hire_prompt(
+                source,
+                replaced_resource=replaced_resource,
+                hire_source=hire_source,
+            ),
+            "ends_ordination": True,
+        },
+        BANK_PAYMENT_FIELDS,
+    )
+
+
+def _paid_bank_hire_prompt(
+    source: Any,
+    *,
+    replaced_resource: str,
+    hire_source: str | None = None,
+) -> str:
+    """Write the Bank question from the same ability record that supplied its price."""
+    if hire_source is None:
+        hire_source = (
+            "the market"
+            if source.source_type == "live_market_hire"
+            else _building_ability_party_name(source.owner)
+        )
+    if hire_source is None:
+        raise AssertionError("A paid Bank hire prompt requires its player-facing source.")
+    if source.hire_resource is None:
+        raise AssertionError("A paid Bank hire prompt requires its engine-reported resource.")
+    return (
+        f"Hire the Bank from {hire_source} for {_building_hire_cost_phrase(source)}? "
+        f"It lets you pay in coins instead of {replaced_resource}."
+    )
+
+
+def _paid_bank_payment_step(
     action: FullTurnAction,
     *,
     state: Any,
     config: Any,
 ) -> tuple[dict, tuple[str, ...]]:
-    """Present the ordinary cost or the atomic Bank hire-and-substitution it replaces."""
+    """Put the selected Bank path's full engine cost onto the acting player's board.
+
+    The preceding question settles whether the hire fee belongs in this action.  It is still part
+    of the transaction the engine enumerated, so the allocation is read from that transaction
+    rather than reconstructed from the Bank rule or from the Merchant counter in the browser.
+    """
+    resource_costs, piety_cost = _resource_payment_costs(action, state, config)
+    if piety_cost:
+        raise AssertionError("A paid Bank Ordination payment cannot include a separate piety cost.")
+    if _is_paid_bank_payment_action(action):
+        hire_resource, hire_cost = _paid_bank_hire_payment(action, state=state, config=config)
+        resource_costs[hire_resource] += hire_cost
+    amounts = [
+        (resource, resource_costs[resource])
+        for resource in COMBINATION_STOCKS
+        if resource_costs[resource]
+    ]
+    if not amounts:
+        raise AssertionError("A paid Bank payment must spend at least one resource.")
+
+    def one_paid_stock(resource: str) -> dict[str, int]:
+        return {stock: -int(stock == resource) for stock in COMBINATION_STOCKS}
+
+    step = {
+        "kind": "combination",
+        "value": ",".join(f"{resource}={amount}" for resource, amount in amounts),
+        # This is also the non-rendered record of every retained stock.  Board pills use the
+        # encoded value, but the complete label keeps a two-move Bank payment from silently
+        # turning its wheat into an invisible cost again.
+        "label": _bank_payment_label(amounts),
+        "prompt": BANK_PAYMENT_PROMPT,
+        "resource_allocation": True,
+        "resource_total": sum(amount for _resource, amount in amounts),
+        "resource_allocation_no_undo": True,
+        "resource_unit_deltas": {
+            resource: one_paid_stock(resource) for resource in COMBINATION_STOCKS
+        },
+        "requires_explicit_answer": True,
+    }
+    if _is_paid_bank_payment_action(action):
+        step["hire_text"] = _paid_bank_hire_fact(action, state=state, config=config)
+    return step, BANK_PAYMENT_FIELDS
+
+
+def _paid_bank_hire_source_for_action(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> Any:
+    """Return the ability record that enumerated this paid Bank action."""
+    source = building_ability_source(
+        state,
+        config,
+        acting_player=state.active_player,
+        building_key="bank",
+    )
+    if not _paid_bank_hire_source(source):
+        raise AssertionError("A paid Bank action must have an available paid Bank ability record.")
+    expected = "market" if source.source_type == "live_market_hire" else source.owner
+    if action.bank_payment_building_source != expected:
+        raise AssertionError("A paid Bank action and its ability record disagree about the source.")
+    return source
+
+
+def _paid_bank_hire_payment(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> tuple[str, int]:
+    """Read this Bank action's chosen hire stock and cost from its enumerated source."""
+    source = _paid_bank_hire_source_for_action(action, state=state, config=config)
+    resource = _hire_payment_map(action).get("bank")
+    if resource is None:
+        raise AssertionError("A paid Bank action must carry its chosen hire resource.")
+    if source.hire_cost <= 0:
+        raise AssertionError("A paid Bank action must carry a positive ability-record hire cost.")
+    return resource, source.hire_cost
+
+
+def _paid_bank_hire_fact(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> str:
+    """State the Bank hire using its enumerated source, not a copied Merchant price."""
+    source_label = action.bank_payment_building_source
+    replaced_resource = action.bank_payment_replaced_resource
+    substitution_silver = action.bank_payment_silver_amount
+    if source_label is None or replaced_resource is None or substitution_silver is None:
+        raise AssertionError("A paid Bank hire fact requires its complete Bank payment choice.")
+    hire_resource, hire_cost = _paid_bank_hire_payment(action, state=state, config=config)
+    hire_source = (
+        "the market"
+        if source_label == "market"
+        else _building_ability_party_name(source_label)
+    )
+    if not hire_source:
+        raise AssertionError("A paid Bank hire fact requires a player-facing source.")
+    return (
+        "This action uses the Bank — "
+        f"{hire_cost} {hire_resource} to hire it from {hire_source}, and "
+        f"{substitution_silver} silver in place of {substitution_silver} {replaced_resource}."
+    )
+
+
+def _legacy_bank_payment_step(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> tuple[dict, tuple[str, ...]]:
+    """Present the old atomic Bank hire-and-substitution choice.
+
+    Kept only as the narrow fallback for a non-Ordination Bank action until that action has a
+    board allocation of its own.  The current market/opponent Bank corpus reaches Ordination.
+    """
     if action.bank_payment_building_id is None:
         value = "none"
         label = _resource_payment_label(action, state, config)
@@ -2113,6 +2305,9 @@ def _presented(
     config: Any | None = None,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -2130,6 +2325,16 @@ def _presented(
     """
     resource_step_metadata = (
         _resource_step_metadata(action, state, config) if include_preview_effects else {}
+    )
+    bank_hire_payment_buildings = tuple(
+        building_id
+        for building_id in hire_payment_buildings
+        if offer_bank_payment and building_id == "bank"
+    )
+    ordinary_hire_payment_buildings = tuple(
+        building_id
+        for building_id in hire_payment_buildings
+        if building_id not in bank_hire_payment_buildings
     )
     if isinstance(action, StartPlayerConfessionBoxAction):
         # A `combination` and not a kind of its own, because the shape is the one the alms pair and
@@ -2193,13 +2398,13 @@ def _presented(
         # decision ahead of the outcome question; for counted/composed effects (alms payments) it
         # keeps "pay this cost" ahead of "spend these stocks".
         presented.append(_hire_step(action, state, config))
-    if isinstance(action, FullTurnAction) and hire_payment_buildings:
+    if isinstance(action, FullTurnAction) and ordinary_hire_payment_buildings:
         # Wildcard hires (Cornucopia) are paid from a chosen stock. Ask that stock before any
         # resolution-specific effect steps spend or award resources.
         presented.extend(
             _hire_payment_resource_steps(
                 action,
-                asked_buildings=hire_payment_buildings,
+                asked_buildings=ordinary_hire_payment_buildings,
             )
         )
     for name in RESOURCE_CHOICE_FIELDS:
@@ -2285,7 +2490,35 @@ def _presented(
     if offer_bank_payment and isinstance(action, FullTurnAction):
         if state is None or config is None:
             raise ValueError("state and config are required to present Bank payment choices.")
-        presented.append(_bank_payment_step(action, state=state, config=config))
+        if action.resolution.value == "ordination":
+            if offer_paid_bank_hire_choice:
+                if (
+                    paid_bank_hire_source is None
+                    or paid_bank_hire_replaced_resource is None
+                ):
+                    raise ValueError(
+                        "A paid Bank hire choice requires its ability record and replacement."
+                    )
+                presented.append(
+                    _paid_bank_hire_step(
+                        action,
+                        source=paid_bank_hire_source,
+                        replaced_resource=paid_bank_hire_replaced_resource,
+                    )
+                )
+            if bank_hire_payment_buildings:
+                bank_hire_resource_steps = _hire_payment_resource_steps(
+                    action,
+                    asked_buildings=bank_hire_payment_buildings,
+                )
+                for step, _fields in bank_hire_resource_steps:
+                    # Cornucopia's stock is the remaining answer to this same Bank hire.  It ends
+                    # the Ordination sequence just like the concrete-resource Bank button above.
+                    step["ends_ordination"] = True
+                presented.extend(bank_hire_resource_steps)
+            presented.append(_paid_bank_payment_step(action, state=state, config=config))
+        else:
+            presented.append(_legacy_bank_payment_step(action, state=state, config=config))
     return presented
 
 
@@ -2296,6 +2529,9 @@ def _presented_rows(
     config: Any | None = None,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -2309,6 +2545,9 @@ def _presented_rows(
             config=config,
             offer_hire=offer_hire,
             offer_bank_payment=offer_bank_payment,
+            offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+            paid_bank_hire_source=paid_bank_hire_source,
+            paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
             offer_own_active_bank_payment=offer_own_active_bank_payment,
             own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
             hire_payment_buildings=hire_payment_buildings,
@@ -2327,6 +2566,9 @@ def _presented_steps(
     config: Any | None = None,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -2340,6 +2582,9 @@ def _presented_steps(
             config=config,
             offer_hire=offer_hire,
             offer_bank_payment=offer_bank_payment,
+            offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+            paid_bank_hire_source=paid_bank_hire_source,
+            paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
             offer_own_active_bank_payment=offer_own_active_bank_payment,
             own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
             hire_payment_buildings=hire_payment_buildings,
@@ -2557,6 +2802,9 @@ def _steps_before_hire_payment_questions(
     state: Any,
     config: Any,
     offer_hire: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     include_preview_effects: bool = True,
 ) -> list[dict]:
     """Decision steps through the hire choice, stopping before any hire-payment stock choice."""
@@ -2617,6 +2865,15 @@ def _steps_before_hire_payment_questions(
     if offer_hire and isinstance(action, FullTurnAction):
         hire_step, _fields = _hire_step(action, state, config)
         steps.append(hire_step)
+    if offer_paid_bank_hire_choice and isinstance(action, FullTurnAction):
+        if paid_bank_hire_source is None or paid_bank_hire_replaced_resource is None:
+            raise ValueError("A paid Bank hire choice requires its ability record and replacement.")
+        bank_hire_step, _fields = _paid_bank_hire_step(
+            action,
+            source=paid_bank_hire_source,
+            replaced_resource=paid_bank_hire_replaced_resource,
+        )
+        steps.append(bank_hire_step)
     return _address_steps(steps, player_id)
 
 
@@ -2627,10 +2884,27 @@ def _hire_payment_question_buildings_by_action_id(
     state: Any,
     config: Any,
     offer_hire_by_action_id: dict[str, bool],
+    offer_paid_bank_hire_choice_by_action_id: dict[str, bool] | None = None,
+    paid_bank_hire_source_by_action_id: dict[str, Any | None] | None = None,
+    paid_bank_hire_replaced_resource_by_action_id: dict[str, str | None] | None = None,
     include_preview_effects: bool = True,
 ) -> dict[str, tuple[str, ...]]:
     """Per action, which hired buildings still need a stock-choice question."""
     action_with_ids = [(action, action_id(action)) for action in actions]
+    # Audit callers that only ask about ordinary hire payments intentionally have no paid-Bank
+    # context. Keep that narrow seam so they do not reproduce a Bank source rule just to say none.
+    if offer_paid_bank_hire_choice_by_action_id is None:
+        offer_paid_bank_hire_choice_by_action_id = {
+            move_id: False for _action, move_id in action_with_ids
+        }
+    if paid_bank_hire_source_by_action_id is None:
+        paid_bank_hire_source_by_action_id = {
+            move_id: None for _action, move_id in action_with_ids
+        }
+    if paid_bank_hire_replaced_resource_by_action_id is None:
+        paid_bank_hire_replaced_resource_by_action_id = {
+            move_id: None for _action, move_id in action_with_ids
+        }
     by_action_id: dict[str, tuple[str, ...]] = {
         move_id: tuple() for _action, move_id in action_with_ids
     }
@@ -2643,6 +2917,11 @@ def _hire_payment_question_buildings_by_action_id(
                 state=state,
                 config=config,
                 offer_hire=offer_hire_by_action_id[move_id],
+                offer_paid_bank_hire_choice=offer_paid_bank_hire_choice_by_action_id[move_id],
+                paid_bank_hire_source=paid_bank_hire_source_by_action_id[move_id],
+                paid_bank_hire_replaced_resource=(
+                    paid_bank_hire_replaced_resource_by_action_id[move_id]
+                ),
                 include_preview_effects=include_preview_effects,
             )
         )
@@ -2836,6 +3115,9 @@ def _covered_fields(
     *,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -2854,6 +3136,9 @@ def _covered_fields(
             config=config,
             offer_hire=offer_hire,
             offer_bank_payment=offer_bank_payment,
+            offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+            paid_bank_hire_source=paid_bank_hire_source,
+            paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
             offer_own_active_bank_payment=offer_own_active_bank_payment,
             own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
             hire_payment_buildings=hire_payment_buildings,
@@ -2890,6 +3175,9 @@ def decision_steps(
     config: Any,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -2928,6 +3216,9 @@ def decision_steps(
                 config=config,
                 offer_hire=offer_hire,
                 offer_bank_payment=offer_bank_payment,
+                offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+                paid_bank_hire_source=paid_bank_hire_source,
+                paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
                 offer_own_active_bank_payment=offer_own_active_bank_payment,
                 own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
                 hire_payment_buildings=hire_payment_buildings,
@@ -2987,6 +3278,9 @@ def decision_steps(
         config=config,
         offer_hire=offer_hire,
         offer_bank_payment=offer_bank_payment,
+        offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+        paid_bank_hire_source=paid_bank_hire_source,
+        paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
         offer_own_active_bank_payment=offer_own_active_bank_payment,
         own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
         hire_payment_buildings=hire_payment_buildings,
@@ -3015,6 +3309,9 @@ def _unresolved_fields(
     *,
     offer_hire: bool = False,
     offer_bank_payment: bool = False,
+    offer_paid_bank_hire_choice: bool = False,
+    paid_bank_hire_source: Any | None = None,
+    paid_bank_hire_replaced_resource: str | None = None,
     offer_own_active_bank_payment: bool = False,
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
@@ -3039,6 +3336,9 @@ def _unresolved_fields(
         config,
         offer_hire=offer_hire,
         offer_bank_payment=offer_bank_payment,
+        offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
+        paid_bank_hire_source=paid_bank_hire_source,
+        paid_bank_hire_replaced_resource=paid_bank_hire_replaced_resource,
         offer_own_active_bank_payment=offer_own_active_bank_payment,
         own_active_bank_payment_replaced_resource=own_active_bank_payment_replaced_resource,
         hire_payment_buildings=hire_payment_buildings,
@@ -3411,11 +3711,40 @@ def _turn_candidates_and_auto_family_indexes(
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config) if actions is None else actions)
     hire_contexts = _hire_contexts(actions, config)
-    bank_payment_contexts = {
-        _bank_payment_context_key(action)
-        for action in actions
-        if _is_paid_bank_payment_action(action)
+    paid_bank_actions_by_context: collections.defaultdict[tuple[Any, ...], list[FullTurnAction]] = (
+        collections.defaultdict(list)
+    )
+    non_bank_actions_by_context: collections.defaultdict[tuple[Any, ...], list[FullTurnAction]] = (
+        collections.defaultdict(list)
+    )
+    for action in actions:
+        if not isinstance(action, FullTurnAction):
+            continue
+        context = _bank_payment_context_key(action)
+        if _is_paid_bank_payment_action(action):
+            paid_bank_actions_by_context[context].append(action)
+        elif action.bank_payment_building_id is None:
+            non_bank_actions_by_context[context].append(action)
+    bank_payment_contexts = set(paid_bank_actions_by_context)
+    paid_bank_hire_choice_contexts = {
+        context
+        for context in bank_payment_contexts
+        if non_bank_actions_by_context[context]
     }
+    paid_bank_hire_sources_by_context = {
+        context: _paid_bank_hire_source_for_action(
+            members[0],
+            state=state,
+            config=config,
+        )
+        for context, members in paid_bank_actions_by_context.items()
+    }
+    paid_bank_hire_replaced_resources_by_context: dict[tuple[Any, ...], str] = {}
+    for context, members in paid_bank_actions_by_context.items():
+        replacements = {member.bank_payment_replaced_resource for member in members}
+        if len(replacements) != 1 or None in replacements:
+            raise AssertionError("One paid Bank hire question must name one replaced resource.")
+        paid_bank_hire_replaced_resources_by_context[context] = replacements.pop()
     owned_bank_payment_resources_by_context: dict[tuple[Any, ...], str] = {}
     for action in actions:
         if not _is_owned_bank_payment_action(action):
@@ -3432,6 +3761,9 @@ def _turn_candidates_and_auto_family_indexes(
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
     offer_bank_payment_by_action_id: dict[str, bool] = {}
+    offer_paid_bank_hire_choice_by_action_id: dict[str, bool] = {}
+    paid_bank_hire_source_by_action_id: dict[str, Any | None] = {}
+    paid_bank_hire_replaced_resource_by_action_id: dict[str, str | None] = {}
     offer_own_active_bank_payment_by_action_id: dict[str, bool] = {}
     own_active_bank_payment_replaced_resource_by_action_id: dict[str, str | None] = {}
     preview_effects_by_action_id: dict[str, dict[str, Any]] = {}
@@ -3445,6 +3777,22 @@ def _turn_candidates_and_auto_family_indexes(
         offer_hire_by_action_id[move_id] = offered_hire
         offer_bank_payment_by_action_id[move_id] = isinstance(action, FullTurnAction) and (
             _bank_payment_context_key(action) in bank_payment_contexts
+        )
+        paid_bank_context = (
+            _bank_payment_context_key(action) if isinstance(action, FullTurnAction) else None
+        )
+        offer_paid_bank_hire_choice_by_action_id[move_id] = (
+            paid_bank_context in paid_bank_hire_choice_contexts
+        )
+        paid_bank_hire_source_by_action_id[move_id] = (
+            paid_bank_hire_sources_by_context.get(paid_bank_context)
+            if paid_bank_context is not None
+            else None
+        )
+        paid_bank_hire_replaced_resource_by_action_id[move_id] = (
+            paid_bank_hire_replaced_resources_by_context.get(paid_bank_context)
+            if paid_bank_context is not None
+            else None
         )
         own_active_bank_payment_replaced_resource = (
             owned_bank_payment_resources_by_context.get(_bank_payment_context_key(action))
@@ -3480,6 +3828,11 @@ def _turn_candidates_and_auto_family_indexes(
         state=state,
         config=config,
         offer_hire_by_action_id=offer_hire_by_action_id,
+        offer_paid_bank_hire_choice_by_action_id=offer_paid_bank_hire_choice_by_action_id,
+        paid_bank_hire_source_by_action_id=paid_bank_hire_source_by_action_id,
+        paid_bank_hire_replaced_resource_by_action_id=(
+            paid_bank_hire_replaced_resource_by_action_id
+        ),
         include_preview_effects=include_preview_effects,
     )
     for action in actions:
@@ -3491,6 +3844,11 @@ def _turn_candidates_and_auto_family_indexes(
             config=config,
             offer_hire=offer_hire_by_action_id[move_id],
             offer_bank_payment=offer_bank_payment_by_action_id[move_id],
+            offer_paid_bank_hire_choice=offer_paid_bank_hire_choice_by_action_id[move_id],
+            paid_bank_hire_source=paid_bank_hire_source_by_action_id[move_id],
+            paid_bank_hire_replaced_resource=(
+                paid_bank_hire_replaced_resource_by_action_id[move_id]
+            ),
             offer_own_active_bank_payment=offer_own_active_bank_payment_by_action_id[move_id],
             own_active_bank_payment_replaced_resource=(
                 own_active_bank_payment_replaced_resource_by_action_id[move_id]
@@ -3518,6 +3876,11 @@ def _turn_candidates_and_auto_family_indexes(
                 config,
                 offer_hire=offer_hire_by_action_id[move_id],
                 offer_bank_payment=offer_bank_payment_by_action_id[move_id],
+                offer_paid_bank_hire_choice=offer_paid_bank_hire_choice_by_action_id[move_id],
+                paid_bank_hire_source=paid_bank_hire_source_by_action_id[move_id],
+                paid_bank_hire_replaced_resource=(
+                    paid_bank_hire_replaced_resource_by_action_id[move_id]
+                ),
                 offer_own_active_bank_payment=offer_own_active_bank_payment_by_action_id[
                     move_id
                 ],
