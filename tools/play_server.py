@@ -2025,6 +2025,9 @@ def _own_active_bank_payment_step(
         {
             "resource_allocation": True,
             "resource_total": total,
+            # An Ordination payment is settled by its first stock, so a spent stock cannot be
+            # returned independently while the move total remains fixed.
+            "resource_allocation_no_undo": True,
             "resource_unit_deltas": {
                 resource: one_paid_stock(resource) for resource in COMBINATION_STOCKS
             },

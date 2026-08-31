@@ -140,6 +140,7 @@
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
   var ordinationReasons = aside.querySelectorAll('[data-ordination-unavailable-reason]');
+  var ordinationPaymentCost = aside.querySelector('[data-ordination-payment-cost]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
   var turnStepHireRow = aside.querySelector('[data-turn-step-hire-row]');
@@ -1266,6 +1267,12 @@
     });
   }
 
+  function resourceAllocationNoUndo(steps) {
+    return steps.some(function (step) {
+      return step.resource_allocation_no_undo === true;
+    });
+  }
+
   function allocationMaximum(resource, options) {
     var maximum = 0;
     options.forEach(function (step) {
@@ -2004,6 +2011,7 @@
     var allocationActive = allocationSteps.length > 0;
     var allocationChoices = allocationOptions || allocationSteps;
     var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
+    var allocationNoUndo = resourceAllocationNoUndo(allocationSteps);
     var allocationComplete = allocationActive && (
       allocationAnyTotal
         ? allocationChoices.some(function (step) {
@@ -2018,7 +2026,7 @@
         var needs_more = allocationChoices.some(function (step) {
           return resourceCounts(step.value)[resource] > selected;
         });
-        var can_reset = !allocationAnyTotal && !allocationComplete
+        var can_reset = !allocationNoUndo && !allocationAnyTotal && !allocationComplete
           && selected > 0
           && selected >= allocationMaximum(resource, allocationChoices);
         return needs_more || can_reset;
@@ -2149,6 +2157,17 @@
         reason.setAttribute('data-ordination-reason-shown', shown ? 'true' : 'false');
       });
     });
+    if (ordinationPaymentCost) {
+      var costShown = resourceAllocationTotal !== null && (
+        pendingOrdinationAnswer !== null || ordinationPaymentStarted
+      );
+      ordinationPaymentCost.textContent = costShown
+        ? 'Cost ' + resourceAllocationTotal + ' · paid ' + resourceAllocationAmount(resourceAllocation)
+        : '';
+      ordinationPaymentCost.setAttribute(
+        'data-ordination-payment-cost-shown', costShown ? 'true' : 'false'
+      );
+    }
     renderTurnSteps();
     Array.prototype.forEach.call(panels, function (panel) {
       var index = Number(panel.getAttribute('data-turn-panel'));
@@ -2330,6 +2349,7 @@
       /* Ordination can stay extendable while its Bank allocation is visible. The first stock
          settles the currently painted outcome, then the ordinary allocation path owns payment. */
       pendingOrdinationAnswer = ordinationPicked;
+      resourceAllocationTotal = Number(ordinationPaymentSteps[0].resource_total || 0);
       show(
         ordinationPaymentSteps,
         [],

@@ -3931,18 +3931,21 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     """A Bank stock fixes Ordination, then the server-offered mix controls Confirm."""
     base_url, _server = serve(SCENARIOS / "bank_active_ordination_substitution_001.json")
 
-    def reach_ordination() -> None:
+    def reach_ordination() -> dict[str, dict]:
         page.goto(base_url, wait_until="networkidle")
+        turn_start = _all_board_snapshots(page)
         _walk_live_dom_until(
             page,
             lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
             target="Bank ordination step",
             preferred_resolution="ordination",
         )
+        return turn_start
 
     reach_ordination()
     ordain = page.locator('[data-ordination-action="ordain"]')
     mission = page.locator('[data-ordination-action="mission"]')
+    cost = page.locator('[data-ordination-payment-cost]')
     assert page.locator(
         '[data-turn-prompt="player_one: Move serfs and acolytes, up to 2 in total."]'
         '[data-turn-offered="true"]'
@@ -3954,9 +3957,11 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     ).inner_text() == "No acolyte in the Abbey."
     assert not _confirm_enabled(page)
     assert page.locator('[data-resource-choice-key][data-turn-offered="true"]').count() == 0
+    assert cost.get_attribute('data-ordination-payment-cost-shown') == "false"
 
     ordain.click()
     assert ordain.is_enabled() and mission.is_enabled()
+    assert cost.inner_text() == "Cost 1 · paid 0"
     assert {
         resource: page.locator(
             f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
@@ -3980,6 +3985,8 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     )
     silver.click()
     assert not ordain.is_enabled() and not mission.is_enabled()
+    assert silver.count() == 0
+    assert cost.inner_text() == "Cost 1 · paid 1"
     assert {
         action: button.evaluate("node => getComputedStyle(node).display")
         for action, button in (("ordain", ordain), ("mission", mission))
@@ -3995,6 +4002,7 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     ordain.click()
     ordain.click()
     assert not ordain.is_enabled() and not mission.is_enabled()
+    assert cost.inner_text() == "Cost 2 · paid 0"
     assert {
         action: button.evaluate("node => getComputedStyle(node).display")
         for action, button in (("ordain", ordain), ("mission", mission))
@@ -4010,16 +4018,46 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     assert not _confirm_enabled(page)
 
     page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    ).click()
+    assert cost.inner_text() == "Cost 2 · paid 1"
+    assert {
+        resource: page.locator(
+            f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+            '[data-turn-offered="true"]'
+        ).count()
+        for resource in ("wheat", "silver", "stone")
+    } == {"wheat": 1, "silver": 0, "stone": 0}
+    assert not _confirm_enabled(page)
+
+    page.locator(
         '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
         '[data-turn-offered="true"]'
     ).click()
     assert not ordain.is_enabled() and not mission.is_enabled()
-    assert not _confirm_enabled(page)
+    assert cost.inner_text() == "Cost 2 · paid 2"
+    assert page.locator('[data-resource-choice-key][data-turn-offered="true"]').count() == 0
+    assert _confirm_enabled(page)
+
+    turn_start = reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    ordain.click()
+    ordain.click()
     page.locator(
         '[data-active-seat="true"] [data-resource-choice-key="silver"]'
         '[data-turn-offered="true"]'
     ).click()
-    assert _confirm_enabled(page)
+    assert cost.inner_text() == "Cost 2 · paid 1"
+    page.locator('[data-turn-control="reset"][data-turn-control-enabled="true"]').click()
+    page.wait_for_function(
+        """() => document.querySelector('[data-ordination-payment-cost]').getAttribute(
+          'data-ordination-payment-cost-shown'
+        ) === 'false'"""
+    )
+    assert _all_board_snapshots(page) == turn_start
+    assert page.locator('[data-ordination-action][data-ordination-active="true"]').count() == 0
+    assert cost.inner_text() == ""
 
 
 @pytest.mark.parametrize(

@@ -4608,6 +4608,7 @@ def test_owned_bank_payment_mix_resolves_the_bank_fields_after_ordination() -> N
     assert all(
         step["resource_allocation"] is True
         and step["resource_total"] == 1
+        and step["resource_allocation_no_undo"] is True
         and step["resource_unit_deltas"]["silver"] == {
             "stone": 0,
             "silver": -1,
@@ -4646,6 +4647,7 @@ def test_owned_bank_with_only_silver_still_asks_for_its_single_payment_mix() -> 
     assert payment_steps[0]["value"] == "silver=2"
     assert payment_steps[0]["resource_allocation"] is True
     assert payment_steps[0]["resource_total"] == 2
+    assert payment_steps[0]["resource_allocation_no_undo"] is True
     assert not {"auto", "default", "preselected"}.intersection(payment_steps[0])
 
 

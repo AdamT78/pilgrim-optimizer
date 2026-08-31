@@ -1033,7 +1033,9 @@ def render_turn_panel(payload: dict) -> str:
         '<div class="turn-hire-fact" data-turn-hire-fact="true" '
         'data-turn-hire-fact-active="false"></div>'
         f'<div class="turn-keys">{_resolution_keys(candidates)}'
-        f"{_combination_keys(candidates)}{_ordination_action_keys(candidates)}</div>"
+        f"{_combination_keys(candidates)}{_ordination_action_keys(candidates)}"
+        '<span class="ordination-payment-cost" data-ordination-payment-cost="true"'
+        ' data-ordination-payment-cost-shown="false"></span></div>'
         f"{_turn_step_controls(turn_steps)}"
         f"{_turn_panels(candidates)}"
         f"{_box_turn_controls()}"
@@ -1232,9 +1234,12 @@ def turn_styles(route_color: str) -> str:
   [data-ordination-action][data-turn-offered="false"] {{
     color: #98948A; background: #161616; border-color: #4A4741; cursor: not-allowed; opacity: 0.72;
   }}
-  .ordination-unavailable-reason {{ display: none; align-self: center; color: #C9C4B4;
+  .ordination-unavailable-reason, .ordination-payment-cost {{
+    display: none; align-self: center; color: #C9C4B4;
     font-size: 12px; line-height: 1.35; }}
   .ordination-unavailable-reason[data-ordination-reason-shown="true"] {{ display: inline-block; }}
+  .ordination-payment-cost {{ flex-basis: 100%; }}
+  .ordination-payment-cost[data-ordination-payment-cost-shown="true"] {{ display: block; }}
 
   .turn-controls {{ margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }}
   .turn-control-row {{ display: flex; gap: 6px; }}
