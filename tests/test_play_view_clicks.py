@@ -4086,6 +4086,7 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
     ordain = page.locator('[data-ordination-action="ordain"]')
     mission = page.locator('[data-ordination-action="mission"]')
     cost = page.locator('[data-ordination-payment-cost]')
+    consequence = page.locator('[data-ordination-bank-consequence]')
     assert page.locator(
         '[data-turn-prompt="player_one: Move serfs and acolytes, up to 2 in total."]'
         '[data-turn-offered="true"]'
@@ -4097,6 +4098,8 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
     ).inner_text() == "No acolyte in the Abbey."
     assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
     assert cost.get_attribute('data-ordination-payment-cost-shown') == "false"
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
     assert offered_resources() == {"wheat": 0, "silver": 0, "stone": 0}
 
     ordain.click()
@@ -4108,13 +4111,18 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
         value: page.locator(f'[data-combination-key="{value}"][data-turn-offered="true"]').count()
         for value in ("none", "bank:market")
     } == {"none": 1, "bank:market": 1}
+    assert ordain.is_enabled() and mission.is_enabled()
     assert page.locator('[data-turn-hire-fact-active="true"]').count() == 0
     assert cost.get_attribute('data-ordination-payment-cost-shown') == "false"
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "true"
+    assert consequence.inner_text() == "Another move can only be paid by hiring the Bank."
     assert offered_resources() == {"wheat": 0, "silver": 0, "stone": 0}
 
     page.locator('[data-combination-key="none"][data-turn-offered="true"]').click()
     assert not ordain.is_enabled() and not mission.is_enabled()
     assert cost.inner_text() == "Cost 1 · paid 0"
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
     assert offered_resources() == {"wheat": 1, "silver": 0, "stone": 0}
     assert not _confirm_enabled(page)
     page.locator(
@@ -4128,10 +4136,13 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
     ordain = page.locator('[data-ordination-action="ordain"]')
     mission = page.locator('[data-ordination-action="mission"]')
     cost = page.locator('[data-ordination-payment-cost]')
+    consequence = page.locator('[data-ordination-bank-consequence]')
     ordain.click()
     page.locator('[data-combination-key="bank:market"][data-turn-offered="true"]').click()
     assert not ordain.is_enabled() and not mission.is_enabled()
     assert cost.inner_text() == "Cost 2 · paid 0"
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
     assert offered_resources() == {"wheat": 0, "silver": 1, "stone": 0}
     page.locator(
         '[data-active-seat="true"] [data-resource-choice-key="silver"]'
@@ -4151,6 +4162,7 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
     cost = page.locator('[data-ordination-payment-cost]')
     ordain.click()
     ordain.click()
+    assert not ordain.is_enabled() and not mission.is_enabled()
     assert page.locator(
         '[data-turn-prompt="player_one: Hire the Bank from the market for 1 silver? '
         'It lets you pay in coins instead of wheat."][data-turn-offered="true"]'
@@ -4160,7 +4172,72 @@ def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> N
         "1 silver in place of 1 wheat."
     )
     assert cost.inner_text() == "Cost 3 · paid 0"
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
     assert offered_resources() == {"wheat": 1, "silver": 1, "stone": 0}
+
+
+def test_opponent_hired_bank_ordination_warns_before_its_last_move(page, serve) -> None:
+    """The paid-Bank warning is the same server fact when another player owns the Bank."""
+    base_url, _server = serve(SCENARIOS / "bank_hire_opponent_ordination_001.json")
+
+    def reach_ordination() -> None:
+        page.goto(base_url, wait_until="networkidle")
+        _walk_live_dom_until(
+            page,
+            lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+            target="opponent Bank Ordination step",
+            preferred_resolution="ordination",
+        )
+
+    reach_ordination()
+    ordain = page.locator('[data-ordination-action="ordain"]')
+    mission = page.locator('[data-ordination-action="mission"]')
+    consequence = page.locator('[data-ordination-bank-consequence]')
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
+
+    ordain.click()
+    assert page.locator(
+        '[data-turn-prompt="player_one: Hire the Bank from Yellow for 1 silver? '
+        'It lets you pay in coins instead of wheat."][data-turn-offered="true"]'
+    ).count() == 1
+    assert ordain.is_enabled() and mission.is_enabled()
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "true"
+    assert consequence.inner_text() == "Another move can only be paid by hiring the Bank."
+
+    page.locator('[data-combination-key="bank:player_two"][data-turn-offered="true"]').click()
+    assert not ordain.is_enabled()
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
+
+
+@pytest.mark.parametrize(
+    "scenario_name",
+    (
+        "bank_active_ordination_substitution_001.json",
+        "bank_active_ordination_full_substitution_001.json",
+    ),
+)
+def test_owned_bank_ordination_never_shows_the_paid_hire_consequence(
+    page, serve, scenario_name: str
+) -> None:
+    """An active Bank may change payment, but it does not create a hire consequence."""
+    base_url, _server = serve(SCENARIOS / scenario_name)
+    page.goto(base_url, wait_until="networkidle")
+    _walk_live_dom_until(
+        page,
+        lambda: page.locator('[data-ordination-choice="true"]').count() == 1,
+        target="owned Bank Ordination step",
+        preferred_resolution="ordination",
+    )
+
+    consequence = page.locator('[data-ordination-bank-consequence]')
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
+    page.locator('[data-ordination-action="ordain"][data-turn-offered="true"]').click()
+    assert consequence.get_attribute('data-ordination-bank-consequence-shown') == "false"
+    assert consequence.inner_text() == ""
 
 
 @pytest.mark.parametrize(

@@ -140,6 +140,7 @@
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
   var ordinationReasons = aside.querySelectorAll('[data-ordination-unavailable-reason]');
+  var ordinationBankConsequence = aside.querySelector('[data-ordination-bank-consequence]');
   var ordinationPaymentCost = aside.querySelector('[data-ordination-payment-cost]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
   var turnStepResourceRow = aside.querySelector('[data-turn-step-resource-row]');
@@ -2158,6 +2159,22 @@
         reason.setAttribute('data-ordination-reason-shown', shown ? 'true' : 'false');
       });
     });
+    if (ordinationBankConsequence) {
+      var consequences = offered.map(function (step) {
+        return step.ordination_next_move_consequence;
+      }).filter(function (consequence) {
+        return typeof consequence === 'string';
+      });
+      /* The server writes this sentence only on the two answers to a live paid-Bank question.
+         Agreement is required because a mixed frontier is not an honest place to choose a fact. */
+      var consequence = consequences.length && consequences.every(function (value) {
+        return value === consequences[0];
+      }) ? consequences[0] : '';
+      ordinationBankConsequence.textContent = consequence;
+      ordinationBankConsequence.setAttribute(
+        'data-ordination-bank-consequence-shown', consequence ? 'true' : 'false'
+      );
+    }
     if (ordinationPaymentCost) {
       var costShown = resourceAllocationTotal !== null && (
         pendingOrdinationAnswer !== null || ordinationPaymentStarted

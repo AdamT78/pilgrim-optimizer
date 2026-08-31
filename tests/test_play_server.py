@@ -4572,6 +4572,9 @@ def test_paid_bank_hire_asks_before_its_board_payment(
         ("none", "Pay without it", expected_hire_prompt),
         (bank_value, "Hire the Bank for 1 silver", expected_hire_prompt),
     }
+    assert {step.get("ordination_next_move_consequence") for step in hire_steps} == {
+        "Another move can only be paid by hiring the Bank."
+    }
     assert all(step.get("hire_text") is None for step in hire_steps)
     assert {(step["value"], step["resource_total"], step["label"]) for step in payment_steps} == {
         ("wheat=1", 1, "Pay 1 wheat."),
@@ -4585,6 +4588,45 @@ def test_paid_bank_hire_asks_before_its_board_payment(
         for step in payment_steps
     )
     assert all(candidate["action_id"] is not None for candidate in candidates)
+
+
+def test_paid_bank_ordination_warning_stays_off_when_another_move_needs_no_hire() -> None:
+    """Extra stock and a serf leave a non-hiring second Ordination move in the frontier."""
+    scenario = load_scenario(SCENARIOS / "bank_hire_market_ordination_001.json")
+
+    def hire_steps_after_one_ordination_move(state) -> list[dict]:
+        return [
+            step
+            for candidate in play_server.turn_candidates(
+                state, scenario.config, include_preview_effects=False
+            )
+            if any(
+                step["kind"] == "ordination" and step["value"] == "ordain=1"
+                for step in candidate["steps"]
+            )
+            for step in candidate["steps"]
+            if step.get("ends_ordination") is True
+        ]
+
+    unmutated_steps = hire_steps_after_one_ordination_move(scenario.state)
+    assert {step["value"] for step in unmutated_steps} == {"none", "bank:market"}
+    assert {step.get("ordination_next_move_consequence") for step in unmutated_steps} == {
+        "Another move can only be paid by hiring the Bank."
+    }
+
+    player_id = scenario.state.active_player
+    player = scenario.state.player_state(player_id)
+    state = scenario.state.with_player_state(
+        player_id,
+        replace(
+            player,
+            resources=replace(player.resources, wheat=3, silver=2),
+            workforce=replace(player.workforce, village=3),
+        ),
+    )
+    mutated_steps = hire_steps_after_one_ordination_move(state)
+    assert {step["value"] for step in mutated_steps} == {"none", "bank:market"}
+    assert {step.get("ordination_next_move_consequence") for step in mutated_steps} == {None}
 
 
 def test_cornucopia_bank_hire_asks_which_stock_pays_before_its_board_payment() -> None:

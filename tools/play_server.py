@@ -3608,6 +3608,61 @@ def _attach_ordination_choice_states(
             break
 
 
+ORDINATION_PAID_BANK_NEXT_MOVE_CONSEQUENCE = (
+    "Another move can only be paid by hiring the Bank."
+)
+
+
+def _attach_paid_bank_ordination_next_move_consequences(
+    *,
+    actions: list[Any],
+    steps_by_action_id: dict[str, list[dict]],
+    offer_paid_bank_hire_choice_by_action_id: dict[str, bool],
+) -> None:
+    """Write the next-move consequence only where the engine frontier makes it true.
+
+    The live Bank question shares its prefix with complete actions, not with a browser-side cost
+    calculation. Compare those actions at that prefix: a non-hiring action one Ordination move
+    later disproves the sentence; otherwise the next enabled move necessarily selects the Bank.
+    """
+    ordination_actions: list[tuple[FullTurnAction, tuple[tuple[str, Any], ...]]] = []
+    for action in actions:
+        if not isinstance(action, FullTurnAction) or action.resolution.value != "ordination":
+            continue
+        steps = steps_by_action_id[action_id(action)]
+        index = next(index for index, step in enumerate(steps) if step["kind"] == "ordination")
+        ordination_actions.append((action, _ordination_choice_context(steps, index)))
+
+    for action, context in ordination_actions:
+        steps = steps_by_action_id[action_id(action)]
+        if not offer_paid_bank_hire_choice_by_action_id[action_id(action)]:
+            continue
+        current_moves = action.ordination_steps
+        next_move_actions = [
+            candidate
+            for candidate, candidate_context in ordination_actions
+            if candidate_context == context
+            and len(candidate.ordination_steps) == len(current_moves) + 1
+            and candidate.ordination_steps[: len(current_moves)] == current_moves
+        ]
+        # A current paid-Bank question guarantees that a non-hiring action exists at this prefix.
+        # If no action advances it, the duty is already spent and the controls are dark instead.
+        if not next_move_actions or any(
+            not _is_paid_bank_payment_action(candidate) for candidate in next_move_actions
+        ):
+            continue
+        question_steps = [
+            step
+            for step in steps
+            if step["kind"] == "combination" and step.get("ends_ordination") is True
+        ]
+        if len(question_steps) != 1:
+            raise AssertionError("A paid Bank Ordination choice must contain one Bank question.")
+        question_steps[0]["ordination_next_move_consequence"] = (
+            ORDINATION_PAID_BANK_NEXT_MOVE_CONSEQUENCE
+        )
+
+
 def _mark_unambiguous_edge_steps(candidates: list[dict]) -> list[int]:
     """Name the family selections that make a movement continuation automatic.
 
@@ -3865,6 +3920,11 @@ def _turn_candidates_and_auto_family_indexes(
         key = _steps_key(steps)
         grouped.setdefault(key, []).append(action)
 
+    _attach_paid_bank_ordination_next_move_consequences(
+        actions=actions,
+        steps_by_action_id=steps_by_action_id,
+        offer_paid_bank_hire_choice_by_action_id=offer_paid_bank_hire_choice_by_action_id,
+    )
     candidates = []
     for members in grouped.values():
         members = _dedupe_cloisters_route_spellings(members)
