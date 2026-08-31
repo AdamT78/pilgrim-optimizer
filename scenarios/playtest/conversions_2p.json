@@ -75,7 +75,7 @@
       "setup_sow_completed_by": ["player_one", "player_two"]
     },
     "merchant_board_position": 2,
-    "ship_position": 0,
+    "ship_position": 1,
     "completed_rounds": 1,
     "game_over": false,
     "timing": {
