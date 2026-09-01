@@ -140,6 +140,7 @@
   var pairs = aside.querySelectorAll('[data-combination-key]');
   var ordinationActions = aside.querySelectorAll('[data-ordination-action]');
   var ordinationReasons = aside.querySelectorAll('[data-ordination-unavailable-reason]');
+  var turnControlReasons = aside.querySelectorAll('[data-turn-control-unavailable-reason]');
   var ordinationBankConsequence = aside.querySelector('[data-ordination-bank-consequence]');
   var ordinationPaymentCost = aside.querySelector('[data-ordination-payment-cost]');
   var turnStepDirections = aside.querySelectorAll('[data-turn-step-direction]');
@@ -540,7 +541,9 @@
     var relocation = nextField === 'selected_position';
     // A relocation is a committed-step question too. Its server-written prompt belongs in the
     // grown prompt row, not a fixed-height answer row where it would escape into the controls.
-    var stepPrompt = activation || relocation;
+    var completedRelocation = live.length === 1 && live[0].kind === 'relocation'
+      && conversionChosen.length === (live[0].answers || []).length;
+    var stepPrompt = activation || relocation || completedRelocation;
     var relocationTargets = relocation ? offeredTurnStepValues(conversionChosen.length, live) : [];
     var piety = pietyIndex !== -1 && conversionChosen.length >= pietyIndex;
     var resource = amountIndex !== -1 && conversionChosen.length >= amountIndex;
@@ -1385,7 +1388,20 @@
       item.setAttribute('data-turn-control-enabled', enabled ? 'true' : 'false');
       item.setAttribute('data-turn-control-active', active ? 'true' : 'false');
       item.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      item.disabled = !enabled;
     });
+  }
+
+  function agreedUnavailableControlReason(offered, control) {
+    var reasons = [];
+    offered.forEach(function (step) {
+      (step.unavailable_controls || []).forEach(function (status) {
+        if (status.control === control && reasons.indexOf(status.reason) === -1) {
+          reasons.push(status.reason);
+        }
+      });
+    });
+    return reasons.length === 1 ? reasons[0] : null;
   }
 
   function setConfirmLabel(endTurn) {
@@ -2210,12 +2226,23 @@
     setConfirmLabel(
       RESOLUTION_COMMITTED && conversionChosen.length === 0 && confirmActionId !== null
     );
+    var actionEnabled = (
+      actionResolutions.length > 0 && preview.resolution === null && resolutionSplit !== 'tithe'
+    );
     setControl(
       'action',
-      actionResolutions.length > 0 && preview.resolution === null && resolutionSplit !== 'tithe',
+      actionEnabled,
       resolutionSplit === 'action'
         || (preview.resolution !== null && preview.resolution !== 'tithe')
     );
+    var actionUnavailableReason = agreedUnavailableControlReason(offered, 'action');
+    Array.prototype.forEach.call(turnControlReasons, function (reason) {
+      var shown = reason.getAttribute('data-turn-control-unavailable-reason') === 'action'
+        && !actionEnabled
+        && actionUnavailableReason !== null
+        && reason.getAttribute('data-turn-control-reason') === actionUnavailableReason;
+      reason.setAttribute('data-turn-control-reason-shown', shown ? 'true' : 'false');
+    });
     setControl(
       'tithe',
       resolutions.indexOf('tithe') !== -1

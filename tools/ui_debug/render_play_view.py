@@ -882,6 +882,36 @@ def _ordination_action_keys(candidates: list[dict]) -> str:
     )
 
 
+def _turn_control_unavailable_reasons(candidates: list[dict]) -> str:
+    """The server-described reasons for visible but unavailable turn controls."""
+    seen: dict[str, list[str]] = {}
+    for candidate in candidates:
+        for step in candidate["steps"]:
+            for status in step.get("unavailable_controls", ()):
+                control = str(status["control"])
+                reason = str(status["reason"])
+                seen.setdefault(control, [])
+                if reason not in seen[control]:
+                    seen[control].append(reason)
+    rendered = "".join(
+        f'<span class="turn-control-unavailable-reason"'
+        f' data-turn-control-unavailable-reason="{escape(control)}"'
+        f' data-turn-control-reason="{escape(reason)}"'
+        f' data-turn-control-reason-shown="false">{say(reason)}</span>'
+        for control, reasons in seen.items()
+        for reason in reasons
+    )
+    if rendered:
+        return rendered
+    # The shipped turn script always owns this hook.  With no refusal in the current payload it
+    # stays empty and hidden; a message is still rendered only from a server-provided reason.
+    return (
+        '<span class="turn-control-unavailable-reason"'
+        ' data-turn-control-unavailable-reason="action" data-turn-control-reason=""'
+        ' data-turn-control-reason-shown="false"></span>'
+    )
+
+
 def _turn_step_controls(steps: list[dict]) -> str:
     """The client-side controls for the engine's committed building steps."""
     directions: dict[str, str] = {}
@@ -959,7 +989,7 @@ def _turn_panels(candidates: list[dict]) -> str:
     return "".join(panels)
 
 
-def _box_turn_controls() -> str:
+def _box_turn_controls(candidates: list[dict]) -> str:
     """The box controls. Same `data-turn-control` handles, new location."""
 
     def button(label: str, key: str) -> str:
@@ -980,6 +1010,7 @@ def _box_turn_controls() -> str:
         '<div class="turn-control-row turn-control-row-top">'
         f"{button('Action', 'action')}{button('Tithe', 'tithe')}"
         "</div>"
+        f"{_turn_control_unavailable_reasons(candidates)}"
         '<div class="turn-control-row turn-control-row-bottom">'
         f"{button('Reset', 'reset')}{button('Confirm', 'confirm')}"
         "</div>"
@@ -1040,7 +1071,7 @@ def render_turn_panel(payload: dict) -> str:
         ' data-ordination-payment-cost-shown="false"></span></div>'
         f"{_turn_step_controls(turn_steps)}"
         f"{_turn_panels(candidates)}"
-        f"{_box_turn_controls()}"
+        f"{_box_turn_controls(candidates)}"
         "</div>"
     )
 
@@ -1236,10 +1267,12 @@ def turn_styles(route_color: str) -> str:
   [data-ordination-action][data-turn-offered="false"] {{
     color: #98948A; background: #161616; border-color: #4A4741; cursor: not-allowed; opacity: 0.72;
   }}
-  .ordination-unavailable-reason, .ordination-bank-consequence, .ordination-payment-cost {{
+  .ordination-unavailable-reason, .turn-control-unavailable-reason,
+  .ordination-bank-consequence, .ordination-payment-cost {{
     display: none; align-self: center; color: #C9C4B4;
     font-size: 12px; line-height: 1.35; }}
   .ordination-unavailable-reason[data-ordination-reason-shown="true"] {{ display: inline-block; }}
+  .turn-control-unavailable-reason[data-turn-control-reason-shown="true"] {{ display: block; }}
   .ordination-bank-consequence {{ flex-basis: 100%; }}
   .ordination-bank-consequence[data-ordination-bank-consequence-shown="true"] {{ display: block; }}
   .ordination-payment-cost {{ flex-basis: 100%; }}
