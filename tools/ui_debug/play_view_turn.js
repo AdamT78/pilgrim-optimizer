@@ -541,7 +541,9 @@
     var relocation = nextField === 'selected_position';
     // A relocation is a committed-step question too. Its server-written prompt belongs in the
     // grown prompt row, not a fixed-height answer row where it would escape into the controls.
-    var stepPrompt = activation || relocation;
+    var completedRelocation = live.length === 1 && live[0].kind === 'relocation'
+      && conversionChosen.length === (live[0].answers || []).length;
+    var stepPrompt = activation || relocation || completedRelocation;
     var relocationTargets = relocation ? offeredTurnStepValues(conversionChosen.length, live) : [];
     var piety = pietyIndex !== -1 && conversionChosen.length >= pietyIndex;
     var resource = amountIndex !== -1 && conversionChosen.length >= amountIndex;

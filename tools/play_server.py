@@ -1767,25 +1767,31 @@ def _attach_turn_action_preview_effects(
                         break
         else:
             later_steps = steps[fee_index + 1 :]
-            attached = False
-            for step in reversed(later_steps):
-                if step["kind"] in {
-                    "resolution",
-                    "hire",
-                    "resource",
-                    "combination",
-                    "building",
-                }:
-                    step["resource_delta"] = resource_delta
-                    attached = True
-                    break
-            if not attached:
-                fee_step = steps[fee_index]
-                existing = fee_step.get("resource_delta", {})
-                fee_step["resource_delta"] = {
-                    resource: int(existing.get(resource, 0)) + int(resource_delta.get(resource, 0))
-                    for resource in COMBINATION_STOCKS
-                }
+            if not any(
+                "resource_delta" in step and step["kind"] != "ordination"
+                for step in later_steps
+            ):
+                attached = False
+                for step in reversed(later_steps):
+                    if step["kind"] in {
+                        "resolution",
+                        "hire",
+                        "resource",
+                        "combination",
+                        "building",
+                    }:
+                        step["resource_delta"] = resource_delta
+                        attached = True
+                        break
+                if not attached:
+                    fee_step = steps[fee_index]
+                    existing = fee_step.get("resource_delta", {})
+                    fee_step["resource_delta"] = {
+                        resource: (
+                            int(existing.get(resource, 0)) + int(resource_delta.get(resource, 0))
+                        )
+                        for resource in COMBINATION_STOCKS
+                    }
     building_id = effects.get("building_constructed")
     if building_id is not None:
         for step in steps:

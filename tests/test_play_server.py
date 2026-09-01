@@ -5190,6 +5190,46 @@ def test_minority_fee_precedes_construct_payment_and_leaves_every_engine_cost_ac
     }
 
 
+def test_minority_taxation_preview_delta_is_not_attached_to_take_nothing_twice() -> None:
+    scenario = load_scenario(SCENARIOS / "taxation_minor_cost_001.json")
+    actions = {
+        action_id(action): action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+    }
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    minority_taxation = [
+        (candidate, actions[candidate["action_id"]])
+        for candidate in play_server.turn_candidates(scenario.state, scenario.config)
+        if actions[candidate["action_id"]].resolution is TurnResolutionType.TAXATION
+        and any(step.get("minority_fee") for step in candidate["steps"])
+    ]
+
+    assert len(minority_taxation) == 3
+    for candidate, action in minority_taxation:
+        steps = candidate["steps"]
+        take_nothing = next(
+            step
+            for step in steps
+            if step["kind"] == "combination" and step["label"] == "take nothing"
+        )
+        assert take_nothing.get("resource_delta") == {"stone": 0, "silver": 0, "wheat": 0}
+
+        result = apply_action(scenario.state, action, scenario.config)
+        after = result.state.player_state(scenario.state.active_player).resources
+        actual_delta = {
+            resource: getattr(after, resource) - getattr(before, resource)
+            for resource in ("stone", "silver", "wheat")
+        }
+        preview_delta = {
+            resource: sum(
+                int(step.get("resource_delta", {}).get(resource, 0)) for step in steps
+            )
+            for resource in ("stone", "silver", "wheat")
+        }
+        assert preview_delta == actual_delta
+
+
 def test_minority_fee_is_a_category_blind_non_tithe_step_in_the_corpus(corpus_actions) -> None:
     fee_scenarios: set[str] = set()
     fees = 0

@@ -2575,6 +2575,7 @@ def test_library_step_stages_and_confirms_abbey_with_preview_and_reset(page, ser
     _click_handle_centre(page, abbey.element_handle(), require_hit=True)
     page.wait_for_timeout(20)
     assert _confirm_enabled(page), "a complete Library Abbey relocation did not enable Confirm"
+    assert page.locator('[data-turn-step-activation-prompt="true"]').inner_text() == expected_prompt
     assert _visible_active_token_count(page, "abbey") == abbey_before + 1
     assert _lit_city_slots_for_player(page, active_player) == city_before - 1
     _screenshot_turn_prompt(page, SCREENSHOTS / "library-prompt-staged-abbey.png")
