@@ -1926,7 +1926,7 @@
     applyTurnStepRelocationPreview();
     return {
       started: started,
-      resettable: started && answered.length > 0,
+      resettable: answered.length > 0,
       overflow: overflow,
       count: count,
       origin: origin,

@@ -1446,9 +1446,9 @@ def _legal_full_turn_actions_for_state(
                         relation_context=duty_relation_context,
                     )
                 _duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                if player_resources.silver < silver_cost:
-                    continue
                 category_actions = action_options_for_duty_category(duty_category)
+                if player_resources.silver < silver_cost:
+                    category_actions = ()
                 if TurnResolutionType.GIVE_ALMS_PAID in category_actions:
                     strength = _duty_strength_for_position(
                         state,

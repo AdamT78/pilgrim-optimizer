@@ -7543,6 +7543,29 @@ def test_the_first_thing_a_new_game_asks_is_which_board_begins(tmp_path: Path) -
 
 
 @needs_node
+def test_reset_undoes_a_first_player_choice_before_confirmation(tmp_path: Path) -> None:
+    """Naming a first player is an answer the page can discard before it posts the turn."""
+    server = _opening(tmp_path)
+    choices = _players_the_engine_would_accept(server)
+    first, second = choices[:2]
+
+    transcript = _run_script(
+        server,
+        [_name(first), _press("reset"), _name(second)],
+        tmp_path,
+        confirm=True,
+    )
+
+    assert transcript["resetShown"] == [False, True, False, True]
+    assert sorted(transcript["offeredBoards"][2]) == choices
+    assert transcript["posted"]["action_id"] == f"start_player_selection:{second}"
+
+    server.apply(transcript["posted"]["action_id"], server.payload["state_token"])
+    assert server.payload["state"]["phase"] == "setup_sow"
+    assert server.payload["state"]["start_player_id"] == second
+
+
+@needs_node
 def test_start_player_selection_prompt_says_this_round(tmp_path: Path) -> None:
     server = _opening(tmp_path)
     transcript = _run_script(server, [], tmp_path)

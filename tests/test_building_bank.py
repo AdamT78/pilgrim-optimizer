@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 
 import pytest
@@ -48,6 +49,36 @@ def _inline_hired_bank_actions(path: str):
     ]
     bank_actions = [action for action in actions if action.bank_payment_building_id == "bank"]
     return scenario, actions, bank_actions
+
+
+def test_minority_fee_shortage_leaves_only_tithe_actions() -> None:
+    scenario = load_scenario("scenarios/bank_hire_market_construct_substitution_001.json")
+    acting_player = scenario.state.active_player
+    player = scenario.state.player_state(acting_player)
+    no_silver_state = scenario.state.with_player_state(
+        acting_player,
+        replace(player, resources=replace(player.resources, silver=0)),
+    )
+
+    affordable_counts = Counter(
+        action.resolution for action in legal_actions(scenario.state, scenario.config)
+    )
+    no_silver_counts = Counter(
+        (action.selected_duty, action.resolution)
+        for action in legal_actions(no_silver_state, scenario.config)
+    )
+
+    assert affordable_counts == Counter(
+        {
+            TurnResolutionType.CONSTRUCT_BUILDING: 28,
+            TurnResolutionType.CONSTRUCT_ROAD_DEFERRED: 2,
+            TurnResolutionType.TITHE: 5,
+            TurnResolutionType.GIVE_ALMS_PAID: 4,
+            TurnResolutionType.PRODUCE_WHEAT: 1,
+            TurnResolutionType.PRODUCE_STONE: 1,
+        }
+    )
+    assert no_silver_counts == Counter({(4, TurnResolutionType.TITHE): 1})
 
 
 def _legacy_paid_bank_step(scenario) -> BuildingActivationStep:
