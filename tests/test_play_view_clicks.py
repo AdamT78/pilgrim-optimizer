@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from pilgrim.io.scenarios import load_scenario
 from pilgrim.model.actions import EndTurnAction, action_id
 from pilgrim.model.enums import EventType, PlayerId, TurnResolutionType
 from pilgrim.rules.transition import apply_action, apply_turn_step, legal_actions, turn_steps
@@ -4058,6 +4059,156 @@ def test_owned_bank_ordination_payment_uses_only_the_acting_board(page, serve) -
     assert _all_board_snapshots(page) == turn_start
     assert page.locator('[data-ordination-action][data-ordination-active="true"]').count() == 0
     assert cost.inner_text() == ""
+
+
+def test_owned_bank_construct_payment_uses_the_player_board(page, serve) -> None:
+    """Construct locks its selected building before its Bank mix starts spending board stock."""
+    scenario_path = SCENARIOS / "bank_active_construct_minority_substitution_001.json"
+    base_url, server = serve(scenario_path)
+
+    def offered_resources() -> dict[str, int]:
+        return {
+            resource: page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).count()
+            for resource in ("stone", "silver", "wheat")
+        }
+
+    def choose_building(building_id: str) -> None:
+        candidate = next(
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if any(
+                step["kind"] == "building" and step["value"] == building_id
+                for step in candidate["steps"]
+            )
+        )
+        page.goto(base_url, wait_until="networkidle")
+        _click_candidate_prefix(page, candidate, before_kind="building")
+        _click_candidate_step(
+            page,
+            next(step for step in candidate["steps"] if step["kind"] == "building"),
+        )
+
+    def click_resource(resource: str) -> None:
+        _click_handle_centre(
+            page,
+            page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).element_handle(),
+            require_hit=True,
+        )
+
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "building" and step["value"] == "well"
+            for step in candidate["steps"]
+        )
+    )
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="building")
+    cost = page.locator('[data-ordination-payment-cost]')
+    building_choices = page.locator('[data-building-choice-key][data-turn-offered="true"]')
+    before_building = {
+        "building_choices": {
+            building_choices.nth(index).get_attribute("data-building-choice-key")
+            for index in range(building_choices.count())
+        },
+        "resources": offered_resources(),
+        "cost": (cost.inner_text(), cost.get_attribute("data-ordination-payment-cost-shown")),
+    }
+    _click_candidate_step(
+        page,
+        next(step for step in candidate["steps"] if step["kind"] == "building"),
+    )
+    after_building = {
+        "building_choices": building_choices.count(),
+        "resources": offered_resources(),
+        "cost": cost.inner_text(),
+        "confirm": _confirm_enabled(page),
+    }
+    click_resource("silver")
+    after_one_pill = {
+        "resources": offered_resources(),
+        "cost": cost.inner_text(),
+        "confirm": _confirm_enabled(page),
+    }
+    click_resource("silver")
+    after_two_pills = {
+        "resources": offered_resources(),
+        "cost": cost.inner_text(),
+        "confirm": _confirm_enabled(page),
+        "silver": _player_holdings(page)["silver"],
+    }
+
+    scenario = load_scenario(scenario_path)
+    player = scenario.state.player_state(scenario.state.active_player)
+    server.state = scenario.state.with_player_state(
+        scenario.state.active_player,
+        replace(player, resources=replace(player.resources, stone=2, silver=2)),
+    )
+    server._refresh()
+    server._capture_turn_start()
+    partial_totals = {}
+    for building_id in ("brewery", "chapel", "customs_house"):
+        choose_building(building_id)
+        partial_totals[building_id] = {
+            "cost": cost.inner_text(),
+            "resources": offered_resources(),
+            "confirm": _confirm_enabled(page),
+        }
+
+    assert {
+        "before_building": before_building,
+        "after_building": after_building,
+        "after_one_pill": after_one_pill,
+        "after_two_pills": after_two_pills,
+        "partial_totals": partial_totals,
+    } == {
+        "before_building": {
+            "building_choices": {"well", "chapel", "mint", "quarry"},
+            "resources": {"stone": 0, "silver": 0, "wheat": 0},
+            "cost": ("", "false"),
+        },
+        "after_building": {
+            "building_choices": 0,
+            "resources": {"stone": 0, "silver": 1, "wheat": 0},
+            "cost": "Cost 2 · paid 0",
+            "confirm": False,
+        },
+        "after_one_pill": {
+            "resources": {"stone": 0, "silver": 1, "wheat": 0},
+            "cost": "Cost 2 · paid 1",
+            "confirm": False,
+        },
+        "after_two_pills": {
+            "resources": {"stone": 0, "silver": 0, "wheat": 0},
+            "cost": "Cost 2 · paid 2",
+            "confirm": True,
+            "silver": 0,
+        },
+        "partial_totals": {
+            "brewery": {
+                "cost": "Cost 3 · paid 0",
+                "resources": {"stone": 1, "silver": 1, "wheat": 0},
+                "confirm": False,
+            },
+            "chapel": {
+                "cost": "Cost 2 · paid 0",
+                "resources": {"stone": 1, "silver": 1, "wheat": 0},
+                "confirm": False,
+            },
+            "customs_house": {
+                "cost": "Cost 4 · paid 0",
+                "resources": {"stone": 1, "silver": 1, "wheat": 0},
+                "confirm": False,
+            },
+        },
+    }
 
 
 def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> None:

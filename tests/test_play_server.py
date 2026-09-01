@@ -1822,7 +1822,7 @@ def test_every_unresolved_field_has_server_written_player_text(
                 if not isinstance(text, str) or not text:
                     unnamed.append((scenario_path.name, field))
 
-    assert scenarios_checked == 320, "the player-wording check no longer walks the full corpus"
+    assert scenarios_checked == 321, "the player-wording check no longer walks the full corpus"
     assert not unnamed, f"unresolved fields without player text: {unnamed[:10]}"
     # Own-active Bank variants now have a whole payment step, so these fields are deliberately no
     # longer part of a corpus-wide unresolved candidate. Keep the corpus walk proving that exact
@@ -4905,6 +4905,195 @@ def test_owned_bank_construct_payment_names_retained_stone_and_context_resource(
     assert {(step["value"], step["label"]) for step in payment_steps} == {
         ("stone=2,silver=1", "Pay 2 stone and 1 silver."),
         ("stone=1,silver=2", "Pay 1 stone and 2 silver."),
+    }
+
+
+def test_owned_bank_construct_payment_allocates_the_engine_payment_mix() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_active_construct_minority_substitution_001.json")
+
+    def payments_for(candidates: list[dict], building_ids: set[str]) -> set[tuple[str, str, int]]:
+        return {
+            (
+                next(
+                    step["value"]
+                    for step in candidate["steps"]
+                    if step["kind"] == "building"
+                ),
+                step["value"],
+                step["resource_total"],
+            )
+            for candidate in candidates
+            if any(
+                step["kind"] == "building" and step["value"] in building_ids
+                for step in candidate["steps"]
+            )
+            for step in candidate["steps"]
+            if step["kind"] == "combination"
+        }
+
+    base_candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        include_preview_effects=False,
+    )
+    player = scenario.state.player_state(scenario.state.active_player)
+    substituted_state = scenario.state.with_player_state(
+        scenario.state.active_player,
+        replace(player, resources=replace(player.resources, stone=2, silver=2)),
+    )
+    substituted_candidates = play_server.turn_candidates(
+        substituted_state,
+        scenario.config,
+        include_preview_effects=False,
+    )
+    construct_candidates = [
+        candidate
+        for candidate in base_candidates
+        if any(step["kind"] == "resolution" and step["value"] == "construct_building"
+               for step in candidate["steps"])
+    ]
+    construct_bank_actions = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
+        and action.bank_payment_building_id == "bank"
+    ]
+    allocation_steps = [
+        step
+        for candidate in construct_candidates
+        for step in candidate["steps"]
+        if step["kind"] == "combination"
+    ]
+    observed = {
+        "base": payments_for(base_candidates, {"well", "chapel", "mint", "quarry"}),
+        "partial_substitution": payments_for(
+            substituted_candidates,
+            {"brewery", "chapel", "customs_house"},
+        ),
+        "allocation_metadata": {
+            (
+                step["resource_allocation"],
+                step["resource_allocation_no_undo"],
+                step["requires_explicit_answer"],
+                tuple(
+                    (resource, tuple(sorted(delta.items())))
+                    for resource, delta in sorted(step["resource_unit_deltas"].items())
+                ),
+            )
+            for step in allocation_steps
+        },
+        "ordination_only": [
+            (step["kind"], key)
+            for candidate in construct_candidates
+            for step in candidate["steps"]
+            for key in step
+            if step["kind"] == "ordination"
+            or key in {"ends_ordination", "ordination_next_move_consequence"}
+        ],
+        "construct_bank_sources": [
+            action.bank_payment_building_source for action in construct_bank_actions
+        ],
+    }
+
+    assert observed == {
+        "base": {
+            ("well", "silver=2", 2),
+            ("chapel", "silver=2", 2),
+            ("mint", "silver=2", 2),
+            ("quarry", "silver=2", 2),
+        },
+        "partial_substitution": {
+            ("brewery", "stone=2,silver=1", 3),
+            ("brewery", "stone=1,silver=2", 3),
+            ("chapel", "silver=2", 2),
+            ("chapel", "stone=1,silver=1", 2),
+            ("customs_house", "stone=2,silver=2", 4),
+        },
+        "allocation_metadata": {
+            (
+                True,
+                True,
+                True,
+                (
+                    ("silver", (("silver", -1), ("stone", 0), ("wheat", 0))),
+                    ("stone", (("silver", 0), ("stone", -1), ("wheat", 0))),
+                    ("wheat", (("silver", 0), ("stone", 0), ("wheat", -1))),
+                ),
+            )
+        },
+        "ordination_only": [],
+        "construct_bank_sources": ["own_active", "own_active", "own_active", "own_active"],
+    }
+
+
+def test_hired_bank_construct_legacy_labels_name_every_applied_resource_cost() -> None:
+    scenario = load_scenario(SCENARIOS / "bank_hire_market_construct_substitution_001.json")
+    actions = {
+        action_id(action): action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+    }
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    observed = {}
+    for candidate in play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        include_preview_effects=False,
+    ):
+        action = actions[candidate["action_id"]]
+        if not (
+            action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
+            and action.bank_payment_building_id == "bank"
+            and action.bank_payment_building_source == "market"
+        ):
+            continue
+        result = apply_action(scenario.state, action, scenario.config)
+        after = result.state.player_state(scenario.state.active_player).resources
+        spent = {
+            resource: max(0, getattr(before, resource) - getattr(after, resource))
+            for resource in ("stone", "silver", "wheat")
+        }
+        payment = next(step for step in candidate["steps"] if step["kind"] == "combination")
+        observed[action.construct_building_id] = (spent, payment["label"])
+
+    assert observed == {
+        "well": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
+        "chapel": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
+        "mint": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
+        "quarry": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
+        "brewery": (
+            {"stone": 1, "silver": 3, "wheat": 0},
+            "1 stone, 3 silver, hires the Bank",
+        ),
+        "cloisters": (
+            {"stone": 1, "silver": 3, "wheat": 0},
+            "1 stone, 3 silver, hires the Bank",
+        ),
+        "dormitory": (
+            {"stone": 1, "silver": 3, "wheat": 0},
+            "1 stone, 3 silver, hires the Bank",
+        ),
+        "grain_store": (
+            {"stone": 1, "silver": 3, "wheat": 0},
+            "1 stone, 3 silver, hires the Bank",
+        ),
+        "customs_house": (
+            {"stone": 2, "silver": 3, "wheat": 0},
+            "2 stone, 3 silver, hires the Bank",
+        ),
+        "inquisition": (
+            {"stone": 2, "silver": 3, "wheat": 0},
+            "2 stone, 3 silver, hires the Bank",
+        ),
+        "wagon_yard": (
+            {"stone": 2, "silver": 3, "wheat": 0},
+            "2 stone, 3 silver, hires the Bank",
+        ),
+        "bank": (
+            {"stone": 2, "silver": 3, "wheat": 0},
+            "2 stone, 3 silver, hires the Bank",
+        ),
     }
 
 

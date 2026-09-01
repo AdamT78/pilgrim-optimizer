@@ -41,8 +41,8 @@ def test_manifest_records_the_reviewed_modifier_hire_scope() -> None:
     }
 
     assert actual == {
-        "corpus_scenario_count": 320,
-        "capture_scenario_counts": {"legal_actions": 314, "turn_steps": 320},
+        "corpus_scenario_count": 321,
+        "capture_scenario_counts": {"legal_actions": 315, "turn_steps": 321},
         "buildings": {
             "bank": {
                 "standalone_step_scenarios": 1,
@@ -81,23 +81,23 @@ def test_manifest_records_the_reviewed_modifier_hire_scope() -> None:
                 },
             },
             "customs_house": {
-                "standalone_step_scenarios": 7,
+                "standalone_step_scenarios": 8,
                 "after_commit": {
-                    "full_turn_action_count": 114,
+                    "full_turn_action_count": 141,
                     "uses_effect_count": 36,
-                    "does_not_use_effect_count": 78,
+                    "does_not_use_effect_count": 105,
                 },
                 "inline_hire_and_use_exists": False,
                 "removal_safe": False,
                 "only_through_effect_actions": 36,
                 "frontiers": {
                     "classification": "improving",
-                    "frontier_count": 7,
-                    "opt_out_frontier_count": 7,
+                    "frontier_count": 8,
+                    "opt_out_frontier_count": 8,
                     "no_opt_out_frontier_count": 0,
-                    "declining_full_turn_action_count": 126,
+                    "declining_full_turn_action_count": 167,
                 },
             },
         },
-        "capture_impact": {"legal_actions": 9, "turn_steps": 12, "removed_steps": 12},
+        "capture_impact": {"legal_actions": 9, "turn_steps": 13, "removed_steps": 13},
     }

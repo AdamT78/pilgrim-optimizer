@@ -1,9 +1,9 @@
 {
   "capture_scenario_counts": {
-    "legal_actions": 314,
-    "turn_steps": 320
+    "legal_actions": 315,
+    "turn_steps": 321
   },
-  "corpus_scenario_count": 320,
+  "corpus_scenario_count": 321,
   "generated_by": "python3 tools/audits/route_modifier_hire_manifest.py",
   "limitations": [
     "tools/capture_legal_actions.py writes only top-level scenarios, while tools/capture_turn_steps.py also writes scenarios/playtest. Both write each scenario's initial position only; their output does not include later states.",
@@ -592,6 +592,47 @@
         "states_examined": 1
       },
       "scenario": "scenarios/bank_active_ordination_substitution_001.json"
+    },
+    {
+      "capture_file_groups": {
+        "legal_actions": [
+          "target_hire_steps"
+        ],
+        "turn_steps": [
+          "target_hire_steps"
+        ]
+      },
+      "capture_files": {
+        "legal_actions": "bank_hire_market_construct_substitution_001.txt",
+        "turn_steps": "bank_hire_market_construct_substitution_001.txt"
+      },
+      "capture_snapshot": {
+        "legal_actions_count": 41,
+        "offers_target_hire_step": true,
+        "target_hire_step_building_ids": [
+          "customs_house",
+          "wagon_yard"
+        ],
+        "target_hire_step_count": 2,
+        "turn_steps_count": 5
+      },
+      "reachable_committed_step_scan": {
+        "additional_target_hire_windows": [
+          {
+            "after_turn_step_ids": [
+              "turn_step:building_activation:wagon_yard:from:market:pay:silver"
+            ],
+            "legal_actions_count": 27,
+            "target_hire_step_building_ids": [
+              "bank"
+            ],
+            "target_hire_step_count": 1,
+            "turn_steps_count": 4
+          }
+        ],
+        "states_examined": 94
+      },
+      "scenario": "scenarios/bank_hire_market_construct_substitution_001.json"
     },
     {
       "capture_file_groups": {
@@ -7266,11 +7307,12 @@
     }
   ],
   "scope": {
-    "baseline_affected_scenario_count": 27,
-    "current_capture_snapshot_affected_scenario_count": 15,
+    "baseline_affected_scenario_count": 28,
+    "current_capture_snapshot_affected_scenario_count": 16,
     "current_capture_snapshot_matches_reviewed_baseline": false,
     "expected_changed_capture_files": {
       "legal_actions": [
+        "bank_hire_market_construct_substitution_001.txt",
         "bank_hire_market_ordination_001.txt",
         "bank_hire_opponent_ordination_001.txt",
         "cloisters_hire_market_skip_duty_tile_001.txt",
@@ -7299,6 +7341,7 @@
         "wagon_yard_opponent_not_hireable_001.txt"
       ],
       "turn_steps": [
+        "bank_hire_market_construct_substitution_001.txt",
         "bank_hire_market_ordination_001.txt",
         "bank_hire_opponent_ordination_001.txt",
         "cloisters_hire_market_skip_duty_tile_001.txt",
@@ -7460,6 +7503,7 @@
       "legal_actions": [
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
+        "bank_hire_market_construct_substitution_001.txt",
         "bank_hire_market_ordination_001.txt",
         "bank_hire_opponent_ordination_001.txt",
         "building_hire_live_market_001.txt",
@@ -7505,6 +7549,7 @@
       "turn_steps": [
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
+        "bank_hire_market_construct_substitution_001.txt",
         "bank_hire_market_ordination_001.txt",
         "bank_hire_opponent_ordination_001.txt",
         "building_hire_live_market_001.txt",
@@ -9377,6 +9422,85 @@
       {
         "first_later_hire_window": {
           "after_turn_step_ids": [
+            "turn_step:building_relocation:dormitory:from:market:selected:3:pay:silver"
+          ],
+          "hire_frontiers": [
+            {
+              "candidate_hire_step_index": 4,
+              "candidate_step_prefix": [
+                "origin=0",
+                "edge=\"city->north\"",
+                "duty=1",
+                "resolution=\"produce_stone\""
+              ],
+              "complete_option_labels": [
+                "Hire Quarry from market for 1 silver"
+              ],
+              "hire_kind": "enabling",
+              "hire_option_labels": [
+                "Hire Quarry from market for 1 silver"
+              ],
+              "hired_building_ids": [
+                "quarry"
+              ],
+              "offers_opt_out": false
+            },
+            {
+              "candidate_hire_step_index": 4,
+              "candidate_step_prefix": [
+                "origin=0",
+                "edge=\"city->north\"",
+                "duty=1",
+                "resolution=\"produce_wheat\""
+              ],
+              "complete_option_labels": [
+                "Hire Well from market for 1 silver"
+              ],
+              "hire_kind": "enabling",
+              "hire_option_labels": [
+                "Hire Well from market for 1 silver"
+              ],
+              "hired_building_ids": [
+                "well"
+              ],
+              "offers_opt_out": false
+            }
+          ],
+          "legal_actions_count": 6,
+          "new_since_initial_building_ids": [
+            "well",
+            "quarry"
+          ],
+          "options": [
+            {
+              "action_count": 1,
+              "building_id": "well",
+              "candidate_hire_step_indices": [
+                4
+              ],
+              "hire_option_labels": [
+                "Hire Well from market for 1 silver"
+              ]
+            },
+            {
+              "action_count": 1,
+              "building_id": "quarry",
+              "candidate_hire_step_indices": [
+                4
+              ],
+              "hire_option_labels": [
+                "Hire Quarry from market for 1 silver"
+              ]
+            }
+          ],
+          "turn_steps_count": 11
+        },
+        "scenario": "scenarios/bank_hire_market_construct_substitution_001.json",
+        "states_examined": 94
+      },
+      {
+        "first_later_hire_window": {
+          "after_turn_step_ids": [
             "turn_step:building_conversion:grain_store:from:market:direction:buy_wheat:amount:1:pay:stone"
           ],
           "hire_frontiers": [
@@ -9731,7 +9855,7 @@
       "scenarios/kogge_donated_no_extra_routes_001.json",
       "scenarios/kogge_hire_opponent_city_to_west_001.json"
     ],
-    "union_with_target_hire_step_group_scenario_count": 44
+    "union_with_target_hire_step_group_scenario_count": 45
   },
   "target_building_ids": [
     "kogge",
