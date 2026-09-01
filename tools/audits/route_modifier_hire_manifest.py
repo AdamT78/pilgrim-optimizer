@@ -64,6 +64,7 @@ ROUTE_HIRE_BUILDING_IDS = ("kogge", "cloisters")
 # engine.  The next branch must compare its capture diff to this reviewed baseline before it
 # updates the current-state portion of the generated manifest.
 SCOPED_SCENARIO_PATHS = (
+    "scenarios/bank_hire_market_construct_substitution_001.json",
     "scenarios/bank_hire_market_ordination_001.json",
     "scenarios/bank_hire_opponent_ordination_001.json",
     "scenarios/cloisters_hire_market_skip_duty_tile_001.json",

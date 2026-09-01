@@ -1,0 +1,79 @@
+{
+  "scenario_id": "bank_hire_market_construct_substitution_001",
+  "root_player_id": 0,
+  "opponent_model": {
+    "type": "sandbox_active_player_max"
+  },
+  "player_count": 4,
+  "setup_file": "configs/setups/basic_mancala_sandbox.json",
+  "initial_state": {
+    "merchant_board_position": 2,
+    "timing": {
+      "absolute_turn": 0,
+      "round_number": 13,
+      "season_number": 1,
+      "turn_in_round": 0
+    },
+    "building_market": [
+      "well",
+      "chapel",
+      "mint",
+      "quarry",
+      "brewery",
+      "cloisters",
+      "dormitory",
+      "grain_store",
+      "wagon_yard",
+      "customs_house",
+      "inquisition",
+      "bank"
+    ],
+    "players": {
+      "player_one": {
+        "resources": {
+          "stone": 2,
+          "silver": 3,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 1, 0, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0
+        },
+        "special_activities": {},
+        "player_board_slots": {
+          "active_buildings": [],
+          "donated_buildings": [],
+          "cardinal_favor_tiles": 0
+        }
+      },
+      "player_two": {
+        "resources": {
+          "stone": 0,
+          "silver": 0,
+          "wheat": 0
+        },
+        "workforce": {
+          "mancala": [0, 0, 0, 0, 2, 0, 0, 0, 0],
+          "village": 0,
+          "abbey": 0
+        },
+        "special_activities": {}
+      }
+    },
+    "building_availability": {
+      "well": 2,
+      "chapel": 3,
+      "mint": 4,
+      "quarry": 5,
+      "brewery": 6,
+      "cloisters": 7,
+      "dormitory": 8,
+      "grain_store": 9,
+      "wagon_yard": 10,
+      "customs_house": 11,
+      "inquisition": 12,
+      "bank": 13
+    }
+  }
+}

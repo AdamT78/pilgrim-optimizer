@@ -2176,9 +2176,11 @@
       );
     }
     if (ordinationPaymentCost) {
-      var costShown = resourceAllocationTotal !== null && (
-        pendingOrdinationAnswer !== null || ordinationPaymentStarted
-      );
+      /* Today only Bank payments are no-undo fixed allocations. The question can follow either
+         Ordination or Construct, but the server's allocation flags -- not its resolution name --
+         say when this running total is meaningful. */
+      var costShown = resourceAllocationTotal !== null
+        && resourceAllocationNoUndo(allocationSteps);
       ordinationPaymentCost.textContent = costShown
         ? 'Cost ' + resourceAllocationTotal + ' · paid ' + resourceAllocationAmount(resourceAllocation)
         : '';

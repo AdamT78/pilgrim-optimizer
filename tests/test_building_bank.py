@@ -216,6 +216,91 @@ def test_bank_construct_substitution_spends_silver_and_not_stone() -> None:
     assert "well" in result.state.player_state(PlayerId.PLAYER_ONE).player_board_slots.active_buildings
 
 
+def test_hired_market_bank_construct_substitution_is_reachable_with_the_hire_in_its_cost() -> None:
+    scenario, _actions, bank_actions = _inline_hired_bank_actions(
+        "scenarios/bank_hire_market_construct_substitution_001.json"
+    )
+    construct_bank_actions = [
+        action
+        for action in bank_actions
+        if action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
+    ]
+
+    def action_for_building(building_id: str) -> FullTurnAction:
+        return _first_action(
+            construct_bank_actions,
+            lambda candidate: candidate.construct_building_id == building_id,
+        )
+
+    observed_costs = {}
+    for building_id in ("well", "brewery", "customs_house"):
+        action = action_for_building(building_id)
+        result = apply_action(scenario.state, action, scenario.config)
+        before_resources = scenario.state.player_state(scenario.state.active_player).resources
+        resources = result.state.player_state(PlayerId.PLAYER_ONE).resources
+        payment = {
+            resource: max(0, getattr(before_resources, resource) - getattr(resources, resource))
+            for resource in ("stone", "silver", "wheat")
+        }
+        observed_costs[building_id] = {
+            "payment": payment,
+            "total": sum(payment.values()),
+            "retained_stone": resources.stone,
+        }
+
+    observed = {
+        "building_ids": {action.construct_building_id for action in construct_bank_actions},
+        "count": len(construct_bank_actions),
+        "sources": {action.bank_payment_building_source for action in construct_bank_actions},
+        "replaced_resources": {
+            action.bank_payment_replaced_resource for action in construct_bank_actions
+        },
+        "substitution_silver": {
+            action.bank_payment_silver_amount for action in construct_bank_actions
+        },
+        "hire_payments": {action.hire_payments for action in construct_bank_actions},
+        "costs": observed_costs,
+    }
+    assert observed == {
+        "building_ids": {
+            "bank",
+            "brewery",
+            "chapel",
+            "cloisters",
+            "customs_house",
+            "dormitory",
+            "grain_store",
+            "inquisition",
+            "mint",
+            "quarry",
+            "wagon_yard",
+            "well",
+        },
+        "count": 12,
+        "sources": {"market"},
+        "replaced_resources": {"stone"},
+        "substitution_silver": {1},
+        "hire_payments": {(("bank", "silver"),)},
+        "costs": {
+            "well": {
+                "payment": {"stone": 0, "silver": 3, "wheat": 0},
+                "total": 3,
+                "retained_stone": 2,
+            },
+            "brewery": {
+                "payment": {"stone": 1, "silver": 3, "wheat": 0},
+                "total": 4,
+                "retained_stone": 1,
+            },
+            "customs_house": {
+                "payment": {"stone": 2, "silver": 3, "wheat": 0},
+                "total": 5,
+                "retained_stone": 0,
+            },
+        },
+    }
+
+
 def test_bank_helper_supports_one_resource_type_substitution_including_piety() -> None:
     wheat_sub = _costs_with_bank_substitution(
         required_stone=1,

@@ -2010,13 +2010,12 @@ def _own_active_bank_payment_step(
         ),
         "requires_explicit_answer": True,
     }
-    if action.resolution.value != "ordination":
+    total = sum(amount for _resource, amount in amounts)
+    if action.resolution.value == "ordination":
+        if total != len(action.ordination_steps):
+            raise AssertionError("An Ordination Bank payment must pay once for every move.")
+    else:
         step["label"] = _bank_payment_label(amounts)
-        return step, OWN_ACTIVE_BANK_PAYMENT_FIELDS
-
-    total = len(action.ordination_steps)
-    if sum(amount for _resource, amount in amounts) != total:
-        raise AssertionError("An Ordination Bank payment must pay once for every move.")
 
     def one_paid_stock(resource: str) -> dict[str, int]:
         return {stock: -int(stock == resource) for stock in COMBINATION_STOCKS}
@@ -2025,14 +2024,12 @@ def _own_active_bank_payment_step(
         {
             "resource_allocation": True,
             "resource_total": total,
-            # An Ordination payment is settled by its first stock, so a spent stock cannot be
-            # returned independently while the move total remains fixed.
+            # A Bank payment is settled by its first stock, so a spent stock cannot be returned
+            # independently while the total remains fixed.
             "resource_allocation_no_undo": True,
             "resource_unit_deltas": {
                 resource: one_paid_stock(resource) for resource in COMBINATION_STOCKS
             },
-            # A first stock fixes the Ordination outcome before its fixed-total allocation opens.
-            # Until then, the page keeps the move controls live for another legal Ordination move.
         }
     )
     return step, OWN_ACTIVE_BANK_PAYMENT_FIELDS
@@ -2283,8 +2280,19 @@ def _legacy_bank_payment_step(
                 str(substitution_silver),
             )
         )
-        total_silver = _bank_hire_silver_amount(action) + substitution_silver
-        label = f"{total_silver} silver, hires the Bank"
+        resource_costs, piety_cost = _resource_payment_costs(action, state, config)
+        if piety_cost:
+            raise AssertionError("A legacy Bank payment cannot include a separate piety cost.")
+        hire_resource, hire_cost = _paid_bank_hire_payment(action, state=state, config=config)
+        resource_costs[hire_resource] += hire_cost
+        costs = [
+            f"{resource_costs[resource]} {resource}"
+            for resource in COMBINATION_STOCKS
+            if resource_costs[resource]
+        ]
+        if not costs:
+            raise AssertionError("A paid Bank action must spend at least one resource.")
+        label = f"{', '.join(costs)}, hires the Bank"
         hire_text = _bank_hire_fact(action)
     return (
         {
