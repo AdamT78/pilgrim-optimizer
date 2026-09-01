@@ -4211,6 +4211,142 @@ def test_owned_bank_construct_payment_uses_the_player_board(page, serve) -> None
     }
 
 
+def test_hired_bank_construct_asks_after_building_then_uses_the_acting_board(page, serve) -> None:
+    """Construct fixes its building before a hired Bank decides and allocates its payment."""
+    base_url, server = serve(SCENARIOS / "bank_hire_market_construct_substitution_001.json")
+
+    def offered_resources() -> dict[str, int]:
+        return {
+            resource: page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).count()
+            for resource in ("stone", "silver", "wheat")
+        }
+
+    def offered_buildings() -> set[str | None]:
+        buildings = page.locator('[data-building-choice-key][data-turn-offered="true"]')
+        return {
+            buildings.nth(index).get_attribute("data-building-choice-key")
+            for index in range(buildings.count())
+        }
+
+    def choose_building(building_id: str) -> None:
+        candidate = next(
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if any(
+                step["kind"] == "building" and step["value"] == building_id
+                for step in candidate["steps"]
+            )
+        )
+        page.goto(base_url, wait_until="networkidle")
+        _click_candidate_prefix(page, candidate, before_kind="building")
+        _click_candidate_step(
+            page,
+            next(step for step in candidate["steps"] if step["kind"] == "building"),
+        )
+
+    def click_resource(resource: str) -> None:
+        _click_handle_centre(
+            page,
+            page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).element_handle(),
+            require_hit=True,
+        )
+
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "building" and step["value"] == "well"
+            for step in candidate["steps"]
+        )
+    )
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="building")
+    cost = page.locator("[data-ordination-payment-cost]")
+    assert offered_buildings() == {
+        "well",
+        "chapel",
+        "mint",
+        "quarry",
+        "brewery",
+        "cloisters",
+        "dormitory",
+        "grain_store",
+        "wagon_yard",
+        "customs_house",
+        "inquisition",
+        "bank",
+    }
+    assert not any(
+        "Hire the Bank from" in prompt
+        for prompt in page.locator('[data-turn-prompt][data-turn-offered="true"]').evaluate_all(
+            "nodes => nodes.map(node => node.getAttribute('data-turn-prompt'))"
+        )
+    )
+    assert offered_resources() == {"stone": 0, "silver": 0, "wheat": 0}
+    assert (cost.inner_text(), cost.get_attribute("data-ordination-payment-cost-shown")) == (
+        "",
+        "false",
+    )
+
+    _click_candidate_step(
+        page,
+        next(step for step in candidate["steps"] if step["kind"] == "building"),
+    )
+    hire_prompt = (
+        "player_one: Hire the Bank from the market for 1 silver? "
+        "It lets you pay in coins instead of stone."
+    )
+    hire_prompt_selector = f'[data-turn-prompt="{hire_prompt}"][data-turn-offered="true"]'
+    assert page.locator(hire_prompt_selector).count() == 1
+    assert {
+        value: page.locator(f'[data-combination-key="{value}"][data-turn-offered="true"]').count()
+        for value in ("none", "bank:market")
+    } == {"none": 1, "bank:market": 1}
+    assert offered_buildings() == set()
+    assert offered_resources() == {"stone": 0, "silver": 0, "wheat": 0}
+    assert (cost.inner_text(), cost.get_attribute("data-ordination-payment-cost-shown")) == (
+        "",
+        "false",
+    )
+
+    page.locator('[data-combination-key="none"][data-turn-offered="true"]').click()
+    assert cost.inner_text() == "Cost 2 · paid 0"
+    assert offered_resources() == {"stone": 1, "silver": 1, "wheat": 0}
+    click_resource("stone")
+    assert cost.inner_text() == "Cost 2 · paid 1"
+    # The selected building stays closed while payment is part-complete, so a different cost
+    # cannot be selected under this allocation.
+    assert offered_buildings() == set()
+    click_resource("silver")
+    assert cost.inner_text() == "Cost 2 · paid 2"
+    assert _confirm_enabled(page)
+
+    choose_building("well")
+    page.locator('[data-combination-key="bank:market"][data-turn-offered="true"]').click()
+    assert cost.inner_text() == "Cost 3 · paid 0"
+    assert offered_resources() == {"stone": 0, "silver": 1, "wheat": 0}
+    for paid in range(1, 4):
+        click_resource("silver")
+        assert cost.inner_text() == f"Cost 3 · paid {paid}"
+    assert _confirm_enabled(page)
+
+    choose_building("customs_house")
+    assert page.locator(hire_prompt_selector).count() == 0
+    assert page.locator('[data-turn-hire-fact-active="true"]').inner_text() == (
+        "This action uses the Bank — 1 silver to hire it from the market, and "
+        "1 silver in place of 1 stone."
+    )
+    assert cost.inner_text() == "Cost 5 · paid 0"
+    assert offered_resources() == {"stone": 1, "silver": 1, "wheat": 0}
+    assert offered_buildings() == set()
+
+
 def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> None:
     """A paid Bank decides its hire before its whole engine cost opens as board pills."""
     base_url, _server = serve(SCENARIOS / "bank_hire_market_ordination_001.json")

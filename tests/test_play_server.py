@@ -5027,7 +5027,7 @@ def test_owned_bank_construct_payment_allocates_the_engine_payment_mix() -> None
     }
 
 
-def test_hired_bank_construct_legacy_labels_name_every_applied_resource_cost() -> None:
+def test_hired_bank_construct_asks_after_building_and_allocates_every_applied_cost() -> None:
     scenario = load_scenario(SCENARIOS / "bank_hire_market_construct_substitution_001.json")
     actions = {
         action_id(action): action
@@ -5035,65 +5035,74 @@ def test_hired_bank_construct_legacy_labels_name_every_applied_resource_cost() -
         if isinstance(action, FullTurnAction)
     }
     before = scenario.state.player_state(scenario.state.active_player).resources
-    observed = {}
+    ordination_only_fields = {"ends_ordination", "ordination_next_move_consequence"}
+    observed: dict[str, set[tuple[str | None, str, int, str, str | None]]] = {}
     for candidate in play_server.turn_candidates(
         scenario.state,
         scenario.config,
         include_preview_effects=False,
     ):
         action = actions[candidate["action_id"]]
-        if not (
-            action.resolution is TurnResolutionType.CONSTRUCT_BUILDING
-            and action.bank_payment_building_id == "bank"
-            and action.bank_payment_building_source == "market"
-        ):
+        payments = [step for step in candidate["steps"] if step.get("resource_allocation")]
+        if action.resolution is not TurnResolutionType.CONSTRUCT_BUILDING or not payments:
             continue
+        assert len(payments) == 1
         result = apply_action(scenario.state, action, scenario.config)
         after = result.state.player_state(scenario.state.active_player).resources
         spent = {
             resource: max(0, getattr(before, resource) - getattr(after, resource))
             for resource in ("stone", "silver", "wheat")
         }
-        payment = next(step for step in candidate["steps"] if step["kind"] == "combination")
-        observed[action.construct_building_id] = (spent, payment["label"])
+        question = next(
+            (
+                step
+                for step in candidate["steps"]
+                if step["kind"] == "combination" and not step.get("resource_allocation")
+            ),
+            None,
+        )
+        payment = payments[0]
+        question_value = question["value"] if question is not None else None
+        observed.setdefault(action.construct_building_id, set()).add(
+            (
+                question_value,
+                payment["value"],
+                payment["resource_total"],
+                payment["label"],
+                payment.get("hire_text"),
+            )
+        )
+        assert spent == {
+            resource: int(payment["value"].split(f"{resource}=", 1)[1].split(",", 1)[0])
+            if f"{resource}=" in payment["value"]
+            else 0
+            for resource in ("stone", "silver", "wheat")
+        }
+        assert not ordination_only_fields.intersection(payment)
+        if question is not None:
+            assert not ordination_only_fields.intersection(question)
 
+    hire_fact = (
+        "This action uses the Bank — 1 silver to hire it from the market, and "
+        "1 silver in place of 1 stone."
+    )
     assert observed == {
-        "well": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
-        "chapel": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
-        "mint": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
-        "quarry": ({"stone": 0, "silver": 3, "wheat": 0}, "3 silver, hires the Bank"),
-        "brewery": (
-            {"stone": 1, "silver": 3, "wheat": 0},
-            "1 stone, 3 silver, hires the Bank",
-        ),
-        "cloisters": (
-            {"stone": 1, "silver": 3, "wheat": 0},
-            "1 stone, 3 silver, hires the Bank",
-        ),
-        "dormitory": (
-            {"stone": 1, "silver": 3, "wheat": 0},
-            "1 stone, 3 silver, hires the Bank",
-        ),
-        "grain_store": (
-            {"stone": 1, "silver": 3, "wheat": 0},
-            "1 stone, 3 silver, hires the Bank",
-        ),
-        "customs_house": (
-            {"stone": 2, "silver": 3, "wheat": 0},
-            "2 stone, 3 silver, hires the Bank",
-        ),
-        "inquisition": (
-            {"stone": 2, "silver": 3, "wheat": 0},
-            "2 stone, 3 silver, hires the Bank",
-        ),
-        "wagon_yard": (
-            {"stone": 2, "silver": 3, "wheat": 0},
-            "2 stone, 3 silver, hires the Bank",
-        ),
-        "bank": (
-            {"stone": 2, "silver": 3, "wheat": 0},
-            "2 stone, 3 silver, hires the Bank",
-        ),
+        building: {
+            ("none", "stone=1,silver=1", 2, "Pay 1 stone and 1 silver.", None),
+            ("bank:market", "silver=3", 3, "Pay 3 silver.", hire_fact),
+        }
+        for building in ("well", "chapel", "mint", "quarry")
+    } | {
+        building: {
+            ("none", "stone=2,silver=1", 3, "Pay 2 stone and 1 silver.", None),
+            ("bank:market", "stone=1,silver=3", 4, "Pay 1 stone and 3 silver.", hire_fact),
+        }
+        for building in ("brewery", "cloisters", "dormitory", "grain_store")
+    } | {
+        building: {
+            (None, "stone=2,silver=3", 5, "Pay 2 stone and 3 silver.", hire_fact),
+        }
+        for building in ("wagon_yard", "customs_house", "inquisition", "bank")
     }
 
 
