@@ -1335,6 +1335,9 @@ DUTY_PROMPT = "Choose a duty to take."
 SKIP_PROMPT = "Choose the City or Duty space on your route to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "Choose a resource."
+MINORITY_FEE_PROMPT = (
+    "You are in the minority here. Pay {amount} silver to take this Duty Action."
+)
 BUILDING_PROMPT = "Choose a building."
 HIRE_PROMPT = "Choose whether to hire a building."
 CONFESSION_BOX_PROMPT = "Choose whether to use the Confession Box."
@@ -1483,6 +1486,38 @@ def _resource_delta(before: Any, after: Any) -> dict[str, int]:
     }
 
 
+def _minority_silver_cost_from_events(action: Any, events: Any) -> int:
+    """Read a duty action's fee from the engine event that charged it.
+
+    Tithe deliberately has no ordinary Duty Resolution event and never pays the fee.  Every other
+    duty action names the exact cost it applied there, which keeps presentation out of the business
+    of reconstructing strength or treating Taxation as an exception.
+    """
+    if not isinstance(action, FullTurnAction) or action.resolution.value == "tithe":
+        return 0
+    resolution_events = [event for event in events if event.event_type is EventType.DUTY_RESOLUTION]
+    if len(resolution_events) != 1:
+        raise AssertionError("One non-Tithe duty action must report one Duty Resolution event.")
+    silver_cost = int(dict(resolution_events[0].details).get("silver_cost", 0))
+    if silver_cost < 0:
+        raise AssertionError("A minority fee cannot be negative.")
+    return silver_cost
+
+
+def _minority_silver_cost(action: Any, state: Any, config: Any) -> int:
+    """Apply one enumerated action to ask the engine whether it charged the minority fee."""
+    if not isinstance(action, FullTurnAction) or action.resolution.value == "tithe":
+        return 0
+    try:
+        result = apply_action(state, action, config)
+    except ValueError:
+        # The enumerator deliberately retains a few modifier combinations whose final payment
+        # cannot be replayed. They have no preview either, so do not make a structural caller
+        # reject the whole action surface merely to ask whether this unavailable outcome paid.
+        return 0
+    return _minority_silver_cost_from_events(action, result.events)
+
+
 _PREVIEW_EFFECT_FIELDS: tuple[str, ...] = (
     "resource_delta",
     "building_constructed",
@@ -1598,6 +1633,12 @@ def _turn_action_preview_effects(
         result.events,
         player_name=player.name.lower(),
     )
+    minority_silver_cost = _minority_silver_cost_from_events(action, result.events)
+    if minority_silver_cost:
+        # The fee has its own answer before anything resolution-specific.  The later payment or
+        # effect preview therefore carries only what remains after the engine-charged fee.
+        effects["minority_silver_cost"] = minority_silver_cost
+        resource_delta["silver"] += minority_silver_cost
     if split_ordination_cost and action.resolution.value == "ordination":
         # The Ordination events carry the paid wheat for this exact offered outcome. Keep it
         # separate from route and hire residue so its preview waits for the player's sequence.
@@ -1705,19 +1746,46 @@ def _attach_turn_action_preview_effects(
                 step["resource_delta"] = ordination_resource_delta
                 break
     resource_delta = effects.get("resource_delta")
-    if resource_delta is not None and not any(
-        "resource_delta" in step and step["kind"] != "ordination" for step in steps
-    ):
-        for step in reversed(steps):
-            if step["kind"] in {
-                "resolution",
-                "hire",
-                "resource",
-                "combination",
-                "building",
-            }:
-                step["resource_delta"] = resource_delta
-                break
+    if resource_delta is not None:
+        fee_index = next(
+            (index for index, step in enumerate(steps) if step.get("minority_fee") is not None),
+            None,
+        )
+        if fee_index is None:
+            # Existing resource questions (Tithe and Taxation) already own their own preview
+            # deltas. Keep their placement exactly as it was before a minority fee existed.
+            if not any("resource_delta" in step and step["kind"] != "ordination" for step in steps):
+                for step in reversed(steps):
+                    if step["kind"] in {
+                        "resolution",
+                        "hire",
+                        "resource",
+                        "combination",
+                        "building",
+                    }:
+                        step["resource_delta"] = resource_delta
+                        break
+        else:
+            later_steps = steps[fee_index + 1 :]
+            attached = False
+            for step in reversed(later_steps):
+                if step["kind"] in {
+                    "resolution",
+                    "hire",
+                    "resource",
+                    "combination",
+                    "building",
+                }:
+                    step["resource_delta"] = resource_delta
+                    attached = True
+                    break
+            if not attached:
+                fee_step = steps[fee_index]
+                existing = fee_step.get("resource_delta", {})
+                fee_step["resource_delta"] = {
+                    resource: int(existing.get(resource, 0)) + int(resource_delta.get(resource, 0))
+                    for resource in COMBINATION_STOCKS
+                }
     building_id = effects.get("building_constructed")
     if building_id is not None:
         for step in steps:
@@ -1952,11 +2020,29 @@ def _resource_payment_costs(
             continue
         for resource in COMBINATION_STOCKS:
             resource_costs[resource] += max(0, -int(dict(event.details).get(resource, 0)))
+    minority_silver_cost = _minority_silver_cost_from_events(action, result.events)
+    if minority_silver_cost:
+        resource_costs["silver"] -= minority_silver_cost
+        if resource_costs["silver"] < 0:
+            raise AssertionError("The minority fee cannot exceed the engine-reported silver spend.")
 
     before_player = state.player_state(state.active_player)
     after_player = result.state.player_state(state.active_player)
     piety_cost = max(0, before_player.piety - after_player.piety)
     return resource_costs, piety_cost
+
+
+def _minority_fee_step(amount: int) -> dict | None:
+    """Return the server-described payment that opens every charged duty action."""
+    if amount <= 0:
+        return None
+    return {
+        "kind": "resource",
+        "value": "silver",
+        "prompt": MINORITY_FEE_PROMPT.format(amount=amount),
+        "minority_fee": amount,
+        "resource_delta": {"stone": 0, "silver": -amount, "wheat": 0},
+    }
 
 
 def _resource_payment_label(action: FullTurnAction, state: Any, config: Any) -> str:
@@ -3198,6 +3284,7 @@ def decision_steps(
     own_active_bank_payment_replaced_resource: str | None = None,
     hire_payment_buildings: tuple[str, ...] = (),
     preview_effects: dict[str, Any] | None = None,
+    minority_silver_cost: int | None = None,
     include_preview_effects: bool = True,
 ) -> list[dict]:
     """The questions this action is an answer to, in the order the page asks them.
@@ -3288,6 +3375,11 @@ def decision_steps(
     steps.append(
         {"kind": "resolution", "value": action.resolution.value, "prompt": RESOLUTION_PROMPT}
     )
+    if minority_silver_cost is None:
+        minority_silver_cost = _minority_silver_cost(action, state, config)
+    minority_fee_step = _minority_fee_step(minority_silver_cost)
+    if minority_fee_step is not None:
+        steps.append(minority_fee_step)
     steps += _presented_steps(
         action,
         state=state,
@@ -3316,6 +3408,87 @@ def decision_steps(
         preview_effects = {}
     _attach_turn_action_preview_effects(steps, preview_effects)
     return _address_steps(steps, player_id)
+
+
+def _minority_fee_context(action: FullTurnAction) -> tuple[Any, ...]:
+    """The visible route-and-duty prefix that makes one fee applicable."""
+    return (
+        action.origin,
+        tuple(action.route),
+        action.selected_duty,
+        action.sow_route_omitted_location,
+        action.sow_route_building_id,
+        action.sow_route_building_source,
+        action.sow_route_secondary_building_id,
+        action.sow_route_secondary_building_source,
+    )
+
+
+def _attach_minority_fee_action_unavailability(
+    *,
+    actions: list[Any],
+    state: Any,
+    config: Any,
+    steps_by_action_id: dict[str, list[dict]],
+) -> None:
+    """Put the engine's fee refusal beside the still-live Tithe control.
+
+    The action generator intentionally drops unaffordable duty actions while retaining Tithe.
+    Ask that generator again from a silver-rich copy only to identify the missing action and read
+    its charged fee; the page receives the resulting control reason and does no rule work itself.
+    """
+    live_action_contexts = {
+        _minority_fee_context(action)
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.resolution.value != "tithe"
+    }
+    tithe_actions = [
+        action
+        for action in actions
+        if isinstance(action, FullTurnAction) and action.resolution.value == "tithe"
+        and _minority_fee_context(action) not in live_action_contexts
+    ]
+    if not tithe_actions:
+        return
+    player = state.active_player
+    player_state = state.player_state(player)
+    affordable_state = state.with_player_state(
+        player,
+        dataclasses.replace(
+            player_state,
+            resources=dataclasses.replace(
+                player_state.resources,
+                silver=max(100, player_state.resources.silver),
+            ),
+        ),
+    )
+    potential_actions_by_context: dict[tuple[Any, ...], FullTurnAction] = {}
+    for action in legal_actions(affordable_state, config):
+        if not isinstance(action, FullTurnAction) or action.resolution.value == "tithe":
+            continue
+        potential_actions_by_context.setdefault(_minority_fee_context(action), action)
+
+    fee_by_context: dict[tuple[Any, ...], int] = {}
+    for context, action in potential_actions_by_context.items():
+        fee = _minority_silver_cost(action, affordable_state, config)
+        if fee > player_state.resources.silver:
+            fee_by_context[context] = fee
+
+    for action in tithe_actions:
+        fee = fee_by_context.get(_minority_fee_context(action))
+        if fee is None:
+            continue
+        resolution_step = next(
+            step
+            for step in steps_by_action_id[action_id(action)]
+            if step["kind"] == "resolution"
+        )
+        resolution_step["unavailable_controls"] = [
+            {
+                "control": "action",
+                "reason": f"You are in the minority and cannot pay the {fee} silver.",
+            }
+        ]
 
 
 def _unresolved_fields(
@@ -3838,6 +4011,7 @@ def _turn_candidates_and_auto_family_indexes(
     offer_own_active_bank_payment_by_action_id: dict[str, bool] = {}
     own_active_bank_payment_replaced_resource_by_action_id: dict[str, str | None] = {}
     preview_effects_by_action_id: dict[str, dict[str, Any]] = {}
+    minority_silver_cost_by_action_id: dict[str, int] = {}
     preview_effect_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     for action in actions:
@@ -3876,7 +4050,7 @@ def _turn_candidates_and_auto_family_indexes(
         offer_own_active_bank_payment_by_action_id[move_id] = (
             own_active_bank_payment_replaced_resource is not None
         )
-        preview_effects_by_action_id[move_id] = (
+        preview_effects = (
             _turn_action_preview_effects(
                 action,
                 state,
@@ -3892,6 +4066,12 @@ def _turn_candidates_and_auto_family_indexes(
             )
             if include_preview_effects and isinstance(action, FullTurnAction)
             else {}
+        )
+        preview_effects_by_action_id[move_id] = preview_effects
+        minority_silver_cost_by_action_id[move_id] = (
+            int(preview_effects.get("minority_silver_cost", 0))
+            if include_preview_effects
+            else _minority_silver_cost(action, state, config)
         )
     hire_payment_buildings_by_action_id = _hire_payment_question_buildings_by_action_id(
         actions,
@@ -3926,6 +4106,7 @@ def _turn_candidates_and_auto_family_indexes(
             ),
             hire_payment_buildings=hire_payment_buildings_by_action_id[move_id],
             preview_effects=preview_effects_by_action_id[move_id],
+            minority_silver_cost=minority_silver_cost_by_action_id[move_id],
             include_preview_effects=include_preview_effects,
         )
         steps_by_action_id[move_id] = steps
@@ -3940,6 +4121,12 @@ def _turn_candidates_and_auto_family_indexes(
         actions=actions,
         steps_by_action_id=steps_by_action_id,
         offer_paid_bank_hire_choice_by_action_id=offer_paid_bank_hire_choice_by_action_id,
+    )
+    _attach_minority_fee_action_unavailability(
+        actions=actions,
+        state=state,
+        config=config,
+        steps_by_action_id=steps_by_action_id,
     )
     candidates = []
     for members in grouped.values():

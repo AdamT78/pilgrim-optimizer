@@ -4903,8 +4903,8 @@ def test_owned_bank_construct_payment_names_retained_stone_and_context_resource(
         "player_one: The Bank lets you pay in coins instead of stone. Choose how to pay."
     }
     assert {(step["value"], step["label"]) for step in payment_steps} == {
-        ("stone=2,silver=1", "Pay 2 stone and 1 silver."),
-        ("stone=1,silver=2", "Pay 1 stone and 2 silver."),
+        ("stone=2", "Pay 2 stone."),
+        ("stone=1,silver=1", "Pay 1 stone and 1 silver."),
     }
 
 
@@ -4998,17 +4998,17 @@ def test_owned_bank_construct_payment_allocates_the_engine_payment_mix() -> None
 
     assert observed == {
         "base": {
-            ("well", "silver=2", 2),
-            ("chapel", "silver=2", 2),
-            ("mint", "silver=2", 2),
-            ("quarry", "silver=2", 2),
+            ("well", "silver=1", 1),
+            ("chapel", "silver=1", 1),
+            ("mint", "silver=1", 1),
+            ("quarry", "silver=1", 1),
         },
         "partial_substitution": {
-            ("brewery", "stone=2,silver=1", 3),
-            ("brewery", "stone=1,silver=2", 3),
-            ("chapel", "silver=2", 2),
-            ("chapel", "stone=1,silver=1", 2),
-            ("customs_house", "stone=2,silver=2", 4),
+            ("brewery", "stone=2", 2),
+            ("brewery", "stone=1,silver=1", 2),
+            ("chapel", "silver=1", 1),
+            ("chapel", "stone=1", 1),
+            ("customs_house", "stone=2,silver=1", 3),
         },
         "allocation_metadata": {
             (
@@ -5040,7 +5040,6 @@ def test_hired_bank_construct_asks_after_building_and_allocates_every_applied_co
     for candidate in play_server.turn_candidates(
         scenario.state,
         scenario.config,
-        include_preview_effects=False,
     ):
         action = actions[candidate["action_id"]]
         payments = [step for step in candidate["steps"] if step.get("resource_allocation")]
@@ -5062,6 +5061,7 @@ def test_hired_bank_construct_asks_after_building_and_allocates_every_applied_co
             None,
         )
         payment = payments[0]
+        fee_step = next(step for step in candidate["steps"] if step.get("minority_fee"))
         question_value = question["value"] if question is not None else None
         observed.setdefault(action.construct_building_id, set()).add(
             (
@@ -5077,7 +5077,11 @@ def test_hired_bank_construct_asks_after_building_and_allocates_every_applied_co
             if f"{resource}=" in payment["value"]
             else 0
             for resource in ("stone", "silver", "wheat")
-        }
+        } | {"silver": fee_step["minority_fee"] + (
+            int(payment["value"].split("silver=", 1)[1].split(",", 1)[0])
+            if "silver=" in payment["value"]
+            else 0
+        )}
         assert not ordination_only_fields.intersection(payment)
         if question is not None:
             assert not ordination_only_fields.intersection(question)
@@ -5088,22 +5092,141 @@ def test_hired_bank_construct_asks_after_building_and_allocates_every_applied_co
     )
     assert observed == {
         building: {
-            ("none", "stone=1,silver=1", 2, "Pay 1 stone and 1 silver.", None),
-            ("bank:market", "silver=3", 3, "Pay 3 silver.", hire_fact),
+            ("none", "stone=1", 1, "Pay 1 stone.", None),
+            ("bank:market", "silver=2", 2, "Pay 2 silver.", hire_fact),
         }
         for building in ("well", "chapel", "mint", "quarry")
     } | {
         building: {
-            ("none", "stone=2,silver=1", 3, "Pay 2 stone and 1 silver.", None),
-            ("bank:market", "stone=1,silver=3", 4, "Pay 1 stone and 3 silver.", hire_fact),
+            ("none", "stone=2", 2, "Pay 2 stone.", None),
+            ("bank:market", "stone=1,silver=2", 3, "Pay 1 stone and 2 silver.", hire_fact),
         }
         for building in ("brewery", "cloisters", "dormitory", "grain_store")
     } | {
         building: {
-            (None, "stone=2,silver=3", 5, "Pay 2 stone and 3 silver.", hire_fact),
+            (None, "stone=2,silver=2", 4, "Pay 2 stone and 2 silver.", hire_fact),
         }
         for building in ("wagon_yard", "customs_house", "inquisition", "bank")
     }
+
+
+def test_minority_fee_precedes_construct_payment_and_leaves_every_engine_cost_accounted_for(
+) -> None:
+    scenario = load_scenario(SCENARIOS / "bank_hire_market_construct_substitution_001.json")
+    actions = {
+        action_id(action): action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+    }
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    observed: dict[str, set[tuple[int, int, int]]] = {}
+    for candidate in play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+    ):
+        action = actions[candidate["action_id"]]
+        if action.resolution is not TurnResolutionType.CONSTRUCT_BUILDING:
+            continue
+        resolution_index = next(
+            index
+            for index, step in enumerate(candidate["steps"])
+            if step["kind"] == "resolution"
+        )
+        fee_step = candidate["steps"][resolution_index + 1]
+        assert fee_step["minority_fee"] == 1
+        assert fee_step["value"] == "silver"
+        assert fee_step["prompt"] == (
+            "player_one: You are in the minority here. Pay 1 silver to take this Duty Action."
+        )
+        payment = next(
+            (step for step in candidate["steps"] if step.get("resource_allocation")),
+            None,
+        )
+        if payment is not None:
+            stated = {
+                resource: int(payment["value"].split(f"{resource}=", 1)[1].split(",", 1)[0])
+                if f"{resource}=" in payment["value"]
+                else 0
+                for resource in ("stone", "silver", "wheat")
+            }
+            stated_total = payment["resource_total"]
+        else:
+            # A route-hired Construct has no separate allocation control. Its building step is
+            # still server-described with the residual action cost after the fee.
+            action_cost_steps = [
+                step
+                for step in candidate["steps"][resolution_index + 2 :]
+                if "resource_delta" in step
+            ]
+            assert len(action_cost_steps) == 1
+            stated = {
+                resource: max(0, -int(action_cost_steps[0]["resource_delta"][resource]))
+                for resource in ("stone", "silver", "wheat")
+            }
+            stated_total = sum(stated.values())
+        result = apply_action(scenario.state, action, scenario.config)
+        after = result.state.player_state(scenario.state.active_player).resources
+        spent = {
+            resource: max(0, getattr(before, resource) - getattr(after, resource))
+            for resource in ("stone", "silver", "wheat")
+        }
+        assert spent == {
+            **stated,
+            "silver": stated["silver"] + fee_step["minority_fee"],
+        }
+        observed.setdefault(action.construct_building_id, set()).add(
+            (fee_step["minority_fee"], stated_total, sum(spent.values()))
+        )
+
+    assert observed == {
+        building: {(1, 1, 2), (1, 2, 3)}
+        for building in ("well", "chapel", "mint", "quarry")
+    } | {
+        building: {(1, 2, 3), (1, 3, 4)}
+        for building in ("brewery", "cloisters", "dormitory", "grain_store")
+    } | {
+        building: {(1, 4, 5)}
+        for building in ("wagon_yard", "customs_house", "inquisition", "bank")
+    }
+
+
+def test_minority_fee_is_a_category_blind_non_tithe_step_in_the_corpus(corpus_actions) -> None:
+    fee_scenarios: set[str] = set()
+    fees = 0
+    ordination_candidates = 0
+    for scenario_path, scenario, actions in corpus_actions:
+        candidates = play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            actions=actions,
+            include_preview_effects=False,
+        )
+        player_id = scenario.state.active_player.name.lower()
+        for candidate in candidates:
+            steps = candidate["steps"]
+            resolution_index = next(
+                (index for index, step in enumerate(steps) if step["kind"] == "resolution"),
+                None,
+            )
+            if resolution_index is None:
+                continue
+            fee_step = steps[resolution_index + 1] if resolution_index + 1 < len(steps) else None
+            if fee_step is not None and fee_step.get("minority_fee"):
+                assert steps[resolution_index]["value"] != "tithe"
+                assert fee_step["value"] == "silver"
+                assert fee_step["prompt"] == (
+                    f"{player_id}: You are in the minority here. Pay 1 silver to take this "
+                    "Duty Action."
+                )
+                fees += 1
+                fee_scenarios.add(scenario_path.name)
+            if steps[resolution_index]["value"] == "ordination":
+                ordination_candidates += 1
+                assert fee_step is None or "minority_fee" not in fee_step
+
+    assert fees >= 39, "the corpus no longer exercises a population of minority fee steps"
+    assert len(fee_scenarios) >= 6, "the corpus no longer exercises several duty categories"
+    assert ordination_candidates > 0, "the corpus no longer contains Ordination candidates"
 
 
 def test_bank_payment_labels_keep_one_as_an_explicit_price_amount() -> None:

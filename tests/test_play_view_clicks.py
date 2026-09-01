@@ -3207,6 +3207,7 @@ def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
     base_url, server = serve(SCENARIOS / "playtest" / "movement_2p.json")
     page.goto(base_url, wait_until="networkidle")
     turn_start = server.state
+    red_silver = turn_start.player_state(PlayerId.PLAYER_ONE).resources.silver
     yellow_silver = turn_start.player_state(PlayerId.PLAYER_TWO).resources.silver
 
     def wait_for_turn_start() -> None:
@@ -3250,6 +3251,18 @@ def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
         _click_handle_centre(page, target, require_hit=True)
         page.wait_for_timeout(20)
 
+    assert page.locator(
+        '[data-turn-prompt="player_one: You are in the minority here. '
+        'Pay 1 silver to take this Duty Action."][data-turn-offered="true"]'
+    ).count() == 1
+    fee = page.locator(
+        '[data-active-seat="true"] [data-resource-choice-key="silver"]'
+        '[data-turn-offered="true"]'
+    )
+    assert fee.count() == 1
+    fee.click()
+    # The preview now holds both the one-silver Kogge hire and the separately stated fee.
+    assert _player_holdings(page)["silver"] == red_silver - 2
     assert _confirm_enabled(page), "Kogge route did not enable Confirm"
     _click_handle_point(
         page,
@@ -3263,6 +3276,7 @@ def test_hired_kogge_arrow_shows_its_cost_pays_on_confirm_and_reset_removes_it(
         )"""
     )
 
+    assert server.state.player_state(PlayerId.PLAYER_ONE).resources.silver == red_silver - 2
     assert server.state.player_state(PlayerId.PLAYER_TWO).resources.silver == yellow_silver + 1
     assert "Red hired Kogge from Yellow and paid 1 silver." in page.locator(
         ".log-event"
@@ -4136,12 +4150,6 @@ def test_owned_bank_construct_payment_uses_the_player_board(page, serve) -> None
         "resources": offered_resources(),
         "cost": cost.inner_text(),
         "confirm": _confirm_enabled(page),
-    }
-    click_resource("silver")
-    after_two_pills = {
-        "resources": offered_resources(),
-        "cost": cost.inner_text(),
-        "confirm": _confirm_enabled(page),
         "silver": _player_holdings(page)["silver"],
     }
 
@@ -4166,7 +4174,6 @@ def test_owned_bank_construct_payment_uses_the_player_board(page, serve) -> None
         "before_building": before_building,
         "after_building": after_building,
         "after_one_pill": after_one_pill,
-        "after_two_pills": after_two_pills,
         "partial_totals": partial_totals,
     } == {
         "before_building": {
@@ -4177,33 +4184,28 @@ def test_owned_bank_construct_payment_uses_the_player_board(page, serve) -> None
         "after_building": {
             "building_choices": 0,
             "resources": {"stone": 0, "silver": 1, "wheat": 0},
-            "cost": "Cost 2 · paid 0",
+            "cost": "Cost 1 · paid 0",
             "confirm": False,
         },
         "after_one_pill": {
-            "resources": {"stone": 0, "silver": 1, "wheat": 0},
-            "cost": "Cost 2 · paid 1",
-            "confirm": False,
-        },
-        "after_two_pills": {
             "resources": {"stone": 0, "silver": 0, "wheat": 0},
-            "cost": "Cost 2 · paid 2",
+            "cost": "Cost 1 · paid 1",
             "confirm": True,
             "silver": 0,
         },
         "partial_totals": {
             "brewery": {
-                "cost": "Cost 3 · paid 0",
-                "resources": {"stone": 1, "silver": 1, "wheat": 0},
-                "confirm": False,
-            },
-            "chapel": {
                 "cost": "Cost 2 · paid 0",
                 "resources": {"stone": 1, "silver": 1, "wheat": 0},
                 "confirm": False,
             },
+            "chapel": {
+                "cost": "Cost 1 · paid 0",
+                "resources": {"stone": 1, "silver": 1, "wheat": 0},
+                "confirm": False,
+            },
             "customs_house": {
-                "cost": "Cost 4 · paid 0",
+                "cost": "Cost 3 · paid 0",
                 "resources": {"stone": 1, "silver": 1, "wheat": 0},
                 "confirm": False,
             },
@@ -4316,24 +4318,21 @@ def test_hired_bank_construct_asks_after_building_then_uses_the_acting_board(pag
     )
 
     page.locator('[data-combination-key="none"][data-turn-offered="true"]').click()
-    assert cost.inner_text() == "Cost 2 · paid 0"
-    assert offered_resources() == {"stone": 1, "silver": 1, "wheat": 0}
+    assert cost.inner_text() == "Cost 1 · paid 0"
+    assert offered_resources() == {"stone": 1, "silver": 0, "wheat": 0}
     click_resource("stone")
-    assert cost.inner_text() == "Cost 2 · paid 1"
-    # The selected building stays closed while payment is part-complete, so a different cost
-    # cannot be selected under this allocation.
+    assert cost.inner_text() == "Cost 1 · paid 1"
+    # The paid building remains closed after its one-stone action price is complete.
     assert offered_buildings() == set()
-    click_resource("silver")
-    assert cost.inner_text() == "Cost 2 · paid 2"
     assert _confirm_enabled(page)
 
     choose_building("well")
     page.locator('[data-combination-key="bank:market"][data-turn-offered="true"]').click()
-    assert cost.inner_text() == "Cost 3 · paid 0"
+    assert cost.inner_text() == "Cost 2 · paid 0"
     assert offered_resources() == {"stone": 0, "silver": 1, "wheat": 0}
-    for paid in range(1, 4):
+    for paid in range(1, 3):
         click_resource("silver")
-        assert cost.inner_text() == f"Cost 3 · paid {paid}"
+        assert cost.inner_text() == f"Cost 2 · paid {paid}"
     assert _confirm_enabled(page)
 
     choose_building("customs_house")
@@ -4342,9 +4341,126 @@ def test_hired_bank_construct_asks_after_building_then_uses_the_acting_board(pag
         "This action uses the Bank — 1 silver to hire it from the market, and "
         "1 silver in place of 1 stone."
     )
-    assert cost.inner_text() == "Cost 5 · paid 0"
+    assert cost.inner_text() == "Cost 4 · paid 0"
     assert offered_resources() == {"stone": 1, "silver": 1, "wheat": 0}
     assert offered_buildings() == set()
+
+
+def test_minority_fee_is_paid_before_construct_opens_its_map_choice(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "bank_hire_market_construct_substitution_001.json")
+
+    def offered_resources() -> dict[str, int]:
+        return {
+            resource: page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).count()
+            for resource in ("stone", "silver", "wheat")
+        }
+
+    def offered_buildings() -> set[str | None]:
+        buildings = page.locator('[data-building-choice-key][data-turn-offered="true"]')
+        return {
+            buildings.nth(index).get_attribute("data-building-choice-key")
+            for index in range(buildings.count())
+        }
+
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "building" and step["value"] == "mint"
+            for step in candidate["steps"]
+        )
+        and any(step.get("value") == "none" for step in candidate["steps"])
+    )
+    fee_step = next(step for step in candidate["steps"] if step.get("minority_fee"))
+    mint_step = next(
+        step
+        for step in candidate["steps"]
+        if step["kind"] == "building" and step["value"] == "mint"
+    )
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resource")
+
+    prompt = page.locator(
+        '[data-turn-prompt="player_one: You are in the minority here. '
+        'Pay 1 silver to take this Duty Action."][data-turn-offered="true"]'
+    )
+    assert prompt.count() == 1
+    assert offered_resources() == {"stone": 0, "silver": 1, "wheat": 0}
+    assert offered_buildings() == set()
+    assert _player_holdings(page)["silver"] == 3
+
+    _click_candidate_step(page, fee_step)
+    assert _player_holdings(page)["silver"] == 2
+    assert offered_buildings() == {
+        "well",
+        "chapel",
+        "mint",
+        "quarry",
+        "brewery",
+        "cloisters",
+        "dormitory",
+        "grain_store",
+        "wagon_yard",
+        "customs_house",
+        "inquisition",
+        "bank",
+    }
+
+    _click_candidate_step(page, mint_step)
+    page.locator('[data-combination-key="none"][data-turn-offered="true"]').click()
+    cost = page.locator('[data-ordination-payment-cost]')
+    assert cost.inner_text() == "Cost 1 · paid 0"
+    assert offered_resources() == {"stone": 1, "silver": 0, "wheat": 0}
+
+
+def test_minority_fee_keeps_tithe_live_and_explains_an_unaffordable_action(page, serve) -> None:
+    scenario_path = SCENARIOS / "bank_hire_market_construct_substitution_001.json"
+    base_url, server = serve(scenario_path)
+    scenario = load_scenario(scenario_path)
+    player = scenario.state.player_state(scenario.state.active_player)
+    server.state = scenario.state.with_player_state(
+        scenario.state.active_player,
+        replace(player, resources=replace(player.resources, silver=0)),
+    )
+    server._refresh()
+    server._capture_turn_start()
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "duty" and step["value"] == 4 for step in candidate["steps"])
+    )
+
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    action = page.locator('[data-turn-control="action"]')
+    tithe = page.locator('[data-turn-control="tithe"]')
+    reason = page.locator(
+        '[data-turn-control-unavailable-reason="action"]'
+        '[data-turn-control-reason-shown="true"]'
+    )
+    assert action.is_visible() and not action.is_enabled()
+    assert tithe.is_visible() and tithe.is_enabled()
+    assert reason.inner_text() == "You are in the minority and cannot pay the 1 silver."
+
+
+def test_taxation_minority_fee_uses_the_same_server_sentence(page, serve) -> None:
+    base_url, server = serve(
+        SCENARIOS / "customs_house_active_taxation_beats_larger_stack_001.json"
+    )
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step.get("minority_fee") for step in candidate["steps"])
+    )
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resource")
+    assert page.locator(
+        '[data-turn-prompt="player_one: You are in the minority here. '
+        'Pay 1 silver to take this Duty Action."][data-turn-offered="true"]'
+    ).count() == 1
 
 
 def test_hired_bank_ordination_asks_then_uses_the_acting_board(page, serve) -> None:
