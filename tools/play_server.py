@@ -2080,16 +2080,19 @@ def _paid_bank_hire_step(
     if source_label is None:
         # The no-Bank half of this choice has no source of its own. Its paired Bank action supplied
         # the ability record above, while this value is deliberately the player's refusal.
+        step = {
+            "kind": "combination",
+            "value": "none",
+            "label": "Pay without it",
+            "prompt": _paid_bank_hire_prompt(source, replaced_resource=replaced_resource),
+        }
+        if action.resolution.value == "ordination":
+            # Ordination alone has an extendable move phase.  Construct has already fixed its
+            # building, so it must not inherit a movement-only fact merely because the question
+            # uses the same Bank-payment shape.
+            step["ends_ordination"] = True
         return (
-            {
-                "kind": "combination",
-                "value": "none",
-                "label": "Pay without it",
-                "prompt": _paid_bank_hire_prompt(source, replaced_resource=replaced_resource),
-                # A Bank answer settles the Ordination sequence before the payment allocation
-                # opens.  The page reads this seam fact; it does not infer that a hire is final.
-                "ends_ordination": True,
-            },
+            step,
             BANK_PAYMENT_FIELDS,
         )
 
@@ -2099,18 +2102,20 @@ def _paid_bank_hire_step(
         hire_source = _building_ability_party_name(source_label)
     if not hire_source:
         raise AssertionError("A paid Bank hire question requires a player-facing source.")
+    step = {
+        "kind": "combination",
+        "value": f"bank:{source_label}",
+        "label": f"Hire the Bank for {_building_hire_cost_phrase(source)}",
+        "prompt": _paid_bank_hire_prompt(
+            source,
+            replaced_resource=replaced_resource,
+            hire_source=hire_source,
+        ),
+    }
+    if action.resolution.value == "ordination":
+        step["ends_ordination"] = True
     return (
-        {
-            "kind": "combination",
-            "value": f"bank:{source_label}",
-            "label": f"Hire the Bank for {_building_hire_cost_phrase(source)}",
-            "prompt": _paid_bank_hire_prompt(
-                source,
-                replaced_resource=replaced_resource,
-                hire_source=hire_source,
-            ),
-            "ends_ordination": True,
-        },
+        step,
         BANK_PAYMENT_FIELDS,
     )
 
@@ -2146,13 +2151,14 @@ def _paid_bank_payment_step(
 ) -> tuple[dict, tuple[str, ...]]:
     """Put the selected Bank path's full engine cost onto the acting player's board.
 
-    The preceding question settles whether the hire fee belongs in this action.  It is still part
-    of the transaction the engine enumerated, so the allocation is read from that transaction
-    rather than reconstructed from the Bank rule or from the Merchant counter in the browser.
+    Where both paths are affordable, the preceding question settles whether the hire fee belongs
+    in this action.  It is still part of the transaction the engine enumerated, so the allocation
+    is read from that transaction rather than reconstructed from the Bank rule or from the Merchant
+    counter in the browser.
     """
     resource_costs, piety_cost = _resource_payment_costs(action, state, config)
     if piety_cost:
-        raise AssertionError("A paid Bank Ordination payment cannot include a separate piety cost.")
+        raise AssertionError("A paid Bank payment cannot include a separate piety cost.")
     if _is_paid_bank_payment_action(action):
         hire_resource, hire_cost = _paid_bank_hire_payment(action, state=state, config=config)
         resource_costs[hire_resource] += hire_cost
@@ -2498,7 +2504,7 @@ def _presented(
     if offer_bank_payment and isinstance(action, FullTurnAction):
         if state is None or config is None:
             raise ValueError("state and config are required to present Bank payment choices.")
-        if action.resolution.value == "ordination":
+        if action.resolution.value in {"ordination", "construct_building"}:
             if offer_paid_bank_hire_choice:
                 if (
                     paid_bank_hire_source is None
@@ -2521,8 +2527,10 @@ def _presented(
                 )
                 for step, _fields in bank_hire_resource_steps:
                     # Cornucopia's stock is the remaining answer to this same Bank hire.  It ends
-                    # the Ordination sequence just like the concrete-resource Bank button above.
-                    step["ends_ordination"] = True
+                    # Ordination only: Construct already closed its building choice, and has no
+                    # iterative movement question to settle.
+                    if action.resolution.value == "ordination":
+                        step["ends_ordination"] = True
                 presented.extend(bank_hire_resource_steps)
             presented.append(_paid_bank_payment_step(action, state=state, config=config))
         else:
