@@ -1,9 +1,9 @@
 {
   "capture_scenario_counts": {
-    "legal_actions": 316,
-    "turn_steps": 322
+    "legal_actions": 317,
+    "turn_steps": 323
   },
-  "corpus_scenario_count": 322,
+  "corpus_scenario_count": 323,
   "generated_by": "python3 tools/audits/route_modifier_hire_manifest.py",
   "limitations": [
     "tools/capture_legal_actions.py writes only top-level scenarios, while tools/capture_turn_steps.py also writes scenarios/playtest. Both write each scenario's initial position only; their output does not include later states.",
@@ -144,6 +144,32 @@
         "states_examined": 1
       },
       "scenario": "scenarios/allocation_chapter_house_two_second_targets_001.json"
+    },
+    {
+      "capture_file_groups": {
+        "legal_actions": [
+          "sow_carried_hires"
+        ],
+        "turn_steps": [
+          "sow_carried_hires"
+        ]
+      },
+      "capture_files": {
+        "legal_actions": "allocation_hire_infirmary_chapter_house_bank_001.txt",
+        "turn_steps": "allocation_hire_infirmary_chapter_house_bank_001.txt"
+      },
+      "capture_snapshot": {
+        "legal_actions_count": 78,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
+      },
+      "reachable_committed_step_scan": {
+        "additional_target_hire_windows": [],
+        "states_examined": 1
+      },
+      "scenario": "scenarios/allocation_hire_infirmary_chapter_house_bank_001.json"
     },
     {
       "capture_file_groups": {
@@ -7451,9 +7477,10 @@
     }
   },
   "sow_carried_hire_group": {
-    "baseline_initial_affected_scenario_count": 21,
+    "baseline_initial_affected_scenario_count": 22,
     "building_ids": [
       "infirmary",
+      "chapter_house",
       "mill",
       "well",
       "chapel",
@@ -7463,24 +7490,26 @@
     "candidate_hire_step_index_basis": "zero-based",
     "current_initial_action_counts_by_building": {
       "chapel": 2,
-      "infirmary": 90,
+      "chapter_house": 2,
+      "infirmary": 154,
       "mill": 30,
       "mint": 1,
       "quarry": 1,
       "well": 17
     },
-    "current_initial_affected_scenario_count": 21,
+    "current_initial_affected_scenario_count": 22,
     "current_initial_hire_frontier_counts_by_kind": {
       "enabling": 15,
-      "improving": 12
+      "improving": 13
     },
     "current_initial_scenario_counts_by_hire_kind": {
       "enabling": 10,
-      "improving": 12
+      "improving": 13
     },
     "current_initial_snapshot_matches_reviewed_baseline": true,
     "expected_changed_capture_files": {
       "legal_actions": [
+        "allocation_hire_infirmary_chapter_house_bank_001.txt",
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
         "bank_active_give_alms_hire_mill_market_wheat3_001.txt",
@@ -7504,6 +7533,7 @@
         "produce_wheat_hire_well_opponent_001.txt"
       ],
       "turn_steps": [
+        "allocation_hire_infirmary_chapter_house_bank_001.txt",
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
         "bank_active_give_alms_hire_mill_market_wheat3_001.txt",
@@ -7529,6 +7559,7 @@
     },
     "expected_changed_capture_files_for_union": {
       "legal_actions": [
+        "allocation_hire_infirmary_chapter_house_bank_001.txt",
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
         "bank_active_give_alms_hire_mill_market_wheat3_001.txt",
@@ -7576,6 +7607,7 @@
         "wagon_yard_opponent_not_hireable_001.txt"
       ],
       "turn_steps": [
+        "allocation_hire_infirmary_chapter_house_bank_001.txt",
         "allocation_hire_infirmary_market_001.txt",
         "allocation_hire_infirmary_opponent_001.txt",
         "bank_active_give_alms_hire_mill_market_wheat3_001.txt",
@@ -7626,6 +7658,96 @@
     },
     "hire_frontier_kind_basis": "enabling has no same-frontier opt-out; improving offers one",
     "initial_capture_scenarios": [
+      {
+        "capture_file_groups": {
+          "legal_actions": [
+            "sow_carried_hires"
+          ],
+          "turn_steps": [
+            "sow_carried_hires"
+          ]
+        },
+        "capture_files": {
+          "legal_actions": "allocation_hire_infirmary_chapter_house_bank_001.txt",
+          "turn_steps": "allocation_hire_infirmary_chapter_house_bank_001.txt"
+        },
+        "capture_snapshot": {
+          "candidate_hire_step_index_basis": "zero-based",
+          "complete_turn_action_count": 78,
+          "complete_turn_without_hire_count": 12,
+          "distinct_hire_frontier_option_labels": [
+            "Don't hire",
+            "Hire Chapter House from market for 1 wheat",
+            "Hire Infirmary from market for 1 wheat"
+          ],
+          "distinct_hire_option_labels": [
+            "Hire Chapter House from market for 1 wheat",
+            "Hire Infirmary from market for 1 wheat"
+          ],
+          "hire_frontiers": [
+            {
+              "candidate_hire_step_index": 4,
+              "candidate_step_prefix": [
+                "origin=7",
+                "edge=\"west->north_west\"",
+                "duty=8",
+                "resolution=\"allocation\""
+              ],
+              "complete_option_labels": [
+                "Don't hire",
+                "Hire Chapter House from market for 1 wheat",
+                "Hire Infirmary from market for 1 wheat"
+              ],
+              "hire_kind": "improving",
+              "hire_option_labels": [
+                "Hire Chapter House from market for 1 wheat",
+                "Hire Infirmary from market for 1 wheat"
+              ],
+              "hired_building_ids": [
+                "infirmary",
+                "chapter_house"
+              ],
+              "offers_opt_out": true
+            }
+          ],
+          "legal_actions_count": 78,
+          "options": [
+            {
+              "action_count": 64,
+              "building_id": "infirmary",
+              "candidate_hire_step_indices": [
+                4
+              ],
+              "hire_option_labels": [
+                "Hire Chapter House from market for 1 wheat",
+                "Hire Infirmary from market for 1 wheat"
+              ]
+            },
+            {
+              "action_count": 2,
+              "building_id": "chapter_house",
+              "candidate_hire_step_indices": [
+                4
+              ],
+              "hire_option_labels": [
+                "Hire Chapter House from market for 1 wheat",
+                "Hire Infirmary from market for 1 wheat"
+              ]
+            }
+          ],
+          "sow_carried_hire_action_count": 66,
+          "sow_carried_hire_building_ids": [
+            "infirmary",
+            "chapter_house"
+          ],
+          "turn_steps_count": 0
+        },
+        "reachable_committed_step_scan": {
+          "first_later_hire_window": null,
+          "states_examined": 1
+        },
+        "scenario": "scenarios/allocation_hire_infirmary_chapter_house_bank_001.json"
+      },
       {
         "capture_file_groups": {
           "legal_actions": [
@@ -9957,7 +10079,7 @@
       "scenarios/kogge_donated_no_extra_routes_001.json",
       "scenarios/kogge_hire_opponent_city_to_west_001.json"
     ],
-    "union_with_target_hire_step_group_scenario_count": 46
+    "union_with_target_hire_step_group_scenario_count": 47
   },
   "target_building_ids": [
     "kogge",

@@ -288,7 +288,7 @@ def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(
 ) -> None:
     # The Bank+Mill carrier is part of the direct scenario corpus; this Kogge audit must keep
     # traversing it even though it cannot move under the legacy Kogge implementation.
-    assert len(corpus_actions) == 316
+    assert len(corpus_actions) == 317
 
     moved_without_kogge_reach: list[str] = []
     checked_without_kogge_reach = 0

@@ -344,10 +344,10 @@ def test_only_known_scenarios_move_with_expected_action_deltas(corpus_actions, p
         if legacy_counts[name] != current_counts[name]
     }
     assert moved == EXPECTED_MOVED_ACTION_DELTAS
-    # The step-free Bank+Mill carrier adds 15 actions to both representations; it does not move
-    # any Kogge+Cloisters delta.
-    assert sum(legacy_counts.values()) == 8304
-    assert sum(current_counts.values()) == 7492
+    # The Chapter House fixture adds 78 actions to both representations; it does not move any
+    # Kogge+Cloisters delta.
+    assert sum(legacy_counts.values()) == 8382
+    assert sum(current_counts.values()) == 7570
 
 
 def test_kogge_and_cloisters_playtest_keeps_spoke_using_kogge_route_counts() -> None:

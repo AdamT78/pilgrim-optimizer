@@ -15,7 +15,7 @@ def test_manifest_covers_the_full_corpus_and_reviewed_initial_hire_boundary() ->
     rows = manifest.collect_capture_snapshot_rows()
     target_rows = tuple(row for row in rows if row.offered_building_ids)
 
-    assert len(rows) == 322
+    assert len(rows) == 323
     assert {row.scenario_path for row in target_rows} < set(manifest.SCOPED_SCENARIO_PATHS)
     assert len(target_rows) == 16
     assert not {
@@ -32,7 +32,7 @@ def test_manifest_walk_records_only_the_reviewed_later_target_hire_window() -> N
     payload = json.loads(manifest.output_path().read_text(encoding="utf-8"))
     rows = payload["scenarios"]
 
-    assert len(rows) == 322
+    assert len(rows) == 323
     assert any(row["reachable_committed_step_scan"]["states_examined"] > 1 for row in rows)
     observed = {
         row["scenario"]: row["reachable_committed_step_scan"]["additional_target_hire_windows"]
@@ -62,8 +62,8 @@ def test_manifest_records_capture_coverage_and_limitations() -> None:
         if row["scenario"] == "scenarios/playtest/movement_2p.json"
     )
 
-    assert payload["corpus_scenario_count"] == 322
-    assert payload["capture_scenario_counts"] == {"legal_actions": 316, "turn_steps": 322}
+    assert payload["corpus_scenario_count"] == 323
+    assert payload["capture_scenario_counts"] == {"legal_actions": 317, "turn_steps": 323}
     assert movement["capture_files"] == {"legal_actions": None, "turn_steps": "movement_2p.txt"}
     assert any("initial position only" in limitation for limitation in payload["limitations"])
     assert any("exact changed IDs" in limitation for limitation in payload["limitations"])
@@ -152,9 +152,10 @@ def test_sow_carried_hire_group_matches_the_reviewed_initial_action_boundary() -
     }
 
     assert tuple(row.scenario_path for row in rows) == manifest.SOW_CARRIED_HIRE_SCENARIO_PATHS
-    assert len(rows) == 21
+    assert len(rows) == 22
     assert action_counts == {
-        "infirmary": 90,
+        "infirmary": 154,
+        "chapter_house": 2,
         "mill": 30,
         "well": 17,
         "chapel": 2,
@@ -237,10 +238,11 @@ def test_sow_carried_hire_manifest_records_overlap_and_later_reachable_windows()
         row for row in payload["scenarios"] if row["scenario"].startswith("scenarios/deep_")
     )
 
-    assert group["current_initial_affected_scenario_count"] == 21
+    assert group["current_initial_affected_scenario_count"] == 22
     assert group["current_initial_action_counts_by_building"] == {
         "chapel": 2,
-        "infirmary": 90,
+        "chapter_house": 2,
+        "infirmary": 154,
         "mill": 30,
         "mint": 1,
         "quarry": 1,
@@ -248,14 +250,14 @@ def test_sow_carried_hire_manifest_records_overlap_and_later_reachable_windows()
     }
     assert group["current_initial_hire_frontier_counts_by_kind"] == {
         "enabling": 15,
-        "improving": 12,
+        "improving": 13,
     }
     assert group["current_initial_scenario_counts_by_hire_kind"] == {
         "enabling": 10,
-        "improving": 12,
+        "improving": 13,
     }
     assert len(group["overlap_with_target_hire_step_group"]) == 3
-    assert group["union_with_target_hire_step_group_scenario_count"] == 46
+    assert group["union_with_target_hire_step_group_scenario_count"] == 47
     assert set(later) == {
         "scenarios/bank_hire_market_construct_substitution_001.json",
         "scenarios/deep_round_eighteen_seed_seven_two_player_001.json",
@@ -275,10 +277,10 @@ def test_sow_carried_hire_manifest_records_overlap_and_later_reachable_windows()
 @pytest.mark.parametrize(
     ("group", "capture", "expected_count"),
     (
-        (manifest.SOW_CARRIED_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 21),
-        (manifest.SOW_CARRIED_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 21),
-        (manifest.UNION_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 45),
-        (manifest.UNION_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 46),
+        (manifest.SOW_CARRIED_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 22),
+        (manifest.SOW_CARRIED_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 22),
+        (manifest.UNION_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 46),
+        (manifest.UNION_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 47),
     ),
 )
 def test_capture_file_change_helper_accepts_each_sow_scope_group(
