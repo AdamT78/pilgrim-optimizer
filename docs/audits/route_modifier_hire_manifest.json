@@ -1,9 +1,9 @@
 {
   "capture_scenario_counts": {
-    "legal_actions": 317,
-    "turn_steps": 323
+    "legal_actions": 318,
+    "turn_steps": 324
   },
-  "corpus_scenario_count": 323,
+  "corpus_scenario_count": 324,
   "generated_by": "python3 tools/audits/route_modifier_hire_manifest.py",
   "limitations": [
     "tools/capture_legal_actions.py writes only top-level scenarios, while tools/capture_turn_steps.py also writes scenarios/playtest. Both write each scenario's initial position only; their output does not include later states.",
@@ -711,6 +711,28 @@
         "states_examined": 1
       },
       "scenario": "scenarios/bank_hire_market_ordination_001.json"
+    },
+    {
+      "capture_file_groups": {
+        "legal_actions": [],
+        "turn_steps": []
+      },
+      "capture_files": {
+        "legal_actions": "bank_hire_market_ordination_different_resource_001.txt",
+        "turn_steps": "bank_hire_market_ordination_different_resource_001.txt"
+      },
+      "capture_snapshot": {
+        "legal_actions_count": 5,
+        "offers_target_hire_step": false,
+        "target_hire_step_building_ids": [],
+        "target_hire_step_count": 0,
+        "turn_steps_count": 0
+      },
+      "reachable_committed_step_scan": {
+        "additional_target_hire_windows": [],
+        "states_examined": 1
+      },
+      "scenario": "scenarios/bank_hire_market_ordination_different_resource_001.json"
     },
     {
       "capture_file_groups": {
@@ -4062,7 +4084,7 @@
         "turn_steps": "kogge_donated_no_extra_routes_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 16,
+        "legal_actions_count": 15,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
           "customs_house"
@@ -4118,7 +4140,7 @@
         "turn_steps": "kogge_hire_opponent_city_to_west_001.txt"
       },
       "capture_snapshot": {
-        "legal_actions_count": 25,
+        "legal_actions_count": 24,
         "offers_target_hire_step": true,
         "target_hire_step_building_ids": [
           "customs_house"
@@ -7492,7 +7514,7 @@
       "chapel": 2,
       "chapter_house": 2,
       "infirmary": 154,
-      "mill": 30,
+      "mill": 28,
       "mint": 1,
       "quarry": 1,
       "well": 17
@@ -8858,7 +8880,7 @@
         },
         "capture_snapshot": {
           "candidate_hire_step_index_basis": "zero-based",
-          "complete_turn_action_count": 8,
+          "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
@@ -8890,10 +8912,10 @@
               "offers_opt_out": true
             }
           ],
-          "legal_actions_count": 8,
+          "legal_actions_count": 7,
           "options": [
             {
-              "action_count": 2,
+              "action_count": 1,
               "building_id": "mill",
               "candidate_hire_step_indices": [
                 4
@@ -8903,7 +8925,7 @@
               ]
             }
           ],
-          "sow_carried_hire_action_count": 2,
+          "sow_carried_hire_action_count": 1,
           "sow_carried_hire_building_ids": [
             "mill"
           ],
@@ -8974,7 +8996,7 @@
         },
         "capture_snapshot": {
           "candidate_hire_step_index_basis": "zero-based",
-          "complete_turn_action_count": 8,
+          "complete_turn_action_count": 7,
           "complete_turn_without_hire_count": 6,
           "distinct_hire_frontier_option_labels": [
             "Don't hire",
@@ -9006,10 +9028,10 @@
               "offers_opt_out": true
             }
           ],
-          "legal_actions_count": 8,
+          "legal_actions_count": 7,
           "options": [
             {
-              "action_count": 2,
+              "action_count": 1,
               "building_id": "mill",
               "candidate_hire_step_indices": [
                 4
@@ -9019,7 +9041,7 @@
               ]
             }
           ],
-          "sow_carried_hire_action_count": 2,
+          "sow_carried_hire_action_count": 1,
           "sow_carried_hire_building_ids": [
             "mill"
           ],
