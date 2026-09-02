@@ -286,7 +286,9 @@ def test_turn_modifier_registry_marks_all_turn_modifiers_as_implemented() -> Non
 def test_kogge_widening_only_moves_corpus_scenarios_where_kogge_is_reachable(
     monkeypatch, corpus_actions
 ) -> None:
-    assert len(corpus_actions) == 315
+    # The Bank+Mill carrier is part of the direct scenario corpus; this Kogge audit must keep
+    # traversing it even though it cannot move under the legacy Kogge implementation.
+    assert len(corpus_actions) == 316
 
     moved_without_kogge_reach: list[str] = []
     checked_without_kogge_reach = 0

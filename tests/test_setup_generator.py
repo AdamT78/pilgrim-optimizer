@@ -195,7 +195,7 @@ def test_setup_generator_initial_state_and_metadata_defaults() -> None:
 def test_all_committed_scenarios_still_load_with_optional_start_player() -> None:
     root = Path(__file__).resolve().parents[1]
     paths = sorted(root.joinpath("scenarios").glob("*.json"))
-    assert len(paths) == 315
+    assert len(paths) == 316
     for path in paths:
         load_scenario(path)
 

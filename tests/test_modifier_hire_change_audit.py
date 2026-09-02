@@ -41,8 +41,8 @@ def test_manifest_records_the_reviewed_modifier_hire_scope() -> None:
     }
 
     assert actual == {
-        "corpus_scenario_count": 321,
-        "capture_scenario_counts": {"legal_actions": 315, "turn_steps": 321},
+        "corpus_scenario_count": 322,
+        "capture_scenario_counts": {"legal_actions": 316, "turn_steps": 322},
         "buildings": {
             "bank": {
                 "standalone_step_scenarios": 1,
@@ -95,7 +95,7 @@ def test_manifest_records_the_reviewed_modifier_hire_scope() -> None:
                     "frontier_count": 8,
                     "opt_out_frontier_count": 8,
                     "no_opt_out_frontier_count": 0,
-                    "declining_full_turn_action_count": 167,
+                    "declining_full_turn_action_count": 169,
                 },
             },
         },

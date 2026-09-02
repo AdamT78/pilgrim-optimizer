@@ -508,6 +508,11 @@ def test_paid_bank_hire_outcomes_are_atomic_and_the_paid_non_use_outcomes_are_re
             if action.bank_payment_building_id == "bank"
             and action.bank_payment_building_source not in (None, "own_active")
         ]
+        legacy_inline_bank_actions = [
+            action
+            for action in inline_bank_actions
+            if action.bank_payment_hired_building_id is None
+        ]
         current_non_bank_actions = [
             action for action in current_actions if action not in inline_bank_actions
         ]
@@ -523,16 +528,19 @@ def test_paid_bank_hire_outcomes_are_atomic_and_the_paid_non_use_outcomes_are_re
             _outcome_without_action_id_spellings(
                 apply_action(scenario.state, action, scenario.config).state
             )
-            for action in inline_bank_actions
+            for action in legacy_inline_bank_actions
         } == legacy_bank_use_outcomes
         assert legacy_paid_non_use_outcomes.isdisjoint(
             {
                 _physical_outcome(apply_action(scenario.state, action, scenario.config).state)
                 for action in current_actions
+                if action.bank_payment_hired_building_id is None
             }
         )
 
-        added_actions.extend(action for action in current_actions if action not in baseline_actions)
+        added_actions.extend(
+            action for action in legacy_inline_bank_actions if action not in baseline_actions
+        )
         preserved_non_bank_outcomes += len(baseline_actions)
         preserved_paid_bank_outcomes += len(legacy_bank_use_outcomes)
         removed_paid_non_use_actions += sum(
@@ -613,4 +621,81 @@ def test_apply_rejects_bank_fields_on_unsupported_resolution() -> None:
         TransitionValidationError,
         match="Bank payment substitution is only supported for Ordination and Construct building actions",
     ):
+        apply_action(scenario.state, invalid_action, scenario.config)
+
+
+def test_bank_replaces_a_hired_mill_payment_without_changing_total_spend() -> None:
+    scenario = load_scenario("scenarios/bank_active_give_alms_hire_mill_market_wheat3_001.json")
+    actions = legal_actions(scenario.state, scenario.config)
+    ordinary_action = _first_action(
+        actions,
+        lambda action: (
+            isinstance(action, FullTurnAction)
+            and action.resolution is TurnResolutionType.GIVE_ALMS_PAID
+            and action.hired_building_id == "mill"
+            and action.bank_payment_building_id is None
+            and action.alms_payment_silver == 0
+            and action.alms_payment_wheat == 3
+        ),
+    )
+    bank_action = _first_action(
+        actions,
+        lambda action: (
+            isinstance(action, FullTurnAction)
+            and action.resolution is TurnResolutionType.GIVE_ALMS_PAID
+            and action.hired_building_id == "mill"
+            and action.bank_payment_building_id == "bank"
+            and action.bank_payment_hired_building_id == "mill"
+            and action.alms_payment_silver == 0
+            and action.alms_payment_wheat == 3
+        ),
+    )
+
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE).resources
+    ordinary_result = apply_action(scenario.state, ordinary_action, scenario.config)
+    bank_result = apply_action(scenario.state, bank_action, scenario.config)
+    ordinary_after = ordinary_result.state.player_state(PlayerId.PLAYER_ONE).resources
+    bank_after = bank_result.state.player_state(PlayerId.PLAYER_ONE).resources
+    ordinary_spend = {
+        resource: getattr(before, resource) - getattr(ordinary_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+    bank_spend = {
+        resource: getattr(before, resource) - getattr(bank_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+
+    assert ordinary_spend == {"stone": 0, "silver": 0, "wheat": 2}
+    assert bank_spend == {"stone": 0, "silver": 1, "wheat": 1}
+    assert sum(bank_spend.values()) == sum(ordinary_spend.values())
+
+
+def test_bank_hire_variants_name_one_hired_payment_target() -> None:
+    scenario = load_scenario("scenarios/bank_active_give_alms_hire_mill_market_wheat3_001.json")
+    bank_actions = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction) and action.bank_payment_building_id == "bank"
+    ]
+
+    assert bank_actions
+    assert all(action.bank_payment_hired_building_id == "mill" for action in bank_actions)
+    assert all(action.hired_building_id == "mill" for action in bank_actions)
+    assert all(action.bank_payment_replaced_resource == "wheat" for action in bank_actions)
+    assert all(action.bank_payment_silver_amount == 1 for action in bank_actions)
+
+
+def test_bank_cannot_substitute_its_own_hire_cost() -> None:
+    scenario = load_scenario("scenarios/bank_hire_market_ordination_001.json")
+    bank_action = _first_action(
+        legal_actions(scenario.state, scenario.config),
+        lambda action: (
+            isinstance(action, FullTurnAction)
+            and action.bank_payment_building_id == "bank"
+            and action.bank_payment_building_source == "market"
+        ),
+    )
+    invalid_action = replace(bank_action, bank_payment_hired_building_id="bank")
+
+    with pytest.raises(TransitionValidationError, match="Bank cannot substitute its own hire cost"):
         apply_action(scenario.state, invalid_action, scenario.config)
