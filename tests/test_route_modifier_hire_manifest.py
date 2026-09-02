@@ -15,7 +15,7 @@ def test_manifest_covers_the_full_corpus_and_reviewed_initial_hire_boundary() ->
     rows = manifest.collect_capture_snapshot_rows()
     target_rows = tuple(row for row in rows if row.offered_building_ids)
 
-    assert len(rows) == 323
+    assert len(rows) == 324
     assert {row.scenario_path for row in target_rows} < set(manifest.SCOPED_SCENARIO_PATHS)
     assert len(target_rows) == 16
     assert not {
@@ -32,7 +32,7 @@ def test_manifest_walk_records_only_the_reviewed_later_target_hire_window() -> N
     payload = json.loads(manifest.output_path().read_text(encoding="utf-8"))
     rows = payload["scenarios"]
 
-    assert len(rows) == 323
+    assert len(rows) == 324
     assert any(row["reachable_committed_step_scan"]["states_examined"] > 1 for row in rows)
     observed = {
         row["scenario"]: row["reachable_committed_step_scan"]["additional_target_hire_windows"]
@@ -62,8 +62,8 @@ def test_manifest_records_capture_coverage_and_limitations() -> None:
         if row["scenario"] == "scenarios/playtest/movement_2p.json"
     )
 
-    assert payload["corpus_scenario_count"] == 323
-    assert payload["capture_scenario_counts"] == {"legal_actions": 317, "turn_steps": 323}
+    assert payload["corpus_scenario_count"] == 324
+    assert payload["capture_scenario_counts"] == {"legal_actions": 318, "turn_steps": 324}
     assert movement["capture_files"] == {"legal_actions": None, "turn_steps": "movement_2p.txt"}
     assert any("initial position only" in limitation for limitation in payload["limitations"])
     assert any("exact changed IDs" in limitation for limitation in payload["limitations"])
@@ -156,7 +156,7 @@ def test_sow_carried_hire_group_matches_the_reviewed_initial_action_boundary() -
     assert action_counts == {
         "infirmary": 154,
         "chapter_house": 2,
-        "mill": 30,
+        "mill": 28,
         "well": 17,
         "chapel": 2,
         "mint": 1,
@@ -243,7 +243,7 @@ def test_sow_carried_hire_manifest_records_overlap_and_later_reachable_windows()
         "chapel": 2,
         "chapter_house": 2,
         "infirmary": 154,
-        "mill": 30,
+        "mill": 28,
         "mint": 1,
         "quarry": 1,
         "well": 17,

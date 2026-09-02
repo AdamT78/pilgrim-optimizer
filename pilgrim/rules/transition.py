@@ -1386,6 +1386,11 @@ def _legal_full_turn_actions_for_state(
                 bank_payment_hired_building_id=bank_payment_hired_building_id,
             )
             for bank_option in bank_options:
+                if _paid_market_bank_hire_is_dominated_by_no_bank_twin(
+                    action=action,
+                    option=bank_option,
+                ):
+                    continue
                 bank_action = _with_bank_payment_fields(action, option=bank_option)
                 actions.add_if_new(bank_action)
 
@@ -6055,6 +6060,28 @@ def _legal_bank_payment_options_for_action(
             )
 
     return tuple(substitutions)
+
+
+def _paid_market_bank_hire_is_dominated_by_no_bank_twin(
+    *,
+    action: FullTurnAction,
+    option: _BankPaymentOption,
+) -> bool:
+    """Whether this paid Bank option can only make its no-Bank twin poorer.
+
+    This deliberately compares one Bank option to the same action before its Bank fields are
+    attached; it is not a general action-dominance search.  A market hire pays the supply, so the
+    Bank-only difference is its own resource payment and the resource it replaces.  Opponent
+    hires are excluded because their payment also changes the opponent's resources.
+    """
+    source = option.source
+    return (
+        action.bank_payment_building_id is None
+        and source.source_type == "live_market_hire"
+        and source.payable_to == "bank"
+        and source.hire_resource == option.replaced_resource
+        and source.hire_cost >= option.silver_amount
+    )
 
 
 def _bank_payment_source_variants(

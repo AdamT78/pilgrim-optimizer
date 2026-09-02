@@ -563,6 +563,118 @@ def test_paid_bank_hire_outcomes_are_atomic_and_the_paid_non_use_outcomes_are_re
     assert len(added_actions) == 6
 
 
+@pytest.mark.parametrize(
+    "scenario_name",
+    (
+        "kogge_donated_no_extra_routes_001.json",
+        "kogge_hire_opponent_city_to_west_001.json",
+    ),
+)
+def test_paid_market_bank_hire_that_pays_in_its_replaced_resource_is_refused(
+    scenario_name: str,
+) -> None:
+    """The two Kogge lines are each worse than their surviving no-Bank twin."""
+    scenario = load_scenario(f"scenarios/{scenario_name}")
+    actions = legal_actions(scenario.state, scenario.config)
+    twin = _first_action(
+        actions,
+        lambda candidate: (
+            isinstance(candidate, FullTurnAction)
+            and candidate.resolution is TurnResolutionType.GIVE_ALMS_PAID
+            and candidate.hired_building_id == "mill"
+            and candidate.hired_building_source == "market"
+            and candidate.bank_payment_building_id is None
+            and candidate.alms_payment_silver == 0
+            and candidate.alms_payment_wheat == 1
+        ),
+    )
+    refused_bank_action = replace(
+        twin,
+        bank_payment_building_id="bank",
+        bank_payment_building_source="market",
+        bank_payment_replaced_resource="wheat",
+        bank_payment_silver_amount=1,
+        bank_payment_hired_building_id="mill",
+        hire_payments=tuple(sorted((*twin.hire_payments, ("bank", "wheat")))),
+    )
+
+    assert twin in actions
+    assert refused_bank_action not in actions
+
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE).resources
+    twin_after = apply_action(scenario.state, twin, scenario.config).state.player_state(
+        PlayerId.PLAYER_ONE
+    ).resources
+    bank_after = apply_action(
+        scenario.state,
+        refused_bank_action,
+        scenario.config,
+    ).state.player_state(PlayerId.PLAYER_ONE).resources
+    twin_spend = {
+        resource: getattr(before, resource) - getattr(twin_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+    bank_spend = {
+        resource: getattr(before, resource) - getattr(bank_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+
+    assert (twin_spend, bank_spend) == (
+        ({"stone": 0, "silver": 0, "wheat": 1}, {"stone": 0, "silver": 1, "wheat": 1})
+    )
+
+
+def test_paid_market_bank_hire_with_a_different_resource_remains_a_real_trade() -> None:
+    scenario = load_scenario(
+        "scenarios/bank_hire_market_ordination_different_resource_001.json"
+    )
+    actions = legal_actions(scenario.state, scenario.config)
+    ordinary_action = _first_action(
+        actions,
+        lambda candidate: (
+            isinstance(candidate, FullTurnAction)
+            and candidate.resolution is TurnResolutionType.ORDINATION
+            and candidate.ordination_steps == ("ordain",)
+            and candidate.bank_payment_building_id is None
+        ),
+    )
+    bank_action = _first_action(
+        actions,
+        lambda candidate: (
+            isinstance(candidate, FullTurnAction)
+            and candidate.resolution is TurnResolutionType.ORDINATION
+            and candidate.ordination_steps == ("ordain",)
+            and candidate.bank_payment_building_id == "bank"
+            and candidate.bank_payment_building_source == "market"
+            and candidate.bank_payment_replaced_resource == "wheat"
+            and dict(candidate.hire_payments).get("bank") == "stone"
+        ),
+    )
+
+    before = scenario.state.player_state(PlayerId.PLAYER_ONE).resources
+    ordinary_after = apply_action(
+        scenario.state,
+        ordinary_action,
+        scenario.config,
+    ).state.player_state(PlayerId.PLAYER_ONE).resources
+    bank_after = apply_action(scenario.state, bank_action, scenario.config).state.player_state(
+        PlayerId.PLAYER_ONE
+    ).resources
+    ordinary_spend = {
+        resource: getattr(before, resource) - getattr(ordinary_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+    bank_spend = {
+        resource: getattr(before, resource) - getattr(bank_after, resource)
+        for resource in ("stone", "silver", "wheat")
+    }
+
+    assert (ordinary_spend, bank_spend) == (
+        ({"stone": 0, "silver": 0, "wheat": 1}, {"stone": 1, "silver": 1, "wheat": 0})
+    )
+    assert bank_spend["wheat"] < ordinary_spend["wheat"]
+
+
 def test_wagon_yard_can_free_hire_bank_and_apply_substitution() -> None:
     scenario = load_scenario(
         "scenarios/wagon_yard_active_free_hire_market_bank_ordination_001.json"
