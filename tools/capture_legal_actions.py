@@ -1,4 +1,4 @@
-"""Dump the exact legal-action list for every scenario, as a refactor tripwire.
+"""Dump the exact legal-action list for every committed and playtest scenario.
 
 The CLI's `legal-actions` summary is human-readable and omits action ids, so it can agree while
 the ids underneath have churned. This writes the ids themselves, in generation order, which is the
@@ -20,7 +20,13 @@ REPO = Path(__file__).resolve().parents[1]
 def main(argv: list[str]) -> int:
     out = Path(argv[0])
     out.mkdir(parents=True, exist_ok=True)
-    for path in sorted(REPO.joinpath("scenarios").glob("*.json")):
+    paths = sorted(
+        (
+            *REPO.joinpath("scenarios").glob("*.json"),
+            *REPO.joinpath("scenarios/playtest").glob("*.json"),
+        )
+    )
+    for path in paths:
         try:
             scenario = load_scenario(path)
             actions = legal_actions(scenario.state, scenario.config)

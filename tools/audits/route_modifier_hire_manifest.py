@@ -251,10 +251,10 @@ def capture_scenario_paths(capture: str, root: Path | None = None) -> tuple[Path
     """Mirror exactly the scenario paths written by one current capture script."""
     base = project_root() if root is None else root
     scenarios = base / "scenarios"
-    if capture == LEGAL_ACTIONS_CAPTURE:
-        return tuple(sorted(scenarios.glob("*.json")))
-    if capture == TURN_STEPS_CAPTURE:
-        return tuple(sorted((*scenarios.glob("*.json"), *(scenarios / "playtest").glob("*.json"))))
+    if capture in CAPTURE_NAMES:
+        return tuple(
+            sorted((*scenarios.glob("*.json"), *(scenarios / "playtest").glob("*.json")))
+        )
     raise ValueError(f"Unknown capture name: {capture!r}")
 
 
@@ -616,7 +616,6 @@ def expected_capture_files(
         capture: frozenset(
             f"{Path(scenario_path).stem}.txt"
             for scenario_path in scoped_scenario_paths(group)
-            if capture != LEGAL_ACTIONS_CAPTURE or Path(scenario_path).parent.name != "playtest"
         )
         for capture in CAPTURE_NAMES
     }
@@ -856,9 +855,8 @@ def generate_manifest(root: Path | None = None) -> str:
             ],
         },
         "limitations": [
-            "tools/capture_legal_actions.py writes only top-level scenarios, while "
-            "tools/capture_turn_steps.py also writes scenarios/playtest. Both write each "
-            "scenario's initial position only; their output does not include later states.",
+            "The legal-action and turn-step captures write each scenario's initial position "
+            "only; their output does not include later states.",
             "This audit exhaustively walks currently legal committed turn steps before a full "
             "action. It does not walk action results or later turns. Today those results have a "
             "committed resolution and cannot offer these pre-resolution hires; revisit this "

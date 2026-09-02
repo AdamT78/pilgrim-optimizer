@@ -911,6 +911,51 @@ def test_resource_preview_reset_restores_pre_click_holdings(page, serve) -> None
     assert _player_holdings(page) == before
 
 
+def test_fixed_hire_payment_requires_its_one_stock_again_after_reset(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "building_hire_live_market_001.json")
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if [step["kind"] for step in candidate["steps"][-2:]] == ["hire", "resource"]
+    )
+    hire_step, payment_step = candidate["steps"][-2:]
+    assert (hire_step["label"], payment_step["prompt"]) == (
+        "Hire Well from market",
+        "player_one: Pay 1 wheat to hire the Well.",
+    )
+
+    def reach_unpaid_hire() -> None:
+        _click_candidate_prefix(page, candidate, before_kind="hire")
+        _click_candidate_step(page, hire_step)
+        page.wait_for_selector(
+            '[data-turn-prompt="player_one: Pay 1 wheat to hire the Well."]'
+            '[data-turn-offered="true"]'
+        )
+        assert {
+            resource: page.locator(
+                f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+                '[data-turn-offered="true"]'
+            ).count()
+            for resource in ("wheat", "silver", "stone")
+        } == {"wheat": 1, "silver": 0, "stone": 0}
+        assert page.locator(
+            '[data-component="player-board-v2"]:not([data-active-seat="true"]) '
+            '[data-resource-choice-key][data-turn-offered="true"]'
+        ).count() == 0
+        assert not _confirm_enabled(page), "Confirm accepted a hire whose payment was unanswered"
+
+    page.goto(base_url, wait_until="networkidle")
+    reach_unpaid_hire()
+    _click_candidate_step(page, payment_step)
+    page.wait_for_selector(
+        '[data-turn-control="confirm"][data-turn-control-enabled="true"]'
+    )
+
+    page.locator('[data-turn-control="reset"][data-turn-control-enabled="true"]').click()
+    page.wait_for_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    reach_unpaid_hire()
+
+
 def test_produce_resource_preview_matches_confirm_and_reset(page, serve) -> None:
     base_url, server = serve(SCENARIOS / "produce_wheat_001.json")
     page.goto(base_url, wait_until="networkidle")
@@ -4679,6 +4724,85 @@ def test_bonus_building_hire_options_are_mouse_reachable(
         assert choice not in set(_offered_combination_values(page)), (
             "clicking a hire option did not advance past the hire step"
         )
+        if scenario_name == "allocation_hire_infirmary_market_001.json" and choice == hire_key:
+            page.wait_for_selector(
+                '[data-turn-prompt="player_one: Pay 1 wheat to hire the Infirmary."]'
+                '[data-turn-offered="true"]'
+            )
+            assert page.locator(
+                '[data-active-seat="true"] [data-resource-choice-key="wheat"]'
+                '[data-turn-offered="true"]'
+            ).count() == 1
+            assert not _confirm_enabled(page)
+            _screenshot_turn_prompt(
+                page,
+                SCREENSHOTS / "hire-payment-infirmary-wheat-pending.png",
+            )
+            _screenshot_taxation_pills(
+                page,
+                SCREENSHOTS / "hire-payment-infirmary-wheat-pending-pills.png",
+            )
+
+
+def test_owned_bank_hire_payment_screenshots_the_fork_and_silver_answer(page, serve) -> None:
+    base_url, server = serve(
+        SCENARIOS / "allocation_hire_infirmary_chapter_house_bank_001.json"
+    )
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "hire" and step["value"] == "infirmary:market"
+            for step in candidate["steps"]
+        )
+        and any(
+            step["kind"] == "resource" and step["value"] == "silver"
+            for step in candidate["steps"]
+        )
+        and any(
+            step["kind"] == "arrangement"
+            and step["value"] == "abbey=-1,road_engineer=+1"
+            for step in candidate["steps"]
+        )
+    )
+    hire_step = next(step for step in candidate["steps"] if step["kind"] == "hire")
+    silver_step = next(
+        step
+        for step in candidate["steps"]
+        if step["kind"] == "resource" and step["value"] == "silver"
+    )
+
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="hire")
+    _click_candidate_step(page, hire_step)
+    page.wait_for_selector(
+        '[data-turn-prompt="player_one: The Bank lets you pay in coins instead of wheat. '
+        'Choose how to pay."][data-turn-offered="true"]'
+    )
+    assert {
+        resource: page.locator(
+            f'[data-active-seat="true"] [data-resource-choice-key="{resource}"]'
+            '[data-turn-offered="true"]'
+        ).count()
+        for resource in ("wheat", "silver", "stone")
+    } == {"wheat": 1, "silver": 1, "stone": 0}
+    assert not _confirm_enabled(page)
+    _screenshot_turn_prompt(
+        page,
+        SCREENSHOTS / "hire-payment-infirmary-bank-pending.png",
+    )
+    _screenshot_taxation_pills(
+        page,
+        SCREENSHOTS / "hire-payment-infirmary-bank-pending-pills.png",
+    )
+
+    silver_before = _player_holdings(page)["silver"]
+    _click_candidate_step(page, silver_step)
+    assert _player_holdings(page)["silver"] == silver_before - 1
+    _screenshot_taxation_pills(
+        page,
+        SCREENSHOTS / "hire-payment-infirmary-bank-silver-answered-pills.png",
+    )
 
 
 def test_seat_choice_keys_are_reachable_for_all_four_seats_and_light_confirm(page, serve) -> None:

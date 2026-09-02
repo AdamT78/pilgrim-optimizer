@@ -63,8 +63,11 @@ def test_manifest_records_capture_coverage_and_limitations() -> None:
     )
 
     assert payload["corpus_scenario_count"] == 324
-    assert payload["capture_scenario_counts"] == {"legal_actions": 318, "turn_steps": 324}
-    assert movement["capture_files"] == {"legal_actions": None, "turn_steps": "movement_2p.txt"}
+    assert payload["capture_scenario_counts"] == {"legal_actions": 324, "turn_steps": 324}
+    assert movement["capture_files"] == {
+        "legal_actions": "movement_2p.txt",
+        "turn_steps": "movement_2p.txt",
+    }
     assert any("initial position only" in limitation for limitation in payload["limitations"])
     assert any("exact changed IDs" in limitation for limitation in payload["limitations"])
 
@@ -105,7 +108,7 @@ def test_capture_file_change_helper_rejects_a_missing_manifest_file() -> None:
 @pytest.mark.parametrize(
     ("capture", "expected_count"),
     (
-        (manifest.LEGAL_ACTIONS_CAPTURE, 12),
+        (manifest.LEGAL_ACTIONS_CAPTURE, 13),
         (manifest.TURN_STEPS_CAPTURE, 13),
     ),
 )
@@ -177,10 +180,10 @@ def test_sow_carried_hire_group_records_candidate_index_and_player_labels() -> N
 
     assert infirmary.options[0].candidate_hire_step_indices == (4,)
     assert infirmary.options[0].hire_option_labels == (
-        "Hire Infirmary from market for 1 wheat",
+        "Hire Infirmary from market",
     )
     assert well.options[0].candidate_hire_step_indices == (6,)
-    assert well.options[0].hire_option_labels == ("Hire Well from market for 1 wheat",)
+    assert well.options[0].hire_option_labels == ("Hire Well from market",)
 
 
 def test_sow_carried_hire_group_records_every_frontier_and_its_complete_options() -> None:
@@ -203,12 +206,12 @@ def test_sow_carried_hire_group_records_every_frontier_and_its_complete_options(
     assert infirmary.hire_frontiers[0].offers_opt_out
     assert infirmary.hire_frontiers[0].complete_option_labels == (
         "Don't hire",
-        "Hire Infirmary from market for 1 wheat",
+        "Hire Infirmary from market",
     )
     assert well.hire_frontiers[0].hire_kind == "enabling"
     assert not well.hire_frontiers[0].offers_opt_out
     assert well.hire_frontiers[0].complete_option_labels == (
-        "Hire Well from market for 1 wheat",
+        "Hire Well from market",
     )
     assert len(deep.hire_frontiers) == 7
     assert sum(frontier.hire_kind == "enabling" for frontier in deep.hire_frontiers) == 6
@@ -279,7 +282,7 @@ def test_sow_carried_hire_manifest_records_overlap_and_later_reachable_windows()
     (
         (manifest.SOW_CARRIED_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 22),
         (manifest.SOW_CARRIED_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 22),
-        (manifest.UNION_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 46),
+        (manifest.UNION_HIRE_GROUP, manifest.LEGAL_ACTIONS_CAPTURE, 47),
         (manifest.UNION_HIRE_GROUP, manifest.TURN_STEPS_CAPTURE, 47),
     ),
 )
