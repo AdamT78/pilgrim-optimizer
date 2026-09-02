@@ -2127,18 +2127,12 @@ def _own_active_bank_payment_step(
     return step, OWN_ACTIVE_BANK_PAYMENT_FIELDS
 
 
-def _bank_hire_silver_amount(action: FullTurnAction) -> int:
-    """Read the Bank hire's silver from the payment tuple carried by this exact action."""
-    amount = sum(
-        building_id == "bank" and resource == "silver"
-        for building_id, resource in tuple(action.hire_payments or ())
-    )
-    if amount <= 0:
-        raise AssertionError("A paid Bank action must carry its silver hire payment.")
-    return amount
-
-
-def _bank_hire_fact(action: FullTurnAction) -> str:
+def _bank_hire_fact(
+    action: FullTurnAction,
+    *,
+    state: Any,
+    config: Any,
+) -> str:
     """State the Bank hire and substitution with the source and amounts the action selected."""
     source = action.bank_payment_building_source
     replaced_resource = action.bank_payment_replaced_resource
@@ -2148,10 +2142,10 @@ def _bank_hire_fact(action: FullTurnAction) -> str:
     hire_source = "the market" if source == "market" else _building_ability_party_name(source)
     if not hire_source:
         raise AssertionError("A Bank hire fact requires a player-facing hire source.")
-    hire_silver = _bank_hire_silver_amount(action)
+    hire_resource, hire_cost = _paid_bank_hire_payment(action, state=state, config=config)
     return (
         "This action uses the Bank — "
-        f"{hire_silver} silver to hire it from {hire_source}, and "
+        f"{hire_cost} {hire_resource} to hire it from {hire_source}, and "
         f"{substitution_silver} silver in place of {substitution_silver} {replaced_resource}."
     )
 
@@ -2317,7 +2311,7 @@ def _paid_bank_hire_payment(
     source = _paid_bank_hire_source_for_action(action, state=state, config=config)
     resource = _hire_payment_map(action).get("bank")
     if resource is None:
-        raise AssertionError("A paid Bank action must carry its chosen hire resource.")
+        raise AssertionError("A paid Bank action must carry a Bank hire payment.")
     if source.hire_cost <= 0:
         raise AssertionError("A paid Bank action must carry a positive ability-record hire cost.")
     return resource, source.hire_cost
@@ -2391,7 +2385,7 @@ def _legacy_bank_payment_step(
         if not costs:
             raise AssertionError("A paid Bank action must spend at least one resource.")
         label = f"{', '.join(costs)}, hires the Bank"
-        hire_text = _bank_hire_fact(action)
+        hire_text = _bank_hire_fact(action, state=state, config=config)
     return (
         {
             "kind": "combination",

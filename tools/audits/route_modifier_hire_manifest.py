@@ -119,6 +119,7 @@ ROUTE_HIRE_SCENARIO_PATHS = (
 SOW_CARRIED_HIRE_SCENARIO_PATHS = (
     "scenarios/allocation_hire_infirmary_market_001.json",
     "scenarios/allocation_hire_infirmary_opponent_001.json",
+    "scenarios/bank_active_give_alms_hire_mill_market_wheat3_001.json",
     "scenarios/building_hire_live_market_001.json",
     "scenarios/building_hire_opponent_owned_001.json",
     "scenarios/clerical_devotion_hire_chapel_market_001.json",

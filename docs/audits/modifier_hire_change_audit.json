@@ -14,7 +14,7 @@
         "source_field": "bank_payment_building_source"
       },
       "inline_hire_and_use": {
-        "action_count": 18,
+        "action_count": 20,
         "criterion": "the effect building-id field names this building and its paired source field is neither null nor own_active in the initial scenario state",
         "examples": [
           {
@@ -124,6 +124,18 @@
             "effect_source": "player_two",
             "hire_payment": "silver",
             "scenario": "scenarios/bank_hire_opponent_ordination_001.json"
+          },
+          {
+            "action_id": "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
+            "effect_source": "market",
+            "hire_payment": "wheat",
+            "scenario": "scenarios/kogge_donated_no_extra_routes_001.json"
+          },
+          {
+            "action_id": "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
+            "effect_source": "market",
+            "hire_payment": "wheat",
+            "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json"
           }
         ],
         "exists": true
@@ -642,7 +654,7 @@
       },
       "same_frontier_opt_out": {
         "classification": "improving",
-        "declining_full_turn_action_count": 167,
+        "declining_full_turn_action_count": 169,
         "frontier_count": 8,
         "no_opt_out_frontier_count": 0,
         "opt_out_frontier_count": 8
@@ -1204,7 +1216,7 @@
               "only_through_step_action_ids": [],
               "only_through_step_effect_action_ids": [],
               "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 10,
+              "only_without_step_action_count": 11,
               "only_without_step_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
                 "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1213,6 +1225,7 @@
                 "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
                 "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
                 "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone"
@@ -1234,7 +1247,7 @@
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
               ],
-              "without_step_action_count": 15,
+              "without_step_action_count": 16,
               "without_step_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone",
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1246,6 +1259,7 @@
                 "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
                 "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
@@ -1255,7 +1269,7 @@
             },
             "same_frontier_opt_out": {
               "classification": "improving",
-              "declining_full_turn_action_count": 15,
+              "declining_full_turn_action_count": 16,
               "declining_full_turn_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone",
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1267,13 +1281,14 @@
                 "turn:sow:0:2:duty:2:action:clerical_silversmith:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat",
                 "turn:sow:0:2:duty:2:action:tithe:sow_route_building:cloisters:from:market:skip:1:hire_payments:cloisters=wheat:gain:silver",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
                 "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
                 "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone"
               ],
-              "full_turn_action_count": 15
+              "full_turn_action_count": 16
             },
             "scenario": "scenarios/kogge_donated_no_extra_routes_001.json",
             "standalone_hire_step": {
@@ -1302,7 +1317,7 @@
               "only_through_step_action_ids": [],
               "only_through_step_effect_action_ids": [],
               "only_through_step_unused_action_ids": [],
-              "only_without_step_action_count": 19,
+              "only_without_step_action_count": 20,
               "only_without_step_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
                 "turn:sow:0:1:duty:1:action:produce_wheat:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1313,6 +1328,7 @@
                 "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
                 "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:tithe:sow_route_building:cloisters:from:market:skip:6:hire_payments:cloisters=wheat:gain:wheat",
                 "turn:sow:0:6:duty:6:action:tithe:sow_route_building:cloisters:from:market:skip:5:hire_payments:cloisters=wheat:gain:stone",
@@ -1341,7 +1357,7 @@
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat"
               ],
-              "without_step_action_count": 24,
+              "without_step_action_count": 25,
               "without_step_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone",
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1355,6 +1371,7 @@
                 "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
                 "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
@@ -1371,7 +1388,7 @@
             },
             "same_frontier_opt_out": {
               "classification": "improving",
-              "declining_full_turn_action_count": 24,
+              "declining_full_turn_action_count": 25,
               "declining_full_turn_action_ids": [
                 "turn:sow:0:1:duty:1:action:produce_stone",
                 "turn:sow:0:1:duty:1:action:produce_stone:sow_route_building:cloisters:from:market:skip:2:hire_payments:cloisters=wheat",
@@ -1385,6 +1402,7 @@
                 "turn:sow:0:3:duty:3:action:build_roads_deferred:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
                 "turn:sow:0:3:duty:3:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:stone",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1",
+                "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:bank_payment_building:bank:from:market:replace:wheat:silver:1:hire:mill:hire_building:mill:from:market:hire_payments:bank=wheat,mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:0:pay_wheat:1:hire_building:mill:from:market:hire_payments:mill=wheat",
                 "turn:sow:0:5:duty:5:action:give_alms_paid:pay_silver:1:pay_wheat:0",
                 "turn:sow:0:5:duty:5:action:tithe:gain:wheat",
@@ -1398,7 +1416,7 @@
                 "turn:sow:0:7:duty:7:action:allocation:allocation_moves:abbey>vestry:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat",
                 "turn:sow:0:7:duty:7:action:tithe:sow_route_building:kogge:from:player_two:hire_payments:kogge=wheat:gain:silver"
               ],
-              "full_turn_action_count": 24
+              "full_turn_action_count": 25
             },
             "scenario": "scenarios/kogge_hire_opponent_city_to_west_001.json",
             "standalone_hire_step": {
@@ -1876,7 +1894,7 @@
         "only_through_step_action_count": 36,
         "only_through_step_effect_action_count": 36,
         "only_through_step_unused_action_count": 0,
-        "only_without_step_action_count": 62,
+        "only_without_step_action_count": 64,
         "safe_without_first_adding_inline_actions": false,
         "scenarios_with_only_through_step_actions": [
           "scenarios/customs_house_hire_market_taxation_majority_001.json",
@@ -1886,15 +1904,15 @@
         ],
         "shared_action_count": 105,
         "through_step_action_count": 141,
-        "without_step_action_count": 167
+        "without_step_action_count": 169
       }
     }
   ],
   "capture_scenario_counts": {
-    "legal_actions": 315,
-    "turn_steps": 321
+    "legal_actions": 316,
+    "turn_steps": 322
   },
-  "corpus_scenario_count": 321,
+  "corpus_scenario_count": 322,
   "generated_by": "python3 tools/audits/modifier_hire_change_audit.py",
   "limitations": [
     "The manifest measures each scenario's initial state, exactly as the two capture scripts do. It does not walk later turns or action results.",
@@ -1921,9 +1939,9 @@
         "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
         "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
       ],
-      "predicted_unchanged_file_count": 306,
+      "predicted_unchanged_file_count": 307,
       "rough_change": "add source-bearing modifier-use FullTurnAction variants for the currently post-step-only effect choices; existing non-hire actions remain",
-      "total_capture_file_count": 315
+      "total_capture_file_count": 316
     },
     "prediction_basis": "current initial-state offers and the effect-use actions visible only after their standalone step; this is a computed scope, not an observed hypothetical diff",
     "turn_steps": {
@@ -1943,10 +1961,10 @@
         "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
         "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
       ],
-      "predicted_unchanged_file_count": 308,
+      "predicted_unchanged_file_count": 309,
       "removed_standalone_activation_step_count": 13,
       "rough_change": "remove one paid target BuildingActivationStep per offer; Bank's free Wagon Yard step stays",
-      "total_capture_file_count": 321
+      "total_capture_file_count": 322
     }
   }
 }

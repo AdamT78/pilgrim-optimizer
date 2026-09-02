@@ -1822,7 +1822,7 @@ def test_every_unresolved_field_has_server_written_player_text(
                 if not isinstance(text, str) or not text:
                     unnamed.append((scenario_path.name, field))
 
-    assert scenarios_checked == 321, "the player-wording check no longer walks the full corpus"
+    assert scenarios_checked == 322, "the player-wording check no longer walks the full corpus"
     assert not unnamed, f"unresolved fields without player text: {unnamed[:10]}"
     # Own-active Bank variants now have a whole payment step, so these fields are deliberately no
     # longer part of a corpus-wide unresolved candidate. Keep the corpus walk proving that exact
@@ -5289,7 +5289,7 @@ def test_bank_payment_labels_keep_one_as_an_explicit_price_amount() -> None:
         ),
         (
             "kogge_donated_no_extra_routes_001.json",
-            (False, None, True, "Cannot be used: no action this turn can use the Bank."),
+            (True, None, False, "Usable: choose it when an action asks how to pay."),
         ),
     ),
 )
@@ -5311,6 +5311,23 @@ def test_paid_bank_tile_follows_whether_an_action_offers_its_payment(
 
     assert tuple(tile[field] for field in ("usable", "reason", "greyed", "status_text")) == expected
     assert play_server._paid_bank_payment_on_offer(actions) is expected[0]
+
+
+def test_paid_bank_hire_fact_names_the_recorded_wheat_cost() -> None:
+    scenario = load_scenario(SCENARIOS / "kogge_donated_no_extra_routes_001.json")
+
+    candidates = play_server.turn_candidates(scenario.state, scenario.config)
+
+    assert candidates
+    assert {
+        step["hire_text"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step.get("hire_text", "").startswith("This action uses the Bank")
+    } == {
+        "This action uses the Bank — 1 wheat to hire it from the market, and "
+        "1 silver in place of 1 wheat."
+    }
 
 
 def test_wagon_yard_free_bank_hire_keeps_its_committed_step_wording() -> None:

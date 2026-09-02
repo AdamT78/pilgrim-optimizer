@@ -246,6 +246,7 @@ class _BankPaymentOption:
     source: BuildingAbilitySource
     replaced_resource: str
     silver_amount: int
+    hired_building_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +257,8 @@ class _ResolvedBankPayment:
     source: BuildingAbilitySource
     replaced_resource: str
     silver_amount: int
+    hired_building_id: str | None = None
+    hired_source: BuildingAbilitySource | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1365,6 +1368,7 @@ def _legal_full_turn_actions_for_state(
         required_wheat: int = 0,
         required_piety: int = 0,
         hired_source: BuildingAbilitySource | None = None,
+        bank_payment_hired_building_id: str | None = None,
     ) -> None:
         if not allow_bank_modifier:
             return
@@ -1383,6 +1387,7 @@ def _legal_full_turn_actions_for_state(
                 required_wheat=required_wheat,
                 required_piety=required_piety,
                 hired_source=hired_source,
+                bank_payment_hired_building_id=bank_payment_hired_building_id,
             )
             for bank_option in bank_options:
                 bank_action = _with_bank_payment_fields(action, option=bank_option)
@@ -1933,6 +1938,14 @@ def _legal_full_turn_actions_for_state(
                                     option=hire_option,
                                 )
                                 actions.add_if_new(hired_infirmary_action)
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=hired_infirmary_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                        hired_source=hire_option.source,
+                                    )
 
                     for hire_option in _legal_hire_payment_options(
                         source=mill_source,
@@ -1974,6 +1987,14 @@ def _legal_full_turn_actions_for_state(
                                     option=hire_option,
                                 )
                                 actions.add_if_new(hired_mill_action)
+                                if bank_modifier_allowed_for_turn:
+                                    _append_bank_payment_variants_for_action(
+                                        action=hired_mill_action,
+                                        state_for_action=state_for_turn,
+                                        required_silver=silver_cost,
+                                        required_wheat=required_wheat,
+                                        hired_source=hire_option.source,
+                                    )
 
                             if owns_active_infirmary:
                                 bonus_sequences = legal_ordination_step_sequences(
@@ -2009,6 +2030,14 @@ def _legal_full_turn_actions_for_state(
                                         option=hire_option,
                                     )
                                     actions.add_if_new(hired_mill_bonus_action)
+                                    if bank_modifier_allowed_for_turn:
+                                        _append_bank_payment_variants_for_action(
+                                            action=hired_mill_bonus_action,
+                                            state_for_action=state_for_turn,
+                                            required_silver=silver_cost,
+                                            required_wheat=required_wheat,
+                                            hired_source=hire_option.source,
+                                        )
                 elif TurnResolutionType.TAXATION in category_actions:
                     strength = _taxation_duty_strength_for_position(
                         state,
@@ -2067,6 +2096,55 @@ def _legal_full_turn_actions_for_state(
                             tithe_resource=tithe_resource,
                         )
                     )
+                actions_before_hire_bank_variants = len(actions)
+                if bank_modifier_allowed_for_turn:
+                    for index in range(actions_before_duty, actions_before_hire_bank_variants):
+                        action = actions[index]
+                        if (
+                            not isinstance(action, FullTurnAction)
+                            or action.hired_building_id is None
+                            or action.bank_payment_building_id is not None
+                        ):
+                            continue
+                        hired_source = _hire_source_for_action(
+                            building_ability_source(
+                                state_for_turn,
+                                config,
+                                acting_player=state.active_player,
+                                building_key=action.hired_building_id,
+                            ),
+                            action,
+                        )
+                        required_silver = silver_cost
+                        required_wheat = 0
+                        if action.resolution is TurnResolutionType.GIVE_ALMS_PAID:
+                            required_silver += action.alms_payment_silver
+                            required_wheat = mill_actual_wheat_cost(action.alms_payment_wheat)
+                        elif action.resolution is TurnResolutionType.ORDINATION:
+                            mill_source = building_ability_source(
+                                state_for_turn,
+                                config,
+                                acting_player=state.active_player,
+                                building_key="mill",
+                            )
+                            required_wheat = _ordination_wheat_cost(
+                                len(action.ordination_steps),
+                                mill_active=(
+                                    action.hired_building_id == "mill"
+                                    or (
+                                        mill_source.source_type == "own_active"
+                                        and mill_source.usable
+                                    )
+                                ),
+                            )
+                        _append_bank_payment_variants_for_action(
+                            action=action,
+                            state_for_action=state_for_turn,
+                            required_silver=required_silver,
+                            required_wheat=required_wheat,
+                            hired_source=hired_source,
+                            bank_payment_hired_building_id=action.hired_building_id,
+                        )
                 if route_option.building_id is not None:
                     for index in range(actions_before_duty, len(actions)):
                         action = actions[index]
@@ -2651,7 +2729,7 @@ def _apply_full_turn_action(
             required_wheat: int = 0,
             required_piety: int = 0,
         ) -> tuple[int, int, int, int]:
-            if bank_payment is None:
+            if bank_payment is None or bank_payment.hired_building_id is not None:
                 return (
                     max(0, required_stone),
                     max(0, required_silver),
@@ -2786,6 +2864,7 @@ def _apply_full_turn_action(
                 action.bank_payment_building_source,
                 action.bank_payment_replaced_resource,
                 action.bank_payment_silver_amount,
+                action.bank_payment_hired_building_id,
             )
         ):
             raise TransitionValidationError(
@@ -2806,13 +2885,22 @@ def _apply_full_turn_action(
                 raise TransitionValidationError(
                     "Bank silver substitution amount must be at least 1."
                 )
-            if action.resolution not in (
+            if action.bank_payment_hired_building_id == _BUILDING_BANK:
+                raise TransitionValidationError("Bank cannot substitute its own hire cost.")
+            if action.bank_payment_hired_building_id is None and action.resolution not in (
                 TurnResolutionType.ORDINATION,
                 TurnResolutionType.CONSTRUCT_BUILDING,
                 TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
             ):
                 raise TransitionValidationError(
                     "Bank payment substitution is only supported for Ordination and Construct building actions."
+                )
+            if (
+                action.bank_payment_hired_building_id is not None
+                and action.hired_building_id != action.bank_payment_hired_building_id
+            ):
+                raise TransitionValidationError(
+                    "Bank hire-payment substitution must target the action's hired building."
                 )
             if has_route_building_id or has_secondary_route_building_id:
                 raise TransitionValidationError(
@@ -2956,10 +3044,6 @@ def _apply_full_turn_action(
                 "hired_building_id and hired_building_source must be set together."
             )
         if action.hired_building_id is not None:
-            if has_bank_payment_modifier:
-                raise TransitionValidationError(
-                    "Combining Bank payment substitution with resolution-level hired building fields is deferred."
-                )
             allowed_hire_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution)
             if allowed_hire_buildings is None:
                 raise TransitionValidationError("This action cannot include hired building fields.")
@@ -3026,6 +3110,7 @@ def _apply_full_turn_action(
                 required_wheat=required_mill_wheat,
                 silver_cost=silver_cost,
                 additional_silver_cost=action.alms_payment_silver,
+                bank_payment=bank_payment,
             )
             mill_waiver = mill_wheat_waiver(required_mill_wheat) if mill_source is not None else 0
             mill_actual_wheat_spent = (
@@ -3040,14 +3125,12 @@ def _apply_full_turn_action(
                 alms_payment_actual_wheat = action.alms_payment_wheat - credited_wheat_waiver
             state_for_give_alms = state_after_sow
             if mill_source is not None and _is_hired_source(mill_source):
-                try:
-                    state_for_give_alms, hire_payment = apply_building_hire_payment(
-                        state_for_give_alms,
-                        acting_player=player,
-                        source=mill_source,
-                    )
-                except ValueError as exc:
-                    raise TransitionValidationError(str(exc)) from exc
+                state_for_give_alms, hire_payment = _apply_hire_payment_with_bank_substitution(
+                    state_for_give_alms,
+                    acting_player=player,
+                    source=mill_source,
+                    bank_payment=bank_payment,
+                )
                 building_hired_events.append(
                     _building_hired_event(
                         source=mill_source,
@@ -3507,6 +3590,7 @@ def _apply_full_turn_action(
                 action=action,
                 required_wheat=required_mill_wheat,
                 silver_cost=silver_cost,
+                bank_payment=bank_payment,
             )
             mill_waiver = mill_wheat_waiver(required_mill_wheat) if mill_source is not None else 0
             mill_actual_wheat_spent = (
@@ -3533,6 +3617,7 @@ def _apply_full_turn_action(
                 silver_cost=silver_cost,
                 ordination_wheat_cost=mill_actual_wheat_spent,
                 mode="ordination",
+                bank_payment=bank_payment,
             )
             ordination_cap_bonus = 1 if ordination_source is not None else 0
             max_ordination_steps = duty_value + ordination_cap_bonus
@@ -3580,14 +3665,12 @@ def _apply_full_turn_action(
             elif mill_source is not None and _is_hired_source(mill_source):
                 hired_ordination_source = mill_source
             if hired_ordination_source is not None:
-                try:
-                    state_for_ordination, hire_payment = apply_building_hire_payment(
-                        state_for_ordination,
-                        acting_player=player,
-                        source=hired_ordination_source,
-                    )
-                except ValueError as exc:
-                    raise TransitionValidationError(str(exc)) from exc
+                state_for_ordination, hire_payment = _apply_hire_payment_with_bank_substitution(
+                    state_for_ordination,
+                    acting_player=player,
+                    source=hired_ordination_source,
+                    bank_payment=bank_payment,
+                )
                 new_player_state = state_for_ordination.player_state(player)
                 building_hired_events.append(
                     _building_hired_event(
@@ -3795,6 +3878,7 @@ def _apply_full_turn_action(
                 duty_value=duty_value,
                 silver_cost=silver_cost,
                 mode="allocation",
+                bank_payment=bank_payment,
             )
             allocation_bonus = 1 if allocation_source is not None else 0
             if allocation_bonus:
@@ -3823,14 +3907,12 @@ def _apply_full_turn_action(
             state_for_allocation = state_after_sow
             new_player_state = state_for_allocation.player_state(player)
             if allocation_source is not None and _is_hired_source(allocation_source):
-                try:
-                    state_for_allocation, hire_payment = apply_building_hire_payment(
-                        state_for_allocation,
-                        acting_player=player,
-                        source=allocation_source,
-                    )
-                except ValueError as exc:
-                    raise TransitionValidationError(str(exc)) from exc
+                state_for_allocation, hire_payment = _apply_hire_payment_with_bank_substitution(
+                    state_for_allocation,
+                    acting_player=player,
+                    source=allocation_source,
+                    bank_payment=bank_payment,
+                )
                 new_player_state = state_for_allocation.player_state(player)
                 building_hired_events.append(
                     _building_hired_event(
@@ -3941,6 +4023,7 @@ def _apply_full_turn_action(
                         player=player,
                         action=action,
                         building_key="well",
+                        bank_payment=bank_payment,
                     )
                     well_bonus = 1 if selected_simple_source is not None else 0
                     produce_resource_bonus = wheat_bonus + well_bonus
@@ -4000,6 +4083,7 @@ def _apply_full_turn_action(
                         player=player,
                         action=action,
                         building_key="quarry",
+                        bank_payment=bank_payment,
                     )
                     quarry_bonus = 1 if selected_simple_source is not None else 0
                     produce_resource_bonus = stone_bonus + quarry_bonus
@@ -4065,14 +4149,15 @@ def _apply_full_turn_action(
                 new_piety_position = state_after_sow.player_state(player).piety
                 state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
                 if selected_simple_source is not None and _is_hired_source(selected_simple_source):
-                    try:
-                        state_after_resolution, hire_payment = apply_building_hire_payment(
-                            state_after_resolution,
-                            acting_player=player,
-                            source=selected_simple_source,
-                        )
-                    except ValueError as exc:
-                        raise TransitionValidationError(str(exc)) from exc
+                    (
+                        state_after_resolution,
+                        hire_payment,
+                    ) = _apply_hire_payment_with_bank_substitution(
+                        state_after_resolution,
+                        acting_player=player,
+                        source=selected_simple_source,
+                        bank_payment=bank_payment,
+                    )
                     new_player_state = state_after_resolution.player_state(player)
                     building_hired_events.append(
                         _building_hired_event(
@@ -4112,6 +4197,7 @@ def _apply_full_turn_action(
                         player=player,
                         action=action,
                         building_key="mint",
+                        bank_payment=bank_payment,
                     )
                     if selected_simple_source is not None:
                         clerical_output_bonus += 1
@@ -4149,6 +4235,7 @@ def _apply_full_turn_action(
                         player=player,
                         action=action,
                         building_key="chapel",
+                        bank_payment=bank_payment,
                     )
                     if selected_simple_source is not None:
                         clerical_output_bonus += 1
@@ -4181,14 +4268,15 @@ def _apply_full_turn_action(
                     raise TransitionValidationError(str(exc)) from exc
                 state_after_resolution = state_after_sow.with_player_state(player, new_player_state)
                 if selected_simple_source is not None and _is_hired_source(selected_simple_source):
-                    try:
-                        state_after_resolution, hire_payment = apply_building_hire_payment(
-                            state_after_resolution,
-                            acting_player=player,
-                            source=selected_simple_source,
-                        )
-                    except ValueError as exc:
-                        raise TransitionValidationError(str(exc)) from exc
+                    (
+                        state_after_resolution,
+                        hire_payment,
+                    ) = _apply_hire_payment_with_bank_substitution(
+                        state_after_resolution,
+                        acting_player=player,
+                        source=selected_simple_source,
+                        bank_payment=bank_payment,
+                    )
                     new_player_state = state_after_resolution.player_state(player)
                     building_hired_events.append(
                         _building_hired_event(
@@ -5824,31 +5912,57 @@ def _legal_bank_payment_options_for_action(
     required_wheat: int = 0,
     required_piety: int = 0,
     hired_source: BuildingAbilitySource | None = None,
+    bank_payment_hired_building_id: str | None = None,
 ) -> tuple[_BankPaymentOption, ...]:
-    if max(required_stone, required_wheat, required_piety) <= 0:
-        return ()
-
-    substitutions: list[_BankPaymentOption] = []
-    for replaced_resource, required_amount in {
+    costs = {
         "stone": max(0, required_stone),
         "wheat": max(0, required_wheat),
         "piety": max(0, required_piety),
-    }.items():
+    }
+    if bank_payment_hired_building_id is None:
+        substituted_costs = costs
+        affordability_hired_source = hired_source
+    else:
+        if (
+            hired_source is None
+            or not _is_hired_source(hired_source)
+            or not hired_source.usable
+            or hired_source.building_key != bank_payment_hired_building_id
+            or hired_source.building_key == _BUILDING_BANK
+            or hired_source.hire_resource not in _BANK_REPLACED_RESOURCES
+            or hired_source.hire_cost <= 0
+        ):
+            return ()
+        costs[hired_source.hire_resource] += hired_source.hire_cost
+        substituted_costs = {hired_source.hire_resource: hired_source.hire_cost}
+        # A transformed hire payment is included in the substituted cost itself, so it must not
+        # also be charged through the normal-hire affordability path.
+        affordability_hired_source = None
+
+    if max(substituted_costs.values(), default=0) <= 0:
+        return ()
+
+    substitutions: list[_BankPaymentOption] = []
+    for replaced_resource, required_amount in substituted_costs.items():
         if required_amount <= 0:
             continue
         player_state = state.player_state(state.active_player)
         max_substitution = min(required_amount, player_state.resources.silver)
-        for silver_amount in range(1, max_substitution + 1):
+        if bank_payment_hired_building_id is None:
+            substitution_amounts = range(1, max_substitution + 1)
+        else:
+            substitution_amounts = (required_amount,) if max_substitution == required_amount else ()
+        for silver_amount in substitution_amounts:
             (
                 adjusted_stone,
                 adjusted_silver,
                 adjusted_wheat,
                 adjusted_piety,
             ) = _costs_with_bank_substitution(
-                required_stone=required_stone,
+                required_stone=costs.get("stone", 0),
                 required_silver=required_silver,
-                required_wheat=required_wheat,
-                required_piety=required_piety,
+                required_wheat=costs.get("wheat", 0),
+                required_piety=costs.get("piety", 0),
                 replaced_resource=replaced_resource,
                 silver_amount=silver_amount,
             )
@@ -5858,7 +5972,7 @@ def _legal_bank_payment_options_for_action(
                 required_silver=adjusted_silver,
                 required_wheat=adjusted_wheat,
                 required_piety=adjusted_piety,
-                hired_source=hired_source,
+                hired_source=affordability_hired_source,
             ):
                 continue
             substitutions.append(
@@ -5868,6 +5982,7 @@ def _legal_bank_payment_options_for_action(
                     source=source,
                     replaced_resource=replaced_resource,
                     silver_amount=silver_amount,
+                    hired_building_id=bank_payment_hired_building_id,
                 )
             )
 
@@ -6175,8 +6290,6 @@ def _is_bank_modifier_eligible_action(action: FullTurnAction) -> bool:
         action.sow_route_building_id is None
         and action.sow_route_secondary_building_id is None
         and action.sow_route_omitted_location is None
-        and action.hired_building_id is None
-        and action.hired_building_source is None
         and action.effective_acolyte_building_id is None
         and action.effective_acolyte_building_source is None
         and action.taxation_majority_building_id is None
@@ -6342,6 +6455,7 @@ def _with_bank_payment_fields(
         bank_payment_building_source=source_label,
         bank_payment_replaced_resource=option.replaced_resource,
         bank_payment_silver_amount=option.silver_amount,
+        bank_payment_hired_building_id=option.hired_building_id,
     )
     if paid_in_a_prior_step:
         return updated
@@ -6600,10 +6714,11 @@ def _resolved_bank_payment_for_action(
     source_label = action.bank_payment_building_source
     replaced_resource = action.bank_payment_replaced_resource
     silver_amount = action.bank_payment_silver_amount
+    hired_building_id = action.bank_payment_hired_building_id
     if building_id is None:
         if any(
             field is not None
-            for field in (source_label, replaced_resource, silver_amount)
+            for field in (source_label, replaced_resource, silver_amount, hired_building_id)
         ):
             raise TransitionValidationError(
                 "Bank payment fields require bank_payment_building_id."
@@ -6621,7 +6736,9 @@ def _resolved_bank_payment_for_action(
         raise TransitionValidationError(f"Bank replaced resource must be one of: {replaced_text}.")
     if silver_amount <= 0:
         raise TransitionValidationError("Bank silver substitution amount must be at least 1.")
-    if action.resolution not in (
+    if hired_building_id == _BUILDING_BANK:
+        raise TransitionValidationError("Bank cannot substitute its own hire cost.")
+    if hired_building_id is None and action.resolution not in (
         TurnResolutionType.ORDINATION,
         TurnResolutionType.CONSTRUCT_BUILDING,
         TurnResolutionType.CONSTRUCT_BUILDING_AND_ROAD_DEFERRED,
@@ -6629,6 +6746,34 @@ def _resolved_bank_payment_for_action(
         raise TransitionValidationError(
             "Bank payment substitution is only supported for Ordination and Construct building actions."
         )
+    if hired_building_id is not None:
+        if action.hired_building_id != hired_building_id:
+            raise TransitionValidationError(
+                "Bank hire-payment substitution must target the action's hired building."
+            )
+        hired_source = _hire_source_for_action(
+            building_ability_source(
+                state,
+                config,
+                acting_player=player,
+                building_key=hired_building_id,
+            ),
+            action,
+        )
+        if not _is_hired_source(hired_source) or not hired_source.usable:
+            raise TransitionValidationError(
+                "Bank hire-payment substitution requires a usable hired building."
+            )
+        if hired_source.hire_resource != replaced_resource:
+            raise TransitionValidationError(
+                "Bank replaced resource does not match the hired building's payment resource."
+            )
+        if hired_source.hire_cost != silver_amount:
+            raise TransitionValidationError(
+                "Bank hire-payment substitution must replace the full hire cost."
+            )
+    else:
+        hired_source = None
 
     source = _modifier_building_source_available_this_turn(
         state,
@@ -6674,7 +6819,48 @@ def _resolved_bank_payment_for_action(
         source=source,
         replaced_resource=replaced_resource,
         silver_amount=silver_amount,
+        hired_building_id=hired_building_id,
+        hired_source=hired_source,
     )
+
+
+def _source_with_bank_hire_payment(
+    source: BuildingAbilitySource,
+    bank_payment: _ResolvedBankPayment | None,
+) -> BuildingAbilitySource:
+    """Return the actual payment source after an action-targeted Bank substitution."""
+    if bank_payment is None or bank_payment.hired_building_id != source.building_key:
+        return source
+    if source.building_key == _BUILDING_BANK:
+        raise TransitionValidationError("Bank cannot substitute its own hire cost.")
+    if (
+        not _is_hired_source(source)
+        or source.hire_resource != bank_payment.replaced_resource
+        or source.hire_cost != bank_payment.silver_amount
+    ):
+        raise TransitionValidationError(
+            "Bank hire-payment substitution does not match the resolved hire cost."
+        )
+    return replace(source, hire_resource="silver")
+
+
+def _apply_hire_payment_with_bank_substitution(
+    state: GameState,
+    *,
+    acting_player: PlayerId,
+    source: BuildingAbilitySource,
+    bank_payment: _ResolvedBankPayment | None,
+) -> tuple[GameState, BuildingHirePayment]:
+    """Settle one resolution-level hire, replacing its full resource cost when Bank targets it."""
+    payment_source = _source_with_bank_hire_payment(source, bank_payment)
+    try:
+        return apply_building_hire_payment(
+            state,
+            acting_player=acting_player,
+            source=payment_source,
+        )
+    except ValueError as exc:
+        raise TransitionValidationError(str(exc)) from exc
 
 
 def _resolved_wagon_yard_free_hire_for_action(
@@ -6952,15 +7138,20 @@ def _resolved_simple_bonus_source_for_action(
     player: PlayerId,
     action: FullTurnAction,
     building_key: str,
+    bank_payment: _ResolvedBankPayment | None = None,
 ) -> BuildingAbilitySource | None:
     """Resolve and validate simple building-bonus source against action hire fields."""
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key=building_key,
-    )
-    source = _hire_source_for_action(source, action)
+    if bank_payment is not None and bank_payment.hired_building_id == building_key:
+        source = bank_payment.hired_source
+        assert source is not None
+    else:
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=player,
+            building_key=building_key,
+        )
+        source = _hire_source_for_action(source, action)
     action_has_hire_fields = action.hired_building_id is not None
 
     if source.source_type == "own_active" and source.usable:
@@ -7002,15 +7193,20 @@ def _resolved_infirmary_source_for_action(
     silver_cost: int,
     ordination_wheat_cost: int = 0,
     mode: str,
+    bank_payment: _ResolvedBankPayment | None = None,
 ) -> BuildingAbilitySource | None:
     """Resolve/validate Infirmary source for allocation or ordination actions."""
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key="infirmary",
-    )
-    source = _hire_source_for_action(source, action)
+    if bank_payment is not None and bank_payment.hired_building_id == "infirmary":
+        source = bank_payment.hired_source
+        assert source is not None
+    else:
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=player,
+            building_key="infirmary",
+        )
+        source = _hire_source_for_action(source, action)
     action_hires_infirmary = action.hired_building_id == "infirmary"
     uses_infirmary_bonus = False
     if mode == "allocation":
@@ -7047,11 +7243,12 @@ def _resolved_infirmary_source_for_action(
                 "Infirmary hire fields are only legal when action uses the extra Infirmary bonus."
             )
         required_wheat = ordination_wheat_cost if mode == "ordination" else 0
+        affordability_source = _source_with_bank_hire_payment(source, bank_payment)
         if not _can_afford_resolution_costs(
             state.player_state(player),
             required_silver=silver_cost,
             required_wheat=required_wheat,
-            hired_source=source,
+            hired_source=affordability_source,
         ):
             raise TransitionValidationError(
                 "Infirmary hire plus duty costs are not affordable for this action."
@@ -7116,15 +7313,20 @@ def _resolved_mill_source_for_action(
     silver_cost: int,
     additional_silver_cost: int = 0,
     additional_wheat_cost: int = 0,
+    bank_payment: _ResolvedBankPayment | None = None,
 ) -> BuildingAbilitySource | None:
     """Resolve/validate Mill source for Give Alms paid or Ordination actions."""
-    source = building_ability_source(
-        state,
-        config,
-        acting_player=player,
-        building_key="mill",
-    )
-    source = _hire_source_for_action(source, action)
+    if bank_payment is not None and bank_payment.hired_building_id == "mill":
+        source = bank_payment.hired_source
+        assert source is not None
+    else:
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=player,
+            building_key="mill",
+        )
+        source = _hire_source_for_action(source, action)
     action_hires_mill = action.hired_building_id == "mill"
     if required_wheat < 0:
         raise TransitionValidationError("Mill required wheat cannot be negative.")
@@ -7151,11 +7353,12 @@ def _resolved_mill_source_for_action(
             raise TransitionValidationError(
                 "Mill hire fields are only legal when wheat cost is present."
             )
+        affordability_source = _source_with_bank_hire_payment(source, bank_payment)
         if not _can_afford_resolution_costs(
             state.player_state(player),
             required_silver=silver_cost + additional_silver_cost,
             required_wheat=mill_wheat_cost + additional_wheat_cost,
-            hired_source=source,
+            hired_source=affordability_source,
         ):
             raise TransitionValidationError(
                 "Mill hire plus duty costs are not affordable for this action."

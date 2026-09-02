@@ -65,6 +65,10 @@ class FullTurnAction:
     bank_payment_building_source: str | None = None
     bank_payment_replaced_resource: str | None = None
     bank_payment_silver_amount: int | None = None
+    # Set only when Bank replaces the payment for this resolution-level hired building rather
+    # than the resolution's own resource cost.  Keeping the target on the action makes the two
+    # legal Bank choices distinct when a turn has both kinds of cost.
+    bank_payment_hired_building_id: str | None = None
     effective_acolyte_building_id: str | None = None
     effective_acolyte_building_source: str | None = None
     taxation_majority_building_id: str | None = None
@@ -295,6 +299,7 @@ def action_id(action: GameAction) -> str:
         or action.bank_payment_building_source is not None
         or action.bank_payment_replaced_resource is not None
         or action.bank_payment_silver_amount is not None
+        or action.bank_payment_hired_building_id is not None
     ):
         bank_payment_suffix = (
             f":bank_payment_building:{action.bank_payment_building_id or 'none'}"
@@ -302,6 +307,8 @@ def action_id(action: GameAction) -> str:
             f":replace:{action.bank_payment_replaced_resource or 'unknown'}"
             f":silver:{action.bank_payment_silver_amount if action.bank_payment_silver_amount is not None else 'none'}"
         )
+        if action.bank_payment_hired_building_id is not None:
+            bank_payment_suffix += f":hire:{action.bank_payment_hired_building_id}"
     if (
         action.effective_acolyte_building_id is not None
         or action.effective_acolyte_building_source is not None
