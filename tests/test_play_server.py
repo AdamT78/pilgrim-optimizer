@@ -52,17 +52,23 @@ from pilgrim.model.enums import (
     PlayerId,
     TurnResolutionType,
 )
+from pilgrim.rules import transition
 from pilgrim.rules.buildings import (
     BUILDING_ABILITY_REASONS,
     BuildingAbilityReason,
     BuildingAbilitySource,
     building_ability_source,
 )
-from pilgrim.rules import transition
+from pilgrim.rules.merchant import CORNUCOPIA_COUNTER
 from pilgrim.rules.ordination import ordination_outcome
 from pilgrim.rules.special_activities import allocation_outcome
-from pilgrim.rules.transition import TaxationMajorityUnlock, apply_action, legal_actions
-from pilgrim.rules.transition import apply_turn_step, turn_steps
+from pilgrim.rules.transition import (
+    TaxationMajorityUnlock,
+    apply_action,
+    apply_turn_step,
+    legal_actions,
+    turn_steps,
+)
 from tools import play_server
 from tools.play_server import PlayServer, actions_document, state_token
 from tools.ui_debug import render_play_view
@@ -1012,24 +1018,24 @@ def test_route_edge_metadata_states_each_building_dependency_for_the_page() -> N
     (
         (
             "allocation_hire_infirmary_market_001.json",
-            {"Don't hire", "Hire Infirmary from market for 1 wheat"},
+            {"Don't hire", "Hire Infirmary from market"},
         ),
         (
             "allocation_hire_infirmary_opponent_001.json",
-            {"Don't hire", "Hire Infirmary from player_two for 1 wheat"},
+            {"Don't hire", "Hire Infirmary from player_two"},
         ),
         (
             "deep_round_eighteen_seed_seven_two_player_001.json",
             {
                 "Don't hire",
-                "Hire Infirmary from market for 1 resource of your choice",
-                "Hire Mint from market for 1 resource of your choice",
-                "Hire Well from market for 1 resource of your choice",
+                "Hire Infirmary from market",
+                "Hire Mint from market",
+                "Hire Well from market",
             },
         ),
     ),
 )
-def test_sow_hire_options_use_turn_step_wording(
+def test_sow_hire_options_name_the_source_without_naming_a_payment_stock(
     scenario_name: str, expected_labels: set[str]
 ) -> None:
     scenario = load_scenario(str(SCENARIOS / scenario_name))
@@ -1047,7 +1053,7 @@ def test_sow_hire_options_use_turn_step_wording(
     assert labels == expected_labels
 
 
-def test_sow_and_turn_step_cornucopia_hires_share_the_cost_phrase_helper(monkeypatch) -> None:
+def test_sow_hire_label_leaves_the_cost_to_its_following_payment_step(monkeypatch) -> None:
     scenario = load_scenario(str(SCENARIOS / "allocation_hire_infirmary_market_001.json"))
     action = next(
         action
@@ -1074,9 +1080,113 @@ def test_sow_and_turn_step_cornucopia_hires_share_the_cost_phrase_helper(monkeyp
     sow_step, _fields = play_server._hire_step(action, scenario.state, scenario.config)
     turn_step_sentence = play_server._building_hire_sentence("Infirmary", source)
 
-    assert sow_step["label"] == "Hire Infirmary from market for the helper's shared price"
+    assert sow_step["label"] == "Hire Infirmary from market"
     assert turn_step_sentence == "Hire Infirmary from market for the helper's shared price."
-    assert seen == [source, source]
+    assert seen == [source]
+
+
+def test_fixed_hire_payment_immediately_names_the_cost_and_building() -> None:
+    scenario = load_scenario(SCENARIOS / "allocation_hire_infirmary_market_001.json")
+    actions = {
+        action_id(action): action for action in legal_actions(scenario.state, scenario.config)
+    }
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=list(actions.values()),
+        include_preview_effects=False,
+    )
+    paid = next(
+        candidate
+        for candidate in candidates
+        if any(
+            step["kind"] == "hire" and step["value"] == "infirmary:market"
+            for step in candidate["steps"]
+        )
+    )
+    declined = next(
+        candidate
+        for candidate in candidates
+        if any(step["kind"] == "hire" and step["value"] == "none" for step in candidate["steps"])
+    )
+
+    paid_hire_index = next(
+        index for index, step in enumerate(paid["steps"]) if step["kind"] == "hire"
+    )
+    declined_hire_index = next(
+        index for index, step in enumerate(declined["steps"]) if step["kind"] == "hire"
+    )
+    assert paid["steps"][paid_hire_index]["label"] == "Hire Infirmary from market"
+    payment = paid["steps"][paid_hire_index + 1]
+    assert (payment["kind"], payment["value"], payment["prompt"]) == (
+        "resource",
+        "wheat",
+        "player_one: Pay 1 wheat to hire the Infirmary.",
+    )
+    assert declined["steps"][declined_hire_index + 1]["kind"] == "arrangement"
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    declined_result = apply_action(
+        scenario.state,
+        actions[declined["action_id"]],
+        scenario.config,
+    )
+    after = declined_result.state.player_state(scenario.state.active_player).resources
+    assert after == before
+
+
+def test_owned_bank_substitution_is_a_hire_stock_before_arrangement() -> None:
+    scenario = load_scenario(SCENARIOS / "allocation_hire_infirmary_chapter_house_bank_001.json")
+    actions = {
+        action_id(action): action for action in legal_actions(scenario.state, scenario.config)
+    }
+    candidates = [
+        candidate
+        for candidate in play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            actions=list(actions.values()),
+            include_preview_effects=False,
+        )
+        if any(
+            step["kind"] == "hire" and step["value"] == "infirmary:market"
+            for step in candidate["steps"]
+        )
+    ]
+    groups: dict[tuple[Any, ...], list[dict]] = {}
+    for candidate in candidates:
+        resource_index = next(
+            index for index, step in enumerate(candidate["steps"]) if step["kind"] == "resource"
+        )
+        key = tuple(
+            step["value"]
+            for index, step in enumerate(candidate["steps"])
+            if index != resource_index
+        )
+        groups.setdefault(key, []).append(candidate)
+    siblings = next(group for group in groups.values() if len(group) == 2)
+    by_stock = {
+        next(step["value"] for step in candidate["steps"] if step["kind"] == "resource"):
+        candidate
+        for candidate in siblings
+    }
+
+    assert set(by_stock) == {"silver", "wheat"}
+    before = scenario.state.player_state(scenario.state.active_player).resources
+    for stock, candidate in by_stock.items():
+        steps = candidate["steps"]
+        hire_index = next(index for index, step in enumerate(steps) if step["kind"] == "hire")
+        payment = steps[hire_index + 1]
+        assert payment["kind"] == "resource"
+        assert payment["prompt"] == (
+            "player_one: The Bank lets you pay in coins instead of wheat. Choose how to pay."
+        )
+        assert all(step["kind"] != "combination" for step in steps[hire_index + 1 :])
+
+        result = apply_action(scenario.state, actions[candidate["action_id"]], scenario.config)
+        after = result.state.player_state(scenario.state.active_player).resources
+        assert getattr(before, stock) - getattr(after, stock) == 1
+        other = "wheat" if stock == "silver" else "silver"
+        assert getattr(before, other) == getattr(after, other)
 
 
 def test_turn_script_never_names_a_building_to_order_answers() -> None:
@@ -2829,6 +2939,207 @@ def test_every_hired_candidate_in_the_corpus_asks_the_hire_step(corpus_actions) 
                 )
     assert checked > 0, "corpus had no hired candidates, so this checked nothing"
     assert not missing, f"missing hire step on {len(missing)} hired candidates: {missing[:10]}"
+
+
+def test_corpus_hire_payments_are_immediate_exact_and_single_bank_use(
+    corpus_actions, playtest_actions
+) -> None:
+    """Applied actions, not their page copy, are the authority for every offered hire stock."""
+    shape_counts: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    frontiers: dict[
+        tuple[str, tuple[Any, ...], str], tuple[set[str], set[str]]
+    ] = {}
+    missing_or_late: list[tuple[str, str, list[str], list[str]]] = []
+    resource_mismatches: list[tuple[str, str, list[str], list[str]]] = []
+    state_delta_mismatches: list[tuple[str, str, dict[str, int], dict[str, int]]] = []
+    double_bank_substitutions: list[tuple[str, str, int]] = []
+    hire_questions = 0
+    paid_resolution_hires = 0
+    bank_actions = 0
+
+    for scenario_path, scenario, scenario_actions in _all_corpus_actions(
+        corpus_actions, playtest_actions
+    ):
+        actions = {action_id(action): action for action in scenario_actions}
+        applied: dict[str, Any] = {}
+        candidates = play_server.turn_candidates(
+            scenario.state,
+            scenario.config,
+            actions=list(scenario_actions),
+            include_preview_effects=False,
+        )
+        for candidate in candidates:
+            steps = candidate["steps"]
+            hire_index = next(
+                (index for index, step in enumerate(steps) if step["kind"] == "hire"),
+                None,
+            )
+            if hire_index is None:
+                continue
+            hire_questions += 1
+            move_id = candidate["action_id"]
+            assert move_id is not None, (
+                f"{scenario_path.name} left a hire-bearing candidate unresolved"
+            )
+            action = actions[move_id]
+            assert isinstance(action, FullTurnAction)
+
+            if action.hired_building_id is None:
+                cost_kind = "none"
+            else:
+                paid_resolution_hires += 1
+                source = building_ability_source(
+                    scenario.state,
+                    scenario.config,
+                    acting_player=scenario.state.active_player,
+                    building_key=action.hired_building_id,
+                )
+                cost_kind = (
+                    "choice"
+                    if source.hire_resource == CORNUCOPIA_COUNTER
+                    and not source.hire_resource_chosen
+                    else "fixed"
+                )
+            shape_counts[(cost_kind, tuple(step["kind"] for step in steps[hire_index:]))] += 1
+
+            payment_buildings = [
+                building_id for building_id, _resource in tuple(action.hire_payments or ())
+            ]
+            if action.hired_building_id in payment_buildings:
+                payment_buildings.remove(action.hired_building_id)
+                payment_buildings.insert(0, action.hired_building_id)
+            payment_steps = steps[hire_index + 1 : hire_index + 1 + len(payment_buildings)]
+            if [step["kind"] for step in payment_steps] != ["resource"] * len(
+                payment_buildings
+            ):
+                missing_or_late.append(
+                    (
+                        scenario_path.name,
+                        move_id,
+                        payment_buildings,
+                        [step["kind"] for step in steps[hire_index:]],
+                    )
+                )
+                continue
+            if (
+                not payment_buildings
+                and hire_index + 1 < len(steps)
+                and steps[hire_index + 1]["kind"] == "resource"
+            ):
+                missing_or_late.append(
+                    (
+                        scenario_path.name,
+                        move_id,
+                        [],
+                        [step["kind"] for step in steps[hire_index:]],
+                    )
+                )
+
+            result = applied.get(move_id)
+            if result is None:
+                result = apply_action(scenario.state, action, scenario.config)
+                applied[move_id] = result
+            applied_hires = {
+                str(details["building_id"]): str(details["resource"])
+                for event in result.events
+                if event.event_type is EventType.BUILDING_HIRED
+                and event.action_id == move_id
+                for details in (dict(event.details),)
+            }
+            actually_paid = [applied_hires[building_id] for building_id in payment_buildings]
+            presented = [str(step["value"]) for step in payment_steps]
+            if presented != actually_paid:
+                resource_mismatches.append(
+                    (scenario_path.name, move_id, presented, actually_paid)
+                )
+
+            before = scenario.state.player_state(scenario.state.active_player).resources
+            after = result.state.player_state(scenario.state.active_player).resources
+            actual_delta = {
+                resource: getattr(after, resource) - getattr(before, resource)
+                for resource in ("stone", "silver", "wheat")
+            }
+            event_delta = {
+                resource: sum(
+                    int(dict(event.details).get(resource, 0))
+                    for event in result.events
+                    if event.event_type is EventType.RESOURCE_DELTA
+                    and event.action_id == move_id
+                )
+                for resource in ("stone", "silver", "wheat")
+            }
+            if actual_delta != event_delta:
+                state_delta_mismatches.append(
+                    (scenario_path.name, move_id, actual_delta, event_delta)
+                )
+
+            for offset, (building_id, payment_step) in enumerate(
+                zip(payment_buildings, payment_steps, strict=True)
+            ):
+                step_index = hire_index + 1 + offset
+                frontier = (
+                    scenario_path.name,
+                    tuple(step["value"] for step in steps[:step_index]),
+                    building_id,
+                )
+                offered, applied_resources = frontiers.setdefault(frontier, (set(), set()))
+                offered.add(str(payment_step["value"]))
+                applied_resources.add(applied_hires[building_id])
+
+        for move_id, action in actions.items():
+            if not isinstance(action, FullTurnAction) or action.bank_payment_building_id is None:
+                continue
+            bank_actions += 1
+            result = applied.get(move_id)
+            if result is None:
+                result = apply_action(scenario.state, action, scenario.config)
+                applied[move_id] = result
+            substitutions = sum(
+                event.event_type is EventType.BUILDING_BONUS
+                and dict(event.details).get("action") == "payment_substitution"
+                and event.action_id == move_id
+                for event in result.events
+            )
+            if substitutions > 1:
+                double_bank_substitutions.append((scenario_path.name, move_id, substitutions))
+
+    expected_shapes = Counter(
+        {
+            ("choice", ("hire", "resource", "resource", "arrangement")): 198,
+            ("fixed", ("hire", "resource", "arrangement")): 110,
+            ("choice", ("hire", "resource", "resource")): 51,
+            ("choice", ("hire", "resource", "arrangement")): 44,
+            ("none", ("hire", "resource", "arrangement")): 36,
+            ("none", ("hire", "arrangement")): 29,
+            ("fixed", ("hire", "resource", "combination")): 20,
+            ("none", ("hire", "combination")): 19,
+            ("choice", ("hire", "resource")): 12,
+            ("fixed", ("hire", "resource", "ordination")): 10,
+            ("fixed", ("hire", "resource")): 9,
+            ("none", ("hire", "ordination")): 8,
+            ("fixed", ("hire", "resource", "resource")): 2,
+        }
+    )
+    frontier_mismatches = [
+        (frontier, offered, applied_resources)
+        for frontier, (offered, applied_resources) in frontiers.items()
+        if offered != applied_resources
+    ]
+    assert hire_questions == 548
+    assert paid_resolution_hires == 456
+    assert shape_counts == expected_shapes
+    assert not missing_or_late, f"late or missing hire payments: {missing_or_late[:10]}"
+    assert not resource_mismatches, f"hire payment stocks disagree: {resource_mismatches[:10]}"
+    assert not state_delta_mismatches, (
+        "applied resource events disagree with player resource diffs: "
+        f"{state_delta_mismatches[:10]}"
+    )
+    assert frontiers
+    assert not frontier_mismatches, f"offered hire stocks disagree: {frontier_mismatches[:10]}"
+    assert bank_actions > 0, "corpus carried no Bank substitutions to audit"
+    assert not double_bank_substitutions, (
+        f"actions carrying two Bank substitutions: {double_bank_substitutions[:10]}"
+    )
 
 
 def test_every_cloisters_skip_candidate_in_the_corpus_asks_the_skip_step(corpus_actions) -> None:
