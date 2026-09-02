@@ -192,6 +192,12 @@ RESOURCE_CHOICE_HEIGHT = 61.0
 RESOURCE_CHOICE_TOP = 45.0
 RESOURCE_CHOICE_RADIUS = 9.0
 RESOURCE_CHOICE_STROKE_WIDTH = 1.6
+STOCK_CHOICE_STROKE_WIDTH = 2.0
+STOCK_CHOICE_PAINT = {
+    "wheat": ("#F3E3AF", "#9A6B12"),
+    "stone": ("#DCD8CE", "#5A5751"),
+    "silver": ("#D5E4EF", "#3F6E93"),
+}
 
 # The one key a page shows when the whole BOARD is the answer -- naming a start player is the
 # question that asks it. An outline round the panel and nothing inside it, in the same parchment
@@ -742,24 +748,40 @@ def _darker_surface_colour(colour: str, factor: float = 0.72) -> str:
 
 
 def _render_resource_choice_keys(
-    block: dict, resources: list[dict], *, surface_background: str
+    block: dict,
+    resources: list[dict],
+    *,
+    surface_background: str,
+    stock_colours: bool,
 ) -> str:
     """One key per stock, drawn hidden, for a page that has to ask this seat which one it wants.
 
     Struck here rather than in the page's script for the same reason the first player seal is: the
     script reveals and hides, and never assigns a fill. A key carries the id of the stock it stands
     for, so a page can tell which was pressed without knowing where any of them sit.
+
+    The piety track reuses this geometry around a silver figure but is not asking which stock to
+    spend. Its caller leaves `stock_colours` false so that separate pill stays on its own surface.
     """
     surface_border = _darker_surface_colour(surface_background)
     parts = []
     for cx, resource in zip(block["cell_x"], resources, strict=True):
-        resource_id = escape(str(resource["id"]))
+        resource_name = str(resource["id"])
+        resource_id = escape(resource_name)
+        fill, stroke = (
+            STOCK_CHOICE_PAINT[resource_name]
+            if stock_colours
+            else (surface_background, surface_border)
+        )
+        stroke_width = (
+            STOCK_CHOICE_STROKE_WIDTH if stock_colours else RESOURCE_CHOICE_STROKE_WIDTH
+        )
         parts.append(
             f'<rect data-resource-choice-key="{resource_id}"'
             f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
             f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
-            f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{surface_background}"'
-            f' stroke="{surface_border}" stroke-width="{RESOURCE_CHOICE_STROKE_WIDTH:g}"'
+            f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{fill}"'
+            f' stroke="{stroke}" stroke-width="{stroke_width:g}"'
             ' visibility="hidden"/>'
         )
     return "".join(parts)
@@ -786,7 +808,10 @@ def _render_resource_block(
     if choice_keys:
         parts.append(
             _render_resource_choice_keys(
-                block, resources, surface_background=palette["panel_background"]
+                block,
+                resources,
+                surface_background=palette["panel_background"],
+                stock_colours=True,
             )
         )
     parts += [

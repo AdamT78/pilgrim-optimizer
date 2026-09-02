@@ -430,6 +430,7 @@ def render_piety_choice_pills(
         frame_markup = _render_resource_choice_keys(
             {"cell_x": [cx]}, [{"id": "silver"}],
             surface_background=layout["palette"]["panel_fill"],
+            stock_colours=False,
         )
         frame_markup = (
             f'<g transform="translate({cx:.1f} {top:.1f}) scale(.9) '

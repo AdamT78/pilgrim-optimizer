@@ -5394,25 +5394,26 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     assert board_frame is not None and piety_frame_box is not None
     assert abs(piety_frame_box["width"] - board_frame["width"]) <= 2
     assert abs(piety_frame_box["height"] - board_frame["height"]) <= 2
-    assert board_frame_style["fill"] == board_surface_style
-    assert piety_frame_style["fill"] == piety_surface_style
-    assert board_frame_style["stroke"] != board_frame_style["fill"]
-    assert piety_frame_style["stroke"] != piety_frame_style["fill"]
-
-    def rgb(value: str) -> tuple[int, int, int]:
-        return tuple(
-            int(channel) for channel in value.removeprefix("rgb(").removesuffix(")").split(", ")
-        )
-
-    board_fill = rgb(board_frame_style["fill"])
-    board_stroke = rgb(board_frame_style["stroke"])
-    piety_fill = rgb(piety_frame_style["fill"])
-    piety_stroke = rgb(piety_frame_style["stroke"])
-    assert all(border < fill for border, fill in zip(board_stroke, board_fill))
-    assert all(border < fill for border, fill in zip(piety_stroke, piety_fill))
-    board_ratio = sum(border / fill for border, fill in zip(board_stroke, board_fill)) / 3
-    piety_ratio = sum(border / fill for border, fill in zip(piety_stroke, piety_fill)) / 3
-    assert abs(board_ratio - piety_ratio) <= 0.03
+    # The stock key now owns its hue; the piety pill deliberately remains tied to its own surface.
+    assert (
+        board_frame_style["fill"],
+        board_frame_style["stroke"],
+        board_frame_style["strokeWidth"],
+        board_surface_style,
+        piety_frame_style["fill"],
+        piety_frame_style["stroke"],
+        piety_frame_style["strokeWidth"],
+        piety_surface_style,
+    ) == (
+        "rgb(220, 216, 206)",
+        "rgb(90, 87, 81)",
+        "2px",
+        "rgb(228, 217, 188)",
+        "rgb(185, 185, 180)",
+        "rgb(133, 133, 130)",
+        "1.6px",
+        "rgb(185, 185, 180)",
+    )
     board_page.close()
 
     def union(boxes):
