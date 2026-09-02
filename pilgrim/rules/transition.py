@@ -47,7 +47,6 @@ from pilgrim.rules.buildings import (
     is_building_live,
     mill_actual_wheat_cost,
     mill_wheat_waiver,
-    player_has_active_chapter_house,
     record_hired_building_this_turn,
     used_player_board_slots,
     validate_building_state,
@@ -400,7 +399,7 @@ _HIRED_BUILDINGS_BY_ACTION: dict[TurnResolutionType, frozenset[str]] = {
     TurnResolutionType.PRODUCE_STONE: frozenset({"quarry"}),
     TurnResolutionType.CLERICAL_SILVERSMITH: frozenset({"mint"}),
     TurnResolutionType.CLERICAL_DEVOTION: frozenset({"chapel"}),
-    TurnResolutionType.ALLOCATION: frozenset({"infirmary"}),
+    TurnResolutionType.ALLOCATION: frozenset({"infirmary", "chapter_house"}),
     TurnResolutionType.GIVE_ALMS_PAID: frozenset({"mill"}),
     TurnResolutionType.ORDINATION: frozenset({"infirmary", "mill"}),
 }
@@ -1349,9 +1348,6 @@ def _legal_full_turn_actions_for_state(
     uses_customs_house_taxation_override: bool,
 ) -> tuple[GameAction, ...]:
     player_vector = state.player_vector(state.active_player)
-    base_player_state = state.player_state(state.active_player)
-    chapter_house_active = player_has_active_chapter_house(base_player_state)
-    activity_capacity = special_activity_capacity(chapter_house_active=chapter_house_active)
     duty_relation_context = _DutyRelationModifierContext(
         acting_player=state.active_player,
         uses_scriptorium=uses_scriptorium_effective_counts,
@@ -1562,76 +1558,103 @@ def _legal_full_turn_actions_for_state(
                         relation_context=duty_relation_context,
                     )
                     duty_value, silver_cost = duty_value_and_silver_cost(strength)
-                    base_move_sequences = _allocation_move_sequences(
-                        player_state,
-                        max_moves=duty_value,
-                        special_activity_capacity=activity_capacity,
-                    )
                     infirmary_source = building_ability_source(
                         state_for_turn,
                         config,
                         acting_player=state.active_player,
                         building_key="infirmary",
                     )
-
-                    if infirmary_source.source_type == "own_active" and infirmary_source.usable:
-                        for move_sequence in _allocation_move_sequences(
-                            player_state,
-                            max_moves=duty_value + 1,
-                            special_activity_capacity=activity_capacity,
-                        ):
-                            actions.append(
-                                FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.ALLOCATION,
-                                    allocation_moves=move_sequence,
-                                )
-                            )
-                    else:
-                        for move_sequence in base_move_sequences:
-                            actions.append(
-                                FullTurnAction(
-                                    origin=origin,
-                                    route=route,
-                                    selected_duty=duty_position,
-                                    resolution=TurnResolutionType.ALLOCATION,
-                                    allocation_moves=move_sequence,
-                                )
-                            )
-                        for hire_option in _legal_hire_payment_options(
+                    chapter_house_source = building_ability_source(
+                        state_for_turn,
+                        config,
+                        acting_player=state.active_player,
+                        building_key="chapter_house",
+                    )
+                    owns_active_infirmary = (
+                        infirmary_source.source_type == "own_active" and infirmary_source.usable
+                    )
+                    owns_active_chapter_house = (
+                        chapter_house_source.source_type == "own_active"
+                        and chapter_house_source.usable
+                    )
+                    infirmary_hire_options = (
+                        _legal_hire_payment_options(
                             source=infirmary_source,
                             player_state=player_state,
+                        )
+                        if _is_hired_source(infirmary_source) and infirmary_source.usable
+                        else ()
+                    )
+                    chapter_house_hire_options = (
+                        _legal_hire_payment_options(
+                            source=chapter_house_source,
+                            player_state=player_state,
+                        )
+                        if _is_hired_source(chapter_house_source) and chapter_house_source.usable
+                        else ()
+                    )
+
+                    def append_allocation_hire_variant(
+                        hire_option: _HirePaymentOption | None,
+                        *,
+                        hire_building_id: str | None,
+                        player_state: PlayerState = player_state,
+                        silver_cost: int = silver_cost,
+                        owns_active_infirmary: bool = owns_active_infirmary,
+                        owns_active_chapter_house: bool = owns_active_chapter_house,
+                        duty_value: int = duty_value,
+                        origin: int = origin,
+                        route: tuple[int, ...] = route,
+                        duty_position: int = duty_position,
+                    ) -> None:
+                        """Add one Allocation branch after settling its one possible hire."""
+                        if not _can_afford_resolution_costs(
+                            player_state,
+                            required_silver=silver_cost,
+                            hired_source=hire_option.source if hire_option is not None else None,
                         ):
-                            if not _can_afford_resolution_costs(
-                                player_state,
-                                required_silver=silver_cost,
-                                hired_source=hire_option.source,
-                            ):
-                                continue
-                            for move_sequence in _allocation_move_sequences(
-                                player_state,
-                                max_moves=duty_value + 1,
-                                special_activity_capacity=activity_capacity,
-                                min_moves=duty_value + 1,
-                            ):
-                                actions.append(
-                                    _with_hire_payment_fields(
-                                        FullTurnAction(
-                                            origin=origin,
-                                            route=route,
-                                            selected_duty=duty_position,
-                                            resolution=TurnResolutionType.ALLOCATION,
-                                            allocation_moves=move_sequence,
-                                            hired_building_id="infirmary",
-                                            hired_building_source=(
-                                                _hired_building_source_label(hire_option.source)
-                                            ),
-                                        ),
-                                        option=hire_option,
-                                    )
+                            return
+                        uses_infirmary = owns_active_infirmary or hire_building_id == "infirmary"
+                        uses_chapter_house = (
+                            owns_active_chapter_house or hire_building_id == "chapter_house"
+                        )
+                        capacity = special_activity_capacity(
+                            chapter_house_active=uses_chapter_house
+                        )
+                        min_moves = duty_value + 1 if hire_building_id == "infirmary" else 1
+                        for move_sequence in _allocation_move_sequences(
+                            player_state,
+                            max_moves=duty_value + int(uses_infirmary),
+                            special_activity_capacity=capacity,
+                            min_moves=min_moves,
+                            requires_second_acolyte_placement=hire_building_id == "chapter_house",
+                        ):
+                            action = FullTurnAction(
+                                origin=origin,
+                                route=route,
+                                selected_duty=duty_position,
+                                resolution=TurnResolutionType.ALLOCATION,
+                                allocation_moves=move_sequence,
+                            )
+                            if hire_option is not None:
+                                action = replace(
+                                    action,
+                                    hired_building_id=hire_building_id,
+                                    hired_building_source=_hired_building_source_label(
+                                        hire_option.source
+                                    ),
                                 )
+                                action = _with_hire_payment_fields(action, option=hire_option)
+                            actions.append(action)
+
+                    append_allocation_hire_variant(None, hire_building_id=None)
+                    for infirmary_hire in infirmary_hire_options:
+                        append_allocation_hire_variant(infirmary_hire, hire_building_id="infirmary")
+                    for chapter_house_hire in chapter_house_hire_options:
+                        append_allocation_hire_variant(
+                            chapter_house_hire,
+                            hire_building_id="chapter_house",
+                        )
                 elif TurnResolutionType.CONSTRUCT_ROAD_DEFERRED in category_actions:
                     strength = _duty_strength_for_position(
                         state,
@@ -3067,6 +3090,13 @@ def _apply_full_turn_action(
                 )
             except ValueError as exc:
                 raise TransitionValidationError(str(exc)) from exc
+        action_building_hires = _action_building_hire_ids(action)
+        if len(action_building_hires) > 1:
+            listed = ", ".join(action_building_hires)
+            raise TransitionValidationError(
+                "An action may hire at most one action building for its resolution; "
+                f"got {listed}."
+            )
         for building_id in _route_hired_building_ids(action):
             if not can_hire_building_this_turn(hire_context, building_key=building_id):
                 raise TransitionValidationError(
@@ -3864,12 +3894,6 @@ def _apply_full_turn_action(
             old_piety_position = state_after_sow.player_state(player).piety
             new_piety_position = state_after_sow.player_state(player).piety
         elif action.resolution is TurnResolutionType.ALLOCATION:
-            chapter_house_active = player_has_active_chapter_house(
-                state_after_sow.player_state(player)
-            )
-            allocation_special_activity_capacity = special_activity_capacity(
-                chapter_house_active=chapter_house_active
-            )
             allocation_source = _resolved_infirmary_source_for_action(
                 state=state_after_sow,
                 config=config,
@@ -3879,6 +3903,38 @@ def _apply_full_turn_action(
                 silver_cost=silver_cost,
                 mode="allocation",
                 bank_payment=bank_payment,
+            )
+            chapter_house_source = _resolved_chapter_house_source_for_allocation(
+                state=state_after_sow,
+                config=config,
+                player=player,
+                action=action,
+                silver_cost=silver_cost,
+                bank_payment=bank_payment,
+            )
+            allocation_hire_source = next(
+                (
+                    source
+                    for source in (allocation_source, chapter_house_source)
+                    if source is not None and _is_hired_source(source)
+                ),
+                None,
+            )
+            if not _can_afford_resolution_costs(
+                state_after_sow.player_state(player),
+                required_silver=silver_cost,
+                hired_source=(
+                    _source_with_bank_hire_payment(allocation_hire_source, bank_payment)
+                    if allocation_hire_source is not None
+                    else None
+                ),
+            ):
+                raise TransitionValidationError(
+                    "Allocation hires plus duty costs are not affordable for this action."
+                )
+            chapter_house_active = chapter_house_source is not None
+            allocation_special_activity_capacity = special_activity_capacity(
+                chapter_house_active=chapter_house_active
             )
             allocation_bonus = 1 if allocation_source is not None else 0
             if allocation_bonus:
@@ -3906,17 +3962,17 @@ def _apply_full_turn_action(
 
             state_for_allocation = state_after_sow
             new_player_state = state_for_allocation.player_state(player)
-            if allocation_source is not None and _is_hired_source(allocation_source):
+            if allocation_hire_source is not None:
                 state_for_allocation, hire_payment = _apply_hire_payment_with_bank_substitution(
                     state_for_allocation,
                     acting_player=player,
-                    source=allocation_source,
+                    source=allocation_hire_source,
                     bank_payment=bank_payment,
                 )
                 new_player_state = state_for_allocation.player_state(player)
                 building_hired_events.append(
                     _building_hired_event(
-                        source=allocation_source,
+                        source=allocation_hire_source,
                         payment=hire_payment,
                         actor=player,
                         action_id=transition_action_id,
@@ -5834,6 +5890,18 @@ def _declared_hired_buildings(action: FullTurnAction) -> tuple[str, ...]:
     )
 
 
+def _action_building_hire_ids(action: FullTurnAction) -> tuple[str, ...]:
+    """Action-building hires named by owners or payments, separate from route and Bank hires."""
+    action_buildings = _HIRED_BUILDINGS_BY_ACTION.get(action.resolution, frozenset())
+    named = {action.hired_building_id} & action_buildings
+    named.update(
+        building_id
+        for building_id, _resource in action.hire_payments
+        if building_id in action_buildings
+    )
+    return tuple(sorted(named))
+
+
 def _route_hired_building_ids(action: FullTurnAction) -> tuple[str, ...]:
     """Route buildings this action hires exactly where it consumes their movement permission."""
     candidates = (
@@ -7229,10 +7297,6 @@ def _resolved_infirmary_source_for_action(
         if not action_hires_infirmary:
             return None
         expected_source_label = _hired_building_source_label(source)
-        if action.hired_building_id != "infirmary":
-            raise TransitionValidationError(
-                "Action hired_building_id must be infirmary for this resolution."
-            )
         if action.hired_building_source != expected_source_label:
             raise TransitionValidationError(
                 "Action hired_building_source does not match resolved source: "
@@ -7257,6 +7321,69 @@ def _resolved_infirmary_source_for_action(
 
     if action_hires_infirmary:
         raise TransitionValidationError("Infirmary is not hire-usable in current state.")
+    return None
+
+
+def _resolved_chapter_house_source_for_allocation(
+    *,
+    state: GameState,
+    config: GameConfig,
+    player: PlayerId,
+    action: FullTurnAction,
+    silver_cost: int,
+    bank_payment: _ResolvedBankPayment | None = None,
+) -> BuildingAbilitySource | None:
+    """Resolve Chapter House for one Allocation, requiring a hired source to raise capacity."""
+    if bank_payment is not None and bank_payment.hired_building_id == "chapter_house":
+        source = bank_payment.hired_source
+        assert source is not None
+    else:
+        source = building_ability_source(
+            state,
+            config,
+            acting_player=player,
+            building_key="chapter_house",
+        )
+        source = _hire_source_for_action(source, action)
+    action_hires_chapter_house = action.hired_building_id == "chapter_house"
+
+    if source.source_type == "own_active" and source.usable:
+        if action_hires_chapter_house:
+            raise TransitionValidationError(
+                "Chapter House is own-active; action must not include its hire fields."
+            )
+        return source
+
+    if _is_hired_source(source) and source.usable:
+        if not action_hires_chapter_house:
+            return None
+        expected_source_label = _hired_building_source_label(source)
+        if action.hired_building_source != expected_source_label:
+            raise TransitionValidationError(
+                "Chapter House hire source does not match resolved source: "
+                f"expected {expected_source_label}."
+            )
+        if not _allocation_sequence_uses_chapter_house(
+            player_state=state.player_state(player),
+            moves=action.allocation_moves,
+        ):
+            raise TransitionValidationError(
+                "Chapter House hire fields are only legal when Allocation places a second acolyte "
+                "on a Special Activity."
+            )
+        affordability_source = _source_with_bank_hire_payment(source, bank_payment)
+        if not _can_afford_resolution_costs(
+            state.player_state(player),
+            required_silver=silver_cost,
+            hired_source=affordability_source,
+        ):
+            raise TransitionValidationError(
+                "Chapter House hire plus duty costs are not affordable for this action."
+            )
+        return source
+
+    if action_hires_chapter_house:
+        raise TransitionValidationError("Chapter House is not hire-usable in current state.")
     return None
 
 
@@ -8377,12 +8504,31 @@ def _is_allocation_second_acolyte_placement(
     return special_activity_count(player_state, move.destination) == 1
 
 
+def _allocation_sequence_uses_chapter_house(
+    player_state: PlayerState,
+    moves: tuple[AllocationMove, ...],
+) -> bool:
+    """Return whether this sequence spends Chapter House capacity on a second acolyte."""
+    current_player_state = player_state
+    for move in moves:
+        is_second_placement = _is_allocation_second_acolyte_placement(current_player_state, move)
+        current_player_state = apply_allocation_move_with_capacity(
+            current_player_state,
+            move,
+            capacity=2,
+        )
+        if is_second_placement:
+            return True
+    return False
+
+
 def _allocation_move_sequences(
     player_state,
     *,
     max_moves: int,
     special_activity_capacity: int,
     min_moves: int = 1,
+    requires_second_acolyte_placement: bool = False,
 ) -> tuple[tuple[AllocationMove, ...], ...]:
     """Generate one legal allocation move sequence per distinct outcome, between the move bounds.
 
@@ -8429,6 +8575,8 @@ def _allocation_move_sequences(
         return ()
 
     # Keyed on depth as well as outcome, so every length an outcome is reachable at survives.
+    # A hired Chapter House needs a path that spent its second slot, which may be a different
+    # spelling of the same outcome from the ordinary branch's shortest representative.
     # Filled level by level, so iterating it later walks the depths in ascending order.
     by_outcome_and_depth: dict[
         tuple[AllocationOutcome, int],
@@ -8462,7 +8610,8 @@ def _allocation_move_sequences(
                 next_path = (*current_path, move)
                 next_outcome = allocation_outcome(next_path)
                 key = (next_outcome, depth)
-                by_outcome_and_depth.setdefault(key, next_path)
+                if not requires_second_acolyte_placement or next_second_placements:
+                    by_outcome_and_depth.setdefault(key, next_path)
                 frontier_key = (next_outcome, next_second_placements)
                 if frontier_key in next_frontier_keys:
                     continue

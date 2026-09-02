@@ -116,7 +116,11 @@ _DUTY_ENHANCEMENTS: tuple[DutyEnhancement, ...] = (
         source_key="chapter_house",
         effect="allows a second acolyte on each Special Activity via Allocation; bonuses scale by acolyte count, max 2",
         status="implemented",
-        notes="Active Chapter House increases per-space Special Activity capacity from 1 to 2.",
+        notes=(
+            "An active or hired-for-this-Allocation Chapter House increases per-space Special "
+            "Activity capacity from 1 to 2; it is hireable for Allocation only when it places a "
+            "second acolyte, and Allocation may hire only one action building."
+        ),
     ),
     DutyEnhancement(
         duty="clerical",

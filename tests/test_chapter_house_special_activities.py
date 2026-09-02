@@ -33,6 +33,7 @@ def _allocation_move_sequences_without_second_placement_limit(
     max_moves: int,
     special_activity_capacity: int,
     min_moves: int = 1,
+    requires_second_acolyte_placement: bool = False,
 ) -> tuple[tuple, ...]:
     """Allocation generator before the one-second-placement cap."""
     if max_moves <= 0:

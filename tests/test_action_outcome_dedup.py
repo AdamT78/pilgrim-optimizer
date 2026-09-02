@@ -69,6 +69,7 @@ def every_allocation_spelling(
     max_moves: int,
     special_activity_capacity: int,
     min_moves: int = 1,
+    requires_second_acolyte_placement: bool = False,
 ):
     """Allocation generation as it was: every legal spelling, longest first.
 
@@ -100,8 +101,10 @@ def every_allocation_spelling(
                 )
             except ValueError:
                 continue
-            found.append((*path, move))
-            walk(next_state, (*path, move), next_second_placements)
+            next_path = (*path, move)
+            if not requires_second_acolyte_placement or next_second_placements:
+                found.append(next_path)
+            walk(next_state, next_path, next_second_placements)
 
     walk(player_state, (), 0)
     keep = [sequence for sequence in found if len(sequence) >= min_moves]

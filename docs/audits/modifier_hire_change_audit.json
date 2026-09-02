@@ -1909,10 +1909,10 @@
     }
   ],
   "capture_scenario_counts": {
-    "legal_actions": 316,
-    "turn_steps": 322
+    "legal_actions": 317,
+    "turn_steps": 323
   },
-  "corpus_scenario_count": 322,
+  "corpus_scenario_count": 323,
   "generated_by": "python3 tools/audits/modifier_hire_change_audit.py",
   "limitations": [
     "The manifest measures each scenario's initial state, exactly as the two capture scripts do. It does not walk later turns or action results.",
@@ -1939,9 +1939,9 @@
         "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
         "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
       ],
-      "predicted_unchanged_file_count": 307,
+      "predicted_unchanged_file_count": 308,
       "rough_change": "add source-bearing modifier-use FullTurnAction variants for the currently post-step-only effect choices; existing non-hire actions remain",
-      "total_capture_file_count": 316
+      "total_capture_file_count": 317
     },
     "prediction_basis": "current initial-state offers and the effect-use actions visible only after their standalone step; this is a computed scope, not an observed hypothetical diff",
     "turn_steps": {
@@ -1961,10 +1961,10 @@
         "scenarios/wagon_yard_active_free_hire_opponent_scriptorium_001.json",
         "scenarios/wagon_yard_hire_opponent_free_hire_market_scriptorium_001.json"
       ],
-      "predicted_unchanged_file_count": 309,
+      "predicted_unchanged_file_count": 310,
       "removed_standalone_activation_step_count": 13,
       "rough_change": "remove one paid target BuildingActivationStep per offer; Bank's free Wagon Yard step stays",
-      "total_capture_file_count": 322
+      "total_capture_file_count": 323
     }
   }
 }

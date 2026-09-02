@@ -41,8 +41,8 @@ def test_manifest_records_the_reviewed_modifier_hire_scope() -> None:
     }
 
     assert actual == {
-        "corpus_scenario_count": 322,
-        "capture_scenario_counts": {"legal_actions": 316, "turn_steps": 322},
+        "corpus_scenario_count": 323,
+        "capture_scenario_counts": {"legal_actions": 317, "turn_steps": 323},
         "buildings": {
             "bank": {
                 "standalone_step_scenarios": 1,

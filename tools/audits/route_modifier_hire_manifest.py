@@ -52,6 +52,7 @@ TARGET_BUILDING_IDS = (
 )
 SOW_CARRIED_HIRE_BUILDING_IDS = (
     "infirmary",
+    "chapter_house",
     "mill",
     "well",
     "chapel",
@@ -117,6 +118,7 @@ ROUTE_HIRE_SCENARIO_PATHS = (
 # current-state measurements below change, so a sow-hire refactor can compare its captures to the
 # scope it was meant to reach.
 SOW_CARRIED_HIRE_SCENARIO_PATHS = (
+    "scenarios/allocation_hire_infirmary_chapter_house_bank_001.json",
     "scenarios/allocation_hire_infirmary_market_001.json",
     "scenarios/allocation_hire_infirmary_opponent_001.json",
     "scenarios/bank_active_give_alms_hire_mill_market_wheat3_001.json",
@@ -290,7 +292,7 @@ def _sow_carried_hire_actions(
 
 
 def _action_carries_route_hire(action: FullTurnAction) -> bool:
-    """Keep this audit on the six existing hire choices, not their new route-hire cross-product."""
+    """Keep this audit on action hires, not their route-hire cross-product."""
     return any(
         source not in (None, "own_active")
         for source in (
@@ -428,7 +430,7 @@ def collect_capture_snapshot_rows(root: Path | None = None) -> tuple[CaptureSnap
 def collect_sow_carried_hire_snapshot_rows(
     root: Path | None = None,
 ) -> tuple[SowCarriedHireSnapshotRow, ...]:
-    """Measure every initial position whose legal action carries one of the six hires."""
+    """Measure every initial position whose legal action carries one tracked action hire."""
     base = project_root() if root is None else root
     captured_paths = {
         capture: set(capture_scenario_paths(capture, root=base)) for capture in CAPTURE_NAMES

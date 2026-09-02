@@ -1822,7 +1822,7 @@ def test_every_unresolved_field_has_server_written_player_text(
                 if not isinstance(text, str) or not text:
                     unnamed.append((scenario_path.name, field))
 
-    assert scenarios_checked == 322, "the player-wording check no longer walks the full corpus"
+    assert scenarios_checked == 323, "the player-wording check no longer walks the full corpus"
     assert not unnamed, f"unresolved fields without player text: {unnamed[:10]}"
     # Own-active Bank variants now have a whole payment step, so these fields are deliberately no
     # longer part of a corpus-wide unresolved candidate. Keep the corpus walk proving that exact
