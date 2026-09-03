@@ -965,7 +965,7 @@ def test_the_board_draws_the_keys_and_the_script_only_shows_them(page: str) -> N
     ] * len(SEATED_PLAYERS)
     assert paint == expected
     assert '[data-resource-choice="true"] [data-resource-choice-key] {' in page
-    assert '[data-resource-choice="true"] [data-resource-divider] {' in page
+    assert '[data-resource-choice="true"] [data-resource-divider] {' not in page
 
 
 def test_the_choice_keys_have_no_motion_yet(page: str) -> None:

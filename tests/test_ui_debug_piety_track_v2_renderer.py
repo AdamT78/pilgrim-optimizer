@@ -1005,7 +1005,7 @@ def test_destination_variants_share_one_pill_and_always_show_conversion_silver()
     assert "data-piety-choice-silver-settled" not in panel
 
 
-def test_piety_choice_pills_do_not_take_a_stock_hue() -> None:
+def test_piety_choice_pills_take_the_silver_stock_hue() -> None:
     panel = render_piety_track_v2_svg(
         layout(),
         config(),
@@ -1022,4 +1022,4 @@ def test_piety_choice_pills_do_not_take_a_stock_hue() -> None:
     )
     observed = None if key is None else (key.group(1), key.group(2), float(key.group(3)))
 
-    assert observed == ("#B9B9B4", "#858582", 1.6)
+    assert observed == ("#D5E4EF", "#3F6E93", 2.0)

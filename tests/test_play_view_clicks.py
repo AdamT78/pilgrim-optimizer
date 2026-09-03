@@ -5394,7 +5394,8 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
     assert board_frame is not None and piety_frame_box is not None
     assert abs(piety_frame_box["width"] - board_frame["width"]) <= 2
     assert abs(piety_frame_box["height"] - board_frame["height"]) <= 2
-    # The stock key now owns its hue; the piety pill deliberately remains tied to its own surface.
+    # The piety pill carries silver too: its coin already says what the hue means, and the wash
+    # separates the key from the grey track beneath it.
     assert (
         board_frame_style["fill"],
         board_frame_style["stroke"],
@@ -5409,9 +5410,9 @@ def test_piety_destination_pills_are_hidden_until_asked_and_overlay_disc_band(pa
         "rgb(90, 87, 81)",
         "2px",
         "rgb(228, 217, 188)",
-        "rgb(185, 185, 180)",
-        "rgb(133, 133, 130)",
-        "1.6px",
+        "rgb(213, 228, 239)",
+        "rgb(63, 110, 147)",
+        "2px",
         "rgb(185, 185, 180)",
     )
     board_page.close()

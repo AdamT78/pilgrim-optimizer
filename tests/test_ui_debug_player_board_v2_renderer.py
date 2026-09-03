@@ -739,11 +739,11 @@ def test_a_key_is_drawn_hidden_and_only_an_attribute_shows_it(layout: dict) -> N
     for key in re.findall(r"<rect data-resource-choice-key=[^>]*/>", svg):
         assert 'visibility="hidden"' in key
     styles = resource_choice_styles()
-    assert '[data-resource-choice="true"] [data-resource-choice-key]' in styles
-    assert "visibility: visible; cursor: pointer;" in styles
-    # And the rules go while the keys are up: three keys with rules between them read as a table.
-    assert '[data-resource-choice="true"] [data-resource-divider]' in styles
-    assert styles.count("visibility: hidden;") == 1
+    assert styles == (
+        '  [data-resource-choice="true"] [data-resource-choice-key] {\n'
+        "    visibility: visible; cursor: pointer;\n"
+        "  }\n"
+    )
     assert "fill" not in styles and "#" not in styles
 
 
@@ -790,9 +790,9 @@ def test_the_page_that_shows_the_board_shows_it_being_asked(layout: dict) -> Non
 
     assert panel.count('data-resource-choice="true"') == 1
     assert panel.count("data-resource-choice-key") == 3
-    # The pair is the point: the rules going is half of what the choosing state looks like.
+    # The seams are still part of the board while one or more stock keys are live.
     assert panel.count("<figcaption>") == 2
-    assert '[data-resource-choice="true"] [data-resource-divider]' in page
+    assert '[data-resource-choice="true"] [data-resource-divider]' not in page
     # And the four boards the page opened with are not touched by any of it.
     assert page[: page.index("<h2>")].count("data-resource-choice-key") == 1
 

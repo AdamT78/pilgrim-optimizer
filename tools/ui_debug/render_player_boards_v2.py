@@ -191,7 +191,6 @@ RESOURCE_CHOICE_WIDTH = 66.0
 RESOURCE_CHOICE_HEIGHT = 61.0
 RESOURCE_CHOICE_TOP = 45.0
 RESOURCE_CHOICE_RADIUS = 9.0
-RESOURCE_CHOICE_STROKE_WIDTH = 1.6
 STOCK_CHOICE_STROKE_WIDTH = 2.0
 STOCK_CHOICE_PAINT = {
     "wheat": ("#F3E3AF", "#9A6B12"),
@@ -741,47 +740,28 @@ def _render_resource(
     )
 
 
-def _darker_surface_colour(colour: str, factor: float = 0.72) -> str:
-    bare = colour.lstrip("#")
-    channels = [int(bare[index : index + 2], 16) for index in (0, 2, 4)]
-    return "#" + "".join(f"{round(channel * factor):02X}" for channel in channels)
-
-
-def _render_resource_choice_keys(
-    block: dict,
-    resources: list[dict],
-    *,
-    surface_background: str,
-    stock_colours: bool,
-) -> str:
+def _render_resource_choice_keys(block: dict, resources: list[dict]) -> str:
     """One key per stock, drawn hidden, for a page that has to ask this seat which one it wants.
 
     Struck here rather than in the page's script for the same reason the first player seal is: the
     script reveals and hides, and never assigns a fill. A key carries the id of the stock it stands
     for, so a page can tell which was pressed without knowing where any of them sit.
 
-    The piety track reuses this geometry around a silver figure but is not asking which stock to
-    spend. Its caller leaves `stock_colours` false so that separate pill stays on its own surface.
+    The piety track reuses the silver key around a coin. Its grey pill barely separated from the
+    grey track; silver paint agrees with the coin the pill already shows rather than asserting a
+    new stock choice there.
     """
-    surface_border = _darker_surface_colour(surface_background)
     parts = []
     for cx, resource in zip(block["cell_x"], resources, strict=True):
         resource_name = str(resource["id"])
         resource_id = escape(resource_name)
-        fill, stroke = (
-            STOCK_CHOICE_PAINT[resource_name]
-            if stock_colours
-            else (surface_background, surface_border)
-        )
-        stroke_width = (
-            STOCK_CHOICE_STROKE_WIDTH if stock_colours else RESOURCE_CHOICE_STROKE_WIDTH
-        )
+        fill, stroke = STOCK_CHOICE_PAINT[resource_name]
         parts.append(
             f'<rect data-resource-choice-key="{resource_id}"'
             f' x="{cx - RESOURCE_CHOICE_WIDTH / 2:.1f}" y="{RESOURCE_CHOICE_TOP:g}"'
             f' width="{RESOURCE_CHOICE_WIDTH:g}" height="{RESOURCE_CHOICE_HEIGHT:g}"'
             f' rx="{RESOURCE_CHOICE_RADIUS:g}" fill="{fill}"'
-            f' stroke="{stroke}" stroke-width="{stroke_width:g}"'
+            f' stroke="{stroke}" stroke-width="{STOCK_CHOICE_STROKE_WIDTH:g}"'
             ' visibility="hidden"/>'
         )
     return "".join(parts)
@@ -806,14 +786,7 @@ def _render_resource_block(
         for x in block["divider_x"]
     ]
     if choice_keys:
-        parts.append(
-            _render_resource_choice_keys(
-                block,
-                resources,
-                surface_background=palette["panel_background"],
-                stock_colours=True,
-            )
-        )
+        parts.append(_render_resource_choice_keys(block, resources))
     parts += [
         _render_resource(block, cx, resource, palette, choice_keys)
         for cx, resource in zip(block["cell_x"], resources, strict=True)
@@ -1091,15 +1064,14 @@ def resource_choice_styles() -> str:
     `data-resource-choice="true"` on the board and takes it off again when the choice is answered.
     Reveal, hide, and a cursor -- no fill is named here or anywhere the script can reach.
 
-    The rules between the readouts go while the keys are up. During a choice these three are keys
-    rather than readouts, and keys with rules ruled between them read as a table again.
+    The rules between the readouts stay while the keys are up. A live key now has a 2px stroke in
+    its stock's own hue on a wash, while a seam is a 1.5px parchment-edge rule, so they read as
+    different kinds of thing. Hiding both seams used to help a neutral key register, but when only
+    one stock was payable it also rearranged the other two readouts for a question not about them.
     """
     return (
         '  [data-resource-choice="true"] [data-resource-choice-key] {\n'
         "    visibility: visible; cursor: pointer;\n"
-        "  }\n"
-        '  [data-resource-choice="true"] [data-resource-divider] {\n'
-        "    visibility: hidden;\n"
         "  }\n"
     )
 
