@@ -5108,7 +5108,7 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
         ),
         (
             '[data-board-position-index="2"][data-turn-duty-candidate="true"]',
-            "Red: Choose a duty to take.",
+            "Red: Sow and then choose a Duty tile to activate.",
         ),
     ):
         assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == prompt
