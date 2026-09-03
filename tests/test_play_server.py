@@ -3835,7 +3835,7 @@ def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path
         assert duty.get("auto") is None
         expected = (
             ([], "Choose a space to lift acolytes from.", [1]),
-            ([_at(1)], "Choose a duty to take.", [2]),
+            ([_at(1)], "Sow and then choose a Duty tile to activate.", [2]),
         )
         for clicks, prompt_end, offered in expected:
             transcript = _run_script(server, clicks, tmp_path)
@@ -9620,7 +9620,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                     {
                         "kind": "origin",
                         "value": 2,
-                        "prompt": f"{active}: Choose a duty to take.",
+                        "prompt": f"{active}: Sow and then choose a Duty tile to activate.",
                         "counter": 1,
                     }
                 ],

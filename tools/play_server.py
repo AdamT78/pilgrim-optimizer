@@ -1332,7 +1332,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 # so the visible line is always "player_id: <question>" and the page never composes one itself.
 ORIGIN_PROMPT = "Choose a space to lift acolytes from."
 ROUTE_PROMPT = "Follow an arrow."
-DUTY_PROMPT = "Choose a duty to take."
+DUTY_PROMPT = "Sow and then choose a Duty tile to activate."
 SKIP_PROMPT = "Choose the City or Duty space on your route to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "Choose a resource."
