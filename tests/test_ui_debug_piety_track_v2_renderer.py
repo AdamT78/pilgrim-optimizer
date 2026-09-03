@@ -1003,3 +1003,23 @@ def test_destination_variants_share_one_pill_and_always_show_conversion_silver()
     assert destination_one and destination_one.group(1) == "+1"
     assert "data-piety-choice-piety" not in panel
     assert "data-piety-choice-silver-settled" not in panel
+
+
+def test_piety_choice_pills_take_the_silver_stock_hue() -> None:
+    panel = render_piety_track_v2_svg(
+        layout(),
+        config(),
+        "2_player",
+        piety_choice_steps=[
+            {"piety_destination": 1, "silver_delta": 1, "hire_payment": None},
+        ],
+    )
+
+    key = re.search(
+        r'<rect data-resource-choice-key="silver"[^>]* fill="([^"]+)"'
+        r' stroke="([^"]+)" stroke-width="([^"]+)"',
+        panel,
+    )
+    observed = None if key is None else (key.group(1), key.group(2), float(key.group(3)))
+
+    assert observed == ("#D5E4EF", "#3F6E93", 2.0)

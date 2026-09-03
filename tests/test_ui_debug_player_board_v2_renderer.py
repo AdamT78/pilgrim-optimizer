@@ -46,6 +46,8 @@ from tools.ui_debug.render_player_boards_v2 import (
     ROLE_LABEL_TOP_GAP,
     ROLE_LINE_HEIGHT,
     SIDE_MARGIN,
+    STOCK_CHOICE_PAINT,
+    STOCK_CHOICE_STROKE_WIDTH,
     TOKEN_BAND_HEIGHT,
     TOKEN_GAP,
     TOKEN_GRID_TOP_GAP,
@@ -692,6 +694,35 @@ def test_every_stock_gets_a_key_big_enough_to_press(layout: dict) -> None:
     assert resource_icon_size("coin") < RESOURCE_CHOICE_WIDTH / 2
 
 
+def test_live_stock_hues_belong_to_the_pills_not_the_numerals(layout: dict) -> None:
+    svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
+    expected_paint = {
+        "wheat": ("#F3E3AF", "#9A6B12"),
+        "stone": ("#DCD8CE", "#5A5751"),
+        "silver": ("#D5E4EF", "#3F6E93"),
+    }
+    key_paint = {
+        resource: (fill, stroke, float(stroke_width))
+        for resource, fill, stroke, stroke_width in re.findall(
+            r'<rect data-resource-choice-key="(\w+)"[^>]* fill="([^"]+)"'
+            r' stroke="([^"]+)" stroke-width="([^"]+)"',
+            svg,
+        )
+    }
+    numeral_inks = dict(
+        re.findall(r'<g data-resource="(\w+)".*?<text [^>]*fill="([^"]+)"', svg)
+    )
+
+    assert (STOCK_CHOICE_PAINT, key_paint, numeral_inks) == (
+        expected_paint,
+        {
+            resource: (*paint, STOCK_CHOICE_STROKE_WIDTH)
+            for resource, paint in expected_paint.items()
+        },
+        {resource: "#3A2F1E" for resource in expected_paint},
+    )
+
+
 def test_resource_artwork_is_decorative_and_never_takes_pointer_events(layout: dict) -> None:
     svg = render_player_board_v2_svg(layout, players_of(layout)[0], choice_keys=True)
     readouts = re.findall(r'<g data-resource="\w+"[^>]*>', svg)
@@ -708,11 +739,11 @@ def test_a_key_is_drawn_hidden_and_only_an_attribute_shows_it(layout: dict) -> N
     for key in re.findall(r"<rect data-resource-choice-key=[^>]*/>", svg):
         assert 'visibility="hidden"' in key
     styles = resource_choice_styles()
-    assert '[data-resource-choice="true"] [data-resource-choice-key]' in styles
-    assert "visibility: visible; cursor: pointer;" in styles
-    # And the rules go while the keys are up: three keys with rules between them read as a table.
-    assert '[data-resource-choice="true"] [data-resource-divider]' in styles
-    assert styles.count("visibility: hidden;") == 1
+    assert styles == (
+        '  [data-resource-choice="true"] [data-resource-choice-key] {\n'
+        "    visibility: visible; cursor: pointer;\n"
+        "  }\n"
+    )
     assert "fill" not in styles and "#" not in styles
 
 
@@ -759,9 +790,9 @@ def test_the_page_that_shows_the_board_shows_it_being_asked(layout: dict) -> Non
 
     assert panel.count('data-resource-choice="true"') == 1
     assert panel.count("data-resource-choice-key") == 3
-    # The pair is the point: the rules going is half of what the choosing state looks like.
+    # The seams are still part of the board while one or more stock keys are live.
     assert panel.count("<figcaption>") == 2
-    assert '[data-resource-choice="true"] [data-resource-divider]' in page
+    assert '[data-resource-choice="true"] [data-resource-divider]' not in page
     # And the four boards the page opened with are not touched by any of it.
     assert page[: page.index("<h2>")].count("data-resource-choice-key") == 1
 
