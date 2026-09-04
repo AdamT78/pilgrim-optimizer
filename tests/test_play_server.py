@@ -1910,18 +1910,151 @@ def test_blocked_candidate_census_matches_the_current_affordance_backlog(
     expected = Counter(
         {
             ("construct_plan",): 8,
-            ("effective_acolyte_building_id", "effective_acolyte_building_source"): 4,
-            (
-                "free_hire_enabler_building_id",
-                "free_hire_target_building_id",
-                "free_hire_target_building_source",
-            ): 3,
         }
     )
 
     assert blocked == expected, (
         f"blocked-candidate census moved from {sum(expected.values())} "
         f"to {sum(blocked.values())}: {blocked}"
+    )
+
+
+def test_optional_modifier_steps_are_atomic_server_written_options() -> None:
+    own_scriptorium = load_scenario(
+        str(SCENARIOS / "scriptorium_active_majority_selected_duty_001.json")
+    )
+    wagon_yard = load_scenario(
+        str(SCENARIOS / "wagon_yard_active_free_hire_market_guild_001.json")
+    )
+    hired_scriptorium = load_scenario(
+        str(SCENARIOS / "scriptorium_hire_market_majority_selected_duty_001.json")
+    )
+    hired_step = next(
+        step
+        for step in turn_steps(hired_scriptorium.state, hired_scriptorium.config)
+        if step.building_id == "scriptorium"
+    )
+    after_hire = apply_turn_step(
+        hired_scriptorium.state,
+        hired_scriptorium.config,
+        hired_step,
+    )
+
+    def options_at(scenario, resolution: str, *, state=None) -> list[dict[str, str]]:
+        current = scenario.state if state is None else state
+        candidates = play_server.turn_candidates(current, scenario.config)
+        return sorted(
+            (
+                {
+                    "value": str(step["value"]),
+                    "label": str(step["label"]),
+                    "prompt": str(step["prompt"]),
+                }
+                for candidate in candidates
+                if any(
+                    step["kind"] == "resolution" and step["value"] == resolution
+                    for step in candidate["steps"]
+                )
+                for step in candidate["steps"]
+                if step["kind"] == "combination"
+                and str(step["value"]).startswith(("effective_acolyte:", "free_hire:"))
+            ),
+            key=lambda option: option["value"],
+        )
+
+    assert {
+        "own_scriptorium": options_at(own_scriptorium, "clerical_devotion"),
+        "hired_scriptorium": options_at(
+            hired_scriptorium,
+            "clerical_devotion",
+            state=after_hire,
+        ),
+        "wagon_yard": options_at(wagon_yard, "clerical_devotion"),
+    } == {
+        "own_scriptorium": [
+            {
+                "value": "effective_acolyte:decline",
+                "label": "Don't use the Scriptorium",
+                "prompt": "player_one: Choose whether to use the Scriptorium.",
+            },
+            {
+                "value": "effective_acolyte:scriptorium:own_active",
+                "label": (
+                    "Use the Scriptorium for +1 effective acolyte on occupied Duty tiles"
+                ),
+                "prompt": "player_one: Choose whether to use the Scriptorium.",
+            },
+        ],
+        "hired_scriptorium": [
+            {
+                "value": "effective_acolyte:decline",
+                "label": "Don't use the Scriptorium",
+                "prompt": "player_one: Choose whether to use the Scriptorium.",
+            },
+            {
+                "value": "effective_acolyte:scriptorium:committed",
+                "label": (
+                    "Use the Scriptorium for +1 effective acolyte on occupied Duty tiles"
+                ),
+                "prompt": "player_one: Choose whether to use the Scriptorium.",
+            },
+        ],
+        "wagon_yard": [
+            {
+                "value": "free_hire:decline",
+                "label": "Don't use the Wagon Yard",
+                "prompt": "player_one: Choose whether to use the Wagon Yard's free hire.",
+            },
+            {
+                "value": "free_hire:wagon_yard:guild:market",
+                "label": "Use the Wagon Yard to hire Guild from the market for free",
+                "prompt": "player_one: Choose whether to use the Wagon Yard's free hire.",
+            },
+        ],
+    }
+
+
+def test_wagon_yard_option_list_keeps_distinct_non_null_bundles() -> None:
+    scenario = load_scenario(
+        str(SCENARIOS / "wagon_yard_active_free_hire_market_guild_001.json")
+    )
+    actions = [
+        action
+        for action in legal_actions(scenario.state, scenario.config)
+        if isinstance(action, FullTurnAction)
+        and action.resolution is TurnResolutionType.CLERICAL_DEVOTION
+    ]
+    declined = next(
+        action for action in actions if action.free_hire_enabler_building_id is None
+    )
+    market = next(
+        action for action in actions if action.free_hire_target_building_source == "market"
+    )
+    opponent = replace(market, free_hire_target_building_source="player_two")
+
+    candidates = play_server.turn_candidates(
+        scenario.state,
+        scenario.config,
+        actions=(declined, market, opponent),
+        include_preview_effects=False,
+    )
+    options = {
+        step["value"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step["kind"] == "combination" and str(step["value"]).startswith("free_hire:")
+    }
+
+    assert (options, [candidate["variants"] for candidate in candidates], {
+        tuple(candidate["unresolved"]) for candidate in candidates
+    }) == (
+        {
+            "free_hire:decline",
+            "free_hire:wagon_yard:guild:market",
+            "free_hire:wagon_yard:guild:player_two",
+        },
+        [1, 1, 1],
+        {()},
     )
 
 

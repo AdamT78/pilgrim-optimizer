@@ -70,6 +70,7 @@ from tools.play_server import (  # noqa: E402
     DECIDED_FIELDS,
     _covered_fields,
     _hire_contexts,
+    _optional_modifier_contexts,
     _resolution_context_key,
     turn_candidates,
 )
@@ -267,10 +268,34 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
         actions = legal_actions(state, config)
         by_id = {action_id(action): action for action in actions}
         hire_contexts = _hire_contexts(list(actions), config)
+        effective_acolyte_contexts = _optional_modifier_contexts(
+            list(actions),
+            config,
+            enabler_field="effective_acolyte_building_id",
+        )
+        free_hire_contexts = _optional_modifier_contexts(
+            list(actions),
+            config,
+            enabler_field="free_hire_enabler_building_id",
+        )
         offer_hire_by_action_id = {
             action_id(action): (
                 isinstance(action, FullTurnAction)
                 and _resolution_context_key(action, config) in hire_contexts
+            )
+            for action in actions
+        }
+        offer_effective_acolyte_by_action_id = {
+            action_id(action): (
+                isinstance(action, FullTurnAction)
+                and _resolution_context_key(action, config) in effective_acolyte_contexts
+            )
+            for action in actions
+        }
+        offer_free_hire_by_action_id = {
+            action_id(action): (
+                isinstance(action, FullTurnAction)
+                and _resolution_context_key(action, config) in free_hire_contexts
             )
             for action in actions
         }
@@ -299,6 +324,8 @@ def measure(scenario_path: str, turns: int = 1, policy: str = "first") -> dict:
                     state,
                     config,
                     offer_hire=offer_hire_by_action_id[answered],
+                    offer_effective_acolyte=offer_effective_acolyte_by_action_id[answered],
+                    offer_free_hire=offer_free_hire_by_action_id[answered],
                     include_preview_effects=False,
                 ):
                     worsen(name, ASKED)
