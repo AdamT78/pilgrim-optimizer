@@ -1887,10 +1887,41 @@ def test_hire_payments_are_not_in_refusals(
                     (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
                 )
 
-    assert refused == 15, f"corpus refused-group count moved from 15 to {refused}"
+    assert refused > 0, "corpus had no refused groups, so this checked nothing"
     assert not hire_payment_blocked, (
         f"hire_payments still block {len(hire_payment_blocked)} candidate groups: "
         f"{hire_payment_blocked[:10]}"
+    )
+
+
+def test_blocked_candidate_census_matches_the_current_affordance_backlog(
+    corpus_actions, playtest_actions
+) -> None:
+    """The count should fall as affordances are built; a rise means something regressed."""
+    blocked = Counter(
+        tuple(candidate.get("unresolved", ()))
+        for _scenario_path, scenario, actions in _all_corpus_actions(
+            corpus_actions, playtest_actions
+        )
+        for candidate in _payload_from_corpus(scenario, actions)["turn_candidates"]
+        if candidate.get("action_id") is None
+    )
+
+    expected = Counter(
+        {
+            ("construct_plan",): 8,
+            ("effective_acolyte_building_id", "effective_acolyte_building_source"): 4,
+            (
+                "free_hire_enabler_building_id",
+                "free_hire_target_building_id",
+                "free_hire_target_building_source",
+            ): 3,
+        }
+    )
+
+    assert blocked == expected, (
+        f"blocked-candidate census moved from {sum(expected.values())} "
+        f"to {sum(blocked.values())}: {blocked}"
     )
 
 
@@ -1944,28 +1975,40 @@ def test_every_unresolved_field_has_server_written_player_text(
     )
 
 
-def test_an_unmapped_unresolved_field_stops_candidate_construction(monkeypatch) -> None:
+def test_an_unmapped_unresolved_field_stops_candidate_construction(
+    monkeypatch, corpus_actions
+) -> None:
     """MUTATION. A new residue field needs wording before a player can encounter it."""
-    monkeypatch.delitem(play_server.UNRESOLVED_FIELD_TEXT, "construct_plan")
-    scenario = load_scenario(SCENARIOS / "construct_road_engineer_extra_road_001.json")
+    def opening_candidates():
+        for _scenario_path, scenario, actions in corpus_actions:
+            yield from play_server.turn_candidates(
+                scenario.state,
+                scenario.config,
+                actions=actions,
+                include_preview_effects=False,
+            )
 
-    with pytest.raises(RuntimeError, match="construct_plan.*no player-facing name"):
-        play_server.turn_candidates(scenario.state, scenario.config)
+    with _one_field_gone_unasked_without_text(monkeypatch):
+        with pytest.raises(RuntimeError, match="tithe_resource.*no player-facing name"):
+            tuple(opening_candidates())
 
 
-def test_an_undecided_turn_renders_the_server_written_field_name() -> None:
+def test_an_undecided_turn_renders_the_server_written_field_name(
+    monkeypatch, corpus_actions
+) -> None:
     """The renderer reads the completed sentence, never the field that led to it."""
-    scenario = load_scenario(SCENARIOS / "construct_road_engineer_extra_road_001.json")
-    candidate = next(
-        candidate
-        for candidate in play_server.turn_candidates(scenario.state, scenario.config)
-        if "construct_plan" in candidate["unresolved"]
-    )
-    page = render_play_view.render_turn_panel({"turn_candidates": [candidate]})
+    with _one_field_gone_unasked(monkeypatch):
+        candidate = next(
+            candidate
+            for _scenario_path, scenario, actions in corpus_actions
+            for candidate in _payload_from_corpus(scenario, actions)["turn_candidates"]
+            if UNPRESENTED in candidate["unresolved"]
+        )
+        page = render_play_view.render_turn_panel({"turn_candidates": [candidate]})
 
     assert {
-        "server_words_shown": "which roads to build" in page,
-        "engine_field_hidden": "construct_plan" not in page,
+        "server_words_shown": "which resource to tithe" in page,
+        "engine_field_hidden": UNPRESENTED not in page,
     } == {"server_words_shown": True, "engine_field_hidden": True}
 
 
@@ -2319,6 +2362,17 @@ UNPRESENTED = "tithe_resource"
 
 
 @contextmanager
+def _one_field_gone_unasked_without_text(monkeypatch):
+    """Take one presented field off the page without giving its residue player wording."""
+    monkeypatch.setattr(
+        play_server,
+        "RESOURCE_CHOICE_FIELDS",
+        tuple(name for name in play_server.RESOURCE_CHOICE_FIELDS if name != UNPRESENTED),
+    )
+    yield
+
+
+@contextmanager
 def _one_field_gone_unasked(monkeypatch):
     """Take one presented field back off the page, so a turn becomes genuinely unanswerable.
 
@@ -2328,17 +2382,13 @@ def _one_field_gone_unasked(monkeypatch):
     names it when that affordance disappears. The natural case guards today's real backlog; this
     one guards the mechanism independently of which fields happen to be unfinished today.
     """
-    monkeypatch.setattr(
-        play_server,
-        "RESOURCE_CHOICE_FIELDS",
-        tuple(name for name in play_server.RESOURCE_CHOICE_FIELDS if name != UNPRESENTED),
-    )
-    monkeypatch.setitem(
-        play_server.UNRESOLVED_FIELD_TEXT,
-        UNPRESENTED,
-        "which resource to tithe",
-    )
-    yield
+    with _one_field_gone_unasked_without_text(monkeypatch):
+        monkeypatch.setitem(
+            play_server.UNRESOLVED_FIELD_TEXT,
+            UNPRESENTED,
+            "which resource to tithe",
+        )
+        yield
 
 
 def _played_until_the_page_must_refuse(server, limit: int = 40):
