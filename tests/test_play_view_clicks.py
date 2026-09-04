@@ -809,6 +809,57 @@ def _exercise_optional_modifier_answers(
     return outcomes
 
 
+def test_natural_construct_plan_dead_end_reveals_one_refusal_panel(page, serve) -> None:
+    """Keep a NATURAL dead end visible, separately from the manufactured refusal test.
+
+    If the construct-plan family becomes answerable, re-point this test to another naturally
+    reachable dead end rather than deleting it. Its job is to cover the browser's refusal path,
+    not the particular affordance backlog that currently supplies the path.
+    """
+    scenario_path = SCENARIOS / "construct_road_engineer_extra_road_001.json"
+    base_url, server = serve(scenario_path)
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate["unresolved"] == ["construct_plan"]
+    )
+
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    assert (
+        page.locator(".turn-blocked:visible").count(),
+        page.locator('[data-turn-prompt][data-turn-offered="true"]').count(),
+    ) == (0, 1), "a refusal appeared while the resolution question was still unanswered"
+
+    resolution = next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    _click_candidate_step(page, resolution)
+
+    laid_out_panels = page.locator("[data-turn-panel]").evaluate_all(
+        """nodes => nodes
+          .map(node => {
+            const box = node.getBoundingClientRect();
+            return {
+              display: getComputedStyle(node).display,
+              hasLayout: box.width > 0 && box.height > 0,
+            };
+          })
+          .filter(panel => panel.display !== 'none')"""
+    )
+    assert laid_out_panels == [{"display": "block", "hasLayout": True}], (
+        "the natural terminal frontier did not reveal exactly one laid-out refusal panel"
+    )
+    shown = page.locator('[data-turn-panel][data-turn-shown="true"]')
+    assert shown.locator(".turn-field").all_inner_texts() == ["which roads to build"]
+    confirm = page.locator('[data-turn-control="confirm"]')
+    assert confirm.is_visible() and not confirm.is_enabled(), (
+        "Confirm became available for a naturally undecided turn"
+    )
+    page.screenshot(
+        path=str(SCREENSHOTS / "construct-road-engineer-extra-road-001-blocked-turn.png"),
+        full_page=True,
+    )
+
+
 def test_wagon_yard_optional_bundle_is_laid_out_and_commits_both_answers(page, serve) -> None:
     values = (
         "free_hire:decline",

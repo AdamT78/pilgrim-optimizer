@@ -26,6 +26,10 @@ from xml.sax.saxutils import escape
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from tools.ui_debug.building_choice_style import (  # noqa: E402
+    BUILDING_CHOICE_STROKE,
+    BUILDING_CHOICE_STROKE_WIDTH,
+)
 from tools.ui_debug.render_buildings import HEX_RADIUS as TILE_HEX_RADIUS  # noqa: E402
 from tools.ui_debug.render_buildings import (  # noqa: E402
     TILE_NAME_CENTER_Y_OFFSET,
@@ -144,14 +148,6 @@ SKIPPED_HEXES = ("F1", "B6", "G11", "L6")
 SHIP_POSITION_COUNT = len(EDGE_HEX_PATH)
 
 SHIP_COLOR = "#000000"
-
-# The outline a building wears while it is one of the ones that may be constructed. Deliberately
-# the parchment an offered duty space on the wheel is ringed in, and deliberately not the
-# building's own palette: a building already draws itself in its level's colours, and lighting an
-# offered one in more of the same would read as a property of the building rather than as
-# something being asked about it right now.
-BUILDING_CHOICE_STROKE = "#F2EEDF"
-BUILDING_CHOICE_STROKE_WIDTH = 4.0
 
 # The start roll decides which eligible hex carries setup slot 1; the rest follow clockwise.
 START_HEX_BY_ROLL = {1: "E1", 2: "D1", 3: "D2", 4: "C3", 5: "C4", 6: "B5"}

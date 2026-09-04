@@ -44,6 +44,10 @@ import math
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from tools.ui_debug.building_choice_style import (
+    BUILDING_CHOICE_STROKE,
+    BUILDING_CHOICE_STROKE_WIDTH,
+)
 from tools.ui_debug.render_duty_wheel import CUBE_CELL_HEIGHT as DUTY_CUBE_CELL_HEIGHT
 from tools.ui_debug.render_duty_wheel import CUBE_COLUMN_WIDTH as DUTY_CUBE_COLUMN_WIDTH
 from tools.ui_debug.render_duty_wheel import CUBE_SIZE as DUTY_CUBE_SIZE
@@ -197,12 +201,6 @@ STOCK_CHOICE_PAINT = {
     "stone": ("#DCD8CE", "#5A5751"),
     "silver": ("#D5E4EF", "#3F6E93"),
 }
-
-# A building choice is the same question whether its answer stands on the map or on this board,
-# so its key wears the map key's exact parchment stroke. The page only reveals it; all paint stays
-# with the renderer that knows the key's shape.
-BUILDING_CHOICE_STROKE = "#F2EEDF"
-BUILDING_CHOICE_STROKE_WIDTH = 4.0
 
 # The one key a page shows when the whole BOARD is the answer -- naming a start player is the
 # question that asks it. An outline round the panel and nothing inside it, in the same parchment
