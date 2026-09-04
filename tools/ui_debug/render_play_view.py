@@ -941,7 +941,6 @@ def _turn_step_controls(steps: list[dict]) -> str:
         '<div class="turn-step-controls" data-component="turn-step-controls">'
         '<div class="turn-step-hire-row" data-turn-step-hire-row="true"'
         ' data-turn-step-row-active="false">'
-        '<span class="turn-step-label">Hire payment</span>'
         '<span data-turn-step-hire-text="true"></span>'
         f"{hire_buttons}</div>"
         '<div class="turn-step-direction-row" data-turn-step-direction-row="true"'
