@@ -9,7 +9,10 @@
   var CANDIDATE_WIRE = __CANDIDATE_WIRE__;
 
   function expandCandidateWire(wire) {
-    var fields = { '$p': 'prompt', '$t': 'turn_phase', '$k': 'kind', '$s': 'summary' };
+    var fields = {
+      '$p': 'prompt', '$t': 'turn_phase', '$g': 'turn_stage',
+      '$w': 'building_ability_window', '$b': 'building_stage', '$k': 'kind', '$s': 'summary'
+    };
     var candidateFields = { 'summary': '$s' };
     return wire.c.map(function (candidate) {
       var expanded = {};
@@ -135,6 +138,7 @@
   var prompts = aside.querySelectorAll('[data-turn-prompt]');
   var hireFact = aside.querySelector('[data-turn-hire-fact]');
   var phaseRows = aside.querySelectorAll('[data-turn-phase]');
+  var stageRows = aside.querySelectorAll('[data-turn-stage]');
   var phasePrompts = aside.querySelectorAll('[data-turn-phase-prompt]');
   var keys = aside.querySelectorAll('[data-resolution-key]');
   var pairs = aside.querySelectorAll('[data-combination-key]');
@@ -381,19 +385,36 @@
     return candidates[0].action_id;
   }
 
-  function renderPhase(current) {
+  function openStagesOf(steps) {
+    var open = [];
+    steps.forEach(function (step) {
+      [step.turn_stage, step.building_stage].forEach(function (stage) {
+        if (stage && open.indexOf(stage) === -1) { open.push(stage); }
+      });
+    });
+    return open;
+  }
+
+  function renderPhase(buildingWindow, openStages, currentStage) {
     if (PHASE_COLUMN_SCOPE !== 'turn') { return; }
-    if (current === null) { return; }
-    currentTurnPhase = current;
+    if (buildingWindow !== null) { currentTurnPhase = buildingWindow; }
     Array.prototype.forEach.call(phaseRows, function (row) {
-      if (row.getAttribute('data-turn-phase') === current) {
-        row.setAttribute('data-phase-current', 'true');
+      row.removeAttribute('data-phase-current');
+    });
+    Array.prototype.forEach.call(stageRows, function (row) {
+      var open = openStages.indexOf(row.getAttribute('data-turn-stage')) !== -1;
+      row.setAttribute('data-turn-stage-state', open ? 'open' : 'not-open');
+      var paintsQuestion = open
+        && row.getAttribute('data-turn-stage') === currentStage
+        && row.getAttribute('data-turn-stage-highlight') === 'true';
+      if (paintsQuestion) {
+        row.setAttribute('data-turn-stage-current', 'true');
       } else {
-        row.removeAttribute('data-phase-current');
+        row.removeAttribute('data-turn-stage-current');
       }
     });
     Array.prototype.forEach.call(phasePrompts, function (prompt) {
-      if (prompt.getAttribute('data-turn-phase-prompt') === current) {
+      if (prompt.getAttribute('data-turn-phase-prompt') === buildingWindow) {
         prompt.setAttribute('data-turn-phase-prompt-current', 'true');
       } else {
         prompt.removeAttribute('data-turn-phase-prompt-current');
@@ -1363,13 +1384,18 @@
 
   /* What the offered step is ASKING, in one line at a time. The sentence comes off the step
      whole. Nothing here composes, shortens or joins one. */
-  function promptsOf(offered) {
-    var prompt = null;
+  function promptingStepOf(offered) {
+    var promptingStep = null;
     offered.forEach(function (step) {
-      if (prompt !== null) { return; }
-      if (step.prompt) { prompt = step.prompt; }
+      if (promptingStep !== null) { return; }
+      if (step.prompt) { promptingStep = step; }
     });
-    return prompt === null ? [] : [prompt];
+    return promptingStep;
+  }
+
+  function promptsOf(offered) {
+    var step = promptingStepOf(offered);
+    return step === null ? [] : [step.prompt];
   }
 
   function mark(elements, attribute, values) {
@@ -2254,7 +2280,20 @@
 
   function render() {
     if (!CANDIDATES.length) {
-      renderPhase(RESOLUTION_COMMITTED ? 'end' : null);
+      var initialOpenStages = Array.prototype.filter.call(stageRows, function (row) {
+        return row.getAttribute('data-turn-stage-state') === 'open';
+      }).map(function (row) { return row.getAttribute('data-turn-stage'); });
+      var initialCurrentStage = null;
+      Array.prototype.forEach.call(stageRows, function (row) {
+        if (row.getAttribute('data-turn-stage-current') === 'true') {
+          initialCurrentStage = row.getAttribute('data-turn-stage');
+        }
+      });
+      renderPhase(
+        RESOLUTION_COMMITTED ? 'end' : null,
+        initialOpenStages,
+        initialCurrentStage
+      );
       restoreBaseline();
       applyTurnStepRelocationPreview();
       renderTurnSteps();
@@ -2275,14 +2314,25 @@
       live = surviving(chosen);
       offered = stepsAt(chosen.length, live);
     }
-    var phase = RESOLUTION_COMMITTED ? 'end' : null;
-    if (phase === null && offered.length) {
-      phase = offered[0].turn_phase;
+    var buildingWindow = RESOLUTION_COMMITTED ? 'end' : null;
+    var openStages = openStagesOf(offered);
+    var promptingStep = promptingStepOf(offered);
+    var currentStage = promptingStep === null ? null : promptingStep.turn_stage;
+    if (buildingWindow === null && offered.length) {
+      buildingWindow = offered[0].building_ability_window;
     }
-    if (phase === null && live.length) {
-      phase = live[0].settled_turn_phase;
+    if (currentStage === null && offered.length) {
+      currentStage = offered[0].turn_stage;
     }
-    renderPhase(phase || null);
+    if (currentStage === null && live.length) {
+      buildingWindow = live[0].settled_building_ability_window;
+      currentStage = live[0].settled_turn_stage;
+      openStages = openStagesOf([{
+        turn_stage: live[0].settled_turn_stage,
+        building_stage: live[0].settled_building_stage
+      }]);
+    }
+    renderPhase(buildingWindow || null, openStages, currentStage);
     var allocationSteps = resourceAllocationSteps(offered);
     var allocationAnyTotal = resourceAllocationAnyTotal(allocationSteps);
     if (!allocationSteps.length) {

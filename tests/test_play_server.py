@@ -138,7 +138,11 @@ def _payload_from_corpus(scenario, actions) -> dict[str, Any]:
         **route_payload,
         log=[],
         log_blocks=[],
-        phase_column=play_server.phase_column_payload(scenario.state, []),
+        phase_column=play_server.phase_column_payload(
+            scenario.state,
+            [],
+            turn_candidates=route_payload["turn_candidates"],
+        ),
     )
 
 
@@ -2795,17 +2799,50 @@ def test_candidate_summaries_share_one_wire_entry() -> None:
     )
 
 
-def _phase_column_at_cursor(column: dict, current: str) -> dict:
-    """Keep the server's phase rows, changing only which supplied cursor names as current."""
+TURN_STAGE_ORDER = (
+    "beginning_buildings",
+    "lift_acolytes",
+    "walk_route",
+    "take_duty",
+    "action_or_tithe",
+    "end_buildings",
+    "end_turn",
+)
+TURN_STEP_STAGE_KEYS = frozenset(
+    {"lift_acolytes", "walk_route", "take_duty", "action_or_tithe", "end_turn"}
+)
+
+
+def _phase_column_at_stages(column: dict, open_stages: set[str]) -> dict:
+    """Keep the server's row structure, changing only its supplied open set."""
     return {
         **column,
-        "rows": [{**row, "current": row["key"] == current} for row in column["rows"]],
+        "rows": [
+            {
+                **row,
+                "stages": [
+                    {
+                        **stage,
+                        "state": "open" if stage["key"] in open_stages else "not-open",
+                    }
+                    for stage in row["stages"]
+                ],
+            }
+            for row in column["rows"]
+        ],
     }
 
 
-def _server_painted_turn_phases(column: dict) -> list[str]:
+def _server_stage_snapshot(column: dict) -> dict[str, list[str]]:
     page = render_play_view._turn_phase_column({"phase_column": column})
-    return re.findall(r'data-turn-phase="([^"]+)" data-phase-current="true"', page)
+    return {
+        "open": re.findall(
+            r'data-turn-stage="([^"]+)" data-turn-stage-state="open"', page
+        ),
+        "painted": re.findall(
+            r'data-turn-stage="([^"]+)"[^>]*data-turn-stage-current="true"', page
+        ),
+    }
 
 
 def _phase_named_at_frontier(frontier: dict[str, Any]) -> str:
@@ -2814,16 +2851,37 @@ def _phase_named_at_frontier(frontier: dict[str, Any]) -> str:
     return phases.pop()
 
 
+def _open_stages_from_steps(steps: list[dict[str, Any]]) -> set[str]:
+    return {
+        stage
+        for step in steps
+        for stage in (step.get("turn_stage"), step.get("building_stage"))
+        if stage is not None
+    }
+
+
+def _painted_stage(open_stages: set[str]) -> list[str]:
+    return [
+        next(stage for stage in TURN_STAGE_ORDER if stage in open_stages & TURN_STEP_STAGE_KEYS)
+    ]
+
+
+def _prompting_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Mirror promptsOf: the first offered step carrying the one sentence the page shows."""
+    return next((step for step in steps if step.get("prompt")), None)
+
+
 def _phase_after_the_page_follows_automatic_steps(
     candidates: list[dict], cursor: dict[str, int], selection: frozenset[int]
-) -> str:
-    """Read the next phase from the payload after its marked automatic continuation."""
+) -> tuple[str, set[str], str, str | None]:
+    """Read the phase, open set, and prompting stage after automatic continuation."""
     selected = candidates[cursor["candidateIndex"]]["steps"][: cursor["depth"]]
     prefix = [step["value"] for step in selected]
     while True:
         live = [
             candidate
             for candidate in candidates
+            if set(candidate.get("family", ())).issubset(selection)
             if len(candidate["steps"]) >= len(prefix)
             and [step["value"] for step in candidate["steps"][: len(prefix)]] == prefix
         ]
@@ -2840,10 +2898,32 @@ def _phase_after_the_page_follows_automatic_steps(
             continue
         if offered:
             phases = {step["turn_phase"] for step in offered.values()}
+            offered_steps = list(offered.values())
+            open_stages = _open_stages_from_steps(offered_steps)
+            prompting_step = _prompting_step(offered_steps)
+            current_stage = (
+                prompting_step["turn_stage"]
+                if prompting_step is not None
+                else offered_steps[0]["turn_stage"]
+            )
+            prompt = None if prompting_step is None else prompting_step["prompt"]
         else:
             phases = {candidate["settled_turn_phase"] for candidate in live}
+            open_stages = {
+                stage
+                for candidate in live
+                for stage in (
+                    candidate.get("settled_turn_stage"),
+                    candidate.get("settled_building_stage"),
+                )
+                if stage is not None
+            }
+            current_stages = {candidate["settled_turn_stage"] for candidate in live}
+            assert len(current_stages) == 1
+            current_stage = current_stages.pop()
+            prompt = None
         assert len(phases) == 1, f"one page cursor carried several server phases: {phases!r}"
-        return phases.pop()
+        return phases.pop(), open_stages, current_stage, prompt
 
 
 def _candidates_at_cursor(candidates: list[dict], cursor: dict[str, int]) -> list[dict]:
@@ -2877,6 +2957,8 @@ def _run_phase_cursors(
     server, candidates: list[dict], cursors: list[dict[str, int]], tmp_path: Path
 ) -> list[dict]:
     """Run the shipped script once per cursor without replacing its phase logic in Python."""
+    always_visible = _always_visible_route_families(server.payload)
+    families_by_index = {family["i"]: family for family in server.payload["families"]}
     output = _run_script(
         server,
         [],
@@ -2885,7 +2967,16 @@ def _run_phase_cursors(
             "phaseColumn": server.payload["phase_column"],
             "phaseOnly": True,
             "phaseCandidateRuns": [
-                _candidates_at_cursor(candidates, cursor)
+                {
+                    "candidates": _candidates_at_cursor(candidates, cursor),
+                    "enabledFamilies": [
+                        families_by_index[index]["building_id"]
+                        for index in sorted(
+                            always_visible
+                            | frozenset(candidates[cursor["candidateIndex"]].get("family", ()))
+                        )
+                    ],
+                }
                 for cursor in cursors
             ],
         },
@@ -2895,8 +2986,10 @@ def _run_phase_cursors(
 
 
 @needs_node
-def test_every_playtest_frontier_paints_the_phase_its_payload_names(tmp_path: Path) -> None:
-    """Server first paint and client rerender both consume the payload's phase, never a rule."""
+def test_every_playtest_frontier_paints_the_stage_owning_its_shown_prompt(
+    tmp_path: Path,
+) -> None:
+    """The one shown server sentence and the one green server stage never disagree."""
     checked = 0
     scenario_names = []
     for scenario_path in sorted(PLAYTEST_SCENARIOS.glob("*.json")):
@@ -2905,40 +2998,163 @@ def test_every_playtest_frontier_paints_the_phase_its_payload_names(tmp_path: Pa
             candidates = server.payload["turn_candidates"]
             frontiers = _turn_candidate_frontiers(candidates)
             scenario_names.append(scenario_path.name)
-            expected = [_phase_named_at_frontier(frontier) for frontier in frontiers]
+            for frontier in frontiers:
+                assert _phase_named_at_frontier(frontier) in {"sow", "end"}
             cursors = [frontier["cursor"] for frontier in frontiers]
 
-            for phase in expected:
-                column = _phase_column_at_cursor(server.payload["phase_column"], phase)
-                assert _server_painted_turn_phases(column) == [phase]
+            for frontier in frontiers:
+                open_stages = _open_stages_from_steps(frontier["steps"])
+                column = _phase_column_at_stages(server.payload["phase_column"], open_stages)
+                assert _server_stage_snapshot(column)["open"] == [
+                    stage for stage in TURN_STAGE_ORDER if stage in open_stages
+                ]
 
             painted = _run_phase_cursors(server, candidates, cursors, tmp_path)
             assert len(painted) == len(frontiers)
             selection = _always_visible_route_families(server.payload)
             for frontier, observed in zip(frontiers, painted, strict=True):
-                expected_phase = _phase_after_the_page_follows_automatic_steps(
-                    candidates, frontier["cursor"], selection
+                cursor = frontier["cursor"]
+                cursor_selection = selection | frozenset(
+                    candidates[cursor["candidateIndex"]].get("family", ())
                 )
-                assert observed["phaseRows"] == [expected_phase], (
-                    f"{scenario_path.name} client painted {observed['phaseRows']!r} at "
-                    f"{frontier['prefix']!r}; its server payload names {expected_phase!r}"
+                (
+                    expected_phase,
+                    expected_stages,
+                    expected_current_stage,
+                    expected_prompt,
+                ) = _phase_after_the_page_follows_automatic_steps(
+                    candidates, cursor, cursor_selection
+                )
+                assert observed == {
+                    "phaseRows": [],
+                    "openStageRows": [
+                        stage for stage in TURN_STAGE_ORDER if stage in expected_stages
+                    ],
+                    "paintedStageRows": [expected_current_stage],
+                    "promptRows": [] if expected_prompt is None else [expected_prompt],
+                }, (
+                    f"{scenario_path.name} client painted {observed!r} at "
+                    f"{frontier['prefix']!r}; its server payload names "
+                    f"{expected_phase!r} and {expected_stages!r}"
                 )
             checked += len(frontiers)
 
-            settled = next(candidate for candidate in candidates if candidate["action_id"] is not None)
+            settled = next(
+                candidate for candidate in candidates if candidate["action_id"] is not None
+            )
             server.apply(settled["action_id"], server.payload["state_token"])
-            assert _server_painted_turn_phases(server.payload["phase_column"]) == ["end"]
+            assert _server_stage_snapshot(server.payload["phase_column"])["painted"] == [
+                "end_turn"
+            ]
             assert _run_script(
                 server,
                 [],
                 tmp_path,
                 job_fields={"phaseColumn": server.payload["phase_column"], "phaseOnly": True},
-            ) == {"phaseRows": ["end"]}
+            )["paintedStageRows"] == ["end_turn"]
         finally:
             server.server_close()
 
     assert sorted(scenario_names) == sorted(PLAYTEST_POSITION_NAMES)
     assert checked >= 1700, f"only {checked} playtest frontiers were checked"
+
+
+def test_turn_stage_contract_covers_mixed_frontiers_and_the_short_setup_spine(
+    play_payload_corpus,
+) -> None:
+    expected_stage_by_kind = {
+        "origin": "lift_acolytes",
+        "edge": "walk_route",
+        "skip": "walk_route",
+        "duty": "take_duty",
+        "resolution": "action_or_tithe",
+        "resource": "action_or_tithe",
+        "combination": "action_or_tithe",
+        "hire": "action_or_tithe",
+        "building": "action_or_tithe",
+        "arrangement": "action_or_tithe",
+        "ordination": "action_or_tithe",
+    }
+    mixed_frontiers = []
+    setup_positions = []
+    setup_candidates = 0
+
+    for scenario_path, payload in play_payload_corpus:
+        candidates = payload["turn_candidates"]
+        for candidate in candidates:
+            for step in candidate["steps"]:
+                assert step["turn_stage"] == expected_stage_by_kind[step["kind"]]
+                if step["kind"] == "origin" and payload["state"]["phase"] == "sow":
+                    assert step["turn_phase"] == "sow"
+                    assert step["building_ability_window"] == "beginning"
+        for frontier in _turn_candidate_frontiers(candidates):
+            open_step_stages = {step["turn_stage"] for step in frontier["steps"]}
+            if {"walk_route", "take_duty"}.issubset(open_step_stages):
+                mixed_frontiers.append((scenario_path.name, frontier["prefix"]))
+
+        if payload["state"]["phase"] == "setup_sow":
+            setup_positions.append(scenario_path.name)
+            setup_candidates += len(candidates)
+            stages = [
+                stage["key"]
+                for row in payload["phase_column"]["rows"]
+                for stage in row["stages"]
+            ]
+            assert stages == ["lift_acolytes", "walk_route"]
+
+    assert len(mixed_frontiers) == 95
+    assert len(setup_positions) == 5
+    assert setup_candidates == 30
+
+
+def test_building_stage_opens_from_committed_steps_or_route_family_candidates() -> None:
+    for scenario_name, expected_source in (
+        (PLAYTEST_CONVERSIONS, "turn_steps"),
+        (PLAYTEST_KOGGE_AND_CLOISTERS, "route_family"),
+    ):
+        scenario = load_scenario(PLAYTEST_SCENARIOS / scenario_name)
+        steps = play_server.turn_steps_payload(scenario.state, scenario.config)
+        route_payload = play_server.route_family_payload(
+            scenario.state,
+            scenario.config,
+            available_turn_steps=steps,
+        )
+        column = play_server.phase_column_payload(
+            scenario.state,
+            [],
+            available_turn_steps=steps,
+            turn_candidates=route_payload["turn_candidates"],
+        )
+        states = {
+            stage["key"]: stage["state"]
+            for row in column["rows"]
+            for stage in row["stages"]
+        }
+
+        assert states["beginning_buildings"] == "open"
+        assert states["end_buildings"] == "not-open"
+        assert (bool(steps), bool(route_payload["auto_family_indexes"])) == (
+            expected_source == "turn_steps",
+            expected_source == "route_family",
+        )
+
+
+def test_round_end_phase_markup_keeps_its_flat_existing_shape() -> None:
+    column = {
+        "scope": "round_end",
+        "rows": [
+            {"key": "round_marker", "label": "Round marker advanced", "current": False},
+            {"key": "merchant", "label": "Merchant advanced", "current": True},
+        ],
+    }
+
+    assert render_play_view._turn_phase_column({"phase_column": column}) == (
+        '<div class="phase-column" data-phase-column="round_end">'
+        '<div class="phase-row" data-round-end-phase="round_marker">'
+        "Round marker advanced</div>"
+        '<div class="phase-row" data-round-end-phase="merchant" '
+        'data-phase-current="true">Merchant advanced</div></div>'
+    )
 
 
 def _buildings_on_the_track(server) -> list[str]:
@@ -4027,7 +4243,7 @@ def test_pulpit_asks_its_sow_acts_and_auto_advances_its_sole_edge(tmp_path: Path
         assert duty.get("auto") is None
         expected = (
             ([], "Choose a space to lift acolytes from.", [1]),
-            ([_at(1)], "Sow and then choose a Duty tile to activate.", [2]),
+            ([_at(1)], "Choose a duty to take.", [2]),
         )
         for clicks, prompt_end, offered in expected:
             transcript = _run_script(server, clicks, tmp_path)
@@ -8965,7 +9181,8 @@ def test_the_script_may_filter_and_reveal_and_nothing_else(tmp_path: Path) -> No
     assert "setAttribute('data-turn-skip-candidate'" in code
     assert "setAttribute('data-turn-duty-candidate'" in code
     assert "setAttribute('data-turn-shown'" in code
-    assert "setAttribute('data-phase-current'" in code
+    assert "setAttribute('data-turn-stage-state'" in code
+    assert "setAttribute('data-turn-stage-current'" in code
     # And it may not know what any step is ABOUT. A step says how it is answered and the script
     # routes on that; the day it can tell a tithe's stock from a taxation's by name is the day the
     # next field needs the script taught about it rather than merely published to it. The whole
@@ -9705,14 +9922,21 @@ def test_end_turn_phase_is_painted_in_server_html_before_the_script_runs() -> No
         turn_progress=replace(scenario.state.turn_progress, resolution_committed=True),
     )
     state_payload = view_payload(committed, scenario.config)
+    candidates = play_server.turn_candidates(committed, scenario.config)
+    turn_step_payload = play_server.turn_steps_payload(committed, scenario.config)
     payload = dict(
         state_payload,
         state_token=state_token(state_payload),
-        turn_candidates=play_server.turn_candidates(committed, scenario.config),
-        turn_steps=play_server.turn_steps_payload(committed, scenario.config),
+        turn_candidates=candidates,
+        turn_steps=turn_step_payload,
         log=[],
         log_blocks=[],
-        phase_column=play_server.phase_column_payload(committed, []),
+        phase_column=play_server.phase_column_payload(
+            committed,
+            [],
+            available_turn_steps=turn_step_payload,
+            turn_candidates=candidates,
+        ),
     )
 
     page = render_play_view_from_payload(payload)
@@ -9720,9 +9944,15 @@ def test_end_turn_phase_is_painted_in_server_html_before_the_script_runs() -> No
     assert payload["phase_column"]["prompts"] == {}
     assert page.count('data-turn-phase="') == 3
     assert 'data-turn-phase-prompt=' not in page
-    assert len(re.findall(r'<div class="phase-row"[^>]*data-phase-current="true"', page)) == 1
+    assert not re.findall(r'<div class="phase-row"[^>]*data-phase-current="true"', page)
+    assert page.count('data-turn-stage="') == 7
+    current_stage_rows = re.findall(
+        r'<div class="turn-stage-row"[^>]*data-turn-stage-current="true"', page
+    )
+    assert len(current_stage_rows) == 1
     assert (
-        '<div class="phase-row" data-turn-phase="end" data-phase-current="true">End of Turn</div>'
+        'data-turn-stage="end_turn" data-turn-stage-state="open" '
+        'data-turn-stage-highlight="true" data-turn-stage-current="true">End the turn</div>'
         in page
     )
 
@@ -9812,7 +10042,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
                     {
                         "kind": "origin",
                         "value": 2,
-                        "prompt": f"{active}: Sow and then choose a Duty tile to activate.",
+                        "prompt": f"{active}: Choose a duty to take.",
                         "counter": 1,
                     }
                 ],
@@ -9830,7 +10060,7 @@ def test_showing_more_than_one_prompt_line_at_once_is_caught(tmp_path: Path) -> 
         [],
         tmp_path,
         mutate=lambda code: code.replace(
-            "return prompt === null ? [] : [prompt];",
+            "return step === null ? [] : [step.prompt];",
             (
                 "return offered.filter(function (step) { return step.prompt; }).map(function"
                 " (step) { return step.prompt; });"

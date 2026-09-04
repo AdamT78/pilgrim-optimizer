@@ -1339,7 +1339,7 @@ COMBINATION_STOCKS: tuple[str, ...] = ("stone", "silver", "wheat")
 # so the visible line is always "player_id: <question>" and the page never composes one itself.
 ORIGIN_PROMPT = "Choose a space to lift acolytes from."
 ROUTE_PROMPT = "Follow an arrow."
-DUTY_PROMPT = "Sow and then choose a Duty tile to activate."
+DUTY_PROMPT = "Choose a duty to take."
 SKIP_PROMPT = "Choose the City or Duty space on your route to leave unsown."
 RESOLUTION_PROMPT = "Action or Tithe."
 RESOURCE_PROMPT = "Choose a resource."
@@ -4122,12 +4122,100 @@ def _route_family_building_ids(family_indexes: list[int]) -> set[str]:
     }
 
 
+_TURN_STAGE_BY_STEP_KIND = {
+    "origin": "lift_acolytes",
+    "edge": "walk_route",
+    "skip": "walk_route",
+    "duty": "take_duty",
+    "resolution": "action_or_tithe",
+    "resource": "action_or_tithe",
+    "combination": "action_or_tithe",
+    "hire": "action_or_tithe",
+    "building": "action_or_tithe",
+    "arrangement": "action_or_tithe",
+    "ordination": "action_or_tithe",
+}
+
+
+def _turn_stage_for_step(step: dict[str, Any]) -> str:
+    """Name the spine row that owns one server-presented turn question."""
+    if (
+        step.get("kind") == "resolution"
+        and step.get("value") == "end_turn"
+        and step.get("direct_confirm") is True
+    ):
+        return "end_turn"
+    try:
+        return _TURN_STAGE_BY_STEP_KIND[str(step["kind"])]
+    except KeyError as error:
+        raise AssertionError(f"A turn step has no server-authored stage: {step!r}") from error
+
+
+def _attach_candidate_turn_stages(
+    candidates: list[dict],
+    *,
+    state: Any,
+    has_turn_steps: bool,
+    has_route_families: bool,
+) -> None:
+    """Put every locally reachable spine state on the candidates that can reach it.
+
+    The browser is allowed to union fields from the candidates still standing; it is not allowed
+    to translate question kinds, action values, or building families into turn structure. The
+    building window is separate from ``turn_phase`` because lifting is part of Sow while committed
+    beginning-of-turn building steps are still available beside it.
+    """
+    phase = state.phase
+    if phase not in {TurnPhase.SETUP_SOW, TurnPhase.SOW}:
+        return
+
+    setup = phase is TurnPhase.SETUP_SOW
+    resolution_committed = bool(state.turn_progress.resolution_committed)
+    for candidate in candidates:
+        for index, step in enumerate(candidate["steps"]):
+            stage = _turn_stage_for_step(step)
+            step["turn_stage"] = stage
+            if setup:
+                step["turn_phase"] = "setup"
+                step["building_ability_window"] = "setup"
+                continue
+
+            step["turn_phase"] = "end" if resolution_committed else "sow"
+            step["building_ability_window"] = (
+                "end" if resolution_committed else "beginning" if index == 0 else "sow"
+            )
+            if resolution_committed and has_turn_steps:
+                step["building_stage"] = "end_buildings"
+            elif not resolution_committed and (
+                (index == 0 and has_turn_steps)
+                or (has_route_families and stage in {"lift_acolytes", "walk_route"})
+            ):
+                step["building_stage"] = "beginning_buildings"
+
+        if setup:
+            candidate["settled_turn_phase"] = "setup"
+            candidate["settled_building_ability_window"] = "setup"
+            candidate["settled_turn_stage"] = "walk_route"
+        elif resolution_committed:
+            candidate["settled_turn_phase"] = "end"
+            candidate["settled_building_ability_window"] = "end"
+            candidate["settled_turn_stage"] = "end_turn"
+            if has_turn_steps:
+                candidate["settled_building_stage"] = "end_buildings"
+        else:
+            # A completely named action is still a preview until Confirm commits its resolution.
+            candidate["settled_turn_phase"] = "sow"
+            candidate["settled_building_ability_window"] = "sow"
+            candidate["settled_turn_stage"] = "action_or_tithe"
+
+
 def _turn_candidates_and_auto_family_indexes(
     state: Any,
     config: Any,
     *,
     actions: tuple[Any, ...] | list[Any] | None = None,
     include_preview_effects: bool = True,
+    has_turn_steps: bool | None = None,
 ) -> tuple[list[dict], list[int]]:
     """The moves on offer, grouped by the decisions the page can actually put to a player.
 
@@ -4457,17 +4545,15 @@ def _turn_candidates_and_auto_family_indexes(
         state=state,
         config=config,
     )
-    if state.phase is TurnPhase.SOW and not state.turn_progress.resolution_committed:
-        for candidate in candidates:
-            for index, step in enumerate(candidate["steps"]):
-                # The page has to move the phase marker while it narrows candidates locally.  Give
-                # it the engine-side answer at each cursor position instead of teaching it that a
-                # first answer means an acolyte was picked up.
-                step["turn_phase"] = "beginning" if index == 0 else "sow"
-            # Once every decision in a full turn is named, its resolution is still only previewed.
-            # Confirm is the engine boundary that replaces this page with the End of Turn window.
-            candidate["settled_turn_phase"] = "sow"
     auto_family_indexes = _mark_unambiguous_edge_steps(candidates)
+    if has_turn_steps is None:
+        has_turn_steps = bool(turn_steps(state, config))
+    _attach_candidate_turn_stages(
+        candidates,
+        state=state,
+        has_turn_steps=has_turn_steps,
+        has_route_families=bool(auto_family_indexes),
+    )
     return candidates, auto_family_indexes
 
 
@@ -4494,6 +4580,7 @@ def route_family_payload(
     *,
     actions: tuple[Any, ...] | list[Any] | None = None,
     include_preview_effects: bool = True,
+    available_turn_steps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the server-written route-family data a play page consumes together.
 
@@ -4507,6 +4594,7 @@ def route_family_payload(
         config,
         actions=available_actions,
         include_preview_effects=include_preview_effects,
+        has_turn_steps=(None if available_turn_steps is None else bool(available_turn_steps)),
     )
     route_family_building_ids = _route_family_building_ids(auto_family_indexes)
     return {
@@ -4533,6 +4621,26 @@ _TURN_PHASE_ROWS = (
     ("sow", "Sow"),
     ("end", "End of Turn"),
 )
+_TURN_STAGE_ROWS = {
+    "beginning": (("beginning_buildings", "Use or hire buildings", False),),
+    "sow": (
+        ("lift_acolytes", "Lift acolytes", True),
+        ("walk_route", "Walk the route", True),
+        ("take_duty", "Take a duty", True),
+        ("action_or_tithe", "Action or Tithe", True),
+    ),
+    "end": (
+        ("end_buildings", "Use or hire buildings", False),
+        ("end_turn", "End the turn", True),
+    ),
+}
+_SETUP_PHASE_ROWS = (("setup", "Setup"),)
+_SETUP_STAGE_ROWS = {
+    "setup": (
+        ("lift_acolytes", "Lift acolytes", True),
+        ("walk_route", "Walk the route", True),
+    )
+}
 _ROUND_END_EVENT_ROWS = (
     (EventType.EXCESS_RESOURCE_CAP, "excess", "Excess resources returned"),
     (EventType.SHIP_ADVANCE, "round_marker", "Round marker advanced"),
@@ -4598,6 +4706,7 @@ def phase_column_payload(
     state: Any,
     log_blocks: list[dict[str, Any]],
     available_turn_steps: list[dict[str, Any]] | None = None,
+    turn_candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Describe the phase column the page must draw for this outstanding decision.
 
@@ -4606,26 +4715,72 @@ def phase_column_payload(
     Confession answer cannot erase the work completed before the first Confession question.
     """
     phase = state.phase
-    if state.game_over or phase is TurnPhase.SETUP_SOW:
+    if state.game_over:
         return {
             "scope": "inactive",
             "rows": [
                 {"key": key, "label": label, "current": False} for key, label in _TURN_PHASE_ROWS
             ],
         }
-    if phase is TurnPhase.SOW:
-        current = "end" if state.turn_progress.resolution_committed else "beginning"
-        window_prompt = _turn_window_prompt(
-            resolution_committed=state.turn_progress.resolution_committed,
-            available_turn_steps=available_turn_steps or [],
+    if phase in {TurnPhase.SETUP_SOW, TurnPhase.SOW}:
+        setup = phase is TurnPhase.SETUP_SOW
+        window = (
+            "setup"
+            if setup
+            else "end"
+            if state.turn_progress.resolution_committed
+            else "beginning"
+        )
+        open_stages = {
+            stage
+            for candidate in turn_candidates or []
+            for step in candidate.get("steps", [])[:1]
+            for stage in (step.get("turn_stage"), step.get("building_stage"))
+            if stage is not None
+        }
+        if not open_stages:
+            open_stages.add(
+                "lift_acolytes"
+                if setup or not state.turn_progress.resolution_committed
+                else "end_turn"
+            )
+            if available_turn_steps:
+                open_stages.add(
+                    "beginning_buildings"
+                    if not state.turn_progress.resolution_committed
+                    else "end_buildings"
+                )
+        phase_rows = _SETUP_PHASE_ROWS if setup else _TURN_PHASE_ROWS
+        stage_rows = _SETUP_STAGE_ROWS if setup else _TURN_STAGE_ROWS
+        window_prompt = (
+            ""
+            if setup
+            else _turn_window_prompt(
+                resolution_committed=state.turn_progress.resolution_committed,
+                available_turn_steps=available_turn_steps or [],
+            )
         )
         return {
             "scope": "turn",
             "rows": [
-                {"key": key, "label": label, "current": key == current}
-                for key, label in _TURN_PHASE_ROWS
+                {
+                    "key": key,
+                    "label": label,
+                    "current": False,
+                    "stages": [
+                        {
+                            "key": stage_key,
+                            "label": stage_label,
+                            "state": "open" if stage_key in open_stages else "not-open",
+                            "highlight": highlight,
+                        }
+                        for stage_key, stage_label, highlight in stage_rows[key]
+                    ],
+                }
+                for key, label in phase_rows
             ],
-            "prompts": {current: window_prompt} if window_prompt else {},
+            "window": window,
+            "prompts": {window: window_prompt} if window_prompt else {},
         }
     if phase not in {TurnPhase.START_PLAYER_CONFESSION, TurnPhase.START_PLAYER_SELECTION}:
         return {
@@ -4855,7 +5010,11 @@ class PlayServer(ThreadingHTTPServer):
         self.state_payload = view_payload(self.state, self.config)
         self.token = state_token(self.state_payload)
         available_turn_steps = turn_steps_payload(self.state, self.config)
-        route_payload = route_family_payload(self.state, self.config)
+        route_payload = route_family_payload(
+            self.state,
+            self.config,
+            available_turn_steps=available_turn_steps,
+        )
         self.payload = dict(
             self.state_payload,
             state_token=self.token,
@@ -4871,7 +5030,10 @@ class PlayServer(ThreadingHTTPServer):
                 for block in self.log_blocks
             ],
             phase_column=phase_column_payload(
-                self.state, self.log_blocks, available_turn_steps=available_turn_steps
+                self.state,
+                self.log_blocks,
+                available_turn_steps=available_turn_steps,
+                turn_candidates=route_payload["turn_candidates"],
             ),
         )
         if self._setup_metadata is not None:
