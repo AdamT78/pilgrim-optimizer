@@ -1632,7 +1632,7 @@ def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
             for step in candidate["steps"]
             if step["kind"] == "edge" and str(step["value"]) in CITY_REVERSAL_ARROWS
         )
-        assert len(server.payload["turn_candidates"]) == 988
+        assert len(server.payload["turn_candidates"]) == 991
         assert len(page.encode("utf-8")) < 2_000_000
         assert reversal_occurrences == Counter(
             {
@@ -1685,8 +1685,10 @@ def test_conversions_playtest_exposes_and_applies_all_conversion_paths() -> None
     steps = list(turn_steps(scenario.state, scenario.config))
 
     assert len(actions) == 63
-    assert len(candidates) == 62
-    assert sum(candidate["action_id"] is None for candidate in candidates) == 1
+    assert (
+        len(candidates),
+        sum(candidate["action_id"] is None for candidate in candidates),
+    ) == (63, 0)
     assert {step.building_id for step in steps} == {
         "stone_yard",
         "grain_store",
@@ -1885,7 +1887,7 @@ def test_hire_payments_are_not_in_refusals(
                     (scenario_path.name, unresolved, int(candidate.get("variants", 0)))
                 )
 
-    assert refused > 0, "corpus had no refused groups, so this checked nothing"
+    assert refused == 15, f"corpus refused-group count moved from 15 to {refused}"
     assert not hire_payment_blocked, (
         f"hire_payments still block {len(hire_payment_blocked)} candidate groups: "
         f"{hire_payment_blocked[:10]}"
@@ -1944,32 +1946,34 @@ def test_every_unresolved_field_has_server_written_player_text(
 
 def test_an_unmapped_unresolved_field_stops_candidate_construction(monkeypatch) -> None:
     """MUTATION. A new residue field needs wording before a player can encounter it."""
-    monkeypatch.delitem(play_server.UNRESOLVED_FIELD_TEXT, "donate_building_id")
-    scenario = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    monkeypatch.delitem(play_server.UNRESOLVED_FIELD_TEXT, "construct_plan")
+    scenario = load_scenario(SCENARIOS / "construct_road_engineer_extra_road_001.json")
 
-    with pytest.raises(RuntimeError, match="donate_building_id.*no player-facing name"):
+    with pytest.raises(RuntimeError, match="construct_plan.*no player-facing name"):
         play_server.turn_candidates(scenario.state, scenario.config)
 
 
 def test_an_undecided_turn_renders_the_server_written_field_name() -> None:
     """The renderer reads the completed sentence, never the field that led to it."""
-    scenario = load_scenario(PLAYTEST_SCENARIOS / PLAYTEST_MOVEMENT)
+    scenario = load_scenario(SCENARIOS / "construct_road_engineer_extra_road_001.json")
     candidate = next(
         candidate
         for candidate in play_server.turn_candidates(scenario.state, scenario.config)
-        if "donate_building_id" in candidate["unresolved"]
+        if "construct_plan" in candidate["unresolved"]
     )
     page = render_play_view.render_turn_panel({"turn_candidates": [candidate]})
 
-    assert "which building to donate" in page
-    assert "donate_building_id" not in page
+    assert {
+        "server_words_shown": "which roads to build" in page,
+        "engine_field_hidden": "construct_plan" not in page,
+    } == {"server_words_shown": True, "engine_field_hidden": True}
 
 
 @pytest.mark.parametrize(
     ("position_name", "expected_refused"),
     [
         (PLAYTEST_CLOISTERS_LOOP, 0),
-        (PLAYTEST_KOGGE_AND_CLOISTERS, 3),
+        (PLAYTEST_KOGGE_AND_CLOISTERS, 0),
     ],
 )
 def test_playtest_positions_have_expected_refused_counts(
@@ -2854,15 +2858,23 @@ def test_building_steps_close_during_the_server_described_sow_window(tmp_path: P
 
 
 @pytest.mark.slow
-def test_every_scenario_draws_a_choice_key_for_every_market_building(corpus_actions) -> None:
+def test_every_scenario_draws_exactly_the_buildings_that_can_answer_a_plain_pick(
+    corpus_actions,
+) -> None:
     missing_by_scenario: dict[str, list[str]] = {}
     extra_by_scenario: dict[str, list[str]] = {}
     for scenario_path, scenario, actions in corpus_actions:
         payload = _payload_from_corpus(scenario, actions)
         drawn = set(_buildings_on_payload(payload))
         market = set(payload["state"]["building_market"])
-        missing = sorted(market - drawn)
-        extra = sorted(drawn - market)
+        owned = {
+            building_id
+            for player in payload["state"]["players"]
+            for building_id in player["player_board_slots"]["active_buildings"]
+        }
+        expected = market | (owned if payload["turn_candidates"] else set())
+        missing = sorted(expected - drawn)
+        extra = sorted(drawn - expected)
         if missing:
             missing_by_scenario[scenario_path.name] = missing
         if extra:

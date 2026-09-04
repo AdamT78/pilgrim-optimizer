@@ -1330,7 +1330,7 @@ def turn_styles(route_color: str) -> str:
   }}
   /* A player-board slot remains the tooltip target. Its transparent conversion hit target carries
      data-turn-step-click-target, so this gate can stop a non-offered conversion without removing
-     the slot itself from hover hit testing. Map choice keys keep the same rule below. */
+     the slot itself from hover hit testing. Building choice keys keep the same rule below. */
   [data-turn-step-building-id][data-turn-step-offered="true"] {{ cursor: pointer; }}
   [data-turn-step-building-id][data-turn-step-offered="false"] {{ pointer-events: none; }}
   [data-turn-step-building-id][data-turn-step-market="true"] {{ visibility: hidden; }}
@@ -1378,10 +1378,10 @@ def turn_styles(route_color: str) -> str:
     fill: #3A2F1E;
   }}
 
-  /* Every building on the round track carries a key, and the rule below shows the offered ones --
-     so the map says which buildings may be constructed by ringing the ones that may, in the same
-     parchment an offered space on the wheel is ringed in. Visibility only: the hex, its outline and
-     which round it stands on are the map's, as they are for the seals and the stock keys. */
+  /* Every building that may answer a plain pick carries a key, and the rule below shows the
+     offered ones -- on the round track for construction and on the player's board for donation.
+     Visibility only: each renderer owns the hex, its outline and where it stands, as with the
+     seals and stock keys. */
 {building_choice_styles()}
 {seat_choice_styles()}
   /* Both seat keys and building keys are outlines struck with pointer-events="all", so hiding one
@@ -1583,6 +1583,7 @@ def render_play_view_html(
             choice_keys=bool(candidates),
             seat_key=bool(candidates),
             turn_step_hit=turn_surface,
+            building_choice_keys=bool(candidates),
         )
         active = taken and player_id == payload["state"]["active_player"]
         panels.append(

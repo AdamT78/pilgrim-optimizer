@@ -1629,6 +1629,9 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     _click_candidate_step(
         page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
     )
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "building")
+    )
     _screenshot_active_board(page, SCREENSHOTS / "donation-board-after.png")
 
     preview_slots = _all_player_slots(page)
@@ -1655,6 +1658,9 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
     _click_candidate_step(
         page, next(step for step in candidate["steps"] if step["kind"] == "resolution")
     )
+    _click_candidate_step(
+        page, next(step for step in candidate["steps"] if step["kind"] == "building")
+    )
     page.locator('[data-turn-control="confirm"]').click()
     page.wait_for_timeout(120)
     assert (
@@ -1666,6 +1672,111 @@ def test_building_donation_previews_donated_slot_and_confirm_matches_reset(page,
         action.donate_building_id,
         "true",
     ]
+
+
+def test_two_building_donation_is_answered_on_the_player_board(page, serve) -> None:
+    base_url, server = serve(SCENARIOS / "kogge_cloisters_own_own_skip_city_001.json")
+    donation_candidates = [
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(step["kind"] == "building" for step in candidate["steps"])
+    ]
+    candidate = min(
+        (
+            candidate
+            for candidate in donation_candidates
+            if any(
+                step["kind"] == "building" and step["value"] == "cloisters"
+                for step in candidate["steps"]
+            )
+        ),
+        key=lambda offered: len(offered["steps"]),
+    )
+    building_step = next(step for step in candidate["steps"] if step["kind"] == "building")
+    resolution_step = next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    before_state = server.state
+
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    _click_candidate_step(page, resolution_step)
+
+    keys = page.locator(
+        '[data-active-seat="true"] [data-building-choice-key][data-turn-offered="true"]'
+    )
+    styles = keys.evaluate_all(
+        """nodes => nodes.map(node => {
+          const style = getComputedStyle(node);
+          const box = node.getBoundingClientRect();
+          const conversion = node.parentElement.querySelector(
+            '[data-turn-step-click-target="true"]'
+          );
+          return {
+            id: node.getAttribute('data-building-choice-key'),
+            fill: style.fill,
+            stroke: style.stroke,
+            strokeWidth: style.strokeWidth,
+            visibility: style.visibility,
+            pointerEvents: style.pointerEvents,
+            cursor: style.cursor,
+            hasLayout: box.width > 0 && box.height > 0,
+            clickable: document.elementFromPoint(
+              box.left + box.width / 2, box.top + box.height / 2
+            ) === node,
+            conversionOffered: conversion.getAttribute('data-turn-step-offered'),
+            conversionPointerEvents: getComputedStyle(conversion).pointerEvents,
+          };
+        }).sort((left, right) => left.id.localeCompare(right.id))"""
+    )
+    assert {
+        "candidate_buildings": sorted(
+            {
+                step["value"]
+                for offered in donation_candidates
+                for step in offered["steps"]
+                if step["kind"] == "building"
+            }
+        ),
+        "prompt": page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text(),
+        "styles": styles,
+        "confirm": _confirm_enabled(page),
+    } == {
+        "candidate_buildings": ["cloisters", "kogge"],
+        "prompt": "Red: Choose one of your buildings to donate.",
+        "styles": [
+            {
+                "id": building_id,
+                "fill": "none",
+                "stroke": "rgb(242, 238, 223)",
+                "strokeWidth": "4px",
+                "visibility": "visible",
+                "pointerEvents": "all",
+                "cursor": "pointer",
+                "hasLayout": True,
+                "clickable": True,
+                "conversionOffered": "false",
+                "conversionPointerEvents": "none",
+            }
+            for building_id in ("cloisters", "kogge")
+        ],
+        "confirm": False,
+    }
+    _screenshot_active_board(page, SCREENSHOTS / "donation-choice-lit-player-board.png")
+
+    chosen = page.locator(
+        f'[data-active-seat="true"] [data-building-choice-key="{building_step["value"]}"]'
+        '[data-turn-offered="true"]'
+    )
+    _click_handle_centre(page, chosen.element_handle(), require_hit=True)
+    assert (_confirm_enabled(page), server.state) == (True, before_state)
+
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    active_slots = server.state.player_state(server.state.active_player).player_board_slots
+    assert (
+        server.state.turn_progress.resolution_committed,
+        building_step["value"] in active_slots.donated_buildings,
+        server.state != before_state,
+    ) == (True, True, True)
 
 
 def test_construction_preview_matches_confirm_and_reset(page, serve) -> None:
@@ -6295,6 +6406,25 @@ def test_an_offered_player_board_building_still_selects_a_conversion(page, serve
     assert offered.count() == 1
     handle = offered.element_handle()
     assert handle is not None
+    donation_key = offered.locator("xpath=..").locator("[data-building-choice-key]")
+    donation_handle = donation_key.element_handle()
+    assert {
+        "key_count": donation_key.count(),
+        "offered": donation_key.get_attribute("data-turn-offered"),
+        "visibility": donation_key.evaluate("node => getComputedStyle(node).visibility"),
+        "pointer_events": donation_key.evaluate("node => getComputedStyle(node).pointerEvents"),
+        "donation_is_hit": _is_hit_target(
+            page, donation_handle, *_centre(page, donation_handle)
+        ),
+        "conversion_is_hit": _is_hit_target(page, handle, *_centre(page, handle)),
+    } == {
+        "key_count": 1,
+        "offered": "false",
+        "visibility": "hidden",
+        "pointer_events": "none",
+        "donation_is_hit": False,
+        "conversion_is_hit": True,
+    }
     _click_handle_centre(page, handle, require_hit=True)
     assert offered.get_attribute("data-turn-step-selected") == "true"
 

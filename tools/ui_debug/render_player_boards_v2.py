@@ -198,6 +198,12 @@ STOCK_CHOICE_PAINT = {
     "silver": ("#D5E4EF", "#3F6E93"),
 }
 
+# A building choice is the same question whether its answer stands on the map or on this board,
+# so its key wears the map key's exact parchment stroke. The page only reveals it; all paint stays
+# with the renderer that knows the key's shape.
+BUILDING_CHOICE_STROKE = "#F2EEDF"
+BUILDING_CHOICE_STROKE_WIDTH = 4.0
+
 # The one key a page shows when the whole BOARD is the answer -- naming a start player is the
 # question that asks it. An outline round the panel and nothing inside it, in the same parchment
 # the duty wheel outlines an offered space with, because that is already what this page's "you may
@@ -852,6 +858,7 @@ def _render_building_slot(
     tagged: bool = False,
     holding: dict | None = None,
     turn_step_hit: bool = False,
+    building_choice_key: bool = False,
 ) -> str:
     """One of the six bottom slots, empty unless it is holding something.
 
@@ -890,6 +897,16 @@ def _render_building_slot(
             return ""
         return f' data-turn-step-building-id="{escape(building_id)}"'
 
+    def building_key(building_id: str) -> str:
+        if not building_choice_key:
+            return ""
+        return (
+            f'<path data-building-choice-key="{escape(building_id)}"'
+            f' data-building-id="{escape(building_id)}" d="{path}" fill="none"'
+            f' pointer-events="all" stroke="{BUILDING_CHOICE_STROKE}"'
+            f' stroke-width="{BUILDING_CHOICE_STROKE_WIDTH:g}" visibility="hidden"/>'
+        )
+
     if holding is not None:
         return (
             f'<g data-player-board-slot="{number}"'
@@ -902,6 +919,7 @@ def _render_building_slot(
             f'<g transform="translate({cx:.2f},{cy:.2f})">{holding["content"]}</g>'
             f'<path data-slot-outline="true" d="{path}" fill="none"{dashes}'
             f'{turn_step_target(str(holding["id"]))}'
+            f'{building_key(str(holding["id"])) if holding["state"] != "donated" else ""}'
             "</g>"
         )
     if not tagged:
@@ -945,6 +963,7 @@ def render_player_board_v2_svg(
     choice_keys: bool = False,
     seat_key: bool = False,
     turn_step_hit: bool = False,
+    building_choice_keys: bool = False,
 ) -> str:
     """One player's board, holding `board_state` (the layout's sample when none is given).
 
@@ -958,6 +977,10 @@ def render_player_board_v2_svg(
     `turn_step_hit` moves the conversion-step attribute from the slot to a transparent hit target
     on top of it. The slot remains available to the building tooltip when the conversion is not
     offered, while the existing turn-step pointer gate still controls the hit target.
+
+    `building_choice_keys` adds one hidden parchment outline to each active building. Empty slots
+    have no building to name, and a donated tile is no longer one of the player's buildings to
+    give away. This key is parallel to the conversion target: neither reuses the other's state.
 
     `choice_keys` adds the three hidden keys a page needs to ask this seat which stock it wants.
     Opt in, because a page that will never ask should not carry three rects a board it has no way
@@ -1017,7 +1040,14 @@ def render_player_board_v2_svg(
         holding = held[number - 1] if number <= len(held) else None
         parts.append(
             _render_building_slot(
-                cx, cy, palette, number, interactive, holding, turn_step_hit=turn_step_hit
+                cx,
+                cy,
+                palette,
+                number,
+                interactive,
+                holding,
+                turn_step_hit=turn_step_hit,
+                building_choice_key=building_choice_keys,
             )
         )
     parts.append(_render_corner_tag(geometry, player))

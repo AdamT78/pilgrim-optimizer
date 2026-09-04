@@ -1226,7 +1226,6 @@ DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
 # are not labels the renderer may invent: a new residue field must stop payload construction until
 # it gets player wording, rather than exposing an engine identifier at the table.
 UNRESOLVED_FIELD_TEXT = {
-    "donate_building_id": "which building to donate",
     "construct_plan": "which roads to build",
     "effective_acolyte_building_id": "which building adds the extra acolytes",
     "effective_acolyte_building_source": "where that building is hired from",
@@ -1245,10 +1244,14 @@ UNRESOLVED_FIELD_TEXT = {
 # optional precisely because most resolutions never ask -- so no step is emitted for it.
 RESOURCE_CHOICE_FIELDS: tuple[str, ...] = ("tithe_resource", "taxation_step1_resource")
 
-# Fields answered by pointing at a building where it stands on the round track. Same kind of step
-# whichever field asks it, as with the stocks, and a `None` means this action does not ask -- a
-# Construct that only lays road carries no building at all.
-BUILDING_CHOICE_FIELDS: tuple[str, ...] = ("construct_building_id",)
+# Fields answered by pointing at a building where it stands. Construct answers live on the round
+# track and donation answers live on the player's board, but both are one kind of step because the
+# payload names the building directly. A `None` means this action does not ask -- a Construct that
+# only lays road carries no building at all.
+BUILDING_CHOICE_FIELDS: tuple[str, ...] = (
+    "construct_building_id",
+    "donate_building_id",
+)
 HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
 HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
 BANK_PAYMENT_FIELDS: tuple[str, ...] = (
@@ -1340,6 +1343,11 @@ MINORITY_FEE_PROMPT = (
     "You are in the minority here. Pay {amount} silver to take this Duty Action."
 )
 BUILDING_PROMPT = "Choose a building."
+DONATION_BUILDING_PROMPT = "Choose one of your buildings to donate."
+BUILDING_CHOICE_PROMPTS: dict[str, str] = {
+    "construct_building_id": BUILDING_PROMPT,
+    "donate_building_id": DONATION_BUILDING_PROMPT,
+}
 HIRE_PROMPT = "Choose whether to hire a building."
 CONFESSION_BOX_PROMPT = "Choose whether to use the Confession Box."
 ALMS_PAYMENT_PROMPT = "Choose payment."
@@ -2539,7 +2547,14 @@ def _presented(
         value = getattr(action, name, None)
         if value is not None:
             presented.append(
-                ({"kind": "building", "value": value, "prompt": BUILDING_PROMPT}, (name,))
+                (
+                    {
+                        "kind": "building",
+                        "value": value,
+                        "prompt": BUILDING_CHOICE_PROMPTS[name],
+                    },
+                    (name,),
+                )
             )
     for resolution, verb, fields in COMBINATION_STEPS:
         if action.resolution.value != resolution:
@@ -3352,7 +3367,7 @@ def decision_steps(
     mark each question differently without consulting field names or writing a second copy of what
     any one means. The others are still separated by where they are answered: a resolution is beside
     the board, a stock is on the asking seat's own board, a seat is a whole board, a building is a
-    hex on the round track, and a combination is a set of amounts that only go together one way.
+    hex where it stands, and a combination is a set of amounts that only go together one way.
 
     Route length is not fixed. It is however many acolytes were lifted, so it varies by origin and
     by turn, and nothing here or on the page may assume a number.
