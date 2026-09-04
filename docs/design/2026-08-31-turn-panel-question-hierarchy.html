@@ -1,0 +1,269 @@
+<meta charset="utf-8">
+<title>Turn Panel — Questions Prototype</title>
+<style>
+:root {
+  --bg:#0C0C0C; --panel:#101010; --line:#2E2E2E; --ink:#F2EEDF; --dim:#8E8778;
+  --seat:#B7382E; --parch:#EFEADB; --parch-line:#C7BFA6;
+  --green:#5FBF74; --green-deep:#1E4D2B; --gold:#E0C36A;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.55 Helvetica,Arial,sans-serif; padding:32px 28px 90px; }
+h1 { font-size:22px; margin:0 0 6px; }
+.lede { color:var(--dim); max-width:78ch; margin:0 0 22px; }
+.facts { border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+  max-width:78ch; margin:0 0 26px; background:var(--panel); }
+.facts h3 { margin:0 0 8px; font-size:12px; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--dim); }
+.facts p { margin:5px 0; } .facts code { color:var(--green); font-size:13px; }
+h3.group { font-size:12px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--green); margin:38px 0 0; padding-top:4px; }
+section.state { border-top:1px solid var(--line); padding:22px 0 6px; }
+section.state header { display:flex; align-items:baseline; gap:12px; margin-bottom:14px; }
+.num { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:50%; background:#242424; border:1px solid var(--line); font-size:13px;
+  color:var(--dim); }
+section.state h2 { font-size:17px; margin:0; font-weight:600; }
+.pair { display:flex; gap:30px; align-items:flex-start; flex-wrap:wrap; }
+.col { flex:0 0 428px; }
+.col h5 { margin:0 0 8px; font-size:11px; letter-spacing:.10em; text-transform:uppercase;
+  color:var(--dim); font-weight:600; }
+.col.next h5 { color:var(--green); }
+.note { color:var(--dim); max-width:82ch; margin:15px 0 0; }
+.note strong { color:#BDB6A4; font-weight:600; }
+.note code { color:#9FC7A8; font-size:13px; }
+
+/* ---------------------------------------------------------- the live panel,
+   replicated from render_play_view.py so the comparison is honest. */
+.log-status-line { margin-bottom:8px; color:#F2EEDF; text-align:left;
+  font:13px/1.5 Helvetica,Arial,sans-serif; }
+.play-turn { width:428px; color:#F2EEDF; font:13px/1.5 Helvetica,Arial,sans-serif;
+  background:#101010; border:1px solid #333333; border-radius:10px; padding:10px 12px; }
+.phase-column { display:flex; flex-direction:column; gap:2px; margin:-1px 0 9px;
+  padding-bottom:9px; border-bottom:1px solid #333333; }
+.phase-row { color:#6B675E; font-size:12px; letter-spacing:0.02em; }
+.phase-row[data-phase-current="true"] { color:#5FBF6E; font-weight:700; }
+.turn-prompt { margin-bottom:8px; color:#B7382E; font-weight:700; }
+.turn-keys { display:flex; flex-wrap:wrap; gap:6px; }
+.turn-key { color:#F2EEDF; background:#1C1C1C; border:1px solid #3A3A3A; border-radius:8px;
+  padding:6px 10px; font:13px/1.4 Helvetica,Arial,sans-serif; cursor:default; }
+.turn-key[data-dead="true"] { color:#98948A; background:#161616; border-color:#4A4741;
+  opacity:0.72; }
+.ordination-unavailable-reason { align-self:center; color:#C9C4B4; font-size:12px;
+  line-height:1.35; }
+.ordination-bank-consequence, .ordination-payment-cost { flex-basis:100%; color:#C9C4B4;
+  font-size:12px; line-height:1.35; }
+.turn-hire-fact { margin:6px 0; color:#E0C36A; }
+.turn-controls { margin-top:10px; display:flex; flex-direction:column; gap:6px; }
+.turn-control-row { display:flex; gap:6px; }
+.turn-control { flex:1; color:#F2EEDF; background:#1C1C1C; border:1px solid #3A3A3A;
+  border-radius:8px; padding:6px 10px; font:13px/1.4 Helvetica,Arial,sans-serif;
+  cursor:default; }
+.turn-control[data-turn-control-enabled="false"] { opacity:0.34; }
+.turn-control[data-turn-control-active="true"] { opacity:1; background:#F2EEDF;
+  border-color:#F2EEDF; color:#1C1C1C; }
+
+/* ------------------------------------------------------------ the proposal */
+.np { width:428px; background:#101010; border:1px solid #333333; border-radius:10px;
+  padding:11px 13px 12px; font:13px/1.5 Helvetica,Arial,sans-serif; color:var(--ink); }
+.np-meta { font-size:11px; letter-spacing:.03em; color:#6B675E; margin-bottom:8px; }
+.np-q-ctrl { margin-bottom:6px; }
+.np-q-ctrl .np-ctrl-row { margin-top:0; }
+.np-phases { display:flex; flex-direction:column; gap:1px; padding-bottom:9px;
+  margin-bottom:12px; border-bottom:1px solid #262626; }
+.np-phase { font-size:11px; letter-spacing:.03em; color:#5A564E; }
+.np-phase.on { color:#5FBF6E; font-weight:700; }
+
+.np-q { padding-left:11px; border-left:2px solid var(--seat); margin-bottom:11px; }
+.np-q[data-q="closed"] { border-left-color:#252525; }
+.np-qh { margin:0 0 7px; font:700 13px/1.38 Helvetica,Arial,sans-serif; color:var(--ink); }
+.np-q[data-q="closed"] .np-qh { color:#66625A; font-weight:600; }
+.np-elsewhere { float:right; color:#9A9486; font-weight:400; padding-left:8px; }
+.np-ans { display:block; width:100%; text-align:left; margin-bottom:4px;
+  background:var(--parch); color:#17170F; border:1px solid var(--parch-line);
+  border-radius:7px; padding:6px 10px; font:13.5px/1.35 Helvetica,Arial,sans-serif;
+  cursor:default; }
+.np-ans.dead { background:transparent; border:1px solid #3A382F; color:#9A9486; }
+.np-why { margin:1px 0 6px 11px; padding-left:9px; border-left:1px solid #262626;
+  font-size:12px; line-height:1.35; color:#7A7466; }
+.np-note { margin:7px 0 0; font-size:12px; line-height:1.4; color:#A79F8C; }
+.np-fact { margin:0 0 8px; font-size:12.5px; line-height:1.4; color:var(--gold); }
+.np-meter { display:flex; align-items:center; gap:9px; margin:2px 0 0; }
+.np-pips { display:inline-flex; gap:4px; }
+.np-pip { width:11px; height:11px; border-radius:3px; border:1px solid #4A4741;
+  background:transparent; }
+.np-pip.on { background:var(--ink); border-color:var(--ink); }
+.np-meter-text { font:14px/1.2 Helvetica,Arial,sans-serif; color:var(--ink);
+  font-variant-numeric:tabular-nums; }
+
+.np-ctrls { margin-top:13px; padding-top:11px; border-top:1px solid #262626;
+  display:flex; flex-direction:column; gap:6px; }
+.np-ctrl-row { display:flex; gap:6px; }
+.np-ctrl { flex:1; border-radius:7px; padding:8px 10px;
+  font:13px/1.35 Helvetica,Arial,sans-serif; cursor:default;
+  background:#1C1C1C; border:1px solid #3A3A3A; color:#DCD7C7; }
+.np-ctrl[data-wide="true"] { flex:2; }
+.np-ctrl[data-mode="answer"] { background:var(--parch); border-color:var(--parch-line);
+  color:#17170F; }
+.np-ctrl[data-mode="taken"] { background:#161616; border-color:#2C2C2C; color:#A9A497;
+  border-left:3px solid var(--seat); }
+.np-ctrl[data-mode="gone"], .np-ctrl[data-mode="shut"] { background:transparent;
+  border-color:#282828; color:#55514A; }
+.np-ctrl[data-mode="ready"] { background:var(--green-deep); border-color:var(--green);
+  color:#E6F5E4; font-weight:700; }
+
+/* legend + specimen */
+.legend { display:flex; gap:14px; flex-wrap:wrap; margin:14px 0 0; }
+.legend .cell { flex:0 0 200px; }
+.legend p { margin:6px 0 0; font-size:12.5px; color:var(--dim); line-height:1.4; }
+.scale { border:1px solid var(--line); border-radius:10px; background:var(--panel);
+  padding:14px 16px; max-width:78ch; }
+.scale div { margin:6px 0; color:var(--ink); }
+.scale span { color:var(--dim); font-size:12px; margin-left:10px; }
+</style>
+
+<h1>The turn panel as a set of questions</h1>
+<p class="lede">Left column is the panel exactly as it renders today; right column is the proposal.
+Same width (428px, the real one), same states, same sentences. Every label, reason, note and number
+below was lifted from <code>play_server</code> running
+<code>scenarios/bank_hire_market_ordination_001.json</code>, driven through
+lift &rarr; duty &rarr; Action &rarr; one serf &rarr; hire &rarr; pay. Nothing is composed in the
+page and no control has been invented.</p>
+
+<div class="facts">
+  <h3>What the payload already carries</h3>
+  <p>Every step carries its own <code>prompt</code>. After one serf is moved, the four surviving
+  candidates split by their next unanswered step:</p>
+  <p><code>ordain=1 &rarr; combination 'none'</code> and <code>'bank:market'</code> &mdash;
+  prompt <em>&ldquo;Hire the Bank &hellip; for 1 silver?&rdquo;</em><br>
+  <code>ordain=2</code> and <code>ordain=1,mission=1</code> &mdash;
+  prompt <em>&ldquo;Move serfs and acolytes, up to 2 in total.&rdquo;</em></p>
+  <p>Both sentences are printed into the panel as <code>.turn-prompt</code> rows. <code>show()</code>
+  marks one offered and the other keeps <code>display:none</code>, so two questions&rsquo; answers
+  appear under one question&rsquo;s heading. The grouping is not missing &mdash; it is switched off.</p>
+  <p><code>ordination_next_move_consequence</code> is written by the server onto the two
+  <em>combination</em> steps, not the ordination ones. In the flat key row it lands last and reads
+  as a caption on the acolyte button. It belongs to the hire answers.</p>
+  <p>Red holds <strong>1 wheat, 2 silver, 0 stone</strong>. Village <strong>2</strong>,
+  Abbey <strong>0</strong>. Duty value <strong>2</strong>. The Bank is in the market; hiring costs
+  <strong>1 silver</strong>.</p>
+</div>
+
+
+<h3 class="group">The grammar</h3>
+<section class="state">
+  <header><span class="num">&sect;</span><h2>Four things, four treatments</h2></header>
+  <div class="legend">
+    <div class="cell">
+      <div class="np" style="padding:11px 13px">
+        <section class="np-q" data-q="open"><h4 class="np-qh">An open question.</h4>
+        <button class="np-ans">An answer you may press</button>
+        <button class="np-ans dead">An answer you may not</button>
+        <p class="np-why">Why not, from the payload.</p></section>
+      </div>
+      <p><strong>Open.</strong> Seat-coloured rule, bright heading, parchment answers.
+      Parchment means one thing only: a pressable answer to a question that is open now.</p>
+    </div>
+    <div class="cell">
+      <div class="np" style="padding:11px 13px">
+        <section class="np-q" data-q="closed"><h4 class="np-qh">A question that has closed.</h4>
+        <button class="np-ans dead">Its answers stay put</button>
+        <button class="np-ans dead">and stay dead</button></section>
+      </div>
+      <p><strong>Closed.</strong> Rule goes grey, heading dims, answers become outlines. Present,
+      unpressable, and visibly finished &mdash; absent would read as a broken page.</p>
+    </div>
+    <div class="cell">
+      <div class="np" style="padding:11px 13px">
+        <section class="np-q" data-q="open">
+        <h4 class="np-qh">Answered somewhere else.<span class="np-elsewhere">&#8594;</span></h4>
+        <div class="np-meter"><span class="np-pips"><i class="np-pip on"></i><i class="np-pip"></i></span><span class="np-meter-text">Cost 2 &middot; paid 1</span></div></section>
+      </div>
+      <p><strong>Off-panel.</strong> No offered step of this question has a key in the panel, so the
+      client already knows it is answered on the board. A glyph, not a sentence.</p>
+    </div>
+    <div class="cell">
+      <div class="np" style="padding:11px 13px">
+        <div class="np-ctrls" data-q="none" style="margin:0;border-top:0;padding-top:0">
+        <div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div>
+        <div class="np-ctrl-row"><button class="np-ctrl">Reset</button><button class="np-ctrl" data-mode="ready" data-wide="true">Confirm</button></div></div>
+      </div>
+      <p><strong>Controls.</strong> Never parchment unless they are answering an open question.
+      Confirm is permanently the wider of the pair and is the only control that ever goes bright.</p>
+    </div>
+  </div>
+  <p class="note">The rule that makes the rest fall out: <strong>a question is a visual
+  object</strong> &mdash; heading plus its own answers, bound by a rule down the left. More than one
+  can be open. A question&rsquo;s heading sits where its answers sit, which is what puts the
+  &ldquo;Action or Tithe.&rdquo; heading above the control rows in state 1 and leaves the payment
+  heading pointing at the board in states 4&ndash;6.</p>
+</section>
+
+<h3 class="group">Type</h3>
+<section class="state">
+  <header><span class="num">&sect;</span><h2>Four sizes instead of one</h2></header>
+  <div class="scale">
+    <div style="font-size:11px;color:#6B675E">Round 3 - 0 of 4 turns played &nbsp; / &nbsp; Sow
+      <span>11px &mdash; context. Round line and phase column. Never competes.</span></div>
+    <div style="font-size:12px;color:#7A7466">No acolyte in the Abbey.
+      <span>12px &mdash; annotation. Reasons and notes, always dimmer than what they explain.</span></div>
+    <div style="font-size:13px;font-weight:700">Move serfs and acolytes, up to 2 in total.
+      <span>13px bold &mdash; a question.</span></div>
+    <div style="font-size:13.5px">Move a serf from the Village to the Abbey
+      <span>13.5px &mdash; an answer. The thing you press is the largest interactive text.</span></div>
+    <div style="font-size:14px;font-variant-numeric:tabular-nums">Cost 2 &middot; paid 1
+      <span>14px tabular &mdash; the running total the decision turns on.</span></div>
+  </div>
+  <p class="note">Today the round line, the phase rows, the prompt, every key, every control, the
+  reason and the cost line are all 12&ndash;13px. The prompt is the only differentiated element and
+  it is differentiated by <code>#B7382E</code>, the seat colour, which on <code>#101010</code> is
+  both the lowest-contrast text in the panel and the web&rsquo;s standard colour for an error. The
+  proposal moves seat identity into a 2px rule and sets the heading in ink.</p>
+</section>
+
+<h3 class="group">State by state &middot; today, then proposed</h3>
+<section class="state"><header><span class="num">1</span><h2>Before Action &mdash; the resolution question</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Action or Tithe.</div><div class="turn-keys"></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Action</button><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><div class="np-ctrls"><section class="np-q np-q-ctrl" data-q="open"><h4 class="np-qh">Red: Action or Tithe.</h4><div class="np-ctrl-row"><button class="np-ctrl" data-mode="answer">Action</button><button class="np-ctrl" data-mode="answer">Tithe</button></div></section><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">Today the two buttons that answer &ldquo;Action or Tithe.&rdquo; sit in a 2&times;2 grid with Reset and Confirm, styled identically to them and to every key above; the prompt is eight lines away. In the proposal they carry the answer treatment while the question is open, under its heading. <strong>This is where the cream inversion starts:</strong> today Action is dark while it is an answer, and turns cream in state 2 when it stops being one.</p></section>
+<section class="state"><header><span class="num">2</span><h2>After Action &mdash; one question, one dead answer</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Move serfs and acolytes, up to 2 in total.</div><div class="turn-keys"><button class="turn-key">Move a serf from the Village to the Abbey</button><button class="turn-key" data-dead="true">Move an Acolyte from the Abbey to the City</button><span class="ordination-unavailable-reason">No acolyte in the Abbey.</span></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="true">Action</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="open"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans">Move a serf from the Village to the Abbey</button><button class="np-ans dead">Move an Acolyte from the Abbey to the City</button><p class="np-why">No acolyte in the Abbey.</p></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">The disabled key is <code>#98948A</code> on <code>#161616</code> and its reason is <code>#C9C4B4</code> &mdash; the explanation is brighter than the thing explained, and sits as a flex sibling that can wrap anywhere in the row. The proposal makes dead answers outlines rather than a second shade of dark, indents the reason under its own control behind a hairline, and sets it dimmer than the label. Action, now taken, drops to a quiet marker with a seat-coloured edge.</p></section>
+<section class="state"><header><span class="num">3</span><h2>After one serf &mdash; two questions at once</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Hire the Bank from the market for 1 silver? It lets you pay in coins instead of wheat.</div><div class="turn-keys"><button class="turn-key">Hire the Bank for 1 silver</button><button class="turn-key">Pay without it</button><button class="turn-key">Move a serf from the Village to the Abbey</button><button class="turn-key">Move an Acolyte from the Abbey to the City</button><span class="ordination-bank-consequence">Another move can only be paid by hiring the Bank.</span></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="true">Action</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="open"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans">Move a serf from the Village to the Abbey</button><button class="np-ans">Move an Acolyte from the Abbey to the City</button></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Hire the Bank from the market for 1 silver? It lets you pay in coins instead of wheat.</h4><button class="np-ans">Hire the Bank for 1 silver</button><button class="np-ans">Pay without it</button><p class="np-note">Another move can only be paid by hiring the Bank.</p></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">The state the whole thing turns on. Four live buttons, identical, two of them answering the red sentence and two answering a sentence that is in the DOM with <code>display:none</code>. The consequence line lands under the acolyte button and reads as its caption; it belongs to the hire answers, which is where the server hung it. On the right, two blocks, each with its own heading, the note attached to the block that owns it.</p></section>
+<section class="state"><header><span class="num">3b</span><h2>The same state, hire question first</h2></header><div class="pair"><div class="col"><h5>Hire first</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="open"><h4 class="np-qh">Red: Hire the Bank from the market for 1 silver? It lets you pay in coins instead of wheat.</h4><button class="np-ans">Hire the Bank for 1 silver</button><button class="np-ans">Pay without it</button><p class="np-note">Another move can only be paid by hiring the Bank.</p></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans">Move a serf from the Village to the Abbey</button><button class="np-ans">Move an Acolyte from the Abbey to the City</button></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div><div class="col next"><h5>Move first (recommended)</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="open"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans">Move a serf from the Village to the Abbey</button><button class="np-ans">Move an Acolyte from the Abbey to the City</button></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Hire the Bank from the market for 1 silver? It lets you pay in coins instead of wheat.</h4><button class="np-ans">Hire the Bank for 1 silver</button><button class="np-ans">Pay without it</button><p class="np-note">Another move can only be paid by hiring the Bank.</p></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">Left: hire first, matching today&rsquo;s render order. Right: move first, matching step order in the candidate. Move-first reads as the turn&rsquo;s own chronology &mdash; the allowance you are spending, then the question spending it raised &mdash; and needs no special case. Recommending move-first; the alternative is here so the decision is visible.</p></section>
+<section class="state"><header><span class="num">4</span><h2>Hired &mdash; payment open, moving over</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Choose how to pay.</div><div class="turn-hire-fact">This action uses the Bank — 1 silver to hire it from the market, and 1 silver in place of 1 wheat.</div><div class="turn-keys"><button class="turn-key" data-dead="true">Move a serf from the Village to the Abbey</button><button class="turn-key" data-dead="true">Move an Acolyte from the Abbey to the City</button><span class="ordination-payment-cost">Cost 2 &middot; paid 0</span></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="true">Action</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="closed"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans dead">Move a serf from the Village to the Abbey</button><button class="np-ans dead">Move an Acolyte from the Abbey to the City</button></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Choose how to pay.<span class="np-elsewhere" aria-hidden="true">&#8594;</span></h4><p class="np-fact">This action uses the Bank — 1 silver to hire it from the market, and 1 silver in place of 1 wheat.</p><div class="np-meter"><span class="np-pips"><i class="np-pip"></i><i class="np-pip"></i></span><span class="np-meter-text">Cost 2 &middot; paid 0</span></div></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">Today the move keys go dark with no reason, which is deliberate, but they go dark in the same grey as an unavailable control, so &ldquo;that question is finished&rdquo; and &ldquo;you cannot do that yet&rdquo; look the same. The proposal closes the block: rule grey, heading dim, answers outlined. The payment question opens beneath with the gold hire fact and the cost meter, and points at the board, where the silver pill is the only thing lit.</p></section>
+<section class="state"><header><span class="num">5</span><h2>Paid in full &mdash; Confirm arrives</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Choose how to pay.</div><div class="turn-hire-fact">This action uses the Bank — 1 silver to hire it from the market, and 1 silver in place of 1 wheat.</div><div class="turn-keys"><button class="turn-key" data-dead="true">Move a serf from the Village to the Abbey</button><button class="turn-key" data-dead="true">Move an Acolyte from the Abbey to the City</button><span class="ordination-payment-cost">Cost 2 &middot; paid 2</span></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="true">Action</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="closed"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans dead">Move a serf from the Village to the Abbey</button><button class="np-ans dead">Move an Acolyte from the Abbey to the City</button></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Choose how to pay.<span class="np-elsewhere" aria-hidden="true">&#8594;</span></h4><p class="np-fact">This action uses the Bank — 1 silver to hire it from the market, and 1 silver in place of 1 wheat.</p><div class="np-meter"><span class="np-pips"><i class="np-pip on"></i><i class="np-pip on"></i></span><span class="np-meter-text">Cost 2 &middot; paid 2</span></div></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="ready" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">On the left, the single most important state change in a turn is signalled by removing <code>opacity: 0.34</code>, which leaves Confirm identical to Reset while Action stays the brightest object on the panel. On the right the meter fills and Confirm &mdash; already the wider control &mdash; is the only bright thing in the box.</p></section>
+<section class="state"><header><span class="num">6</span><h2>Path A &mdash; declined the Bank</h2></header><div class="pair"><div class="col"><h5>Today</h5><div class="log-status-line">Round 3 - 0 of 4 turns played</div><div class="play-turn"><div class="phase-column"><div class="phase-row">Beginning of Turn</div><div class="phase-row" data-phase-current="true">Sow</div><div class="phase-row">End of Turn</div></div><div class="turn-prompt">Red: Choose how to pay.</div><div class="turn-keys"><button class="turn-key" data-dead="true">Move a serf from the Village to the Abbey</button><button class="turn-key" data-dead="true">Move an Acolyte from the Abbey to the City</button><span class="ordination-payment-cost">Cost 1 &middot; paid 0</span></div><div class="turn-controls"><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="true">Action</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Tithe</button></div><div class="turn-control-row"><button class="turn-control" data-turn-control-enabled="true" data-turn-control-active="false">Reset</button><button class="turn-control" data-turn-control-enabled="false" data-turn-control-active="false">Confirm</button></div></div></div></div><div class="col next"><h5>Proposed</h5><div class="np-meta">Round 3 - 0 of 4 turns played</div><div class="np"><div class="np-phases"><div class="np-phase">Beginning of Turn</div><div class="np-phase on">Sow</div><div class="np-phase">End of Turn</div></div><section class="np-q" data-q="closed"><h4 class="np-qh">Red: Move serfs and acolytes, up to 2 in total.</h4><button class="np-ans dead">Move a serf from the Village to the Abbey</button><button class="np-ans dead">Move an Acolyte from the Abbey to the City</button></section><section class="np-q" data-q="open"><h4 class="np-qh">Red: Choose how to pay.<span class="np-elsewhere" aria-hidden="true">&#8594;</span></h4><div class="np-meter"><span class="np-pips"><i class="np-pip"></i></span><span class="np-meter-text">Cost 1 &middot; paid 0</span></div></section><div class="np-ctrls"><div class="np-ctrl-row"><button class="np-ctrl" data-mode="taken">Action</button><button class="np-ctrl" data-mode="gone">Tithe</button></div><div class="np-ctrl-row np-ctrl-row-b"><button class="np-ctrl" data-mode="chrome">Reset</button><button class="np-ctrl" data-mode="shut" data-wide="true">Confirm</button></div></div></div></div></div><p class="note">No hire, no gold fact, cost 1, one pip. The same three blocks in the same places; only the numbers and the lit pill differ. Worth including because it is the case where the panel says least, and the layout should not reshuffle to say it.</p></section>
+
+<h3 class="group">What this needs, and what it does not</h3>
+<section class="state">
+  <header><span class="num">?</span><h2>Where the work lands</h2></header>
+  <p class="note"><strong>No new server copy.</strong> Every string above already exists: the two
+  prompts are <code>step.prompt</code>, the reason is <code>status.reason</code>, the note is
+  <code>step.ordination_next_move_consequence</code>, the gold sentence is the hire fact, and
+  <code>Cost n &middot; paid n</code> is already composed in the client at
+  <code>play_view_turn.js:2183</code> from two numbers it holds. The pips are those same two
+  numbers, not a re-reading of a server sentence.</p>
+  <p class="note"><strong>The change in <code>show()</code> is the point.</strong> Today it picks
+  one prompt: every <code>.turn-prompt</code> is set unoffered and one is set offered. The proposal
+  groups the offered steps by their own <code>prompt</code> and emits one block per distinct
+  prompt, ordered by the step&rsquo;s index in the candidate. That makes simultaneous questions the
+  normal case rather than the exception, which is the part that keeps this from drifting the next
+  time two steps overlap: nothing in the renderer or the client needs to know that <em>this</em>
+  overlap is the hired-Bank one.</p>
+  <p class="note"><strong>Ordering is derived, not chosen.</strong> Move before hire because the
+  ordination step is index 4 and the combination step is index 5 in every surviving candidate.
+  Today&rsquo;s order is the reverse, and it is an accident of render order &mdash;
+  <code>_combination_keys</code> is emitted before <code>_ordination_keys</code> and the flat
+  <code>flex-wrap</code> keeps that order. State 3b shows the alternative so the choice is on the
+  record rather than implied.</p>
+  <p class="note"><strong>The closed-question state is new and needs a source.</strong> In states
+  4&ndash;6 the move question is drawn closed. The client can tell: the ordination keys are painted
+  from <code>ordinationPaymentStarted</code> already, which is exactly &ldquo;that question is
+  over&rdquo;. No engine change; it is the same flag, spent on the block instead of the buttons.</p>
+  <p class="note"><strong>It is taller, and here is by how much.</strong> Measured off this page
+  at 428px: state 1 206&rarr;225px, state 2 298&rarr;314, state 3 356&rarr;440, states 4&ndash;5
+  343&rarr;390, state 6 298&rarr;347. The 84px in state 3 is the price of printing the second
+  question&rsquo;s heading instead of hiding it, and it is the one increase I would defend without
+  trimming. The rest is block spacing and can come down if the column is tight.</p>
+  <p class="note"><strong>What is not settled.</strong> The prompt sentences keep their
+  &ldquo;Red:&rdquo; prefix, which is now doubled by the seat-coloured rule. Removing it is a server
+  change and not mine to make here. And a question whose answers are off-panel is marked with a
+  glyph; if that proves too quiet in play, the honest fix is a server-written sentence, not a
+  page-composed one.</p>
+</section>
