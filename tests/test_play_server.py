@@ -2318,14 +2318,11 @@ UNPRESENTED = "tithe_resource"
 def _one_field_gone_unasked(monkeypatch):
     """Take one presented field back off the page, so a turn becomes genuinely unanswerable.
 
-    This used to hunt for a position the page could not finish, and there were plenty. There are
-    none left: every field a turn carries now has a way to be chosen, which is the milestone and
-    is exactly why the refusal can no longer be reached by playing.
-
-    So it is manufactured, and it must be. The refusal is what stands between a player and a page
-    that picks for them, and a mechanism with no test is a mechanism that stops working quietly.
-    Un-presenting a field is precisely the condition it was built for -- it is the state every one
-    of these fields was in before somebody built its affordance -- rather than an invented one.
+    Natural terminal dead ends are present in the committed scenario corpus, so the refusal is
+    also exercised through the page as it is shipped. This manufactured case remains valuable
+    because it takes a field that is normally presented and proves the generic refusal notices and
+    names it when that affordance disappears. The natural case guards today's real backlog; this
+    one guards the mechanism independently of which fields happen to be unfinished today.
     """
     monkeypatch.setattr(
         play_server,

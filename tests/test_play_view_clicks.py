@@ -693,6 +693,79 @@ def _click_if_offered(page, selector: str) -> None:
         page.wait_for_timeout(40)
 
 
+def test_natural_blocked_turn_reveals_one_explanation_and_reset_only_escapes_preview(
+    page, serve
+) -> None:
+    """One server candidate can hold several legal variants and still reveal one refusal."""
+    scenario_path = SCENARIOS / "wagon_yard_active_free_hire_market_guild_001.json"
+    base_url, server = serve(scenario_path)
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if any(
+            step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+            for step in candidate["steps"]
+        )
+    )
+    assert all(
+        candidate["action_id"] is None for candidate in server.payload["turn_candidates"]
+    ), "the natural dead end unexpectedly had a finishable branch"
+
+    page.goto(base_url, wait_until="networkidle")
+    _click_candidate_prefix(page, candidate, before_kind="resolution")
+    assert (
+        page.locator(".turn-blocked:visible").count(),
+        page.locator('[data-turn-prompt][data-turn-offered="true"]').count(),
+    ) == (0, 1), (
+        "a refusal appeared while the resolution question was still unanswered"
+    )
+    resolution = next(step for step in candidate["steps"] if step["kind"] == "resolution")
+    _click_candidate_step(page, resolution)
+
+    shown = page.locator('[data-turn-panel][data-turn-shown="true"]')
+    panel_layout = shown.evaluate_all(
+        """nodes => nodes.map(node => {
+          const box = node.getBoundingClientRect();
+          return {display: getComputedStyle(node).display,
+                  hasLayout: box.width > 0 && box.height > 0};
+        })"""
+    )
+    assert panel_layout == [{"display": "block", "hasLayout": True}], (
+        "the terminal frontier did not reveal exactly one laid-out panel"
+    )
+    assert shown.locator(".turn-field").all_inner_texts() == [
+        "which building grants the free hire",
+        "which building to hire for free",
+        "where the free-hired building comes from",
+    ]
+    confirm = page.locator('[data-turn-control="confirm"]')
+    assert confirm.is_visible() and not confirm.is_enabled(), (
+        "Confirm became available for an unconfirmable turn"
+    )
+    page.screenshot(path=str(SCREENSHOTS / "wagon-yard-blocked-turn.png"), full_page=True)
+
+    before_state = server.state
+    before_token = server.payload["state_token"]
+    reset = page.locator('[data-turn-control="reset"]')
+    assert reset.is_visible() and reset.is_enabled(), "the blocked preview offered no local escape"
+    _click_handle_centre(page, reset.element_handle(), require_hit=True)
+    page.wait_for_function(
+        "() => !document.querySelector('[data-turn-panel][data-turn-shown=\"true\"]')"
+    )
+
+    assert server.state == before_state and server.payload["state_token"] == before_token, (
+        "Reset submitted or changed the natural dead-end state"
+    )
+    assert (
+        page.locator(".turn-blocked:visible").count(),
+        confirm.is_enabled(),
+        page.locator(
+            '[data-board-position-index][data-turn-start-candidate="true"]'
+        ).count()
+        > 0,
+    ) == (0, False, True), "Reset made the same unconfirmable turn look finishable"
+
+
 def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(page, serve) -> None:
     """The six engine combinations remain reachable through the resource pills."""
     outcomes = {}
