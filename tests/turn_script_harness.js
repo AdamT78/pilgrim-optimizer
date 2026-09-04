@@ -218,6 +218,16 @@ const phaseRows = ((job.phaseColumn && job.phaseColumn.rows) || []).map((row) =>
   if (row.current) attrs['data-phase-current'] = 'true';
   return makeElement('div', attrs, []);
 });
+const stageRows = ((job.phaseColumn && job.phaseColumn.rows) || []).flatMap((row) =>
+  (row.stages || []).map((stage) => {
+    const attrs = {
+      'data-turn-stage': stage.key,
+      'data-turn-stage-state': stage.state,
+      'data-turn-stage-highlight': stage.highlight ? 'true' : 'false',
+    };
+    return makeElement('div', attrs, []);
+  })
+);
 const phasePrompts = Object.keys((job.phaseColumn && job.phaseColumn.prompts) || {}).map((key) =>
   makeElement('div', { 'data-turn-phase-prompt': key }, [])
 );
@@ -345,7 +355,7 @@ for (let index = 0; index < (job.panels || []).length; index += 1) {
 const aside = makeElement(
   'div',
   { 'data-component': 'play-turn' },
-  [].concat(phaseRows, phasePrompts, prompts, keys, pairs, confirmLabels, panels)
+  [].concat(phaseRows, stageRows, phasePrompts, prompts, keys, pairs, confirmLabels, panels)
 );
 
 const root = makeElement(
@@ -874,7 +884,7 @@ function record() {
 let source = job.phaseCandidateRuns
   ? phaseCandidateTemplate.replace(
     '__HARNESS_PHASE_CANDIDATES__',
-    JSON.stringify(job.phaseCandidateRuns[0])
+    JSON.stringify(job.phaseCandidateRuns[0].candidates)
   )
   : job.script;
 if (job.expandedCandidates) {
@@ -890,9 +900,11 @@ if (job.phaseCandidateRuns) {
   const beforePhaseHook = source;
   source = source.replace(
     '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();',
-    '  window.__phaseHarnessRender = function (candidates) {\n'
-      + '    CANDIDATES = candidates;\n'
+    '  window.__phaseHarnessRender = function (run) {\n'
+      + '    CANDIDATES = run.candidates;\n'
       + '    chosen = [];\n'
+      + '    enabledFamilies = run.enabledFamilies;\n'
+      + '    currentTurnPhase = job.phaseColumn.window || currentTurnPhase;\n'
       + '    render();\n'
       + '  };\n\n'
       + '  captureBaseline();\n  captureArrangementBaseline();\n  captureOrdinationBaseline();\n  render();'
@@ -910,10 +922,19 @@ if (job.phaseOnly) {
     phaseRows: phaseRows
       .filter((row) => row.getAttribute('data-phase-current') === 'true')
       .map((row) => row.getAttribute('data-turn-phase')),
+    openStageRows: stageRows
+      .filter((row) => row.getAttribute('data-turn-stage-state') === 'open')
+      .map((row) => row.getAttribute('data-turn-stage')),
+    paintedStageRows: stageRows
+      .filter((row) => row.getAttribute('data-turn-stage-current') === 'true')
+      .map((row) => row.getAttribute('data-turn-stage')),
+    promptRows: prompts
+      .filter((row) => row.getAttribute('data-turn-offered') === 'true')
+      .map((row) => row.getAttribute('data-turn-prompt')),
   });
   if (job.phaseCandidateRuns) {
-    return job.phaseCandidateRuns.map((candidates) => {
-      window.__phaseHarnessRender(candidates);
+    return job.phaseCandidateRuns.map((run) => {
+      window.__phaseHarnessRender(run);
       return phaseSnapshot();
     });
   }

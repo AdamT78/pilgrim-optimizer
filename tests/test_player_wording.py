@@ -16,7 +16,7 @@ from tools.ui_debug import render_play_view
 _CHANGED_TEXTS: tuple[str, ...] = (
     "player_one: Choose a space to lift acolytes from.",
     "player_one: Follow an arrow.",
-    "player_one: Sow and then choose a Duty tile to activate.",
+    "player_one: Choose a duty to take.",
     "player_one: Choose the City or Duty space on your route to leave unsown.",
     "player_one: Choose a resource.",
     "player_one: Choose a building.",
@@ -183,7 +183,7 @@ def test_building_questions_distinguish_constructing_from_donating() -> None:
     (
         (play_server.ORIGIN_PROMPT, "Choose a space to lift acolytes from."),
         (play_server.ROUTE_PROMPT, "Follow an arrow."),
-        (play_server.DUTY_PROMPT, "Sow and then choose a Duty tile to activate."),
+        (play_server.DUTY_PROMPT, "Choose a duty to take."),
         (
             play_server.SKIP_PROMPT,
             "Choose the City or Duty space on your route to leave unsown.",

@@ -629,8 +629,16 @@ def _screenshot_turn_prompt(page, path: Path) -> None:
     page.locator('[data-component="play-turn"]').screenshot(path=str(path))
 
 
-def _assert_painted_turn_phase(page, current: str) -> None:
-    """The column has one visible green row and the other two remain visibly dim."""
+def _turn_stage_states(page) -> dict[str, str]:
+    return page.locator("[data-turn-stage]").evaluate_all(
+        """rows => Object.fromEntries(rows.map(row => [
+          row.getAttribute('data-turn-stage'), row.getAttribute('data-turn-stage-state')
+        ]))"""
+    )
+
+
+def _assert_painted_turn_stage(page, current: str) -> None:
+    """Only the step owning the shown question is green; every other row remains dim."""
     expected_colors = {
         True: "rgb(95, 191, 110)",
         False: "rgb(107, 103, 94)",
@@ -639,20 +647,58 @@ def _assert_painted_turn_phase(page, current: str) -> None:
         row = page.locator(f'[data-turn-phase="{phase}"]')
         assert row.count() == 1, f"{phase} phase row was not drawn exactly once"
         assert row.is_visible(), f"{phase} phase row was hidden"
-        is_current = phase == current
-        assert (row.get_attribute("data-phase-current") == "true") is is_current
-        assert row.evaluate("node => getComputedStyle(node).color") == expected_colors[is_current]
-
-
-def _assert_all_turn_phases_dim(page) -> None:
-    """An inactive phase column remains visibly present but has no current row."""
-    for phase in ("beginning", "sow", "end"):
-        row = page.locator(f'[data-turn-phase="{phase}"]')
-        assert row.count() == 1, f"{phase} phase row was not drawn exactly once"
-        assert row.is_visible(), f"{phase} phase row was hidden"
         assert row.get_attribute("data-phase-current") is None
-        assert row.evaluate("node => getComputedStyle(node).color") == "rgb(107, 103, 94)"
-    assert page.locator('[data-turn-phase][data-phase-current="true"]').count() == 0
+        assert row.evaluate("node => getComputedStyle(node).color") == expected_colors[False]
+        assert row.evaluate("node => getComputedStyle(node).fontSize") == "10px"
+        assert row.evaluate("node => getComputedStyle(node).textTransform") == "uppercase"
+
+    stage_rows = page.locator("[data-turn-stage]")
+    assert stage_rows.count() == 7
+    for index in range(stage_rows.count()):
+        row = stage_rows.nth(index)
+        stage = row.get_attribute("data-turn-stage")
+        is_current = stage == current
+        assert row.is_visible(), f"{stage} stage row was hidden"
+        assert (row.get_attribute("data-turn-stage-current") == "true") is is_current
+        assert row.evaluate("node => getComputedStyle(node).color") == expected_colors[is_current]
+        assert row.evaluate("node => getComputedStyle(node).fontSize") == "13px"
+        expected_weight = "700" if is_current else "400"
+        assert row.evaluate("node => getComputedStyle(node).fontWeight") == expected_weight
+    assert page.locator('[data-turn-stage-current="true"]').count() == 1
+
+
+def _assert_green_stage_matches_shown_prompt(page, candidates: list[dict]) -> str | None:
+    """Tie the rendered sentence back to its server-authored stage at every live question."""
+    shown = page.locator('[data-turn-prompt][data-turn-offered="true"]')
+    assert shown.count() <= 1
+    if shown.count() == 0:
+        return None
+
+    prompt = shown.get_attribute("data-turn-prompt")
+    prompt_stages = {
+        step["turn_stage"]
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step.get("prompt") == prompt
+    }
+    assert len(prompt_stages) == 1, f"shown prompt {prompt!r} has stages {prompt_stages!r}"
+    assert page.locator('[data-turn-stage-current="true"]').get_attribute(
+        "data-turn-stage"
+    ) == prompt_stages.pop()
+    return prompt
+
+
+def _assert_setup_turn_spine(page, current: str) -> None:
+    phase = page.locator('[data-turn-phase="setup"]')
+    assert phase.count() == 1
+    assert phase.is_visible()
+    assert phase.get_attribute("data-phase-current") is None
+    assert page.locator("[data-turn-stage]").count() == 2
+    assert page.locator('[data-turn-stage="take_duty"]').count() == 0
+    assert page.locator('[data-turn-stage="action_or_tithe"]').count() == 0
+    assert page.locator('[data-turn-stage-current="true"]').get_attribute(
+        "data-turn-stage"
+    ) == current
 
 
 def _assert_painted_round_end_phases(page, keys: list[str], current: str) -> None:
@@ -1537,7 +1583,7 @@ def test_devotion_can_sell_gained_piety_before_end_turn(page, serve) -> None:
     click_devotion(choose_action=False)
     click_sell_and_confirm()
     assert server.state == after_conversion
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
     assert page.locator('[data-turn-phase-prompt="end"]').count() == 0
     assert _confirm_enabled(page)
     page.locator('[data-turn-control="confirm"]').click()
@@ -1624,7 +1670,7 @@ def test_resolution_abandons_piety_conversion_and_allows_a_new_commit(page, serv
     assert not hint.is_visible()
     assert hint.inner_text() == ""
     assert page.locator('[data-piety-choice-pill][data-piety-choice-offered="true"]').count() == 0
-    _assert_painted_turn_phase(page, "sow")
+    _assert_painted_turn_stage(page, "action_or_tithe")
     assert server.state == before_state
 
     page.locator('[data-turn-control="reset"]').click()
@@ -2207,12 +2253,12 @@ def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn
     base_url, server = serve(SCENARIOS / "guild_active_move_merchant_001.json")
     page.goto(base_url, wait_until="networkidle")
     before_position = server.state.merchant_board_position
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
     before_box = page.locator('[data-component="play-turn"]').bounding_box()
     assert before_box is not None
 
     _stage_guild(page)
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
     assert page.locator("[data-turn-step-direction-row]").get_attribute(
         "data-turn-step-row-active"
     ) == "true"
@@ -2236,14 +2282,14 @@ def test_guild_click_commits_in_the_beginning_window_and_reset_restores_the_turn
     _screenshot_turn_prompt(page, SCREENSHOTS / "guild-prompt-staged.png")
 
     _commit_guild(page, server)
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
     _screenshot_turn_prompt(page, SCREENSHOTS / "guild-prompt-committed.png")
 
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(120)
     assert server.state.merchant_board_position == before_position
     assert _merchant_visible_at(page, before_position)
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
 
 
 def test_guild_click_commits_in_the_end_of_turn_window_and_never_asks_about_using_guild(
@@ -2268,18 +2314,18 @@ def test_guild_click_commits_in_the_end_of_turn_window_and_never_asks_about_usin
     page.wait_for_timeout(120)
 
     assert server.state.turn_progress.resolution_committed is True
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
     assert "choose whether to use Guild" not in page.content()
     _stage_guild(page)
     assert "choose whether to use Guild" not in page.content()
     _commit_guild(page, server)
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
 
     page.locator('[data-turn-control="reset"]').click()
     page.wait_for_timeout(120)
     assert server.state.merchant_board_position == before_position
     assert _merchant_visible_at(page, before_position)
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
 
 
 def _choose_conversion(page, building_id: str, direction: str, amount: int) -> None:
@@ -3159,7 +3205,7 @@ def test_confirm_paints_the_action_that_its_next_press_will_take(page, serve) ->
 
     page.reload(wait_until="networkidle")
     _reach_movement_library_window(page)
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
     assert _painted_confirm_label(page) == "End turn", (
         "the End-of-Turn Confirm did not say what its next press would do"
     )
@@ -5304,12 +5350,12 @@ def test_two_active_conversions_commit_from_building_direction_and_amount_clicks
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
 
 
-def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> None:
-    """A conversion is outside the Sow answer sequence, so it cannot advance that phase."""
+def test_turn_spine_tracks_conversion_sow_and_end_turn(page, serve) -> None:
+    """A conversion is outside the Sow answer sequence, so it cannot advance the spine."""
     base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CONVERSIONS)
     page.goto(base_url, wait_until="networkidle")
 
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-beginning.png")
 
     _choose_conversion(page, "grain_store", "sell_wheat", 1)
@@ -5318,7 +5364,7 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     page.wait_for_timeout(100)
 
     assert server.state.turn_progress.used_buildings == frozenset({"grain_store"})
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
 
     origin = page.query_selector('[data-board-position-index][data-turn-start-candidate="true"]')
     assert origin is not None, "the next turn never offered an acolyte lift"
@@ -5346,11 +5392,11 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
     ).state
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_function(
-        """() => document.querySelector('[data-turn-phase="sow"]')
-          ?.getAttribute('data-phase-current') === 'true'"""
+        """() => document.querySelector('[data-turn-stage="walk_route"]')
+          ?.getAttribute('data-turn-stage-current') === 'true'"""
     )
 
-    _assert_painted_turn_phase(page, "sow")
+    _assert_painted_turn_stage(page, "walk_route")
     assert page.evaluate(
         """() => {
           const tilePaint = (buildingId) => {
@@ -5432,8 +5478,89 @@ def test_turn_phase_column_tracks_conversion_sow_and_end_turn(page, serve) -> No
 
     assert server.state == expected_resolution
     assert server.state.turn_progress.resolution_committed is True
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-end.png")
+
+
+def test_turn_spine_keeps_one_height_and_one_green_row_through_a_mixed_frontier(
+    page, serve
+) -> None:
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    candidate = next(
+        candidate
+        for candidate in server.payload["turn_candidates"]
+        if candidate.get("family") == [0, 1]
+        and [step["value"] for step in candidate["steps"][:4]]
+        == [0, "city->north", "north->city", "city->north"]
+        and any(step["kind"] == "duty" and step["value"] == 4 for step in candidate["steps"])
+        and any(
+            step["kind"] == "resolution" and step["value"] == "tithe"
+            for step in candidate["steps"]
+        )
+    )
+    mixed_prefix = [0, "city->north", "north->city"]
+    mixed_steps = [
+        candidate["steps"][len(mixed_prefix)]
+        for candidate in server.payload["turn_candidates"]
+        if len(candidate["steps"]) > len(mixed_prefix)
+        and [step["value"] for step in candidate["steps"][: len(mixed_prefix)]]
+        == mixed_prefix
+    ]
+    assert {
+        stage
+        for step in mixed_steps
+        for stage in (step.get("turn_stage"), step.get("building_stage"))
+        if stage is not None
+    } == {"beginning_buildings", "walk_route", "take_duty"}
+    page.goto(base_url, wait_until="networkidle")
+    heights = {}
+
+    def record(label: str, current: str, open_stages: set[str]) -> str | None:
+        _assert_painted_turn_stage(page, current)
+        prompt = _assert_green_stage_matches_shown_prompt(
+            page, server.payload["turn_candidates"]
+        )
+        states = _turn_stage_states(page)
+        assert {stage for stage, state in states.items() if state == "open"} == open_stages
+        box = page.locator('[data-component="play-turn"]').bounding_box()
+        assert box is not None
+        heights[label] = box["height"]
+        return prompt
+
+    record("lift", "lift_acolytes", {"beginning_buildings", "lift_acolytes"})
+    _click_candidate_step(page, candidate["steps"][0])
+    record("first walk", "walk_route", {"beginning_buildings", "walk_route"})
+
+    _click_candidate_step(page, candidate["steps"][1])
+    record("second walk", "walk_route", {"beginning_buildings", "walk_route"})
+    _click_candidate_step(page, candidate["steps"][2])
+    mixed_prompt = record(
+        "mixed walk or duty",
+        "take_duty",
+        {"beginning_buildings", "walk_route", "take_duty"},
+    )
+    assert mixed_prompt == (
+        f"{server.payload['state']['active_player']}: {play_server.DUTY_PROMPT}"
+    )
+
+    _click_candidate_step(page, candidate["steps"][3])
+    record("choose omission", "walk_route", {"beginning_buildings", "walk_route"})
+    _click_candidate_step(page, candidate["steps"][4])
+    record("take duty", "take_duty", {"take_duty"})
+    _click_candidate_step(page, candidate["steps"][5])
+    record("action or tithe", "action_or_tithe", {"action_or_tithe"})
+    _click_candidate_step(page, candidate["steps"][6])
+    record("tithe resource", "action_or_tithe", {"action_or_tithe"})
+    _click_candidate_step(page, candidate["steps"][7])
+    record("confirm", "action_or_tithe", {"action_or_tithe"})
+
+    page.locator('[data-turn-control="confirm"]').click()
+    page.wait_for_timeout(120)
+    record("end turn", "end_turn", {"end_turn"})
+
+    assert max(heights.values()) == pytest.approx(min(heights.values()), abs=0.1), "\n".join(
+        f"{label}: {height}" for label, height in heights.items()
+    )
 
 
 def test_greyed_building_tiles_use_one_palette_across_all_three_level_colours(page, serve) -> None:
@@ -5475,18 +5602,18 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
     base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_PULPIT)
     server_html = page.request.get(base_url).text()
     assert (
-        '<div class="phase-row" data-turn-phase="beginning" data-phase-current="true">'
-        "Beginning of Turn</div>"
+        'data-turn-stage="lift_acolytes" data-turn-stage-state="open" '
+        'data-turn-stage-highlight="true" data-turn-stage-current="true">Lift acolytes</div>'
     ) in server_html
     assert server.payload["phase_column"]["prompts"] == {
         "beginning": "Pick up acolytes for sowing. A building can be hired here."
     }
     assert [
         step["turn_phase"] for step in server.payload["turn_candidates"][0]["steps"][:3]
-    ] == ["beginning", "sow", "sow"]
+    ] == ["sow", "sow", "sow"]
 
     page.goto(base_url, wait_until="networkidle")
-    _assert_painted_turn_phase(page, "beginning")
+    _assert_painted_turn_stage(page, "lift_acolytes")
     assert page.locator('[data-turn-phase-prompt="beginning"]').inner_text() == (
         "Pick up acolytes for sowing. A building can be hired here."
     )
@@ -5498,7 +5625,7 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
         ),
         (
             '[data-board-position-index="2"][data-turn-duty-candidate="true"]',
-            "Red: Sow and then choose a Duty tile to activate.",
+            "Red: Choose a duty to take.",
         ),
     ):
         assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == prompt
@@ -5507,7 +5634,7 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
         _click_handle_centre(page, target, require_hit=True)
         page.wait_for_timeout(40)
 
-    _assert_painted_turn_phase(page, "sow")
+    _assert_painted_turn_stage(page, "action_or_tithe")
     assert page.locator('[data-turn-prompt][data-turn-offered="true"]').inner_text() == (
         "Red: Action or Tithe."
     )
@@ -5526,7 +5653,7 @@ def test_pulpit_questions_and_phase_window_words_follow_the_server_payload(page,
     page.wait_for_timeout(120)
 
     assert server.state.turn_progress.resolution_committed is True
-    _assert_painted_turn_phase(page, "end")
+    _assert_painted_turn_stage(page, "end_turn")
     assert server.payload["phase_column"]["prompts"] == {}
     assert page.locator('[data-turn-phase-prompt="end"]').count() == 0
 
@@ -5551,7 +5678,7 @@ def test_merchant_named_hire_states_its_price_without_a_payment_click(page, serv
 
 def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve) -> None:
     """A continuation arrow is automatic only until a duty or another route can be chosen."""
-    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
+    base_url, server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
     page.goto(base_url, wait_until="networkidle")
 
     origin = page.query_selector(
@@ -5564,7 +5691,10 @@ def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve)
     _click_handle_centre(page, origin, require_hit=True)
     page.wait_for_timeout(40)
 
-    _assert_painted_turn_phase(page, "sow")
+    _assert_painted_turn_stage(page, "take_duty")
+    assert _assert_green_stage_matches_shown_prompt(
+        page, server.payload["turn_candidates"]
+    ) == f"{server.payload['state']['active_player']}: {play_server.DUTY_PROMPT}"
     duties = page.locator('[data-turn-duty-candidate="true"]').evaluate_all(
         "spaces => spaces.map(space => Number(space.getAttribute('data-board-position-index')))"
     )
@@ -5575,12 +5705,12 @@ def test_cloisters_reach_skips_only_its_two_unambiguous_route_edges(page, serve)
     assert set(arrows) == {"east->city", "east->south_east"}
 
 
-def test_setup_sow_phase_column_stays_dim_after_a_setup_answer(page, serve) -> None:
-    """Setup sowing is not a turn, before or after its player has answered a step."""
+def test_setup_sow_draws_only_its_two_stage_spine_rows(page, serve) -> None:
+    """Setup has a shorter real shape, before and after its player answers the lift."""
     base_url, server = serve(SCENARIOS / "setup_sow_2p_001.json")
     page.goto(base_url, wait_until="networkidle")
 
-    _assert_all_turn_phases_dim(page)
+    _assert_setup_turn_spine(page, "lift_acolytes")
     _screenshot_turn_prompt(page, SCREENSHOTS / "turn-phase-setup-sow.png")
 
     answer = _next_offered_from_dom(page)
@@ -5589,7 +5719,7 @@ def test_setup_sow_phase_column_stays_dim_after_a_setup_answer(page, serve) -> N
     page.wait_for_timeout(100)
 
     assert server.payload["state"]["phase"] == "setup_sow"
-    _assert_all_turn_phases_dim(page)
+    _assert_setup_turn_spine(page, "walk_route")
 
 
 def test_first_player_choice_paints_completed_round_end_steps_and_current_choice(

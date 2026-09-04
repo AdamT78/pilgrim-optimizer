@@ -131,6 +131,9 @@ RESOURCE_TOKEN_ICONS = {"wheat": "wheat", "stone": "cube", "silver": "coin"}
 _CANDIDATE_STEP_WIRE_FIELDS = {
     "prompt": "$p",
     "turn_phase": "$t",
+    "turn_stage": "$g",
+    "building_ability_window": "$w",
+    "building_stage": "$b",
     "kind": "$k",
 }
 _CANDIDATE_WIRE_FIELDS = {"summary": "$s"}
@@ -1028,6 +1031,45 @@ def _turn_phase_column(payload: dict) -> str:
     )
     attribute = "data-round-end-phase" if scope == "round_end" else "data-turn-phase"
     prompts = column.get("prompts") or {}
+    if scope == "turn":
+        current_chosen = False
+        groups = []
+        for row in rows:
+            stages = []
+            for stage in row.get("stages") or ():
+                current = (
+                    not current_chosen
+                    and stage.get("state") == "open"
+                    and stage.get("highlight") is True
+                )
+                current_chosen = current_chosen or current
+                stages.append(
+                    f'<div class="turn-stage-row" data-turn-stage="{escape(str(stage["key"]))}"'
+                    f' data-turn-stage-state="{escape(str(stage["state"]))}"'
+                    f' data-turn-stage-highlight="{str(stage.get("highlight") is True).lower()}"'
+                    + (' data-turn-stage-current="true"' if current else "")
+                    + f">{escape(str(stage['label']))}</div>"
+                )
+            groups.append(
+                f'<div class="turn-phase-group" data-turn-phase-group="{escape(str(row["key"]))}">'
+                f'<div class="phase-row" data-turn-phase="{escape(str(row["key"]))}">'
+                f"{escape(str(row['label']))}</div>"
+                '<div class="turn-stage-rows">'
+                + "".join(stages)
+                + "</div></div>"
+            )
+        window = column.get("window")
+        return (
+            '<div class="phase-column" data-phase-column="turn">'
+            + "".join(groups)
+            + "".join(
+                f'<div class="phase-prompt" data-turn-phase-prompt="{escape(str(key))}"'
+                + (' data-turn-phase-prompt-current="true"' if key == window else "")
+                + f">{escape(str(prompt))}</div>"
+                for key, prompt in prompts.items()
+            )
+            + "</div>"
+        )
     return (
         f'<div class="phase-column" data-phase-column="{escape(scope)}">'
         + "".join(
@@ -1052,12 +1094,21 @@ def render_turn_panel(payload: dict) -> str:
     """Where a turn is answered and agreed to, beside the log rather than on the board."""
     candidates = payload.get("turn_candidates") or []
     turn_steps = payload.get("turn_steps") or []
+    phase_column = payload.get("phase_column") or {}
+    stage_count = sum(len(row.get("stages") or ()) for row in phase_column.get("rows") or ())
+    spine_shape = "setup" if stage_count == 2 else "full"
+    spine_attribute = (
+        f' data-turn-spine="{spine_shape}"'
+        if phase_column.get("scope") == "turn"
+        else ""
+    )
     if not candidates and not turn_steps:
         return (
-            f'<div class="play-turn" data-component="play-turn">{_turn_phase_column(payload)}</div>'
+            f'<div class="play-turn" data-component="play-turn"{spine_attribute}>'
+            f"{_turn_phase_column(payload)}</div>"
         )
     return (
-        '<div class="play-turn" data-component="play-turn">'
+        f'<div class="play-turn" data-component="play-turn"{spine_attribute}>'
         f"{_turn_phase_column(payload)}"
         f"{_prompt_lines(candidates)}"
         '<div class="turn-hire-fact" data-turn-hire-fact="true" '
@@ -1239,10 +1290,31 @@ def turn_styles(route_color: str) -> str:
     width: 100%; margin-top: 10px; color: #F2EEDF; font: 13px/1.5 Helvetica, Arial, sans-serif;
     background: #101010; border: 1px solid #333333; border-radius: 10px; padding: 10px 12px;
   }}
+  /* The prompt and summary trade the same reserved space while a full turn advances. This is the
+     tallest measured ordinary frontier at the supported narrow width, including its border. */
+  .play-turn[data-turn-spine="full"] {{ min-height: 439px; }}
   .phase-column {{ display: flex; flex-direction: column; gap: 2px;
     margin: -1px 0 9px; padding-bottom: 9px; border-bottom: 1px solid #333333; }}
   .phase-row {{ color: {TURN_PHASE_DIM_COLOR}; font-size: 12px; letter-spacing: 0.02em; }}
   .phase-row[data-phase-current="true"] {{ color: {TURN_PHASE_CURRENT_COLOR}; font-weight: 700; }}
+  .phase-column[data-phase-column="turn"] {{ gap: 0; }}
+  .phase-column[data-phase-column="turn"] .turn-phase-group + .turn-phase-group {{
+    margin-top: 2px;
+  }}
+  .phase-column[data-phase-column="turn"] .phase-row {{
+    color: {TURN_PHASE_DIM_COLOR}; font-size: 10px; font-weight: 400;
+    letter-spacing: 0.09em; line-height: 1.2; text-transform: uppercase;
+  }}
+  .phase-column[data-phase-column="turn"] .turn-stage-rows {{
+    margin: 1px 0 0 4px; padding-left: 10px; border-left: 1px solid #333333;
+  }}
+  .phase-column[data-phase-column="turn"] .turn-stage-row {{
+    color: {TURN_PHASE_DIM_COLOR}; font-size: 13px; font-weight: 400; line-height: 1.25;
+  }}
+  .phase-column[data-phase-column="turn"]
+    .turn-stage-row[data-turn-stage-current="true"] {{
+    color: {TURN_PHASE_CURRENT_COLOR}; font-weight: 700;
+  }}
   .phase-prompt {{ display: none; margin-top: 7px; color: #F2EEDF; font-size: 12px;
     line-height: 1.45; }}
   .phase-prompt[data-turn-phase-prompt-current="true"] {{ display: block; }}
