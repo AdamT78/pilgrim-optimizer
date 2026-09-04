@@ -17,6 +17,8 @@ from tools.ui_debug.render_player_boards_v2 import (
     BANNER_CENTER_Y,
     BANNER_FONT_SIZE,
     BANNER_HEIGHT,
+    BUILDING_CHOICE_STROKE,
+    BUILDING_CHOICE_STROKE_WIDTH,
     BUILDING_ROW_GAP,
     BUILDING_SLOT_DASH_ARRAY,
     BUILDING_SLOT_GAP,
@@ -59,6 +61,7 @@ from tools.ui_debug.render_player_boards_v2 import (
     building_slot_centers,
     column_pitch,
     default_layout_path,
+    default_player_board_v2_state,
     hex_path_data,
     load_player_boards_v2_layout,
     player_by_id,
@@ -318,6 +321,46 @@ def test_an_interactive_board_slot_keeps_its_dashed_outline_on_top(layout: dict)
             f' stroke="{palette["slot_stroke"]}" stroke-width="2"'
             f' stroke-dasharray="{BUILDING_SLOT_DASH_ARRAY}" stroke-linejoin="round"/></g>'
         )
+
+
+def test_active_buildings_get_a_parallel_hidden_choice_key(layout: dict) -> None:
+    state = default_player_board_v2_state(layout)
+    state["slots"] = (
+        {"state": "bought", "id": "well", "content": "<g data-test-building='well'></g>"},
+        {"state": "donated", "id": "mint", "content": "<g data-test-building='mint'></g>"},
+    )
+    svg = render_player_board_v2_svg(
+        layout,
+        player_by_id(layout, "player_one"),
+        board_state=state,
+        interactive=True,
+        turn_step_hit=True,
+        building_choice_keys=True,
+    )
+    key_tags = re.findall(r"<path data-building-choice-key=[^>]*/>", svg)
+    first_slot = svg[
+        svg.index('data-player-board-slot="1"') : svg.index('data-player-board-slot="2"')
+    ]
+
+    assert {
+        "key_ids": re.findall(r'data-building-choice-key="([^"]+)"', svg),
+        "key_tag": key_tags,
+        "stroke": (BUILDING_CHOICE_STROKE, BUILDING_CHOICE_STROKE_WIDTH),
+        "conversion_targets": svg.count('data-turn-step-click-target="true"'),
+        "parallel_order": first_slot.index('data-turn-step-click-target="true"')
+        < first_slot.index('data-building-choice-key="well"'),
+    } == {
+        "key_ids": ["well"],
+        "key_tag": [
+            f'<path data-building-choice-key="well" data-building-id="well"'
+            f' d="{hex_path_data(*building_slot_centers(layout)[0])}" fill="none"'
+            ' pointer-events="all" stroke="#F2EEDF" stroke-width="4"'
+            ' visibility="hidden"/>'
+        ],
+        "stroke": ("#F2EEDF", 4.0),
+        "conversion_targets": layout["building_slot_count"],
+        "parallel_order": True,
+    }
 
 
 def test_a_plain_board_slot_stays_the_single_dashed_hex_of_the_baseline(layout: dict) -> None:

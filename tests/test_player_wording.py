@@ -20,6 +20,7 @@ _CHANGED_TEXTS: tuple[str, ...] = (
     "player_one: Choose the City or Duty space on your route to leave unsown.",
     "player_one: Choose a resource.",
     "player_one: Choose a building.",
+    "player_one: Choose one of your buildings to donate.",
     "player_one: Choose whether to hire a building.",
     "player_one: Choose payment.",
     "player_one: Move serfs and acolytes, up to 1 in total.",
@@ -164,6 +165,19 @@ def test_combination_questions_name_the_choice_instead_of_saying_choose_one() ->
     assert {step["prompt"] for step in payment_steps} == {"player_one: Choose payment."}
 
 
+def test_building_questions_distinguish_constructing_from_donating() -> None:
+    construct_steps = _candidate_steps("scenarios/construct_building_level1_001.json", "building")
+    donation_steps = _candidate_steps("scenarios/give_alms_donate_building_001.json", "building")
+
+    assert (
+        {step["prompt"] for step in construct_steps},
+        {step["prompt"] for step in donation_steps},
+    ) == (
+        {"player_one: Choose a building."},
+        {"player_one: Choose one of your buildings to donate."},
+    )
+
+
 @pytest.mark.parametrize(
     ("prompt", "expected"),
     (
@@ -176,6 +190,10 @@ def test_combination_questions_name_the_choice_instead_of_saying_choose_one() ->
         ),
         (play_server.RESOURCE_PROMPT, "Choose a resource."),
         (play_server.BUILDING_PROMPT, "Choose a building."),
+        (
+            play_server.DONATION_BUILDING_PROMPT,
+            "Choose one of your buildings to donate.",
+        ),
         (play_server.HIRE_PROMPT, "Choose whether to hire a building."),
         (play_server.CONFESSION_BOX_PROMPT, "Choose whether to use the Confession Box."),
         (play_server.ALMS_PAYMENT_PROMPT, "Choose payment."),
