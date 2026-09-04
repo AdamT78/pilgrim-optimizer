@@ -1227,11 +1227,6 @@ DECIDED_FIELDS = ("origin", "route", "selected_duty", "resolution")
 # it gets player wording, rather than exposing an engine identifier at the table.
 UNRESOLVED_FIELD_TEXT = {
     "construct_plan": "which roads to build",
-    "effective_acolyte_building_id": "which building adds the extra acolytes",
-    "effective_acolyte_building_source": "where that building is hired from",
-    "free_hire_enabler_building_id": "which building grants the free hire",
-    "free_hire_target_building_id": "which building to hire for free",
-    "free_hire_target_building_source": "where the free-hired building comes from",
     "bank_payment_building_id": "which building the Bank pays for",
     "bank_payment_building_source": "where that building is hired from",
     "bank_payment_replaced_resource": "which resource the silver replaces",
@@ -1253,6 +1248,15 @@ BUILDING_CHOICE_FIELDS: tuple[str, ...] = (
     "donate_building_id",
 )
 HIRE_FIELDS: tuple[str, ...] = ("hired_building_id", "hired_building_source", "hire_payments")
+EFFECTIVE_ACOLYTE_FIELDS: tuple[str, ...] = (
+    "effective_acolyte_building_id",
+    "effective_acolyte_building_source",
+)
+FREE_HIRE_FIELDS: tuple[str, ...] = (
+    "free_hire_enabler_building_id",
+    "free_hire_target_building_id",
+    "free_hire_target_building_source",
+)
 HIRE_PAYMENT_FIELDS: tuple[str, ...] = ("hire_payments",)
 BANK_PAYMENT_FIELDS: tuple[str, ...] = (
     "bank_payment_building_id",
@@ -1350,6 +1354,8 @@ BUILDING_CHOICE_PROMPTS: dict[str, str] = {
 }
 HIRE_PROMPT = "Choose whether to hire a building."
 CONFESSION_BOX_PROMPT = "Choose whether to use the Confession Box."
+EFFECTIVE_ACOLYTE_PROMPT = "Choose whether to use the Scriptorium."
+WAGON_YARD_FREE_HIRE_PROMPT = "Choose whether to use the Wagon Yard's free hire."
 ALMS_PAYMENT_PROMPT = "Choose payment."
 SEAT_PROMPT = "Choose first player for this round."
 ORDINATION_PROMPT = "Move serfs and acolytes, up to {n} in total."
@@ -1944,6 +1950,72 @@ def _hire_step(
     )
 
 
+def _optional_modifier_steps(
+    action: FullTurnAction,
+    config: Any,
+    *,
+    offer_effective_acolyte: bool,
+    offer_free_hire: bool,
+) -> list[tuple[dict, tuple[str, ...]]]:
+    """Offer each optional modifier as the complete tuple the engine enumerated.
+
+    These are scalar option values, not booleans. The current corpus happens to offer decline plus
+    one non-null bundle, but Wagon Yard can enumerate several target/source bundles in one position.
+    Keeping the complete tuple in the value lets those remain distinct without making the page
+    reconstruct a target-selection rule or simplifying this back to a yes/no question.
+    """
+    steps: list[tuple[dict, tuple[str, ...]]] = []
+    if offer_effective_acolyte:
+        building_id = action.effective_acolyte_building_id
+        source = action.effective_acolyte_building_source
+        if building_id is None:
+            value = "effective_acolyte:decline"
+            label = "Don't use the Scriptorium"
+        else:
+            # The building id is the enable flag. A null source means the Scriptorium was hired by
+            # an already-committed turn step; it is a real use, not the declined spelling.
+            source_value = "committed" if source is None else source
+            value = f"effective_acolyte:{building_id}:{source_value}"
+            label = "Use the Scriptorium for +1 effective acolyte on occupied Duty tiles"
+        steps.append(
+            (
+                {
+                    "kind": "combination",
+                    "value": value,
+                    "label": label,
+                    "prompt": EFFECTIVE_ACOLYTE_PROMPT,
+                },
+                EFFECTIVE_ACOLYTE_FIELDS,
+            )
+        )
+    if offer_free_hire:
+        enabler_id = action.free_hire_enabler_building_id
+        target_id = action.free_hire_target_building_id
+        source = action.free_hire_target_building_source
+        if enabler_id is None:
+            value = "free_hire:decline"
+            label = "Don't use the Wagon Yard"
+        else:
+            if target_id is None or source is None:
+                raise AssertionError("An enabled Wagon Yard free hire must carry its whole bundle.")
+            target_name = building_by_id(config.buildings, target_id).name
+            source_phrase = "the market" if source == "market" else _hire_source_phrase(source)
+            value = f"free_hire:{enabler_id}:{target_id}:{source}"
+            label = f"Use the Wagon Yard to hire {target_name} from {source_phrase} for free"
+        steps.append(
+            (
+                {
+                    "kind": "combination",
+                    "value": value,
+                    "label": label,
+                    "prompt": WAGON_YARD_FREE_HIRE_PROMPT,
+                },
+                FREE_HIRE_FIELDS,
+            )
+        )
+    return steps
+
+
 def _hire_payment_map(action: FullTurnAction) -> dict[str, str]:
     """Hire payment resources keyed by hired building id for one action."""
     return {building_id: resource for building_id, resource in tuple(action.hire_payments or ())}
@@ -2430,6 +2502,8 @@ def _presented(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -2535,6 +2609,17 @@ def _presented(
                 state=state,
                 config=config,
                 bank_replaced_resource=hire_payment_bank_replaced_resource,
+            )
+        )
+    if isinstance(action, FullTurnAction) and (offer_effective_acolyte or offer_free_hire):
+        if config is None:
+            raise ValueError("config is required to present optional modifier choices.")
+        presented.extend(
+            _optional_modifier_steps(
+                action,
+                config,
+                offer_effective_acolyte=offer_effective_acolyte,
+                offer_free_hire=offer_free_hire,
             )
         )
     for name in RESOURCE_CHOICE_FIELDS:
@@ -2669,6 +2754,8 @@ def _presented_rows(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -2686,6 +2773,8 @@ def _presented_rows(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_effective_acolyte=offer_effective_acolyte,
+            offer_free_hire=offer_free_hire,
             offer_bank_payment=offer_bank_payment,
             offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
             paid_bank_hire_source=paid_bank_hire_source,
@@ -2708,6 +2797,8 @@ def _presented_steps(
     state: Any | None = None,
     config: Any | None = None,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -2725,6 +2816,8 @@ def _presented_steps(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_effective_acolyte=offer_effective_acolyte,
+            offer_free_hire=offer_free_hire,
             offer_bank_payment=offer_bank_payment,
             offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
             paid_bank_hire_source=paid_bank_hire_source,
@@ -2905,6 +2998,20 @@ def _hire_contexts(actions: list[Any], config: Any) -> set[tuple[Any, ...]]:
         _resolution_context_key(action, config)
         for action in actions
         if isinstance(action, FullTurnAction) and _action_hires_building(action)
+    }
+
+
+def _optional_modifier_contexts(
+    actions: list[Any],
+    config: Any,
+    *,
+    enabler_field: str,
+) -> set[tuple[Any, ...]]:
+    """Resolution prefixes where at least one action takes an optional modifier."""
+    return {
+        _resolution_context_key(action, config)
+        for action in actions
+        if isinstance(action, FullTurnAction) and getattr(action, enabler_field) is not None
     }
 
 
@@ -3280,6 +3387,8 @@ def _covered_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -3302,6 +3411,8 @@ def _covered_fields(
             state=state,
             config=config,
             offer_hire=offer_hire,
+            offer_effective_acolyte=offer_effective_acolyte,
+            offer_free_hire=offer_free_hire,
             offer_bank_payment=offer_bank_payment,
             offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
             paid_bank_hire_source=paid_bank_hire_source,
@@ -3342,6 +3453,8 @@ def decision_steps(
     state: Any,
     config: Any,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -3385,6 +3498,8 @@ def decision_steps(
                 state=state,
                 config=config,
                 offer_hire=offer_hire,
+                offer_effective_acolyte=offer_effective_acolyte,
+                offer_free_hire=offer_free_hire,
                 offer_bank_payment=offer_bank_payment,
                 offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
                 paid_bank_hire_source=paid_bank_hire_source,
@@ -3453,6 +3568,8 @@ def decision_steps(
         state=state,
         config=config,
         offer_hire=offer_hire,
+        offer_effective_acolyte=offer_effective_acolyte,
+        offer_free_hire=offer_free_hire,
         offer_bank_payment=offer_bank_payment,
         offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
         paid_bank_hire_source=paid_bank_hire_source,
@@ -3566,6 +3683,8 @@ def _unresolved_fields(
     config: Any,
     *,
     offer_hire: bool = False,
+    offer_effective_acolyte: bool = False,
+    offer_free_hire: bool = False,
     offer_bank_payment: bool = False,
     offer_paid_bank_hire_choice: bool = False,
     paid_bank_hire_source: Any | None = None,
@@ -3594,6 +3713,8 @@ def _unresolved_fields(
         state,
         config,
         offer_hire=offer_hire,
+        offer_effective_acolyte=offer_effective_acolyte,
+        offer_free_hire=offer_free_hire,
         offer_bank_payment=offer_bank_payment,
         offer_paid_bank_hire_choice=offer_paid_bank_hire_choice,
         paid_bank_hire_source=paid_bank_hire_source,
@@ -4026,6 +4147,16 @@ def _turn_candidates_and_auto_family_indexes(
     player_id = _speaking_player_id(state)
     actions = list(legal_actions(state, config) if actions is None else actions)
     hire_contexts = _hire_contexts(actions, config)
+    effective_acolyte_contexts = _optional_modifier_contexts(
+        actions,
+        config,
+        enabler_field="effective_acolyte_building_id",
+    )
+    free_hire_contexts = _optional_modifier_contexts(
+        actions,
+        config,
+        enabler_field="free_hire_enabler_building_id",
+    )
     paid_bank_actions_by_context: collections.defaultdict[tuple[Any, ...], list[FullTurnAction]] = (
         collections.defaultdict(list)
     )
@@ -4085,6 +4216,8 @@ def _turn_candidates_and_auto_family_indexes(
             raise AssertionError("One owned-Bank payment context must replace one resource.")
     steps_by_action_id: dict[str, list[dict]] = {}
     offer_hire_by_action_id: dict[str, bool] = {}
+    offer_effective_acolyte_by_action_id: dict[str, bool] = {}
+    offer_free_hire_by_action_id: dict[str, bool] = {}
     offer_bank_payment_by_action_id: dict[str, bool] = {}
     offer_paid_bank_hire_choice_by_action_id: dict[str, bool] = {}
     paid_bank_hire_source_by_action_id: dict[str, Any | None] = {}
@@ -4098,10 +4231,17 @@ def _turn_candidates_and_auto_family_indexes(
     hire_payment_buildings_by_action_id: dict[str, tuple[str, ...]] = {}
     for action in actions:
         move_id = action_id(action)
-        offered_hire = isinstance(action, FullTurnAction) and (
-            _resolution_context_key(action, config) in hire_contexts
+        resolution_context = (
+            _resolution_context_key(action, config)
+            if isinstance(action, FullTurnAction)
+            else None
         )
+        offered_hire = resolution_context in hire_contexts
         offer_hire_by_action_id[move_id] = offered_hire
+        offer_effective_acolyte_by_action_id[move_id] = (
+            resolution_context in effective_acolyte_contexts
+        )
+        offer_free_hire_by_action_id[move_id] = resolution_context in free_hire_contexts
         offer_bank_payment_by_action_id[move_id] = isinstance(action, FullTurnAction) and (
             _bank_payment_context_key(action) in bank_payment_contexts
         )
@@ -4189,6 +4329,8 @@ def _turn_candidates_and_auto_family_indexes(
             state=state,
             config=config,
             offer_hire=offer_hire_by_action_id[move_id],
+            offer_effective_acolyte=offer_effective_acolyte_by_action_id[move_id],
+            offer_free_hire=offer_free_hire_by_action_id[move_id],
             offer_bank_payment=offer_bank_payment_by_action_id[move_id],
             offer_paid_bank_hire_choice=offer_paid_bank_hire_choice_by_action_id[move_id],
             paid_bank_hire_source=paid_bank_hire_source_by_action_id[move_id],
@@ -4236,6 +4378,8 @@ def _turn_candidates_and_auto_family_indexes(
                 state,
                 config,
                 offer_hire=offer_hire_by_action_id[move_id],
+                offer_effective_acolyte=offer_effective_acolyte_by_action_id[move_id],
+                offer_free_hire=offer_free_hire_by_action_id[move_id],
                 offer_bank_payment=offer_bank_payment_by_action_id[move_id],
                 offer_paid_bank_hire_choice=offer_paid_bank_hire_choice_by_action_id[move_id],
                 paid_bank_hire_source=paid_bank_hire_source_by_action_id[move_id],

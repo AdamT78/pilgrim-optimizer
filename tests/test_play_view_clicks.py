@@ -506,16 +506,28 @@ def _painted_confirm_label(page) -> str:
     return text
 
 
-def _reach_taxation_step_two(page, *, step_one: str = "stone") -> None:
+def _reach_taxation_step_two(
+    page,
+    *,
+    step_one: str = "stone",
+    modifier: str | None = None,
+) -> None:
     """Walk the direct Taxation fixture to its separate Step II pill question."""
-    for selector in (
+    selectors = [
         '[data-board-position-index="0"][data-turn-start-candidate="true"]',
         '[data-arrow="city->north"][data-turn-offered="true"]',
         '[data-board-position-index="1"][data-turn-duty-candidate="true"]',
         '[data-turn-control="action"][data-turn-control-enabled="true"]',
+    ]
+    if modifier is not None:
+        selectors.append(
+            f'[data-combination-key="{modifier}"][data-turn-offered="true"]'
+        )
+    selectors.append(
         f'[data-active-seat="true"] [data-resource-choice-key="{step_one}"]'
-        '[data-turn-offered="true"]',
-    ):
+        '[data-turn-offered="true"]'
+    )
+    for selector in selectors:
         handle = page.query_selector(selector)
         assert handle is not None, f"missing Taxation target {selector}"
         _click_handle_centre(page, handle, require_hit=True)
@@ -693,77 +705,217 @@ def _click_if_offered(page, selector: str) -> None:
         page.wait_for_timeout(40)
 
 
-def test_natural_blocked_turn_reveals_one_explanation_and_reset_only_escapes_preview(
-    page, serve
-) -> None:
-    """One server candidate can hold several legal variants and still reveal one refusal."""
-    scenario_path = SCENARIOS / "wagon_yard_active_free_hire_market_guild_001.json"
-    base_url, server = serve(scenario_path)
-    candidate = next(
-        candidate
-        for candidate in server.payload["turn_candidates"]
-        if any(
-            step["kind"] == "resolution" and step["value"] == "clerical_devotion"
+def _exercise_optional_modifier_answers(
+    page,
+    serve,
+    *,
+    scenario_path: Path,
+    resolution: str,
+    values: tuple[str, str],
+    fields: tuple[str, ...],
+    screenshot: Path | None = None,
+) -> dict[str, object]:
+    outcomes = {}
+    for answer_index, answer in enumerate(values):
+        base_url, server = serve(scenario_path)
+        opening_state = server.state
+        candidates = [
+            candidate
+            for candidate in server.payload["turn_candidates"]
+            if any(
+                step["kind"] == "resolution" and step["value"] == resolution
+                for step in candidate["steps"]
+            )
+        ]
+        by_answer = {
+            str(step["value"]): (candidate, step)
+            for candidate in candidates
             for step in candidate["steps"]
+            if step["kind"] == "combination" and str(step["value"]) in values
+        }
+        candidate, answer_step = by_answer[answer]
+        chosen_action = next(
+            action
+            for action in legal_actions(opening_state, server.config)
+            if action_id(action) == candidate["action_id"]
         )
-    )
-    assert all(
-        candidate["action_id"] is None for candidate in server.payload["turn_candidates"]
-    ), "the natural dead end unexpectedly had a finishable branch"
+        expected_state = apply_action(opening_state, chosen_action, server.config).state
 
-    page.goto(base_url, wait_until="networkidle")
-    _click_candidate_prefix(page, candidate, before_kind="resolution")
-    assert (
-        page.locator(".turn-blocked:visible").count(),
-        page.locator('[data-turn-prompt][data-turn-offered="true"]').count(),
-    ) == (0, 1), (
-        "a refusal appeared while the resolution question was still unanswered"
-    )
-    resolution = next(step for step in candidate["steps"] if step["kind"] == "resolution")
-    _click_candidate_step(page, resolution)
+        page.goto(base_url, wait_until="networkidle")
+        _click_candidate_prefix(page, candidate, before_kind="combination")
+        options = page.locator('[data-combination-key][data-turn-offered="true"]')
+        option_layout = options.evaluate_all(
+            """nodes => nodes.map(node => {
+              const style = getComputedStyle(node);
+              const box = node.getBoundingClientRect();
+              return {
+                value: node.getAttribute('data-combination-key'),
+                label: node.textContent.trim(),
+                laidOut: style.display !== 'none'
+                  && style.visibility === 'visible'
+                  && Number(style.opacity) > 0
+                  && style.pointerEvents !== 'none'
+                  && box.width > 0
+                  && box.height > 0,
+              };
+            })"""
+        )
+        prompt_layout = page.locator(
+            '[data-turn-prompt][data-turn-offered="true"]'
+        ).evaluate_all(
+            """nodes => nodes.map(node => {
+              const style = getComputedStyle(node);
+              const box = node.getBoundingClientRect();
+              return {
+                text: node.textContent.trim(),
+                laidOut: style.display !== 'none'
+                  && style.visibility === 'visible'
+                  && Number(style.opacity) > 0
+                  && box.width > 0
+                  && box.height > 0,
+              };
+            })"""
+        )
+        if screenshot is not None and answer_index == 0:
+            _screenshot_turn_prompt(page, screenshot)
 
-    shown = page.locator('[data-turn-panel][data-turn-shown="true"]')
-    panel_layout = shown.evaluate_all(
-        """nodes => nodes.map(node => {
-          const box = node.getBoundingClientRect();
-          return {display: getComputedStyle(node).display,
-                  hasLayout: box.width > 0 && box.height > 0};
-        })"""
+        _click_candidate_step(page, answer_step)
+        confirm = page.locator('[data-turn-control="confirm"]')
+        confirm_layout = confirm.evaluate(
+            """node => {
+              const style = getComputedStyle(node);
+              const box = node.getBoundingClientRect();
+              return style.display !== 'none'
+                && style.visibility === 'visible'
+                && Number(style.opacity) > 0
+                && box.width > 0
+                && box.height > 0;
+            }"""
+        )
+        confirm_enabled = confirm.get_attribute("data-turn-control-enabled") == "true"
+        token = server.payload["state_token"]
+        _click_handle_centre(page, confirm.element_handle(), require_hit=True)
+        page.wait_for_function(
+            "token => !document.documentElement.innerHTML.includes(token)", arg=token
+        )
+        outcomes[answer] = {
+            "option_layout": option_layout,
+            "prompt_layout": prompt_layout,
+            "confirm_laid_out": confirm_layout,
+            "confirm_enabled": confirm_enabled,
+            "chosen_fields": tuple(getattr(chosen_action, field) for field in fields),
+            "committed_expected_action": server.state == expected_state,
+        }
+    return outcomes
+
+
+def test_wagon_yard_optional_bundle_is_laid_out_and_commits_both_answers(page, serve) -> None:
+    values = (
+        "free_hire:decline",
+        "free_hire:wagon_yard:guild:market",
     )
-    assert panel_layout == [{"display": "block", "hasLayout": True}], (
-        "the terminal frontier did not reveal exactly one laid-out panel"
+    outcomes = _exercise_optional_modifier_answers(
+        page,
+        serve,
+        scenario_path=SCENARIOS / "wagon_yard_active_free_hire_market_guild_001.json",
+        resolution="clerical_devotion",
+        values=values,
+        fields=(
+            "free_hire_enabler_building_id",
+            "free_hire_target_building_id",
+            "free_hire_target_building_source",
+        ),
+        screenshot=SCREENSHOTS / "wagon-yard-optional-modifier.png",
     )
-    assert shown.locator(".turn-field").all_inner_texts() == [
-        "which building grants the free hire",
-        "which building to hire for free",
-        "where the free-hired building comes from",
+    expected_layout = [
+        {
+            "value": "free_hire:decline",
+            "label": "Don't use the Wagon Yard",
+            "laidOut": True,
+        },
+        {
+            "value": "free_hire:wagon_yard:guild:market",
+            "label": "Use the Wagon Yard to hire Guild from the market for free",
+            "laidOut": True,
+        },
     ]
-    confirm = page.locator('[data-turn-control="confirm"]')
-    assert confirm.is_visible() and not confirm.is_enabled(), (
-        "Confirm became available for an unconfirmable turn"
-    )
-    page.screenshot(path=str(SCREENSHOTS / "wagon-yard-blocked-turn.png"), full_page=True)
+    expected_prompt = [
+        {
+            "text": "Red: Choose whether to use the Wagon Yard's free hire.",
+            "laidOut": True,
+        }
+    ]
 
-    before_state = server.state
-    before_token = server.payload["state_token"]
-    reset = page.locator('[data-turn-control="reset"]')
-    assert reset.is_visible() and reset.is_enabled(), "the blocked preview offered no local escape"
-    _click_handle_centre(page, reset.element_handle(), require_hit=True)
-    page.wait_for_function(
-        "() => !document.querySelector('[data-turn-panel][data-turn-shown=\"true\"]')"
-    )
+    assert outcomes == {
+        values[0]: {
+            "option_layout": expected_layout,
+            "prompt_layout": expected_prompt,
+            "confirm_laid_out": True,
+            "confirm_enabled": True,
+            "chosen_fields": (None, None, None),
+            "committed_expected_action": True,
+        },
+        values[1]: {
+            "option_layout": expected_layout,
+            "prompt_layout": expected_prompt,
+            "confirm_laid_out": True,
+            "confirm_enabled": True,
+            "chosen_fields": ("wagon_yard", "guild", "market"),
+            "committed_expected_action": True,
+        },
+    }
 
-    assert server.state == before_state and server.payload["state_token"] == before_token, (
-        "Reset submitted or changed the natural dead-end state"
+
+def test_scriptorium_optional_bundle_is_laid_out_and_commits_both_answers(page, serve) -> None:
+    values = (
+        "effective_acolyte:decline",
+        "effective_acolyte:scriptorium:own_active",
     )
-    assert (
-        page.locator(".turn-blocked:visible").count(),
-        confirm.is_enabled(),
-        page.locator(
-            '[data-board-position-index][data-turn-start-candidate="true"]'
-        ).count()
-        > 0,
-    ) == (0, False, True), "Reset made the same unconfirmable turn look finishable"
+    outcomes = _exercise_optional_modifier_answers(
+        page,
+        serve,
+        scenario_path=SCENARIOS / "scriptorium_active_majority_selected_duty_001.json",
+        resolution="clerical_devotion",
+        values=values,
+        fields=("effective_acolyte_building_id", "effective_acolyte_building_source"),
+    )
+    expected_layout = [
+        {
+            "value": "effective_acolyte:decline",
+            "label": "Don't use the Scriptorium",
+            "laidOut": True,
+        },
+        {
+            "value": "effective_acolyte:scriptorium:own_active",
+            "label": "Use the Scriptorium for +1 effective acolyte on occupied Duty tiles",
+            "laidOut": True,
+        },
+    ]
+    expected_prompt = [
+        {
+            "text": "Red: Choose whether to use the Scriptorium.",
+            "laidOut": True,
+        }
+    ]
+
+    assert outcomes == {
+        values[0]: {
+            "option_layout": expected_layout,
+            "prompt_layout": expected_prompt,
+            "confirm_laid_out": True,
+            "confirm_enabled": True,
+            "chosen_fields": (None, None),
+            "committed_expected_action": True,
+        },
+        values[1]: {
+            "option_layout": expected_layout,
+            "prompt_layout": expected_prompt,
+            "confirm_laid_out": True,
+            "confirm_enabled": True,
+            "chosen_fields": ("scriptorium", "own_active"),
+            "committed_expected_action": True,
+        },
+    }
 
 
 def test_taxation_step_two_pills_filter_survivors_and_reach_all_six_multisets(page, serve) -> None:
@@ -902,7 +1054,10 @@ def test_taxation_step_two_darkens_step_one_only_resources(page, serve) -> None:
 def test_taxation_step_two_renders_the_server_scriptorium_explanation(page, serve) -> None:
     base_url, _server = serve(SCENARIOS / "scriptorium_taxation_majority_other_tiles_001.json")
     page.goto(base_url, wait_until="networkidle")
-    _reach_taxation_step_two(page)
+    _reach_taxation_step_two(
+        page,
+        modifier="effective_acolyte:scriptorium:own_active",
+    )
 
     prompt = page.locator('[data-turn-prompt][data-turn-offered="true"]')
     assert prompt.count() == 1
