@@ -160,6 +160,7 @@
   },
   "projectOwned": [
     "icons/actions/*.svg",
-    "icons/resources/*/pilgrim_*.svg"
+    "icons/resources/*/pilgrim_*.svg",
+    "portraits/*/pilgrim_*.svg"
   ]
 }

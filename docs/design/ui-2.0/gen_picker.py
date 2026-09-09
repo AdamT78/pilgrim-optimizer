@@ -2,7 +2,7 @@
 
 Options come from the asset library and nowhere else -- one directory per slot, so adding a file
 adds an option and no code changes. Anything whose licence is still `unverified` in assets.json is
-skipped, which is why the leader portraits do not appear yet.
+skipped, so an asset that has not been cleared cannot reach a page by accident.
 
 Every mark on the card sits in a `<g class="pslot" data-slot="...">` at its own centre, so choosing
 an option is one innerHTML swap and never a repositioning. Two sizing rules, because the two kinds
@@ -10,6 +10,8 @@ of asset normalise differently (see ../hybrid-svg-png.md):
 
     fit   resources   drawn into the pill's ICON_H box; preserveAspectRatio does the work
     ink   population  drawn at FIG_H of visible ink, width following each figure's own aspect
+    disc  portrait    fills the portrait circle, clipped to it
+    frame overlay     placed by its own ring so that ring lands on the portrait circle
 """
 import base64, io, json, os, pathlib, re, contextlib, sys
 
@@ -34,39 +36,77 @@ with contextlib.redirect_stdout(io.StringIO()):
 
 ICON_H = NS['gb'].ICON_H
 FIG_H = NS['pop'].FIG_H
+PR = NS['PR']                      # the portrait circle's radius, in card units
+PX, PY = NS['PX'], NS['PY']
+NS['FRAME_ROOM'] = True            # a frame overhangs the card; give the viewBox room for it
 CARD = NS['player_card'](NS['P'][0])
 POP_DEFS = NS['_POP_DEFS']
 
 META = json.loads((ASSETS / "assets.json").read_text())
 BLOCKED = {a["src"] for a in META["assets"].values() if a.get("licence") == "unverified"}
 
-ROWS = [("serf", "Serf", "icons/population/serf", "ink"),
+ROWS = [("portrait", "Portrait", "portraits/leaders", "disc"),
+        ("frame", "Frame", "frames/player_board", "frame"),
+        ("serf", "Serf", "icons/population/serf", "ink"),
         ("acolyte", "Acolyte", "icons/population/acolyte", "ink"),
         ("piety", "Piety", "icons/resources/piety", "fit"),
         ("wheat", "Wheat", "icons/resources/wheat", "fit"),
         ("stone", "Stone", "icons/resources/stone", "fit"),
         ("silver", "Silver", "icons/resources/silver", "fit")]
 
-# Slots the card does not have yet. They are listed rather than omitted so the page says what is
-# actually blocking each one -- and it says it from the tree, not from a sentence I wrote once and
-# would forget to update. The two states differ: a directory with no licensed file needs a file; a
-# directory with files needs the CARD to grow a swappable slot, which the portrait has not yet
-# because it is drawn geometry rather than a placed image.
-PENDING_SLOTS = [("Portrait", "portraits/leaders/"), ("Frame", "frames/player_board/")]
 
 
-def pending_reason(rel):
-    files = sorted(p.name for p in (ASSETS / rel).glob("*")
-                   if p.suffix in (".svg", ".png")
-                   and str(p.relative_to(ASSETS)) not in BLOCKED)
-    if not files:
-        return "no licensed file yet. A file dropped in <code>assets/%s</code> becomes one." % rel
-    return ("%d file%s ready in <code>assets/%s</code> &mdash; the card has no swappable slot for "
-            "this yet, so there is nothing to swap into." % (len(files), "" if len(files) == 1
-                                                             else "s", rel))
+def placement(kind, asp, rel):
+    """How big a mark is drawn, and where its slot sits -- both in card units.
+
+    Each kind measures itself differently, and the differences are the point:
+
+        fit     a resource fills the pill's icon box, aspect preserved by the viewport
+        ink     a population figure is drawn at a fixed height of VISIBLE ink, width following
+        disc    a portrait fills the portrait circle and is clipped to it
+        frame   a frame is placed by its portrait OPENING, not by its own box, so that its ring
+                lands on the card's portrait however the frame is proportioned
+    """
+    if kind == "ink":
+        return FIG_H * asp, FIG_H, None
+    if kind == "disc":
+        return 2.0 * PR, 2.0 * PR, None
+    if kind == "frame":
+        return frame_place(rel, "ring")
+    return ICON_H, ICON_H, None
 
 
-PENDING = [(label, pending_reason(rel)) for label, rel in PENDING_SLOTS]
+# What the card's frame has to contain, in card units: the panel rect and the counts under it.
+CARD_TOP, CARD_BOT = 16.0, 128.0
+
+
+def frame_place(rel, how):
+    """Size and place a frame two ways, because one frame cannot do both.
+
+    A frame of this shape has two openings, and their proportions are fixed relative to each
+    other. The card's are not the same proportions, so:
+
+        ring    the ring lands exactly on the portrait circle -- and the panel opening comes out
+                47 units short of the card, cutting the pills and their counts
+        panel   the panel opening contains the card -- which needs 1.73x more scale, making the
+                frame 597 units wide against a 316-unit card and pushing the ring off it entirely
+
+    Only "ring" is offered. "panel" stays here because it is the measurement that settles the
+    question, and because a differently proportioned frame might make it the better one.
+    """
+    meta = next(a for a in META["assets"].values() if a["src"] == rel)
+    cx, cy, r = meta["openingCirclePx"]
+    px0, py0, pw, ph = meta["panelOpeningPx"]
+    cw, ch = meta["canvasPx"]
+    k = PR / r if how == "ring" else (CARD_BOT - CARD_TOP) / ph
+    w, h = cw * k, ch * k
+    if how == "ring":
+        ox, oy = PX - cx * k, PY - cy * k
+    else:
+        # centre the panel opening on the card's own rect
+        ox = (0 + 316.0) / 2.0 - (px0 + pw / 2.0) * k
+        oy = (CARD_TOP + CARD_BOT) / 2.0 - (py0 + ph / 2.0) * k
+    return w, h, (ox + w / 2.0, oy + h / 2.0)
 
 
 def symbol(sid, path):
@@ -102,22 +142,45 @@ for slot, label, rel, kind in ROWS:
     d = ASSETS / rel
     files = sorted((p for p in d.glob("*") if p.suffix in (".svg", ".png")), key=_order) \
         if d.is_dir() else []
-    entries = [{"id": "", "label": "NULL", "kind": kind, "asp": 1}]
+    entries = [{"id": "", "label": "NULL", "kind": kind, "asp": 1, "w": 0, "h": 0, "at": None}]
     for p in files:
         if str(p.relative_to(ASSETS)) in BLOCKED:
             continue
         sid = "opt_%s_%s" % (slot, re.sub(r"\W+", "_", p.stem))
         mk, asp = symbol(sid, p)
         syms.append(mk)
-        entries.append({"id": sid, "label": p.stem, "kind": kind, "asp": round(asp, 4)})
+        rel_p = str(p.relative_to(ASSETS))
+        if kind == "frame":
+            # "panel" is kept in frame_place and deliberately NOT offered: sizing this frame's
+            # panel to contain the card makes the whole frame 597 units wide against a 316-unit
+            # card, with the ring far off the left edge. It is not a candidate, it is the proof
+            # that the ring placement is the only one this artwork supports.
+            for how in ("ring",):
+                w, h, at = frame_place(rel_p, how)
+                entries.append({"id": sid, "label": "%s (%s)" % (p.stem, how), "kind": kind,
+                                "asp": round(asp, 4), "w": round(w, 3), "h": round(h, 3),
+                                "at": [round(at[0], 3), round(at[1], 3)], "how": how})
+            continue
+        w, h, at = placement(kind, asp, rel_p)
+        entries.append({"id": sid, "label": p.stem, "kind": kind, "asp": round(asp, 4),
+                        "w": round(w, 3), "h": round(h, 3),
+                        "at": [round(at[0], 3), round(at[1], 3)] if at else None})
     opts[slot] = entries
     btns = []
     for i, e in enumerate(entries):
         if e["id"]:
-            H = 34.0; W = H * (e["asp"] if kind == "ink" else 1)
-            inner = ('<svg viewBox="0 0 %.1f %.1f" width="%.1f" height="%.1f">'
-                     '<use href="#%s" width="%.1f" height="%.1f"/></svg>'
-                     % (W, H, W, H, e["id"], W, H))
+            if kind == "frame":
+                H = 22.0; W = H * e["asp"]           # wide: show the whole frame, not a crop
+            elif kind == "ink":
+                H = 34.0; W = H * e["asp"]
+            else:
+                H = W = 34.0
+            clip = ('<clipPath id="sw%s"><circle cx="%.1f" cy="%.1f" r="%.1f"/></clipPath>'
+                    % (e["id"], W / 2, H / 2, W / 2)) if kind == "disc" else ""
+            g = ('<g clip-path="url(#sw%s)">' % e["id"]) if clip else "<g>"
+            inner = ('<svg viewBox="0 0 %.1f %.1f" width="%.1f" height="%.1f"><defs>%s</defs>%s'
+                     '<use href="#%s" width="%.1f" height="%.1f"/></g></svg>'
+                     % (W, H, W, H, clip, g, e["id"], W, H))
         else:
             inner = '<span class="nul">&empty;</span>'
         btns.append('<button class="opt" data-slot="%s" data-i="%d" title="%s">%s</button>'
@@ -126,11 +189,12 @@ for slot, label, rel, kind in ROWS:
                      % (label, "".join(btns)))
 
 rows_html.append('<div class="rule"></div>')
-for label, why in PENDING:
-    rows_html.append('<div class="row pend"><div class="lab">%s</div>'
-                     '<div class="opts">%s</div></div>' % (label, why))
 rows_html.append('<div class="row"><div class="lab"></div><div class="opts">'
                  '<button class="reset">Reset to the board</button></div></div>')
+
+# What the board itself draws in each slot: its own mark, except the frame, which it does not
+# draw at all. "Reset to the board" has to mean the board, not the first thing in the directory.
+DEFAULTS = {slot: (0 if slot == "frame" else min(1, len(opts[slot]) - 1)) for slot in opts}
 
 pathlib.Path(OUT + "player-board-picker.html").write_text("""<!doctype html>
 <meta charset="utf-8"><title>Pilgrim &mdash; player board picker</title><style>
@@ -166,28 +230,36 @@ only; nothing whose licence is unverified is offered.</p>
 <p class="note">Every mark sits in its own centred slot, so a choice is a swap and never a
 reposition. Resources are fitted into the pill's %g-unit box; population figures are drawn at
 %g units of <b>visible ink</b>, each one's width following its own aspect &mdash; which is why
-they line up however differently they are proportioned.</p>
+they line up however differently they are proportioned. The portrait fills the disc and is clipped
+to it. The frame is placed by its own <b>ring</b>, not its box, so the ring lands on the portrait
+circle whatever the frame's proportions &mdash; and at that scale its panel opening comes out
+47 units shorter than the card, which is why the counts sit below the lower rail.</p>
 <svg width="0" height="0" style="position:absolute"><defs>%s</defs></svg>%s
 <script>
-const OPTS=%s, ICON_H=%g, FIG_H=%g;
+const OPTS=%s, DEFAULTS=%s, ICON_H=%g, FIG_H=%g;
 function mark(o){ if(!o.id) return '';
-  const H=(o.kind==='ink')?FIG_H:ICON_H, W=(o.kind==='ink')?H*o.asp:H;
-  return '<use href="#'+o.id+'" x="'+(-W/2)+'" y="'+(-H/2)+'" width="'+W+'" height="'+H+'"/>'; }
+  return '<use href="#'+o.id+'" x="'+(-o.w/2)+'" y="'+(-o.h/2)+'" width="'+o.w
+       + '" height="'+o.h+'"/>'; }
 function apply(slot,i){
   const o=OPTS[slot][i];
-  document.querySelectorAll('.pslot[data-slot="'+slot+'"]').forEach(g=>{g.innerHTML=mark(o);});
+  document.querySelectorAll('.pslot[data-slot="'+slot+'"]').forEach(g=>{
+    // A frame is positioned by its own opening, so its slot moves with the choice. Every other
+    // slot is fixed by the card and only its contents change.
+    if(o.at) g.setAttribute('transform','translate('+o.at[0]+' '+o.at[1]+')');
+    else if(o.kind==='frame') g.removeAttribute('transform');
+    g.innerHTML=mark(o);});
   document.querySelectorAll('.opt[data-slot="'+slot+'"]').forEach(b=>
     b.setAttribute('aria-pressed', b.dataset.i===String(i)));
 }
 document.querySelectorAll('.opt').forEach(b=>
   b.onclick=()=>apply(b.dataset.slot, +b.dataset.i));
 // open on what the board actually draws: index 1 is ordered to be the board's own mark
-function reset(){ Object.keys(OPTS).forEach(s=>{ if(OPTS[s].length>1) apply(s,1); }); }
+function reset(){ Object.keys(OPTS).forEach(s=>apply(s, DEFAULTS[s])); }
 document.querySelector('.reset').onclick=reset;
 reset();
 </script>
 """ % ("".join(rows_html), CARD, ICON_H, FIG_H, "".join(syms), POP_DEFS,
-       json.dumps(opts), ICON_H, FIG_H))
+       json.dumps(opts), json.dumps(DEFAULTS), ICON_H, FIG_H))
 
 OUT_PATH = pathlib.Path(OUT + "player-board-picker.html")
 print("written %s" % OUT_PATH.name)

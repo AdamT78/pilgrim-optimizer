@@ -135,7 +135,18 @@
         0.98
       ],
       "inkAspect": 2.3333,
-      "licence": "openai-generated"
+      "licence": "openai-generated",
+      "openingCirclePx": [
+        224.0,
+        209.0,
+        113.0
+      ],
+      "panelOpeningPx": [
+        351,
+        141,
+        610,
+        192
+      ]
     }
   },
   "registers": {

@@ -886,16 +886,48 @@ def rows(p):
         o.append(slot(x,R2,_pill_slot(k, gb.resPill(k)),p[k],below=True))
     return "".join(o)
 
+# Room for a frame to be laid over the card. Off by default, so the board is unchanged; the
+# picker turns it on, because a frame overhangs the card on every side and would otherwise be
+# cut off by the viewBox.
+FRAME_ROOM = False
+CARD_VIEWBOX = "-30 -8 352 140"
+CARD_VIEWBOX_FRAMED = "-30 -20 352 158"
+
+
 def portrait(p):
+    """The portrait disc, with its mark in a swappable slot.
+
+    The mark is the only seat-coloured thing on the card, so the colour sits on the SLOT rather
+    than in the file: the drawn figure is stored as `pilgrim_portrait.svg` with currentColor and
+    picks the seat up from here, while a photographic portrait ignores it. Both are clipped by the
+    group, so a swap cannot leak outside the disc.
+    """
     f,s=SEAT[p["seat"]]; act=p.get("active")
     glyph=(s if DARKSEAT[p["seat"]] else LIGHT) if act else PALEGLYPH
     cid,defs=in_clip(circ_path(PX,PY,PR))
     o=defs+'<circle cx="%s" cy="%s" r="%s" fill="%s"/>'%(PX,PY,PR,f if act else LIGHT)
-    o+=('<g clip-path="url(#%s)"><g transform="translate(%s %s) scale(%s)" fill="none" '
-        'stroke="%s" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-        '<circle cx="0" cy="-4" r="6.5"/><path d="M-11 14 V9 a11 11 0 0 1 22 0 V14"/></g></g>'
-        %(cid,PX,PY,PR/19.8,glyph))
+    # The clip stays on its own untransformed group. A clip-path resolves in the user space the
+    # element itself establishes, so putting it on the translated group moved the clipping circle
+    # to (2*PX, 2*PY) and quietly cut the figure -- 8669 pixels different, and invisible in a diff
+    # of the markup.
+    o+=('<g clip-path="url(#%s)">'
+        '<g class="pslot" data-slot="portrait" color="%s" transform="translate(%s %s)">'
+        '<g transform="scale(%s)" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+        '<circle cx="0" cy="-4" r="6.5"/><path d="M-11 14 V9 a11 11 0 0 1 22 0 V14"/></g></g></g>'
+        %(cid,glyph,PX,PY,PR/19.8))
     return o
+
+
+def frame_slot():
+    """An empty slot for a player-board frame, laid over the finished card.
+
+    A frame of this kind has a portrait opening, so it is positioned by that opening rather than
+    by its own box -- the picker computes the translate from `openingCirclePx` in assets.json and
+    sizes the image so the opening lands on the portrait circle. Empty here: the board draws no
+    frame, and only a page that offers one fills it.
+    """
+    return '<g class="pslot" data-slot="frame"></g>' 
 def player_card(p):
     f,_=SEAT[p["seat"]]
     CARD=card_path(W,H); COL=circ_path(PX,PY,COLLAR)
@@ -914,12 +946,17 @@ def player_card(p):
         '<g clip-path="url(#%s)"><path d="%s" fill="none" stroke="%s" stroke-width="1.4"/></g>'
         %(c1,CARD,INK,c2,COLLAR,INK))
     if p.get("seal"): o+=gb.seal(SX,SY,SR)
+    # The frame goes last: it has a portrait opening and an open panel, so it is an overlay the
+    # card shows through, not a backdrop.
+    o+=frame_slot()
     # `color` on the card, not on the page: third-party marks are stored with fill="currentColor"
     # so the renderer can recolour them, and without this they inherit whatever colour the
     # surrounding page happens to use -- which on a dark page painted them near-invisible in the
     # pills. Carrying it on the card means the card is right wherever it is embedded.
-    return '<svg class="seat" color="%s" viewBox="-30 -8 352 140" width="%s" height="%s">%s</svg>'%(
-        INK, COMP_W, round(140*COMP_W/SVG_BOX,1), o)
+    vb = CARD_VIEWBOX_FRAMED if FRAME_ROOM else CARD_VIEWBOX
+    vh = float(vb.split()[3])
+    return '<svg class="seat" color="%s" viewBox="%s" width="%s" height="%s">%s</svg>'%(
+        INK, vb, COMP_W, round(vh*COMP_W/SVG_BOX,1), o)
 
 alms=ap.panel_svg(P, SEAT, INK, PARCH, positions={"red":0,"yellow":0,"blue":0,"white":0},
                   width=COMP_W, win_seats=["blue"])
