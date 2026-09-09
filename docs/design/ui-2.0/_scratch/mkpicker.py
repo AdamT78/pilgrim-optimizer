@@ -13,24 +13,15 @@ of asset normalise differently (see ../hybrid-svg-png.md):
 """
 import base64, io, json, os, pathlib, re, contextlib, sys
 
-HERE = pathlib.Path(__file__).resolve().parent
-OUT = str(HERE) + "/"
-ASSETS = HERE / "assets"
-
-# The board generator is still a scratch file. Prefer a copy sitting beside this one, so that the
-# day it moves into the repo nothing here has to change.
-MKR = HERE / "gen_board.py"
-if not MKR.exists():
-    MKR = pathlib.Path("/tmp/mkR.py")
+OUT = "/home/claude/ui-2.0/"
+ASSETS = pathlib.Path(OUT) / "assets"
 
 os.environ.setdefault("TILE_S", "0.80")
 os.environ.setdefault("TITLE_SZ", "11.4")
 os.environ["OUTNAME"] = "_picker_scratch.html"
-# `__file__` has to be seeded: the board generator locates its own inputs relative to itself, and
-# an exec namespace does not get one for free.
-NS = {"__file__": str(MKR), "__name__": "gen_board"}
+NS = {}
 with contextlib.redirect_stdout(io.StringIO()):
-    exec(compile(MKR.read_text(), str(MKR), 'exec'), NS)
+    exec(compile(pathlib.Path('/tmp/mkR.py').read_text(), '/tmp/mkR.py', 'exec'), NS)
 
 ICON_H = NS['gb'].ICON_H
 FIG_H = NS['pop'].FIG_H
