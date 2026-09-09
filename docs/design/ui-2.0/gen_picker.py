@@ -47,11 +47,26 @@ ROWS = [("serf", "Serf", "icons/population/serf", "ink"),
         ("stone", "Stone", "icons/resources/stone", "fit"),
         ("silver", "Silver", "icons/resources/silver", "fit")]
 
-# Slots the card has but the library cannot yet fill. They are listed rather than omitted so the
-# page says WHERE a file goes to become an option -- an empty row is an instruction, a missing row
-# is a thing you have to remember.
-PENDING = [("Portrait", "portraits/leaders/", "licence unverified"),
-           ("Frame", "frames/player_board/", "licence unverified")]
+# Slots the card does not have yet. They are listed rather than omitted so the page says what is
+# actually blocking each one -- and it says it from the tree, not from a sentence I wrote once and
+# would forget to update. The two states differ: a directory with no licensed file needs a file; a
+# directory with files needs the CARD to grow a swappable slot, which the portrait has not yet
+# because it is drawn geometry rather than a placed image.
+PENDING_SLOTS = [("Portrait", "portraits/leaders/"), ("Frame", "frames/player_board/")]
+
+
+def pending_reason(rel):
+    files = sorted(p.name for p in (ASSETS / rel).glob("*")
+                   if p.suffix in (".svg", ".png")
+                   and str(p.relative_to(ASSETS)) not in BLOCKED)
+    if not files:
+        return "no licensed file yet. A file dropped in <code>assets/%s</code> becomes one." % rel
+    return ("%d file%s ready in <code>assets/%s</code> &mdash; the card has no swappable slot for "
+            "this yet, so there is nothing to swap into." % (len(files), "" if len(files) == 1
+                                                             else "s", rel))
+
+
+PENDING = [(label, pending_reason(rel)) for label, rel in PENDING_SLOTS]
 
 
 def symbol(sid, path):
@@ -111,10 +126,9 @@ for slot, label, rel, kind in ROWS:
                      % (label, "".join(btns)))
 
 rows_html.append('<div class="rule"></div>')
-for label, where, why in PENDING:
+for label, why in PENDING:
     rows_html.append('<div class="row pend"><div class="lab">%s</div>'
-                     '<div class="opts">no options &mdash; %s. A file dropped in '
-                     '<code>assets/%s</code> becomes one.</div></div>' % (label, why, where))
+                     '<div class="opts">%s</div></div>' % (label, why))
 rows_html.append('<div class="row"><div class="lab"></div><div class="opts">'
                  '<button class="reset">Reset to the board</button></div></div>')
 
@@ -175,6 +189,16 @@ reset();
 """ % ("".join(rows_html), CARD, ICON_H, FIG_H, "".join(syms), POP_DEFS,
        json.dumps(opts), ICON_H, FIG_H))
 
-print("written player-board-picker.html")
+OUT_PATH = pathlib.Path(OUT + "player-board-picker.html")
+print("written %s" % OUT_PATH.name)
 for slot, label, _r, _k in ROWS:
     print("  %-8s %d options (incl NULL)" % (slot, len(opts[slot])))
+
+# A path is not a thing you can click. Print the URL, and open it when asked -- `webbrowser`
+# rather than `open`, so this works the same on a mac, a Linux box and a CI container that
+# quietly does nothing.
+URL = OUT_PATH.resolve().as_uri()
+print("\n%s" % URL)
+if "--open" in sys.argv or os.environ.get("OPEN_PICKER"):
+    import webbrowser
+    webbrowser.open(URL)

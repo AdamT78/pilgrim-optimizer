@@ -21,7 +21,7 @@
       "shareAlike": false
     },
     "openai-generated": {
-      "name": "OpenAI image generation; output rights assigned to the user under the OpenAI Europe Terms of Use",
+      "name": "OpenAI-generated output; rights assigned to the user under the OpenAI Europe Terms of Use. Not CC0, public domain or royalty-free stock",
       "url": "https://openai.com/policies/eu-terms-of-use/",
       "attributionRequired": false,
       "shareAlike": false
@@ -121,32 +121,41 @@
       "modifications": "cropped to the alpha box and reduced to an ink height of 120 px",
       "notes": "Do not describe the original images as manually illustrated."
     },
-    "portraits/leaders/leader_male_01.png": {
-      "state": "held",
-      "title": null,
-      "creator": null,
+    "portraits/leaders/leader_female_hooded_sketch.png": {
+      "state": "present",
+      "title": "Leader, female, hooded sketch",
+      "creator": "OpenAI image generation",
       "collection": null,
       "source": null,
-      "licence": "unverified",
-      "awaitedBecause": "Uploaded 2026-09-09 with no licence on record. Not committed."
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1254 px master to a 320 px production cut",
+      "notes": "Do not describe the original portraits as manually illustrated by a human. Not CC0, public domain or royalty-free stock: the accurate description is OpenAI-generated output, commercially usable, no third-party attribution known. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/portraits/leader_female_hooded_sketch.png"
     },
-    "portraits/leaders/leader_female_01.png": {
-      "state": "held",
-      "title": null,
-      "creator": null,
+    "portraits/leaders/leader_male_hooded_sketch.png": {
+      "state": "present",
+      "title": "Leader, male, hooded sketch",
+      "creator": "OpenAI image generation",
       "collection": null,
       "source": null,
-      "licence": "unverified",
-      "awaitedBecause": "Uploaded 2026-09-09 with no licence on record. Not committed."
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1254 px master to a 320 px production cut",
+      "notes": "Do not describe the original portraits as manually illustrated by a human. Not CC0, public domain or royalty-free stock: the accurate description is OpenAI-generated output, commercially usable, no third-party attribution known. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/portraits/leader_male_hooded_sketch.png"
     },
-    "frames/player_board/frame_01.png": {
-      "state": "held",
-      "title": null,
-      "creator": null,
+    "frames/player_board/player_frame_gothic_red_01.png": {
+      "state": "present",
+      "title": "Player-board frame, gothic red",
+      "creator": "OpenAI image generation",
       "collection": null,
       "source": null,
-      "licence": "unverified",
-      "awaitedBecause": "Uploaded 2026-09-09 with no licence on record. Not committed."
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1905x826 master to a 1024x444 production cut, native aspect preserved",
+      "notes": "Transparent coordinate-bound overlay: preserve the native aspect ratio, never stretch with preserveAspectRatio=\"none\". Resource symbols placed on top keep their own separate attribution. Do not describe the frame as manually illustrated by a human. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/frames/player_frame_gothic_red_01.png"
     }
   },
   "projectOwned": [

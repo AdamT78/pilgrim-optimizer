@@ -20,14 +20,14 @@ What lives here is what a generator cannot produce: drawings, portraits, frames,
         resources/           one directory per slot, as population
           piety/             pilgrim_piety.svg, fa_hands_praying.svg
           wheat/             pilgrim_wheat.svg, fa_wheat_awn.svg
-          stone/             pilgrim_stone.svg, [gi_stone_block.svg awaited]
-          silver/            pilgrim_silver.svg, [gi_two_coins.svg awaited]
+          stone/             pilgrim_stone.svg, gi_stone_block.svg
+          silver/            pilgrim_silver.svg, gi_two_coins.svg
           cornucopia/
         actions/             <duty>_<n>.svg -- see below
       portraits/
-        leaders/             HELD -- .gitignore, nothing committed
+        leaders/             leader_female_hooded_sketch.png, leader_male_hooded_sketch.png
       frames/
-        player_board/        HELD -- .gitignore, nothing committed
+        player_board/        player_frame_gothic_red_01.png
       ui/
         buttons/
         markers/             merchant_wagon.svg
@@ -35,10 +35,10 @@ What lives here is what a generator cannot produce: drawings, portraits, frames,
 
 The four marks the shortlist prototype opens with are Font Awesome's **Hands Praying** and **Wheat
 Awn** (CC BY 4.0) and Game-icons' **Stone Block** by Lorc and **Two Coins** by Delapouite
-(CC BY 3.0). The first two are here. The second two are `awaited`: the prototype links them rather
-than embedding them, so their geometry exists in no file we hold — their licences are cleared and
-recorded, and dropping the two SVGs into the slot directories is all that remains. The picker
-offers them the moment they land.
+(CC BY 3.0). All four are here. The Game-icons pair arrived as the white-on-black download — a
+full-canvas black rectangle with the glyph in white on top — so the background path is stripped and
+the glyph stores `fill="currentColor"`, which is what lets the renderer recolour it instead of the
+file fixing today's palette.
 
 ## Why population is split by slot
 
@@ -108,16 +108,29 @@ satisfies neither version of the licence, so every entry now carries all five. R
 recolouring, converting to PNG and Base64 embedding all preserve the obligation; none of these
 licences is ShareAlike, so none of them reaches the renderer, the game, or unrelated artwork.
 
-The precedent for `held`: the afilinkov NPC portraits are personal-use only and their terms forbid
-use in *any* project, so nothing derived from them is committed. `portraits/leaders/` and
-`frames/player_board/` each carry a `.gitignore`, because a held file sitting in the asset tree is
-one wholesale `git add` away from being committed and a note in a README does not stop that.
+Nothing is `held` at present. The precedent stands, and it is the afilinkov NPC portraits: those
+are personal-use only and their terms forbid use in *any* project, so nothing derived from them is
+committed, and none of it is in this tree. If something arrives without a licence, give it a `held`
+entry and a `.gitignore` in its directory — a held file in the asset tree is one wholesale
+`git add` away from being committed, and a note in a README does not stop that.
+
+The leader portraits and the player-board frame are `openai-generated`, which is a rights basis
+rather than a licence: rights in the output are assigned to the user under the OpenAI Europe Terms,
+so they may be used, modified and shipped commercially, and no attribution is owed. Two things
+follow that are easy to get wrong. They are **not** CC0, public domain, or royalty-free stock, and
+should not be described that way. And the unmodified output likely carries no copyright protection
+in Sweden, so it can be used but is weak to defend — substantial human-authored redesign, or the
+wider player-board composition, may qualify separately. The originals must never be described as
+manually illustrated by a human.
 
 ### Register: `openai-generated`
 
     Files:      icons/population/serf/serf_wide_hat.png
                 icons/population/acolyte/acolyte_hood_cross.png
                 icons/population/acolyte/acolyte_tied_cloak.png
+                portraits/leaders/leader_female_hooded_sketch.png
+                portraits/leaders/leader_male_hooded_sketch.png
+                frames/player_board/player_frame_gothic_red_01.png
 
     Source:     Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project.
     Rights:     Output rights assigned to the user under the OpenAI Europe Terms of Use.
@@ -135,10 +148,13 @@ face opening — could make the human-authored changes protectable; cropping, re
 encoding or a mechanical trace to SVG almost certainly would not. Nothing here depends on that, but
 it is worth knowing before these become the game's signature marks.
 
-`portraits/leaders/*` and `frames/player_board/frame_01.png` are still unverified and **not
-committed**. If they came from the same source, the register above applies to them too — change
-their `state` to `present` in `attribution.json` and fill in the credit fields, and the checker
-will stop reporting them.
+The frame is **coordinate-bound**, not content-normalised: it is a transparent overlay placed into
+a defined rectangle, so its native aspect must be preserved and it must never be stretched with
+`preserveAspectRatio="none"`. Its production cut is 1024x444 against a 1905x826 master, which holds
+the aspect to 2.30631 against 2.30630. The portraits are coordinate-bound for the same reason —
+they are placed into the portrait disc rather than cropped to their ink, and cropping a portrait to
+its ink moves the face. Any resource symbol laid on top of the frame keeps its own separate
+attribution.
 
 ## Masters and production files
 

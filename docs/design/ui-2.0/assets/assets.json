@@ -2,28 +2,6 @@
   "alphaThreshold": 8,
   "note": "inkBoxPx is [x, y, width, height] in source pixels",
   "assets": {
-    "frame_01": {
-      "src": "frames/player_board/frame_01.png",
-      "class": "content-normalized",
-      "canvasPx": [
-        1905,
-        826
-      ],
-      "inkBoxPx": [
-        10,
-        6,
-        1887,
-        811
-      ],
-      "anchor": "ink-center",
-      "normalization": "none",
-      "inkFill": [
-        0.991,
-        0.982
-      ],
-      "inkAspect": 2.3268,
-      "licence": "unverified"
-    },
     "acolyte_hood_cross": {
       "src": "icons/population/acolyte/acolyte_hood_cross.png",
       "class": "content-normalized",
@@ -93,49 +71,71 @@
       "licence": "openai-generated",
       "master": "_masters/population/serf_wide_hat.png"
     },
-    "leader_female_01": {
-      "src": "portraits/leaders/leader_female_01.png",
-      "class": "content-normalized",
+    "leader_female_hooded_sketch": {
+      "src": "portraits/leaders/leader_female_hooded_sketch.png",
+      "class": "coordinate-bound",
       "canvasPx": [
-        1254,
-        1254
+        320,
+        320
       ],
       "inkBoxPx": [
-        21,
-        13,
-        1202,
-        1228
+        6,
+        3,
+        306,
+        313
       ],
-      "anchor": "ink-center",
+      "anchor": "canvas",
       "normalization": "none",
       "inkFill": [
-        0.959,
-        0.979
+        0.956,
+        0.978
       ],
-      "inkAspect": 0.9788,
-      "licence": "unverified"
+      "inkAspect": 0.9776,
+      "licence": "openai-generated"
     },
-    "leader_male_01": {
-      "src": "portraits/leaders/leader_male_01.png",
-      "class": "content-normalized",
+    "leader_male_hooded_sketch": {
+      "src": "portraits/leaders/leader_male_hooded_sketch.png",
+      "class": "coordinate-bound",
       "canvasPx": [
-        1254,
-        1254
+        320,
+        320
       ],
       "inkBoxPx": [
-        14,
-        28,
-        1208,
-        1212
+        4,
+        7,
+        308,
+        309
       ],
-      "anchor": "ink-center",
+      "anchor": "canvas",
       "normalization": "none",
       "inkFill": [
         0.963,
-        0.967
+        0.966
       ],
-      "inkAspect": 0.9967,
-      "licence": "unverified"
+      "inkAspect": 0.9968,
+      "licence": "openai-generated"
+    },
+    "player_frame_gothic_red_01": {
+      "src": "frames/player_board/player_frame_gothic_red_01.png",
+      "class": "coordinate-bound",
+      "canvasPx": [
+        1024,
+        444
+      ],
+      "inkBoxPx": [
+        5,
+        4,
+        1015,
+        435
+      ],
+      "anchor": "canvas",
+      "normalization": "none",
+      "inkFill": [
+        0.991,
+        0.98
+      ],
+      "inkAspect": 2.3333,
+      "licence": "openai-generated"
     }
   },
   "registers": {
