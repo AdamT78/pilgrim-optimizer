@@ -5,10 +5,35 @@ settled each decision. Nothing here is wired to the engine, and nothing in the g
 is where the next play view is designed before it is migrated.
 
 **This is not `tools/ui_debug/`.** That directory holds the renderers the *current* game view is
-actually drawn by, and it is the destination: moving a decision from here to there is what shipping
-it means. The one live connection today is `render/gen_board_kit.py`, which imports the resource
-pill's constants from `tools/ui_debug/render_player_boards_v2.py` so that a study's pill cannot
-drift from the game's.
+actually drawn by. The one live connection today is `render/gen_board_kit.py`, which imports the
+resource pill's constants from `tools/ui_debug/render_player_boards_v2.py` so that a study's pill
+cannot drift from the game's.
+
+## Nothing migrates yet, and the reason is not timidity
+
+The design happens here first and the logic is wired up afterwards. That is a decision, not a
+backlog item, and it is worth writing down because the obvious-looking alternative -- port one
+component at a time into the shipping renderers -- does not survive contact with the two boards.
+
+They are not two versions of one board. They are different objects:
+
+| | `render_player_boards_v2.py` (shipping) | this redesign |
+| --- | --- | --- |
+| population | Village and Abbey banners over grids of individual tokens | a figure, one square, a numeral |
+| resources | wheat, stone, silver | piety, wheat, stone, silver |
+| buildings and roles | six named role circles and six dashed slots on the card | not on the card; ownership moves to the market tiles |
+
+So there is no component here that drops into there. The population band would *replace* v2's
+banner-and-grid rather than join it, and that trades eight visible tokens for a numeral -- the grid
+shows at a glance how full a village is against its capacity, and a "6" does not. That is a design
+decision about the shipping board, reached by accident, in service of a migration nobody asked for.
+
+The unit of this redesign is the whole card, and the whole card is blocked until the market carries
+building ownership. Until then, designing here costs nothing and breaks nothing.
+
+What keeps this honest in the meantime is the one import above. A study's resource pill is derived
+from the game's own constants rather than copied from them, so the two cannot quietly diverge while
+they live apart.
 
 ## Running it
 
