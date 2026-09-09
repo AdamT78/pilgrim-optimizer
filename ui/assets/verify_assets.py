@@ -41,25 +41,33 @@ def attribution_problems():
     att = json.loads((HERE / "attribution.json").read_text())
     out = []
     owned = att.get("projectOwned", [])
-    for p in sorted(HERE.rglob("*")):
-        if not p.is_file():
+    # Walk the directories that hold assets, rather than the whole tree minus a list of
+    # extensions. The blacklist version reported __pycache__ as an unlicensed asset the first
+    # time anyone ran a script in here -- and a check that fails on a stray .pyc is a check
+    # people learn to ignore. `_masters` is excluded because a master is not a shipped file;
+    # its production cut carries the entry.
+    for root in ("icons", "portraits", "frames", "ui"):
+        base = HERE / root
+        if not base.is_dir():
             continue
-        rel = p.relative_to(HERE).as_posix()
-        if (rel.split("/")[0] in {"_masters"} or p.name in {".gitkeep", ".gitignore"}
-                or p.suffix in {".json", ".py", ".md", ".html"}):
-            continue
-        if rel in att["files"]:
-            state = att["files"][rel]["state"]
-            if state != "present":
-                out.append("%-52s on disk but recorded as '%s'. A held file in the tree is one "
-                           "wholesale `git add` away from being committed; its directory carries "
-                           "a .gitignore for that reason, but move it out once you are done."
-                           % (rel, state))
-            continue
-        if any(fnmatch.fnmatch(rel, pat) for pat in owned):
-            continue
-        out.append("%-52s no entry in attribution.json and matches no projectOwned pattern"
-                   % rel)
+        for p in sorted(base.rglob("*")):
+            if not p.is_file() or p.name in {".gitkeep", ".gitignore"}:
+                continue
+            if "__pycache__" in p.parts:
+                continue
+            rel = p.relative_to(HERE).as_posix()
+            if rel in att["files"]:
+                state = att["files"][rel]["state"]
+                if state != "present":
+                    out.append("%-52s on disk but recorded as '%s'. A held file in the tree is "
+                               "one wholesale `git add` away from being committed; its directory "
+                               "carries a .gitignore for that reason, but move it out once you "
+                               "are done." % (rel, state))
+                continue
+            if any(fnmatch.fnmatch(rel, pat) for pat in owned):
+                continue
+            out.append("%-52s no entry in attribution.json and matches no projectOwned pattern"
+                       % rel)
 
     for rel, a in sorted(att["files"].items()):
         if a["state"] == "present" and not (HERE / rel).exists():

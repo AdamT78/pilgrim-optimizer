@@ -8,12 +8,85 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      engine: ${{ steps.what.outputs.engine }}
+      ui: ${{ steps.what.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: what
+        name: Decide which lanes this change needs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Anything that is not a pull request runs everything. A push to main is the last line
+          # of defence and is not the place to be clever, and workflow_dispatch is someone asking
+          # for a full run by hand.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "engine=true" >>"$GITHUB_OUTPUT"
+            echo "ui=true" >>"$GITHUB_OUTPUT"
+            echo "not a pull request: running every lane"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "$changed"
+          # The engine lanes are needed unless EVERY changed path is design-only. Framed as
+          # "nothing outside these directories" rather than "something inside them", so a new
+          # top-level directory is treated as engine work until someone decides otherwise --
+          # the failure that costs fifteen minutes is cheaper than the one that ships a bug.
+          if echo "$changed" | grep -qvE '^(ui/|docs/)'; then
+            echo "engine=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "engine=false" >>"$GITHUB_OUTPUT"
+            echo "design-only change: skipping the engine lanes"
+          fi
+          if echo "$changed" | grep -qE '^ui/'; then
+            echo "ui=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "ui=false" >>"$GITHUB_OUTPUT"
+          fi
+
+  ui:
+    # What the engine lanes never checked: that the generators still produce their pages, and
+    # that every asset still has a licence on record. Both are seconds, and until now nothing in
+    # CI ran them at all.
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.ui == 'true'
+      - uses: actions/setup-python@v5
+        if: needs.changes.outputs.ui == 'true'
+        with:
+          python-version: "3.13"
+      - name: Install what the UI checks need
+        if: needs.changes.outputs.ui == 'true'
+        run: pip install -e ".[dev]" pillow numpy
+      - name: Every generated page still rebuilds, and none is a fossil
+        if: needs.changes.outputs.ui == 'true'
+        run: python ui/rebuild_ui_pages.py --check
+      - name: Every asset matches its declared box and has a licence on record
+        if: needs.changes.outputs.ui == 'true'
+        working-directory: ui/assets
+        run: |
+          python verify_assets.py
+          python gen_credits.py --check
+
   fast:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.engine == 'true'
         with:
           node-version: "22"
       - uses: actions/setup-python@v5
@@ -21,49 +94,68 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
       # Deliberately F-only: undefined/shadowed names must gate, while existing E501s do not.
+      # This one runs on EVERY change, design-only included: it is repo-wide, it takes seconds,
+      # and it is exactly what caught fourteen undefined-name errors in ui/ the day that tree
+      # arrived. Skipping it for design changes would skip it on the least-linted code there is.
       - run: ruff check --select F
       - name: Require Node.js for turn-script harness tests
+        if: needs.changes.outputs.engine == 'true'
         run: |
           if ! command -v node >/dev/null; then
             echo "::error::Node.js is required for the turn-script harness tests."
             exit 1
           fi
           node --version
-      - run: pytest -m "not slow" --ignore=tests/test_play_view_clicks.py
+      - if: needs.changes.outputs.engine == 'true'
+        run: pytest -m "not slow" --ignore=tests/test_play_view_clicks.py
 
   slow:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.engine == 'true'
       - uses: actions/setup-python@v5
+        if: needs.changes.outputs.engine == 'true'
         with:
           python-version: "3.13"
-      - run: pip install -e ".[dev]"
+      - if: needs.changes.outputs.engine == 'true'
+        run: pip install -e ".[dev]"
       - name: Run deep-fixture slow guards
+        if: needs.changes.outputs.engine == 'true'
         run: pytest -m slow -p no:cacheprovider --ignore=tests/test_play_view_clicks.py
 
   browser:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.engine == 'true'
       - uses: actions/setup-python@v5
+        if: needs.changes.outputs.engine == 'true'
         with:
           python-version: "3.13"
-      - run: pip install -e ".[dev]"
+      - if: needs.changes.outputs.engine == 'true'
+        run: pip install -e ".[dev]"
       - name: Use the canonical Ubuntu mirror
+        if: needs.changes.outputs.engine == 'true'
         run: sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list /etc/apt/sources.list.d/* || true
       - uses: actions/cache@v4
+        if: needs.changes.outputs.engine == 'true'
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium
-      - run: python -m playwright install --with-deps chromium
+      - if: needs.changes.outputs.engine == 'true'
+        run: python -m playwright install --with-deps chromium
       - name: Run browser click guards
+        if: needs.changes.outputs.engine == 'true'
         run: pytest -q -p no:cacheprovider tests/test_play_view_clicks.py
 
   generation-report:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.engine == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
