@@ -32,13 +32,17 @@ wheel=wheel.replace('<svg','<svg class="wheel"',1)
 # Every duty tile is drawn 150 square and placed at scale(.74). Growing it grows the tile in
 # place -- the ring positions do not move -- so the headroom is the gap between neighbours, and
 # what is spent goes to the arrows and the city inside the ring.
-TILE_S = os.environ.get("TILE_S", "").strip()
+# 0.80 was chosen and adopted (variant B of the scale-up study: tiles 174.5 -> 188.7 px, the
+# neighbour gap 32.2 -> 18.1; 0.86 was rejected at a gap of 3.9 with the arrows crushed). It is a
+# default rather than an env var because an adopted decision that only holds while you remember to
+# export a variable is a decision that silently reverts -- which it did, once.
+TILE_S = os.environ.get("TILE_S", "0.80").strip()
 if TILE_S:
     wheel = wheel.replace('scale(.74)', 'scale(%s)' % TILE_S)
 # Scaling the tile does NOT relieve a crowded title: the type grows with everything else, so the
 # gap between the title and the first act keeps its proportion and only gains a pixel or so. The
 # lever that actually opens it is the type itself.
-TITLE_SZ = os.environ.get("TITLE_SZ", "").strip()
+TITLE_SZ = os.environ.get("TITLE_SZ", "11.4").strip()   # adopted with the scale-up, as above
 if TITLE_SZ:
     wheel = _re.sub(r'(<text x="12" y="22" font-size=")12\.5(")',
                     lambda m: m.group(1) + TITLE_SZ + m.group(2), wheel)
