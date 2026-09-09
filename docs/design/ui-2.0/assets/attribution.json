@@ -61,7 +61,7 @@
       "role": "default grain mark in the shortlist prototype"
     },
     "icons/resources/stone/gi_stone_block.svg": {
-      "state": "awaited",
+      "state": "present",
       "title": "Stone Block",
       "creator": "Lorc",
       "collection": "Game-icons.net",
@@ -69,10 +69,10 @@
       "licence": "CC-BY-3.0",
       "shortlistId": "S1",
       "role": "default stone mark in the shortlist prototype",
-      "awaitedBecause": "The shortlist prototype links this icon rather than embedding it, so the geometry is not in any file here. Licence is cleared; only the SVG is missing."
+      "modifications": "background rectangle removed, recoloured to the card's ink, and the SVG path data embedded in a Python-generated SVG"
     },
     "icons/resources/silver/gi_two_coins.svg": {
-      "state": "awaited",
+      "state": "present",
       "title": "Two Coins",
       "creator": "Delapouite",
       "collection": "Game-icons.net",
@@ -80,7 +80,7 @@
       "licence": "CC-BY-3.0",
       "shortlistId": "C1",
       "role": "default silver mark in the shortlist prototype",
-      "awaitedBecause": "The shortlist prototype links this icon rather than embedding it, so the geometry is not in any file here. Licence is cleared; only the SVG is missing."
+      "modifications": "background rectangle removed, recoloured to the card's ink, and the SVG path data embedded in a Python-generated SVG"
     },
     "ui/markers/merchant_wagon.svg": {
       "state": "present",

@@ -910,8 +910,12 @@ def player_card(p):
         '<g clip-path="url(#%s)"><path d="%s" fill="none" stroke="%s" stroke-width="1.4"/></g>'
         %(c1,CARD,INK,c2,COLLAR,INK))
     if p.get("seal"): o+=gb.seal(SX,SY,SR)
-    return '<svg class="seat" viewBox="-30 -8 352 140" width="%s" height="%s">%s</svg>'%(
-        COMP_W, round(140*COMP_W/SVG_BOX,1), o)
+    # `color` on the card, not on the page: third-party marks are stored with fill="currentColor"
+    # so the renderer can recolour them, and without this they inherit whatever colour the
+    # surrounding page happens to use -- which on a dark page painted them near-invisible in the
+    # pills. Carrying it on the card means the card is right wherever it is embedded.
+    return '<svg class="seat" color="%s" viewBox="-30 -8 352 140" width="%s" height="%s">%s</svg>'%(
+        INK, COMP_W, round(140*COMP_W/SVG_BOX,1), o)
 
 alms=ap.panel_svg(P, SEAT, INK, PARCH, positions={"red":0,"yellow":0,"blue":0,"white":0},
                   width=COMP_W, win_seats=["blue"])
