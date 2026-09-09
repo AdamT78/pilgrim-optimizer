@@ -8,6 +8,7 @@ set -- an untrimmed canvas, and members of one normalisation group whose ink doe
     python3 verify_assets.py            # check
     python3 verify_assets.py --write    # recompute assets.json from the files
 """
+import fnmatch
 import json, pathlib, sys
 
 from PIL import Image
@@ -30,9 +31,52 @@ def ink_box(path):
             int(ys.max()) + 1 - int(ys.min())]
 
 
+def attribution_problems():
+    """Every file in the tree must be accounted for by name, not by assumption.
+
+    This is the check that matters most, because the failure it catches is silent: a file arrives,
+    gets used, ships, and nobody can say afterwards where it came from. An asset with no entry is a
+    problem even when its licence would have been fine -- the record is the obligation.
+    """
+    att = json.loads((HERE / "attribution.json").read_text())
+    out = []
+    owned = att.get("projectOwned", [])
+    for p in sorted(HERE.rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(HERE).as_posix()
+        if (rel.split("/")[0] in {"_masters"} or p.name in {".gitkeep", ".gitignore"}
+                or p.suffix in {".json", ".py", ".md", ".html"}):
+            continue
+        if rel in att["files"]:
+            state = att["files"][rel]["state"]
+            if state != "present":
+                out.append("%-52s on disk but recorded as '%s'. A held file in the tree is one "
+                           "wholesale `git add` away from being committed; its directory carries "
+                           "a .gitignore for that reason, but move it out once you are done."
+                           % (rel, state))
+            continue
+        if any(fnmatch.fnmatch(rel, pat) for pat in owned):
+            continue
+        out.append("%-52s no entry in attribution.json and matches no projectOwned pattern"
+                   % rel)
+
+    for rel, a in sorted(att["files"].items()):
+        if a["state"] == "present" and not (HERE / rel).exists():
+            out.append("%-52s recorded as present, but the file is missing" % rel)
+        lic = att["licences"][a["licence"]]
+        if a["state"] == "present" and lic["attributionRequired"]:
+            for field in ("title", "creator", "licence"):
+                if not a.get(field):
+                    out.append("%-52s needs %s: its licence requires attribution" % (rel, field))
+    return out
+
+
 def main(write=False):
     meta = json.loads(META.read_text())
     problems, held, groups = [], [], {}
+    if not write:
+        problems += attribution_problems()
 
     for name, a in sorted(meta["assets"].items()):
         p = HERE / a["src"]

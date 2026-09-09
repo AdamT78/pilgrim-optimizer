@@ -6,6 +6,12 @@ images would be a second copy of the truth that starts drifting the first time a
 What lives here is what a generator cannot produce: drawings, portraits, frames, bought icons.
 
     assets/
+      attribution.json                 licence and credit, one entry per file -- the record
+      gen_credits.py                   renders the two notices below from it
+      THIRD-PARTY-NOTICES.md           generated; the record kept with the assets
+      credits-third-party-icons.html   generated; ships in the game's credits screen
+      assets.json                      ink boxes for the rasters
+      verify_assets.py                 enforces both contracts
       icons/
         population/          one directory per SLOT, not per subject
           serf/              serf_wide_hat.png
@@ -14,16 +20,25 @@ What lives here is what a generator cannot produce: drawings, portraits, frames,
         resources/           one directory per slot, as population
           piety/             pilgrim_piety.svg, fa_hands_praying.svg
           wheat/             pilgrim_wheat.svg, fa_wheat_awn.svg
-          stone/  silver/  cornucopia/
+          stone/             pilgrim_stone.svg, [gi_stone_block.svg awaited]
+          silver/            pilgrim_silver.svg, [gi_two_coins.svg awaited]
+          cornucopia/
         actions/             <duty>_<n>.svg -- see below
       portraits/
-        leaders/             leader_male_01.png, leader_female_01.png
+        leaders/             HELD -- .gitignore, nothing committed
       frames/
-        player_board/        frame_01.png
+        player_board/        HELD -- .gitignore, nothing committed
       ui/
         buttons/
         markers/             merchant_wagon.svg
         miscellaneous/
+
+The four marks the shortlist prototype opens with are Font Awesome's **Hands Praying** and **Wheat
+Awn** (CC BY 4.0) and Game-icons' **Stone Block** by Lorc and **Two Coins** by Delapouite
+(CC BY 3.0). The first two are here. The second two are `awaited`: the prototype links them rather
+than embedding them, so their geometry exists in no file we hold — their licences are cleared and
+recorded, and dropping the two SVGs into the slot directories is all that remains. The picker
+offers them the moment they land.
 
 ## Why population is split by slot
 
@@ -45,7 +60,7 @@ point of enumerating a directory rather than a hardcoded list.
 
 ## Duty action icons
 
-Exported from the generator by `/tmp/export_assets.py`, not traced: the file and the board come
+Exported from the generator by `../_scratch/export_assets.py`, not traced: the file and the board come
 from one drawing, so they cannot drift. Each is the **mark alone** — the pill behind it on a duty
 tile is the tile's furniture, not the icon — on a `-16 -16 32 32` viewBox.
 
@@ -69,32 +84,34 @@ so changing one changes both, and `taxation_1` reads as Justice rather than a pu
 
 ## Provenance
 
-Every file needs a licence on record before it is committed, because some of it cannot be. The
-precedent: the afilinkov NPC portraits are personal-use only and their terms forbid use in *any*
-project, so nothing derived from them is committed. The merchant wagon is a Noun Project icon by
-**Alzam** and its attribution travels with the file.
+`attribution.json` is the record, one entry per file, and it is the only place licence facts are
+written by hand. Two notices are generated from it by `gen_credits.py` and must not be edited:
 
-| path | source | licence |
-| --- | --- | --- |
-| `icons/actions/*.svg` | drawn for Pilgrim, exported from the generator | project |
-| `icons/resources/*/pilgrim_*.svg` | drawn for Pilgrim, exported from the generator | project |
-| `icons/resources/*/fa_*.svg` | Font Awesome Free 6, Fonticons Inc. | **CC BY 4.0** |
-| `ui/markers/merchant_wagon.svg` | Noun Project, **Alzam** | attribution required |
-| `icons/population/**` | OpenAI image generation | `openai-generated`, see below |
-| `portraits/leaders/*` | uploaded 2026-09-09 | **unverified** |
-| `frames/player_board/frame_01.png` | uploaded 2026-09-09 | **unverified** |
+    THIRD-PARTY-NOTICES.md            the record kept with the assets
+    credits-third-party-icons.html    the fragment that ships in the game's credits screen
 
-### Register: `cc-by`
+Generating the shipped credit rather than writing it is the point. A credits screen gets written
+once; the asset tree keeps moving. Deriving one from the other means the game cannot end up
+crediting artwork it no longer contains, or shipping artwork it never credited.
 
-    Files:      icons/resources/piety/fa_hands_praying.svg   (Font Awesome, hands-praying)
-                icons/resources/wheat/fa_wheat_awn.svg       (Font Awesome, wheat-awn)
+Each entry carries a **state**, and the states are what the tooling acts on:
 
-    Licence:    CC BY 4.0. Font Awesome Free 6, Fonticons, Inc.
-    Attribution: REQUIRED, and must ship with the game -- a credits line, not a code comment.
+| state | meaning |
+| --- | --- |
+| `present` | in the tree, licensed, credited |
+| `awaited` | licence cleared, file not here yet — credited in the record, **not** in the shipped credits, because crediting art the build does not contain is a claim to have used something you have not |
+| `held` | no licence on record. Not committed, must not ship |
 
-Anything under CC BY carries an obligation the `openai-generated` population icons do not. Keep the
-two classes visibly apart in this register, because the moment they blur, the credits line gets
-forgotten.
+CC BY wants five things — title, creator, source, licence with a link, and a statement of what was
+changed. The register this file used to carry named only the creator and the licence, which
+satisfies neither version of the licence, so every entry now carries all five. Resizing,
+recolouring, converting to PNG and Base64 embedding all preserve the obligation; none of these
+licences is ShareAlike, so none of them reaches the renderer, the game, or unrelated artwork.
+
+The precedent for `held`: the afilinkov NPC portraits are personal-use only and their terms forbid
+use in *any* project, so nothing derived from them is committed. `portraits/leaders/` and
+`frames/player_board/` each carry a `.gitignore`, because a held file sitting in the asset tree is
+one wholesale `git add` away from being committed and a note in a README does not stop that.
 
 ### Register: `openai-generated`
 
@@ -119,7 +136,9 @@ encoding or a mechanical trace to SVG almost certainly would not. Nothing here d
 it is worth knowing before these become the game's signature marks.
 
 `portraits/leaders/*` and `frames/player_board/frame_01.png` are still unverified and **not
-committed**. If they came from the same source, the register above applies to them too.
+committed**. If they came from the same source, the register above applies to them too — change
+their `state` to `present` in `attribution.json` and fill in the credit fields, and the checker
+will stop reporting them.
 
 ## Masters and production files
 
@@ -142,3 +161,10 @@ on the dimension it normalises. Run it before an asset is used, not after a layo
 
     python3 verify_assets.py            # check
     python3 verify_assets.py --write    # recompute assets.json from the files
+    python3 gen_credits.py              # rewrite the two notices
+    python3 gen_credits.py --check      # fail if either notice is stale
+
+`verify_assets.py` also walks the tree and fails on any file with no `attribution.json` entry that
+matches no `projectOwned` pattern. That check catches the silent failure: a file arrives, gets
+used, ships, and afterwards nobody can say where it came from. An asset with no entry is a problem
+even when its licence would have been fine — the record is the obligation.
