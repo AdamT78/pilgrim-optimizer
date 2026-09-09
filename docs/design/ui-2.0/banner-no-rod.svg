@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 141" width="130" height="141">
+  <title>Banner</title>
+  <defs>
+    <!-- Drawn twice, fat-stroked then filled, so the outline is the union's and the stroke sits
+         wholly outside the shape. See banner.svg. -->
+    <g id="art">
+      <!-- The same cloth as banner.svg, keeping its three slots: without the rod they read as
+           the tabs the banner hangs by, open at the top edge and closing on a semicircle. -->
+      <path fill-rule="evenodd" d="M27 8 H101 V97 A37 37 0 0 1 27 97 Z
+        M36.75 8 V15.5 A5.5 5.5 0 0 0 47.75 15.5 V8 Z
+        M58.5 8 V15.5 A5.5 5.5 0 0 0 69.5 15.5 V8 Z
+        M80.25 8 V15.5 A5.5 5.5 0 0 0 91.25 15.5 V8 Z"/>
+    </g>
+  </defs>
+  <use href="#art" fill="#3B6EA5" stroke="#000" stroke-width="3"
+       stroke-linejoin="round" stroke-linecap="round"/>
+  <use href="#art" fill="#3B6EA5"/>
+</svg>

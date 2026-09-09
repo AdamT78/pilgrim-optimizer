@@ -1,0 +1,117 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Desktop fit — UI 2.0</title>
+<style>
+body{margin:0;padding:28px 32px 70px;background:#1E2320;color:#E8E2D3;
+ font:14px/1.55 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+h1{font-size:23px;font-weight:600;margin:0 0 6px}
+h2{font-size:16px;font-weight:600;margin:30px 0 8px;padding-top:20px;border-top:1px solid #343A35}
+.intro{color:#A49E90;max-width:900px;margin:0 0 8px}
+.intro b{color:#E8E2D3;font-weight:600}
+.src{color:#6F6A5F;max-width:900px;font-size:12.5px;margin:0 0 20px}
+.cap{color:#6F6A5F;font-size:12.5px;margin:8px 0 0;max-width:900px}
+.cap b{color:#A49E90;font-weight:600}
+table{border-collapse:collapse;font-size:12.5px;margin:6px 0 0}
+th,td{text-align:left;padding:3px 16px 3px 0;color:#A49E90}
+th{color:#E8E2D3;font-weight:600;border-bottom:1px solid #3A4038}
+td.n{font-variant-numeric:tabular-nums}
+
+/* the fake window */
+.win{background:#11150F;border:1px solid #3A4038;border-radius:8px;display:inline-block;
+     overflow:hidden}
+.chrome{height:34px;background:#2A2F28;border-bottom:1px solid #3A4038;display:flex;
+        align-items:center;gap:6px;padding:0 10px;box-sizing:border-box}
+.dot{width:9px;height:9px;border-radius:50%;background:#4A5147}
+.chrome .u{margin-left:12px;height:16px;flex:1;background:#20251E;border-radius:4px}
+.stage{position:relative;background:#2F5237;box-sizing:border-box;padding:20px;
+       display:flex;gap:20px;align-items:flex-start}
+.colv{display:flex;flex-direction:column;gap:20px}
+.b{box-sizing:border-box;border:1px solid #1E2A20;border-radius:6px;position:relative;
+   background:#E5D8B9;color:#3A3228;display:flex;flex-direction:column;
+   align-items:center;justify-content:center;text-align:center}
+.b .t{font-size:13px;font-weight:700}
+.b .d{font-size:11px;color:#6B6355;margin-top:2px;font-variant-numeric:tabular-nums}
+.pb{background:#E5D8B9;border-left:9px solid #B7382E}
+.pb.y{border-left-color:#D9B33B}.pb.bl{border-left-color:#3B6EA5}.pb.w{border-left-color:#fff}
+.drawer{position:absolute;right:20px;bottom:20px;background:rgba(20,26,20,.92);
+        border:1px dashed #7E8A78;border-radius:6px;color:#CFD8CB;display:flex;
+        align-items:center;justify-content:center;text-align:center;font-size:12px;padding:8px}
+</style></head><body>
+
+<h1>Designing to the desktop window</h1>
+<p class="intro">Two things to settle: <b>what window to design against</b>, and <b>what actually
+fits in it</b>. The second is arithmetic on the boards you already have, so it is settled below
+rather than argued.</p>
+<p class="src">Board sizes are the viewBox of each renderer's current generated page, in that
+board's own units. Panels below are drawn at true pixel size and true aspect ratio inside a
+window drawn at true pixel size.</p>
+
+<h2>The boards, measured</h2>
+<table>
+<tr><th>Board</th><th>Own units</th><th>w&nbsp;/&nbsp;h</th><th>Shape</th></tr>
+<tr><td>Duty wheel</td><td class="n">1104 × 1425</td><td class="n">0.77</td><td>taller than wide — the expensive one</td></tr>
+<tr><td>Map</td><td class="n">1014 × 1149</td><td class="n">0.88</td><td>taller than wide</td></tr>
+<tr><td>Market</td><td class="n">624 × 430</td><td class="n">1.45</td><td>flexible, scrolls</td></tr>
+<tr><td>Alms table</td><td class="n">572 × 283</td><td class="n">2.02</td><td>wide and short — cheap</td></tr>
+<tr><td>Player board</td><td class="n">346 × 152</td><td class="n">2.28</td><td>×4 stacked = 632 tall</td></tr>
+<tr><td>Piety track</td><td class="n">637 × 213</td><td class="n">3.00</td><td>being removed</td></tr>
+</table>
+<p class="cap">Height is the scarce dimension on every desktop window, and the two boards that eat
+it are the wheel and the map. <b>That, not the piety track, is what decides the layout.</b></p>
+
+<h2>1440 × 760 — the floor</h2>
+<p class="intro">A 13&Prime; MacBook maximised in Chrome with a bookmarks bar, and near enough a
+Windows laptop at 1920/125&nbsp;% too. Everything below is drawn at 1:1.</p>
+<div class="win" style="width:1442px">
+  <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u"></span></div>
+  <div class="stage" style="width:1440px;height:760px">
+    <div class="colv" style="gap:8px">
+      <div class="b pb"  style="width:346px;height:152px"><span class="t">Player — Red</span><span class="d">346 × 152</span></div>
+      <div class="b pb y" style="width:346px;height:152px"><span class="t">Player — Yellow</span></div>
+      <div class="b pb bl" style="width:346px;height:152px"><span class="t">Player — Blue</span></div>
+      <div class="b pb w" style="width:346px;height:152px"><span class="t">Player — White</span></div>
+    </div>
+    <div class="b" style="width:558px;height:720px"><span class="t">Duty wheel</span>
+      <span class="d">558 × 720 · duty space 103px · cube 6.6px</span></div>
+    <div class="colv">
+      <div class="b" style="width:456px;height:226px"><span class="t">Alms table</span><span class="d">456 × 226</span></div>
+      <div class="b" style="width:456px;height:474px"><span class="t">Market</span><span class="d">456 × 474</span></div>
+    </div>
+    <div class="drawer" style="width:300px;height:150px">Map — no room as a column.<br>Comes forward as an overlay.</div>
+  </div>
+</div>
+<p class="cap">20px padding, 20px gutters: 346 + 558 + 456 + gutters = exactly 1440. The wheel takes
+the full height and everything else is sized off what is left. <b>The map does not fit.</b> Adding it
+as a fourth column needs 353px even at 400 tall, and there are 83 left.</p>
+
+<h2>1728 × 900 — a 14&Prime; MacBook</h2>
+<div class="win" style="width:1730px">
+  <div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="u"></span></div>
+  <div class="stage" style="width:1728px;height:900px">
+    <div class="colv" style="gap:8px">
+      <div class="b pb"  style="width:346px;height:152px"><span class="t">Player — Red</span></div>
+      <div class="b pb y" style="width:346px;height:152px"><span class="t">Player — Yellow</span></div>
+      <div class="b pb bl" style="width:346px;height:152px"><span class="t">Player — Blue</span></div>
+      <div class="b pb w" style="width:346px;height:152px"><span class="t">Player — White</span></div>
+    </div>
+    <div class="b" style="width:666px;height:860px"><span class="t">Duty wheel</span>
+      <span class="d">666 × 860 · duty space 123px · cube 7.8px</span></div>
+    <div class="colv">
+      <div class="b" style="width:636px;height:315px"><span class="t">Alms table</span><span class="d">636 × 315</span></div>
+      <div class="b" style="width:636px;height:525px"><span class="t">Market</span><span class="d">636 × 525</span></div>
+    </div>
+  </div>
+</div>
+<p class="cap">The extra 288px of width goes to the wheel and to the right column; the map still
+does not fit as a column. At 1920 × 900 it can, at about 500 tall and 441 wide, but only by
+squeezing the alms and market column down to 367 &mdash; narrower than the market's natural 624.</p>
+
+<h2>What this settles</h2>
+<p class="intro">Design against <b>1440 × 760</b> and let bigger windows grow. Three things are
+permanent — the player column, the duty wheel, and a right column with the alms table over the
+market. <b>The map is the piece that yields</b>, coming forward as an overlay when acolytes move
+and going away again. The piety track's 637 × 213 is worth reclaiming, but it buys the alms table
+room rather than solving anything on its own.</p>
+<p class="cap">One number worth staring at: a cube on the duty wheel comes out <b>6.6px</b> at the
+floor size and 7.8px at 1728. That is a dot, not a cube. Either the wheel's tally stops being drawn
+as cubes at this scale, or the wheel needs more of the window than this layout gives it.</p>
+
+</body></html>

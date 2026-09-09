@@ -1,0 +1,152 @@
+{
+  "alphaThreshold": 8,
+  "note": "inkBoxPx is [x, y, width, height] in source pixels",
+  "assets": {
+    "frame_01": {
+      "src": "frames/player_board/frame_01.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        1905,
+        826
+      ],
+      "inkBoxPx": [
+        10,
+        6,
+        1887,
+        811
+      ],
+      "anchor": "ink-center",
+      "normalization": "none",
+      "inkFill": [
+        0.991,
+        0.982
+      ],
+      "inkAspect": 2.3268,
+      "licence": "unverified"
+    },
+    "acolyte_hood_cross": {
+      "src": "icons/population/acolyte/acolyte_hood_cross.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        110,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        110,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.9167,
+      "licence": "openai-generated",
+      "master": "_masters/population/acolyte_hood_cross.png"
+    },
+    "acolyte_tied_cloak": {
+      "src": "icons/population/acolyte/acolyte_tied_cloak.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        108,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        108,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.9,
+      "licence": "openai-generated",
+      "master": "_masters/population/acolyte_tied_cloak.png"
+    },
+    "serf_wide_hat": {
+      "src": "icons/population/serf/serf_wide_hat.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        103,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        103,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.8583,
+      "licence": "openai-generated",
+      "master": "_masters/population/serf_wide_hat.png"
+    },
+    "leader_female_01": {
+      "src": "portraits/leaders/leader_female_01.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        1254,
+        1254
+      ],
+      "inkBoxPx": [
+        21,
+        13,
+        1202,
+        1228
+      ],
+      "anchor": "ink-center",
+      "normalization": "none",
+      "inkFill": [
+        0.959,
+        0.979
+      ],
+      "inkAspect": 0.9788,
+      "licence": "unverified"
+    },
+    "leader_male_01": {
+      "src": "portraits/leaders/leader_male_01.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        1254,
+        1254
+      ],
+      "inkBoxPx": [
+        14,
+        28,
+        1208,
+        1212
+      ],
+      "anchor": "ink-center",
+      "normalization": "none",
+      "inkFill": [
+        0.963,
+        0.967
+      ],
+      "inkAspect": 0.9967,
+      "licence": "unverified"
+    }
+  },
+  "registers": {
+    "openai-generated": {
+      "source": "Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project.",
+      "rightsBasis": "Output rights assigned to the user under the OpenAI Europe Terms of Use.",
+      "permittedUse": "Commercial use, modification, embedding and distribution as part of the game.",
+      "thirdPartyAttribution": "None known or required.",
+      "exclusivity": "Not exclusive. Similar AI output may exist or be generated for others.",
+      "copyrightStatus": "Likely not independently protected by copyright in Sweden while wholly AI-generated. Human-authored modifications or the broader UI composition may receive protection if they satisfy the originality requirement.",
+      "notes": "Do not describe the original images as manually illustrated."
+    }
+  }
+}
