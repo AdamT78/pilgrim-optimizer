@@ -60,7 +60,7 @@ point of enumerating a directory rather than a hardcoded list.
 
 ## Duty action icons
 
-Exported from the generator by `../scratch/export_assets.py`, not traced: the file and the board come
+Exported from the generator by `../scratch/export_assets.py.txt`, not traced: the file and the board come
 from one drawing, so they cannot drift. Each is the **mark alone** — the pill behind it on a duty
 tile is the tile's furniture, not the icon — on a `-16 -16 32 32` viewBox.
 

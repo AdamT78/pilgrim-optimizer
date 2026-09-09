@@ -617,7 +617,7 @@ the strip is black: the field carries the state, so the ink does not have to. Th
 takes the state -- a building woke on the round it woke on -- and is filled green on the round the
 board is actually on.
 
-Built by `scratch/mkmarketsvg.py` against the panel's content box (1182 x 116, which is the strip's
+Built by `scratch/mkmarketsvg.py.txt` against the panel's content box (1182 x 116, which is the strip's
 1193 x 127 less its border and padding), so it drops into `.mkt` at 1:1.
 
 ## The log, and what it costs to open it
@@ -670,8 +670,8 @@ complete rounds in the transcript -- so reordering would fire most rounds, break
 every time, and make comparison across rounds harder. Turn order already lives in the First Player
 marker, the alms table's `1st` slot, and the log's own line.
 
-Built by `scratch/mklog.py` (engine transcript to log voice) and `scratch/mkmarketsvg.py`'s sibling
-`scratch/mklogsheet.py` for the standalone study in `log-panel.html`. The translation layer belongs in
+Built by `scratch/mklog.py.txt` (engine transcript to log voice) and `scratch/mkmarketsvg.py.txt`'s sibling
+`scratch/mklogsheet.py.txt` for the standalone study in `log-panel.html`. The translation layer belongs in
 `pilgrim/io/event_text.py` and does not live there yet.
 
 The action box's **Last** line is one line of the log and now obeys the same rules: the seat is a

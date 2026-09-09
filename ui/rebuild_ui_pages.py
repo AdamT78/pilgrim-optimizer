@@ -19,10 +19,8 @@ the output directory that no generator here wrote is reported as a fossil and fa
 rebuild sweep is worth exactly as much as the list of generators behind it is complete.
 """
 import pathlib
-import shutil
 import subprocess
 import sys
-import tempfile
 
 UI = pathlib.Path(__file__).resolve().parent
 RENDER = UI / "render"

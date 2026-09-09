@@ -9,14 +9,14 @@ pipelines; with them, it means running one.
 
 | file | produced by | what it is |
 | --- | --- | --- |
-| `duty-wheel.svg` | `_scratch/` (duty wheel builder) | the eight duty tiles, the city, the ring |
-| `map-populated.svg` | `_scratch/mkmap.py` | the hex map, populated from the real setup generator |
-| `market-hex.svg` | `_scratch/mkmarketsvg.py` | the market hex row, built to the panel's content box |
-| `market-panel.html` | `_scratch/mkmarket.py` | the market panel's own markup |
-| `log-body.html` | `_scratch/mklog.py` | the event-log body |
+| `duty-wheel.svg` | `scratch/` (duty wheel builder) | the eight duty tiles, the city, the ring |
+| `map-populated.svg` | `scratch/mkmap.py.txt` | the hex map, populated from the real setup generator |
+| `market-hex.svg` | `scratch/mkmarketsvg.py.txt` | the market hex row, built to the panel's content box |
+| `market-panel.html` | `scratch/mkmarket.py.txt` | the market panel's own markup |
+| `log-body.html` | `scratch/mklog.py.txt` | the event-log body |
 | `wagon-path.txt` | traced from the Noun Project wagon (Alzam) | the merchant wagon outline, spokes removed |
 
-The generators in `_scratch/` are the versions rescued from a session's temp directory. They run,
+The generators in `scratch/` are the versions rescued from a session's temp directory. They run,
 but they still carry absolute paths of their own and have not been made portable the way
 `gen_board.py` and `gen_picker.py` have. Treat them as the record of how each file was made, not
 yet as a build step you can rely on.

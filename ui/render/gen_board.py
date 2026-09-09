@@ -3,7 +3,7 @@
 Everything is sized from one decision -- the action box's body text -- and the two SVG
 components are SCALED so their own numerals come out the same size as it.
 """
-import sys, io, contextlib, importlib, importlib.util, pathlib, math, os
+import sys, importlib, importlib.util, pathlib, math, os
 
 HERE = pathlib.Path(__file__).resolve().parent      # ui/render
 UI = HERE.parent                                    # ui
@@ -513,7 +513,7 @@ def sa_panel(ink="#2A2320", parch="#E5D8B9"):
         for c in range(6):
             cx = x0 + colw*c + colw/2
             n = SA_OCC[r][c]
-            x, yy = cx - SA_CUBE/2, y - SA_CUBE/2
+            yy = y - SA_CUBE/2
             if n:
                 # a second acolyte is a second cube, not a numeral on the first
                 span = n*SA_CUBE + (n - 1)*SA_GAP
@@ -1209,7 +1209,7 @@ html,body{height:100%%;margin:0;overflow:hidden;background:#0C0F0A;
 .hud button{font:inherit;color:#E8E2D3;background:#3A4A38;border:1px solid #5A6B57;
   border-radius:4px;padding:1px 6px;margin-left:8px;cursor:pointer}
 """ % {"cw":COMP_W, "pw":PANEL_W, "gap":GAP, "gapdiff":GAP1-GAP, "mktw":MKT_W, "mkth":MKT_H,
-        "almsx":round(COMP_W + GAP1 - 30*COMP_W/352, 1), "almsinset":ALMS_INSET, "almsh":ALMS_H,
+        "almsx":round(COMP_W + GAP1 - 30*COMP_W/352, 1),
 }
 
 SCRIPT = """
