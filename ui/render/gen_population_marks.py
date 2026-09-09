@@ -16,7 +16,7 @@ The figure's height is what the band allows, not a number picked by eye. Centred
 running 16..56, a 30-unit figure clears the card's frame top by 5 and the band's foot by 5.
 
 PNGs are placed through a `<symbol>` whose viewBox is the file's own canvas -- the production cuts
-are alpha-tight, so canvas and ink are the same box. See `../hybrid-svg-png.md`; the short version
+are alpha-tight, so canvas and ink are the same box. See `../docs/hybrid-svg-png.md`; the short version
 is that a `<use>` cannot size a bare `<image>`, only a `<symbol>`, and a padded PNG would report a
 box it does not fill.
 """
@@ -28,7 +28,7 @@ NUM_GAP = 3.5       # square to its count
 DIV_HALF = 15.0     # the divider's half-height
 _NUM_W = 8.0        # a single numeral, for finding the gap the divider splits
 
-ASSETS = pathlib.Path(__file__).parent / "assets" / "icons" / "population"
+ASSETS = pathlib.Path(__file__).resolve().parents[1] / "assets" / "icons" / "population"
 DEFAULT = {"serf": "serf/serf_wide_hat.png",
            "acolyte": "acolyte/acolyte_hood_cross.png"}
 

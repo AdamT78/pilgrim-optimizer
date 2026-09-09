@@ -15,15 +15,13 @@ of asset normalise differently (see ../hybrid-svg-png.md):
 """
 import base64, io, json, os, pathlib, re, contextlib, sys
 
-HERE = pathlib.Path(__file__).resolve().parent
-OUT = str(HERE) + "/"
-ASSETS = HERE / "assets"
+HERE = pathlib.Path(__file__).resolve().parent      # ui/render
+UI = HERE.parent                                    # ui
+OUT = str(UI / "generated") + "/"
+ASSETS = UI / "assets"
+pathlib.Path(OUT).mkdir(parents=True, exist_ok=True)
 
-# The board generator is still a scratch file. Prefer a copy sitting beside this one, so that the
-# day it moves into the repo nothing here has to change.
 MKR = HERE / "gen_board.py"
-if not MKR.exists():
-    MKR = pathlib.Path("/tmp/mkR.py")
 
 os.environ.setdefault("TILE_S", "0.80")
 os.environ.setdefault("TITLE_SZ", "11.4")

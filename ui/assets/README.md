@@ -60,7 +60,7 @@ point of enumerating a directory rather than a hardcoded list.
 
 ## Duty action icons
 
-Exported from the generator by `../_scratch/export_assets.py`, not traced: the file and the board come
+Exported from the generator by `../scratch/export_assets.py`, not traced: the file and the board come
 from one drawing, so they cannot drift. Each is the **mark alone** — the pill behind it on a duty
 tile is the tile's furniture, not the icon — on a `-16 -16 32 32` viewBox.
 
@@ -171,7 +171,7 @@ Keep the masters: a 120 px cut cannot be re-derived into one.
 
 ## Checking
 
-`verify_assets.py` enforces the contract in `../hybrid-svg-png.md` rather than trusting it —
+`verify_assets.py` enforces the contract in `../docs/hybrid-svg-png.md` rather than trusting it —
 declared boxes against measured ones, untrimmed canvases, and whether a normalisation group agrees
 on the dimension it normalises. Run it before an asset is used, not after a layout is built on it.
 

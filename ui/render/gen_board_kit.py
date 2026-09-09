@@ -7,7 +7,7 @@ use in any project. Nothing here touches it -- the portrait the card actually dr
 of geometry in `gen_board.py` -- so this module has no licence encumbrance and no /tmp dependency.
 
 The pill geometry is not invented here either. It is derived from the live renderer's own constants
-(`ui_debug.render_player_boards_v2`) through the scale factor K, so a change to the game's resource
+(`tools/ui_debug/render_player_boards_v2.py`) through the scale factor K, so a change to the game's resource
 chooser reaches these studies instead of silently diverging from them -- which is also why this
 module must be imported with the repository root on the path.
 """

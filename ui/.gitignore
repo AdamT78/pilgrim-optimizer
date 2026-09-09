@@ -1,0 +1,8 @@
+# Rebuilt on demand by ui/render/*.py, never committed -- the same rule
+# tools/ui_debug/generated/ follows, and for the same reason: a committed output can sit
+# there looking authoritative long after it stopped matching its generator.
+#
+# Because this directory is ignored, `git diff` on anything inside it reports nothing however
+# much changed. To show a page did not move, copy it, rebuild, and cmp against the copy.
+generated/
+__pycache__/

@@ -5,17 +5,19 @@ components are SCALED so their own numerals come out the same size as it.
 """
 import sys, io, contextlib, importlib, importlib.util, pathlib, math, os
 
-HERE = pathlib.Path(__file__).resolve().parent
-OUT = str(HERE) + "/"
+HERE = pathlib.Path(__file__).resolve().parent      # ui/render
+UI = HERE.parent                                    # ui
+OUT = str(UI / "generated") + "/"
+pathlib.Path(OUT).mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(HERE))
 
 # Pre-rendered stages of the pipeline -- the duty wheel, the populated map, the market hex, the
 # log body. Each is produced by its own generator; they live here as files so this one can be run
 # without re-running all of them, which is the only reason a generated artifact is in the tree.
 def IN(name):
-    p = HERE / "_inputs" / name
+    p = UI / "inputs" / name
     if not p.exists():
-        raise SystemExit("missing pipeline input %s -- see _inputs/README.md" % p)
+        raise SystemExit("missing pipeline input %s -- see ui/inputs/README.md" % p)
     return p.read_text()
 
 import gen_board_kit as gb            # colours, pills, cubes, numerals -- see its docstring

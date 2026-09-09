@@ -1,26 +1,53 @@
-# UI 2.0 prototypes
+# ui/
 
-Static HTML mockups for the next play view. Each file is self-contained — open it in a
-browser, no server and no build step. Nothing here is wired to the engine yet; where a
-prototype shows numbers, the README notes whether they are real or placed by hand.
+The Pilgrim UI redesign: generators that draw the board, an asset library, and the studies that
+settled each decision. Nothing here is wired to the engine, and nothing in the game reads it — this
+is where the next play view is designed before it is migrated.
 
-| File | What it is |
-| --- | --- |
-| `player-board.html` | The per-player summary strip. Portrait mounted on the seat spine. |
-| `market.html` | The market, all 24 buildings, from two real generated setups. |
-| `duty-wheel.html` | The duty wheel with the actions on the tiles — the rail, two variants. |
-| `gen_portraits_svg.py` | Generator for the placeholder portraits used by the player board. |
-| `gen_alms_panel.py` | Generator for the alms panel the table uses. |
-| `desktop-fit.html` | What fits in a desktop window, drawn 1:1. The layout target. |
-| `game-board.html` | **v2.0 table.** The four components composed into one live page. |
-| `board-3-2.html` | **The 3:2 board.** Two finished compositions, type solved for this canvas. |
-| `board-3-2-step1.html` | **Rebuild, step 1.** Alms + boards + action box, type matched by construction. |
-| `alms-on-player-board.html` | Three ways to fold the alms table into the player boards. |
-| `alms-rail-variants.html` | The chosen footer rail, three ways to mark the occupied cell. |
-| `alms-wins-tray.html` | Rail A with the four win places back, four placements. |
-| `alms-panel-board-width.html` | The alms table as its own panel at player-board width. |
-| `alms-panel-speciality.html` | Parchment panel, three ways to mark the speciality spaces. |
-| `alms-panel-shaded.html` | **Chosen:** the shaded band, cut to the divider lines' height. |
+**This is not `tools/ui_debug/`.** That directory holds the renderers the *current* game view is
+actually drawn by, and it is the destination: moving a decision from here to there is what shipping
+it means. The one live connection today is `render/gen_board_kit.py`, which imports the resource
+pill's constants from `tools/ui_debug/render_player_boards_v2.py` so that a study's pill cannot
+drift from the game's.
+
+## Running it
+
+    python3 ui/render/gen_board.py --open       # the assembled board
+    python3 ui/render/gen_picker.py --open      # swap icons, portraits and frames on one card
+    python3 ui/rebuild_ui_pages.py              # rebuild every generated page
+    python3 ui/rebuild_ui_pages.py --check      # rebuild and report anything that moved
+
+Both generators print the finished page as a `file://` URL; `--open` opens it. Run them from
+anywhere — they locate the repository by looking for the renderer, not by counting directories up.
+
+## Layout
+
+    ui/
+      render/       the generators. gen_board.py and gen_picker.py are the two entry points;
+                    the rest are modules they import
+      assets/       source material a generator cannot produce — icons, portraits, frames — with
+                    its own README, licence record and checks
+      inputs/       pre-rendered stages of the pipeline that gen_board.py composes
+      generated/    the rebuilt pages. GIT-IGNORED
+      studies/      frozen decision records, grouped by component. Never regenerated
+      docs/         hybrid-svg-png.md, the rendering contract the assets are built to
+      scratch/      upstream generators rescued from a temp directory, not yet portable
+
+The split that matters is `generated/` against `studies/`. Both are HTML and they behave in
+opposite ways: a generated page is rebuilt from its generator every run and is worthless the
+moment it disagrees with it, while a study is a snapshot of a decision that will never be drawn
+again. It is the same distinction `tools/ui_debug/` already draws between `generated/` and
+`prototypes/`, and it uses the same words on purpose.
+
+Because `generated/` is ignored, **`git diff` inside it reports nothing however much changed**.
+That is the trade: no more committed outputs quietly going stale, but git no longer tells you when
+one moves. `rebuild_ui_pages.py --check` is what replaces that signal, and it also fails on any
+page in `generated/` that no generator writes — a page nothing rebuilds compares identical forever.
+
+## Studies
+
+Grouped by component: `alms/` (6), `market/` (10), `duty/` (5), `player-board/` (3), `misc/` (17).
+They are read for intent, not edited. The sections below record what each one settled.
 
 ## desktop-fit.html
 
@@ -590,7 +617,7 @@ the strip is black: the field carries the state, so the ink does not have to. Th
 takes the state -- a building woke on the round it woke on -- and is filled green on the round the
 board is actually on.
 
-Built by `/tmp/mkmarketsvg.py` against the panel's content box (1182 x 116, which is the strip's
+Built by `scratch/mkmarketsvg.py` against the panel's content box (1182 x 116, which is the strip's
 1193 x 127 less its border and padding), so it drops into `.mkt` at 1:1.
 
 ## The log, and what it costs to open it
@@ -643,8 +670,8 @@ complete rounds in the transcript -- so reordering would fire most rounds, break
 every time, and make comparison across rounds harder. Turn order already lives in the First Player
 marker, the alms table's `1st` slot, and the log's own line.
 
-Built by `/tmp/mklog.py` (engine transcript to log voice) and `/tmp/mkmarketsvg.py`'s sibling
-`/tmp/mklogsheet.py` for the standalone study in `log-panel.html`. The translation layer belongs in
+Built by `scratch/mklog.py` (engine transcript to log voice) and `scratch/mkmarketsvg.py`'s sibling
+`scratch/mklogsheet.py` for the standalone study in `log-panel.html`. The translation layer belongs in
 `pilgrim/io/event_text.py` and does not live there yet.
 
 The action box's **Last** line is one line of the log and now obeys the same rules: the seat is a
