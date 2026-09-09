@@ -1308,3 +1308,13 @@ html=("<!doctype html><html><head><meta charset='utf-8'><title>Pilgrim &mdash; 3
 html = html.replace("<body>", "<body>" + _POP_DEFS, 1)
 p=pathlib.Path(OUT+os.environ.get("OUTNAME","board-3-2-step1.html")); p.write_text(html)
 print("written", p, p.stat().st_size//1024, "KB", "| component width", COMP_W)
+
+# Only when run directly. `gen_picker.py` execs this file to lift one card out of it, and under
+# that exec __name__ is "gen_board" -- without the guard, building the picker would print the
+# board's URL and, with --open, open the wrong page.
+if __name__ == "__main__":
+    URL = p.resolve().as_uri()
+    print("\n%s" % URL)
+    if "--open" in sys.argv or os.environ.get("OPEN_BOARD"):
+        import webbrowser
+        webbrowser.open(URL)
