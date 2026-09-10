@@ -1,0 +1,37 @@
+{
+  "id": "pilgrim_v2_recalibrated_sage",
+  "aria_label": "Pilgrim Gothic v2 player board, sage seat",
+  "seat": "sage",
+  "turn": "lit",
+  "portrait": "portraits/leader_male_hooded.png",
+  "serf": "population/serf_gothic.png",
+  "acolyte": "population/acolyte_gothic.png",
+  "serf_cube": "ui/cube_serf_grey.svg",
+  "population_divider": "ui/population_divider.svg",
+  "resources": {
+    "piety": "resources/piety_gothic.png",
+    "grain": "resources/grain_gothic.png",
+    "stone": "resources/stone_gothic.png",
+    "silver": "resources/silver_gothic.png"
+  },
+  "counts": {
+    "serf": 8,
+    "acolyte": 2,
+    "piety": 4,
+    "grain": 0,
+    "stone": 3,
+    "silver": 1
+  },
+  "portrait_background": "#b8b1a5",
+  "information_panel_fill": "#ead8b4",
+  "resource_row_fill": "#39352f",
+  "resource_value_fill": "#ead8b4",
+  "resource_fills": {
+    "piety": "#5b2d62",
+    "grain": "#e2c27c",
+    "stone": "#c8c4bd",
+    "silver": "#7fb2cf"
+  },
+  "font_family": "Georgia, serif",
+  "text_fill": "#24190f"
+}

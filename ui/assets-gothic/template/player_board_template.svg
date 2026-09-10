@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1905 826" role="img" aria-label="Pilgrim gothic player board template v2 recalibrated">
+  <defs>
+    <clipPath id="portraitClip"><ellipse cx="409.5" cy="360" rx="216" ry="199"/></clipPath>
+    <clipPath id="topPanelClip"><rect x="669" y="213" width="1117" height="174" rx="38"/></clipPath>
+    <clipPath id="resourcePietyClip"><rect x="709" y="433" width="205" height="179" rx="7"/></clipPath>
+    <clipPath id="resourceGrainClip"><rect x="971" y="433" width="215" height="179" rx="7"/></clipPath>
+    <clipPath id="resourceStoneClip"><rect x="1248" y="433" width="215" height="179" rx="7"/></clipPath>
+    <clipPath id="resourceSilverClip"><rect x="1522" y="433" width="215" height="179" rx="7"/></clipPath>
+    
+    <!-- The turn toggle. Scoped to a descendant of [data-turn] rather than to the root <svg>, so it
+         keeps working when a board is wrapped into a <symbol> and its root element's attributes are
+         discarded — which is exactly what the four-board column does. -->
+    <style>
+      [data-turn] &gt; [data-turn-layer]{display:none}
+      [data-turn="lit"] &gt; [data-turn-layer="lit"]{display:inline}
+      [data-turn="dim"] &gt; [data-turn-layer="dim"]{display:inline}
+    </style>
+
+    <linearGradient id="paperTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4e5c4"/><stop offset="1" stop-color="#e4cca1"/></linearGradient>
+    <filter id="paperNoise" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".03" numOctaves="3" seed="11" result="n"/><feColorMatrix in="n" type="saturate" values="0" result="g"/><feComponentTransfer in="g"><feFuncA type="table" tableValues="0 .09"/></feComponentTransfer></filter>
+  </defs>
+
+  <!-- Dynamic backgrounds calibrated to the transparent openings of frame_base.png. -->
+  <ellipse id="underlay-portrait" cx="409.5" cy="360" rx="216" ry="199" fill="#b8b1a5"/>
+  <rect id="underlay-panel" x="669" y="213" width="1117" height="399" rx="36" fill="#ead8b4"/>
+  <rect id="underlay-upper" x="669" y="213" width="1117" height="174" rx="38" fill="#ead8b4"/>
+  <rect id="underlay-resource-row" x="690" y="420" width="1070" height="210" rx="26" fill="#39352f"/>
+
+  <g clip-path="url(#portraitClip)"><image data-asset-role="portrait" href="../portraits/leader_male_hooded.png" x="196" y="140" width="448" height="448" preserveAspectRatio="xMidYMid meet"/>
+  </g>
+
+  <g clip-path="url(#topPanelClip)">
+    <rect x="669" y="213" width="1117" height="174" rx="38" fill="url(#paperTop)"/>
+    <rect x="669" y="213" width="1117" height="174" fill="#6a4d29" filter="url(#paperNoise)" opacity=".16"/>
+
+    <image data-asset-role="serf" href="../population/serf_gothic.png" x="766" y="225" width="160" height="148" preserveAspectRatio="xMidYMid meet"/>
+    <image data-asset-role="serf_cube" href="../ui/cube_serf_grey.svg" x="966" y="258" width="70" height="70" preserveAspectRatio="xMidYMid meet"/>
+    <text x="1096" y="334" fill="#24190f" font-family="Georgia,serif" font-size="96" font-weight="700" text-anchor="middle">8</text>
+
+    <image data-asset-role="population_divider" href="../ui/population_divider.svg" x="1198" y="220" width="48" height="160" preserveAspectRatio="xMidYMid meet"/>
+
+    <image data-asset-role="acolyte" href="../population/acolyte_gothic.png" x="1311" y="225" width="161" height="148" preserveAspectRatio="xMidYMid meet"/>
+    <image data-asset-role="acolyte_cube" href="../ui/cube_acolyte_yellow.svg" x="1512" y="258" width="70" height="70" preserveAspectRatio="xMidYMid meet"/>
+    <text x="1642" y="334" fill="#24190f" font-family="Georgia,serif" font-size="96" font-weight="700" text-anchor="middle">2</text>
+  </g>
+
+  <g id="resource-piety" clip-path="url(#resourcePietyClip)">
+    <rect x="709" y="433" width="205" height="132" rx="7" fill="#5b2d62"/>
+    <rect x="709" y="565" width="205" height="47" fill="#ead8b4"/>
+    <rect x="709" y="433" width="205" height="179" fill="#6a4d29" filter="url(#paperNoise)" opacity=".12"/>
+    <line x1="709" y1="565" x2="914" y2="565" stroke="#5a3a18" stroke-width="3"/>
+    <image data-asset-role="resource:piety" href="../resources/piety_gothic.png" x="744" y="439" width="136" height="120" preserveAspectRatio="xMidYMid meet"/>
+    <text x="812" y="605" fill="#24190f" font-family="Georgia,serif" font-size="50" font-weight="700" text-anchor="middle">4</text>
+  </g>
+
+  <g id="resource-grain" clip-path="url(#resourceGrainClip)">
+    <rect x="971" y="433" width="215" height="132" rx="7" fill="#e2c27c"/>
+    <rect x="971" y="565" width="215" height="47" fill="#ead8b4"/>
+    <rect x="971" y="433" width="215" height="179" fill="#6a4d29" filter="url(#paperNoise)" opacity=".12"/>
+    <line x1="971" y1="565" x2="1186" y2="565" stroke="#5a3a18" stroke-width="3"/>
+    <image data-asset-role="resource:grain" href="../resources/grain_gothic.png" x="1010" y="439" width="138" height="120" preserveAspectRatio="xMidYMid meet"/>
+    <text x="1079" y="605" fill="#24190f" font-family="Georgia,serif" font-size="50" font-weight="700" text-anchor="middle">0</text>
+  </g>
+
+  <g id="resource-stone" clip-path="url(#resourceStoneClip)">
+    <rect x="1248" y="433" width="215" height="132" rx="7" fill="#c8c4bd"/>
+    <rect x="1248" y="565" width="215" height="47" fill="#ead8b4"/>
+    <rect x="1248" y="433" width="215" height="179" fill="#6a4d29" filter="url(#paperNoise)" opacity=".10"/>
+    <line x1="1248" y1="565" x2="1463" y2="565" stroke="#5a3a18" stroke-width="3"/>
+    <image data-asset-role="resource:stone" href="../resources/stone_gothic.png" x="1286" y="440" width="138" height="118" preserveAspectRatio="xMidYMid meet"/>
+    <text x="1356" y="605" fill="#24190f" font-family="Georgia,serif" font-size="50" font-weight="700" text-anchor="middle">3</text>
+  </g>
+
+  <g id="resource-silver" clip-path="url(#resourceSilverClip)">
+    <rect x="1522" y="433" width="215" height="132" rx="7" fill="#7fb2cf"/>
+    <rect x="1522" y="565" width="215" height="47" fill="#ead8b4"/>
+    <rect x="1522" y="433" width="215" height="179" fill="#6a4d29" filter="url(#paperNoise)" opacity=".10"/>
+    <line x1="1522" y1="565" x2="1737" y2="565" stroke="#5a3a18" stroke-width="3"/>
+    <image data-asset-role="resource:silver" href="../resources/silver_gothic.png" x="1558" y="447" width="144" height="108" preserveAspectRatio="xMidYMid meet"/>
+    <text x="1630" y="605" fill="#24190f" font-family="Georgia,serif" font-size="50" font-weight="700" text-anchor="middle">1</text>
+  </g>
+
+  <!-- The frame, in layers. frame_base.png still exists and still has a red drape baked into it;
+       these four are that image taken apart so a seat's colour is a swapped layer rather than a
+       second copy of the whole frame. The split is by hard alpha, so the three frame layers cover
+       disjoint pixels and their order among themselves cannot matter; the gemstones go last
+       because they genuinely sit on top. See ../frames/README.md. -->
+  <image data-asset-role="frame_base" href="../frames/frame_base_nocloth.png" x="0" y="0" width="1905" height="826" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>
+  <image data-asset-role="frame_ornaments" href="../frames/frame_ornaments.png" x="0" y="0" width="1905" height="826" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>
+
+  <!-- Whose turn it is. Both drapes ship inside the board and one is hidden, so a turn change is an
+       attribute, not a rebuild: the board is 3 MB of embedded Base64 and a game changes turn every
+       few seconds. Flip it with
+           board.querySelector('[data-turn]').dataset.turn = 'dim'
+       The `display` attributes below are the same choice written statically, for renderers that do
+       not apply the stylesheet (CairoSVG's PNG path); in a browser the rules in <style> win. -->
+  <g data-turn="lit">
+    <image data-turn-layer="lit" data-asset-role="cloth_lit" href="../frames/cloth_sage.png" x="0" y="0" width="1905" height="826" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>
+    <image data-turn-layer="dim" data-asset-role="cloth_dim" href="../frames/cloth_sage_dim.png" x="0" y="0" width="1905" height="826" preserveAspectRatio="xMidYMid meet" pointer-events="none" display="none"/>
+  </g>
+
+  <image data-asset-role="gems" href="../frames/stones_sage.png" x="0" y="0" width="1905" height="826" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>
+</svg>

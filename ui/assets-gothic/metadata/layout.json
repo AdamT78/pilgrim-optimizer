@@ -1,0 +1,114 @@
+{
+  "population": {
+    "serf": {
+      "count": [
+        1096,
+        334
+      ],
+      "x": 766,
+      "y": 225,
+      "width": 160,
+      "height": 148
+    },
+    "acolyte": {
+      "count": [
+        1642,
+        334
+      ],
+      "x": 1311,
+      "y": 225,
+      "width": 161,
+      "height": 148,
+      "center_x": 1355.5
+    },
+    "acolyte_cube": {
+      "x": 1512,
+      "y": 258,
+      "width": 70,
+      "height": 70
+    },
+    "serf_cube": {
+      "x": 966,
+      "y": 258,
+      "width": 70,
+      "height": 70
+    }
+  },
+  "resources": {
+    "piety": {
+      "count": [
+        812,
+        605
+      ]
+    },
+    "grain": {
+      "count": [
+        1079,
+        605
+      ]
+    },
+    "stone": {
+      "count": [
+        1356,
+        605
+      ]
+    },
+    "silver": {
+      "count": [
+        1630,
+        605
+      ]
+    }
+  },
+  "notes_v6": {
+    "acolyte_alignment": "Acolyte horizontally aligned to the stone resource window below.",
+    "stone_resource_center_x": 1355.5,
+    "serf_reference_alignment": "Serf remains aligned to the piety resource window below."
+  },
+  "notes_v7": {
+    "acolyte_cube_alignment": "Yellow cube moved so the horizontal distance from the acolyte matches the serf-to-grey-cube distance.",
+    "left_gap_px": 40,
+    "acolyte_right_edge": 1436,
+    "acolyte_cube_left_x": 1476
+  },
+  "notes_v8": {
+    "acolyte_count_alignment": "Right-side number moved so the yellow-cube-to-number distance matches the grey-cube-to-number distance on the left.",
+    "left_cube_center_x": 965,
+    "left_count_center_x": 1072,
+    "right_cube_center_x": 1511,
+    "right_count_center_x": 1618,
+    "matching_center_gap": 107
+  },
+  "notes_v9": {
+    "population_count_shift": "Both upper population numbers moved 12 units left.",
+    "serf_count_x": 1060,
+    "acolyte_count_x": 1606,
+    "same_shift_for_red_and_black": true
+  },
+  "notes_v10": {
+    "left_group_shift": 36,
+    "rule": "Serf + grey cube + 8 moved together as one group.",
+    "internal_spacing_preserved": true,
+    "goal": "Balance visible serf-to-left-border spacing with visible 8-to-divider spacing.",
+    "right_group_unchanged": true,
+    "same_template_for_red_and_black": true
+  },
+  "notes_v11": {
+    "right_group_shift": 36,
+    "rule": "Acolyte + yellow cube + 2 moved together as one group.",
+    "internal_spacing_preserved": true,
+    "left_group_unchanged_from_v10": true,
+    "same_template_for_red_and_black": true
+  },
+  "ui": {
+    "acolyte_cube_color": "red"
+  },
+  "notes_v12": {
+    "upper_figures_shift_y": -1,
+    "serf_y": 225,
+    "acolyte_y": 225,
+    "reason": "Upper figures nudged up for cleaner horizontal alignment in the parchment row.",
+    "acolyte_cube_recolored": "yellow to red",
+    "same_for_red_and_black_gem_versions": true
+  }
+}
