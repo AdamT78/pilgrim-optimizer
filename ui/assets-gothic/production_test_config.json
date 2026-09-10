@@ -3,7 +3,7 @@
   "aria_label": "Pilgrim Gothic v2 player board, sage seat",
   "seat": "sage",
   "turn": "lit",
-  "portrait": "portraits/leader_male_hooded.png",
+  "portrait": "portraits/leader_male_shaven.png",
   "serf": "population/serf_gothic.png",
   "acolyte": "population/acolyte_gothic.png",
   "serf_cube": "ui/cube_serf_grey.svg",

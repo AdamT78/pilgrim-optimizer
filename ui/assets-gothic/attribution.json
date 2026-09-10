@@ -224,6 +224,17 @@
       "licence": "openai-generated",
       "role": "population marker artwork"
     },
+    "portraits/full/leader_female_blindfolded.png": {
+      "state": "present",
+      "title": "blindfolded visionary",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 1254 px cut for the game-start reveal",
+      "modifications": "the blood recoloured toward the set's own sepia (hue 36 deg, saturation x0.40, weighted by each pixel's own saturation so the greyscale drawing is untouched), then cropped to 1.55x on the face to match the framing of the other portraits",
+      "reproducibleBy": null
+    },
     "portraits/full/leader_female_hooded.png": {
       "state": "present",
       "title": "leader female hooded",
@@ -232,6 +243,17 @@
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
       "role": "leader portrait, 1254 px cut for the game-start reveal"
+    },
+    "portraits/full/leader_male_gaunt.png": {
+      "state": "present",
+      "title": "gaunt ascetic, looking down",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 1254 px cut for the game-start reveal",
+      "modifications": "cropped to 1.55x on the face and resampled, to match the framing of the existing portraits; see ui/assets-gothic/GENERATION.md",
+      "reproducibleBy": null
     },
     "portraits/full/leader_male_hooded.png": {
       "state": "present",
@@ -242,6 +264,28 @@
       "licence": "openai-generated",
       "role": "leader portrait, 1254 px cut for the game-start reveal"
     },
+    "portraits/full/leader_male_shaven.png": {
+      "state": "present",
+      "title": "shaven-headed elder, steady gaze",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 1254 px cut for the game-start reveal",
+      "modifications": "cropped to 1.55x on the face and resampled, to match the framing of the existing portraits; see ui/assets-gothic/GENERATION.md",
+      "reproducibleBy": null
+    },
+    "portraits/leader_female_blindfolded.png": {
+      "state": "present",
+      "title": "blindfolded visionary",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 640 px board cut",
+      "modifications": "the blood recoloured toward the set's own sepia (hue 36 deg, saturation x0.40, weighted by each pixel's own saturation so the greyscale drawing is untouched), then cropped to 1.55x on the face to match the framing of the other portraits",
+      "reproducibleBy": null
+    },
     "portraits/leader_female_hooded.png": {
       "state": "present",
       "title": "leader female hooded",
@@ -251,6 +295,17 @@
       "licence": "openai-generated",
       "role": "leader portrait, 640 px board cut"
     },
+    "portraits/leader_male_gaunt.png": {
+      "state": "present",
+      "title": "gaunt ascetic, looking down",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 640 px board cut",
+      "modifications": "cropped to 1.55x on the face and resampled, to match the framing of the existing portraits; see ui/assets-gothic/GENERATION.md",
+      "reproducibleBy": null
+    },
     "portraits/leader_male_hooded.png": {
       "state": "present",
       "title": "leader male hooded",
@@ -259,6 +314,17 @@
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
       "role": "leader portrait, 640 px board cut"
+    },
+    "portraits/leader_male_shaven.png": {
+      "state": "present",
+      "title": "shaven-headed elder, steady gaze",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 640 px board cut",
+      "modifications": "cropped to 1.55x on the face and resampled, to match the framing of the existing portraits; see ui/assets-gothic/GENERATION.md",
+      "reproducibleBy": null
     },
     "resources/grain_gothic.png": {
       "state": "present",

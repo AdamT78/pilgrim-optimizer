@@ -1,4 +1,4 @@
-"""The gothic board picker: change the seat, the turn and the portrait, and watch the board.
+"""The gothic board picker: change the seat, the stones, the turn and the portrait.
 
 This does not draw anything. It calls the production assembler to build the board exactly as
 `--formats svg` would, then adds a symbol for every candidate asset and gives the page controls that
@@ -20,8 +20,15 @@ THE TURN CONTROL IS NOT A PREVIEW
 
 Lit and dim are not two boards. Both drapes are inside the one board and the control flips a single
 attribute, which is exactly what the play view will do sixty times a game rather than asking for a
-new 3.6 MB board each turn. Changing the seat rebuilds nothing either: it repoints three `<use>`
-elements at symbols that were embedded up front.
+new 3.6 MB board each turn. Changing the seat rebuilds nothing either: it repoints the handful of
+`<use>` elements a seat decides, at symbols that were embedded up front.
+
+SEAT AND STONES BOTH WRITE THE GEMSTONE SLOT
+
+The seat picks a coloured gemstone overlay; the stones control chooses between that and the shared
+black set, which belongs to no seat and has to stay available whichever seat you are on. Two
+controls over one `<use>`, so the page keeps them as state and repaints the slot from both -- if
+each wrote the slot directly, changing seat would silently drop you back to coloured stones.
 """
 import argparse
 import base64
@@ -122,9 +129,10 @@ code{background:#1b4b37;padding:1px 5px;border-radius:3px;font-size:11.5px}
 Portraits are whatever sits in the asset directory; seats are whatever the assembler knows.</p>
 <div class="panel">%(rows)s</div>
 <div class="stage">%(board)s</div>
-<p class="note">Changing the seat repoints three <code>&lt;use&gt;</code> elements &mdash; drape, dim
-drape and gemstones &mdash; at symbols already embedded, so the frame and portrait are never
-re-sent. The turn control sets one attribute, <code>data-turn</code>, and a stylesheet inside the
+<p class="note">Changing the seat repoints every <code>&lt;use&gt;</code> the seat decides &mdash;
+drape, dim drape, gemstones and the acolyte cube &mdash; at symbols already embedded, so the frame
+and portrait are never re-sent. The stones control overrides just the gemstones with the shared
+black set, and survives a change of seat. The turn control sets one attribute, <code>data-turn</code>, and a stylesheet inside the
 board shows the matching drape; that is the whole mechanism the play view needs. The portrait keeps
 the template's box and <code>xMidYMid meet</code>, so a replacement with different proportions fits
 by its own aspect &mdash; but it fits its <b>canvas</b>, not its visible ink, so artwork with
@@ -134,16 +142,38 @@ coordinates.</p>
 const OPTS = %(opts)s;
 const board = document.querySelector('.stage svg');
 const turnHolder = board.querySelector('[data-turn]');
-function apply(role, i){
+const slot = r => board.querySelector('[data-asset-role="' + r + '"]');
+
+// Seat and stones are two settings over one <use>, so they are kept as state and the gemstone slot
+// is repainted from both. Letting each control write the slot directly is what would make changing
+// seat silently drop you back to coloured stones.
+const state = {seat: null, stones: 'colour'};
+const bySeat = v => OPTS.seat.find(o => o.value === v);
+
+function paintStones(){
+  const black = (OPTS.stones || []).find(o => o.value === 'black');
+  const id = (state.stones === 'black' && black) ? black.id : bySeat(state.seat).parts.gems;
+  slot('gems').setAttribute('href', '#' + id);
+}
+function paintSeat(){
+  const o = bySeat(state.seat);
+  board.setAttribute('data-seat', o.value);
+  // Every role the seat decides, whatever they turn out to be -- naming them here is how the
+  // acolyte cube got left behind on the previous seat's colour when the stones control arrived.
+  // `gems` is the exception: paintStones owns that slot, because two controls write it.
+  for (const [r, id] of Object.entries(o.parts))
+    if (r !== 'gems') slot(r).setAttribute('href', '#' + id);
+  const sw = document.getElementById('sw-seatcolour');
+  if (sw) sw.style.background = o.swatch;   // the swatch follows whichever seat is selected
+  paintStones();
+}
+function choose(role, i){
   const o = OPTS[role][i];
-  if (role === 'turn') {
-    turnHolder.dataset.turn = o.value;
-  } else if (role === 'seat') {
-    board.setAttribute('data-seat', o.value);
-    for (const [r, id] of Object.entries(o.parts))
-      board.querySelector('[data-asset-role="' + r + '"]').setAttribute('href', '#' + id);
-  } else {
-    const el = board.querySelector('[data-asset-role="' + role + '"]');
+  if (role === 'turn')          turnHolder.dataset.turn = o.value;
+  else if (role === 'seat')   { state.seat = o.value; paintSeat(); }
+  else if (role === 'stones') { state.stones = o.value; paintStones(); }
+  else {
+    const el = slot(role);
     if (o.id) { el.setAttribute('href', '#' + o.id); el.style.display = ''; }
     else      { el.style.display = 'none'; }
   }
@@ -151,10 +181,12 @@ function apply(role, i){
     b.setAttribute('aria-pressed', b.dataset.i === String(i)));
 }
 document.querySelectorAll('button.opt').forEach(b =>
-  b.onclick = () => apply(b.dataset.role, +b.dataset.i));
-Object.keys(OPTS).forEach(r => {
+  b.onclick = () => choose(b.dataset.role, +b.dataset.i));
+// Seat first: everything else is painted relative to it.
+['seat', 'stones', 'turn', 'portrait'].forEach(r => {
+  if (!OPTS[r]) return;
   const i = OPTS[r].findIndex(o => o.on);
-  apply(r, i < 0 ? 0 : i);
+  choose(r, i < 0 ? 0 : i);
 });
 </script>
 """
@@ -180,8 +212,9 @@ def row(role, entries):
         if e.get("thumb"):
             inner = '<img src="%s" alt="">' % e["thumb"]
         elif e.get("swatch"):
-            inner = ('<span class="sw" style="background:%s"></span><span>%s</span>'
-                     % (e["swatch"], e["label"]))
+            inner = ('<span class="sw"%s style="background:%s"></span><span>%s</span>'
+                     % (' id="%s"' % e["swatch_id"] if e.get("swatch_id") else "",
+                        e["swatch"], e["label"]))
         else:
             inner = e["label"]
         btns.append('<button class="opt" data-role="%s" data-i="%d" title="%s">%s</button>'
@@ -228,6 +261,19 @@ def main():
                         "swatch": SWATCH.get(seat, "#8a7f62"), "on": seat == start_seat})
     opts["seat"] = entries
 
+    # Stones. The seat decides which coloured overlay exists; this decides whether the board wears
+    # it or the black set. Black is a shared asset, not a seat's, which is exactly why it is a
+    # second control rather than a fifth seat: it has to be available to whichever seat you are on.
+    entries = [{"value": "colour", "label": "seat colour", "swatch": SWATCH.get(start_seat),
+                "swatch_id": "sw-seatcolour", "on": True}]
+    black = assets_dir / "frames" / "stones_black.png"
+    if black.is_file():
+        entries.append({"value": "black", "label": "black",
+                        "id": add_symbol(asm, defs, "opt_gems_black", black),
+                        "swatch": SWATCH["black"], "on": False})
+    if len(entries) > 1:
+        opts["stones"] = entries
+
     opts["turn"] = [
         {"value": "lit", "label": "to play", "on": True},
         {"value": "dim", "label": "waiting", "on": False},
@@ -251,7 +297,7 @@ def main():
     root.attrib.pop("height", None)
     svg = ET.tostring(root, encoding="unicode")
 
-    rows = "".join(row(role, opts[role]) for role in ("seat", "turn", "portrait"))
+    rows = "".join(row(role, opts[role]) for role in ("seat", "stones", "turn", "portrait") if role in opts)
     page = PAGE % {"rows": rows, "board": svg, "opts": json.dumps(opts)}
 
     out = pathlib.Path(args.output) if args.output else \
