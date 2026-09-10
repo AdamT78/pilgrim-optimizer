@@ -78,6 +78,20 @@ jobs:
         run: |
           python verify_assets.py
           python gen_credits.py --check
+      - uses: actions/cache@v4
+        if: needs.changes.outputs.ui == 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium
+      - name: Install the browser the picker guards drive
+        if: needs.changes.outputs.ui == 'true'
+        run: python -m playwright install --with-deps chromium
+      - name: The gothic board and picker still agree with themselves
+        # Named here as well as living in tests/, and that is the point: the fast lane is gated on
+        # engine changes, so a design-only pull request -- exactly the kind that touches these
+        # files -- would never run them otherwise.
+        if: needs.changes.outputs.ui == 'true'
+        run: pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py -q
 
   fast:
     needs: changes
