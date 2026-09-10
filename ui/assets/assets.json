@@ -1,0 +1,163 @@
+{
+  "alphaThreshold": 8,
+  "note": "inkBoxPx is [x, y, width, height] in source pixels",
+  "assets": {
+    "acolyte_hood_cross": {
+      "src": "icons/population/acolyte/acolyte_hood_cross.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        110,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        110,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.9167,
+      "licence": "openai-generated",
+      "master": "_masters/population/acolyte_hood_cross.png"
+    },
+    "acolyte_tied_cloak": {
+      "src": "icons/population/acolyte/acolyte_tied_cloak.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        108,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        108,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.9,
+      "licence": "openai-generated",
+      "master": "_masters/population/acolyte_tied_cloak.png"
+    },
+    "serf_wide_hat": {
+      "src": "icons/population/serf/serf_wide_hat.png",
+      "class": "content-normalized",
+      "canvasPx": [
+        103,
+        120
+      ],
+      "inkBoxPx": [
+        0,
+        0,
+        103,
+        120
+      ],
+      "anchor": "ink-bottom-center",
+      "normalization": "ink-height",
+      "inkFill": [
+        1.0,
+        1.0
+      ],
+      "inkAspect": 0.8583,
+      "licence": "openai-generated",
+      "master": "_masters/population/serf_wide_hat.png"
+    },
+    "leader_female_hooded_sketch": {
+      "src": "portraits/leaders/leader_female_hooded_sketch.png",
+      "class": "coordinate-bound",
+      "canvasPx": [
+        320,
+        320
+      ],
+      "inkBoxPx": [
+        6,
+        3,
+        306,
+        313
+      ],
+      "anchor": "canvas",
+      "normalization": "none",
+      "inkFill": [
+        0.956,
+        0.978
+      ],
+      "inkAspect": 0.9776,
+      "licence": "openai-generated"
+    },
+    "leader_male_hooded_sketch": {
+      "src": "portraits/leaders/leader_male_hooded_sketch.png",
+      "class": "coordinate-bound",
+      "canvasPx": [
+        320,
+        320
+      ],
+      "inkBoxPx": [
+        4,
+        7,
+        308,
+        309
+      ],
+      "anchor": "canvas",
+      "normalization": "none",
+      "inkFill": [
+        0.963,
+        0.966
+      ],
+      "inkAspect": 0.9968,
+      "licence": "openai-generated"
+    },
+    "player_frame_gothic_red_01": {
+      "src": "frames/player_board/player_frame_gothic_red_01.png",
+      "class": "coordinate-bound",
+      "canvasPx": [
+        1024,
+        444
+      ],
+      "inkBoxPx": [
+        5,
+        4,
+        1015,
+        435
+      ],
+      "anchor": "canvas",
+      "normalization": "none",
+      "inkFill": [
+        0.991,
+        0.98
+      ],
+      "inkAspect": 2.3333,
+      "licence": "openai-generated",
+      "openingCirclePx": [
+        224.0,
+        209.0,
+        113.0
+      ],
+      "panelOpeningPx": [
+        351,
+        141,
+        610,
+        192
+      ]
+    }
+  },
+  "registers": {
+    "openai-generated": {
+      "source": "Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project.",
+      "rightsBasis": "Output rights assigned to the user under the OpenAI Europe Terms of Use.",
+      "permittedUse": "Commercial use, modification, embedding and distribution as part of the game.",
+      "thirdPartyAttribution": "None known or required.",
+      "exclusivity": "Not exclusive. Similar AI output may exist or be generated for others.",
+      "copyrightStatus": "Likely not independently protected by copyright in Sweden while wholly AI-generated. Human-authored modifications or the broader UI composition may receive protection if they satisfy the originality requirement.",
+      "notes": "Do not describe the original images as manually illustrated."
+    }
+  }
+}

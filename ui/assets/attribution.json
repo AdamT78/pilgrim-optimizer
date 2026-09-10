@@ -1,0 +1,166 @@
+{
+  "note": "Credit for every third-party file, and for the ones still awaited. This is the source the notices are generated from -- do not hand-edit THIRD-PARTY-NOTICES.md or credits-third-party-icons.html, run gen_credits.py.",
+  "modificationsDefault": "resized and recoloured for Pilgrim; SVG path data embedded in a Python-generated SVG",
+  "licences": {
+    "CC-BY-4.0": {
+      "name": "Creative Commons Attribution 4.0 International",
+      "url": "https://creativecommons.org/licenses/by/4.0/",
+      "attributionRequired": true,
+      "shareAlike": false
+    },
+    "CC-BY-3.0": {
+      "name": "Creative Commons Attribution 3.0 Unported",
+      "url": "https://creativecommons.org/licenses/by/3.0/",
+      "attributionRequired": true,
+      "shareAlike": false
+    },
+    "noun-project": {
+      "name": "The Noun Project, attribution required",
+      "url": "https://thenounproject.com/",
+      "attributionRequired": true,
+      "shareAlike": false
+    },
+    "openai-generated": {
+      "name": "OpenAI-generated output; rights assigned to the user under the OpenAI Europe Terms of Use. Not CC0, public domain or royalty-free stock",
+      "url": "https://openai.com/policies/eu-terms-of-use/",
+      "attributionRequired": false,
+      "shareAlike": false
+    },
+    "project": {
+      "name": "Drawn for Pilgrim; no third-party rights",
+      "url": null,
+      "attributionRequired": false,
+      "shareAlike": false
+    },
+    "unverified": {
+      "name": "Licence not established -- file must not be committed or shipped",
+      "url": null,
+      "attributionRequired": true,
+      "shareAlike": null
+    }
+  },
+  "files": {
+    "icons/resources/piety/fa_hands_praying.svg": {
+      "state": "present",
+      "title": "Hands Praying",
+      "creator": "Fonticons, Inc.",
+      "collection": "Font Awesome Free 6",
+      "source": "https://fontawesome.com/icons/hands-praying",
+      "licence": "CC-BY-4.0",
+      "shortlistId": "P1",
+      "role": "default piety mark in the shortlist prototype"
+    },
+    "icons/resources/wheat/fa_wheat_awn.svg": {
+      "state": "present",
+      "title": "Wheat Awn",
+      "creator": "Fonticons, Inc.",
+      "collection": "Font Awesome Free 6",
+      "source": "https://fontawesome.com/icons/wheat-awn",
+      "licence": "CC-BY-4.0",
+      "shortlistId": "G1",
+      "role": "default grain mark in the shortlist prototype"
+    },
+    "icons/resources/stone/gi_stone_block.svg": {
+      "state": "present",
+      "title": "Stone Block",
+      "creator": "Lorc",
+      "collection": "Game-icons.net",
+      "source": "https://game-icons.net/1x1/lorc/stone-block.html",
+      "licence": "CC-BY-3.0",
+      "shortlistId": "S1",
+      "role": "default stone mark in the shortlist prototype",
+      "modifications": "background rectangle removed, recoloured to the card's ink, and the SVG path data embedded in a Python-generated SVG"
+    },
+    "icons/resources/silver/gi_two_coins.svg": {
+      "state": "present",
+      "title": "Two Coins",
+      "creator": "Delapouite",
+      "collection": "Game-icons.net",
+      "source": "https://game-icons.net/1x1/delapouite/two-coins.html",
+      "licence": "CC-BY-3.0",
+      "shortlistId": "C1",
+      "role": "default silver mark in the shortlist prototype",
+      "modifications": "background rectangle removed, recoloured to the card's ink, and the SVG path data embedded in a Python-generated SVG"
+    },
+    "ui/markers/merchant_wagon.svg": {
+      "state": "present",
+      "title": "Wagon",
+      "creator": "Alzam",
+      "collection": "The Noun Project",
+      "source": null,
+      "licence": "noun-project",
+      "modifications": "spokes removed, recoloured, and the outline embedded in a Python-generated SVG"
+    },
+    "icons/population/serf/serf_wide_hat.png": {
+      "state": "present",
+      "title": "Serf, wide hat",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "modifications": "cropped to the alpha box and reduced to an ink height of 120 px",
+      "notes": "Do not describe the original images as manually illustrated."
+    },
+    "icons/population/acolyte/acolyte_hood_cross.png": {
+      "state": "present",
+      "title": "Acolyte, hooded with cross",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "modifications": "cropped to the alpha box and reduced to an ink height of 120 px",
+      "notes": "Do not describe the original images as manually illustrated."
+    },
+    "icons/population/acolyte/acolyte_tied_cloak.png": {
+      "state": "present",
+      "title": "Acolyte, tied cloak",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "modifications": "cropped to the alpha box and reduced to an ink height of 120 px",
+      "notes": "Do not describe the original images as manually illustrated."
+    },
+    "portraits/leaders/leader_female_hooded_sketch.png": {
+      "state": "present",
+      "title": "Leader, female, hooded sketch",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1254 px master to a 320 px production cut",
+      "notes": "Do not describe the original portraits as manually illustrated by a human. Not CC0, public domain or royalty-free stock: the accurate description is OpenAI-generated output, commercially usable, no third-party attribution known. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/portraits/leader_female_hooded_sketch.png"
+    },
+    "portraits/leaders/leader_male_hooded_sketch.png": {
+      "state": "present",
+      "title": "Leader, male, hooded sketch",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1254 px master to a 320 px production cut",
+      "notes": "Do not describe the original portraits as manually illustrated by a human. Not CC0, public domain or royalty-free stock: the accurate description is OpenAI-generated output, commercially usable, no third-party attribution known. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/portraits/leader_male_hooded_sketch.png"
+    },
+    "frames/player_board/player_frame_gothic_red_01.png": {
+      "state": "present",
+      "title": "Player-board frame, gothic red",
+      "creator": "OpenAI image generation",
+      "collection": null,
+      "source": null,
+      "licence": "openai-generated",
+      "generated": "2026-09-09",
+      "modifications": "resized from the 1905x826 master to a 1024x444 production cut, native aspect preserved",
+      "notes": "Transparent coordinate-bound overlay: preserve the native aspect ratio, never stretch with preserveAspectRatio=\"none\". Resource symbols placed on top keep their own separate attribution. Do not describe the frame as manually illustrated by a human. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
+      "master": "_masters/frames/player_frame_gothic_red_01.png"
+    }
+  },
+  "projectOwned": [
+    "icons/actions/*.svg",
+    "icons/resources/*/pilgrim_*.svg",
+    "portraits/*/pilgrim_*.svg"
+  ]
+}
