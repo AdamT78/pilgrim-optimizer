@@ -26,18 +26,23 @@ UI = pathlib.Path(__file__).resolve().parent
 RENDER = UI / "render"
 OUT = UI / "generated"
 
-# Each entry is a generator and the page it is expected to write.
+# Each entry is a generator, the arguments the sweep runs it with, and the page it must write.
+# The arguments matter for the gothic board: its own default is svg,html,png, and PNG needs
+# CairoSVG, which is a heavier dependency than a rebuild sweep should require.
 GENERATORS = [
-    ("gen_board.py", "board-3-2-step1.html"),
-    ("gen_picker.py", "player-board-picker.html"),
+    ("gen_board.py", [], "board-3-2-step1.html"),
+    ("gen_picker.py", [], "player-board-picker.html"),
+    ("gen_board_gothic.py", ["--formats", "html", "--name", "gothic-board"], "gothic-board.html"),
+    ("gen_picker_2.py", [], "gothic-board-picker.html"),
+    ("gen_board_2.py", [], "gothic-four-boards.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.
 BYPRODUCTS = {"_picker_scratch.html", "_log_final.html"}
 
 
-def run(name):
-    r = subprocess.run([sys.executable, str(RENDER / name)],
+def run(name, argv):
+    r = subprocess.run([sys.executable, str(RENDER / name), *argv],
                        capture_output=True, text=True, cwd=str(UI.parent))
     if r.returncode != 0:
         print("FAILED %s\n%s" % (name, r.stderr.strip()[-2000:]))
@@ -47,14 +52,14 @@ def run(name):
 def main(check=False):
     before = {}
     if check:
-        for _g, page in GENERATORS:
+        for _g, _a, page in GENERATORS:
             p = OUT / page
             if p.exists():
                 before[page] = p.read_bytes()
 
     ok = True
-    for gen, page in GENERATORS:
-        if not run(gen):
+    for gen, argv, page in GENERATORS:
+        if not run(gen, argv):
             ok = False
             continue
         p = OUT / page
@@ -70,7 +75,7 @@ def main(check=False):
         elif not check:
             print("%-28s %d KB" % (page, p.stat().st_size // 1024))
 
-    written = {page for _g, page in GENERATORS} | BYPRODUCTS
+    written = {page for _g, _a, page in GENERATORS} | BYPRODUCTS
     fossils = sorted(p.name for p in OUT.glob("*.html") if p.name not in written)
     if fossils:
         print("\nfossils in ui/generated/ that no generator writes: %s" % ", ".join(fossils))

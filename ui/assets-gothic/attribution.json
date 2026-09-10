@@ -1,0 +1,350 @@
+{
+  "note": "Credit and provenance for every file under ui/assets-gothic/. The gothic concept and all of its artwork was generated with ChatGPT (OpenAI) across several sessions, for the Pilgrim project. No third party requires attribution, but the record is kept in the same machine-readable shape as ui/assets/attribution.json so the same tooling can read it. Do not describe any of this artwork as manually illustrated.",
+  "reproducibility": "The originals cannot be regenerated. They came out of ChatGPT sessions with no prompt or seed on record, and image generation is not deterministic anyway, so a lost original is lost -- asking again produces different artwork, not the same artwork. Files marked reproducibleBy can be rebuilt from the originals by that script; everything else is an original in its own right and its only copy is the one in this repository.",
+  "modificationsDefault": "none; used as generated",
+  "licences": {
+    "openai-generated": {
+      "name": "OpenAI-generated output; rights assigned to the user under the OpenAI Europe Terms of Use. Not CC0, public domain or royalty-free stock",
+      "url": "https://openai.com/policies/eu-terms-of-use/",
+      "attributionRequired": false,
+      "shareAlike": false
+    }
+  },
+  "files": {
+    "frames/cloth_bone.png": {
+      "state": "present",
+      "title": "cloth bone",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to bone from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_bone_dim.png": {
+      "state": "present",
+      "title": "cloth bone dim",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to bone and darkened for a seat that is not to play, from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_pewter.png": {
+      "state": "present",
+      "title": "cloth pewter",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to pewter from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_pewter_dim.png": {
+      "state": "present",
+      "title": "cloth pewter dim",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to pewter and darkened for a seat that is not to play, from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_plum.png": {
+      "state": "present",
+      "title": "cloth plum",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to plum from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_plum_dim.png": {
+      "state": "present",
+      "title": "cloth plum dim",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to plum and darkened for a seat that is not to play, from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_red.png": {
+      "state": "present",
+      "title": "cloth red",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "alpha-split from frame_base.png: the drape only",
+      "reproducibleBy": null,
+      "notes": "alpha split of frames/frame_base.png, performed once and not scripted; treat as an original until a splitter lives in the repository"
+    },
+    "frames/cloth_sage.png": {
+      "state": "present",
+      "title": "cloth sage",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to sage from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/cloth_sage_dim.png": {
+      "state": "present",
+      "title": "cloth sage dim",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to sage and darkened for a seat that is not to play, from frames/cloth_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/frame_base.png": {
+      "state": "present",
+      "title": "frame base",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer"
+    },
+    "frames/frame_base_nocloth.png": {
+      "state": "present",
+      "title": "frame base nocloth",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "alpha-split from frame_base.png: the drape, tower, scroll and loose specks removed",
+      "reproducibleBy": null,
+      "notes": "alpha split of frames/frame_base.png, performed once and not scripted; treat as an original until a splitter lives in the repository"
+    },
+    "frames/frame_ornaments.png": {
+      "state": "present",
+      "title": "frame ornaments",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "alpha-split from frame_base.png: the tower, scroll and loose specks only, colour-neutral",
+      "reproducibleBy": null,
+      "notes": "alpha split of frames/frame_base.png, performed once and not scripted; treat as an original until a splitter lives in the repository"
+    },
+    "frames/stones_black.png": {
+      "state": "present",
+      "title": "stones black",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer"
+    },
+    "frames/stones_bone.png": {
+      "state": "present",
+      "title": "stones bone",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to bone from frames/stones_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/stones_pewter.png": {
+      "state": "present",
+      "title": "stones pewter",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to pewter from frames/stones_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/stones_plum.png": {
+      "state": "present",
+      "title": "stones plum",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to plum from frames/stones_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "frames/stones_red.png": {
+      "state": "present",
+      "title": "stones red",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer"
+    },
+    "frames/stones_sage.png": {
+      "state": "present",
+      "title": "stones sage",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "player board frame layer",
+      "modifications": "hue-set to sage from frames/stones_red.png by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "population/acolyte_gothic.png": {
+      "state": "present",
+      "title": "acolyte gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "population marker artwork"
+    },
+    "population/serf_gothic.png": {
+      "state": "present",
+      "title": "serf gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "population marker artwork"
+    },
+    "portraits/full/leader_female_hooded.png": {
+      "state": "present",
+      "title": "leader female hooded",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 1254 px cut for the game-start reveal"
+    },
+    "portraits/full/leader_male_hooded.png": {
+      "state": "present",
+      "title": "leader male hooded",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 1254 px cut for the game-start reveal"
+    },
+    "portraits/leader_female_hooded.png": {
+      "state": "present",
+      "title": "leader female hooded",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 640 px board cut"
+    },
+    "portraits/leader_male_hooded.png": {
+      "state": "present",
+      "title": "leader male hooded",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "leader portrait, 640 px board cut"
+    },
+    "resources/grain_gothic.png": {
+      "state": "present",
+      "title": "grain gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "resource icon artwork"
+    },
+    "resources/piety_gothic.png": {
+      "state": "present",
+      "title": "piety gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "resource icon artwork"
+    },
+    "resources/silver_gothic.png": {
+      "state": "present",
+      "title": "silver gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "resource icon artwork"
+    },
+    "resources/stone_gothic.png": {
+      "state": "present",
+      "title": "stone gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "resource icon artwork"
+    },
+    "ui/cube_acolyte_bone.svg": {
+      "state": "present",
+      "title": "acolyte cube, bone",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "collection": "Pilgrim gothic v2",
+      "licence": "openai-generated",
+      "role": "player's acolyte cube, in the seat colour",
+      "modifications": "three face fills hue-set to bone from ui/cube_acolyte_yellow.svg by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "ui/cube_acolyte_pewter.svg": {
+      "state": "present",
+      "title": "acolyte cube, pewter",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "collection": "Pilgrim gothic v2",
+      "licence": "openai-generated",
+      "role": "player's acolyte cube, in the seat colour",
+      "modifications": "three face fills hue-set to pewter from ui/cube_acolyte_yellow.svg by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "ui/cube_acolyte_plum.svg": {
+      "state": "present",
+      "title": "acolyte cube, plum",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "collection": "Pilgrim gothic v2",
+      "licence": "openai-generated",
+      "role": "player's acolyte cube, in the seat colour",
+      "modifications": "three face fills hue-set to plum from ui/cube_acolyte_yellow.svg by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    },
+    "ui/cube_acolyte_sage.svg": {
+      "state": "present",
+      "title": "acolyte cube, sage",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "collection": "Pilgrim gothic v2",
+      "licence": "openai-generated",
+      "role": "player's acolyte cube, in the seat colour",
+      "modifications": "three face fills hue-set to sage from ui/cube_acolyte_yellow.svg by ui/render/recolor_seat_layers.py",
+      "reproducibleBy": "ui/render/recolor_seat_layers.py"
+    }
+  },
+  "projectOwned": [
+    "template/*.svg",
+    "ui/*.svg",
+    "metadata/*.json",
+    "*.json"
+  ]
+}
