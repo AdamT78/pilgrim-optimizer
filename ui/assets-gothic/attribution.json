@@ -293,7 +293,8 @@
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
-      "role": "leader portrait, 640 px board cut"
+      "role": "leader portrait, 640 px board cut",
+      "modifications": "hem continued into the clip oval by ui/render/fix_portrait_hem.py; the file shipped with an alpha ramp in its lower sixth, which let the seat-coloured ground show through the robe"
     },
     "portraits/leader_male_gaunt.png": {
       "state": "present",
@@ -313,7 +314,8 @@
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
       "licence": "openai-generated",
-      "role": "leader portrait, 640 px board cut"
+      "role": "leader portrait, 640 px board cut",
+      "modifications": "hem continued into the clip oval by ui/render/fix_portrait_hem.py; the file shipped with an alpha ramp in its lower sixth, which let the seat-coloured ground show through the robe"
     },
     "portraits/leader_male_shaven.png": {
       "state": "present",
