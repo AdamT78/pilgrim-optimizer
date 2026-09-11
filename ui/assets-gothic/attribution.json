@@ -409,10 +409,20 @@
       "reproducibleBy": "ui/render/recolor_seat_layers.py"
     }
   },
+  "assetDirs": [
+    "portraits",
+    "frames",
+    "ui",
+    "population",
+    "resources",
+    "template",
+    "metadata"
+  ],
   "projectOwned": [
     "template/*.svg",
     "ui/*.svg",
     "metadata/*.json",
-    "*.json"
+    "*.json",
+    "*.md"
   ]
 }

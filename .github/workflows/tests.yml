@@ -78,6 +78,13 @@ jobs:
         run: |
           python verify_assets.py
           python gen_credits.py --check
+      # The gothic tree keeps its own attribution.json and had nothing running against it, which
+      # is the tree where the licences actually bite: portraits that may never be committed, an
+      # icon whose attribution has to ship with the game. It has no assets.json -- its art is not
+      # placed by ink box -- so only the records are checked, and the verifier says so.
+      - name: The gothic tree has a record for every asset
+        if: needs.changes.outputs.ui == 'true'
+        run: python ui/assets/verify_assets.py --root ui/assets-gothic
       - uses: actions/cache@v4
         if: needs.changes.outputs.ui == 'true'
         with:
@@ -91,7 +98,7 @@ jobs:
         # engine changes, so a design-only pull request -- exactly the kind that touches these
         # files -- would never run them otherwise.
         if: needs.changes.outputs.ui == 'true'
-        run: pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py -q
+        run: pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py tests/test_gothic_asset_guards.py -q
 
   fast:
     needs: changes
