@@ -1030,6 +1030,41 @@ apply();
 """
 
 
+# The files that decide what this page contains. Deliberately the SOURCES and not the board page
+# the components are lifted from: that one is generated too, so its mtime moves on every sweep, and
+# a stamp that moved during a sweep would be the very thing this is here to avoid.
+SOURCES = ("gen_layout_tool.py", "gen_board_2.py", "gen_board_gothic.py")
+
+
+def build_stamp(served):
+    """What the panel shows as "built ...", and it is two different questions.
+
+    SERVED, the stamp answers "is this page the one the file on disk would produce right now" --
+    the clock is exactly right for that, and it is what tells you a stale server is lying to you.
+
+    WRITTEN TO A FILE, the clock is not just useless but harmful: it makes the page differ from
+    itself on every build, so nothing can ever compare two builds and say whether a change to a
+    generator changed its output. A file's stamp should describe its CONTENT, so it comes from the
+    newest of the sources that decide the content. Two builds a second apart then agree, which is
+    what `rebuild_ui_pages.py --check` needs in order to mean anything.
+
+    And in UTC, which is the same argument one step further out. That check builds the two copies in
+    timezones fourteen hours apart precisely so that anything depending on WHERE it was built shows
+    up, and a source mtime rendered in local time is exactly that: the same file, the same content,
+    a different page on a laptop that has flown somewhere. The served stamp stays local, because
+    there it is answering "how long ago" for the person looking at it.
+    """
+    import datetime
+
+    if served:
+        return datetime.datetime.now().strftime("%H:%M:%S")
+    newest = max((HERE / name).stat().st_mtime for name in SOURCES if (HERE / name).is_file())
+    if LAYOUT_PATH.is_file():
+        newest = max(newest, LAYOUT_PATH.stat().st_mtime)
+    return datetime.datetime.fromtimestamp(newest, datetime.timezone.utc) \
+        .strftime("%Y-%m-%d %H:%M UTC") + " source"
+
+
 def build(layout, can_save):
     """Assemble the boards once, then hand the page everything it needs to re-lay them out."""
     spec = importlib.util.spec_from_file_location("gen_board_2", HERE / "gen_board_2.py")
@@ -1083,7 +1118,7 @@ def build(layout, can_save):
         "vb_w": g.VB_W, "vb_h": g.VB_H,
         "pad": g.STAGE_PAD,
         "can_save": "true" if can_save else "false",
-        "stamp": __import__("datetime").datetime.now().strftime("%H:%M:%S"),
+        "stamp": build_stamp(can_save),
     }
     # Every control the script reaches for has to be in the page it just built. `el('width_basis')`
     # on a page with no such element throws once, inside `apply`, and the tool then looks like it
