@@ -1,0 +1,24 @@
+{
+  "canvas_width": 1600,
+  "canvas_height": 1200,
+  "board_width": 405,
+  "board_gap": 30,
+  "special_height": 178,
+  "frame_border_y": 0.1,
+  "frame_border_x": 0,
+  "seats": 4,
+  "width_whole_board": false,
+  "column_gap_1": 80,
+  "column_gap_2": 0,
+  "row_gap": 36.8,
+  "wheel_slack_to_boxes": true,
+  "act_rule": 7,
+  "framed": [
+    "sa",
+    "alms",
+    "mkt",
+    "wheel"
+  ],
+  "margin_top": 28,
+  "margin_bottom": 78
+}

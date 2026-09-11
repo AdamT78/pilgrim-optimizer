@@ -35,6 +35,7 @@ GENERATORS = [
     ("gen_board_gothic.py", ["--formats", "html", "--name", "gothic-board"], "gothic-board.html"),
     ("gen_picker_2.py", [], "gothic-board-picker.html"),
     ("gen_board_2.py", [], "gothic-four-boards.html"),
+    ("gen_layout_tool.py", [], "layout-tool.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.

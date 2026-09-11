@@ -21,7 +21,13 @@
   </defs>
 
   <!-- Dynamic backgrounds calibrated to the transparent openings of frame_base.png. -->
-  <ellipse id="underlay-portrait" cx="409.5" cy="360" rx="216" ry="199" fill="#b8b1a5"/>
+  <!-- The portrait's ground carries the seat's colour, and it changes with the turn like the drape
+       does &#8212; through the same [data-turn] stylesheet, so no script is needed to keep the two in
+       step. Both ovals ship in every board and one is hidden, exactly as the two drapes do. -->
+  <g data-turn="lit">
+    <ellipse data-turn-layer="lit" id="underlay-portrait-lit" cx="409.5" cy="360" rx="216" ry="199" fill="#b8b1a5"/>
+    <ellipse data-turn-layer="dim" id="underlay-portrait-dim" cx="409.5" cy="360" rx="216" ry="199" fill="#b8b1a5" display="none"/>
+  </g>
   <rect id="underlay-panel" x="669" y="213" width="1117" height="399" rx="36" fill="#ead8b4"/>
   <rect id="underlay-upper" x="669" y="213" width="1117" height="174" rx="38" fill="#ead8b4"/>
   <rect id="underlay-resource-row" x="690" y="420" width="1070" height="210" rx="26" fill="#39352f"/>

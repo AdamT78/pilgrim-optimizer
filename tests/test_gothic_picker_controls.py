@@ -133,17 +133,31 @@ def test_returning_to_coloured_stones_gives_this_seats_own(page):
             "seat %s: coming back from black gave %r" % (seat, slots["gems"]))
 
 
-def test_the_turn_control_shows_exactly_one_drape(page):
-    """Computed style, not the attribute: the attribute is overridden by the board's stylesheet."""
+def test_the_turn_control_shows_exactly_one_layer_per_holder(page):
+    """Computed style, not the attribute: the attribute is overridden by the board's stylesheet.
+
+    Per HOLDER, not per board. There are two now -- the drape, and the ground behind the portrait,
+    which the seat colours and the turn dims with it -- so a board legitimately displays one layer
+    from each, and the older form of this test (every `data-turn-layer` in the board, expecting
+    exactly one) started failing the moment the second holder arrived. What it was really asking
+    was never "how many layers are visible" but "does any holder show none, or more than one", and
+    that question survives a third holder being added without anybody editing this file.
+    """
     for index, expected in ((0, "lit"), (1, "dim")):
         press(page, "turn", index)
-        shown = page.evaluate("""() => {
+        per_holder = page.evaluate("""() => {
           const b = document.querySelector('.stage svg');
-          return [...b.querySelectorAll('[data-turn-layer]')]
-            .filter(el => getComputedStyle(el).display !== 'none')
-            .map(el => el.getAttribute('data-turn-layer'));
+          return [...b.querySelectorAll('[data-turn]')].map(h =>
+            [...h.children]
+              .filter(el => el.hasAttribute('data-turn-layer')
+                         && getComputedStyle(el).display !== 'none')
+              .map(el => el.getAttribute('data-turn-layer')));
         }""")
-        assert shown == [expected], "turn %r displays %r" % (expected, shown)
+        assert len(per_holder) >= 2, (
+            "the board should have a turn holder for the drape and one for the portrait ground; "
+            "found %d" % len(per_holder))
+        assert all(shown == [expected] for shown in per_holder), (
+            "turn %r displays %r" % (expected, per_holder))
 
 
 def test_every_portrait_option_repoints_the_portrait(page):
