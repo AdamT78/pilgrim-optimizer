@@ -57,14 +57,24 @@ def legacy_template(path, out):
             node.set("href", "../frames/frame_base.png")
         elif role == "frame_ornaments":
             parents[node].remove(node)
-    # The turn holder is emptied rather than deleted. An empty <g> draws nothing, so the legacy
+    # The turn holders are emptied rather than deleted. An empty <g> draws nothing, so the legacy
     # board is unchanged, and the assembler's guard that the template still HAS a turn holder stays
     # armed -- weakening that guard to let this test run would be trading the real check for the
     # test of it.
-    holder = root.find(f".//{q('g')}[@data-turn]")
-    if holder is not None:
-        for child in list(holder):
-            holder.remove(child)
+    #
+    # The DRAPE's holder, named rather than taken first. There are two holders now -- the drape,
+    # and the ground behind the portrait -- and the portrait's comes first in the document, so
+    # `find` took the wrong one: it left the drape images in a template whose config no longer
+    # names any drape, and the build died on a missing role. Emptying both instead is just as
+    # wrong in the other direction -- it deletes the portrait's ground from the legacy board only,
+    # and the comparison then reports the oval as 133,709 changed pixels, which is a difference
+    # this script exists to say nothing about. The frame is what is being compared; everything
+    # else must be identical on both boards, including the things that arrived after it.
+    drape = next((h for h in root.findall(f".//{q('g')}[@data-turn]")
+                  if any((c.get("data-asset-role") or "").startswith("cloth") for c in h)), None)
+    if drape is not None:
+        for child in list(drape):
+            drape.remove(child)
     if frame is None:
         raise SystemExit("template has no frame_base role; nothing to compare against")
     ET.ElementTree(root).write(out, encoding="unicode")
