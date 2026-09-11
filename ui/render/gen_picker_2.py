@@ -141,7 +141,9 @@ coordinates.</p>
 <script>
 const OPTS = %(opts)s;
 const board = document.querySelector('.stage svg');
-const turnHolder = board.querySelector('[data-turn]');
+// Every holder: the drape is one, the portrait's ground is another. Setting only the first is how
+// a dim board would keep a lit seat's portrait behind the leader's head.
+const turnHolders = [...board.querySelectorAll('[data-turn]')];
 const slot = r => board.querySelector('[data-asset-role="' + r + '"]');
 
 // Seat and stones are two settings over one <use>, so they are kept as state and the gemstone slot
@@ -163,13 +165,19 @@ function paintSeat(){
   // `gems` is the exception: paintStones owns that slot, because two controls write it.
   for (const [r, id] of Object.entries(o.parts))
     if (r !== 'gems') slot(r).setAttribute('href', '#' + id);
+  // ...and the fills the seat decides. Both ovals are repainted, not just the visible one: the
+  // turn control shows the other a click later and must not find the previous seat's colour.
+  const oval = {portrait_background_lit: 'underlay-portrait-lit',
+                portrait_background_dim: 'underlay-portrait-dim'};
+  for (const [k, id] of Object.entries(oval))
+    board.querySelector('[id="' + id + '"]').setAttribute('fill', o.fills[k]);
   const sw = document.getElementById('sw-seatcolour');
   if (sw) sw.style.background = o.swatch;   // the swatch follows whichever seat is selected
   paintStones();
 }
 function choose(role, i){
   const o = OPTS[role][i];
-  if (role === 'turn')          turnHolder.dataset.turn = o.value;
+  if (role === 'turn')          turnHolders.forEach(h => h.dataset.turn = o.value);
   else if (role === 'seat')   { state.seat = o.value; paintSeat(); }
   else if (role === 'stones') { state.stones = o.value; paintStones(); }
   else {
@@ -257,7 +265,11 @@ def main():
             if role in ("frame_base", "frame_ornaments"):
                 continue        # colour-neutral: every seat draws the same file
             parts[role] = add_symbol(asm, defs, f"opt_{role}_{seat}", assets_dir / rel)
+        # The portrait's ground is a FILL, not an asset, so it cannot ride on `parts` -- those are
+        # all <use> targets. It travels on the same button all the same, because it is one more
+        # thing the seat decides and the whole point of this button is that they move together.
         entries.append({"value": seat, "label": seat, "parts": parts,
+                        "fills": asm.seat_fills(seat),
                         "swatch": SWATCH.get(seat, "#8a7f62"), "on": seat == start_seat})
     opts["seat"] = entries
 

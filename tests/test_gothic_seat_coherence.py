@@ -34,7 +34,8 @@ SVG_NS = "http://www.w3.org/2000/svg"
 
 # Roles the config may name explicitly; they are cleared before each build so the seat supplies them
 # and the test is measuring the seat rather than whatever the config happened to be left holding.
-SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems", "acolyte_cube")
+SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems", "acolyte_cube",
+              "portrait_background", "portrait_background_lit", "portrait_background_dim")
 
 
 def q(tag: str) -> str:
@@ -112,13 +113,26 @@ def test_no_board_mentions_another_seats_colour(asm):
             )
 
 
+def drape_holder(root):
+    """The turn holder that carries the DRAPE.
+
+    There is more than one holder now -- the portrait ground has its own -- and the portrait's comes
+    first in document order, so `find` returns the wrong one. Naming what is wanted rather than
+    taking the first is the fix; the count itself is checked by its own test.
+    """
+    for holder in root.findall(f".//{q('g')}[@data-turn]"):
+        if any(child.get("data-asset-role") == "cloth_lit" for child in holder):
+            return holder
+    return None
+
+
 def test_the_turn_shows_exactly_one_drape(asm):
     """Both drapes ship in the board and one is hidden; neither zero nor two is a board."""
     for seat in asm.SEAT_COLORS:
         for turn in ("lit", "dim"):
             root = build(asm, seat, turn)
-            holder = root.find(f".//{q('g')}[@data-turn]")
-            assert holder is not None, "the template has no turn holder"
+            holder = drape_holder(root)
+            assert holder is not None, "the template has no drape turn holder"
             assert holder.get("data-turn") == turn
             shown = [use.get("data-turn-layer") for use in holder.iter(q("use"))
                      if use.get("data-turn-layer") and use.get("display") != "none"]
@@ -159,6 +173,105 @@ def test_the_committed_config_is_coherent(asm):
             f"for {expected!r}. Something is overriding the seat -- check for a leftover "
             f"{role!r} key in production_test_config.json."
         )
+
+
+def lab_to_hex(lightness: float, chroma: float, hue: float) -> str:
+    """CIE Lab LCh to an sRGB hex, so the committed palette can be checked rather than trusted.
+
+    Deliberately a local implementation and not an import: the point is to arrive at the same
+    numbers by a second route. A helper shared with the assembler would agree with itself.
+    """
+    import math
+
+    a, b = chroma * math.cos(math.radians(hue)), chroma * math.sin(math.radians(hue))
+    fy = (lightness + 16) / 116
+    fx, fz = fy + a / 500, fy - b / 200
+
+    def finv(t):
+        return t ** 3 if t ** 3 > 216 / 24389 else (116 * t - 16) * 27 / 24389
+
+    x, y, z = (finv(fx) * 0.95047, finv(fy) * 1.0, finv(fz) * 1.08883)
+    lin = (3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
+           -0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
+           0.0556434 * x - 0.2040259 * y + 1.0572252 * z)
+    out = []
+    for v in lin:
+        v = min(max(v, 0.0), 1.0)
+        v = 12.92 * v if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055
+        out.append(int(round(v * 255)))
+    return "#%02x%02x%02x" % tuple(out)
+
+
+def test_the_portrait_palette_is_what_the_recipe_says(asm):
+    """Every committed colour, re-derived from L*, chroma and hue.
+
+    The table is written out as hex so the assembler does not carry a colour-space conversion it
+    would use once at import. The cost of that is a table of sixteen hex digits per seat that no
+    reader can check by eye, which is exactly the kind of thing that survives a typo for months.
+    """
+    for seat, (lit, dim) in asm.PORTRAIT_BG_LC.items():
+        hue = asm.PORTRAIT_BG_HUE[seat]
+        for turn, (lightness, chroma) in (("lit", lit), ("dim", dim)):
+            expected = lab_to_hex(lightness, chroma, hue)
+            assert asm.PORTRAIT_BG[seat][turn] == expected, (
+                f"{seat}/{turn} is {asm.PORTRAIT_BG[seat][turn]}, but L* {lightness}, "
+                f"chroma {chroma}, hue {hue} is {expected}"
+            )
+
+
+def test_each_seat_signals_its_turn_somehow(asm):
+    """Lit and dim have to be tellable apart, by whichever axis that seat uses.
+
+    Three seats move in chroma and ash moves in lightness, so neither axis alone can be asserted --
+    and asserting only "the two hexes differ" would pass a pair that differs by one unit. This asks
+    the question the eye asks: is the change big enough to see?
+    """
+    for seat, (lit, dim) in asm.PORTRAIT_BG_LC.items():
+        moved = abs(lit[0] - dim[0]) + abs(lit[1] - dim[1])
+        assert moved >= 10, (
+            f"{seat}: lit and dim differ by only {moved:.1f} in L* and chroma together, which is "
+            f"too little to read as a turn indicator"
+        )
+
+
+def test_the_portrait_ground_follows_the_seat_and_the_turn(asm):
+    """The two ovals, read off the finished board rather than off the table that made them."""
+    seen = {}
+    for seat in asm.SEAT_COLORS:
+        root = build(asm, seat)
+        fills = {node.get("id"): node.get("fill") for node in root.iter(q("ellipse"))
+                 if (node.get("id") or "").startswith("underlay-portrait")}
+        assert set(fills) == {"underlay-portrait-lit", "underlay-portrait-dim"}, (
+            f"{seat}: the board's portrait ovals are {sorted(fills)}"
+        )
+        assert fills["underlay-portrait-lit"] == asm.PORTRAIT_BG[seat]["lit"]
+        assert fills["underlay-portrait-dim"] == asm.PORTRAIT_BG[seat]["dim"]
+        assert fills["underlay-portrait-lit"] != fills["underlay-portrait-dim"], (
+            f"{seat}: both turns draw the same ground, so the turn does nothing behind the portrait"
+        )
+        seen[seat] = tuple(fills.values())
+    assert len(set(seen.values())) == len(seen), (
+        f"two seats share a portrait ground, so the oval no longer identifies the seat: {seen}"
+    )
+
+
+def test_every_turn_holder_is_set_to_the_turn(asm):
+    """There is more than one holder now, and `find` would only ever have set the first."""
+    for seat in asm.SEAT_COLORS:
+        for turn in ("lit", "dim"):
+            root = build(asm, seat, turn)
+            holders = root.findall(f".//{q('g')}[@data-turn]")
+            assert len(holders) >= 2, (
+                "the template should have a turn holder for the drape and one for the portrait "
+                f"ground; found {len(holders)}"
+            )
+            for holder in holders:
+                assert holder.get("data-turn") == turn
+                shown = [child.get("data-turn-layer") for child in holder
+                         if child.get("data-turn-layer") and child.get("display") != "none"]
+                assert shown == [turn], (
+                    f"{seat}/{turn}: a holder displays {shown}, expected exactly ['{turn}']"
+                )
 
 
 def test_the_shared_frame_layers_are_shared(asm):

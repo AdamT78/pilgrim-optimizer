@@ -56,6 +56,49 @@ SEAT_COLORS = ("sage", "pewter", "plum", "bone")
 
 TURNS = ("lit", "dim")
 
+# THE PORTRAIT BACKGROUND, PER SEAT AND PER TURN.
+#
+# The oval behind a leader's head used to be one warm grey, #b8b1a5, for all four seats. Measuring
+# it was the whole answer: in CIE Lab that grey is L* 72.5, chroma 7.0, hue 87 deg, and the BONE
+# drape is chroma 7.1, hue 78 deg. It was never a neutral -- it was already the bone seat's colour,
+# lightened. So the other three seats are not a new idea, they are the same recipe applied:
+#
+#     L* 72.5 throughout        a face has to stay legible, so lightness does not carry the signal
+#     hue = that seat's drape   measured off the cloth PNGs, not chosen by eye
+#     chroma = the turn         28 for the seat to play, 13 for a seat waiting
+#
+# Chroma rather than lightness is what says whose turn it is here, and it is the second voice
+# saying it -- the drape already says it much louder, in lightness. A portrait that dimmed with the
+# board would put the player's own face in shadow on three boards out of four.
+#
+# BONE SIGNALS WITH LIGHTNESS INSTEAD, and it is forced rather than chosen. Its hue has nowhere to
+# go but yellow, so at chroma 28 it stops reading as ash and starts reading as tan -- it would be
+# the one seat whose identity the scheme damages. So bone is the seat that moves in L* rather than
+# in chroma: 86 to play against 72.5 waiting, pale to near-white, with its chroma falling as it
+# rises so it whitens rather than yellows. Its dim state is the grey the board has always had.
+#
+# That makes bone the exception in the mechanism as well as in the numbers, which is worth stating
+# plainly rather than hiding behind a table: three seats say "my turn" by becoming more coloured,
+# and ash says it by becoming brighter. Both readings are available at a glance because no two
+# seats are ever being compared on the same axis -- you are comparing a board with itself.
+#
+# tests/test_gothic_seat_coherence.py re-derives every one of these from Lab and fails on a typo.
+PORTRAIT_BG = {
+    "sage":   {"lit": "#a0ba8a", "dim": "#aab69f"},   # hue 129.6, L* 72.5, chroma 28 / 13
+    "pewter": {"lit": "#84b7e3", "dim": "#a0b4c9"},   # hue 258.9, L* 72.5, chroma 28 / 13
+    "plum":   {"lit": "#cfa4cf", "dim": "#c0acbf"},   # hue 325.8, L* 72.5, chroma 28 / 13
+    "bone":   {"lit": "#e1d5c8", "dim": "#bab0a5"},   # hue  77.9, L* 86 / 72.5, chroma 8 / 7
+}
+PORTRAIT_BG_HUE = {"sage": 129.6, "pewter": 258.9, "plum": 325.8, "bone": 77.9}
+# seat -> ((lit L*, lit chroma), (dim L*, dim chroma)). Three seats hold L* and move chroma; bone
+# moves L* and holds chroma. The test re-derives the hexes above from exactly these numbers.
+PORTRAIT_BG_LC = {
+    "sage":   ((72.5, 28), (72.5, 13)),
+    "pewter": ((72.5, 28), (72.5, 13)),
+    "plum":   ((72.5, 28), (72.5, 13)),
+    "bone":   ((86.0, 8), (72.5, 7)),
+}
+
 
 def seat_layers(seat: str) -> dict[str, str]:
     """Every asset a seat's colour decides, from the one colour name.
@@ -83,6 +126,22 @@ def seat_layers(seat: str) -> dict[str, str]:
         # grey serf cube a hand's width away. Bone is the one to watch there -- it is drawn warm
         # cream rather than pearl, which keeps it dE 41 from that grey instead of merging with it.
         "acolyte_cube": f"ui/cube_acolyte_{seat}.svg",
+    }
+
+
+def seat_fills(seat: str) -> dict[str, str]:
+    """The colours a seat decides, as opposed to the files it decides.
+
+    Kept apart from `seat_layers` because the caller does different things with them -- one names
+    assets to embed, the other names fills to write -- and because a fill that arrived in the layer
+    table would be looked for on disk.
+    """
+    if seat not in SEAT_COLORS:
+        raise BuildError("Unknown seat %r. The seat colours are %s."
+                         % (seat, ", ".join(SEAT_COLORS)))
+    return {
+        "portrait_background_lit": PORTRAIT_BG[seat]["lit"],
+        "portrait_background_dim": PORTRAIT_BG[seat]["dim"],
     }
 
 
@@ -266,7 +325,8 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
 
     # Board underlay colours.
     underlay = {
-        "underlay-portrait": config.get("portrait_background", "#b8b1a5"),
+        "underlay-portrait-lit": config.get("portrait_background_lit", "#b8b1a5"),
+        "underlay-portrait-dim": config.get("portrait_background_dim", "#b8b1a5"),
         "underlay-panel": config.get("information_panel_fill", "#ead8b4"),
         "underlay-upper": config.get("information_panel_fill", "#ead8b4"),
         "underlay-resource-row": config.get("resource_row_fill", "#39352f"),
@@ -281,20 +341,25 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     turn = str(config.get("turn", "lit"))
     if turn not in TURNS:
         raise BuildError(f"turn must be one of {TURNS}, not {turn!r}")
-    holder = root.find(f".//{q('g')}[@data-turn]")
-    if holder is None:
+    # EVERY holder, not the first one. There are two now -- the drape and the portrait background --
+    # and `find` would have set the drape and left the oval on whichever state the template was
+    # saved in. That failure is invisible in the markup, which is well formed either way, and shows
+    # up only as a dim board wearing a lit seat's portrait.
+    holders = root.findall(f".//{q('g')}[@data-turn]")
+    if not holders:
         raise BuildError("Template has no <g data-turn>; the turn toggle cannot be set. "
                          "See the frame layer comment in player_board_template.svg.")
-    holder.set("data-turn", turn)
-    for layer in holder.findall(q("image")):
-        state = layer.get("data-turn-layer")
-        if state is None:
-            continue
-        # Written statically as well as in CSS, for renderers that do not apply the stylesheet.
-        if state == turn:
-            layer.attrib.pop("display", None)
-        else:
-            layer.set("display", "none")
+    for holder in holders:
+        holder.set("data-turn", turn)
+        for layer in list(holder):
+            state = layer.get("data-turn-layer")
+            if state is None:
+                continue
+            # Written statically as well as in CSS, for renderers that do not apply the stylesheet.
+            if state == turn:
+                layer.attrib.pop("display", None)
+            else:
+                layer.set("display", "none")
 
     root.set("role", "img")
     root.set("aria-label", str(config.get("aria_label", "Pilgrim Gothic v2 player board")))
@@ -449,6 +514,15 @@ def apply_seat(config: dict[str, Any], seat: str | None = None) -> dict[str, Any
     if config.get("seat"):
         for role, path in seat_layers(str(config["seat"])).items():
             config.setdefault(role, path)
+        for role, fill in seat_fills(str(config["seat"])).items():
+            config.setdefault(role, fill)
+    # `portrait_background` was one colour for every seat and both turns. A config still setting it
+    # means what it always meant, and it outranks the seat like any other explicit value -- but it
+    # now has to reach both states, or the turn toggle would show a seat-coloured oval one moment
+    # and that config's colour the next.
+    if config.get("portrait_background"):
+        config.setdefault("portrait_background_lit", config["portrait_background"])
+        config.setdefault("portrait_background_dim", config["portrait_background"])
     missing = [r for r in ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems")
                if not config.get(r)]
     if missing:
