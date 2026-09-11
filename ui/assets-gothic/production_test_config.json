@@ -25,6 +25,7 @@
   "information_panel_fill": "#ead8b4",
   "resource_row_fill": "#39352f",
   "resource_value_fill": "#ead8b4",
+  "resource_layout": "disc",
   "resource_fills": {
     "piety": "#5b2d62",
     "grain": "#e2c27c",

@@ -521,7 +521,12 @@ const L = %(layout)s, SCREENS = %(screens)s, CAN_W = %(canvas_width)s;
 const SA = %(sa)s, VB = {w: %(vb_w)s, h: %(vb_h)s}, FRAMEABLE = %(frameable)s;
 // The built-in defaults, so Load can start a file from them rather than from whatever is on screen.
 const DEFAULTS = %(defaults)s;
-const COUNT_AT_DESIGN = 8.9, DESIGN_W = 339.4;   // the resource counts, at the design board width
+// The resource count's font size, in the board's own viewBox units, READ OFF THE BOARDS THIS PAGE
+// IS SHOWING rather than remembered here. It used to be a hand-copied 8.9 px "at the design board
+// width", which was correct for exactly as long as nobody changed the assembler -- and the first
+// time anybody did, the readout went on reporting the old number with complete confidence. A
+// figure this page quotes about a board it is holding should be measured from that board.
+const COUNT_FONT = %(count_font)s;
 // The two SIDES only. Top and bottom are sliders; see DEFAULTS.margin_top.
 const PAD = %(pad)s;
 // Both edges of the gold, measured off frame_base.png.
@@ -774,7 +779,7 @@ function apply(){
   el('fitwrap').style.width = (vw*show) + 'px';
   el('fitwrap').style.height = (vh*show) + 'px';
 
-  const countPx = COUNT_AT_DESIGN * (bw/DESIGN_W) * zoom;
+  const countPx = COUNT_FONT * (bw / VB.w) * zoom;
 
   for (const k of KEYS) el('v-'+k).textContent =
     k.startsWith('frame_border') ? Math.round(L[k]*1000)/10 + '%%'
@@ -1065,6 +1070,30 @@ def build_stamp(served):
         .strftime("%Y-%m-%d %H:%M UTC") + " source"
 
 
+def count_font(roots, asm, config):
+    """The smallest font a resource count can be drawn at, in viewBox units.
+
+    Two sources, and both are needed. The boards give the size the template draws -- the strip's,
+    which lives nowhere else. The assembler gives the sizes its layout can CHOOSE between, which
+    the boards cannot show: the disc shrinks a two-digit count to fit the quadrant, and a sample
+    config holding 4, 0, 3 and 1 never produces one. Reporting the size the sample happens to use
+    would tell you the counts are legible and stay silent about the double-digit purse a real game
+    hands a player.
+    """
+    sizes = [float(f) for f in asm.resource_count_fonts(config)]
+    for root in roots:
+        for group in root.iter("{http://www.w3.org/2000/svg}g"):
+            if not (group.get("id") or "").startswith("resource-"):
+                continue
+            text = group.find("{http://www.w3.org/2000/svg}text")
+            if text is not None and text.get("font-size"):
+                sizes.append(float(text.get("font-size")))
+    if not sizes:
+        raise SystemExit("no resource counts found on the boards, so the readout cannot say how "
+                         "large they render. Has the resource group's <text> been renamed?")
+    return min(sizes)
+
+
 def build(layout, can_save):
     """Assemble the boards once, then hand the page everything it needs to re-lay them out."""
     spec = importlib.util.spec_from_file_location("gen_board_2", HERE / "gen_board_2.py")
@@ -1115,6 +1144,7 @@ def build(layout, can_save):
         "framed_buttons": "".join(
             '<button type="button" data-slot="%s">%s</button>' % (slot, name)
             for slot, name in FRAMEABLE),
+        "count_font": count_font(roots, asm, asm.read_json(config)),
         "vb_w": g.VB_W, "vb_h": g.VB_H,
         "pad": g.STAGE_PAD,
         "can_save": "true" if can_save else "false",

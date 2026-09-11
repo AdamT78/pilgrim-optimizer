@@ -145,6 +145,165 @@ def seat_fills(seat: str) -> dict[str, str]:
     }
 
 
+# THE TWO RESOURCE BOX LAYOUTS.
+#
+#   strip   what the template draws: the icon in the upper 132 px, the count on a parchment band
+#           across the foot. The default, and the only thing a config without this key gets.
+#   disc    the icon fills the whole box, and the count sits on a quarter disc tucked into the
+#           lower right corner -- a circle centred exactly on that corner, so the box's own clip
+#           leaves its upper-left quadrant and nothing else.
+#
+# NO PER-RESOURCE COORDINATES, and that is the point of writing it this way. Every number below is
+# derived from the box the template already declares, so the four boxes need four rectangles and
+# not four sets of disc-and-numeral positions -- and a fifth resource, whenever one arrives, needs
+# a rectangle and nothing more. The template stays the one place a coordinate lives; this is the
+# one place a RULE about coordinates lives.
+RESOURCE_LAYOUTS = ("strip", "disc")
+DISC_RADIUS = 100.0         # of the quarter disc, from the box's lower right corner
+# Where the numeral sits along the diagonal, as a fraction of the radius. A quarter disc's centre
+# of AREA is 4/3pi = 0.424 of the way out, and that is where this started -- but the area is
+# bunched at the corner while the parchment you can SEE runs on up the arc, so a numeral placed
+# there reads as pushed into the corner rather than sitting in the shape. 0.45 is the eye's answer
+# rather than the integral's, and it buys the clearance the numeral needs below it besides.
+DISC_TEXT_FRAC = 0.45
+# TWO SIZES, BY HOW MANY DIGITS THERE ARE, and it is the quadrant that forces it. A quarter disc
+# is widest along its diagonal, so one numeral has room to spare while two are already pressing the
+# arc. Measured against the drawn ink rather than the em box -- the em box carries ascender space
+# these lining figures never use, and sizing to it would leave the disc looking half empty, which
+# is what it looked like. Usable radius is 88.5, the arc less its own 3 px rule:
+#
+#     one digit    74: reaches 89.3 of the 98.5 arc, clears the box's foot by 18
+#     two digits   62: reaches 95.0 of the 98.5 arc, clears the box's foot by 23
+#
+# All three edges of the quadrant are measured, not just the arc, and that correction is the reason
+# the radius is 100 rather than 90. The first sizing pass measured the numeral's ink inside the
+# box's own crop -- so ink the box CLIPPED was invisible to it, and it could only ever report the
+# arc. It said there was room. What it could not see was that the numeral had 12 units of parchment
+# beneath it and 22 to its right, which at a 405 px board is under three pixels, and reads exactly
+# as a number sinking out of its disc.
+#
+# Silver is the reason two digits have to fit at all: EXCESS_RESOURCE_CAP trims stone and wheat to
+# 6 at round end, but nothing caps silver, so a double-digit purse is a normal board state.
+DISC_FONT = 74.0            # one digit
+DISC_FONT_WIDE = 62.0       # two or more
+DISC_ICON_INSET = 10.0      # breathing room between the icon and the box edge, all four sides
+# THE DISC IS A SHADOW, NOT A PATCH. It was parchment with a drawn arc, which made the corner read
+# as an inlaid piece of furniture -- a second object sitting on the box. Painting black at 60%%
+# instead lets each field darken in its OWN colour, so the purple stays purple and the blue stays
+# blue, and the corner reads as shade the icon casts rather than as something added. The arc keeps
+# no rule for the same reason: a shadow with a drawn edge is neither a shadow nor an inlay.
+#
+# 60%% rather than something gentler because of what the numeral has to do on top of it. The pale
+# fields are the weak case -- a pale field darkened is still pale -- and at 45%% the count sits at
+# 4.3:1 against grain and stone, against 6.8:1 at 60%%. That count renders near 8 px on a 14 inch
+# screen, which is already at the legibility floor the layout tool warns about, so the contrast is
+# not the place to economise.
+DISC_FILL = "#000000"
+DISC_FILL_OPACITY = 0.60
+
+
+INK = "#24190f"             # the board's text colour, and the dark half of the numeral's choice
+
+
+def _luminance(colour: str) -> float:
+    channels = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast(a: str, b: str) -> float:
+    """WCAG contrast ratio, so "is this readable" is a number rather than an opinion."""
+    low, high = sorted((_luminance(a), _luminance(b)))
+    return (high + 0.05) / (low + 0.05)
+
+
+def darken(colour: str, opacity: float) -> str:
+    """What a field becomes under the disc's black at this opacity."""
+    return "#%02x%02x%02x" % tuple(
+        int(round(int(colour[i:i + 2], 16) * (1 - opacity))) for i in (1, 3, 5))
+
+
+def apply_disc_layout(group, rects, name, parchment):
+    """Rebuild one resource box as icon-fills-the-box with the count on a corner disc.
+
+    Everything is measured off the group's own rectangles: the coloured field gives the origin and
+    width, the noise overlay gives the full height -- it is the one rect that always spanned the
+    whole box, which is why it is the honest source for that number rather than 179 written here.
+    """
+    box, strip = rects[0], rects[1]
+    full = next((r for r in rects if float(r.get("height", 0)) > float(box.get("height", 0))), None)
+    if full is None:
+        raise BuildError(
+            f"Resource group '{name}' has no rect spanning the whole box, so the disc layout "
+            f"cannot tell how tall the box is. The template's third rect is the noise overlay and "
+            f"is normally that rect.")
+    x, y = float(box.get("x")), float(box.get("y"))
+    w, h = float(box.get("width")), float(full.get("height"))
+
+    box.set("height", str(h))                       # the colour now runs the full box
+    group.remove(strip)                             # the parchment band and the rule under it go
+    for child in list(group):
+        if child.tag == q("line"):
+            group.remove(child)
+
+    icon = group.find(f".//*[@data-asset-role='resource:{name}']")
+    if icon is None:
+        raise BuildError(f"Resource group '{name}' has no icon to fill the box with")
+    icon.set("x", str(x + DISC_ICON_INSET))
+    icon.set("y", str(y + DISC_ICON_INSET))
+    icon.set("width", str(w - 2 * DISC_ICON_INSET))
+    icon.set("height", str(h - 2 * DISC_ICON_INSET))
+    icon.set("preserveAspectRatio", "xMidYMid meet")
+
+    text = group.find(q("text"))
+    if text is None:
+        raise BuildError(f"Resource group '{name}' has no count to place")
+    group.remove(text)                              # removed and re-appended, so it draws on top
+
+    cx, cy = x + w, y + h
+    disc = ET.SubElement(group, q("circle"))
+    disc.set("cx", str(cx))
+    disc.set("cy", str(cy))
+    disc.set("r", str(DISC_RADIUS))
+    disc.set("fill", DISC_FILL)
+    disc.set("fill-opacity", str(DISC_FILL_OPACITY))
+    disc.set("data-resource-disc", name)
+
+    # The numeral's colour is DERIVED from what it will actually sit on, never set beside the fill
+    # and hoped to match. Someone deepening the shadow later would otherwise leave a dark numeral on
+    # a dark ground, and the count is the one thing on this box that has to be readable.
+    ground = darken(str(box.get("fill") or "#808080"), DISC_FILL_OPACITY) \
+        if DISC_FILL == "#000000" else DISC_FILL
+    text.set("fill", parchment if contrast(parchment, ground) >= contrast(INK, ground) else INK)
+
+    # A quarter disc's centre of AREA lies 4r/3pi from the corner along each axis, not r/2. Placing
+    # the numeral there is the difference between a number sitting in the shape and one that looks
+    # pushed into the curve; the eye is unforgiving about this and it costs one constant.
+    offset = DISC_RADIUS * DISC_TEXT_FRAC
+    font = DISC_FONT if len((text.text or "").strip()) < 2 else DISC_FONT_WIDE
+    text.set("x", str(cx - offset))
+    text.set("y", str(cy - offset + font * 0.36))        # 0.36em lifts the baseline to the centre
+    text.set("font-size", str(font))
+    group.append(text)
+
+
+def resource_count_fonts(config) -> tuple[float, ...]:
+    """Every size a resource count can be drawn at under this config's layout.
+
+    For the layout tool rather than for the board: it reports whether the counts are legible at a
+    given board width, and the answer is decided by the SMALLEST a count can get, not by whichever
+    counts the sample config happens to hold. A test config of 4, 0, 3 and 1 would otherwise have
+    the readout answering for single digits and saying nothing about the double-digit purse a real
+    game produces.
+
+    The strip's size is not here because it is not here to be had: it lives in the template, where
+    the tool reads it off the board it is already holding.
+    """
+    if str(config.get("resource_layout", "strip")) == "disc":
+        return (DISC_FONT, DISC_FONT_WIDE)
+    return ()
+
+
 class BuildError(RuntimeError):
     """Raised for user-facing build errors."""
 
@@ -311,8 +470,12 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
         node.set("fill", str(config.get("text_fill", "#24190f")))
         node.set("font-family", str(config.get("font_family", "Georgia, serif")))
 
-    # Resource card colours.
+    # Resource card colours, and which of the two box layouts they wear.
     resource_fills = config.get("resource_fills", {})
+    layout_name = str(config.get("resource_layout", "strip"))
+    if layout_name not in RESOURCE_LAYOUTS:
+        raise BuildError("resource_layout must be one of %s, not %r"
+                         % (", ".join(RESOURCE_LAYOUTS), layout_name))
     for name in RESOURCE_NAMES:
         group = root.find(f".//{q('g')}[@id='resource-{name}']")
         if group is None:
@@ -322,6 +485,9 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
             raise BuildError(f"Resource group '{name}' needs at least two rects")
         rects[0].set("fill", str(resource_fills.get(name, rects[0].get("fill", "#ffffff"))))
         rects[1].set("fill", str(config.get("resource_value_fill", "#ead8b4")))
+        if layout_name == "disc":
+            apply_disc_layout(group, rects, name,
+                              str(config.get("resource_value_fill", "#ead8b4")))
 
     # Board underlay colours.
     underlay = {
