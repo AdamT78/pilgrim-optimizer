@@ -191,13 +191,30 @@ def load_assembler(path):
     return mod
 
 
-def build_board(asm, assets_dir, config_path, seat, turn):
+# A face per seat, so a column of four boards is four PLAYERS rather than one man four times.
+#
+# Not a rule about who sits where -- a real game deals these -- but a placeholder cast, and it lives
+# here rather than in the layout tool because the tool exists to show what the build produces. A
+# tool showing four faces against a build that draws one would be a mockup, which is the one thing
+# it promises not to be. The fifth portrait is spare; there are five leaders and four seats.
+SEAT_PORTRAITS = {
+    "sage": "portraits/leader_male_shaven.png",
+    "pewter": "portraits/leader_female_hooded.png",
+    "plum": "portraits/leader_male_hooded.png",
+    "bone": "portraits/leader_female_blindfolded.png",
+}
+
+
+def build_board(asm, assets_dir, config_path, seat, turn, portrait=None):
     """One complete board for one seat, exactly as the production assembler would write it."""
     config = copy.deepcopy(asm.read_json(config_path))
     for role in ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems"):
         config.pop(role, None)
     config["seat"] = seat
     config["turn"] = turn
+    chosen = portrait or SEAT_PORTRAITS.get(seat)
+    if chosen:
+        config["portrait"] = chosen
     config["id"] = f"gothic-{seat}"
     config["aria_label"] = f"Pilgrim gothic player board, {seat} seat"
     asm.apply_seat(config)
