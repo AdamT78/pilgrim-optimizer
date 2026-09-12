@@ -98,7 +98,9 @@ jobs:
         # engine changes, so a design-only pull request -- exactly the kind that touches these
         # files -- would never run them otherwise.
         if: needs.changes.outputs.ui == 'true'
-        run: pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py tests/test_gothic_asset_guards.py -q
+        run: |
+          pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py \
+            tests/test_gothic_asset_guards.py tests/test_gothic_resource_boxes.py -q
 
   fast:
     needs: changes
