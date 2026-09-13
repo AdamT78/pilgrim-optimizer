@@ -1,0 +1,5 @@
+Using the attached image, generate one new square (1:1) image in which the two panels become a single continuous picture.
+
+Remove the blank band and both panel edges entirely. The two scenes must meet directly, with NO dividing line, NO rule, NO border, NO gutter and NO gap - the change of place happens across a band of picture rather than along a straight edge, so the join wanders a little instead of running dead straight. Each scene keeps exactly half the width, so the change of place falls at the centre of the square.
+
+Keep both scenes as they are: do not relight them, do not brighten or darken either side, and do not change the figures. Same engraving style and same tonal key across the whole square. Full bleed, no outer border, no lettering of any kind.
