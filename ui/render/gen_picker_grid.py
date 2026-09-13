@@ -49,7 +49,9 @@ HERE = pathlib.Path(__file__).resolve().parent
 UI = HERE.parent
 import sys
 sys.path.insert(0, str(HERE))
-from gen_duty_grid import DUTY_NAMES, TILE_FILLS, INK, TWO_ACTION, load  # noqa: E402
+from gen_duty_grid import (  # noqa: E402
+    DUTY_NAMES, INK, PALETTE, PALETTE_REF, TILE_FILLS, TWO_ACTION,
+    load, palette_stats, recolour)
 try:                                        # the tool's own screen list, so the two agree
     from gen_layout_tool import SCREENS
 except Exception:                           # importing it runs no work, but do not depend on it
@@ -93,7 +95,8 @@ def find_tiles(root: pathlib.Path | None, version: str) -> dict[int, pathlib.Pat
     return found
 
 
-def embed(p: pathlib.Path, px: int = 760, quality: int = 82) -> str:
+def embed(p: pathlib.Path, px: int = 760, quality: int = 82,
+          palette: str | None = None, ref=None) -> str:
     """One data URI per picture, re-encoded for a preview page.
 
     The source tiles are 1254 px PNGs of dense engraving -- 3.5 MB each. A picker that inlines
@@ -108,6 +111,8 @@ def embed(p: pathlib.Path, px: int = 760, quality: int = 82) -> str:
         if max(im.size) > px:
             k = px / max(im.size)
             im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+        if palette and ref:
+            im = recolour(im, ref, palette)
         buf = io.BytesIO()
         im.save(buf, format="WEBP", quality=quality, method=6)
         return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
@@ -451,7 +456,23 @@ def main():
     root = pathlib.Path(z.tiles) if z.tiles else None
     # Both versions are loaded and both boards are built. Version is a control in the page, so
     # comparing A against B no longer means regenerating -- the same reason --sample went.
-    tiles = {v: {i: embed(p) for i, p in find_tiles(root, v).items()} for v in ("A", "B")}
+    # The same palette the wheel itself uses, so the picker is judging what the board will show
+    # rather than the raw generations. Each version is matched to ITS OWN city -- A and B are two
+    # different sets, and matching B's tiles to A's city would compare nothing meaningful.
+    tiles = {}
+    for v in ("A", "B"):
+        found = find_tiles(root, v)
+        ref = None
+        if PALETTE and PALETTE_REF in found:
+            from PIL import Image
+            city = Image.open(found[PALETTE_REF]).convert("RGB")
+            k = 760 / max(city.size)
+            if k < 1:
+                city = city.resize((round(city.width * k), round(city.height * k)),
+                                   Image.LANCZOS)
+            ref = palette_stats(city)
+        tiles[v] = {i: embed(p, palette=(None if i == PALETTE_REF else PALETTE), ref=ref)
+                    for i, p in found.items()}
 
     jp = pathlib.Path(z.joins) if z.joins else (root / "joins.json" if root else None)
     book = json.loads(jp.read_text()) if jp and jp.is_file() else {}

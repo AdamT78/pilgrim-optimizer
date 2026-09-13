@@ -63,3 +63,42 @@ What the checker will and will not tell you:
 - **The join.** It no longer looks for one. Every pair splits down the middle and every merge keeps
   it, so the join is 0.5; the heuristic that used to measure it found pillars and scaffold posts
   instead, and was wrong every time it could be checked against a source pair.
+## The colour set (version C)
+
+`C_*` is the same nine scenes on the palette the CITY actually uses, measured off
+`05_city_B.webp` rather than chosen:
+
+```
+median chroma            2.4      the picture is essentially neutral
+most saturated tenth    17.0      a single warm amber-cream, almost all of it sky
+greys              #191917 #31302d #474542 #615e5a #7c7874 #a39c93
+the one hue        #bda58c .. #d7c5ae
+```
+
+So this is **not a colourful set**. It is grisaille with one warm light, and that is what
+"restricted to the city's colours" means once the city is measured. If you want real colour
+variety, the city has to be regenerated first — it is the reference every other tile is matched
+to, and `PALETTE = "full"` in `gen_duty_grid.py` would otherwise pull colourful tiles back toward
+this grey.
+
+**Where to put the results.** The tooling only knows versions A and B (`find_tiles` matches
+`[AB]`, and the picker iterates over the two). Rather than widen that for a trial, save the C
+tiles as `NN_slug_B.webp` in a *separate folder*, and point the tools at it:
+
+```
+python3 ui/render/gen_picker_grid.py --tiles ui/assets-gothic/duty-tiles-colour --open
+```
+
+That keeps the committed B set intact and needs no code change. If colour wins, adding a real
+version C is a small refactor across four files and worth doing properly then.
+
+## The merge step now makes both orders
+
+`*_option3_step2_merge.txt` asks for **two** square images: the panels merged as they are, and
+merged with the two scenes exchanged. Which scene reads better on the left is not obvious before
+you see it, and the merge quality differs between the two.
+
+The prompt guards hard against the failure this invites — a single picture containing both
+merges side by side, which is exactly what produced the captioned comparison sheets earlier in
+this project. If it happens anyway, ask for the second merge in a follow-up message rather than
+rewording.

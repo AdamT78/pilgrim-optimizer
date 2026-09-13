@@ -54,6 +54,12 @@ GENERATORS = [
     ("gen_picker_2.py", [], "gothic-board-picker.html"),
     ("gen_board_2.py", [], "gothic-four-boards.html"),
     ("gen_layout_tool.py", [], "layout-tool.html"),
+    # `--tiles` is not decoration. Without it this generator runs in shapes-only mode -- it says so,
+    # `version A: 0 of 9`, which is correct behaviour and not a fault -- and never reaches the
+    # palette code. That palette code is the only thing here that imports from gen_duty_grid, so the
+    # cheap invocation would build a page, pass, and prove nothing about the coupling that actually
+    # breaks. It costs 4.6s against the sweep's 3.0s, which is the price of the check being real.
+    ("gen_picker_grid.py", ["--tiles", "ui/assets-gothic/duty-tiles"], "duty-grid-picker.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.
