@@ -251,6 +251,28 @@ def extract(html, tag, cls):
     raise SystemExit("unbalanced <%s> while extracting .%s" % (tag, cls))
 
 
+def ground_uri() -> str:
+    """The stage's ground, embedded, because this page is opened from wherever it was written.
+
+    `--output` puts the tool anywhere the caller likes and the result is routinely opened as a
+    file:// URL, so a relative href to `ui/assets-gothic` resolves only when the page happens to
+    sit in the tree. It does not, the background silently falls back to the flat colour, and the
+    only symptom is a board that looks slightly duller than the one in the last screenshot. At
+    ~40 KB against a 10.5 MB page this is not a size decision.
+
+    Missing file is not fatal: the flat colour underneath is the field's own floor, so the page
+    still opens and still looks deliberate. It says so rather than failing the build, because a
+    layout tool that will not start is worse than one with a plain background.
+    """
+    import base64
+    p = UI / "assets-gothic" / "ui" / "ground.webp"
+    if not p.is_file():
+        print("no %s -- the stage falls back to flat colour. Run `python3 ui/render/gen_ground.py` "
+              "to make it." % p.name)
+        return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+    return "data:image/webp;base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+
+
 def lift_components():
     """The real components, and the stylesheet that makes them look like themselves."""
     import re
@@ -374,7 +396,7 @@ body{margin:0;background:#12140f;color:#E8E2D3;font:13px/1.5 "Iowan Old Style",G
 #legend{margin-top:10px;font:11.5px/1.7 ui-monospace,Menlo,monospace;color:#8fa286}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   margin-right:5px}
-#legend .g{background:#2F5237}
+#legend .g{background:#0b0a08 url(%(ground)s) center/cover}
 #legend .k{background:#000;outline:1px solid #2c3327}
 #full{margin-top:8px}
 body.live #view{padding:0}
@@ -386,7 +408,15 @@ body.live #panel:hover,body.live #panel:focus-within{opacity:1}
 #livehint{display:none;position:fixed;right:12px;bottom:10px;z-index:9;color:#7d8f80;
   font:11px ui-monospace,Menlo,monospace;pointer-events:none}
 body.live #livehint{display:block}
-.t-stage{position:absolute;top:0;left:0;transform-origin:top left;background:#2F5237;
+/* THE GROUND, and it is one surface owned by one element.
+   Everything laid on the stage is transparent where it is not a panel -- the duty grid draws no
+   ground rect at all (gen_duty_grid.BACKGROUND is None), and a bare slot clears its own card --
+   so this single background is what shows through the wheel's channels and every gutter, as one
+   connected 32%% of the canvas. That is the whole mechanism: swapping a colour for a picture is
+   this one declaration, and any component that paints its own ground punches a hole in it.
+   The colour behind the image is the field's own floor, so a slow load never flashes green. */
+.t-stage{position:absolute;top:0;left:0;transform-origin:top left;
+  background:#0b0a08 url(%(ground)s) center/100%% 100%% no-repeat;
   display:flex;flex-direction:column}
 .t-toprow,.t-mainrow{display:flex;align-items:flex-start}
 .t-left{display:flex;flex-direction:column}
@@ -1174,6 +1204,7 @@ def build(layout, can_save):
         "count_font": count_font(roots, asm, asm.read_json(config)),
         "vb_w": g.VB_W, "vb_h": g.VB_H,
         "pad": g.STAGE_PAD,
+        "ground": ground_uri(),
         "can_save": "true" if can_save else "false",
         "stamp": build_stamp(can_save),
     }

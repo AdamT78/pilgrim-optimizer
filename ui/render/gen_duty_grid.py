@@ -308,10 +308,13 @@ def joins_for(version: str = VERSION, path: pathlib.Path = JOINS) -> dict[int, f
     data = json.loads(path.read_text(encoding="utf-8"))
     return {int(k): float(v) for k, v in data.get(version, {}).items() if not k.startswith("_")}
 
-# The ground the nine tiles sit on. A placeholder: one flat colour, drawn as a single <rect> with
-# a known id, so replacing it with the real sheet is swapping that one element for an <image>.
-# Nothing else in this file reads it.
-BACKGROUND = "#e7bd83"
+# The ground the nine tiles sit on, drawn as a single <rect> with a known id.
+#
+# `None` draws NO ground at all, and that is the setting to reach for when the ground belongs to
+# the page rather than to the component: the slot's own background -- a colour now, a picture
+# later -- shows straight through the channels, and swapping one for the other never touches this
+# file. A colour here is for when the wheel must carry its own sheet regardless of what it sits on.
+BACKGROUND: str | None = None
 # How much ground is left outside the grid, in viewBox units. Everything else follows from it:
 # the nine keep their traced sizes, the outer tiles go flush against this margin, and whatever
 # is left over becomes the channels between them. Reclaiming the rim is the only way to widen
@@ -402,7 +405,13 @@ ARROW_W = 23.0             # what the City arrows were; the ring's was heavier a
 # 2.3 units -- no gap at all -- which is what `_inset` now corrects for.
 ARROW_GAP = 5.0
 ARROW_STROKE = 0.14        # outline weight, as a fraction of the arrow's width
-ARROW_FILL = BACKGROUND    # the ground colour, so an arrow over dense engraving keeps its shape
+# The arrows are filled, not just outlined, so that the half of an arrow lying over dense
+# engraving still reads as one shape. That fill USED to be `BACKGROUND`, which was fine only
+# while the ground was a flat colour: a ground of None (the page shows through) or an <image>
+# leaves nothing for an arrow to be filled WITH, and an arrow cannot be filled with a picture.
+# So it is its own colour, and it is parchment because that is what the arrows are made of --
+# not because that is what is behind them.
+ARROW_FILL = "#e7bd83"
 
 
 def _channel(a: str, b: str) -> tuple[float, float, float]:
@@ -582,8 +591,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                 f'<rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" '
                 f'fill="url(#{uid}-gr{i})" style="mix-blend-mode:difference"/></mask>')
     out.append("</defs>")
-    # The ground. Replace this one element with an <image> when the real sheet exists.
-    out.append(f'<rect id="{uid}-ground" width="{box}" height="{box}" fill="{background}"/>')
+    # The ground. `None` draws none, and the slot's own background shows through the channels --
+    # which is how a picture gets behind the tiles without this file knowing about it. A colour
+    # still draws the one element an <image> would replace.
+    if background is not None:
+        out.append(f'<rect id="{uid}-ground" width="{box}" height="{box}" fill="{background}"/>')
 
     for i, d in enumerate(shapes):
         label = (labels[i] if labels and i < len(labels) else "")
@@ -638,12 +650,15 @@ if __name__ == "__main__":
     ap.add_argument("--margin", type=float, default=MARGIN,
                     help="ground left outside the grid, in viewBox units (default %(default)s); "
                          "the nine keep their traced sizes, so this sets the channels between them")
-    ap.add_argument("--background", default=BACKGROUND, help="flat ground colour (default %(default)s)")
+    ap.add_argument("--background", default=(BACKGROUND or "none"),
+                    help="flat ground colour, or 'none' to draw no ground and let whatever the "
+                         "wheel sits on show through the channels (default %(default)s)")
     ap.add_argument("--palette", choices=("none", "chroma", "full"),
                     default=(PALETTE or "none"),
                     help="match every tile's colour to the city (default %(default)s)")
     z = ap.parse_args()
-    svg = duty_grid_svg(margin=z.margin, background=z.background,
+    svg = duty_grid_svg(margin=z.margin,
+                        background=(None if z.background == "none" else z.background),
                         palette=(None if z.palette == "none" else z.palette))
     meta = load()
     laid = place(meta["shapes"], meta["box"], z.margin)
