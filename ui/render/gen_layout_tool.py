@@ -208,8 +208,11 @@ BOARD_PAGE = UI / "generated" / "board-3-2-step1.html"
 # cannot drift from the real thing: what it shows IS what gen_board.py produced, markup and
 # stylesheet together. If a class is renamed there, the extraction fails loudly here rather than
 # quietly showing an empty box.
+# The wheel is NOT lifted from the board page any more: it is the 3x3 duty grid, generated from
+# traced vector outlines by gen_duty_grid. Everything else still comes from the real board so the
+# tool measures the real thing.
 COMPONENTS = [("sa", "svg", "sa"), ("alms", "svg", "alms"), ("mkt", "div", "mkt"),
-              ("act", "div", "turn"), ("wheel", "svg", "wheel"), ("log", "div", "log")]
+              ("act", "div", "turn"), ("log", "div", "log")]
 
 # Every control the page's script addresses by id, checked against the built page. See build().
 # The sliders here are the same list the script calls KEYS; the rest are the controls around them.
@@ -393,7 +396,9 @@ body.live #livehint{display:block}
 .ph-in{width:100%%;height:100%%;border:1px dashed #c9a227;background:#1d2a22;color:#93a58a;
   font-size:11px;display:grid;place-items:center;font-family:ui-monospace,Menlo,monospace;
   text-align:center}
-.wheel-in{border-radius:50%%}
+/* The duty wheel is a 3x3 grid of torn tiles, not a disc. The round clip that
+   suited the old wheel crops the grid's corners off -- it took two renders to
+   spot, because a clipped grid still looks deliberate. */
 .ph-in{overflow:hidden;position:relative}
 .nat{position:absolute;left:0;top:0;overflow:hidden}
 /* A slot whose component draws its own border does not need the placeholder's two. */
@@ -413,7 +418,6 @@ body.live #livehint{display:block}
 #panel #framed button{margin:0;width:auto;flex:1 1 auto;padding:5px 3px;border-radius:5px;
   font:11px Georgia,serif;background:#20261c;border:1px solid #333a2c;color:#7d8f80}
 #panel #framed button.on{background:#3a4a33;border-color:#55684b;color:#EFE8D6}
-#wheel{border-radius:50%%}
 </style>
 <style id="act-rule-css"></style>
 <div id="panel">
@@ -1123,6 +1127,10 @@ def build(layout, can_save):
                          % (g.STAGE_PAD, DEFAULTS["margin_top"]))
 
     board_css, parts = lift_components()
+    # The duty grid replaces the circular wheel. It carries its own geometry, so unlike the
+    # lifted components it does not depend on gen_board.py having been run.
+    from gen_duty_grid import VERSION, DUTY_NAMES, duty_grid_svg
+    parts["wheel"] = duty_grid_svg(labels=DUTY_NAMES, version=VERSION)
     sa = {"vb_w": g.SA_VB_W, "w": g.SA_W, "h": g.SA_H, "row1": g.SA_ROW1, "pitch": g.SA_PITCH,
           "cube": g.SA_CUBE, "acts": g.SA_ACTIVITIES, "seats": g.SA_SEATS,
           "swatch": list(g.SA_SWATCH)}

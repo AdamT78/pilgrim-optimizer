@@ -1,0 +1,16 @@
+{
+ "A": {
+  "1": 0.5,
+  "2": 0.5,
+  "5": 0.5,
+  "6": 0.5,
+  "8": 0.5
+ },
+ "B": {
+  "2": 0.5,
+  "5": 0.5,
+  "6": 0.5,
+  "8": 0.5
+ },
+ "_note": "Every source pair splits at 0.4993-0.5035 (7 measured) and every merge checked visually keeps it. The old per-tile numbers came from a steepest-edge heuristic that found architecture, not joins; it was off by 15-17% on all four tiles with ground truth, always to the left. Ordination B may want a small nudge left -- judge it on the hover render."
+}
