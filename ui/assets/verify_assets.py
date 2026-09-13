@@ -71,7 +71,13 @@ def attribution_problems(root):
         if not base.is_dir():
             continue
         for p in sorted(base.rglob("*")):
-            if not p.is_file() or p.name in {".gitkeep", ".gitignore"}:
+            # Any dotfile, not just the two that were named. .DS_Store is the one that actually
+            # turns up: Finder writes it into a folder merely for being opened, .gitignore already
+            # covers it so it can never be committed, and yet it failed this check and made an
+            # unrelated commit look like an attribution problem. A file whose name begins with a
+            # dot is never a shipped asset, which is the same reasoning the .pyc skip below rests
+            # on -- a check that fails on litter is a check people learn to ignore.
+            if not p.is_file() or p.name.startswith("."):
                 continue
             if "__pycache__" in p.parts:
                 continue
