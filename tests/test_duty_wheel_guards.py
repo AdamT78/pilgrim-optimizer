@@ -187,3 +187,121 @@ def test_the_chosen_version_has_artwork_for_every_square_it_claims():
         pytest.skip("version %s is still being generated; missing: %s"
                     % (g.VERSION, ", ".join(missing)))
     assert len(found) == 9
+
+
+def test_a_shuffled_arrangement_is_drawn_and_a_broken_one_is_refused():
+    """Duty tiles are shuffled at setup, so the component must take the arrangement rather than
+    own one. The order it draws by default is a fixture and no more canonical than the two other
+    arrangements in this repo (tools/ui_debug/duty_wheel_layout.json and the engine's
+    _DEFAULT_DUTY_TILES, which disagree with it and with each other). What must hold is that a
+    real arrangement reaches the drawing, and that one which would put two duties in a square --
+    or leave one empty -- fails instead of quietly drawing a board that means something else."""
+    g = grid()
+    plain = g.duty_grid_svg(tiles_dir=None)
+    assert plain == g.duty_grid_svg(tiles_dir=None, cells=g.DEFAULT_CELLS)
+    assert plain != g.duty_grid_svg(tiles_dir=None, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]), (
+        "a different arrangement drew the same picture: `cells` is not reaching the shapes")
+    for bad in ([0, 1, 2, 3, 4, 5, 6, 7, 7], [0, 1, 2], list(range(9)) + [0]):
+        with pytest.raises(ValueError):
+            g.duty_grid_svg(tiles_dir=None, cells=bad)
+
+
+def test_the_arrows_do_not_depend_on_the_arrangement():
+    """Which squares are adjacent is a property of the grid, not of which duty was dealt where,
+    so shuffling the tiles must not move a single arrow."""
+    g = grid()
+    import re
+    arrows = lambda svg: re.findall(r'<g transform="translate\([^"]+\) rotate\([^"]+\)"', svg)
+    a = arrows(g.duty_grid_svg(tiles_dir=None))
+    b = arrows(g.duty_grid_svg(tiles_dir=None, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
+    assert a and a == b, "the arrows moved when the arrangement changed"
+
+
+def test_two_grids_on_one_page_do_not_share_ids():
+    """Every id the component emits must be namespaced to its instance.
+
+    SVG ids are document-global. Two grids in one page with the same id names means every
+    `url(#...)` resolves to whichever came first, so the second grid clips its artwork to the
+    FIRST one's shapes and most of its pictures land outside their tiles and disappear. Measured
+    when this was real: a board that draws 55% artwork on its own drew 27% as the second on a
+    page, with no error and nothing in the console. Two side-by-side grids is an ordinary thing
+    to want -- comparing arrangements, showing a route in two states -- and the symptom points at
+    the artwork rather than at the cause.
+
+    Classes are deliberately NOT namespaced: they carry styling, not references, and the CSS is
+    written against them.
+    """
+    import re
+    g = grid()
+    ids = lambda svg: set(re.findall(r'id="([^"]+)"', svg))
+    a = ids(g.duty_grid_svg(tiles_dir=None, uid="wheelA"))
+    b = ids(g.duty_grid_svg(tiles_dir=None, uid="wheelB"))
+    assert a and b, "no ids emitted at all -- the check would pass vacuously"
+    assert not (a & b), (
+        "two grids share these ids: %s. The second one on a page will resolve them to the "
+        "first's elements." % sorted(a & b)[:8])
+    # and every reference must point at an id the same grid defines
+    svg = g.duty_grid_svg(tiles_dir=None, uid="solo")
+    refs = set(re.findall(r'url\(#([^)]+)\)', svg))
+    assert refs <= ids(svg), (
+        "these are referenced but never defined here: %s" % sorted(refs - ids(svg)))
+
+
+def test_every_arrow_clears_its_destination_and_reaches_under_its_source():
+    """The arrow geometry, which is four constants that have to agree with the torn outlines.
+
+    Each arrow is one length, anchored at the tile it points AT and masked by the tile it leaves.
+    Two things must hold for all twelve, and neither is visible in the markup:
+
+        the head stops short of the destination outline, or the arrow crosses into the next duty
+        the tail ends inside the source outline, or it floats in the channel with a visible butt
+
+    They pull against each other -- a shorter arrow clears more easily but stops reaching under --
+    and the margin between them is thin: the channels vary, and the widest source gap is 75.5
+    units against ARROW_LEN 90. Changing ARROW_LEN, ARROW_GAP, ARROW_W, ARROW_STROKE or MARGIN
+    can break either end, and the render still looks plausible at a glance.
+    """
+    g = grid()
+    meta = g.load()
+    laid = g.place(meta["shapes"], meta["box"], g.MARGIN)
+    bad = []
+    for a, b in g.RING + g.CITY_ROUTES:
+        x, y, ang = g._channel(laid[a], laid[b])
+        dest = g._ray_hit(laid[b], x, y, ang)
+        head = dest - g._inset(g.ARROW_W, meta["box"])
+        tail = head - g.ARROW_LEN
+        src = -g._ray_hit(laid[a], x, y, (ang + 180) % 360)
+        if head >= dest:
+            bad.append("%d->%d head reaches %.1f, destination outline at %.1f" % (a, b, head, dest))
+        if tail >= src:
+            bad.append("%d->%d tail ends at %.1f, source outline at %.1f -- it would float"
+                       % (a, b, tail, src))
+    assert not bad, "arrow geometry no longer fits the tiles:\n  " + "\n  ".join(bad)
+
+
+def test_the_arrow_gap_is_the_gap_that_is_drawn():
+    """ARROW_GAP must be the clear ground you SEE, not the distance between two path tips.
+
+    Both shapes are stroked and strokes sit centred on their paths, so an inset that ignores them
+    is consumed by ink: this is how ARROW_INSET = 2.0 came to leave the arrow and tile outlines
+    OVERLAPPING by 2.3 units while claiming a 2-unit gap.
+
+    The stroke is read back out of the EMITTED markup rather than from the constant `_inset`
+    reads, because otherwise the two sides of this check are the same number and it cannot fail.
+    What it is really guarding is that `arrow()` and `_inset()` still agree about how much ink
+    there is -- which is exactly what stops being true when one of them is edited to a literal.
+    """
+    import re
+    g = grid()
+    box = g.load()["box"]
+    svg = g.duty_grid_svg(tiles_dir=None, arrows=True)
+    widths = {float(w) for w in re.findall(r'stroke-width="([\d.]+)" stroke-linejoin', svg)}
+    drawn = [w for w in widths if abs(w - g.ARROW_W * g.ARROW_STROKE) < 0.01]
+    assert drawn, ("no arrow stroke of the expected weight is in the markup; `arrow()` and "
+                   "ARROW_STROKE have parted company (found %s)" % sorted(widths))
+    ink = drawn[0] / 2 + box * 0.0035 / 2          # half the arrow's ink, half the tile's
+    assert g._inset(g.ARROW_W, box) - ink == pytest.approx(g.ARROW_GAP, abs=0.02), (
+        "_inset does not allow for the ink actually drawn: the gap on screen is %.2f units, not "
+        "the %.2f that ARROW_GAP promises"
+        % (g._inset(g.ARROW_W, box) - ink, g.ARROW_GAP))
+    assert g.ARROW_GAP > 0, "a zero or negative gap puts the arrow head against the tile"

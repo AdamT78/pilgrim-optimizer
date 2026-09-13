@@ -715,6 +715,28 @@
       "role": "duty wheel source panel",
       "modifications": "re-encoded from the 1254px PNG master to WebP, lossless -- pixel-identical",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/B/02_clerical_B.webp": {
+      "state": "present",
+      "title": "Clerical duty tile, version B, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/B/02_clerical_B_pair.webp": {
+      "state": "present",
+      "title": "Clerical duty tile, version B, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 1.97 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
     }
   },
   "assetDirs": [

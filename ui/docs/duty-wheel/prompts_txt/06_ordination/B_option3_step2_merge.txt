@@ -1,5 +1,11 @@
-Using the attached image, generate one new square (1:1) image in which the two panels become a single continuous picture.
+Using the attached image, generate TWO separate square (1:1) images, one after the other as two distinct outputs.
 
-Remove the blank band and both panel edges entirely. The two scenes must meet directly, with NO dividing line, NO rule, NO border, NO gutter and NO gap - the change of place happens across a band of picture rather than along a straight edge, so the join wanders a little instead of running dead straight. Each scene keeps exactly half the width, so the change of place falls at the centre of the square.
+Do NOT place them side by side in one picture. Do NOT make a comparison sheet, a grid, or a before-and-after. Do NOT caption or label them. Two independent full-bleed square pictures, nothing else.
 
-Keep both scenes as they are: do not relight them, do not brighten or darken either side, and do not change the figures. Same engraving style and same tonal key across the whole square. Full bleed, no outer border, no lettering of any kind.
+FIRST IMAGE - the two panels become a single continuous picture in the order they already are: the panel now on the left stays on the left, the panel now on the right stays on the right.
+
+SECOND IMAGE - the same merge with the two scenes exchanged: the panel that was on the RIGHT now fills the left half, and the panel that was on the LEFT now fills the right half.
+
+In both images: remove the blank band and both panel edges entirely. The two scenes must meet directly, with NO dividing line, NO rule, NO border, NO gutter and NO gap - the change of place happens across a band of picture rather than along a straight edge, so the join wanders a little instead of running dead straight. Each scene keeps exactly half the width, so the change of place falls at the centre of the square.
+
+Keep both scenes as they are: do not relight them, do not brighten or darken either side, and do not change the figures. Same style and same tonal key across the whole square. Full bleed, no outer border, no lettering of any kind.

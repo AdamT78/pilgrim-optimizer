@@ -221,7 +221,7 @@ CONTROL_IDS = ["seats", "board_width", "board_gap", "special_height", "frame_bor
                "act_rule",
                "margin_top", "margin_bottom",
                "width_basis", "slack_use", "act-rule-css", "framed", "v-framed",
-               "screen-pick", "showmode", "diag", "reset", "full", "save",
+               "screen-pick", "showmode", "diag", "reset", "full", "save", "palette-pick",
                "json", "read", "stamp", "v-basis", "v-slack", "showbox", "livehint",
                "fname", "fpick", "load", "saved"]
 
@@ -476,6 +476,13 @@ body.live #livehint{display:block}
   <input type="range" id="margin_top" min="0" max="120" step="1">
   <label>bottom margin <b id="v-margin_bottom"></b></label>
   <input type="range" id="margin_bottom" min="0" max="120" step="1">
+
+  <label style="margin-top:14px;color:#EFE8D6;font-weight:600">duty tile palette</label>
+  <select id="palette-pick">
+    <option value="none">as generated</option>
+    <option value="chroma">match the city &#183; colour only</option>
+    <option value="full">match the city &#183; colour and key</option>
+  </select>
 
   <div id="showbox">
     <label style="margin-top:14px" id="fitwin-row"><span id="fitwin-lab">preview shown</span></label>
@@ -946,6 +953,18 @@ document.addEventListener('fullscreenchange', () => {
   }
   requestAnimationFrame(apply);
 });
+// The duty grid carries a filter for every palette and CSS picks which is live, so switching is
+// an attribute flip rather than a rebuild -- no round trip, and the art is embedded only once.
+{
+  const wheelSvg = () => document.querySelector('#wheel svg');
+  const sel = el('palette-pick');
+  const cur = wheelSvg() && wheelSvg().getAttribute('data-palette');
+  if (cur) sel.value = cur;
+  sel.addEventListener('change', e => {
+    const w = wheelSvg();
+    if (w) w.setAttribute('data-palette', e.target.value);
+  });
+}
 SCREENS.forEach((s, i) => el('screen-pick').add(new Option(s[0], i)));
 el('screen-pick').addEventListener('change', e => { screenIndex = +e.target.value; apply(); });
 
