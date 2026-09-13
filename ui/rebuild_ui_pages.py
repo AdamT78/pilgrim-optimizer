@@ -60,10 +60,19 @@ GENERATORS = [
     # cheap invocation would build a page, pass, and prove nothing about the coupling that actually
     # breaks. It costs 4.6s against the sweep's 3.0s, which is the price of the check being real.
     ("gen_picker_grid.py", ["--tiles", "ui/assets-gothic/duty-tiles"], "duty-grid-picker.html"),
+    # The game view borrows from gen_board.py by exec, so it breaks if a name there is renamed --
+    # which is exactly the coupling a rebuild sweep is for. It also redirects that exec's own page
+    # write, so watch for board-3-2-step1.html appearing twice in a run if that ever regresses.
+    ("gen_game_view.py", [], "game-view.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.
-BYPRODUCTS = {"_picker_scratch.html", "_log_final.html"}
+BYPRODUCTS = {"_picker_scratch.html", "_log_final.html",
+              # gen_game_view.py execs gen_board.py to borrow its components, and that file
+              # writes its page at module level rather than under a __main__ guard. OUTNAME
+              # sends the write here instead of over board-3-2-step1.html, which is the
+              # point -- but it does mean every run leaves this behind.
+              "_gen_game_view_scratch.html"}
 
 
 # The two builds are run in timezones fourteen hours apart, and that is not a flourish.
