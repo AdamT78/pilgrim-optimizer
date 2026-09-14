@@ -765,6 +765,160 @@
       "role": "duty wheel source panel",
       "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 1.97 of 255",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/01_allocation_C.webp": {
+      "state": "present",
+      "title": "Allocation duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "re-encoded from the 1254px PNG master to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/02_clerical_C.webp": {
+      "state": "present",
+      "title": "Clerical duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/03_construct_C.webp": {
+      "state": "present",
+      "title": "Construct duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/04_build_roads_C.webp": {
+      "state": "present",
+      "title": "Build Roads duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "re-encoded from the 1254px PNG master to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/05_city_C.webp": {
+      "state": "present",
+      "title": "The City duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "re-encoded from the 1254px PNG master to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/06_ordination_C.webp": {
+      "state": "present",
+      "title": "Ordination duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/07_produce_C.webp": {
+      "state": "present",
+      "title": "Produce duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/08_taxation_C.webp": {
+      "state": "present",
+      "title": "Taxation duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "re-encoded from the 1254px PNG master to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/C/09_give_alms_C.webp": {
+      "state": "present",
+      "title": "Give Alms duty tile, version C, grim dark Gothic",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel tile artwork",
+      "modifications": "merged from its two source panels by the image tool, not by code; re-encoded to WebP, lossless -- pixel-identical",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/C/02_clerical_C_pair.webp": {
+      "state": "present",
+      "title": "Clerical duty tile, version C, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 2.09 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/C/03_construct_C_pair.webp": {
+      "state": "present",
+      "title": "Construct duty tile, version C, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 1.96 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/C/06_ordination_C_pair.webp": {
+      "state": "present",
+      "title": "Ordination duty tile, version C, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 2.04 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/C/07_produce_C_pair.webp": {
+      "state": "present",
+      "title": "Produce duty tile, version C, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 2.25 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "duty-tiles/sources/C/09_give_alms_C_pair.webp": {
+      "state": "present",
+      "title": "Give Alms duty tile, version C, grim dark Gothic (pair panel)",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "duty wheel source panel",
+      "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 1.95 of 255",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
     }
   },
   "assetDirs": [
