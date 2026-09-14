@@ -887,8 +887,13 @@ def main():
     # which duty is mancala position n.
     acolytes = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
                 [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
+    # `active=lit`, the SAME value that decides which player board is drawn lit. Whose turn it is
+    # is one fact, and the wheel and the boards now read it from one place -- so a board can never
+    # be lit for one seat while the wheel stays open to another. Passing it also closes every duty
+    # that seat has no acolytes on: those tiles are drawn exactly as before and simply stop
+    # responding, because a duty you have nobody standing on is not one you can act through.
     wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid",
-                             acolytes=acolytes)
+                             acolytes=acolytes, active=lit)
     drawn = len(dg.find_tiles(version=z.duty_version))
     corner, corner_fit = corner_ornament(G["bw"], G["corner_h"])
 

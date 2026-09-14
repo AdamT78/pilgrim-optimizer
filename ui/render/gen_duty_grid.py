@@ -381,10 +381,10 @@ LIT = ('<feColorMatrix type="saturate" values="1.20"/><feComponentTransfer>'
 # missing nothing lights and the board is merely static, which is the right way to fail.
 HOVER_CSS = ('.dgt .dg-lit{opacity:0}'
              '.dg-hit{fill:transparent}'
-             '.dgt:has(.dg-hit-f:hover) .dg-lit-F{opacity:1}'
-             '.dgt:has(.dg-hit-l:hover) .dg-lit-L{opacity:1}'
-             '.dgt:has(.dg-hit-r:hover) .dg-lit-R{opacity:1}'
-             '.dgt:has(.dg-hit:hover) .dg-edge{stroke:#d8b23a;stroke-opacity:1}')
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-f:hover) .dg-lit-F{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-l:hover) .dg-lit-L{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-r:hover) .dg-lit-R{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit:hover) .dg-edge{stroke:#d8b23a;stroke-opacity:1}')
 # Where a two-action tile's scenes meet, as a fraction of its width. Measured: every source pair
 # splits at 0.4993-0.5035 and every merge keeps it, so this is 0.5 and joins.json records why.
 # Read rather than assumed, so a tile that ever genuinely differs is one file away.
@@ -806,6 +806,51 @@ def arrows_svg(shapes: list[str], length: float = ARROW_LEN, w: float = ARROW_W,
             '<g class="dg-arrows" pointer-events="none">' + "".join(body) + '</g>')
 
 
+def eligible_tiles(acolytes, active: str) -> set[int]:
+    """Which duties `active` may act on: the ones its own acolytes are standing on.
+
+    DERIVED FROM THE COUNTS BEING DRAWN, rather than taken as a second parameter, and that is the
+    whole design. The board already shows four seat figures with a number under every tile, so
+    "the sage player has two acolytes on Clerical" is on screen. If eligibility arrived separately
+    it could disagree with what the picture says -- a tile reading 2 that refuses the click, or a
+    tile reading 0 that accepts one -- and nothing would raise. Deriving it makes that
+    unrepresentable.
+
+    Returned keyed by DUTY, which is the space the caller's counts are in and the space the tile
+    groups are emitted in, so it can be used directly against them. It is NOT square space; see
+    the note beside the acolyte rows.
+
+    This is the only rule in here, and it is a rule about the drawing, not about the game: a seat
+    with no acolytes on a duty has nothing to lift and nothing to spend. Anything narrower --
+    a duty already used this turn, a phase that forbids it -- is the engine's to say, and belongs
+    in a parameter that can only ever SHRINK this set, never grow it.
+    """
+    if active not in SEAT_ORDER:
+        raise ValueError(
+            "active=%r is not one of the seats (%s). A seat name that does not match reads every "
+            "count from the wrong column." % (active, ", ".join(SEAT_ORDER)))
+    if acolytes is None:
+        raise ValueError(
+            "active=%r was given without acolytes, so which duties it may act on is unknown. "
+            "Refusing rather than treating every duty as available: a board that lets a player "
+            "act everywhere is a legal-looking board, and nothing downstream would catch it."
+            % (active,))
+    seat = SEAT_ORDER.index(active)
+    got = acolytes if isinstance(acolytes, dict) else dict(enumerate(acolytes))
+    live = set()
+    for i, counts in got.items():
+        i = int(i)
+        if not (0 <= i < 9) or counts is None:
+            continue
+        if len(counts) != len(SEAT_ORDER):
+            raise ValueError(
+                "acolytes[%r] has %d counts; there are %d seats (%s)."
+                % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
+        if int(counts[seat]) > 0:
+            live.add(i)
+    return live
+
+
 def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   labels: list[str] | None = None, tiles_dir: pathlib.Path | None = TILES,
                   version: str = VERSION, px: int = 448,
@@ -826,6 +871,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   # numbers or every offset lands twice.
                   offsets: bool = True,
                   cells: list[int] | None = None,
+                  # The seat whose turn it is. Given, only the duties that seat's own acolytes
+                  # stand on stay live; every other tile is drawn exactly as now and simply does
+                  # not respond. Left None, all nine respond, which is what every caller got
+                  # before this existed and what the pickers still want.
+                  active: str | None = None,
                   uid: str = "dg") -> str:
     """The grid as one self-contained <svg>, sized by its viewBox and nothing else.
 
@@ -856,6 +906,7 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             "or doubled would draw a board that quietly means something else." % (cells,))
     # shapes[duty] is the outline of the square that duty was dealt
     shapes = [laid[c] for c in cells]
+    live = None if active is None else eligible_tiles(acolytes, active)
     tiles = find_tiles(tiles_dir, version) if tiles_dir else {}
     art = {i: embed(p, px) for i, p in tiles.items()}
     joins = joins_for(version)
@@ -922,7 +973,12 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     for i, d in enumerate(shapes):
         label = (labels[i] if labels and i < len(labels) else "")
         named = ' data-duty-name="%s"' % label if label else ""
-        out.append(f'<g data-duty-tile="{i}"{named} class="dgt">')
+        able = live is None or i in live
+        # Machine-readable and invisible: whatever ends up handling the click needs to know, and
+        # so does anything reading this board back. Absent entirely when no seat is active, so a
+        # board with no turn in progress makes no claim either way.
+        mark = "" if live is None else ' data-eligible="%d"' % (1 if able else 0)
+        out.append(f'<g data-duty-tile="{i}"{named}{mark} class="dgt">')
         if i in art:
             x0, y0, x1, y1 = bbox(d)
             img = (f'<image href="{art[i]}" x="{x0}" y="{y0}" width="{x1 - x0}" '
@@ -944,7 +1000,25 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             out.append(f'<path d="{d}" fill="{TILE_FILLS[i % len(TILE_FILLS)]}"/>')
         out.append(f'<path d="{d}" fill="none" stroke="{INK}" stroke-opacity="0.85" '
                    f'stroke-width="{box * 0.0035:.2f}" stroke-linejoin="round" class="dg-edge"/>')
-        # The hit areas, last so they sit on top, and clipped so only the tile itself responds.
+        # The hit areas, last so they sit on top, clipped so only the tile itself responds.
+        #
+        # EMITTED ON EVERY TILE, including the ones the active seat cannot use. These carry more
+        # than the click: the game view binds its duty description panel to `.dg-hit`, keyed by
+        # the tile's name and which half, so removing them from closed tiles took away the text
+        # that says what the duty DOES.
+        #
+        # This file did remove them, briefly, on the argument that a control which responds but
+        # cannot be used is a lie. That conflated two different things. Responding to a pointer is
+        # not inviting a click -- nothing here sets a pointer cursor, and the gold edge is the
+        # only thing on the board that says "this is yours to take". Reading what a duty does is
+        # not acting on it, and a player deciding where to put acolytes needs to read the ones
+        # they cannot reach this turn most of all.
+        #
+        # So the hit area stays and the REVEALS are gated instead: see HOVER_CSS, where every rule
+        # that lights something requires `:not([data-eligible="0"])`. Suppression is written into
+        # the positive rule rather than layered over it as an override, so there is no specificity
+        # contest to lose later. `data-eligible` on the group is the contract for whatever comes
+        # to handle clicks: it must refuse a "0".
         x0, y0, x1, y1 = bbox(d)
         out.append(f'<g clip-path="url(#{uid}-c{i})">')
         if i in art and i in TWO_ACTION:
@@ -979,7 +1053,18 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                     "acolytes[%r] has %d counts; there are %d seats (%s). A short row would draw "
                     "one seat's acolytes under another seat's figure."
                     % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
-            out.append(acolyte_row(frozen[int(i)], counts))
+            # TWO INDEX SPACES, and they are not the same one.
+            #
+            # `counts` is keyed by DUTY -- the caller is saying "this many acolytes on Taxation".
+            # `frozen` is keyed by SQUARE, because it is the grid's nine positions. The square a
+            # duty has been dealt to is `cells[duty]`, so that is the shape its row belongs under.
+            #
+            # This read `frozen[int(i)]`, which is only right while cells is the identity. Pass a
+            # real arrangement and every count was drawn under the square that shares its NUMBER
+            # rather than under its own tile -- the Taxation bug again, by a different route, and
+            # silent in exactly the same way. It was dormant because the default arrangement is
+            # the identity and nothing yet passes a shuffled one outside the guards.
+            out.append(acolyte_row(frozen[cells[int(i)]], counts))
         out.append("</g>")
     out.append("</svg>")
     return "".join(out)

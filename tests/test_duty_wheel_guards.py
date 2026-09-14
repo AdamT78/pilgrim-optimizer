@@ -431,3 +431,145 @@ def test_the_offsets_tool_watches_every_generator_it_builds_from():
         "session left running across an edit to it will keep serving the old layout, look freshly "
         "rebuilt while doing it, and send you looking for the bug in code that is already correct."
         % (sorted(p.name for p in local), sorted(p.name for p in missed)))
+
+
+SHUFFLE = [2, 5, 3, 8, 4, 6, 1, 7, 0]      # a real arrangement: no duty on its own numbered square
+
+
+def _numerals(svg):
+    """Every acolyte numeral in the emitted markup, as (x, y, value)."""
+    import re
+    body = svg[svg.index('<g class="dg-acolytes'):]
+    return [(float(x), float(y), int(v)) for x, y, v in
+            re.findall(r'<text x="([\d.\-]+)" y="([\d.\-]+)"[^>]*>(\d+)</text>', body)]
+
+
+def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
+    """Counts are keyed by DUTY; the nine acolyte rows are keyed by SQUARE. Not the same index.
+
+    This shipped wrong. The rows were placed with `frozen[duty]` where `frozen` is the grid's nine
+    positions, which is only correct while `cells` is the identity -- and the identity is the
+    default, so every render anyone had looked at was right. Pass a real arrangement and seven of
+    the nine counts were drawn under the square that merely SHARES THEIR NUMBER: a player's
+    acolytes sitting under somebody else's duty, with nothing raised and nothing to notice unless
+    you already knew which duty had been dealt where.
+
+    It is the Taxation bug a second time, and the comment in gen_game_view.py warning against
+    exactly this fault was already in the file when the fault was introduced two functions away.
+    Knowing the shape of a bug does not prevent writing it; a guard does.
+
+    The two duties that happened to land on their own number are why this checks all nine and
+    the ROW rectangle rather than the column -- an earlier version of this check compared x only,
+    so anything in the same column passed and it reported a working fix as still broken.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("the acolyte row geometry lives in gen_tile_offsets.py")
+    grid_mod = __import__("gen_tile_offsets")
+    rows = grid_mod.acolyte_grid(g.laid_shapes(offsets=False))
+
+    wrong = []
+    for duty in range(9):
+        counts = [[0, 0, 0, 0] for _ in range(9)]
+        counts[duty] = [7, 0, 0, 0]                      # one seat, one duty, an unmistakable value
+        svg = g.duty_grid_svg(tiles_dir=None, cells=SHUFFLE, acolytes=counts)
+        marks = [(x, y) for x, y, v in _numerals(svg) if v == 7]
+        assert len(marks) == 1, "expected exactly one 7, found %d" % len(marks)
+        x, y = marks[0]
+        landed = [i for i, r in enumerate(rows)
+                  if r["sx"] <= x <= r["sx"] + 4 * r["fw"] + 3 * r["gap"]
+                  and r["sy"] <= y <= r["sy"] + r["fh"] * 1.05]
+        if landed != [SHUFFLE[duty]]:
+            wrong.append("duty %d was dealt to square %d but its count is drawn under %s"
+                         % (duty, SHUFFLE[duty], landed or "no row at all"))
+    assert not wrong, (
+        "an acolyte count is drawn under the wrong tile:\n  " + "\n  ".join(wrong) + "\n"
+        "The row belongs under cells[duty], the square that duty was dealt to -- not under the "
+        "square with the same number.")
+
+
+def test_a_duty_the_active_seat_cannot_reach_still_answers_but_never_lights():
+    """Closed tiles must stay READABLE and stop being OFFERED. Those are different things.
+
+    The first version of this removed the hit areas from closed tiles, reasoning that a control
+    which responds but cannot be used is a lie. It conflated responding with inviting. The game
+    view binds its duty description panel to `.dg-hit`, so dropping them took away the text saying
+    what the duty does -- from exactly the tiles a player most needs to read while deciding where
+    to put acolytes next turn. Nothing sets a pointer cursor; the gold edge is the only thing that
+    says "yours to take".
+
+    So: every tile keeps its hit areas, and every rule that LIGHTS something is gated on
+    `:not([data-eligible="0"])` as part of the positive selector rather than layered over it as an
+    override, so there is no specificity contest to lose later.
+    """
+    import re
+    g = grid()
+
+    # EVERY rule that turns an affordance on must depend on a hit area AND on eligibility, and it
+    # has to be checked rule by rule. Asking whether the strings appear anywhere in the stylesheet
+    # is a different question and cannot fail: `.dg-hit` is mentioned by `.dg-hit{fill:transparent}`
+    # too, so a gold rule rewritten to `.dgt:hover` would leave that substring intact and gold back
+    # on unreachable tiles. That was this check's first form, and breaking the link on purpose did
+    # not disturb it.
+    reveals = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", g.HOVER_CSS):
+        if "opacity:1" in body or "stroke:#" in body:
+            reveals.append(sel.strip())
+    assert reveals, "no rule in HOVER_CSS reveals anything; this check would pass vacuously"
+    ungated = [s for s in reveals if ".dg-hit" not in s]
+    assert not ungated, (
+        "these light something without depending on a hit area: %s" % ungated)
+    unchecked = [s for s in reveals if 'not([data-eligible="0"])' not in s]
+    assert not unchecked, (
+        "these light something without checking eligibility: %s\n"
+        "A closed duty would take the gold edge or the lit overlay and read as available."
+        % unchecked)
+
+    counts = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
+              [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
+    groups = lambda svg: {int(m.group(1)): m.group(0) for m in re.finditer(
+        r'<g data-duty-tile="(\d+)".*?(?=<g data-duty-tile="|<g class="dg-acolytes|</svg>)',
+        svg, re.S)}
+
+    for seat in g.SEAT_ORDER:
+        svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active=seat)
+        live = g.eligible_tiles(counts, seat)
+        assert live, "seat %s reaches nothing in this fixture; the check would be vacuous" % seat
+        assert len(live) < 9, "every duty is reachable for %s; nothing is being excluded" % seat
+        for i, body in groups(svg).items():
+            assert "dg-hit" in body, (
+                "duty %d has no hit area, so the game view cannot bind its description panel to "
+                "it and the tile goes silent instead of merely closed" % i)
+            assert ('data-eligible="%d"' % (1 if i in live else 0)) in body, (
+                "duty %d is not marked with whether the %s seat can use it, so a click handler "
+                "has nothing to refuse on" % (i, seat))
+
+    # and with no seat active nothing claims anything, so every tile lights as it always did
+    svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts)
+    bodies = groups(svg)
+    assert all("dg-hit" in b for b in bodies.values())
+    # the TILES, not the whole document: the stylesheet names the attribute in every render,
+    # because the gating lives in the selector. Checking the svg as a whole matched the CSS and
+    # failed on a board that was behaving correctly.
+    marked = [i for i, b in bodies.items() if "data-eligible" in b]
+    assert not marked, (
+        "a board with no turn in progress is claiming something about eligibility on %s" % marked)
+
+
+def test_an_active_seat_without_counts_is_refused_rather_than_assumed():
+    """The dangerous default is 'everything is available', so it must not be reachable.
+
+    A board that lets a player act on all nine duties is a legal-LOOKING board: nothing downstream
+    can tell it from a real one, and the mistake surfaces as a rules bug much later. Both ways of
+    getting there -- no counts at all, and a seat name that matches no column -- raise.
+    """
+    g = grid()
+    counts = [[1, 0, 0, 0]] * 9
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, active="sage")                 # counts missing
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="green")   # not a seat
+    with pytest.raises(ValueError):
+        g.eligible_tiles([[1, 0, 0]] * 9, "sage")                      # short row
+    assert g.eligible_tiles(counts, "sage") == set(range(9))
+    assert g.eligible_tiles(counts, "bone") == set()
