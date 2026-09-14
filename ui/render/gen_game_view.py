@@ -872,7 +872,23 @@ def main():
     # lines as the action box and the wheel -- but the panel inside it is the action box's width.
     sa, sa_spec = g2.special_placeholder(G["panel_w"], G["top_h"],
                                          L["frame_border_y"], L["frame_border_x"])
-    wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid")
+    # ACOLYTES ON THE DUTY TILES, and the counts are a FIXTURE, not the engine's.
+    #
+    # The engine does hold this: `Workforce.mancala` is nine counts per player. What it does not
+    # hold in any one place is which mancala index is which duty. Duties are keyed by compass
+    # position and the categories are shuffled onto them at setup, and this repo already carries
+    # THREE arrangements that disagree -- `_DEFAULT_DUTY_TILES` in pilgrim/model/duties.py,
+    # `duties` in tools/ui_debug/duty_wheel_layout.json, and DUTY_NAMES here -- none of which
+    # feeds the rules. Picking one would draw a player's acolytes on the wrong duty and nothing
+    # would say so, which is the Taxation bug again with a different face.
+    #
+    # So the drawing takes counts keyed by DUTY, the caller supplies them, and this caller is
+    # still a fixture. Wiring it to a real GameState is a rules question first: given a state,
+    # which duty is mancala position n.
+    acolytes = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
+                [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
+    wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid",
+                             acolytes=acolytes)
     drawn = len(dg.find_tiles(version=z.duty_version))
     corner, corner_fit = corner_ornament(G["bw"], G["corner_h"])
 

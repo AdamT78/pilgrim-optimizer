@@ -395,6 +395,185 @@ PALETTE_CSS = ('.dg-pal{filter:none}'
                'svg[data-palette="chroma"] .dg-pal-chroma{filter:var(--dg-pal)}'
                'svg[data-palette="full"] .dg-pal-full{filter:var(--dg-pal)}')
 JOINS = TILES / "joins.json"
+# Where each tile sits, and how big it is relative to its square. Written by
+# `gen_tile_offsets.py --serve` and read here, for the same reason ui/layout.json is: without the
+# file this would be numbers retyped from a tool into a generator by hand, which is two sources of
+# truth. The tile SCALE opens the channel below each tile for the acolyte row; the OFFSETS are
+# per-tile nudges judged by eye, and the file itself records what they turned out to be.
+OFFSETS = HERE.parent / "duty_tile_offsets.json"
+
+
+def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
+    """(scale, {i: (dx, dy)}) in GRID UNITS, or (1.0, {}) when there is no file.
+
+    The file stores screen pixels, because that is what the eye judges in and what the tool's
+    pointer moves in. The conversion needs the size the wheel was judged at, so the file records
+    it rather than this guessing: a set of offsets measured on an 877.8 px wheel and applied as if
+    they were grid units would be out by a factor of 1.14, which is small enough to look like a
+    slightly wrong drag and not like a unit error.
+    """
+    if not path.is_file():
+        return 1.0, {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit("%s is not valid JSON: %s" % (path, exc))
+    per_unit = box / float(data.get("wheel_px") or box)
+    out = {}
+    for k, v in (data.get("offsets") or {}).items():
+        if str(k).isdigit() and 0 <= int(k) < 9:
+            out[int(k)] = (float(v.get("dx", 0)) * per_unit, float(v.get("dy", 0)) * per_unit)
+    return float(data.get("tile_scale") or 1.0), out
+
+
+# THE ACOLYTE ROW. Four figures under each tile, one per seat, with that seat's count in the robe.
+#
+# The figure is the population asset itself, duotoned per seat, not a drawn token: four attempts at
+# a drawn hood all read as a user-avatar icon at this size, and the asset already is the acolyte.
+# It is 228 x 210 -- WIDER than tall -- and that is what makes the row affordable: the channel
+# between two rows of tiles constrains height, not width.
+#
+# The duotone strength is measured, not chosen. Downsampled to the drawn size, the first attempt
+# kept only 42% of each seat's chroma and the four read as grey-brown triangles; this keeps 66%.
+# Pushing to 81% makes them poster-flat, plum worst.
+ACOLYTE = HERE.parent / "assets-gothic" / "population" / "acolyte_gothic.png"
+ACOLYTE_ASPECT = 228 / 210.0
+FIG_FRAC = 0.205              # figure width as a fraction of the tile's width
+FIG_OVERLAP = 0.60            # how much of the figure sits above the tile's bottom edge
+SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
+# One numeral colour cannot serve four seats: dark ink measures 5.36 and 6.64 : 1 on sage and bone
+# but only 3.00 and 3.18 on pewter and plum, and parchment is the exact reverse.
+SEAT_NUMERAL = {"sage": "#221c16", "pewter": "#F2E8CC", "plum": "#F2E8CC", "bone": "#221c16"}
+SEAT_ORDER = ("sage", "pewter", "plum", "bone")
+_TINTS: dict[str, str] | None = None
+
+
+def acolyte_tints() -> dict[str, str]:
+    """The acolyte in four seat duotones, as data URIs, built from the one asset and cached.
+
+    Built rather than committed as four more files: they are derived, and four derived PNGs in the
+    tree are four things to regenerate when the seat colours move. Generated at the asset's NATIVE
+    size, so every drawn size is a downsample -- above about 114 px drawn at 2x it would start
+    interpolating and the figure should be redrawn rather than enlarged.
+    """
+    global _TINTS
+    if _TINTS is not None:
+        return _TINTS
+    import colorsys
+    import io
+
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    src = Image.open(ACOLYTE).convert("RGBA")
+    out = {}
+    for seat, hexv in SEAT_SWATCH.items():
+        r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        dark = colorsys.hsv_to_rgb(h, min(1, s * 1.3), v * 0.30)
+        light = colorsys.hsv_to_rgb(h, min(1, s * 0.95), min(1, v * 1.10))
+        a = np.asarray(src).astype(float)
+        lum = (0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]) / 255.0
+        lum = np.clip((lum - 0.06) / 0.84, 0, 1) ** 0.80
+        o = np.zeros_like(a)
+        for c in range(3):
+            o[..., c] = (dark[c] + (light[c] - dark[c]) * lum) * 255
+        o[..., 3] = a[..., 3]
+        fig = Image.fromarray(o.astype("uint8"), "RGBA")
+        # A dark silhouette behind it. NOT decoration: pewter and plum fall to 1.2 : 1 against the
+        # brightest tile bottom (Give Alms, L 91) and would vanish without it.
+        alpha = np.asarray(fig)[..., 3]
+        halo = Image.fromarray(alpha).filter(ImageFilter.MaxFilter(13))
+        sil = Image.new("RGBA", fig.size, (0x22, 0x1c, 0x16, 255))
+        sil.putalpha(halo)
+        base = Image.new("RGBA", fig.size, (0, 0, 0, 0))
+        base.alpha_composite(sil)
+        base.alpha_composite(fig)
+        buf = io.BytesIO()
+        base.save(buf, "PNG")
+        out[seat] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    _TINTS = out
+    return out
+
+
+def acolyte_row(shape: str, counts) -> str:
+    """One row of four under a tile, from the tile's shape BEFORE its offset was applied.
+
+    Before, deliberately. The grid is frozen: an earlier version derived each row from its own
+    tile's offset bounding box, so moving a tile moved its row with it and the relationship the
+    offsets exist to set was invariant. Tiles move; the row does not.
+    """
+    n = [float(v) for v in shape.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
+    xs, ys = n[0::2], n[1::2]
+    x0, x1, y1 = min(xs), max(xs), max(ys)
+    w = x1 - x0
+    fw = w * FIG_FRAC
+    fh = fw / ACOLYTE_ASPECT
+    gap = fw * 0.24
+    sx = x0 + (w - (4 * fw + 3 * gap)) / 2
+    sy = y1 - fh * FIG_OVERLAP
+    uris = acolyte_tints()
+    out = []
+    for j, seat in enumerate(SEAT_ORDER):
+        x = sx + j * (fw + gap)
+        fs = fh * 0.50
+        ink = SEAT_NUMERAL[seat]
+        out.append(
+            f'<image href="{uris[seat]}" x="{x:.1f}" y="{sy:.1f}" width="{fw:.1f}" '
+            f'height="{fh:.1f}" preserveAspectRatio="xMidYMid meet"/>'
+            f'<text x="{x + fw / 2:.1f}" y="{sy + fh * 0.93:.1f}" text-anchor="middle" '
+            f'font-family="Georgia,serif" font-size="{fs:.1f}" font-weight="700" fill="{ink}" '
+            f'stroke="{"#F2E8CC" if ink == "#221c16" else "#221c16"}" '
+            f'stroke-width="{fs * 0.17:.1f}" paint-order="stroke">{counts[j]}</text>')
+    return "".join(out)
+
+
+def laid_shapes(meta: dict | None = None, margin: float | None = None,
+                offsets: bool = True) -> list[str]:
+    """The nine shapes exactly as the board draws them: re-laid, scaled, and offset.
+
+    THE ONE PLACE THAT ANSWERS "where are the tiles". gen_tile_offsets.py used to work this out for
+    itself and got a different answer: it started from the raw traced shapes and skipped `place`,
+    which re-lays the nine as an even 3x3 and spreads them apart -- by up to 25.6 screen px when
+    that was measured, at MARGIN 14. So the
+    tool showed a tighter arrangement than the board built, and offsets dragged in it were judged
+    against tiles that were never where the board would put them. The numbers applied perfectly and
+    the result still looked wrong, which is the hardest kind of wrong to find.
+    """
+    meta = meta or load()
+    box = meta["box"]
+    margin = MARGIN if margin is None else margin
+    laid = meta["shapes"] if margin is None else place(meta["shapes"], box, margin)
+    return placed(laid, box, offsets=offsets)
+
+
+def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
+    """The nine shapes scaled about their own centres and moved by their saved offsets.
+
+    Scaling about each tile's OWN centre shrinks the picture without moving it, so the gaps between
+    tiles grow by exactly what each tile gives up. That USED to be the source of most of what is in
+    the offsets file: the spread was opened here and closed again by hand, nine tiles at a time.
+
+    It is closed once now, in MARGIN -- see the block above it. This docstring previously described
+    that as the alternative, "written down in the file rather than done here"; it has since been
+    done, and the offsets re-dragged against it came back a third the size with no column signal
+    left in them. What remains in the file is per-tile judgement, which is what it is for.
+    """
+    scale, off = tile_placement(box=box)
+    if not offsets:
+        off = {}
+    if scale == 1.0 and not off:
+        return shapes
+    out = []
+    for i, d in enumerate(shapes):
+        n = [float(v) for v in d.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
+        P = [(n[k], n[k + 1]) for k in range(0, len(n), 2)]
+        cx = sum(x for x, _ in P) / len(P)
+        cy = sum(y for _, y in P) / len(P)
+        dx, dy = off.get(i, (0.0, 0.0))
+        Q = [(cx + (x - cx) * scale + dx, cy + (y - cy) * scale + dy) for x, y in P]
+        out.append("M" + " L".join("%.2f %.2f" % q for q in Q) + " Z")
+    return out
 
 
 def joins_for(version: str = VERSION, path: pathlib.Path = JOINS) -> dict[int, float]:
@@ -417,11 +596,43 @@ BACKGROUND: str | None = None
 # but not shrunk, so space comes from the edge or nowhere.
 #
 #   margin 26.8 (as traced)   channels 19/24 units
-#   margin 14                 channels 30/49          <- here
+#   margin 14                 channels 30/49
 #   margin  8                 channels 36/54
 #
 # Below about 10 the outer tiles start crowding whatever sits next to the wheel on the board.
-MARGIN = 14.0
+#
+# RAISED FROM 14 TO 33, and it is worth saying exactly what that number is.
+#
+# The nine tiles are scaled to 92% about their OWN centres, which shrinks each picture without
+# moving it -- so every gap grows by what its two neighbours lost. The arrangement got looser
+# while the art got smaller, and nobody asked for that. It was then closed again by hand, nine
+# tiles at a time, in `duty_tile_offsets.json`.
+#
+# That put a property of the LAYOUT into a file of per-tile judgements, where it does not belong:
+# it made eight of the nine offsets mostly arithmetic, and it meant any future change to the tile
+# scale silently invalidated all of them. The spread belongs here, in the one constant that
+# already means "how far apart are the nine".
+#
+# 33 is fitted, and fitted to something specific: it is the margin at which this 3x3 matches the
+# spread the offsets were dragged against, to 6.5 px mean and 10.3 px worst. It is not derived
+# from the tile scale -- contracting by 0.92 was tried first and lands 24.9 px out, WORSE than
+# leaving it at 14 (20.1). The relationship the offsets actually encode, each tile's depth over
+# its acolyte row, is exactly invariant under this constant (measured: +0.0 px on all nine),
+# because a tile and its row move together. So this changes the arrangement and changes nothing
+# about what a saved offset means.
+#
+# Measured at the wheel's drawn size (877.8 px), tiles at 92%, offsets applied -- which is why
+# these do not compare with the `channels` column above, taken on unscaled tiles in grid units:
+#
+#                        side-by-side gap        above-below gap
+#   margin 14            min 22.9  mean 33.4     min 32.4  mean 36.4
+#   margin 26.8          min 11.6  mean 22.2     min 21.1  mean 25.2
+#   margin 33            min  6.2  mean 16.7     min 15.7  mean 19.7   <- here
+#
+# 6.2 px is thin. It is the narrowest pair on the board and the floor for this constant: the
+# acolytes stand in these channels, drawn over the tiles rather than between them, and the row
+# below is what they would start to read against.
+MARGIN = 33.0
 
 
 def _points(d: str):
@@ -601,7 +812,19 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   margin: float | None = MARGIN, background: str = BACKGROUND,
                   palette: str | None = PALETTE,
                   palettes: tuple[str, ...] = ("chroma", "full"),
-                  arrows: bool = True,
+                  # OFF by default now. The arrows were the only thing on the board saying which
+                  # duty follows which, so removing them removes that information from the view
+                  # entirely -- it is not merely decluttering. They also no longer line up: the
+                  # tiles carry per-tile offsets and the arrows are drawn from the untouched
+                  # adjacency, so they cross the gaps at angles that match nothing. Pass
+                  # arrows=True to get them back.
+                  arrows: bool = False,
+                  acolytes: list[list[int]] | dict[int, list[int]] | None = None,
+                  # False draws the tiles WITHOUT the saved offsets, for a caller that applies
+                  # them itself. gen_tile_offsets.py is the one: it moves tiles live with a
+                  # transform, so the shapes it starts from must not already carry the file's
+                  # numbers or every offset lands twice.
+                  offsets: bool = True,
                   cells: list[int] | None = None,
                   uid: str = "dg") -> str:
     """The grid as one self-contained <svg>, sized by its viewBox and nothing else.
@@ -621,7 +844,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     """
     meta = meta or load()
     box = meta["box"]
-    laid = meta["shapes"] if margin is None else place(meta["shapes"], box, margin)
+    # Two versions of the same nine, both through laid_shapes so the offsets tool cannot disagree
+    # with the board about where a tile starts. The tiles get the saved offsets; the acolyte rows
+    # are built from the unoffset shapes and never move, which is the whole point of the offsets.
+    frozen = laid_shapes(meta, margin, offsets=False)
+    laid = laid_shapes(meta, margin, offsets=offsets)
     cells = list(cells or DEFAULT_CELLS)
     if sorted(cells) != list(range(9)):
         raise ValueError(
@@ -734,6 +961,26 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
         # `laid`, not `shapes`: the arrows are between SQUARES, and shapes has been
         # reindexed by duty. Passing the reindexed list makes them follow the shuffle.
         out.append(arrows_svg(laid, box=box, uid=uid))
+    if acolytes:
+        # AFTER every tile group and outside all of them. That is what freezes the rows against
+        # the tiles: nothing a tile's own transform or offset does can reach these.
+        got = acolytes if isinstance(acolytes, dict) else dict(enumerate(acolytes))
+        # pointer-events="none" is load-bearing. The row is drawn after the tiles, so it is on top
+        # of their hit areas and overlaps each tile's bottom 60%: without this a pointer on an
+        # acolyte hits the figure instead of the tile and the hover simply does not fire. It would
+        # not have shown up in a count of working hover targets either -- the hit rects' CENTRES
+        # sit above the figures, so testing the centres passes while the bottom quarter is dead.
+        out.append('<g class="dg-acolytes" aria-hidden="true" pointer-events="none">')
+        for i, counts in sorted(got.items()):
+            if not (0 <= int(i) < 9) or counts is None:
+                continue
+            if len(counts) != len(SEAT_ORDER):
+                raise ValueError(
+                    "acolytes[%r] has %d counts; there are %d seats (%s). A short row would draw "
+                    "one seat's acolytes under another seat's figure."
+                    % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
+            out.append(acolyte_row(frozen[int(i)], counts))
+        out.append("</g>")
     out.append("</svg>")
     return "".join(out)
 

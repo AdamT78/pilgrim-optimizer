@@ -87,6 +87,45 @@ def test_the_picker_draws_with_the_boards_own_filters():
             "with its own equal-for-now duplicates of them. Import it." % (name, name))
 
 
+def test_the_offsets_tool_lays_the_tiles_out_where_the_board_does():
+    """The tool and the board must start from the same nine shapes, or the offsets mean nothing.
+
+    They did not. gen_tile_offsets.py scaled the raw traced shapes itself and skipped `place`,
+    which re-lays the nine as an even 3x3 and spreads them apart -- up to 25.6 screen px per tile,
+    measured at the MARGIN of the day, 14.
+    So the tool showed a tighter arrangement than the board builds, offsets dragged in it were
+    judged against tiles that were never where the board would put them, and when applied they
+    moved every tile by exactly the saved number and the result still looked wrong.
+
+    That is the shape of fault worth a guard: nothing raises, nothing is measurably broken in
+    either file, and the two simply disagree about the question. Compared as STRINGS rather than as
+    centres, because a tile can share a centre with a different outline.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("gen_tile_offsets.py is not in this checkout")
+    import re
+
+    import gen_tile_offsets as tool
+    assert tool.scaled_shapes() == g.laid_shapes(offsets=False), (
+        "gen_tile_offsets.py is not drawing the tiles where gen_duty_grid.py draws them, so an "
+        "offset dragged in the tool will not put a tile where you put it. The tool must ask "
+        "gen_duty_grid.laid_shapes() rather than working the layout out again.")
+
+    # And what the COMPONENT emits, because the fault that actually shipped was there rather than
+    # here: the tool handed already-laid shapes back to duty_grid_svg, which laid them out and
+    # offset them a second time, and the page's own script applied the file a third. The tool then
+    # opened 27.1 px per tile away from the board while every function above was correct.
+    clips = lambda svg: re.findall(r'<clipPath id="dg-c\d"><path d="([^"]+)"/></clipPath>', svg)
+    for want_offsets in (True, False):
+        drawn = clips(g.duty_grid_svg(tiles_dir=None, palettes=(), offsets=want_offsets))
+        assert drawn == g.laid_shapes(offsets=want_offsets), (
+            "duty_grid_svg(offsets=%r) is not drawing laid_shapes(offsets=%r). If the offsets are "
+            "applied twice every saved nudge lands at double its value, and nothing raises: the "
+            "tiles simply are not where the tool said they would be."
+            % (want_offsets, want_offsets))
+
+
 def test_every_tile_is_filed_under_the_index_its_name_claims():
     """`NN_slug_V.png` -- NN is the one-based position in DUTY_NAMES, and slug is that name.
 
@@ -236,12 +275,19 @@ def test_a_shuffled_arrangement_is_drawn_and_a_broken_one_is_refused():
 
 def test_the_arrows_do_not_depend_on_the_arrangement():
     """Which squares are adjacent is a property of the grid, not of which duty was dealt where,
-    so shuffling the tiles must not move a single arrow."""
+    so shuffling the tiles must not move a single arrow.
+
+    `arrows=True` is passed EXPLICITLY. The default became False when the arrows were taken off the
+    board, and this guard then failed -- correctly, and usefully: it asserts `a and a == b`, so an
+    empty `a` fails rather than passing vacuously, which is the difference between noticing a
+    changed default and silently testing nothing. What it guards is how the arrows behave when
+    drawn, not whether they are drawn, so it asks for them.
+    """
     g = grid()
     import re
     arrows = lambda svg: re.findall(r'<g transform="translate\([^"]+\) rotate\([^"]+\)"', svg)
-    a = arrows(g.duty_grid_svg(tiles_dir=None))
-    b = arrows(g.duty_grid_svg(tiles_dir=None, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
+    a = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True))
+    b = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
     assert a and a == b, "the arrows moved when the arrangement changed"
 
 
@@ -333,3 +379,55 @@ def test_the_arrow_gap_is_the_gap_that_is_drawn():
         "the %.2f that ARROW_GAP promises"
         % (g._inset(g.ARROW_W, box) - ink, g.ARROW_GAP))
     assert g.ARROW_GAP > 0, "a zero or negative gap puts the arrow head against the tile"
+
+
+def test_the_offsets_tool_watches_every_generator_it_builds_from():
+    """Whatever `--serve` rebuilds a page from, it must also notice has changed on disk.
+
+    The tool's server rebuilds the whole page on every request, and its docstring said that made a
+    stale checkout impossible. It did not. Rebuilding re-opens the JSON files, because `build` and
+    `dg.load` read them each call -- but `import gen_duty_grid` runs ONCE, at process start, and
+    every later rebuild calls into that same module object. So a server left running across an edit
+    kept serving pre-edit geometry, under a page that looked freshly built, through any number of
+    hard refreshes.
+
+    That cost three separate rounds of "the duty tiles are not where I saved them" -- the last one
+    after the bug it was blamed on had already been fixed and measured at 0.001 px, which is the
+    expensive part: a stale server makes a correct fix look like a failed one, so the next thing
+    edited is code that was right.
+
+    `serve` now stamps its sources and checks them per request. This guards the half of that which
+    rots silently: the LIST. Importing another generator here and forgetting to watch it restores
+    the original bug in a new place, and nothing else would say so.
+    """
+    import ast
+
+    tool_path = RENDER / "gen_tile_offsets.py"
+    if not tool_path.is_file():
+        pytest.skip("gen_tile_offsets.py is not in this checkout")
+    grid()                     # puts ui/render on sys.path; without it this test needs a neighbour
+                               # to have run first, and passes or errors depending on -k
+
+    import gen_tile_offsets as tool
+    watched = {Path(p).resolve() for p in tool._sources()}
+    assert watched, "_sources() is empty, so the staleness check cannot fail"
+    for p in watched:
+        assert p.is_file(), "_sources() names %s, which does not exist" % p
+
+    # every module this file imports that lives beside it in ui/render
+    imported = set()
+    for node in ast.walk(ast.parse(tool_path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            imported.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            imported.add(node.module)
+    local = {(RENDER / (n.split(".")[0] + ".py")).resolve() for n in imported}
+    local = {p for p in local if p.is_file()}
+    local.add(tool_path.resolve())
+
+    missed = local - watched
+    assert not missed, (
+        "gen_tile_offsets.py builds its page from %s but does not watch %s for changes. A --serve "
+        "session left running across an edit to it will keep serving the old layout, look freshly "
+        "rebuilt while doing it, and send you looking for the bug in code that is already correct."
+        % (sorted(p.name for p in local), sorted(p.name for p in missed)))
