@@ -510,12 +510,21 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-def acolyte_row(shape: str, counts) -> str:
-    """One row of four under a tile, from the tile's shape BEFORE its offset was applied.
+def acolyte_box(shape: str) -> dict:
+    """Where one tile's row of four sits: {sx, sy, fw, fh, gap}, in grid units.
 
-    Before, deliberately. The grid is frozen: an earlier version derived each row from its own
-    tile's offset bounding box, so moving a tile moved its row with it and the relationship the
-    offsets exist to set was invariant. Tiles move; the row does not.
+    THE ONE PLACE THIS IS WORKED OUT. It was two: this file emitted the row and the drag tool
+    computed an identical copy to lay its frozen grid out against, with FIG_FRAC, the overlap and
+    the aspect written down twice as well. They agreed, which is the only interesting moment to
+    merge them -- once they disagree the tool is showing rows the board does not draw, and every
+    offset judged in it is judged against the wrong thing. That exact fault has already happened
+    here once, with `place`.
+
+    The shape passed in is the tile BEFORE its per-tile offset. Deliberately: the grid is frozen,
+    and an earlier version derived each row from its own tile's offset bounding box, so moving a
+    tile moved its row with it and the relationship the offsets exist to set was invariant. Tiles
+    move; the row does not. The ARRANGEMENT shift does move it, because that is carried in the
+    unoffset shapes themselves.
     """
     n = [float(v) for v in shape.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
     xs, ys = n[0::2], n[1::2]
@@ -524,8 +533,25 @@ def acolyte_row(shape: str, counts) -> str:
     fw = w * FIG_FRAC
     fh = fw / ACOLYTE_ASPECT
     gap = fw * 0.24
-    sx = x0 + (w - (4 * fw + 3 * gap)) / 2
-    sy = y1 - fh * FIG_OVERLAP
+    return {"sx": x0 + (w - (4 * fw + 3 * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
+            "fw": fw, "fh": fh, "gap": gap}
+
+
+def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float:
+    """The lowest acolyte ink on the board, in grid units. The bottom of the drawn block.
+
+    The tiles are not the bottom of this component -- the figures hang below the last row of them
+    -- so anything on the board that wants to line up with what the eye sees as the wheel's foot
+    has to ask for this rather than for the box.
+    """
+    return max(acolyte_box(d)["sy"] + acolyte_box(d)["fh"]
+               for d in laid_shapes(meta, margin, offsets=False))
+
+
+def acolyte_row(shape: str, counts) -> str:
+    """One row of four under a tile, drawn. The geometry is `acolyte_box`."""
+    b = acolyte_box(shape)
+    sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
     uris = acolyte_tints()
     out = []
     for j, seat in enumerate(SEAT_ORDER):

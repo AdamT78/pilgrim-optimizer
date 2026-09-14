@@ -49,9 +49,6 @@ import gen_duty_grid as dg  # noqa: E402
 OFFSETS_PATH = UI / "duty_tile_offsets.json"
 WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
-FIG_FRAC = 0.205                    # acolyte width as a fraction of the tile's width
-OVERLAP = 0.60                      # how much of the figure sits above the tile's bottom edge
-ASPECT = 228 / 210.0                # the acolyte asset's own proportion
 TINTS = UI / "assets-gothic" / "population"
 SEATS = [("sage", "#221c16"), ("pewter", "#F2E8CC"), ("plum", "#F2E8CC"), ("bone", "#221c16")]
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
@@ -237,21 +234,14 @@ def scaled_shapes():
 
 
 def acolyte_grid(shapes):
-    """Computed once from the unoffset tiles, then frozen. Nothing here moves again."""
-    grid = []
-    for d in shapes:
-        P = _pts(d)
-        xs = [p[0] for p in P]
-        ys = [p[1] for p in P]
-        x0, x1, y1 = min(xs), max(xs), max(ys)
-        w = x1 - x0
-        fw = w * FIG_FRAC
-        fh = fw / ASPECT
-        gap = fw * 0.24
-        span = 4 * fw + 3 * gap
-        grid.append({"sx": x0 + (w - span) / 2, "sy": y1 - fh * OVERLAP,
-                     "fw": fw, "fh": fh, "gap": gap})
-    return grid
+    """Computed once from the unoffset tiles, then frozen. Nothing here moves again.
+
+    `dg.acolyte_box` does the arithmetic. This file used to repeat it, along with FIG_FRAC, the
+    overlap and the aspect -- a second copy of the geometry the board actually draws, in the one
+    tool whose whole job is to judge tiles against it. Asking the grid is what keeps the rows this
+    page freezes identical to the rows the board emits.
+    """
+    return [dg.acolyte_box(d) for d in shapes]
 
 
 def tint_uris():

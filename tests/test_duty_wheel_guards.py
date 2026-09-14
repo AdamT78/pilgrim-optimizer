@@ -744,3 +744,65 @@ def test_the_tools_pixel_basis_is_the_board_the_offsets_will_be_drawn_on():
         assert recorded is None or abs(float(recorded) - tool.WHEEL_PX) < 0.05, (
             "duty_tile_offsets.json records wheel_px %s but the tool is at %.1f; the numbers in "
             "it were judged on a different board" % (recorded, tool.WHEEL_PX))
+
+
+def test_the_action_box_ends_on_the_acolytes_feet():
+    """The action box is sized from the wheel's visible foot, and that foot is not its box.
+
+    The figures hang below the last row of tiles, so the line the eye reads as the bottom of the
+    component sits above the box's own bottom edge -- 42.3 px above it, as the board stands. The
+    action box is aligned to that line rather than to the row it lives in.
+
+    Two ways this rots, and neither shows up as an error. The number could be frozen into the
+    stylesheet, in which case the next drag or arrangement shift moves the acolytes and the box
+    stays put. Or the wheel could stop being the thing it is measured against -- `geometry()` fits
+    the wheel to whichever of the column's width or height runs out first, so it moves when a gap
+    or the banner does. Both give a board that looks deliberate and is a few px out.
+    """
+    g = grid()
+    if not (RENDER / "gen_game_view.py").is_file():
+        pytest.skip("gen_game_view.py is not in this checkout")
+    import gen_game_view as gv
+
+    G = gv.geometry(gv.layout())
+    box = g.load()["box"]
+    foot = G["banner_h"] + G["wheel"] * (g.acolyte_foot() / box)
+    assert abs(G["act_h"] - foot) < 0.1, (
+        "the action box is %.1f px tall but the acolytes' feet are at %.1f px from the top of "
+        "that column. It is meant to end on that line." % (G["act_h"], foot))
+    assert G["act_h"] < G["main_h"], (
+        "the action box fills its whole row, so it is not being cut to the acolyte line at all "
+        "and this check is comparing two numbers that happen to match")
+
+    # and the foot must actually track the tiles, or the alignment is a coincidence
+    import json
+    path = g.OFFSETS
+    original = path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        data = json.loads(original) if original else {}
+        # RELATIVE to whatever is already saved, not from zero. The board currently carries a
+        # shift, so setting an absolute -60 moves the foot by the difference, and asserting it
+        # moved the full 60 failed on correct code -- a test wrong about the starting point looks
+        # exactly like the bug it was written to catch.
+        was = float((data.get("arrangement_shift") or {}).get("dy", 0.0))
+        before = g.acolyte_foot()
+        data["arrangement_shift"] = {"dx": 0.0, "dy": was - 60.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        after = g.acolyte_foot()
+        G2 = gv.geometry(gv.layout())
+        moved = (before - after) * (G2["wheel"] / box)
+        assert abs(moved - 60.0) < 0.1, (
+            "moving the whole arrangement 60 px up moved the acolyte foot %.1f px, so the foot "
+            "is not tracking the tiles at all." % moved)
+        # THE BOX ITSELF, not just the foot. Asserting only that the foot moved leaves a frozen
+        # constant passing: `act_h = 923.5` is correct for the offsets saved today and wrong the
+        # moment anyone drags, and the first check above cannot see the difference because it
+        # never asks what the box did. Writing this guard without the line below produced exactly
+        # that -- the deliberate regression passed.
+        assert abs((G["act_h"] - G2["act_h"]) - 60.0) < 0.15, (
+            "the acolytes' feet moved 60 px but the action box moved %.1f px. It is not being "
+            "derived from them -- most likely the height is a literal that happens to be right "
+            "for the offsets currently saved." % (G["act_h"] - G2["act_h"]))
+    finally:
+        if original is not None:
+            path.write_text(original, encoding="utf-8")
