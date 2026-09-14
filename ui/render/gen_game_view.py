@@ -749,16 +749,6 @@ def _data_uri(p):
     return "data:%s;base64,%s" % (kind, base64.b64encode(p.read_bytes()).decode("ascii"))
 
 
-def ground_uri():
-    """The ground, embedded, because this page is opened from wherever it was written."""
-    p = UI / "assets-gothic" / "ui" / "ground.webp"
-    if not p.is_file():
-        print("no %s -- the stage falls back to flat colour. Run "
-              "`python3 ui/render/gen_ground.py` to make it." % p.name)
-        return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
-    return _data_uri(p)
-
-
 def _image_size(p):
     """(w, h) of an image, or None if Pillow is not here.
 
@@ -834,6 +824,8 @@ def main():
     ap.add_argument("--config", default=None)
     ap.add_argument("--seats", default=None, help="comma-separated seat colours")
     ap.add_argument("--lit", default=None, help="which seat has the turn (default: the first)")
+    ap.add_argument("--duty-version", default=dg.VERSION,
+                    help="which duty tile set to draw (default: gen_duty_grid.VERSION, %(default)s)")
     ap.add_argument("--output", default=None)
     ap.add_argument("--open", action="store_true")
     z = ap.parse_args()
@@ -880,12 +872,15 @@ def main():
     # lines as the action box and the wheel -- but the panel inside it is the action box's width.
     sa, sa_spec = g2.special_placeholder(G["panel_w"], G["top_h"],
                                          L["frame_border_y"], L["frame_border_x"])
-    wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION, klass="wheel gv-grid")
+    wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid")
+    drawn = len(dg.find_tiles(version=z.duty_version))
     corner, corner_fit = corner_ornament(G["bw"], G["corner_h"])
 
     page = PAGE % {
         "board_css": gb["CSS"],
-        "css": CSS % {"ground": ground_uri(), "pad": G["pad"]},
+        # dg.ground_uri(), not a local copy: the picker needs the same field, and a second
+        # definition of where the ground lives is a second thing to keep in step.
+        "css": CSS % {"ground": dg.ground_uri(), "pad": G["pad"]},
         "sizes": SIZES % {
             "can_w": L["canvas_width"], "can_h": L["canvas_height"],
             "pad": G["pad"], "mt": L["margin_top"], "mb": L["margin_bottom"],
@@ -930,6 +925,11 @@ def main():
     print("  top row  %g tall   main row %.1f tall" % (G["top_h"], G["main_h"]))
     print("  banner   %.1f      duty wheel %.1f square (%s-bound, %.1f px spare)"
           % (G["banner_h"], G["wheel"], G["bound_by"], G["slack"]))
+    # Said out loud, because a version with no files is not an error here -- the wheel draws its
+    # flat region colours and carries on, which looks like a deliberate placeholder board rather
+    # than a wrong --duty-version.
+    print("  tiles    version %s, %d of 9 drawn%s"
+          % (z.duty_version, drawn, "" if drawn else "   <- no art found for this version"))
     print("  boards   %d x %.1f + gaps = %.1f, starting %.1f below the top row"
           % (G["seats"], G["bh"], G["boards_h"], G["left_top"]))
     if corner_fit:

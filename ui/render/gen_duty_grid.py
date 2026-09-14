@@ -18,9 +18,9 @@ not invented. `duty_grid_shapes.json` records where they came from.
 
 WHAT IT CARRIES
 
-The *shapes* are geometry, but the pictures inside them are not, and those are embedded: the
-version B tiles from `assets-gothic/duty-tiles/`, downscaled to the size the component is actually
-drawn at. A tile with no artwork yet keeps its flat region-map colour, so a half-finished set
+The *shapes* are geometry, but the pictures inside them are not, and those are embedded: the tiles
+of whichever version `VERSION` names, from `assets-gothic/duty-tiles/`, downscaled to the size the
+component is actually drawn at. A tile with no artwork yet keeps its flat region-map colour, so a half-finished set
 renders as a grid with holes rather than failing.
 
 The lit and dim states are `feColorMatrix` filters, not further artwork. That is the decision the
@@ -38,6 +38,27 @@ import re
 HERE = pathlib.Path(__file__).resolve().parent
 SHAPES = HERE.parent / "assets-gothic" / "metadata" / "duty_grid_shapes.json"
 TILES = HERE.parent / "assets-gothic" / "duty-tiles"
+# The field this component is built to sit on and deliberately does not paint. BACKGROUND is None
+# so the ground shows through the channels between the nine tiles, and the path lives here rather
+# than in either caller because BOTH need it: the board that lays the wheel on it, and the picker,
+# whose whole claim is to show what the board will show and which drew its own parchment instead.
+GROUND = HERE.parent / "assets-gothic" / "ui" / "ground.webp"
+
+
+def ground_uri() -> str:
+    """The ground as a data: URI, or a transparent pixel if it is not in this checkout.
+
+    Embedded rather than linked: every page that uses it is written to ui/generated/ and then
+    opened from wherever it lands, so a relative src would work in exactly one of those cases and
+    silently show nothing in the rest. Absent, the caller falls back to its own flat colour and
+    the board is plainer rather than broken.
+    """
+    import base64
+    if not GROUND.is_file():
+        print("no %s -- falling back to flat colour. Run "
+              "`python3 ui/render/gen_ground.py` to make it." % GROUND.name)
+        return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+    return "data:image/webp;base64," + base64.b64encode(GROUND.read_bytes()).decode("ascii")
 
 # Version B -- grim dark -- chosen over A after both were generated in full and compared in the
 # picker. The case was not only taste. Measured over the eight tiles of each:
@@ -51,7 +72,33 @@ TILES = HERE.parent / "assets-gothic" / "duty-tiles"
 #
 # A's clipping is the load-bearing one: it sits high enough that the lit filter pushes highlights
 # past white and the engraving inside them is simply gone. B has the headroom.
-VERSION = "B"
+#
+# VERSION C -- the limited palette -- now supersedes B. The C prompts changed subject lines only;
+# the palette paragraph is byte-identical, so this is the same instruction drawn again, with the
+# people fixed: a nun overseeing the road gang instead of a slipping mason, roads and shrines
+# instead of piles driven into a river, an ordinand and a friar who are no longer the same young
+# man twice, and women among the reapers.
+#
+# The figures below are measured on the ASSEMBLED WHEEL -- through the palette, the dim filter and
+# the lit filter, at DIM_SATURATE 1.00 -- and are NOT comparable to the A/B rows above, which were
+# measured on the tiles themselves. B is repeated here on the same method so C has something
+# honest to sit beside:
+#
+#                        B        C
+#   tonal spread      18-203   23-230     2nd-98th percentile of resting luminance
+#   lit blown           6.8%    11.4%     lit pixels with a channel at or over 250
+#   hover signal      +61 R-B  +67 R-B    median resting-to-lit temperature change
+#   edge separation    10.6     12.3      luminance across the silhouette, same ground
+#
+# C IS THE ONE WITH THE CLIPPING NOW, and that is the fault that disqualified A. It is smaller in
+# kind -- A lost engraving inside large blown areas, C's are scattered highlights on a brighter
+# set -- but it is the same mechanism and it is worth knowing before the LIT slopes are ever
+# tuned: C has about half B's headroom under them. It buys a tile that separates better from the
+# ground at rest (12.3 against 10.6) and a slightly stronger hover.
+#
+# Six of C's nine also sit below the tonal band check_tile enforces, against three of B's, and
+# that band was deliberately left at B's values rather than widened to fit the delivery.
+VERSION = "C"
 
 # Flat fills, one per tile. These are a REGION MAP, not a palette: each becomes a hover mask when
 # the art lands, and none of them survives into the finished wheel. Chosen to be easy to tell
@@ -101,10 +148,17 @@ def find_tiles(root: pathlib.Path = TILES, version: str = VERSION) -> dict[int, 
     NN is the tile's position in DUTY_NAMES, one-based -- so Produce is 07 and Taxation is 08,
     and getting that wrong silently draws a tile in its neighbour's square. The regex also
     rejects the `_pair`/`_left`/`_right` sources that sit under duty-tiles/sources/.
+
+    The version group is ANY single letter, not a list of the versions that exist. Spelled `[AB]`
+    it did not fail when version C arrived -- it matched nothing, `found` came back empty, and the
+    wheel drew nine flat region colours and reported "no art", which is precisely what it does for
+    a set nobody has drawn yet. The set was there, in the right folder, under the right names. A
+    pattern that names today's versions turns tomorrow's into an absence, and absence is the one
+    state this component is built to tolerate silently.
     """
     if not root or not root.is_dir():
         return {}
-    pat = re.compile(r"^(\d{2})_([a-z_]+)_([AB])\.(png|webp|jpg)$", re.I)
+    pat = re.compile(r"^(\d{2})_([a-z_]+)_([A-Z])\.(png|webp|jpg)$", re.I)
     found: dict[int, pathlib.Path] = {}
     for p in sorted(root.rglob("*")):
         m = pat.match(p.name)
@@ -268,10 +322,51 @@ def bbox(path_d: str) -> tuple[float, float, float, float]:
 # rather than extra artwork because a second diffusion pass is not deterministic: two merges of
 # one pair differ by edge-difference 13.0, so a generated "lit" tile would redraw itself under
 # the cursor. A filter leaves the drawing alone.
-DIM = ('<feColorMatrix type="saturate" values="0.40"/><feComponentTransfer>'
-       '<feFuncR type="linear" slope=".94" intercept=".005"/>'
-       '<feFuncG type="linear" slope=".96" intercept=".010"/>'
-       '<feFuncB type="linear" slope="1.02" intercept=".025"/></feComponentTransfer>')
+# HOW FAR THE EIGHT ARE HELD BACK FROM THE CITY'S PRESENTATION, as one knob.
+#
+# This was the answer to "the city looks coloured and the duty tiles do not", and the palette
+# transfer -- the obvious suspect -- was not the cause. Measured on the assembled wheel, version C:
+#
+#                        the eight            the city
+#                    L med  C p90  C p99    L med  C p90  C p99
+#   saturate 0.40     57.3    5.1   10.9     58.1   22.3   36.7
+#   saturate 0.70     57.4   10.2   29.7       "      "      "
+#   saturate 1.00     57.5   13.7   37.0       "      "      "
+#
+# All of this art is near-neutral by prompt -- the city's own MEDIAN chroma is 4.0. Its colour is
+# a top-decile event, a warm sky over grey stone, and `saturate` acts hardest exactly there. At
+# 0.40 the eight kept 10.9 of the city's 36.7 at the 99th percentile, so the one thing that makes
+# this palette read as coloured was the one thing being removed, and the tiles went cold blue-grey
+# against a warm city. At 1.00 the top end matches within 0.3.
+#
+# Turning the PALETTE off instead makes it worse, not better: the eight then keep their own tonal
+# key and sit at L 40.9 against the city's 58.1. The transfer is what lifts them to its level.
+#
+# The cost is hover headroom, and it is real: mean lit-vs-resting difference falls 24.6 -> 19.3,
+# about a fifth. 0.70 is the middle if the hover ever feels weak.
+DIM_SATURATE = 1.00
+
+
+def _dim(sat: float) -> str:
+    """The resting filter at a given saturation, with its tonal nudge scaled to match.
+
+    One knob rather than two, because the nudge is part of holding a tile back and has no meaning
+    on its own: at sat 1.00 it interpolates to identity, so the eight get the city's treatment
+    exactly rather than its colour plus a leftover cold cast. At 0.40 it reproduces the original
+    filter byte for byte, which is what makes this a setting and not a rewrite.
+    """
+    t = (1.0 - sat) / 0.60                      # 0 at sat 1.00, 1 at sat 0.40
+    f = [("R", 1 - 0.06 * t, 0.005 * t),
+         ("G", 1 - 0.04 * t, 0.010 * t),
+         ("B", 1 + 0.02 * t, 0.025 * t)]
+    return ('<feColorMatrix type="saturate" values="%.2f"/><feComponentTransfer>' % sat
+            + "".join('<feFunc%s type="linear" slope="%s" intercept="%s"/>'
+                      % (c, ("%.2f" % s).lstrip("0") or "0", ("%.3f" % i).lstrip("0") or "0")
+                      for c, s, i in f)
+            + '</feComponentTransfer>')
+
+
+DIM = _dim(DIM_SATURATE)
 LIT = ('<feColorMatrix type="saturate" values="1.20"/><feComponentTransfer>'
        '<feFuncR type="linear" slope="1.34" intercept=".10"/>'
        '<feFuncG type="linear" slope="1.14" intercept=".055"/>'
