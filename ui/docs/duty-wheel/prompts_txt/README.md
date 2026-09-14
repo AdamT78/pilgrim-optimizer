@@ -81,16 +81,22 @@ variety, the city has to be regenerated first — it is the reference every othe
 to, and `PALETTE = "full"` in `gen_duty_grid.py` would otherwise pull colourful tiles back toward
 this grey.
 
-**Where to put the results.** The tooling only knows versions A and B (`find_tiles` matches
-`[AB]`, and the picker iterates over the two). Rather than widen that for a trial, save the C
-tiles as `NN_slug_B.webp` in a *separate folder*, and point the tools at it:
+**Where to put the results.** Straight into `duty-tiles/C/` as `NN_slug_C.webp`, with the source
+pairs in `duty-tiles/sources/C/`. The refactor this section used to defer has been done: every
+version pattern takes any single letter now, the picker discovers which versions exist instead of
+listing them, and `gen_duty_grid.VERSION` says which one the board draws.
 
 ```
-python3 ui/render/gen_picker_grid.py --tiles ui/assets-gothic/duty-tiles-colour --open
+python3 ui/render/check_tile.py ui/assets-gothic/duty-tiles/C/*.webp \
+        --version C --joins-out ui/assets-gothic/duty-tiles/joins.json
+python3 ui/render/gen_picker_grid.py --tiles ui/assets-gothic/duty-tiles --open
+python3 ui/render/gen_game_view.py --duty-version C --open
 ```
 
-That keeps the committed B set intact and needs no code change. If colour wins, adding a real
-version C is a small refactor across four files and worth doing properly then.
+The advice this replaced was to save the C tiles under a `_B` suffix in a side folder, because the
+tooling only knew `[AB]`. **Do not do that.** It was a workaround for a limitation that no longer
+exists, and it files one set under another set's name — a tile's letter and number decide which
+set it belongs to and which square it is drawn in, which is why there is a guard on exactly that.
 
 ## The merge step now makes both orders
 

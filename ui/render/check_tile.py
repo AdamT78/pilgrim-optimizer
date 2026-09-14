@@ -16,7 +16,7 @@ that gets used rather than being copied across by hand:
 
     check_tile.py <tiles>/*.png --joins-out <tiles>/joins.json
 
-Usage:  check_tile.py TILE.png [--single] [--version A|B]
+Usage:  check_tile.py TILE.png [--single] [--version V]   (the versions TARGET declares)
 """
 from __future__ import annotations
 import argparse

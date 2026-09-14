@@ -18,9 +18,9 @@ not invented. `duty_grid_shapes.json` records where they came from.
 
 WHAT IT CARRIES
 
-The *shapes* are geometry, but the pictures inside them are not, and those are embedded: the
-version B tiles from `assets-gothic/duty-tiles/`, downscaled to the size the component is actually
-drawn at. A tile with no artwork yet keeps its flat region-map colour, so a half-finished set
+The *shapes* are geometry, but the pictures inside them are not, and those are embedded: the tiles
+of whichever version `VERSION` names, from `assets-gothic/duty-tiles/`, downscaled to the size the
+component is actually drawn at. A tile with no artwork yet keeps its flat region-map colour, so a half-finished set
 renders as a grid with holes rather than failing.
 
 The lit and dim states are `feColorMatrix` filters, not further artwork. That is the decision the

@@ -99,8 +99,12 @@ drawn, tonal key, near-black mass. Run it before sending anything.
   these files comes from the `DUTY_TEXT` table in `gen_board.py`. `MERCHANT_ON = "Taxation"`
   suggests a token walks the ring, which makes adjacency a rules question. Settle before art is
   cut to fit.
-- **Version A or B.** Engraved plate reads as nine distinct objects; grim dark is more atmospheric
-  but the unselected tiles start merging into each other. Undecided.
+- ~~**Version A or B.**~~ **Settled, twice** — B over A on clipping, then C over B. The reasoning
+  and measurements for both sit beside `VERSION` in `gen_duty_grid.py`, which is the one place that
+  says which set the board draws. Worth keeping here because of how the worry recorded in this
+  entry resolved: "the unselected tiles start merging into each other" was not the art, it was the
+  resting filter. `saturate 0.40` was stripping the top-decile colour this palette keeps all its
+  warmth in, and the tiles went cold grey against a warm city. It is `DIM_SATURATE` now, at 1.00.
 - **Tonal drift.** Three generations have come in at mean 89–100 against a 122 first tile, on
   wording that explicitly asks for light-to-middle values. May be where the model sits; if so, lift
   the key in the composite instead.

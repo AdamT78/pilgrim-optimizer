@@ -768,7 +768,7 @@
     },
     "duty-tiles/C/01_allocation_C.webp": {
       "state": "present",
-      "title": "Allocation duty tile, version C, grim dark Gothic",
+      "title": "Allocation duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -779,7 +779,7 @@
     },
     "duty-tiles/C/02_clerical_C.webp": {
       "state": "present",
-      "title": "Clerical duty tile, version C, grim dark Gothic",
+      "title": "Clerical duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -790,7 +790,7 @@
     },
     "duty-tiles/C/03_construct_C.webp": {
       "state": "present",
-      "title": "Construct duty tile, version C, grim dark Gothic",
+      "title": "Construct duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -801,7 +801,7 @@
     },
     "duty-tiles/C/04_build_roads_C.webp": {
       "state": "present",
-      "title": "Build Roads duty tile, version C, grim dark Gothic",
+      "title": "Build Roads duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -812,7 +812,7 @@
     },
     "duty-tiles/C/05_city_C.webp": {
       "state": "present",
-      "title": "The City duty tile, version C, grim dark Gothic",
+      "title": "The City duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -823,7 +823,7 @@
     },
     "duty-tiles/C/06_ordination_C.webp": {
       "state": "present",
-      "title": "Ordination duty tile, version C, grim dark Gothic",
+      "title": "Ordination duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -834,7 +834,7 @@
     },
     "duty-tiles/C/07_produce_C.webp": {
       "state": "present",
-      "title": "Produce duty tile, version C, grim dark Gothic",
+      "title": "Produce duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -845,7 +845,7 @@
     },
     "duty-tiles/C/08_taxation_C.webp": {
       "state": "present",
-      "title": "Taxation duty tile, version C, grim dark Gothic",
+      "title": "Taxation duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -856,7 +856,7 @@
     },
     "duty-tiles/C/09_give_alms_C.webp": {
       "state": "present",
-      "title": "Give Alms duty tile, version C, grim dark Gothic",
+      "title": "Give Alms duty tile, version C, grim dark Gothic on a limited palette",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -867,7 +867,7 @@
     },
     "duty-tiles/sources/C/02_clerical_C_pair.webp": {
       "state": "present",
-      "title": "Clerical duty tile, version C, grim dark Gothic (pair panel)",
+      "title": "Clerical duty tile, version C, grim dark Gothic on a limited palette (pair panel)",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -878,7 +878,7 @@
     },
     "duty-tiles/sources/C/03_construct_C_pair.webp": {
       "state": "present",
-      "title": "Construct duty tile, version C, grim dark Gothic (pair panel)",
+      "title": "Construct duty tile, version C, grim dark Gothic on a limited palette (pair panel)",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -889,7 +889,7 @@
     },
     "duty-tiles/sources/C/06_ordination_C_pair.webp": {
       "state": "present",
-      "title": "Ordination duty tile, version C, grim dark Gothic (pair panel)",
+      "title": "Ordination duty tile, version C, grim dark Gothic on a limited palette (pair panel)",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -900,7 +900,7 @@
     },
     "duty-tiles/sources/C/07_produce_C_pair.webp": {
       "state": "present",
-      "title": "Produce duty tile, version C, grim dark Gothic (pair panel)",
+      "title": "Produce duty tile, version C, grim dark Gothic on a limited palette (pair panel)",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
@@ -911,7 +911,7 @@
     },
     "duty-tiles/sources/C/09_give_alms_C_pair.webp": {
       "state": "present",
-      "title": "Give Alms duty tile, version C, grim dark Gothic (pair panel)",
+      "title": "Give Alms duty tile, version C, grim dark Gothic on a limited palette (pair panel)",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
       "collection": "Pilgrim gothic v2",
       "source": "generated in ChatGPT sessions for this project; no upstream URL, no seed on record",
