@@ -29,8 +29,19 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gen_duty_grid import TWO_ACTION  # noqa: E402
 
-TARGET = {"A": (110, 130), "B": (70, 95)}
+# The tonal band each version is aiming at, as an INTENT rather than a description of what
+# arrived. C is given B's band because the C prompts changed subject lines only -- the palette
+# paragraph is byte-identical -- so a tile that misses it has drifted from what was asked for,
+# and moving the band to fit the delivery would be deleting the finding. C does miss: six of its
+# nine sit below 70 against three of B's.
+TARGET = {"A": (110, 130), "B": (70, 95), "C": (70, 95)}
 EDGE = 0.06
+# Where a two-action tile's scenes meet, as a fraction of its width. A constant, because the pair
+# is generated as two equal halves and the merge keeps them: all seven source pairs ever measured
+# split at 0.4993-0.5035. gen_duty_grid reads this out of joins.json rather than assuming it, so
+# a tile that ever genuinely differs is one hand edit away -- but nothing detects it, and the
+# thing that used to try got it wrong every time it could be checked.
+JOIN = 0.5
 
 
 def black_mass(g: np.ndarray) -> tuple[float, float]:
@@ -123,9 +134,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("tiles", nargs="+")
     ap.add_argument("--single", action="store_true", help="a one-action tile: no join expected")
-    ap.add_argument("--version", default="A", choices=["A", "B"])
+    ap.add_argument("--version", default="A", choices=sorted(TARGET))
     ap.add_argument("--joins-out", default=None,
-                    help="write {tile index: join fraction} for every tile named NN_slug_V.ext")
+                    help="write {tile index: join} for every two-action tile named NN_slug_V.ext")
     z = ap.parse_args()
     for t in z.tiles:
         check(Path(t), z.single, z.version)
@@ -137,7 +148,7 @@ if __name__ == "__main__":
         book = json.loads(out.read_text()) if out.is_file() else {}
         if book and all(k.isdigit() for k in book):      # a flat file from before versions
             book = {"A": book}
-        pat = re.compile(r"^(\d{2})_[a-z_]+_([AB])\.(png|webp|jpg)$", re.I)
+        pat = re.compile(r"^(\d{2})_[a-z_]+_([A-Z])\.(png|webp|jpg)$", re.I)
         added = {}
         for t in z.tiles:
             q = Path(t)
@@ -145,7 +156,16 @@ if __name__ == "__main__":
             idx = int(m.group(1)) - 1 if m else None
             if m and idx in TWO_ACTION:
                 v = m.group(2).upper()
-                book.setdefault(v, {})[str(idx)] = round(join_fraction(q), 4)
+                # JOIN, not join_fraction(q). This used to call the detector, and the detector is
+                # wrong -- see its docstring: on all four tiles where a source pair and the merge
+                # made from it were both available it reported 0.33-0.35 against an actual 0.500,
+                # every time, always left, because it finds the strongest vertical edge and on
+                # this material that is a pillar or a standing figure. joins.json was corrected to
+                # 0.5 by hand afterwards and its `_note` records why, but THIS writer was not,
+                # so the command the README tells you to run after generating a set would have
+                # quietly put the bad numbers back. Nothing downstream would complain: the
+                # highlight gradient would simply centre 17% into the wrong scene.
+                book.setdefault(v, {})[str(idx)] = JOIN
                 added[f"{v}{idx}"] = book[v][str(idx)]
         out.write_text(json.dumps(book, indent=1, sort_keys=True))
         print(f"\nwrote {out}: {added or 'nothing (single-action tiles have no join)'}")

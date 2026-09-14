@@ -39,7 +39,11 @@ RENDER = REPO / "ui" / "render"
 TILES = REPO / "ui" / "assets-gothic" / "duty-tiles"
 SHAPES = REPO / "ui" / "assets-gothic" / "metadata" / "duty_grid_shapes.json"
 TILE_PX = 1254          # the image tool's square maximum; see ui/docs/duty-wheel/
-NAME = re.compile(r"^(\d{2})_([a-z_]+)_([AB])\.(png|webp)$")
+# Any single version letter, matching gen_duty_grid.find_tiles. Spelled `[AB]` this guard read a
+# version C tile as a malformed FILENAME and said its number and its name disagreed, which is a
+# different and much more alarming fault than the one it had found. A pattern listing the versions
+# that exist has to be changed in step with the tree in every copy of it, and there were five.
+NAME = re.compile(r"^(\d{2})_([a-z_]+)_([A-Z])\.(png|webp)$")
 
 
 def grid():
