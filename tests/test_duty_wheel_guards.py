@@ -63,6 +63,30 @@ def tile_files():
             if p.suffix.lower() in {".png", ".webp"} and "sources" not in p.parts]
 
 
+def test_the_picker_draws_with_the_boards_own_filters():
+    """The picker's claim is that it shows what the board will show. This is that claim.
+
+    It held three verbatim copies of the wheel's constants -- the dim filter, the lit filter, and
+    the city's index -- and they agreed with the originals only because someone had typed them out
+    twice. The day `DIM_SATURATE` moved from 0.40 to 1.00 the board changed and the picker did not.
+    Nothing raised, nothing looked broken: the picker simply went on rendering a version of the
+    board that no longer existed, which is the worst way for a comparison tool to fail, because
+    every judgement made from it is confidently wrong.
+
+    Identity, not equality. Two equal strings would pass while still being two strings, which is
+    the state this is here to forbid.
+    """
+    g = grid()
+    if not (RENDER / "gen_picker_grid.py").is_file():
+        pytest.skip("gen_picker_grid.py is not in this checkout")
+    import gen_picker_grid as pk
+    for name in ("DIM", "LIT", "CITY"):
+        assert getattr(pk, name) is getattr(g, name), (
+            "gen_picker_grid.%s is not gen_duty_grid.%s -- it is a copy. The picker exists to show "
+            "what the board will show, so it has to draw with the board's own filters rather than "
+            "with its own equal-for-now duplicates of them. Import it." % (name, name))
+
+
 def test_every_tile_is_filed_under_the_index_its_name_claims():
     """`NN_slug_V.png` -- NN is the one-based position in DUTY_NAMES, and slug is that name.
 

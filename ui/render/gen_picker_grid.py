@@ -49,9 +49,15 @@ HERE = pathlib.Path(__file__).resolve().parent
 UI = HERE.parent
 import sys
 sys.path.insert(0, str(HERE))
+# DIM, LIT and CITY are IMPORTED, not copied. They were copied -- three verbatim duplicates of
+# the wheel's own constants -- and the day DIM_SATURATE moved from 0.40 to 1.00 in gen_duty_grid
+# the picker went on drawing the old one. Nothing broke and nothing warned. The picker's whole
+# claim is that it shows what the board will show, so a private copy of the board's filters is
+# the one kind of drift it cannot survive: it would be confidently wrong about the only question
+# it is asked.
 from gen_duty_grid import (  # noqa: E402
-    DUTY_NAMES, INK, PALETTE, PALETTE_REF, TILE_FILLS, TWO_ACTION,
-    load, palette_stats, recolour)
+    CITY, DIM, DUTY_NAMES, INK, LIT, PALETTE, PALETTE_REF, TILE_FILLS, TWO_ACTION, VERSION,
+    ground_uri, load, palette_stats, recolour)
 try:                                        # the tool's own screen list, so the two agree
     from gen_layout_tool import SCREENS
 except Exception:                           # importing it runs no work, but do not depend on it
@@ -70,14 +76,10 @@ SLUGS = ["allocation", "clerical", "construct", "build_roads", "city",
 POSITIONS = ["top left", "top centre", "top right",
              "middle left", "centre", "middle right",
              "bottom left", "bottom centre", "bottom right"]
-DIM = ('<feColorMatrix type="saturate" values="0.40"/><feComponentTransfer>'
-       '<feFuncR type="linear" slope=".94" intercept=".005"/>'
-       '<feFuncG type="linear" slope=".96" intercept=".010"/>'
-       '<feFuncB type="linear" slope="1.02" intercept=".025"/></feComponentTransfer>')
-LIT = ('<feColorMatrix type="saturate" values="1.20"/><feComponentTransfer>'
-       '<feFuncR type="linear" slope="1.34" intercept=".10"/>'
-       '<feFuncG type="linear" slope="1.14" intercept=".055"/>'
-       '<feFuncB type="linear" slope=".78" intercept="0"/></feComponentTransfer>')
+TILE_RE = re.compile(r"^(\d{2})_([a-z_]+)_([A-Z])\.(png|webp|jpg)$", re.I)
+# What each version is, for the buttons. A letter with no entry is labelled by its letter alone,
+# so an unnamed version still appears -- the list decides what exists, this only decides wording.
+VERSION_LABELS = {"A": "A engraved", "B": "B grim dark", "C": "C limited palette"}
 
 
 def find_tiles(root: pathlib.Path | None, version: str) -> dict[int, pathlib.Path]:
@@ -85,14 +87,29 @@ def find_tiles(root: pathlib.Path | None, version: str) -> dict[int, pathlib.Pat
     if not root or not root.is_dir():
         return {}
     found = {}
-    pat = re.compile(r"^(\d{2})_([a-z_]+)_([AB])\.(png|webp|jpg)$", re.I)
     for p in sorted(root.rglob("*")):
-        m = pat.match(p.name)
+        m = TILE_RE.match(p.name)
         if m and m.group(3).upper() == version.upper():
             i = int(m.group(1)) - 1
             if 0 <= i < 9:
                 found[i] = p
     return found
+
+
+def find_versions(root: pathlib.Path | None) -> list[str]:
+    """Which versions this tree actually holds, in order.
+
+    DISCOVERED, not listed. This file used to carry the pair ("A", "B") in ten places, and when
+    version C was drawn every one of them was wrong in the same quiet way: the page still built,
+    still showed two boards, and said nothing about the nine tiles it had skipped. A picker whose
+    job is comparing versions is the worst possible place for the set of versions to be a
+    constant.
+    """
+    if not root or not root.is_dir():
+        return ["A"]
+    seen = {TILE_RE.match(p.name).group(3).upper()
+            for p in root.rglob("*") if TILE_RE.match(p.name)}
+    return sorted(seen) or ["A"]
 
 
 def embed(p: pathlib.Path, px: int = 760, quality: int = 82,
@@ -151,7 +168,6 @@ def sprite_svg(tiles):
 def grid_svg(meta, tiles, joins, version, klass="wheel"):
     """The grid, each shape clipping its own picture, hover lighting one half."""
     box = meta["box"]
-    parch = "#%02x%02x%02x" % tuple(meta.get("parchment", (245, 195, 120)))
     out = [f'<svg class="{klass} board-v" data-v="{version}" viewBox="0 0 {box} {box}" '
            f'xmlns="http://www.w3.org/2000/svg">'
            f'<defs><filter id="pg-dim-{version}" color-interpolation-filters="sRGB">{DIM}</filter>'
@@ -185,7 +201,16 @@ def grid_svg(meta, tiles, joins, version, klass="wheel"):
                 f'<rect x="{x0}" y="{y0}" width="{x1-x0}" height="{y1-y0}" '
                 f'fill="url(#pg-gr{version}{i})" style="mix-blend-mode:difference"/></mask>')
     out.append("</defs>")
-    out.append(f'<rect width="{box}" height="{box}" fill="{parch}"/>')
+    # NO GROUND RECT. This drew a parchment field across the whole box, and parchment is not what
+    # the board sits on -- gen_duty_grid.BACKGROUND is None precisely so the stage's dark field
+    # shows through the channels between the nine tiles. The field is not decoration: it decides
+    # how the torn silhouettes read, and these tiles are near-neutral with their colour
+    # concentrated in bright skies, so a warm field behind them flatters exactly the pixels a
+    # judgement is being made about. Measured on the same tiles, with the parchment keyed out, the
+    # art itself was identical in both -- median L 83.6 either way. The picker was not showing
+    # different tiles, it was showing the same tiles against the wrong ground, which is worse,
+    # because it looks like a rendering difference and is actually a lie about the board.
+    # The ground now comes from #board-wrap, behind the svg, so the channels stay see-through.
 
     for i, d in enumerate(meta["shapes"]):
         x0, y0, x1, y1 = bbox(d)
@@ -194,7 +219,7 @@ def grid_svg(meta, tiles, joins, version, klass="wheel"):
         if i in tiles:
             img = '<use href="#pg-img%s%d"/>' % (version, i)
             body = [f'<g clip-path="url(#pg-c{version}{i})">']
-            if i == 4:                       # the city is never dimmed
+            if i == CITY:                    # the city is never dimmed
                 body.append(img)
             else:
                 body.append(f'<g filter="url(#pg-dim-{version})">{img}</g>')
@@ -289,7 +314,12 @@ header select{font:13px Georgia,serif;background:#2b3128;color:#cfc9b6;
 .note{color:#8d9581;font-size:12px}
 main{padding:20px}
 section{display:none} section.on{display:block}
-#board-wrap{width:%(slot)spx;max-width:100%%;background:#151810;padding:0;margin:0 auto}
+/* The board's own ground, behind the svg rather than inside it, so the wheel's channels show it
+   the way they do on the stage. Stretched to this square where the stage stretches it to
+   1600x1200, so it is the same field but not the same crop of it -- close enough to judge tiles
+   by, and the reason the numbers below are quoted as measured rather than assumed. */
+#board-wrap{width:%(slot)spx;max-width:100%%;padding:0;margin:0 auto;
+  background:#0b0a08 url(%(ground)s) center/100%% 100%% no-repeat}
 #board-wrap svg{width:100%%;height:auto}
 /* Both version boards live in the page; the control shows one. These need the #board-wrap
    prefix: an id selector beats a bare class, so `.board-v{display:none}` lost to
@@ -311,8 +341,7 @@ th{color:#767d69;font-weight:normal}
 </style>
 <header><h1>Duty grid</h1>
 <nav><button id="t-board" class="on">board</button><button id="t-shapes">shapes</button></nav>
-<nav id="vers"><button data-v="A" class="on">A engraved</button>
-<button data-v="B">B grim dark</button></nav>
+<nav id="vers">%(verbuttons)s</nav>
 <label for="screen" class="hl">screen</label> <select id="screen">%(screens)s</select>
 <span class="note" id="note">%(note)s</span></header>
 %(sprite)s
@@ -398,7 +427,7 @@ document.getElementById('screen').onchange = fitAll;
 document.getElementById('fit').onchange = fitBoard;
 document.getElementById('sv-fit').onchange = fitShapes;
 addEventListener('resize', fitAll);
-let VER = 'A';
+let VER = %(firstver)s;
 function setVersion(v) {
   VER = v;
   for (const b of document.querySelectorAll('#vers button'))
@@ -436,7 +465,7 @@ for (const g of document.querySelectorAll('[data-duty-tile]')) {
   });
   g.addEventListener('mouseleave', () => g.classList.remove('half-l','half-r'));
 }
-setVersion('A');
+setVersion(%(firstver)s);
 fitAll();
 </script>
 """
@@ -454,13 +483,14 @@ def main():
 
     meta = load()
     root = pathlib.Path(z.tiles) if z.tiles else None
-    # Both versions are loaded and both boards are built. Version is a control in the page, so
-    # comparing A against B no longer means regenerating -- the same reason --sample went.
+    VERS = find_versions(root)
+    # EVERY version found is loaded and every board is built. Version is a control in the page, so
+    # comparing one against another no longer means regenerating -- the same reason --sample went.
     # The same palette the wheel itself uses, so the picker is judging what the board will show
-    # rather than the raw generations. Each version is matched to ITS OWN city -- A and B are two
-    # different sets, and matching B's tiles to A's city would compare nothing meaningful.
+    # rather than the raw generations. Each version is matched to ITS OWN city -- these are
+    # separate sets, and matching one set's tiles to another's city would compare nothing.
     tiles = {}
-    for v in ("A", "B"):
+    for v in VERS:
         found = find_tiles(root, v)
         ref = None
         if PALETTE and PALETTE_REF in found:
@@ -478,39 +508,51 @@ def main():
     book = json.loads(jp.read_text()) if jp and jp.is_file() else {}
     if book and all(k.isdigit() for k in book):        # a flat file from before versions
         book = {"A": book}
-    joins = {v: {int(k): float(x) for k, x in book.get(v, {}).items()} for v in ("A", "B")}
+    joins = {v: {int(k): float(x) for k, x in book.get(v, {}).items()} for v in VERS}
     if jp and jp.is_file() and not z.joins:
         print("joins from %s" % jp)
 
     rows = ["<tr><th>tile</th><th>w</th><th>h</th><th>aspect</th>"
-            "<th>join A</th><th>join B</th></tr>"]
+            + "".join(f"<th>join {v}</th>" for v in VERS) + "</tr>"]
     for i, d in enumerate(meta["shapes"]):
         x0, y0, x1, y1 = bbox(d)
-        ja, jb = joins["A"].get(i), joins["B"].get(i)
+        cells = "".join(
+            f"<td>{'%.1f%%' % (joins[v].get(i) * 100) if joins[v].get(i) else '&mdash;'}</td>"
+            for v in VERS)
         rows.append(f"<tr><td>{i} {DUTY_NAMES[i]}</td><td>{x1-x0:.0f}</td><td>{y1-y0:.0f}</td>"
-                    f"<td>{(x1-x0)/(y1-y0):.3f}</td>"
-                    f"<td>{'%.1f%%' % (ja*100) if ja else '&mdash;'}</td>"
-                    f"<td>{'%.1f%%' % (jb*100) if jb else '&mdash;'}</td></tr>")
+                    f"<td>{(x1-x0)/(y1-y0):.3f}</td>{cells}</tr>")
 
-    have = {v: sorted(tiles[v]) for v in ("A", "B")}
+    have = {v: sorted(tiles[v]) for v in VERS}
     notes = {v: (f"{len(tiles[v])} of 9 tiles have art" if root else "no --tiles given: shapes only")
-             for v in ("A", "B")}
-    first = min(tiles["A"]) if tiles["A"] else (min(tiles["B"]) if tiles["B"] else None)
+             for v in VERS}
+    # The page opens on the set the BOARD is currently drawing, falling back to the first one that
+    # has art. Not simply the first letter: opening on an empty board, or on a superseded set, and
+    # calling that the picker's answer is how a version gets judged missing when it is merely not
+    # selected. The other tabs are one click away; the default should be the one that is live.
+    shown = (VERSION if VERSION in VERS and tiles.get(VERSION) else
+             next((v for v in VERS if tiles[v]), VERS[0]))
+    first = min(tiles[shown]) if tiles[shown] else None
     options = "".join(f'<option value="{i}">{i} &#183; {DUTY_NAMES[i]}</option>'
-                      for i in have["A"]) or '<option>no art yet</option>'
+                      for i in have[shown]) or '<option>no art yet</option>'
 
     html = PAGE % dict(
         slot=900,
-        grids="".join(grid_svg(meta, tiles[v], joins[v], v) for v in ("A", "B")),
+        ground=ground_uri(),
+        grids="".join(grid_svg(meta, tiles[v], joins[v], v) for v in VERS),
         sprite=sprite_svg(tiles),
-        shapes=shapes_view(meta, tiles["A"], first),
+        shapes=shapes_view(meta, tiles[shown], first),
         options=options,
+        verbuttons="".join(
+            '<button data-v="%s"%s>%s</button>'
+            % (v, ' class="on"' if v == shown else "", VERSION_LABELS.get(v, v))
+            for v in VERS),
+        firstver=json.dumps(shown),
         names=json.dumps(DUTY_NAMES), have=json.dumps(have), notes=json.dumps(notes),
         screens="".join(f'<option value="{i}">{n}</option>'
                         for i, (n, *_rest) in enumerate(SCREENS)),
         screenlist=json.dumps(SCREENS),
-        table="<table>" + "".join(rows) + "</table>", note=notes["A"])
-    for v in ("A", "B"):
+        table="<table>" + "".join(rows) + "</table>", note=notes[shown])
+    for v in VERS:
         for i, j in joins[v].items():
             html = html.replace(f'<g data-duty-tile="{i}" data-duty-name',
                                 f'<g data-join="{j}" data-duty-tile="{i}" data-duty-name', 1)
@@ -519,8 +561,8 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     print("written %s  (%.1f MB)" % (out, out.stat().st_size / 1024 / 1024))
-    for v in ("A", "B"):
-        print(f"  version {v}: {len(tiles[v])} of 9")
+    for v in VERS:
+        print(f"  version {v}: {len(tiles[v])} of 9{'   <- shown first' if v == shown else ''}")
     if z.open:
         import webbrowser
         webbrowser.open(out.resolve().as_uri())
