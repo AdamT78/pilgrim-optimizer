@@ -51,6 +51,10 @@
       "dy": 2.7
     }
   },
+  "arrangement_shift": {
+    "dx": 0.0,
+    "dy": -21.0
+  },
   "measured": {
     "_": "computed by gen_tile_offsets.decompose on every save; do not edit by hand",
     "dx_mean_by_column": [

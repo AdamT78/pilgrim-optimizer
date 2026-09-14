@@ -623,3 +623,124 @@ def test_each_half_of_a_two_action_tile_is_named_the_same_in_both_files():
         + "\n  ".join(wrong) + "\n"
         "Whichever is wrong, the effect is the same: the pointer lands on one action and the "
         "panel describes the other, on a tile that looks completely normal.")
+
+
+def test_the_arrangement_shift_moves_the_acolyte_rows_with_the_tiles():
+    """The whole block moves; nothing inside it moves relative to anything else.
+
+    Two kinds of number live in duty_tile_offsets.json and they are not interchangeable. A
+    per-tile offset says where ONE tile sits against its own acolyte row -- the rows are frozen,
+    so nudging a tile changes that relationship, which is the entire point of the drag tool. The
+    arrangement shift says where all nine sit inside the box, and it must change no relationship
+    at all.
+
+    The trap is that both are applied in the same function. `placed()` drops the per-tile offsets
+    when called with offsets=False, and that call is exactly what the acolyte rows are derived
+    from. Dropping the shift alongside them would leave every row behind while the tiles moved --
+    a bug that needs the file to be non-zero to appear at all, so it would sit dormant until
+    someone actually used the setting.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("the acolyte row geometry lives in gen_tile_offsets.py")
+    import gen_tile_offsets as tool
+
+    box = g.load()["box"]
+
+    def depths(shift):
+        """Each tile's bottom against its own row, under a given shift."""
+        laid = g.placed(g.place(g.load()["shapes"], box, g.MARGIN), box, offsets=True)
+        rows = tool.acolyte_grid(
+            g.placed(g.place(g.load()["shapes"], box, g.MARGIN), box, offsets=False))
+        out = []
+        for i, d in enumerate(laid):
+            out.append(max(q[1] for q in tool._pts(d)) - rows[i]["sy"])
+        return out, laid, rows
+
+    import json
+    path = g.OFFSETS
+    original = path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        data = json.loads(original) if original else {}
+        data["arrangement_shift"] = {"dx": 0.0, "dy": 0.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        base, laid0, rows0 = depths(0)
+
+        data["arrangement_shift"] = {"dx": -17.0, "dy": -23.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        moved, laid1, rows1 = depths(1)
+
+        # `placed()` writes coordinates as %.2f, so every point carries up to 0.005 units of
+        # rounding and a depth -- a difference of two of them, one of which the row geometry is
+        # derived from -- carries a little more. 0.02 units is 0.018 px on screen. The tolerance
+        # is the quantisation, not slack: what it must not hide is a LEAK, and a leak would grow
+        # with the shift while rounding does not, which is what the second shift below tests.
+        drift = [abs(a - b) for a, b in zip(base, moved)]
+        assert max(drift) < 0.02, (
+            "a tile's depth over its acolyte row changed by up to %.3f units when only the whole "
+            "arrangement moved. The rows are being left behind: `placed()` is dropping the shift "
+            "along with the per-tile offsets when called with offsets=False." % max(drift))
+
+        data["arrangement_shift"] = {"dx": -68.0, "dy": -92.0}      # four times as far
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        far, _, _ = depths(2)
+        far_drift = max(abs(a - b) for a, b in zip(base, far))
+        assert far_drift < 0.02, (
+            "the drift grew to %.3f units at four times the shift, so it is not rounding: some "
+            "part of the arrangement is being left behind in proportion to how far it moves."
+            % far_drift)
+
+        # and it really did move, or the check above passed on two identical boards
+        k = box / tool.WHEEL_PX
+        dx = min(q[0] for q in tool._pts(laid1[0])) - min(q[0] for q in tool._pts(laid0[0]))
+        dy = min(q[1] for q in tool._pts(laid1[0])) - min(q[1] for q in tool._pts(laid0[0]))
+        # same 0.02-unit quantum as above -- these are read back out of %.2f path strings too
+        assert abs(dx - (-17.0 * k)) < 0.02 and abs(dy - (-23.0 * k)) < 0.02, (
+            "the shift did not reach the tiles at all (moved %.3f, %.3f units, wanted %.3f, "
+            "%.3f); this test would have passed while guarding nothing"
+            % (dx, dy, -17.0 * k, -23.0 * k))
+        assert abs((rows1[0]["sy"] - rows0[0]["sy"]) - (-23.0 * k)) < 0.02, (
+            "the shift did not reach the acolyte rows")
+    finally:
+        if original is not None:
+            path.write_text(original, encoding="utf-8")
+
+
+def test_the_tools_pixel_basis_is_the_board_the_offsets_will_be_drawn_on():
+    """WHEEL_PX must be the size the wheel is actually drawn at, or everything downstream lies.
+
+    Three things ride on this number and none of them would complain. The nine offsets are stored
+    as "screen px at wheel width 877.8" and converted back through it, so a stale value scales
+    every one of them. The arrangement shift is the same. And the red reference box the tool draws
+    is asserted to be the wheel's real box on the board -- the banner sits on its top edge and the
+    column meets it left and right -- which is only true while these agree.
+
+    The board's wheel is not a constant there either: `geometry()` fits it to whichever of the
+    column's width or height runs out first, so a change to the frame, the banner or a column gap
+    moves it. That is the realistic way this breaks -- nobody edits WHEEL_PX, somebody widens a
+    gap -- and the failure is a board that looks fine with every tile a percent or two out.
+    """
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("gen_tile_offsets.py is not in this checkout")
+    if not (RENDER / "gen_game_view.py").is_file():
+        pytest.skip("gen_game_view.py is not in this checkout")
+    grid()                                  # puts ui/render on sys.path
+    import gen_game_view as gv
+    import gen_tile_offsets as tool
+
+    drawn = gv.geometry(gv.layout())["wheel"]
+    assert drawn > 0, "the game view reports a zero-width wheel; this check would be vacuous"
+    assert abs(drawn - tool.WHEEL_PX) < 0.05, (
+        "the board draws its wheel %.1f px square, but gen_tile_offsets.WHEEL_PX is %.1f. Every "
+        "saved offset is stored in screen px at that width and converted back through it, so all "
+        "nine are out by %.1f%%, and the red reference box in the tool is no longer the box the "
+        "banner and the column actually meet."
+        % (drawn, tool.WHEEL_PX, abs(drawn - tool.WHEEL_PX) / tool.WHEEL_PX * 100))
+
+    # and the file agrees with the tool, or offsets saved earlier are read back at the wrong scale
+    import json
+    if tool.OFFSETS_PATH.is_file():
+        recorded = json.loads(tool.OFFSETS_PATH.read_text(encoding="utf-8")).get("wheel_px")
+        assert recorded is None or abs(float(recorded) - tool.WHEEL_PX) < 0.05, (
+            "duty_tile_offsets.json records wheel_px %s but the tool is at %.1f; the numbers in "
+            "it were judged on a different board" % (recorded, tool.WHEEL_PX))

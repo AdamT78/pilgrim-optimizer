@@ -409,7 +409,14 @@ OFFSETS = HERE.parent / "duty_tile_offsets.json"
 
 
 def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
-    """(scale, {i: (dx, dy)}) in GRID UNITS, or (1.0, {}) when there is no file.
+    """(scale, {i: (dx, dy)}, (sx, sy)) in GRID UNITS, or (1.0, {}, (0, 0)) when there is no file.
+
+    THE THIRD VALUE IS THE WHOLE ARRANGEMENT'S POSITION, and it is a different kind of number from
+    the nine. A per-tile offset says where one tile sits against its own acolyte row; the shift
+    says where all nine, rows included, sit inside the box. So it is applied whether or not the
+    per-tile offsets are -- `offsets=False` means "without the nudges", not "somewhere else
+    entirely". That is what keeps the acolytes still relative to the tiles while the block moves:
+    the rows are derived from the unoffset shapes, which carry the shift too.
 
     The file stores screen pixels, because that is what the eye judges in and what the tool's
     pointer moves in. The conversion needs the size the wheel was judged at, so the file records
@@ -418,7 +425,7 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     slightly wrong drag and not like a unit error.
     """
     if not path.is_file():
-        return 1.0, {}
+        return 1.0, {}, (0.0, 0.0)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -428,7 +435,9 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     for k, v in (data.get("offsets") or {}).items():
         if str(k).isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)) * per_unit, float(v.get("dy", 0)) * per_unit)
-    return float(data.get("tile_scale") or 1.0), out
+    sh = data.get("arrangement_shift") or {}
+    shift = (float(sh.get("dx", 0)) * per_unit, float(sh.get("dy", 0)) * per_unit)
+    return float(data.get("tile_scale") or 1.0), out, shift
 
 
 # THE ACOLYTE ROW. Four figures under each tile, one per seat, with that seat's count in the robe.
@@ -564,10 +573,13 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
     done, and the offsets re-dragged against it came back a third the size with no column signal
     left in them. What remains in the file is per-tile judgement, which is what it is for.
     """
-    scale, off = tile_placement(box=box)
+    scale, off, (sx, sy) = tile_placement(box=box)
     if not offsets:
         off = {}
-    if scale == 1.0 and not off:
+    # `sx, sy` is NOT dropped with them: it moves the whole block, acolyte rows and all, and those
+    # rows are built from exactly this call with offsets=False. Dropping it here would leave the
+    # rows behind when the arrangement moved, which is the one thing the shift must never do.
+    if scale == 1.0 and not off and not (sx or sy):
         return shapes
     out = []
     for i, d in enumerate(shapes):
@@ -576,6 +588,8 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
         cx = sum(x for x, _ in P) / len(P)
         cy = sum(y for _, y in P) / len(P)
         dx, dy = off.get(i, (0.0, 0.0))
+        dx += sx
+        dy += sy
         Q = [(cx + (x - cx) * scale + dx, cy + (y - cy) * scale + dy) for x, y in P]
         out.append("M" + " L".join("%.2f %.2f" % q for q in Q) + " Z")
     return out
