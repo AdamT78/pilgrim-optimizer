@@ -370,6 +370,17 @@
       "licence": "openai-generated",
       "role": "resource icon artwork"
     },
+    "ui/library_corner.webp": {
+      "state": "present",
+      "title": "Hidden library in a vaulted undercroft, board ornament",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from the secret-library prompt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "ornament at the foot of the player-board column, in the 405 x 136.8 px the log left behind when it moved into the action box",
+      "modifications": "cropped from the 1536x1024 original to its central 3:1 band -- the slot's aspect, which gpt-image-1 cannot render directly, and which the prompt composed for by keeping the upper and lower thirds empty; then resized to 810x274, twice the drawn size because the stage is CSS-scaled; then given a soft alpha edge, because the picture is darker at its edges (L 7) than the ground it sits on (L 23) and a hard edge would read as a dark rectangle laid on the board rather than part of it",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
     "ui/ground.webp": {
       "state": "present",
       "title": "Board ground, dark warm field",

@@ -19,3 +19,10 @@ tools/ui_debug/generated/*.html
 _to_delete/
 pilgrim_optimizer.egg-info/
 *.tar.gz
+
+# Scratch from generator sessions: experiments, probe renders, one-off scripts. Ignored rather than
+# merely untracked, for two reasons. It is 198 MB, which makes it the one thing here that a
+# `git add -A` must never reach. And its half-finished scripts were the only hits `ruff check
+# --select F` reported in this working tree, while CI -- which sees tracked files -- was clean: a
+# check that fails on scratch is a check you learn to skim past.
+Claude outputs/
