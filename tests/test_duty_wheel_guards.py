@@ -573,3 +573,53 @@ def test_an_active_seat_without_counts_is_refused_rather_than_assumed():
         g.eligible_tiles([[1, 0, 0]] * 9, "sage")                      # short row
     assert g.eligible_tiles(counts, "sage") == set(range(9))
     assert g.eligible_tiles(counts, "bone") == set()
+
+
+def test_each_half_of_a_two_action_tile_is_named_the_same_in_both_files():
+    """`TWO_ACTION` and gen_board's `DUTY_TEXT` describe the same two halves, twice.
+
+    The grid names each half in TWO_ACTION -- that is what decides which half of the picture a
+    pointer is on -- and gen_board writes the caption for it under "<duty>|<half>". Two files, one
+    fact, and nothing between them.
+
+    They drifted the moment the Give Alms artwork was redrawn with the donation on the left: the
+    art said donate-then-alms and both files still said alms-then-donate, so every pointer on the
+    left half of that tile described the wrong action. Nothing raised, the picture looked entirely
+    normal, and the only way to notice was to read the tile and the caption at the same time.
+
+    A third place said it too -- the old circular wheel puts the crossed-out building on whichever
+    wedge it draws second -- and that is why this matters more than tidiness: the two drawings
+    share ONE key space, so reordering either alone silently mislabels the other.
+
+    The short name in TWO_ACTION has to appear in the caption's title. That holds for all five
+    pairs and is checked to hold, because a substring rule that matched nothing would pass while
+    guarding nothing.
+    """
+    import re
+    g = grid()
+    board = RENDER / "gen_board.py"
+    if not board.is_file():
+        pytest.skip("gen_board.py is not in this checkout")
+    # read rather than import: gen_board writes a page as a side effect of being executed
+    src = board.read_text(encoding="utf-8")
+    block = src[src.index("DUTY_TEXT = {"):]
+    titles = dict(re.findall(r'"([^"]+\|\d)":\s*\(\s*\n\s*"([^"]+)"', block))
+    assert titles, "no DUTY_TEXT entries were parsed; this check would pass guarding nothing"
+
+    wrong, checked = [], 0
+    for i, pair in sorted(g.TWO_ACTION.items()):
+        name = g.DUTY_NAMES[i]
+        for half, short in enumerate(pair):
+            key = "%s|%d" % (name, half)
+            assert key in titles, "gen_board has no caption for %s" % key
+            checked += 1
+            if short.lower() not in titles[key].lower():
+                wrong.append("%s is %r in the grid but %r in gen_board"
+                             % (key, short, titles[key]))
+    assert checked == 2 * len(g.TWO_ACTION), (
+        "expected %d halves, checked %d" % (2 * len(g.TWO_ACTION), checked))
+    assert not wrong, (
+        "a tile's two halves are named in different orders in the two files:\n  "
+        + "\n  ".join(wrong) + "\n"
+        "Whichever is wrong, the effect is the same: the pointer lands on one action and the "
+        "panel describes the other, on a tile that looks completely normal.")

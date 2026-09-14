@@ -127,7 +127,12 @@ DEFAULT_CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # a single action (Allocation, Build Roads, Taxation) and the city has none; measuring a join on
 # those finds the strongest edge in a picture that has no join, which is noise.
 TWO_ACTION = {1: ("Devotion", "Silversmith"), 2: ("Building", "Road"),
-              5: ("Ordain", "Mission"), 6: ("Wheat", "Stone"), 8: ("Alms", "Donate")}
+              5: ("Ordain", "Mission"), 6: ("Wheat", "Stone"), 8: ("Donate", "Alms")}
+# The pairs are in the order the ART draws them, left to right, because that is what decides
+# which half of a tile a pointer is on. Give Alms was ("Alms", "Donate") until the artwork put the
+# donation on the left, and the pair had to follow it: a tile whose halves are named in the wrong
+# order sends every click and every caption to the other action, silently, on a picture that looks
+# completely normal.
 # The centre tile. It is a place, not an action: never dimmed, and nothing to light.
 CITY = 4
 INK = "#2b2114"
