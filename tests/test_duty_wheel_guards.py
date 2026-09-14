@@ -236,12 +236,19 @@ def test_a_shuffled_arrangement_is_drawn_and_a_broken_one_is_refused():
 
 def test_the_arrows_do_not_depend_on_the_arrangement():
     """Which squares are adjacent is a property of the grid, not of which duty was dealt where,
-    so shuffling the tiles must not move a single arrow."""
+    so shuffling the tiles must not move a single arrow.
+
+    `arrows=True` is passed EXPLICITLY. The default became False when the arrows were taken off the
+    board, and this guard then failed -- correctly, and usefully: it asserts `a and a == b`, so an
+    empty `a` fails rather than passing vacuously, which is the difference between noticing a
+    changed default and silently testing nothing. What it guards is how the arrows behave when
+    drawn, not whether they are drawn, so it asks for them.
+    """
     g = grid()
     import re
     arrows = lambda svg: re.findall(r'<g transform="translate\([^"]+\) rotate\([^"]+\)"', svg)
-    a = arrows(g.duty_grid_svg(tiles_dir=None))
-    b = arrows(g.duty_grid_svg(tiles_dir=None, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
+    a = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True))
+    b = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
     assert a and a == b, "the arrows moved when the arrangement changed"
 
 
