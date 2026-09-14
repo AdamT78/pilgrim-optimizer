@@ -179,6 +179,16 @@ def geometry(L):
         # fitted to the wheel's height, because the map is the one component taller than it is wide
         "map_w": wheel * MAP_ASPECT,
         "left_top": float(L["row_gap"]),
+        # What the boards do not use at the foot of their column. This is a RESULT, not a setting:
+        # it is whatever is left over, so it moves whenever anything above it moves. The ornament is
+        # fitted into it rather than the other way round.
+        #
+        # Four sliders drive it, and `seats` is NOT one of them in practice -- Pilgrim is four
+        # players. What does move it is the layout tool: from the current 136.8 px, the leftover
+        # reaches zero at board_width 483.7, special_height 314.8, board_gap 75.6 or row_gap 173.6,
+        # and board_width is the sharp one: a board's HEIGHT follows its width and there are four
+        # of them, so every px of width spent up there costs 1.73 px down here.
+        "corner_h": max(0.0, (main_h - float(L["row_gap"])) - boards_h),
     }
 
 
@@ -285,6 +295,22 @@ html,body{height:100%%;margin:0;overflow:hidden;background:#0b0a08}
 .gv-cell{flex:0 0 auto}
 .gv-cell-mkt .strip,.gv-cell-mkt .mkt{height:100%%;width:100%%}
 .gv-cell-alms svg.alms{width:100%%;height:100%%}
+
+/* THE ORNAMENT AT THE FOOT OF THE BOARD COLUMN.
+   Positioned, not flowed. #gv-left is a flex column with a 30 px gap between boards, and adding
+   the ornament as another flex child would give it that gap as well -- eating 30 of the 136.8 px
+   that are actually there and leaving the picture in a 3.8:1 slot it was never cropped for. Out of
+   flow it gets the real leftover, and it cannot push the boards above it.
+
+   `contain`, so the box may be any shape and the picture keeps its own. The alternative is `cover`,
+   which crops -- and what it would crop is exactly the feathered border that makes this sit on the
+   ground instead of on top of it, replacing a soft edge with a hard one. Letterboxed bars are
+   transparent here, so they are simply more ground.
+
+   No background, no border, no shadow: one element owns the ground and this is not it. */
+.gv-left{position:relative}
+.gv-corner{position:absolute;left:0;bottom:0;pointer-events:none}
+.gv-corner img{display:block;width:100%%;height:100%%;object-fit:contain}
 """
 
 # The measurements, emitted rather than left to the components. Every one of these comes out of
@@ -299,6 +325,7 @@ SIZES = """
 .gv-cell-alms{width:%(panel_w).1fpx;height:%(top_h).1fpx;margin-left:%(gap1).1fpx}
 .gv-cell-mkt{width:%(wheel_room).1fpx;height:%(top_h).1fpx;margin-left:%(gap2).1fpx}
 #gv-left{width:%(bw).1fpx;margin-top:%(left_top).1fpx;height:%(left_h).1fpx;gap:%(board_gap).1fpx}
+#gv-corner{width:%(bw).1fpx;height:%(corner_h).1fpx}
 #gv-act{width:%(panel_w).1fpx;height:%(main_h).1fpx;margin-left:%(gap1).1fpx}
 #gv-wheelcol{width:%(wheel_room).1fpx;height:%(main_h).1fpx;margin-left:%(gap2).1fpx}
 #gv-banner{height:%(banner_h).1fpx}
@@ -325,7 +352,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
     <div class="gv-cell gv-cell-mkt">%(market)s</div>
   </div>
   <div class="gv-main" id="gv-main">
-    <div class="gv-left" id="gv-left">%(boards)s</div>
+    <div class="gv-left" id="gv-left">%(boards)s%(corner)s</div>
     <div class="gv-act" id="gv-act">%(turn)s</div>
     <div class="gv-wheelcol" id="gv-wheelcol">%(banner)s<div class="gv-wheel" id="gv-wheel">%(wheel)s</div><div id="gv-map">%(map)s</div></div>
   </div>
@@ -709,15 +736,79 @@ VIEW_JS = """
 """
 
 
+def _data_uri(p):
+    """A file as a data: URI. Every image on this page is embedded, not linked.
+
+    The page is written to ui/generated/ and then opened from wherever it happens to be -- a
+    file:// URL, a copy on a desktop, an attachment. A relative src would work in the first case
+    and silently show nothing in the others, which is the failure that looks like an art problem.
+    """
+    import base64
+    import mimetypes
+    kind = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    return "data:%s;base64,%s" % (kind, base64.b64encode(p.read_bytes()).decode("ascii"))
+
+
 def ground_uri():
     """The ground, embedded, because this page is opened from wherever it was written."""
-    import base64
     p = UI / "assets-gothic" / "ui" / "ground.webp"
     if not p.is_file():
         print("no %s -- the stage falls back to flat colour. Run "
               "`python3 ui/render/gen_ground.py` to make it." % p.name)
         return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
-    return "data:image/webp;base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+    return _data_uri(p)
+
+
+def _image_size(p):
+    """(w, h) of an image, or None if Pillow is not here.
+
+    Soft, because this is used only to PRINT what was drawn. A generator that refuses to build a
+    board because it cannot measure a decoration for its own log has its priorities backwards.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    with Image.open(p) as im:
+        return im.size
+
+
+def corner_ornament(w, h):
+    """The library picture at the foot of the board column, or nothing at all.
+
+    ABSENCE IS A NORMAL ANSWER HERE. The file is an ornament -- it carries no state, labels no
+    component and is not part of any rule. A checkout without it should build a board that is
+    plainer, not a board that is broken, so this returns "" and says so on stdout rather than
+    raising. That is the opposite of how the ground behaves, and deliberately: the ground has a
+    measured job (keeping tile silhouettes separable) and its absence is worth a fallback.
+
+    It also returns "" when the column has no room. That is a layout-tool case, not a seat-count
+    case -- Pilgrim seats four and there is no fifth board coming. But the leftover is a residue of
+    the board arithmetic above it, and the tool can spend it: widening the boards to 483.7, or
+    raising the top row to 314.8, takes it to zero. Somewhere before that the picture stops being a
+    picture and becomes a letterboxed sliver, which is worse than bare ground, so there is a floor.
+    """
+    p = UI / "assets-gothic" / "ui" / "library_corner.webp"
+    if not p.is_file():
+        print("no %s -- the foot of the board column is left as bare ground." % p.name)
+        return "", None
+    if h < 24.0:
+        print("only %.1f px under the player boards -- the ornament is not drawn." % h)
+        return "", None
+
+    markup = ('<div class="gv-corner" id="gv-corner">'
+              '<img src="%s" alt="" aria-hidden="true"></div>' % _data_uri(p))
+
+    # What `contain` will do, worked out here so the log reports the drawn size rather than the
+    # slot. The two differ whenever the picture's aspect is not the slot's, which is the normal
+    # case: the slot is a residue of the board arithmetic and the picture is whatever was drawn.
+    size = _image_size(p)
+    if size is None:
+        return markup, {"src": None, "w": w, "h": h, "fit": "unmeasured"}
+    aspect = size[0] / size[1]
+    if aspect >= w / h:                       # wider than the slot: the width runs out first
+        return markup, {"src": size, "w": w, "h": w / aspect, "fit": "width"}
+    return markup, {"src": size, "w": h * aspect, "h": h, "fit": "height"}
 
 
 def _unsize(svg):
@@ -790,6 +881,7 @@ def main():
     sa, sa_spec = g2.special_placeholder(G["panel_w"], G["top_h"],
                                          L["frame_border_y"], L["frame_border_x"])
     wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION, klass="wheel gv-grid")
+    corner, corner_fit = corner_ornament(G["bw"], G["corner_h"])
 
     page = PAGE % {
         "board_css": gb["CSS"],
@@ -803,11 +895,12 @@ def main():
             "gap1": L["column_gap_1"], "gap2": L["column_gap_2"],
             "left_top": G["left_top"], "left_h": G["main_h"] - G["left_top"],
             "board_gap": L["board_gap"], "banner_h": G["banner_h"],
-            "map_w": G["map_w"]},
+            "map_w": G["map_w"], "corner_h": G["corner_h"]},
         "sa": sa,
         "alms": _unsize(alms_panel(gb, fills, G["panel_w"])),
         "market": market,
         "boards": "\n      ".join(boards),
+        "corner": corner,
         "turn": turn,
         "banner": BANNER,
         "wheel": wheel,
@@ -839,6 +932,11 @@ def main():
           % (G["banner_h"], G["wheel"], G["bound_by"], G["slack"]))
     print("  boards   %d x %.1f + gaps = %.1f, starting %.1f below the top row"
           % (G["seats"], G["bh"], G["boards_h"], G["left_top"]))
+    if corner_fit:
+        print("  corner   slot %.1f x %.1f, ornament %s drawn %.1f x %.1f, %s-fitted"
+              % (G["bw"], G["corner_h"],
+                 "%dx%d" % corner_fit["src"] if corner_fit["src"] else "(unmeasured)",
+                 corner_fit["w"], corner_fit["h"], corner_fit["fit"]))
     print("  %d assets stored once, saving %.1f MB" % (unique_assets, saved / 1024 / 1024))
     print("  hover: %d duty actions, %d buildings in the catalogue, %d on the market"
           % (len(gb["DUTY_TEXT"]), len(buildings), stamped))
