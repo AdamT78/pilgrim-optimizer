@@ -49,8 +49,6 @@ import gen_duty_grid as dg  # noqa: E402
 OFFSETS_PATH = UI / "duty_tile_offsets.json"
 WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
-TINTS = UI / "assets-gothic" / "population"
-SEATS = [("sage", "#221c16"), ("pewter", "#F2E8CC"), ("plum", "#F2E8CC"), ("bone", "#221c16")]
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
           [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
 
@@ -247,44 +245,6 @@ def acolyte_grid(shapes):
     case, and the widest is the one worth judging a placement against.
     """
     return [dg.acolyte_box(d) for d in shapes]
-
-
-def tint_uris():
-    """The acolyte in four seat duotones, built here rather than committed as four more files."""
-    import base64  # noqa: E401
-    import colorsys
-    import io
-
-    import numpy as np
-    from PIL import Image, ImageFilter
-
-    src = Image.open(TINTS / "acolyte_gothic.png").convert("RGBA")
-    swatch = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
-    uris = {}
-    for seat, hexv in swatch.items():
-        r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
-        h, s, v = colorsys.rgb_to_hsv(r, g, b)
-        dark = colorsys.hsv_to_rgb(h, min(1, s * 1.3), v * 0.30)
-        light = colorsys.hsv_to_rgb(h, min(1, s * 0.95), min(1, v * 1.10))
-        a = np.asarray(src).astype(float)
-        L = (0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]) / 255.0
-        L = np.clip((L - 0.06) / 0.84, 0, 1) ** 0.80
-        o = np.zeros_like(a)
-        for c in range(3):
-            o[..., c] = (dark[c] + (light[c] - dark[c]) * L) * 255
-        o[..., 3] = a[..., 3]
-        fig = Image.fromarray(o.astype("uint8"), "RGBA")
-        al = np.asarray(fig)[..., 3]
-        m = Image.fromarray(al).filter(ImageFilter.MaxFilter(13))
-        sil = Image.new("RGBA", fig.size, (0x22, 0x1c, 0x16, 255))
-        sil.putalpha(m)
-        base = Image.new("RGBA", fig.size, (0, 0, 0, 0))
-        base.alpha_composite(sil)
-        base.alpha_composite(fig)
-        buf = io.BytesIO()
-        base.save(buf, "PNG")
-        uris[seat] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-    return uris
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
@@ -515,22 +475,17 @@ def build(can_save: bool) -> str:
     # the offsets, which it moves itself.
     svg = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION,
                            klass="wheel", arrows=False, offsets=False)
-    grid = acolyte_grid(shapes)
-    uris = tint_uris()
-    marks = []
-    for i, g in enumerate(grid):
-        for j, (seat, numink) in enumerate(SEATS):
-            x = g["sx"] + j * (g["fw"] + g["gap"])
-            fs = g["fh"] * 0.50
-            marks.append(
-                '<image href="%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f" '
-                'preserveAspectRatio="xMidYMid meet"/>'
-                '<text x="%.1f" y="%.1f" text-anchor="middle" font-family="Georgia,serif" '
-                'font-size="%.1f" font-weight="700" fill="%s" stroke="%s" stroke-width="%.1f" '
-                'paint-order="stroke">%d</text>'
-                % (uris[seat], x, g["sy"], g["fw"], g["fh"],
-                   x + g["fw"] / 2, g["sy"] + g["fh"] * 0.93, fs, numink,
-                   "#221c16" if numink != "#221c16" else "#F2E8CC", fs * 0.17, SAMPLE[i][j]))
+    # `dg.acolyte_row` DRAWS these, and this file no longer draws anything of its own.
+    #
+    # It used to emit its own figures -- its own copy of the duotone builder, its own seat palette,
+    # its own numeral -- and that was survivable only while both drew the same picture. The moment
+    # the board started piling figures upward, a tool still drawing one figure per seat would have
+    # shown a row the board does not draw, and every offset judged in it would have been judged
+    # against the wrong thing. That exact fault has already happened here twice: once with `place`,
+    # once with the row geometry, and both times the numbers applied perfectly and the result
+    # still looked wrong. The arithmetic was merged into `dg.acolyte_box` then; the drawing is
+    # merged now, and there is nothing left in this file for the two to disagree about.
+    marks = [dg.acolyte_row(shapes[i], SAMPLE[i]) for i in range(len(shapes))]
     # The acolytes go in AFTER the tiles and outside every tile group, which is what freezes them:
     # a drag transforms one `g.dgt` and cannot reach anything here.
     # one group, so the page can translate the rows with the tiles by the arrangement shift
