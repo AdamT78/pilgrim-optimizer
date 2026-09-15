@@ -480,6 +480,27 @@ OPAQUE_ALPHA_GAIN = 4.0
 OPAQUE_ALPHA_FLOOR = 240
 
 
+def _pixels():
+    """numpy and Pillow, or a message that says which build just asked for them and why.
+
+    Without this the failure is a bare ModuleNotFoundError from inside `import numpy`, several
+    frames down, in whatever subprocess happened to be building a board -- which is how it reached
+    CI twice: once in the lane that runs the whole suite, and once through the picker guards, which
+    build the picker by subprocess and report only its stderr.
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+    except ModuleNotFoundError as missing:
+        raise BuildError(
+            "building a gothic player board needs numpy and Pillow (%s is missing). A population "
+            "row decides whether its figure must be composited before it can be stacked, and "
+            "deciding means measuring the asset's alpha -- see opaque_figure. The ui lane installs "
+            "both; a lane or checkout that only builds boards incidentally has to install them too, "
+            "or skip." % missing.name) from missing
+    return np, Image
+
+
 def opaque_figure(path: Path, panel_fill: str) -> bytes:
     """The figure as PNG bytes, composited onto `panel_fill` and made opaque.
 
@@ -507,8 +528,7 @@ def opaque_figure(path: Path, panel_fill: str) -> bytes:
     """
     import io
 
-    import numpy as np
-    from PIL import Image
+    np, Image = _pixels()
 
     rgb = tuple(int(panel_fill.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
     source = np.asarray(Image.open(path).convert("RGBA")).astype(float)
@@ -523,9 +543,7 @@ def opaque_figure(path: Path, panel_fill: str) -> bytes:
 
 def mean_ink_alpha(path: Path) -> float:
     """Mean alpha where the figure has ink. The number `OPAQUE_ALPHA_FLOOR` is compared against."""
-    import numpy as np
-    from PIL import Image
-
+    np, Image = _pixels()
     alpha = np.asarray(Image.open(path).convert("RGBA")).astype(int)[..., 3]
     inked = alpha[alpha > 24]
     return float(inked.mean()) if inked.size else 255.0

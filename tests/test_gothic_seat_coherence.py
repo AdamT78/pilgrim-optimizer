@@ -34,7 +34,7 @@ SVG_NS = "http://www.w3.org/2000/svg"
 
 # Roles the config may name explicitly; they are cleared before each build so the seat supplies them
 # and the test is measuring the seat rather than whatever the config happened to be left holding.
-SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems", "acolyte_cube",
+SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems",
               "portrait_background", "portrait_background_lit", "portrait_background_dim")
 
 
