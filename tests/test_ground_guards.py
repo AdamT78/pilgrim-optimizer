@@ -154,12 +154,12 @@ def test_the_wheel_draws_no_ground_of_its_own():
         "background -- a colour now, a picture later -- shows through the channels between the "
         "tiles. A colour here paints over it." % (g.BACKGROUND,))
 
-    bare = g.duty_grid_svg(tiles_dir=None, arrows=False, palettes=())
+    bare = g.duty_grid_svg(tiles_dir=None, palettes=())
     assert "-ground" not in bare, (
         "duty_grid_svg() emitted a ground element at its defaults. Whatever the wheel sits on can "
         "no longer be seen through it.")
 
-    painted = g.duty_grid_svg(tiles_dir=None, arrows=False, palettes=(), background="#123456")
+    painted = g.duty_grid_svg(tiles_dir=None, palettes=(), background="#123456")
     assert 'id="dg-ground"' in painted and "#123456" in painted, (
         "duty_grid_svg(background=...) no longer draws a ground. The component is still supposed "
         "to be able to carry its own sheet -- None means 'let the page show through', not 'this "

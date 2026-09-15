@@ -474,7 +474,7 @@ def build(can_save: bool) -> str:
     # grid's job to lay the tiles out; the only thing this page wants is for it to stop short of
     # the offsets, which it moves itself.
     svg = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION,
-                           klass="wheel", arrows=False, offsets=False)
+                           klass="wheel", offsets=False)
     # `dg.acolyte_row` DRAWS these, and this file no longer draws anything of its own.
     #
     # It used to emit its own figures -- its own copy of the duotone builder, its own seat palette,

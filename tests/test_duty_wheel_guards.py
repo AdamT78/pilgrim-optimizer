@@ -282,24 +282,6 @@ def test_a_shuffled_arrangement_is_drawn_and_a_broken_one_is_refused():
             g.duty_grid_svg(tiles_dir=None, cells=bad)
 
 
-def test_the_arrows_do_not_depend_on_the_arrangement():
-    """Which squares are adjacent is a property of the grid, not of which duty was dealt where,
-    so shuffling the tiles must not move a single arrow.
-
-    `arrows=True` is passed EXPLICITLY. The default became False when the arrows were taken off the
-    board, and this guard then failed -- correctly, and usefully: it asserts `a and a == b`, so an
-    empty `a` fails rather than passing vacuously, which is the difference between noticing a
-    changed default and silently testing nothing. What it guards is how the arrows behave when
-    drawn, not whether they are drawn, so it asks for them.
-    """
-    g = grid()
-    import re
-    arrows = lambda svg: re.findall(r'<g transform="translate\([^"]+\) rotate\([^"]+\)"', svg)
-    a = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True))
-    b = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
-    assert a and a == b, "the arrows moved when the arrangement changed"
-
-
 def test_two_grids_on_one_page_do_not_share_ids():
     """Every id the component emits must be namespaced to its instance.
 
@@ -328,66 +310,6 @@ def test_two_grids_on_one_page_do_not_share_ids():
     refs = set(re.findall(r'url\(#([^)]+)\)', svg))
     assert refs <= ids(svg), (
         "these are referenced but never defined here: %s" % sorted(refs - ids(svg)))
-
-
-def test_every_arrow_clears_its_destination_and_reaches_under_its_source():
-    """The arrow geometry, which is four constants that have to agree with the torn outlines.
-
-    Each arrow is one length, anchored at the tile it points AT and masked by the tile it leaves.
-    Two things must hold for all twelve, and neither is visible in the markup:
-
-        the head stops short of the destination outline, or the arrow crosses into the next duty
-        the tail ends inside the source outline, or it floats in the channel with a visible butt
-
-    They pull against each other -- a shorter arrow clears more easily but stops reaching under --
-    and the margin between them is thin: the channels vary, and the widest source gap is 75.5
-    units against ARROW_LEN 90. Changing ARROW_LEN, ARROW_GAP, ARROW_W, ARROW_STROKE or MARGIN
-    can break either end, and the render still looks plausible at a glance.
-    """
-    g = grid()
-    meta = g.load()
-    laid = g.place(meta["shapes"], meta["box"], g.MARGIN)
-    bad = []
-    for a, b in g.RING + g.CITY_ROUTES:
-        x, y, ang = g._channel(laid[a], laid[b])
-        dest = g._ray_hit(laid[b], x, y, ang)
-        head = dest - g._inset(g.ARROW_W, meta["box"])
-        tail = head - g.ARROW_LEN
-        src = -g._ray_hit(laid[a], x, y, (ang + 180) % 360)
-        if head >= dest:
-            bad.append("%d->%d head reaches %.1f, destination outline at %.1f" % (a, b, head, dest))
-        if tail >= src:
-            bad.append("%d->%d tail ends at %.1f, source outline at %.1f -- it would float"
-                       % (a, b, tail, src))
-    assert not bad, "arrow geometry no longer fits the tiles:\n  " + "\n  ".join(bad)
-
-
-def test_the_arrow_gap_is_the_gap_that_is_drawn():
-    """ARROW_GAP must be the clear ground you SEE, not the distance between two path tips.
-
-    Both shapes are stroked and strokes sit centred on their paths, so an inset that ignores them
-    is consumed by ink: this is how ARROW_INSET = 2.0 came to leave the arrow and tile outlines
-    OVERLAPPING by 2.3 units while claiming a 2-unit gap.
-
-    The stroke is read back out of the EMITTED markup rather than from the constant `_inset`
-    reads, because otherwise the two sides of this check are the same number and it cannot fail.
-    What it is really guarding is that `arrow()` and `_inset()` still agree about how much ink
-    there is -- which is exactly what stops being true when one of them is edited to a literal.
-    """
-    import re
-    g = grid()
-    box = g.load()["box"]
-    svg = g.duty_grid_svg(tiles_dir=None, arrows=True)
-    widths = {float(w) for w in re.findall(r'stroke-width="([\d.]+)" stroke-linejoin', svg)}
-    drawn = [w for w in widths if abs(w - g.ARROW_W * g.ARROW_STROKE) < 0.01]
-    assert drawn, ("no arrow stroke of the expected weight is in the markup; `arrow()` and "
-                   "ARROW_STROKE have parted company (found %s)" % sorted(widths))
-    ink = drawn[0] / 2 + box * 0.0035 / 2          # half the arrow's ink, half the tile's
-    assert g._inset(g.ARROW_W, box) - ink == pytest.approx(g.ARROW_GAP, abs=0.02), (
-        "_inset does not allow for the ink actually drawn: the gap on screen is %.2f units, not "
-        "the %.2f that ARROW_GAP promises"
-        % (g._inset(g.ARROW_W, box) - ink, g.ARROW_GAP))
-    assert g.ARROW_GAP > 0, "a zero or negative gap puts the arrow head against the tile"
 
 
 def test_the_offsets_tool_watches_every_generator_it_builds_from():
@@ -1355,3 +1277,5 @@ def test_the_marking_never_takes_the_pointer():
     group = dg.mark_paths("M 0 0 L 10 0 L 10 10 Z")
     assert group.startswith('<g class="dg-mark" pointer-events="none"'), (
         "the marking group no longer disclaims pointer events: %r" % group[:90])
+
+

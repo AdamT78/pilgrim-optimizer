@@ -837,9 +837,13 @@ about 6.4 px to 7.2. Bigger, and just as tight. **Scaling changes the size of a 
 not the crowding.**
 
 The tiles did grow anyway, to **0.80**: each goes 174.5 -> 188.7 px, roughly 8%, and the ring pays
-for it -- the gap between neighbouring tiles falls from 32.2 to 18.1, and the arrows live in those
-gaps. **0.86 was tried and rejected**: neighbours close to 3.9 and the arrows are crushed between
-Allocation and Clerical. Treat 0.80 as the ceiling.
+for it -- the gap between neighbouring tiles falls from 32.2 to 18.1, and the ring arrows lived in
+those gaps. **0.86 was tried and rejected**: neighbours close to 3.9 and the arrows are crushed
+between Allocation and Clerical. Treat 0.80 as the ceiling.
+
+The arrows have since been removed (see `docs/duty-wheel/sow-marking.md`), so the gap no longer
+has to hold anything. 0.80 stands anyway: the rejection at 0.86 was neighbours closing to 3.9
+units of each other, which is a crowding problem between the tiles themselves.
 
 What actually opened the gap was moving the act row **below the title's baseline** (y 22) instead
 of straddling it. The title then owns the tile's full width and the row reads as what the title

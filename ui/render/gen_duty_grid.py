@@ -150,8 +150,11 @@ DUTY_NAMES = ["Allocation", "Clerical", "Construct", "Build Roads", "The City",
 # Pass `cells=` to draw a real game's board: cells[duty] is the 0..8 grid square that duty
 # occupies, top-left to bottom-right. The default below is what this component has always drawn.
 #
-# The ARROWS do not depend on this. They describe which squares are adjacent, which is a property
-# of the grid and does not shuffle.
+# NOTHING ABOUT ROUTING DEPENDS ON THIS. A sow runs over the SHAPES, which do not shuffle, and
+# the graph saying which shape follows which is `configs/board.json` -- now the only copy, since
+# the ring arrows took their hand-written `RING`/`CITY_ROUTES` out with them. Marking a shape
+# during a sow will need one position->square mapping to get from that graph to these cells;
+# see ui/docs/duty-wheel/sow-marking.md.
 DEFAULT_CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # Which tiles carry two actions, and so have a join and two hover halves. Three duty tiles have
 # a single action (Allocation, Build Roads, Taxation) and the city has none; measuring a join on
@@ -1087,136 +1090,6 @@ def place(shapes: list[str], box: float, margin: float = MARGIN) -> list[str]:
 
 
 
-# ---------------------------------------------------------------------------------------------
-# Arrows
-#
-# Two movements, both of them read off `configs/board.json` rather than written down again:
-#
-#   the ring    The Merchant rides the eight duty tiles clockwise, one step per round end, and
-#               never enters the City. Its route is north -> north_east -> east -> south_east ->
-#               south -> south_west -> west -> north_west -> north.
-#   the City    Not symmetric. The City feeds OUT to north and south, and takes IN from east and
-#               west -- four edges, not eight.
-#
-# On a 3x3 that ring is exactly eight horizontal and vertical steps, which is why these are all
-# straight: the old wheel needed curved ring arrows because it was a circle, and this is not.
-#
-# NOTE these are a property of the GRID, not of which duty sits where. The walk top-left ->
-# top-centre -> top-right -> ... is the same whatever art is in the cells, so these arrows stay
-# correct even while DUTY_NAMES disagrees with the board graph (it currently does -- see the
-# duty-wheel README). Fixing that moves the artwork, not these.
-RING = [(0, 1), (1, 2), (2, 5), (5, 8), (8, 7), (7, 6), (6, 3), (3, 0)]
-CITY_ROUTES = [(4, 1), (4, 7), (5, 4), (3, 4)]
-# One length and one width for all twelve. The head is anchored at the tile it points AT rather
-# than centred in the channel, so no arrow crosses into the next duty and the length can still be
-# uniform -- centring cannot do both. Measured from the channel centre, the nearest destination
-# edge is 13.5 units away and the furthest 42.0, so a centred arrow short enough to clear every
-# destination would be 27 units long and its tail would reach under the source tile on none of
-# the twelve. Anchored at the head, 90 clears the widest source gap (75.5) with margin.
-ARROW_LEN = 90.0
-ARROW_W = 23.0             # what the City arrows were; the ring's was heavier and read as a bar
-# The gap you actually SEE between the arrow head and the tile it points at. Stated as the gap
-# rather than as an inset because both shapes are stroked and the strokes sit centred on their
-# paths: the arrow's reaches ARROW_W*0.22/2 beyond its tip, the tile outline's reaches
-# box*0.0035/2 beyond its edge. An inset of 2.0 therefore left the two inked edges overlapping by
-# 2.3 units -- no gap at all -- which is what `_inset` now corrects for.
-ARROW_GAP = 5.0
-ARROW_STROKE = 0.14        # outline weight, as a fraction of the arrow's width
-# The arrows are filled, not just outlined, so that the half of an arrow lying over dense
-# engraving still reads as one shape. That fill USED to be `BACKGROUND`, which was fine only
-# while the ground was a flat colour: a ground of None (the page shows through) or an <image>
-# leaves nothing for an arrow to be filled WITH, and an arrow cannot be filled with a picture.
-# So it is its own colour, and it is parchment because that is what the arrows are made of --
-# not because that is what is behind them.
-ARROW_FILL = "#e7bd83"
-
-
-def _channel(a: str, b: str) -> tuple[float, float, float]:
-    """Where an arrow between two cells sits, and which way it points."""
-    ax0, ay0, ax1, ay1 = bbox(a)
-    bx0, by0, bx1, by1 = bbox(b)
-    if abs((ax0 + ax1) - (bx0 + bx1)) > abs((ay0 + ay1) - (by0 + by1)):
-        x = (ax1 + bx0) / 2 if ax1 < bx0 else (bx1 + ax0) / 2
-        return x, (max(ay0, by0) + min(ay1, by1)) / 2, (0 if ax1 < bx0 else 180)
-    y = (ay1 + by0) / 2 if ay1 < by0 else (by1 + ay0) / 2
-    return (max(ax0, bx0) + min(ax1, bx1)) / 2, y, (90 if ay1 < by0 else 270)
-
-
-def _ray_hit(shape: str, x: float, y: float, ang: float, limit: float = 300.0) -> float:
-    """Distance from (x, y) along `ang` to the first crossing of this outline.
-
-    The outlines are polylines of 140 points, so this is an exact segment intersection rather
-    than a rasterised probe -- no PIL, and it stays right if the shapes are ever resampled.
-    """
-    import math
-    dx, dy = math.cos(math.radians(ang)), math.sin(math.radians(ang))
-    n = [float(v) for v in shape.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
-    pts = [(n[i], n[i + 1]) for i in range(0, len(n), 2)]
-    best = limit
-    for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
-        ex, ey = x2 - x1, y2 - y1
-        den = dx * ey - dy * ex
-        if abs(den) < 1e-9:
-            continue
-        t = ((x1 - x) * ey - (y1 - y) * ex) / den          # along the ray
-        u = ((x1 - x) * dy - (y1 - y) * dx) / den          # along the segment
-        if 0 <= t < best and 0.0 <= u <= 1.0:
-            best = t
-    return best
-
-
-
-def arrow(length: float, w: float, stroke: str, fill: str) -> str:
-    """A flat-tailed arrow, outlined in the same ink as the tile edges.
-
-    Outline AND fill, not outline alone: over cross-hatching a hollow arrow lets the engraving
-    through its middle and the shape dissolves. The stroke is a smaller fraction of the width
-    than it was when these were small, or at this size it reads as a black bar.
-    """
-    return (f'<path d="M{-length / 2:.1f} {-w * .3:.1f} L{length / 2 - w * .8:.1f} {-w * .3:.1f} '
-            f'L{length / 2 - w * .8:.1f} {-w * .85:.1f} L{length / 2:.1f} 0 '
-            f'L{length / 2 - w * .8:.1f} {w * .85:.1f} L{length / 2 - w * .8:.1f} {w * .3:.1f} '
-            f'L{-length / 2:.1f} {w * .3:.1f} Z" fill="{fill}" stroke="{stroke}" '
-            f'stroke-width="{w * ARROW_STROKE:.2f}" stroke-linejoin="round"/>')
-
-
-def _inset(w: float, box: float) -> float:
-    """How far back the arrow's PATH must stop for ARROW_GAP of clear ground to show."""
-    return ARROW_GAP + (w * ARROW_STROKE) / 2 + (box * 0.0035) / 2
-
-
-def arrows_svg(shapes: list[str], length: float = ARROW_LEN, w: float = ARROW_W,
-               fill: str = ARROW_FILL, box: float = 1000, uid: str = "dg") -> str:
-    """Both routes, one size, each rising out from under the tile it leaves.
-
-    The whole arrow is drawn above the tiles and then masked by the SOURCE tile's outline, so the
-    tail is hidden exactly where that tile covers it. Its head is placed at the DESTINATION tile's
-    outline, so it stops there instead of crossing into the next duty.
-
-    Every arrow is therefore the same length and the same width, while the length you can SEE is
-    set by the torn edges -- short where a tile bulges into the channel, long where it falls away.
-
-    `pointer-events:none` so they never steal a hover from the tile beneath.
-    """
-    defs, body = [], []
-    for n, (a, b) in enumerate(RING + CITY_ROUTES):
-        x, y, ang = _channel(shapes[a], shapes[b])
-        reach = _ray_hit(shapes[b], x, y, ang) - _inset(w, box)   # to the destination outline
-        defs.append(f'<mask id="{uid}-am{n}" maskUnits="userSpaceOnUse" x="0" y="0" '
-                    f'width="{box}" height="{box}">'
-                    f'<rect width="{box}" height="{box}" fill="#fff"/>'
-                    f'<path d="{shapes[a]}" fill="#000"/></mask>')
-        # the mask goes on an OUTER group with no transform of its own. A transform on the same
-        # element establishes the user space the mask is then resolved in, so putting both here
-        # would measure the tile outline in the arrow's rotated frame and mask the wrong region.
-        body.append(f'<g mask="url(#{uid}-am{n})">'
-                    f'<g transform="translate({x:.1f} {y:.1f}) rotate({ang})">'
-                    f'<g transform="translate({reach - length / 2:.1f} 0)">'
-                    f'{arrow(length, w, INK, fill)}</g></g></g>')
-    return ('<defs>' + "".join(defs) + '</defs>'
-            '<g class="dg-arrows" pointer-events="none">' + "".join(body) + '</g>')
-
-
 def eligible_tiles(acolytes, active: str, seats: tuple[str, ...] = SEAT_ORDER) -> set[int]:
     """Which duties `active` may act on: the ones its own acolytes are standing on.
 
@@ -1270,13 +1143,6 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   margin: float | None = MARGIN, background: str = BACKGROUND,
                   palette: str | None = PALETTE,
                   palettes: tuple[str, ...] = ("chroma", "full"),
-                  # OFF by default now. The arrows were the only thing on the board saying which
-                  # duty follows which, so removing them removes that information from the view
-                  # entirely -- it is not merely decluttering. They also no longer line up: the
-                  # tiles carry per-tile offsets and the arrows are drawn from the untouched
-                  # adjacency, so they cross the gaps at angles that match nothing. Pass
-                  # arrows=True to get them back.
-                  arrows: bool = False,
                   acolytes: list[list[int]] | dict[int, list[int]] | None = None,
                   # False draws the tiles WITHOUT the saved offsets, for a caller that applies
                   # them itself. gen_tile_offsets.py is the one: it moves tiles live with a
@@ -1473,10 +1339,6 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             out.append(f'<rect class="dg-hit dg-hit-f" x="{x0}" y="{y0}" '
                        f'width="{x1 - x0}" height="{y1 - y0}"/>')
         out.append("</g></g>")
-    if arrows:
-        # `laid`, not `shapes`: the arrows are between SQUARES, and shapes has been
-        # reindexed by duty. Passing the reindexed list makes them follow the shuffle.
-        out.append(arrows_svg(laid, box=box, uid=uid))
     if acolytes:
         # AFTER every tile group and outside all of them. That is what freezes the rows against
         # the tiles: nothing a tile's own transform or offset does can reach these.
