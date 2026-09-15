@@ -472,12 +472,22 @@ def drawn_without_the_artwork(g):
         g.acolyte_tints = real
 
 
-def _numerals(svg):
-    """Every acolyte numeral in the emitted markup, as (x, y, value)."""
+def _piles(svg):
+    """Every acolyte pile in the emitted markup, as (seat, [(x, y), ...]) in document order.
+
+    The count is the LENGTH of that list and is never read from an attribute. `dg-ac` carries
+    `data-seat` and deliberately does not carry the count: a count in the markup would be a second
+    statement of the same thing, free to drift from the number of figures actually drawn, and a
+    guard reading it would pass while the board showed something else. This file has been bitten
+    by duplicated statements of one fact often enough to spell that out.
+    """
     import re
     body = svg[svg.index('<g class="dg-acolytes'):]
-    return [(float(x), float(y), int(v)) for x, y, v in
-            re.findall(r'<text x="([\d.\-]+)" y="([\d.\-]+)"[^>]*>(\d+)</text>', body)]
+    out = []
+    for seat, inner in re.findall(r'<g class="dg-ac" data-seat="(\w+)">(.*?)</g>', body):
+        out.append((seat, [(float(x), float(y)) for x, y in
+                           re.findall(r'<image href="[^"]*" x="([\d.\-]+)" y="([\d.\-]+)"', inner)]))
+    return out
 
 
 def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
@@ -497,6 +507,10 @@ def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
     The two duties that happened to land on their own number are why this checks all nine and
     the ROW rectangle rather than the column -- an earlier version of this check compared x only,
     so anything in the same column passed and it reported a working fix as still broken.
+
+    The marker used to be the numeral 7. There are no numerals now, so it is a pile of seven
+    figures, located by the one figure standing ON the row's line -- the rest of the pile is above
+    it and would otherwise reach into the band this is trying to identify.
     """
     g = grid()
     if not (RENDER / "gen_tile_offsets.py").is_file():
@@ -510,12 +524,14 @@ def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
         counts[duty] = [7, 0, 0, 0]                      # one seat, one duty, an unmistakable value
         with drawn_without_the_artwork(g):
             svg = g.duty_grid_svg(tiles_dir=None, cells=SHUFFLE, acolytes=counts)
-        marks = [(x, y) for x, y, v in _numerals(svg) if v == 7]
-        assert len(marks) == 1, "expected exactly one 7, found %d" % len(marks)
+        marks = [max(f, key=lambda p: p[1]) for seat, f in _piles(svg) if len(f) == 7]
+        assert len(marks) == 1, "expected exactly one pile of seven, found %d" % len(marks)
         x, y = marks[0]
+        # the same slack as `_row_under`, and for the same reason: the markup is written to one
+        # decimal, so a figure exactly on the slot can land 0.05 units outside an exact bound.
         landed = [i for i, r in enumerate(rows)
-                  if r["sx"] <= x <= r["sx"] + 4 * r["fw"] + 3 * r["gap"]
-                  and r["sy"] <= y <= r["sy"] + r["fh"] * 1.05]
+                  if r["sx"] - 1.0 <= x <= r["sx"] + 4 * r["fw"] + 3 * r["gap"] + 1.0
+                  and r["sy"] - 0.1 <= y <= r["sy"] + r["fh"] * 1.05]
         if landed != [SHUFFLE[duty]]:
             wrong.append("duty %d was dealt to square %d but its count is drawn under %s"
                          % (duty, SHUFFLE[duty], landed or "no row at all"))
@@ -848,23 +864,29 @@ def test_the_action_box_ends_on_the_acolytes_feet():
 
 
 def _row_under(g, svg, shape, seats):
-    """The figures drawn under ONE tile, as (x, count), found by that tile's own row rectangle.
+    """The piles drawn under ONE tile, as (x, count), found by that tile's own row rectangle.
 
     By the RECTANGLE, not the column. Squares 0, 3 and 6 share an x range, so a filter on x alone
     picks up three rows and reads as one -- which has now produced a wrong answer twice in this
     file's history, once reporting a working fix as broken.
+
+    A pile is identified by the figure standing ON the line, at `sy`, and the count is how many
+    figures that pile contains. Matching any figure in the band would be wrong twice over: a pile
+    reaches upward by as much as 158 px, and its upper figures are leaned sideways, so both the
+    y band and the x band would have to be widened until they stopped identifying one row.
     """
-    import re
     b = g.acolyte_box(shape, seats)
-    lo, hi = b["sx"] - 1.0, b["sx"] + len(seats) * (b["fw"] + b["gap"]) + 1.0
-    top, bot = b["sy"] - 1.0, b["sy"] + b["fh"] * 1.05
-    body = svg[svg.index('<g class="dg-acolytes'):]
+    # widened by a lean at both ends: this is a finder, and it must not depend on the very thing
+    # `test_every_pile_stands_on_its_own_slot` exists to check. An earlier version bounded it at
+    # sx exactly and silently dropped the first seat's pile the moment its bottom figure leaned.
+    slack = b["fw"] * g.STACK_LEAN + 1.0
+    lo, hi = b["sx"] - slack, b["sx"] + len(seats) * (b["fw"] + b["gap"]) + slack
+    top, bot = b["sy"] - 0.1, b["sy"] + b["fh"] * 1.05
     out = []
-    for x, y, v in re.findall(
-            r'<image href="[^"]*" x="([\d.\-]+)" y="([\d.\-]+)"[^>]*/><text[^>]*>(\d+)</text>',
-            body):
-        if lo <= float(x) <= hi and top <= float(y) <= bot:
-            out.append((float(x), int(v)))
+    for _seat, figs in _piles(svg):
+        base = max(figs, key=lambda p: p[1])
+        if lo <= base[0] <= hi and top <= base[1] <= bot:
+            out.append((base[0], len(figs)))
     return out
 
 
@@ -924,11 +946,15 @@ def test_the_acolyte_foot_does_not_move_with_the_game():
 def test_a_seat_with_no_acolytes_on_a_tile_is_drawn_as_nothing():
     """An absence should look like an absence, and the others must not close up around it.
 
-    A row of figures each labelled 0 is the same picture as a row with one player present until
-    four small numbers are read. So a zero draws nothing.
+    A row of figures each labelled 0 was the same picture as a row with one player present until
+    four small numbers were read. So a zero draws nothing.
+
+    With the numerals gone this matters MORE, not less. An empty slot is now the only thing on the
+    board that distinguishes "this player has none here" from "this player is not in the game" --
+    there is no 0 left to read as a fallback, so the absence has to carry it alone.
 
     The rest keep their slots. That is the half worth guarding: reflowing to close the gap would
-    make the second figure mean a different player on every tile, and a row is only readable at a
+    make the second pile mean a different player on every tile, and a row is only readable at a
     glance across nine tiles because position means seat.
     """
     g = grid()
@@ -951,6 +977,179 @@ def test_a_seat_with_no_acolytes_on_a_tile_is_drawn_as_nothing():
             "to close the gap, so the second figure is no longer the second seat."
             % (i, [x for x, _ in b], [a[0][0], a[2][0]]))
         assert [v for _, v in b] == [2, 3], "tile %d kept the wrong counts: %s" % (i, b)
+
+
+def test_a_count_is_that_many_figures_and_there_is_no_numeral_anywhere():
+    """The picture IS the count. Nothing on the board states it a second time.
+
+    This is the whole change, so it is worth saying what would break it quietly. A numeral kept
+    "as a fallback above some threshold" is the obvious next edit and the wrong one: it would make
+    the tall piles -- the ones a player is squinting at to compare -- the only ones that have to be
+    read, which is exactly backwards. And any numeral at all is a second statement of the count,
+    free to disagree with the number of figures drawn, with nothing to say which is right.
+
+    Counts run past what a game reaches on purpose. A pile is not capped and nothing here truncates
+    one, so nine must draw nine.
+    """
+    g = grid()
+    shapes = g.laid_shapes(offsets=False)
+    for n in range(1, 10):
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, acolytes=[[n, 0, n, 0]] * 9)
+        body = svg[svg.index('<g class="dg-acolytes'):]
+        assert "<text" not in body, (
+            "a numeral is being drawn in the acolyte rows at count %d. The pile is the count; a "
+            "number beside it can disagree with the figures and nothing says which is right." % n)
+        for i, d in enumerate(shapes):
+            row = _row_under(g, svg, d, g.SEAT_ORDER)
+            assert [c for _, c in row] == [n, n], (
+                "tile %d drew piles of %s for counts [%d, 0, %d, 0]"
+                % (i, [c for _, c in row], n, n))
+
+
+def test_a_lone_acolyte_stands_exactly_where_it_always_did():
+    """One acolyte is the commonest count on the board, and it must not have moved at all.
+
+    It holds because the bottom figure of a pile does not lean -- only the ones resting on it do.
+    The first version leaned every figure and re-centred the pile afterwards, which is correct
+    about the pile and wrong about the foot: it moved the bottom figure by half a lean whenever the
+    count changed, so a lone acolyte sat 5 px off its slot in a uniform direction. That reads as a
+    botched drag rather than as a bug, and it would have been chased in the offsets file.
+
+    `test_every_pile_stands_on_its_own_slot` below is the general form of this. Both are kept: this
+    one names the count that is commonest on the board and the one a reader will check by eye.
+    """
+    g = grid()
+    for k in (2, 3, 4):
+        seats = g.SEAT_ORDER[:k]
+        for i, d in enumerate(g.laid_shapes(offsets=False)):
+            b = g.acolyte_box(d, seats)
+            for j in range(k):
+                counts = [0] * k
+                counts[j] = 1
+                with drawn_without_the_artwork(g):
+                    svg = ('<g class="dg-acolytes">'
+                           + g.acolyte_row(d, counts, seats) + '</g>')
+                (_seat, figs), = _piles(svg)
+                (x, y), = figs
+                want = (b["sx"] + j * (b["fw"] + b["gap"]), b["sy"])
+                # the markup writes %.1f, so 0.05 units is the floor. Anything real here is a lean,
+                # which is 0.10 of a figure -- 6.1 units, two orders of magnitude away.
+                assert abs(x - want[0]) < 0.06 and abs(y - want[1]) < 0.06, (
+                    "at %d seats, tile %d, slot %d: a single acolyte is drawn at (%.2f, %.2f) but "
+                    "its slot is (%.2f, %.2f). A lone figure has to stand where it stood before "
+                    "the pile existed." % (k, i, j, x, y, *want))
+
+
+def test_every_pile_stands_on_its_own_slot():
+    """The bottom figure of every pile sits exactly on its seat's slot, at every count.
+
+    The row of feet is what the eye measures pile heights against, so it has to be a row: if the
+    bottom figure moved with the count, four seats with four different counts would stand on four
+    slightly different lines and the comparison the pile exists to make gets harder to read, not
+    easier. It also keeps a count change from nudging anything sideways.
+    """
+    g = grid()
+    for k in (2, 3, 4):
+        seats = g.SEAT_ORDER[:k]
+        for i, d in enumerate(g.laid_shapes(offsets=False)):
+            b = g.acolyte_box(d, seats)
+            for n in range(1, 10):
+                with drawn_without_the_artwork(g):
+                    svg = ('<g class="dg-acolytes">'
+                           + g.acolyte_row(d, [n] * k, seats) + '</g>')
+                for j, (seat, figs) in enumerate(_piles(svg)):
+                    base = max(figs, key=lambda p: p[1])
+                    want = b["sx"] + j * (b["fw"] + b["gap"])
+                    assert abs(base[0] - want) < 0.06, (
+                        "tile %d, %d seats, count %d: %s's bottom figure is at %.2f, not on its "
+                        "slot at %.2f." % (i, k, n, seat, base[0], want))
+
+
+def test_the_pile_grows_upward_so_the_foot_never_moves_with_a_count():
+    """The action box is cut to the acolytes' foot, so a count must not be able to move it.
+
+    `test_the_acolyte_foot_does_not_move_with_the_game` says the same thing about the SEAT count
+    and checks it through `acolyte_box`, which has no count term to begin with. This checks the
+    drawing instead, because the foot is now a property of which end of the pile is anchored: draw
+    it downward, or centre it, and `acolyte_box` still reports the same foot while the figures sit
+    somewhere else entirely and the box no longer ends where they do.
+    """
+    g = grid()
+    for k in (2, 3, 4):
+        seats = g.SEAT_ORDER[:k]
+        for i, d in enumerate(g.laid_shapes(offsets=False)):
+            b = g.acolyte_box(d, seats)
+            for n in range(1, 10):
+                with drawn_without_the_artwork(g):
+                    svg = ('<g class="dg-acolytes">'
+                           + g.acolyte_row(d, [n] * k, seats) + '</g>')
+                for seat, figs in _piles(svg):
+                    low = max(y for _, y in figs)
+                    assert abs(low - b["sy"]) < 0.06, (
+                        "tile %d, %d seats, count %d: %s's lowest figure is at %.2f but the row's "
+                        "line is %.2f. The pile has to grow upward from that line -- the action "
+                        "box ends on it." % (i, k, n, seat, low, b["sy"]))
+                    top = min(y for _, y in figs)
+                    assert abs((b["sy"] - top) - (n - 1) * b["fh"] * g.STACK_STEP) < 0.06, (
+                        "tile %d, count %d: the pile is %.2f tall, not %.2f. Something is not "
+                        "stepping by STACK_STEP." % (i, n, b["sy"] - top,
+                                                     (n - 1) * b["fh"] * g.STACK_STEP))
+
+
+def test_neighbouring_piles_never_touch():
+    """The lean widens a pile into the gap between seats, and the gap is not large.
+
+    A pile is 2 * STACK_LEAN wider than one figure, into a gap of 0.24 of a figure. That leaves
+    0.04 of a figure -- under 2 px at the drawn size -- between BOUNDING BOXES, which is close
+    enough that raising the lean even slightly would run two seats together, and the failure would
+    look like a rendering artefact rather than a constant being wrong.
+
+    So this measures INK, from the asset's own alpha, rather than boxes. The ink clears by far
+    more than the boxes do, because the leaning figures are the upper ones and the acolyte is 9%
+    of its width at the crown -- but that is a fact about this artwork, and it stops being true if
+    the figure is ever redrawn straighter. This is the guard that would notice.
+    """
+    g = grid()
+    np = pytest.importorskip("numpy")
+    Image = pytest.importorskip("PIL.Image", reason="the ink profile comes from the asset")
+    if not g.ACOLYTE.is_file():
+        pytest.skip("the acolyte asset is not in this tree")
+    al = np.asarray(Image.open(g.ACOLYTE).convert("RGBA")).astype(int)[..., 3] > 24
+    H, W = al.shape
+    ext = []
+    for r in range(H):
+        c = np.where(al[r])[0]
+        ext.append((c[0] / W, (c[-1] + 1) / W) if len(c) else None)
+
+    worst, where = 1e9, None
+    for k in (2, 3, 4):
+        seats = g.SEAT_ORDER[:k]
+        for i, d in enumerate(g.laid_shapes(offsets=False)):
+            b = g.acolyte_box(d, seats)
+            step, lean = b["fh"] * g.STACK_STEP, b["fw"] * g.STACK_LEAN
+            band = b["fh"] / H
+            for n in range(1, 10):
+                spans = []
+                for j in range(k):
+                    x = b["sx"] + j * (b["fw"] + b["gap"])
+                    side = [(lean if (n - 1 - m) % 2 else -lean) for m in range(n)]
+                    mid = (min(side) + max(side)) / 2
+                    one = []
+                    for m in range(n):
+                        fx, fy = x + side[m] - mid, b["sy"] - (n - 1 - m) * step
+                        one += [(fy + b["fh"] * r / H, fx + b["fw"] * e[0], fx + b["fw"] * e[1])
+                                for r, e in enumerate(ext) if e]
+                    spans.append(one)
+                for A, B in zip(spans, spans[1:]):
+                    for ya, _, ra in A:
+                        for yb, lb, _ in B:
+                            if abs(ya - yb) <= band and lb - ra < worst:
+                                worst, where = lb - ra, (k, i, n)
+    assert worst > 2.0, (
+        "two neighbouring seats' acolytes come within %.2f units of each other (%d seats, tile "
+        "%d, count %d). They are separate players' pieces and must read as separate piles."
+        % (worst, *where))
 
 
 def test_a_row_of_counts_must_match_the_seats_at_the_table():

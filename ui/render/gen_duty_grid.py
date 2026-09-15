@@ -440,7 +440,7 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     return float(data.get("tile_scale") or 1.0), out, shift
 
 
-# THE ACOLYTE ROW. Four figures under each tile, one per seat, with that seat's count in the robe.
+# THE ACOLYTE ROW. One PILE of figures under each tile per seat -- one figure per acolyte.
 #
 # The figure is the population asset itself, duotoned per seat, not a drawn token: four attempts at
 # a drawn hood all read as a user-avatar icon at this size, and the asset already is the acolyte.
@@ -455,10 +455,49 @@ ACOLYTE_ASPECT = 228 / 210.0
 FIG_FRAC = 0.205              # figure width as a fraction of the tile's width
 FIG_OVERLAP = 0.60            # how much of the figure sits above the tile's bottom edge
 SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
-# One numeral colour cannot serve four seats: dark ink measures 5.36 and 6.64 : 1 on sage and bone
-# but only 3.00 and 3.18 on pewter and plum, and parchment is the exact reverse.
-SEAT_NUMERAL = {"sage": "#221c16", "pewter": "#F2E8CC", "plum": "#F2E8CC", "bone": "#221c16"}
 SEAT_ORDER = ("sage", "pewter", "plum", "bone")
+# How a count is drawn: one figure per acolyte, piled upward, and no numeral anywhere. See
+# `acolyte_row` for why five acolytes are five figures rather than one figure and a 5.
+#
+# STACK_STEP is the whole design, and the floor under it is a property of the artwork rather than
+# a matter of taste. The acolyte's silhouette widens monotonically -- 9% of its width at the crown,
+# 100% at the hem -- so copies offset by a small step merge into ONE larger triangle. At 0.26 a
+# pile of five reads as a fir tree, not as five; a buried figure shows only its top STACK_STEP of
+# height, and that band has to clear the hood before a second face appears at all.
+#
+# The cost is tile art, and it is the ONLY cost: the pile grows upward, so the foot never moves
+# and the action box cut to that line never moves either. As a fraction of the tile's own height:
+#
+#                       n=3    n=5    n=7    n=9
+#   step 0.26           24%    35%    46%    57%   crowns merge, reads as one shape
+#   step 0.30 + lean    26%    38%    51%    64%   <- here
+#   step 0.40           30%    47%    64%    81%
+#   step 0.55           36%    60%    83%   106%   climbs off the top of the tile
+#
+# NOTHING CAPS A DUTY'S COUNT, and the top of that range is not drawn well. A sow places one
+# acolyte per STEP of its route; the route is a free walk on a board graph with two four-cycles
+# through the City, so a position visited twice takes two acolytes -- five picked up from the City
+# puts two on north in a single sow, and four is the most one sow can add anywhere (thirteen
+# picked up, lapping twice). Counts accumulate on top of that, so the ceiling the rules allow is a
+# player's entire pool on one duty: 16, being 5 in the city, 3 in the abbey and 8 in the village
+# with the village -> abbey -> city pipeline able to move all of them.
+#
+# At this step that pile is 104% of its own tile's height at 14 and is clipped by the wheel's box
+# at 16, by 1.8 units. Both are ACCEPTED: a board with every acolyte a player owns on one duty is
+# not a board anyone will play, and Adam decided that rather than me. There is no guard on it,
+# also deliberately -- the only threshold available was one invented for the purpose, and it let a
+# step of 0.34 through while catching 0.45. A guard that fires only on a change someone would make
+# deliberately, having read this table, protects nothing. These numbers are the protection: a
+# larger step buys separation and spends it here, and the count where it starts to cost is
+#
+#     step 0.30   clips at 16      step 0.34   clips at 15      step 0.45   clips at 11
+#
+# STACK_LEAN is what buys 0.30 the readability that 0.40 otherwise needs the extra height for:
+# alternating sides gives each figure an edge the one below it does not have, so the silhouette
+# breaks where the step alone would not separate it. It is not free -- it widens a pile by twice
+# itself into a gap of 0.24 of a figure, and `acolyte_row` states the clearance that leaves.
+STACK_STEP = 0.30             # fraction of a figure's height between one acolyte and the next
+STACK_LEAN = 0.10             # fraction of a figure's width, alternating side to side
 _TINTS: dict[str, str] | None = None
 
 
@@ -567,35 +606,63 @@ def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float
 
 
 def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
-    """One row under a tile, drawn. The geometry is `acolyte_box`.
+    """One row under a tile, drawn: a seat's count is that many FIGURES, piled upward.
 
-    A SEAT WITH NO ACOLYTES HERE IS DRAWN AS NOTHING -- no figure, no numeral. A row of figures
-    each labelled 0 says "four players, none of them here", which is the same picture as "four
-    players, one of them here" until you read four small numbers. An absence should look like an
-    absence.
+    THERE IS NO NUMERAL. A count used to be one figure with a small number on its robe, and the
+    number was the only part of it carrying information -- so reading the board meant reading
+    thirty-six numerals and doing the arithmetic. What a player is actually asking is "who has
+    the most here, and will sowing this way change that", and a pile answers it without being
+    read: four against two is a taller heap next to a shorter one. That is the entire reason for
+    this shape, and it is why the numeral is gone at EVERY count rather than kept as a fallback
+    above some threshold -- a mixed scheme would make the tall piles the ones you have to read.
+
+    The price is paid in tile art and nothing else. The pile grows UPWARD from the line the single
+    figure stood on, so `sy + fh` is untouched: the foot has no count term, the same way it has no
+    seat term, and gen_game_view cuts the action box to it.
+
+    A SEAT WITH NO ACOLYTES HERE IS DRAWN AS NOTHING. A row of figures each labelled 0 said "four
+    players, none of them here" and "four players, one of them here" with the same picture until
+    four small numbers were read; with no numerals left, an empty slot is now the ONLY thing
+    distinguishing those two boards, so it matters more than it did, not less.
 
     The others do NOT close up around it. Each seat keeps the slot its position in `seats` gives
     it, so a gap means a specific player is missing rather than merely that somebody is: the
-    second figure is the second seat on every tile on the board, which is what makes a row
-    readable at a glance across nine of them. Reflowing would make every row a small puzzle.
+    second pile is the second seat on every tile on the board, which is what makes a row readable
+    at a glance across nine of them. Reflowing would make every row a small puzzle.
     """
     b = acolyte_box(shape, seats)
     sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
     uris = acolyte_tints()
+    step, lean = fh * STACK_STEP, fw * STACK_LEAN
     out = []
     for j, seat in enumerate(seats):
-        if int(counts[j]) <= 0:
+        n = int(counts[j])
+        if n <= 0:
             continue
         x = sx + j * (fw + gap)
-        fs = fh * 0.50
-        ink = SEAT_NUMERAL[seat]
-        out.append(
-            f'<image href="{uris[seat]}" x="{x:.1f}" y="{sy:.1f}" width="{fw:.1f}" '
-            f'height="{fh:.1f}" preserveAspectRatio="xMidYMid meet"/>'
-            f'<text x="{x + fw / 2:.1f}" y="{sy + fh * 0.93:.1f}" text-anchor="middle" '
-            f'font-family="Georgia,serif" font-size="{fs:.1f}" font-weight="700" fill="{ink}" '
-            f'stroke="{"#F2E8CC" if ink == "#221c16" else "#221c16"}" '
-            f'stroke-width="{fs * 0.17:.1f}" paint-order="stroke">{counts[j]}</text>')
+        # THE BOTTOM FIGURE DOES NOT LEAN. Only the ones resting on it do.
+        #
+        # Leaning all of them and centring the pile afterwards also works and is what this did
+        # first, but it moves the figure standing on the line by half a lean whenever the count
+        # changes -- so a seat going from one acolyte to two shifts its foot sideways, and the
+        # row of feet the eye compares pile heights against stops being a row. Anchoring the
+        # bottom one keeps every seat's foot exactly on its slot at every count, and it makes a
+        # lone acolyte land where it always landed without needing a case for n == 1.
+        side = [0.0 if n - 1 - i == 0 else (lean if (n - 1 - i) % 2 else -lean)
+                for i in range(n)]
+        # A pile is 2 * STACK_LEAN wider than one figure, against a gap of 0.24 of a figure:
+        # 0.04 of a figure of clearance between neighbouring seats, 2.0 px at the drawn size.
+        # That is bounding boxes; the ink clears by more, because the leaning figures are the
+        # upper ones and a figure is 9% of its width at the crown. Guarded either way.
+        out.append(f'<g class="dg-ac" data-seat="{seat}">')
+        # Drawn top DOWN, so each figure is overlapped from below by the next and the one standing
+        # on the line is whole. Painted the other way the pile reads as a row lying down.
+        for i in range(n):
+            out.append(
+                f'<image href="{uris[seat]}" x="{x + side[i]:.1f}" '
+                f'y="{sy - (n - 1 - i) * step:.1f}" width="{fw:.1f}" height="{fh:.1f}" '
+                f'preserveAspectRatio="xMidYMid meet"/>')
+        out.append('</g>')
     return "".join(out)
 
 
