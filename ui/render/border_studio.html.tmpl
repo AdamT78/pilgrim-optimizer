@@ -24,8 +24,15 @@ button.opt:hover{background:#F6EFD9}
 button.opt[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
 input[type=range]{width:100%%}
 .hint{font-size:11.5px;color:#5d5443;margin:9px 0 0;line-height:1.45}
-.stage{flex:1 1 520px;min-width:300px;background:#1b1813;border-radius:12px;padding:10px}
-svg{display:block;width:100%%;height:auto}
+.stage{flex:1 1 520px;min-width:300px;background:#1b1813;border-radius:12px;padding:10px;
+  display:flex;justify-content:center}
+/* The viewBox is square, so width IS height here: capping the width by the leftover viewport
+   height is what keeps the whole wheel on screen instead of letting a wide window blow it up to
+   its own width and push six tiles below the fold. `min()` takes whichever runs out first --
+   the column, the window's height, or the point past which the outlines stop gaining anything. */
+svg{display:block;width:100%%;height:auto;
+  max-width:min(100%%, calc(100dvh - 210px), 760px)}
+@supports not (height:100dvh){svg{max-width:min(100%%, calc(100vh - 210px), 760px)}}
 .fillp{fill:#272219}
 .edge{fill:none;stroke:%(ink)s;stroke-opacity:.85;stroke-width:var(--sw);stroke-linejoin:round}
 .tname{fill:#8d8471;font:600 30px Georgia,serif;text-anchor:middle;pointer-events:none}
