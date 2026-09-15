@@ -66,9 +66,9 @@ body[data-anim=portal] .on .pring{opacity:1;stroke:url(#pg);
    script and written inline, because what it does cannot be expressed as keyframes: the segment
    lengths are the sum of three sine waves at unrelated rates, so the figure never repeats. CSS
    can interpolate between two states; it cannot be a function of time. */
-body[data-anim=segments] .on .pring-soft{opacity:1;stroke:var(--c);stroke-opacity:.16;
+body[data-anim^=segments] .on .pring-soft{opacity:1;stroke:var(--c);stroke-opacity:.16;
   stroke-width:calc(var(--sw)*3.4);filter:url(#soft)}
-body[data-anim=segments] .on .pring{opacity:1;stroke:url(#pg);
+body[data-anim^=segments] .on .pring{opacity:1;stroke:url(#pg);
   stroke-width:calc(var(--sw)*1.5);filter:url(#glowSmall)}
 body[data-anim=portal] .on .dot{offset-path:var(--p);offset-rotate:0deg;filter:url(#dotGlow)}
 body[data-anim=portal] .on .d1{animation:ride calc(var(--dur)*3.8) linear infinite,
@@ -130,7 +130,13 @@ already draws.</p>
 saying &ldquo;this is yours to take&rdquo;. A persistent mark wants a different <i>kind</i> of
 signal, not a different shade &mdash; <code>#4BA672</code> at hue 146&deg; is the one already
 designed for it.</p>
-<p><b>Two portal variants, and the difference between them is what CSS can and cannot say.</b>
+<p><b>The two dynamic-segment variants differ in one number.</b> Normalising to
+<code>pathLength</code> means the segment count is what sets the segment LENGTH: at <i>n</i>
+segments each lit run is about 1/<i>n</i> of the outline, whatever the waves are doing. So v2 is
+simply 18 rather than 9, which halves every run. Sampled over 4000 frames that puts its mean lit
+length at <b>28.99 of 1000</b> against the <code>ants</code> dash of 14 &mdash; 2.07&times; &mdash;
+where the 9-segment version sits at 57.98, or 4.14&times;.</p>
+<p><b>Three portal variants, and the difference between them is what CSS can and cannot say.</b>
 <i>Portal ring + four dots</i> is a fixed dash pattern shifted by keyframes. <i>Dynamic segments</i>
 has no fixed pattern at all: every frame, script sums three sine waves at rates that share no common
 period to get each lit segment and each gap, then scales the whole array to fit
@@ -203,20 +209,20 @@ function apply(){
   });
   document.querySelectorAll('button.opt').forEach(b=>
     b.setAttribute('aria-pressed',S[b.dataset.k]===b.dataset.v));
-  segments(S.anim==='segments');
+  segments(S.anim.startsWith('segments'));
 }
 // ---- the dynamic-segment pattern -----------------------------------------------------------
 // One computation per frame for ALL nine, not one per tile. Every marked path carries
 // pathLength="%(plen)d", so the same dash string means the same thing on every outline -- which is
 // the whole reason the normalisation below divides by that and not by a measured perimeter.
-const SEG = %(segments)d, PLEN = %(plen)d;
+const SEG = %(segments)d, SEG2 = %(segments2)d, PLEN = %(plen)d;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
 let raf = 0;
 const pulse = x => 0.5 + 0.5 * Math.sin(x);
 
-function dashArray(t){
+function dashArray(t, n){
   const v = []; let total = 0;
-  for(let i = 0; i < SEG; i++){
+  for(let i = 0; i < n; i++){
     const p = i * 0.83;
     // Three waves at rates that share no common period, so the figure never comes back round.
     const lit = 14 + 24*pulse(t*1.15 + p) + 12*pulse(t*0.63 + p*1.9 + 0.7)
@@ -233,7 +239,7 @@ function dashArray(t){
 
 function segmentFrame(ms){
   const t = ms / 1000 * (1800 / S.dur);        // the speed slider, so it drives this too
-  const d = dashArray(t);
+  const d = dashArray(t, S.anim === 'segmentsv2' ? SEG2 : SEG);
   const o = (-42*t - 10*Math.sin(t*0.55)).toFixed(2);
   for(const el of svg.querySelectorAll('.on .pring, .on .pring-soft')){
     el.style.strokeDasharray = d; el.style.strokeDashoffset = o;

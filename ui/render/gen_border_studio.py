@@ -47,12 +47,24 @@ PORTAL_DASH = (44, 28, 20, 62, 34, 36, 16, 74, 24, 54, 18, 68)
 PORTAL_PERIOD = 200.0       # of 1000, so the pattern repeats five times with no seam
 PATH_LENGTH = 1000          # every marked path is normalised to this, so a dash means one thing
 
-# The "dynamic segments" variant builds its dash array every frame from layered sine waves and then
-# scales the whole thing to fit PATH_LENGTH exactly, so there is never a seam and never a reset --
-# the pattern simply keeps evolving. This is how many lit segments it divides the outline into; the
-# waves themselves live in the page, because they are presentation, and this is the one number
-# anyone actually reaches for.
+# The "dynamic segments" variants build their dash array every frame from layered sine waves and
+# then scale the whole thing to fit PATH_LENGTH exactly, so there is never a seam and never a reset
+# -- the pattern simply keeps evolving. The waves live in the page, because they are presentation.
+# THE SEGMENT COUNT IS THE ONLY THING THAT DIFFERS between the two, and it is the only number worth
+# having out here, because normalising to PATH_LENGTH means the count is what sets the LENGTH: at n
+# segments each lit run is about 1/n of the outline, whatever the waves are doing.
+#
+# v2 exists to sit near `ants`, whose lit dash is 14 of 1000. Sampling the waves over 4000 frames:
+#
+#     n = 9    mean lit 57.98   4.14x the ants dash
+#     n = 14   mean lit 37.26   2.66x
+#     n = 18   mean lit 28.99   2.07x     <- v2
+#     n = 22   mean lit 23.71   1.69x
+#
+# So "twice ants, and more of them" is 18, derived rather than dialled in by eye.
 SEGMENTS = 9
+SEGMENTS_V2 = 18
+ANTS_DASH = 14              # what `ants` draws, for the comparison above to mean anything
 
 # The two states, and the colour each is proposed in. `take` is the emerald already designed for it
 # -- hue 146 deg, chosen to read as a different KIND of signal from the gold hover rather than as a
@@ -71,6 +83,7 @@ STATES = {
 }
 EFFECTS = (("portal", "portal ring + four dots"),
            ("segments", "portal ring, dynamic segments"),
+           ("segmentsv2", "portal ring, dynamic segments v2"),
            ("steady", "steady"), ("pulse", "pulse"), ("ants", "marching ants"))
 
 # A fixture, and named as one. Which duties are open after a Sow is a rules question this file has
@@ -162,6 +175,8 @@ def build(dg) -> str:
         "plen": PATH_LENGTH,
         "half": PORTAL_PERIOD,
         "segments": SEGMENTS,
+        "segments2": SEGMENTS_V2,
+        "ants": ANTS_DASH,
         "body": svg_body(dg, rows),
         "states": json.dumps({k: {"label": v[0], "colour": v[1], "note": v[2]}
                               for k, v in STATES.items()}),
@@ -187,8 +202,8 @@ def main() -> None:
     print("  9 outlines at stroke %.2f, ink %s, hover gold %s -- all read from gen_duty_grid"
           % (json.loads(dg.SHAPES.read_text())["box"] * dg.EDGE_STROKE, dg.INK, dg.EDGE_HOVER))
     print("  %d effects, %d states, portal dashes %s" % (len(EFFECTS), len(STATES), dash_pattern()))
-    print("  dynamic segments: %d, rebuilt per frame and normalised to pathLength %d"
-          % (SEGMENTS, PATH_LENGTH))
+    print("  dynamic segments: %d and %d, rebuilt per frame, normalised to pathLength %d"
+          % (SEGMENTS, SEGMENTS_V2, PATH_LENGTH))
     url = z.output.resolve().as_uri()
     print("\n%s" % url)
     if z.open:
