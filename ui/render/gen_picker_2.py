@@ -1,4 +1,5 @@
-"""The gothic board picker: change the seat, the stones, the turn and the portrait.
+"""The gothic board picker: the seat, the stones, the turn, the portrait, and how the resource
+boxes are drawn.
 
 This does not draw anything. It calls the production assembler to build the board exactly as
 `--formats svg` would, then adds a symbol for every candidate asset and gives the page controls that
@@ -12,6 +13,15 @@ adds an option and adding a seat colour is a change in one table rather than her
 
     assets-gothic/portraits/*.png        the portrait   (portraits/full/ is skipped -- see below)
     assembler SEAT_COLORS                the seat       (drape + dim twin + gemstones, together)
+    assembler DISC_FILL_OPACITY          the count's shadow, with that value preselected
+    assembler DISC_ICON_INSET            the icon's breathing room, likewise
+
+THE LAST TWO ARE NOT ASSET SWAPS, which is why they arrived late and separately. Everything else
+here repoints a `<use>` at a symbol; these are an attribute on four circles and a box on four
+icons, and each is ONE CONSTANT in the assembler. They were compared once in two throwaway scripts
+that loaded a module by path -- and when that module was deleted, both broke with nothing in the
+tree able to say so, one of them still captioning its baseline panel with a design that had been
+replaced. A comparison worth keeping belongs where the board already is.
 
 `portraits/full/` holds the 1254 px cuts for the game-start reveal; the board draws the 640 px cuts
 beside them, so the picker offers the board's own directory and not the reveal's.
@@ -138,6 +148,14 @@ the template's box and <code>xMidYMid meet</code>, so a replacement with differe
 by its own aspect &mdash; but it fits its <b>canvas</b>, not its visible ink, so artwork with
 different transparent margins will look smaller or offset. Do not fix that by moving the template's
 coordinates.</p>
+<p class="note"><b>Count shadow</b> moves the quarter disc's opacity <i>and</i> the numeral's
+colour, because the assembler derives the second from the first &mdash; it darkens the box's own
+fill by the opacity and picks parchment or ink by contrast against that. Moving the opacity alone
+would show you a numeral the board would never draw. <b>Icon inset</b> is the gap between the icon
+and its box on all four sides. Both open on the value the assembler is set to, so whatever is
+preselected is what the board actually has; the other buttons are its neighbours. Neither control
+writes anything &mdash; changing a constant in <code>gen_board_gothic.py</code> is what makes a
+choice real.</p>
 <script>
 const OPTS = %(opts)s;
 const board = document.querySelector('.stage svg');
@@ -180,6 +198,23 @@ function choose(role, i){
   if (role === 'turn')          turnHolders.forEach(h => h.dataset.turn = o.value);
   else if (role === 'seat')   { state.seat = o.value; paintSeat(); }
   else if (role === 'stones') { state.stones = o.value; paintStones(); }
+  // The disc's opacity AND the numeral's colour, together. The assembler derives the second from
+  // the first -- it darkens the box's fill by the opacity and picks parchment or ink by contrast
+  // against that -- so moving the opacity alone would show a numeral the board would not draw.
+  else if (role === 'shadow') {
+    board.querySelectorAll('[data-resource-disc]').forEach(d => {
+      d.setAttribute('fill-opacity', o.opacity);
+      const t = d.parentNode.querySelector('text');
+      if (t) t.setAttribute('fill', o.inks[d.getAttribute('data-resource-disc')]);
+    });
+  }
+  else if (role === 'icon') {
+    for (const name of Object.keys(o.geo)) {
+      const el = board.querySelector('[data-asset-role="resource:' + name + '"]');
+      if (!el) continue;
+      for (const [k, v] of Object.entries(o.geo[name])) el.setAttribute(k, v);
+    }
+  }
   else {
     const el = slot(role);
     if (o.id) { el.setAttribute('href', '#' + o.id); el.style.display = ''; }
@@ -191,7 +226,7 @@ function choose(role, i){
 document.querySelectorAll('button.opt').forEach(b =>
   b.onclick = () => choose(b.dataset.role, +b.dataset.i));
 // Seat first: everything else is painted relative to it.
-['seat', 'stones', 'turn', 'portrait'].forEach(r => {
+['seat', 'stones', 'turn', 'portrait', 'shadow', 'icon'].forEach(r => {
   if (!OPTS[r]) return;
   const i = OPTS[r].findIndex(o => o.on);
   choose(r, i < 0 ? 0 : i);
@@ -214,6 +249,82 @@ def thumb(path, px=120):
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+# What the panel calls each control. Only the two that are not one word need saying.
+ROW_LABELS = {"shadow": "Count shadow", "icon": "Icon inset"}
+
+
+def resource_boxes(asm, root):
+    """Each resource box's coloured field, by name: origin, size and fill, read from the board.
+
+    Every number below comes from here rather than from a constant, for the reason the assembler
+    gives about the same numbers: a box's height written into this file is a second statement of
+    something the template already owns, and the experiment script this control replaces had
+    exactly that -- a hard-coded 179.0 it fell back to when the template's shape changed under it.
+    """
+    out = {}
+    for name in asm.RESOURCE_NAMES:
+        grp = root.find(".//%s[@id='resource-%s']" % (q("g"), name))
+        if grp is None:
+            continue
+        rects = [c for c in grp if c.tag == q("rect")]
+        if not rects:
+            continue
+        box = rects[0]
+        out[name] = {"x": float(box.get("x")), "y": float(box.get("y")),
+                     "w": float(box.get("width")), "h": float(box.get("height")),
+                     "fill": box.get("fill") or "#808080"}
+    return out
+
+
+def shadow_options(asm, root, boxes, parchment):
+    """How dark the count's corner disc is, with the numeral colour DERIVED for every choice.
+
+    The assembler does not set the numeral beside the disc and hope they match -- it darkens the
+    box's own fill by the disc's opacity and then picks parchment or ink by contrast against that.
+    So a control that changed only the opacity would show a numeral the board would never draw,
+    and it would be wrong in the exact case the derivation exists for: a dark numeral on a dark
+    ground. The colour is therefore computed here, per resource, by calling the assembler's own
+    darken() and contrast() rather than a copy of them.
+
+    Returns None when the board has no discs -- `resource_layout: "strip"` is a supported setting
+    and this control has nothing to act on there.
+    """
+    if not any(c.get("data-resource-disc") for c in root.iter(q("circle"))):
+        return None
+    shipped = float(asm.DISC_FILL_OPACITY)
+    entries = []
+    for opacity in sorted({0.20, 0.32, 0.45, shipped, 0.75}):
+        inks = {}
+        for name, box in boxes.items():
+            ground = (asm.darken(str(box["fill"]), opacity)
+                      if asm.DISC_FILL == "#000000" else asm.DISC_FILL)
+            inks[name] = (parchment if asm.contrast(parchment, ground) >= asm.contrast(asm.INK, ground)
+                          else asm.INK)
+        entries.append({"value": "%.2f" % opacity, "label": "%d%%" % round(opacity * 100),
+                        "opacity": opacity, "inks": inks,
+                        "on": abs(opacity - shipped) < 1e-9})
+    return entries
+
+
+def icon_options(asm, boxes):
+    """How much breathing room the icon leaves inside its box, in the board's own units.
+
+    The geometry is precomputed per option rather than left to arithmetic in the page, so the
+    control cannot disagree with the assembler about where a box starts.
+    """
+    if not boxes:
+        return None
+    shipped = float(asm.DISC_ICON_INSET)
+    entries = []
+    for inset in sorted({0.0, shipped, 20.0, 30.0}):
+        geo = {name: {"x": b["x"] + inset, "y": b["y"] + inset,
+                      "width": b["w"] - 2 * inset, "height": b["h"] - 2 * inset}
+               for name, b in boxes.items()}
+        entries.append({"value": "%g" % inset, "label": "%g px" % inset, "geo": geo,
+                        "on": abs(inset - shipped) < 1e-9})
+    return entries
+
+
 def row(role, entries):
     btns = []
     for i, e in enumerate(entries):
@@ -228,7 +339,7 @@ def row(role, entries):
         btns.append('<button class="opt" data-role="%s" data-i="%d" title="%s">%s</button>'
                     % (role, i, e["label"], inner))
     return ('<div class="row"><div class="lab">%s</div><div class="opts">%s</div></div>'
-            % (role.capitalize(), "".join(btns)))
+            % (ROW_LABELS.get(role, role.capitalize()), "".join(btns)))
 
 
 def main():
@@ -301,6 +412,19 @@ def main():
         raise SystemExit(f"no portraits found in {assets_dir / 'portraits'}")
     opts["portrait"] = entries
 
+    # The two settings the resource boxes are drawn by. Neither is an asset, so neither can ride on
+    # a <use> the way everything above does -- they are an attribute on four circles and a box on
+    # four icons. Both are one constant in the assembler, and both were compared once in throwaway
+    # scripts that then broke silently; the comparison belongs where the board already is.
+    boxes = resource_boxes(asm, root)
+    shadow = shadow_options(asm, root, boxes,
+                            str(config.get("resource_value_fill", "#ead8b4")))
+    if shadow:
+        opts["shadow"] = shadow
+    icon = icon_options(asm, boxes)
+    if icon:
+        opts["icon"] = icon
+
     # The swappable slots must be addressable by role after the assembler has rewritten them.
     for role in ("cloth_lit", "cloth_dim", "gems", "portrait"):
         use_by_role(root, role)
@@ -309,7 +433,9 @@ def main():
     root.attrib.pop("height", None)
     svg = ET.tostring(root, encoding="unicode")
 
-    rows = "".join(row(role, opts[role]) for role in ("seat", "stones", "turn", "portrait") if role in opts)
+    rows = "".join(row(role, opts[role])
+                   for role in ("seat", "stones", "turn", "portrait", "shadow", "icon")
+                   if role in opts)
     page = PAGE % {"rows": rows, "board": svg, "opts": json.dumps(opts)}
 
     out = pathlib.Path(args.output) if args.output else \

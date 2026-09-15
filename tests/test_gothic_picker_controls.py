@@ -183,6 +183,135 @@ def test_every_portrait_option_repoints_the_portrait(page):
         "two portrait buttons draw the same file: %s" % sorted(seen))
 
 
+# ---------------------------------------------------------------------------------------------
+# THE TWO CONTROLS THAT ARE NOT ASSET SWAPS.
+#
+# Everything above repoints a <use> at a symbol, and the failure mode is the wrong symbol. These
+# two write ATTRIBUTES, and their failure mode is different and quieter: the board still looks like
+# a board, and what it shows is a setting the assembler is not on.
+#
+# They replaced two throwaway scripts that had exactly that fault. One kept captioning its baseline
+# panel "parchment, as it is now" for weeks after the parchment strip was replaced by the disc; the
+# other read a box height from a rect the template had stopped emitting and fell back to a
+# hard-coded 179.0 that happened to still be correct. Both rendered. Neither was checked.
+
+
+def assembler():
+    import importlib.util
+    path = REPO / "ui" / "render" / "gen_board_gothic.py"
+    if not path.is_file():
+        pytest.skip("the assembler is not in this checkout")
+    spec = importlib.util.spec_from_file_location("_pick_asm", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def pressed_label(page, role):
+    got = page.evaluate(
+        """r => {const b = [...document.querySelectorAll('button.opt[data-role="'+r+'"]')]
+                   .find(b => b.getAttribute('aria-pressed') === 'true');
+                 return b ? b.textContent.trim() : null;}""", role)
+    return got
+
+
+def test_both_controls_open_on_what_the_assembler_is_actually_set_to(page):
+    """The preselected button must be the board's real setting, not the middle of the range.
+
+    This is the guard that the old scripts most needed and did not have. A comparison whose
+    baseline is mislabelled is worse than no comparison: it reads as "here is what you have" while
+    showing something else, and every judgement made from it is made against the wrong thing.
+
+    Read from the assembler's constants, so changing DISC_FILL_OPACITY moves what this expects.
+    """
+    asm = assembler()
+    if not options(page, "shadow"):
+        pytest.skip("this board has no discs -- resource_layout is not 'disc'")
+    assert pressed_label(page, "shadow") == "%d%%" % round(float(asm.DISC_FILL_OPACITY) * 100), (
+        "the shadow control opens on %s while gen_board_gothic.DISC_FILL_OPACITY is %s."
+        % (pressed_label(page, "shadow"), asm.DISC_FILL_OPACITY))
+    assert pressed_label(page, "icon") == "%g px" % float(asm.DISC_ICON_INSET), (
+        "the icon control opens on %s while gen_board_gothic.DISC_ICON_INSET is %s."
+        % (pressed_label(page, "icon"), asm.DISC_ICON_INSET))
+
+
+def test_the_shadow_control_moves_the_numeral_with_the_disc(page):
+    """The numeral's colour is derived from the disc, so the control has to move both.
+
+    The assembler darkens the box's own fill by the disc's opacity and then picks parchment or ink
+    by contrast against that. A control that wrote only `fill-opacity` would be showing a numeral
+    the board would never draw -- and it would be wrong in precisely the case the derivation exists
+    for, a dark numeral on a dark ground.
+
+    That case is reachable from the buttons rather than hypothetical: at 20% the grain box is still
+    pale enough that the derivation chooses INK, while every other box keeps parchment. So this
+    asserts that some option produces more than one numeral colour across the four boxes -- which a
+    hard-coded parchment cannot do.
+    """
+    asm = assembler()
+    n = options(page, "shadow")
+    if not n:
+        pytest.skip("this board has no discs -- resource_layout is not 'disc'")
+    seen = []
+    for i in range(n):
+        press(page, "shadow", i)
+        seen.append(page.evaluate(
+            """() => {const d = [...document.querySelectorAll('[data-resource-disc]')];
+                      return {op: d.map(x => x.getAttribute('fill-opacity')),
+                              ink: d.map(x => x.parentNode.querySelector('text')
+                                                 .getAttribute('fill'))};}"""))
+    assert len({tuple(s["op"]) for s in seen}) == n, (
+        "the %d shadow options produced %d distinct opacities; some button does not move the disc."
+        % (n, len({tuple(s["op"]) for s in seen})))
+    for s in seen:
+        assert len(set(s["op"])) == 1, (
+            "the four discs are at different opacities (%s). One control, one value." % s["op"])
+    mixed = [s for s in seen if len(set(s["ink"])) > 1]
+    assert mixed, (
+        "no shadow option gave the four numerals different colours, so the derived colour is not "
+        "being carried -- a hard-coded parchment would pass every other assertion here. The "
+        "assembler picks between %r and parchment by contrast against the darkened box fill."
+        % asm.INK)
+
+
+def test_the_icon_control_moves_every_icon_by_the_boxs_own_geometry(page):
+    """Four icons, one inset, and the numbers come from the template rather than from arithmetic.
+
+    The inset is checked against the box the picker itself read out of the board, so this fails if
+    the control ever starts computing geometry in the page instead of being handed it -- which is
+    how the script this replaced ended up running on a hard-coded height.
+    """
+    asm = assembler()
+    n = options(page, "icon")
+    if not n:
+        pytest.skip("this board has no resource boxes")
+    boxes = page.evaluate(
+        """names => Object.fromEntries(names.map(nm => {
+             const g = document.querySelector('g[id="resource-' + nm + '"]');
+             const r = g && [...g.children].find(c => c.tagName === 'rect');
+             return [nm, r ? {x:+r.getAttribute('x'), y:+r.getAttribute('y'),
+                              w:+r.getAttribute('width'), h:+r.getAttribute('height')} : null];
+           }))""", list(asm.RESOURCE_NAMES))
+    for i in range(n):
+        press(page, "icon", i)
+        label = pressed_label(page, "icon")
+        inset = float(label.split()[0])
+        got = page.evaluate(
+            """names => Object.fromEntries(names.map(nm => {
+                 const e = document.querySelector('[data-asset-role="resource:' + nm + '"]');
+                 return [nm, e ? {x:+e.getAttribute('x'), y:+e.getAttribute('y'),
+                                  w:+e.getAttribute('width'), h:+e.getAttribute('height')} : null];
+               }))""", list(asm.RESOURCE_NAMES))
+        for name, box in boxes.items():
+            if box is None or got.get(name) is None:
+                continue
+            want = {"x": box["x"] + inset, "y": box["y"] + inset,
+                    "w": box["w"] - 2 * inset, "h": box["h"] - 2 * inset}
+            assert got[name] == pytest.approx(want), (
+                "at %s the %s icon is %r, but its box is %r so it should be %r."
+                % (label, name, got[name], box, want))
+
+
 def test_the_page_raised_no_errors(page):
     """Runs last, so it covers every interaction the tests above performed."""
     assert page.errors == [], "the picker raised: %s" % page.errors
