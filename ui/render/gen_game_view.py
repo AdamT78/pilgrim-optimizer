@@ -427,10 +427,21 @@ VIEW_BUTTON = ('<button id="gv-viewbtn" type="button" title="Map (M)" aria-label
                '<span class="ico ico-map">%s</span><span class="ico ico-wheel">%s</span>'
                '</button>' % (MAP_ICON, WHEEL_ICON))
 
+# The marking control. It is a `<select>` and not a row of buttons because it belongs to nobody
+# yet: the two states it previews -- which duties may be taken, which may be lifted from -- are not
+# built, and a prominent control would claim they were. One quiet dropdown, defaulting to none, so
+# the board is exactly what it was until somebody asks.
+#
+# What it marks is `data-eligible="1"`, which this wheel already computes: eligible_tiles() sets it
+# on every tile where the active seat has one or more acolytes. That IS the lift state, from the
+# real counts, so nothing here is a fixture.
+MARK_SELECT = ('<label class="gv-mark"><span>Mark</span><select id="gv-mark">%s</select></label>'
+               % "".join('<option value="%s">%s</option>' % (v, l) for v, l in dg.MARK_EFFECTS))
+
 BANNER = ('<div class="gv-banner" id="gv-banner">'
           '<span class="lab" id="gv-banner-lab">Duty</span>'
           '<div class="bd" id="gv-banner-body"><span class="rest">Point at a duty action or '
-          'building to read it.</span></div>' + VIEW_BUTTON + '</div>')
+          'building to read it.</span></div>' + MARK_SELECT + VIEW_BUTTON + '</div>')
 
 CSS = """
 /* The page's own chrome. Everything below this block is either the ground, or an override of a
@@ -523,6 +534,10 @@ html,body{height:100%%;margin:0;overflow:hidden;
   width:36px;height:36px;padding:0;cursor:pointer;background:#EFE6CC;
   border:1.2px solid #2A2320;border-radius:7px;box-shadow:0 1px 0 rgba(42,35,32,.22)}
 #gv-viewbtn:hover{background:#F7EFD8}
+.gv-mark{flex:0 0 auto;display:flex;align-items:center;gap:7px;
+  font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#6B6355}
+.gv-mark select{font:12.5px Georgia,serif;color:#2A2320;background:#EFE6CC;
+  border:1.2px solid #2A2320;border-radius:7px;padding:4px 6px;max-width:190px}
 #gv-viewbtn .ico{display:none;line-height:0}
 #gv-viewbtn .ico svg{width:19px;height:19px;display:block}
 #gv-viewbtn .ico-map{display:block}                      /* the wheel is showing: offer the map */
@@ -578,6 +593,40 @@ SIZES = """
 """
 
 
+MARK_DRIVER = """
+// The dropdown, and what it marks.
+//
+// `data-eligible="1"` is set by gen_duty_grid.eligible_tiles() on every tile where the active seat
+// has one or more acolytes, so it already IS the lift state and nothing here invents one. Choosing
+// an effect sets `data-mark` from it; choosing "none" clears both and the board is untouched.
+//
+// The segment loop lives in gen_duty_grid.MARK_JS and is handed this svg. It is the only effect
+// that needs a script -- see the note there about why a figure that never repeats cannot be
+// keyframes -- and it is also the only one that writes inline styles, which is why dgMark is
+// called on EVERY change and not only when segments is chosen: leaving it running, or leaving its
+// dash array behind, would corrupt whichever effect came next.
+(function(){
+  var sel = document.getElementById('gv-mark');
+  var wheel = document.querySelector('#gv-wheel svg');
+  if(!sel || !wheel) return;
+  function apply(){
+    var effect = sel.value;
+    var tiles = wheel.querySelectorAll('.dgt');
+    for(var i = 0; i < tiles.length; i++){
+      var able = tiles[i].getAttribute('data-eligible') === '1';
+      if(effect && able) tiles[i].setAttribute('data-mark', '1');
+      else tiles[i].removeAttribute('data-mark');
+    }
+    if(effect) wheel.setAttribute('data-mark-effect', effect);
+    else wheel.removeAttribute('data-mark-effect');
+    if(window.dgMark) window.dgMark(wheel, effect, 1800);
+  }
+  sel.addEventListener('change', apply);
+  apply();
+})();
+"""
+
+
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <title>Pilgrim &mdash; game view</title>
 <style>%(board_css)s</style>
@@ -597,6 +646,8 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
   </div>
 </div></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">%(defs)s</svg>
+<script>%(markjs)s</script>
+<script>%(mark)s</script>
 <script>%(fit)s</script>
 <script>%(inspect)s</script>
 <script>%(view)s</script>
@@ -1139,6 +1190,10 @@ def main():
         "map": gb["_map_svg"],
         "defs": ET.tostring(defs, encoding="unicode"),
         "fit": FIT_JS % {"can_w": L["canvas_width"], "can_h": L["canvas_height"]},
+        # dg.MARK_JS, not a copy: gen_border_studio runs the same loop, and the studio's whole
+        # claim is that a choice made in it is a choice about this board.
+        "markjs": dg.MARK_JS,
+        "mark": MARK_DRIVER,
         "inspect": INSPECT_JS % {
             "duty": json.dumps({k: [v[0], gb["_icons"](v[1]), gb["_icons"](v[2])]
                                 for k, v in gb["DUTY_TEXT"].items()}),

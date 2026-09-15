@@ -1168,3 +1168,190 @@ def test_a_row_of_counts_must_match_the_seats_at_the_table():
                         seats=("sage", "pewter"), active="bone")
     assert g.eligible_tiles([[0, 1]] * 9, "pewter", ("sage", "pewter")) == set(range(9))
     assert g.eligible_tiles([[0, 1]] * 9, "sage", ("sage", "pewter")) == set()
+
+
+# ---------------------------------------------------------------------------------------------
+# THE BORDER STUDIO, which draws the wheel's outlines and must not draw its own.
+#
+# gen_border_studio lays candidate markings over the tile edge so a choice made in it is a choice
+# about the board. That only holds while the edge it draws IS the board's edge -- same nine shapes,
+# same stroke weight, same ink, same gold under the hover. A studio that drifted would still look
+# entirely convincing; it would just be answering a question about a different board.
+#
+# Two scripts in this project already died of that, and one of them kept captioning its baseline
+# with a design that had been replaced weeks earlier. The guards below are the cheap version of
+# never doing it a third time.
+
+
+def studio():
+    import importlib.util
+    path = REPO / "ui" / "render" / "gen_border_studio.py"
+    if not path.is_file():
+        pytest.skip("gen_border_studio.py is not in this checkout")
+    spec = importlib.util.spec_from_file_location("_studio", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_studio_draws_the_wheels_own_edge():
+    """Nine shapes, the board's stroke weight, the board's ink, the board's gold.
+
+    All four are read from gen_duty_grid at build time rather than written into the studio, so this
+    guard is really asserting that they still CAN be: it fails the moment one of those names moves
+    and the studio starts carrying a copy instead.
+    """
+    st = studio()
+    dg = st.grid()
+    page = st.build(dg)
+    import json
+    box = json.loads(dg.SHAPES.read_text())["box"]
+    # `.dgt` and not a class of the studio's own: MARK_CSS is scoped to the wheel's contract, so a
+    # studio using different names would need its own copy of every rule -- which is the drift.
+    assert page.count('class="dgt"') == 9, (
+        "the studio drew %d tiles, not nine." % page.count('class="dgt"'))
+    assert page.count('class="dg-mark"') == 9, (
+        "the studio drew %d marking groups; it is meant to use gen_duty_grid.mark_paths for every "
+        "tile rather than building lookalikes." % page.count('class="dg-mark"'))
+    assert ('stroke-width:%.2f' % (box * dg.EDGE_STROKE)) in page, (
+        "the studio's baseline edge is not %.2f, the board's own stroke weight. A comparison "
+        "against a heavier or lighter edge than the board draws is a comparison against nothing."
+        % (box * dg.EDGE_STROKE))
+    assert dg.INK in page, "the studio's edge is not the board's ink %s." % dg.INK
+    # `--gold:` and not merely "the string appears somewhere". It appears in the studio's own
+    # prose as well, so the loose version of this assertion passed while the declaration carried a
+    # completely different colour -- and the only reason that was found is that falsifying it
+    # reported NO. A guard that cannot fail is worth nothing, and this one could not.
+    assert ("--gold:%s" % dg.EDGE_HOVER) in page, (
+        "the studio's --gold is not the board's %s. That colour is the one thing on the board "
+        "already meaning 'yours to take', and the studio's whole argument for proposing a "
+        "different hue is that it can see the one that is taken." % dg.EDGE_HOVER)
+
+
+def test_the_portal_dashes_divide_the_path_evenly():
+    """No seam, on any of the nine, and that is arithmetic rather than taste.
+
+    The effect this came from sums to 478 against a circumference of 754, so its pattern restarts
+    part-way round the ring. On a smooth circle that is invisible; on nine torn outlines with
+    different perimeters it would be nine visible seams in nine different places, and it would read
+    as the artwork being wrong rather than the dash pattern.
+    """
+    dg = studio().grid()
+    total = sum(float(v) for v in dg.mark_dash().split())
+    assert abs(total - dg.MARK_PERIOD) < 0.05, (
+        "the rescaled dash pattern sums to %.2f, not the %.2f it is meant to."
+        % (total, dg.MARK_PERIOD))
+    reps = dg.MARK_PATH_LENGTH / dg.MARK_PERIOD
+    assert abs(reps - round(reps)) < 1e-9, (
+        "the pattern repeats %.3f times in a pathLength of %d. It has to be a whole number or the "
+        "last dash meets the first mid-stride and every tile shows a seam."
+        % (reps, dg.MARK_PATH_LENGTH))
+
+
+def test_the_studio_marks_no_duty_it_was_not_told_to():
+    """Its eligibility is a fixture, and it has to stay one.
+
+    Which duties are open after a Sow is a rules question, and three arrangements in this repo
+    still disagree about which duty is mancala position n. A studio that started deriving its own
+    answer would be quietly asserting one of them.
+    """
+    st = studio()
+    assert set(st.DEMO_ELIGIBLE) <= set(range(9)), "a demo index outside the nine tiles"
+    assert len(st.DEMO_COUNTS) == 9, "the demo acolyte counts are not nine numbers"
+    src = (REPO / "ui" / "render" / "gen_border_studio.py").read_text()
+    assert "GameState" not in src and "sow_vector" not in src, (
+        "gen_border_studio has started reaching into the engine. It draws candidate markings; "
+        "what is actually eligible is not its question.")
+
+
+# ---------------------------------------------------------------------------------------------
+# ONE MARKING, TWO PAGES. The studio's entire claim is that a choice made in it is a choice about
+# the board, and that holds only while both draw the same rings from the same rules. So the rules
+# live in gen_duty_grid and both pages borrow them whole; these guards are what stops a copy.
+
+
+def game_view():
+    import importlib.util
+    path = REPO / "ui" / "render" / "gen_game_view.py"
+    if not path.is_file():
+        pytest.skip("gen_game_view.py is not in this checkout")
+    spec = importlib.util.spec_from_file_location("_gv_mark", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_marking_is_inert_until_a_page_asks():
+    """A component embedded in a page that has no script must not start animating by itself.
+
+    Every rule in MARK_CSS needs `data-mark="1"` on a tile and `data-mark-effect` on the svg, and
+    this module sets neither -- the layout tool slots this wheel into a simulated screen and the
+    picker shows two at once, and a wheel with an opinion about its own page would be wrong in both.
+    """
+    dg = studio().grid()
+    rules = [r for r in dg.MARK_CSS.split("}") if r.strip().startswith("svg[data-mark-effect")]
+    assert rules, "no effect rules found in MARK_CSS at all"
+    for r in rules:
+        assert 'data-mark="1"' in r, (
+            "a MARK_CSS rule fires without a tile being marked: %r. Every effect has to require "
+            "BOTH attributes, or embedding this wheel starts an animation nobody asked for." % r)
+
+
+def test_the_studio_and_the_board_carry_the_same_marking():
+    """Byte-for-byte, both directions, because a near-copy is the thing that drifts.
+
+    Not "both mention emerald" or "both have six effects" -- the exact text. The moment either page
+    is edited to hold its own version of a rule, this fails, which is the only way the studio's
+    claim about predicting the board stays true.
+    """
+    st = studio()
+    dg = st.grid()
+    page = st.build(dg)
+    assert dg.MARK_CSS in page, "the studio no longer emits gen_duty_grid.MARK_CSS verbatim"
+    assert dg.MARK_JS in page, "the studio no longer emits gen_duty_grid.MARK_JS verbatim"
+    for value, label in dg.MARK_EFFECTS:
+        assert label in page, "the studio is missing the %r effect" % (label,)
+
+
+def test_the_game_view_offers_every_effect_and_marks_what_the_board_computed():
+    """The dropdown's options come from MARK_EFFECTS, and what it marks is not a fixture.
+
+    `data-eligible="1"` is set by eligible_tiles() on every tile where the active seat has one or
+    more acolytes -- the lift state, from the real counts. A driver that marked a hard-coded set
+    would look identical on this board and be wrong on every other.
+    """
+    dg = studio().grid()
+    gv = game_view()
+    for value, label in dg.MARK_EFFECTS:
+        assert ('<option value="%s">%s</option>' % (value, label)) in gv.MARK_SELECT, (
+            "the game view's control is missing %r; its options are meant to be MARK_EFFECTS."
+            % (label,))
+    # The CODE, not the comments above it. Both of these names appear in the note explaining the
+    # driver, so the whole-string version of each assertion passed while the driver had stopped
+    # doing the thing -- found by falsifying, which is the only way it shows.
+    code = "\n".join(ln.split("//")[0] for ln in gv.MARK_DRIVER.splitlines())
+    assert "data-eligible" in code, (
+        "the game view's marking driver no longer reads data-eligible, so whatever it marks is "
+        "not what the board computed -- and a hard-coded set would look identical on this board.")
+    assert "dgMark(" in code, (
+        "the driver never calls dgMark, so the segment loop is neither started nor -- worse -- "
+        "stopped, and its inline dash array would survive into the next effect chosen.")
+
+
+def test_the_marking_never_takes_the_pointer():
+    """A decoration that can be hovered is a decoration that breaks hovering.
+
+    The acolyte row carries `pointer-events="none"` for this, and the mark needs it more: it
+    straddles the outline, so half its width lies OUTSIDE the tile where the hit rect's clip ends,
+    and the portal's dots orbit out there under a glow filter, MOVING. Without this a pointer near
+    the edge lands on the mark instead of the tile, and on `portal` it does so intermittently as a
+    dot passes beneath the cursor -- a fault that appears only on marked tiles, only near an edge,
+    and only sometimes.
+
+    This was not hypothetical. Probing a point on the outline in the built game view resolved to
+    `.dg-mring` before the attribute was added.
+    """
+    dg = studio().grid()
+    group = dg.mark_paths("M 0 0 L 10 0 L 10 10 Z")
+    assert group.startswith('<g class="dg-mark" pointer-events="none"'), (
+        "the marking group no longer disclaims pointer events: %r" % group[:90])
