@@ -251,24 +251,29 @@ def extract(html, tag, cls):
     raise SystemExit("unbalanced <%s> while extracting .%s" % (tag, cls))
 
 
-def ground_uri() -> str:
-    """The stage's ground, embedded, because this page is opened from wherever it was written.
+def panorama_uri() -> str:
+    """The field the page paints behind the whole game view, embedded for the same reason.
 
-    `--output` puts the tool anywhere the caller likes and the result is routinely opened as a
-    file:// URL, so a relative href to `ui/assets-gothic` resolves only when the page happens to
-    sit in the tree. It does not, the background silently falls back to the flat colour, and the
-    only symptom is a board that looks slightly duller than the one in the last screenshot. At
-    ~40 KB against a 10.5 MB page this is not a size decision.
+    Embedded rather than linked: `--output` puts this tool anywhere the caller likes and the
+    result is routinely opened as a file:// URL, so a relative href to `ui/assets-gothic` resolves
+    only when the page happens to sit in the tree. It does not, the background silently falls back
+    to the flat colour, and the only symptom is a simulated screen that looks slightly duller than
+    the last screenshot. At ~255 KB against a 10.5 MB page this is not a size decision.
 
-    Missing file is not fatal: the flat colour underneath is the field's own floor, so the page
-    still opens and still looks deliberate. It says so rather than failing the build, because a
-    layout tool that will not start is worse than one with a plain background.
+    Missing file is not fatal: the colour underneath is the field's own floor, so the page still
+    opens and still looks deliberate. It says so rather than failing the build, because a layout
+    tool that will not start is worse than one with a plain background.
+
+    It is read from the same place gen_duty_grid.PANORAMA points at, and that duplication is the
+    pre-existing one this module already carries for the ground: it loads gen_game_view by PATH
+    rather than importing the render package, so it cannot reach dg without restructuring how the
+    tool starts. The guard in tests/test_ground_guards.py is what holds the two paths equal.
     """
     import base64
-    p = UI / "assets-gothic" / "ui" / "ground.webp"
+    p = UI / "assets-gothic" / "ui" / "panorama.webp"
     if not p.is_file():
-        print("no %s -- the stage falls back to flat colour. Run `python3 ui/render/gen_ground.py` "
-              "to make it." % p.name)
+        print("no %s -- the simulated screen falls back to flat colour. It is a committed asset, "
+              "not a generated one -- restore it from git." % p.name)
         return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
     return "data:image/webp;base64," + base64.b64encode(p.read_bytes()).decode("ascii")
 
@@ -392,12 +397,23 @@ body{margin:0;background:#12140f;color:#E8E2D3;font:13px/1.5 "Iowan Old Style",G
   display:none}
 #view{flex:1;overflow:auto;background:#0b0d09;padding:12px}
 #fitwrap{position:relative}
-#screen{position:relative;background:#000;transform-origin:top left;outline:1px solid #2c3327}
+/* THE GROUND, on the simulated screen rather than on the canvas -- see the note on `.t-stage`.
+   #screen is sized to the chosen screen's vw x vh in JS, so it is this tool's viewport and
+   `cover` here gives the same crop the real page gets from `html,body`. That matters more than
+   it looks: `cover` is the one property of this background that VARIES with the screen being
+   simulated, so a tool that used `100%% 100%%` while the page used `cover` would show the right
+   framing on an ultrawide and the wrong one on every other entry in the list -- which is exactly
+   the list this tool exists to check. Colour LAST, or the declaration drops. */
+#screen{position:relative;transform-origin:top left;outline:1px solid #2c3327;
+  background:url(%(panorama)s) center/cover no-repeat #000}
 #legend{margin-top:10px;font:11.5px/1.7 ui-monospace,Menlo,monospace;color:#8fa286}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   margin-right:5px}
-#legend .g{background:#0b0a08 url(%(ground)s) center/cover}
-#legend .k{background:#000;outline:1px solid #2c3327}
+/* One swatch, because there is now one field. This used to be a pair -- `.g` the ground on the
+   canvas, `.k` the black beyond it -- and that pair was legible only while the canvas ended at a
+   colour change. It does not any more, so a second swatch would be drawing a distinction the
+   picture no longer makes. */
+#legend .g{background:#0b0a08 url(%(panorama)s) center/cover}
 #full{margin-top:8px}
 body.live #view{padding:0}
 body.live #legend{display:none}
@@ -408,15 +424,16 @@ body.live #panel:hover,body.live #panel:focus-within{opacity:1}
 #livehint{display:none;position:fixed;right:12px;bottom:10px;z-index:9;color:#7d8f80;
   font:11px ui-monospace,Menlo,monospace;pointer-events:none}
 body.live #livehint{display:block}
-/* THE GROUND, and it is one surface owned by one element.
+/* THE GROUND MOVED OFF THIS ELEMENT, exactly as it did off `.gv-stage` in gen_game_view.
    Everything laid on the stage is transparent where it is not a panel -- the duty grid draws no
    ground rect at all (gen_duty_grid.BACKGROUND is None), and a bare slot clears its own card --
-   so this single background is what shows through the wheel's channels and every gutter, as one
-   connected 32%% of the canvas. That is the whole mechanism: swapping a colour for a picture is
-   this one declaration, and any component that paints its own ground punches a hole in it.
-   The colour behind the image is the field's own floor, so a slow load never flashes green. */
+   so the field shows through the wheel's channels and every gutter, as one connected 32%% of the
+   canvas. What changed is WHOSE field: the canvas is zoom-to-fitted inside the screen, so a
+   background here stopped at the canvas and left the rest of the simulated screen flat black.
+   The real page had the same fault and the same fix. `background:none` is deliberate and not an
+   omission -- a colour here, even #0b0a08, redraws the canvas rectangle as a visible edge. */
 .t-stage{position:absolute;top:0;left:0;transform-origin:top left;
-  background:#0b0a08 url(%(ground)s) center/100%% 100%% no-repeat;
+  background:none;
   display:flex;flex-direction:column}
 .t-toprow,.t-mainrow{display:flex;align-items:flex-start}
 .t-left{display:flex;flex-direction:column}
@@ -904,7 +921,8 @@ function apply(){
   el('legend').innerHTML =
       '<i class="g"></i>the game canvas, ' + CAN_W + ' x ' + fmt(L.canvas_height)
     + ', laid out at the ' + zoom.toFixed(3) + 'x fit this screen would give'
-    + '&nbsp; &middot; &nbsp;<i class="k"></i>the rest of ' + name + '<br>'
+    + '&nbsp; &middot; &nbsp;the same field runs on past it to the edges of ' + name
+    + ', so the canvas no longer ends at a colour change<br>'
     + (live
         ? 'true size on this window &mdash; full screen removes the panel and the browser chrome '
           + 'for the real thing'
@@ -1206,7 +1224,7 @@ def build(layout, can_save):
         "count_font": count_font(roots, asm, asm.read_json(config)),
         "vb_w": g.VB_W, "vb_h": g.VB_H,
         "pad": g.STAGE_PAD,
-        "ground": ground_uri(),
+        "panorama": panorama_uri(),
         "can_save": "true" if can_save else "false",
         "stamp": build_stamp(can_save),
     }

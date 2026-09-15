@@ -381,6 +381,28 @@
       "modifications": "cropped from the 1536x1024 original to its central 3:1 band -- the slot's aspect, which gpt-image-1 cannot render directly, and which the prompt composed for by keeping the upper and lower thirds empty; then resized to 810x274, twice the drawn size because the stage is CSS-scaled; then given a soft alpha edge, because the picture is darker at its edges (L 7) than the ground it sits on (L 23) and a hard edge would read as a dark rectangle laid on the board rather than part of it",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
     },
+    "ui/sources/panorama_left.webp": {
+      "state": "present",
+      "title": "Pilgrim trail at night, left half of the background panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the left half of ui/panorama.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is confined to the outer quarter, and everything from 25% of its width rightward is fog carrying no nameable outline, because that is where the board sits.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "ui/sources/panorama_right.webp": {
+      "state": "present",
+      "title": "Pilgrim trail at night, right half of the background panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the right half of ui/panorama.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a praying monk and a grazing deer among ruins -- is confined to the outer quarter, and its sky carries no light source at all: the moon belongs to the left half and a second one would have read as two moons over one landscape.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
     "ui/ground.webp": {
       "state": "present",
       "title": "Board ground, dark warm field",
@@ -391,6 +413,17 @@
       "role": "the single ground the whole board sits on; shows through the duty wheel's channels and every gutter, about 32% of the canvas",
       "modifications": "none; used as generated",
       "reproducibleBy": "python3 ui/render/gen_ground.py -- deterministic in --seed, byte-identical to the committed file"
+    },
+    "ui/panorama.webp": {
+      "state": "present",
+      "title": "Pilgrim trail at night, two-part panorama behind the game view",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "two halves generated in a ChatGPT session for this project from the left-half and right-half panorama prompts; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the field behind the whole game view, painted on html,body so it fills the viewport; the stage is transparent over it, so this also shows through the duty wheel's channels and every gutter",
+      "modifications": "joined by ui/render/gen_panorama.py from the two halves under ui/sources/: de-vignetted at both inner edges, then level-matched per channel with the correction faded out over the first quarter of the right half. Butt-joined with no overlap -- an overlap costs width, and restoring 2.600:1 then costs height at 2.6 px of overlap per px of height. Seam step after both corrections is 0.00 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86. The script is the statement of what was done; this is the summary of it.",
+      "reproducibleBy": "python3 ui/render/gen_panorama.py -- byte-identical to the committed file from the two committed halves; `--check` asserts it. The HALVES are not reproducible; the join is."
     },
     "ui/cube_acolyte_bone.svg": {
       "state": "present",

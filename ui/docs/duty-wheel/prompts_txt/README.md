@@ -25,6 +25,35 @@ The four single-action tiles — Allocation, Build Roads, Taxation and the City 
 `V` is `A` (engraved plate) or `B` (grim dark). **B is the chosen set**; A is kept as the record of
 that comparison. Generating A again is only worth it if you are revisiting the decision.
 
+## The background, which is not a tile
+
+```
+background/left.txt        background/right.txt
+```
+
+`background/` has no `NN_` prefix on purpose. `NN` is a one-based position in `DUTY_NAMES` and it
+decides which square a tile is drawn in; the panorama behind the whole game view is not a duty and
+has no square, so numbering it would be a claim about the wheel that is not true.
+
+Two sends, one per half, **and they are not a pair-then-merge route**: neither half is a panel of
+the other, and nothing is attached to the second send. Each is a complete landscape in its own
+right at 1.30:1, and the two are butted together into 2.600:1 by
+`python3 ui/render/gen_panorama.py`, which also carries the two corrections the join needs. Save the
+results as `ui/assets-gothic/ui/sources/panorama_{left,right}.webp`, **lossless** — the join
+measures the level step off their inner columns, so a lossy re-encode moves it.
+
+What these two prompts are mostly about is the EMPTY part. The board covers 26%-73% of the screen,
+so each half's inner side has to carry nothing a viewer would look at, and the paragraph that gets
+that is the one saying so in the negative — no trunk, no ruin, no silhouette, "not a faint one, not
+a distant one". Two earlier rounds asked for "no readable detail" and got *less* detail instead.
+The foreground paragraph exists for the same reason: the fog was read as a horizontal band, so the
+sky emptied and the ground filled with rubble edge to edge.
+
+Two more things that are load-bearing rather than stylistic. Only the LEFT prompt may have a moon —
+the right one says so explicitly, because a second one reads as two moons over one landscape. And
+both ask for a flat `#1e1d1b` at the inner edge, which is what makes the butt join possible at all;
+without it the halves need an overlap, and an overlap costs 2.6 px of height for every px of it.
+
 ## Using these with ChatGPT
 
 **Start a new chat for every tile.** ChatGPT carries context between turns, and that is what
