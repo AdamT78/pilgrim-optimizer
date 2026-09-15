@@ -463,3 +463,80 @@ def test_cover_puts_the_wheel_on_the_same_piece_of_picture_at_every_size():
         "stretched, the wheel already covers the same piece of the panorama at every size -- so "
         "this guard is not distinguishing `cover` from `100%% 100%%` and proves nothing. Check "
         "whether the canvas stopped being zoom-fitted.")
+
+
+def test_the_committed_panorama_is_the_one_the_script_makes():
+    """Re-join it from the two halves and compare bytes, because the record now says you can.
+
+    The same guard ground.webp has, for the same reason: `reproducibleBy` promises the script
+    rebuilds the file byte for byte, and that promise is what lets the repo treat the picture as a
+    convenience and the join as the source. It matters more here than there. The join is not a
+    concatenation -- a de-vignette and a level match sit between the halves and the result, both
+    derived by measuring the images -- so if someone re-encodes the picture, edits it, or changes
+    EDGE or FADE without rebuilding, the record starts describing a file that no longer exists and
+    nothing else would notice.
+
+    It also guards the halves themselves. They are committed LOSSLESS precisely because the level
+    match is measured off their inner 16 columns; re-encoding either of them lossy would move that
+    measurement and this comparison would fail, which is the intended outcome rather than a
+    nuisance.
+    """
+    import sys as _sys
+    if not (RENDER / "gen_panorama.py").is_file():
+        pytest.skip("gen_panorama.py is not in this checkout")
+    if not PANORAMA.is_file():
+        pytest.skip("the committed panorama is not in this checkout")
+    pytest.importorskip("numpy", reason="the join is numpy")
+    pytest.importorskip("PIL", reason="encoding the result needs Pillow")
+    _sys.path.insert(0, str(RENDER))
+    import gen_panorama
+
+    for half in (gen_panorama.LEFT, gen_panorama.RIGHT):
+        assert half.is_file(), (
+            "%s is missing. The halves are diffusion output with no seed on record: without them "
+            "the panorama cannot be rebuilt, only restored." % half)
+
+    im, _step, seam = gen_panorama.join()
+    assert gen_panorama.encode(im) == PANORAMA.read_bytes(), (
+        "ui/assets-gothic/ui/panorama.webp is not what gen_panorama.py now produces (%d bytes "
+        "committed, %d regenerated). Either the join changed and the picture was not rebuilt, or "
+        "the picture was edited outside the script -- and its attribution record claims the two "
+        "are interchangeable. Run `python3 ui/render/gen_panorama.py`."
+        % (PANORAMA.stat().st_size, len(gen_panorama.encode(im))))
+    assert max(abs(v) for v in seam.values()) < 0.5, (
+        "the join leaves a step of %.2f grey levels at the seam. Both corrections are supposed to "
+        "bring it to zero; a step this size means one of them stopped applying." % max(seam.values()))
+
+
+def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
+    """The correction that removes the crease has to do something, and only near the edge.
+
+    This one is worth guarding separately because it is invisible in the result: the crease it
+    removes is 2 levels deep, so a de-vignette that quietly stopped working would leave a picture
+    that still looks right in every thumbnail and shows a soft seam at full size. The first
+    assertion is that it moves the edge columns at all; the second is that it leaves the middle of
+    the half alone, which is what makes it a correction rather than a filter.
+    """
+    import sys as _sys
+    if not (RENDER / "gen_panorama.py").is_file():
+        pytest.skip("gen_panorama.py is not in this checkout")
+    np = pytest.importorskip("numpy", reason="the join is numpy")
+    pytest.importorskip("PIL", reason="reading the halves needs Pillow")
+    _sys.path.insert(0, str(RENDER))
+    import gen_panorama
+    from PIL import Image
+    if not gen_panorama.LEFT.is_file():
+        pytest.skip("the halves are not in this checkout")
+
+    a = np.asarray(Image.open(gen_panorama.LEFT).convert("RGB")).astype(float)
+    b = gen_panorama.devignette(a, "right")
+    edge = np.abs(b[:, -gen_panorama.EDGE:, :] - a[:, -gen_panorama.EDGE:, :]).mean()
+    rest = np.abs(b[:, :-gen_panorama.EDGE, :] - a[:, :-gen_panorama.EDGE, :]).max()
+    assert edge > 0.2, (
+        "de-vignetting the left half's inner edge changed it by %.3f levels on average -- that is "
+        "nothing. Either EDGE no longer covers the ramp, or the halves were re-encoded and the "
+        "ramp is gone, in which case this correction should be removed rather than left inert."
+        % edge)
+    assert rest == 0.0, (
+        "de-vignetting touched pixels outside its %d-column window (max change %.3f). It is meant "
+        "to lift a ramp at one edge, not to grade the picture." % (gen_panorama.EDGE, rest))
