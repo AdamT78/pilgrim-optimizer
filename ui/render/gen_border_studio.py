@@ -47,6 +47,13 @@ PORTAL_DASH = (44, 28, 20, 62, 34, 36, 16, 74, 24, 54, 18, 68)
 PORTAL_PERIOD = 200.0       # of 1000, so the pattern repeats five times with no seam
 PATH_LENGTH = 1000          # every marked path is normalised to this, so a dash means one thing
 
+# The "dynamic segments" variant builds its dash array every frame from layered sine waves and then
+# scales the whole thing to fit PATH_LENGTH exactly, so there is never a seam and never a reset --
+# the pattern simply keeps evolving. This is how many lit segments it divides the outline into; the
+# waves themselves live in the page, because they are presentation, and this is the one number
+# anyone actually reaches for.
+SEGMENTS = 9
+
 # The two states, and the colour each is proposed in. `take` is the emerald already designed for it
 # -- hue 146 deg, chosen to read as a different KIND of signal from the gold hover rather than as a
 # different shade of it. `lift` is offered twice, because which is right is the open question: the
@@ -62,8 +69,9 @@ STATES = {
              "One hue for “lift” whoever is playing. Steadier to read, but says nothing "
              "about whose acolytes they are."),
 }
-EFFECTS = (("portal", "portal ring + four dots"), ("steady", "steady"),
-           ("pulse", "pulse"), ("ants", "marching ants"))
+EFFECTS = (("portal", "portal ring + four dots"),
+           ("segments", "portal ring, dynamic segments"),
+           ("steady", "steady"), ("pulse", "pulse"), ("ants", "marching ants"))
 
 # A fixture, and named as one. Which duties are open after a Sow is a rules question this file has
 # no business answering; these are here so the page has something to mark.
@@ -153,6 +161,7 @@ def build(dg) -> str:
         "dash": dash_pattern(),
         "plen": PATH_LENGTH,
         "half": PORTAL_PERIOD,
+        "segments": SEGMENTS,
         "body": svg_body(dg, rows),
         "states": json.dumps({k: {"label": v[0], "colour": v[1], "note": v[2]}
                               for k, v in STATES.items()}),
@@ -178,6 +187,8 @@ def main() -> None:
     print("  9 outlines at stroke %.2f, ink %s, hover gold %s -- all read from gen_duty_grid"
           % (json.loads(dg.SHAPES.read_text())["box"] * dg.EDGE_STROKE, dg.INK, dg.EDGE_HOVER))
     print("  %d effects, %d states, portal dashes %s" % (len(EFFECTS), len(STATES), dash_pattern()))
+    print("  dynamic segments: %d, rebuilt per frame and normalised to pathLength %d"
+          % (SEGMENTS, PATH_LENGTH))
     url = z.output.resolve().as_uri()
     print("\n%s" % url)
     if z.open:
