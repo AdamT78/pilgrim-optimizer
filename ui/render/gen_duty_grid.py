@@ -520,8 +520,14 @@ def mark_paths(d: str) -> str:
     alternative -- emitting per effect -- would mean the markup changed when the dropdown did, and
     the dropdown is a page thing.
     """
+    # pointer-events="none" for the reason the acolyte row carries it, and it matters more here.
+    # The mark straddles the outline, so half its width lies OUTSIDE the tile where the hit rect's
+    # clip ends -- and the portal's dots orbit out there too, under a glow, MOVING. A decoration
+    # that can take the pointer would make the hover flicker as a dot passed beneath the cursor,
+    # which is a fault that only appears on marked tiles, only near the edge, and only sometimes.
+    # Measured before this line existed: a point on the outline resolved to `.dg-mring`.
     pl = MARK_PATH_LENGTH
-    out = [f'<g class="dg-mark" style="--dg-p:path(\'{d}\')">']
+    out = [f'<g class="dg-mark" pointer-events="none" style="--dg-p:path(\'{d}\')">']
     for cls in ("dg-m", "dg-mring-soft", "dg-mring"):
         out.append(f'<path class="{cls}" d="{d}" pathLength="{pl}"/>')
     for k in range(1, 5):

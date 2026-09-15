@@ -1336,3 +1336,22 @@ def test_the_game_view_offers_every_effect_and_marks_what_the_board_computed():
     assert "dgMark(" in code, (
         "the driver never calls dgMark, so the segment loop is neither started nor -- worse -- "
         "stopped, and its inline dash array would survive into the next effect chosen.")
+
+
+def test_the_marking_never_takes_the_pointer():
+    """A decoration that can be hovered is a decoration that breaks hovering.
+
+    The acolyte row carries `pointer-events="none"` for this, and the mark needs it more: it
+    straddles the outline, so half its width lies OUTSIDE the tile where the hit rect's clip ends,
+    and the portal's dots orbit out there under a glow filter, MOVING. Without this a pointer near
+    the edge lands on the mark instead of the tile, and on `portal` it does so intermittently as a
+    dot passes beneath the cursor -- a fault that appears only on marked tiles, only near an edge,
+    and only sometimes.
+
+    This was not hypothetical. Probing a point on the outline in the built game view resolved to
+    `.dg-mring` before the attribute was added.
+    """
+    dg = studio().grid()
+    group = dg.mark_paths("M 0 0 L 10 0 L 10 10 Z")
+    assert group.startswith('<g class="dg-mark" pointer-events="none"'), (
+        "the marking group no longer disclaims pointer events: %r" % group[:90])
