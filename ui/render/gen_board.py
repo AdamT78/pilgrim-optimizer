@@ -342,7 +342,7 @@ assert _oa > 0, "Ordination's action not found"
 _oseg = _oseg[:_oa] + _act(90, _A) + _act(61, _E) + _oseg[_gspan(_oseg, _oa):]
 wheel = wheel[:_oi] + _oseg + wheel[_oe:]
 
-# Give Alms' second action is a building given away, so it cannot be used. It used to be a
+# Give Alms' donated building, which cannot be used afterwards. It used to be a
 # house with an arrow off its right side -- the very composition Ordination's first action now
 # carries, and at 24 px the two were the same picture. The X lies across the whole building.
 # the same house Construct draws, so one building means one picture wherever it appears
@@ -354,6 +354,21 @@ _gseg = wheel[_gg:_ge2]
 _ga = _gseg.find('<g transform="translate(125 61)">')
 assert _ga > 0, "Give Alms' second action not found"
 _gseg = _gseg[:_ga] + _act(61, _DONATED) + _gseg[_gspan(_gseg, _ga):]
+
+# ...and it goes FIRST, because the tile art draws the donation on the left and the bread on the
+# right. The two drawings share one key space -- DUTY_TEXT is keyed "Give Alms|0" / "|1", meaning
+# position in the drawing -- so if only one of them is reordered the other gets the wrong caption
+# and nothing says so. The row below is built by `finditer` in DOCUMENT order, and that order is
+# what becomes data-i, so exchanging the two elements is what swaps the wedges. Each keeps its own
+# translate; only their positions in the string change.
+_g90 = _gseg.find('<g transform="translate(125 90)">')
+_g61 = _gseg.find('<g transform="translate(125 61)">')
+assert 0 < _g90 < _g61, (
+    "expected Give Alms' two actions in the document order 90 then 61, got %d and %d; the swap "
+    "below would reorder the wrong pair" % (_g90, _g61))
+_e90, _e61 = _gspan(_gseg, _g90), _gspan(_gseg, _g61)
+assert _e90 <= _g61, "Give Alms' two action groups overlap; they cannot be exchanged blindly"
+_gseg = (_gseg[:_g90] + _gseg[_g61:_e61] + _gseg[_e90:_g61] + _gseg[_g90:_e90] + _gseg[_e61:])
 wheel = wheel[:_gg] + _gseg + wheel[_ge2:]
 
 # The copy is the rules, not invention: every line below is taken from
@@ -434,15 +449,19 @@ DUTY_TEXT = {
         "Take one resource of your choice, then duty value more from the tithe counters on "
         "other tiles where you hold majority.",
         "At most 1 + duty value in all &middot; no piety, no Alms."),
+    # Donate first, alms second -- the order the tile ART draws them in, left to right. The
+    # rules doc lists `give_alms_paid` before `give_alms_donate_building`, but that list is not a
+    # claim about which side of a picture anything sits on. What these keys index is position in
+    # the drawing, so they follow the drawing, and both drawings were changed together.
     "Give Alms|0": (
+        "Donate a building",
+        "Give away one active building and advance the Alms track exactly one row.",
+        "Always one row, whatever the duty value."),
+    "Give Alms|1": (
         "Give Alms",
         "Pay silver and wheat equal to your duty value and move that many rows up the Alms "
         "track.",
         "Mill waives up to 2 wheat."),
-    "Give Alms|1": (
-        "Donate a building",
-        "Give away one active building and advance the Alms track exactly one row.",
-        "Always one row, whatever the duty value."),
 }
 
 # --- the Special Activities table --------------------------------------------------------

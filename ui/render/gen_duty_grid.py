@@ -127,7 +127,12 @@ DEFAULT_CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # a single action (Allocation, Build Roads, Taxation) and the city has none; measuring a join on
 # those finds the strongest edge in a picture that has no join, which is noise.
 TWO_ACTION = {1: ("Devotion", "Silversmith"), 2: ("Building", "Road"),
-              5: ("Ordain", "Mission"), 6: ("Wheat", "Stone"), 8: ("Alms", "Donate")}
+              5: ("Ordain", "Mission"), 6: ("Wheat", "Stone"), 8: ("Donate", "Alms")}
+# The pairs are in the order the ART draws them, left to right, because that is what decides
+# which half of a tile a pointer is on. Give Alms was ("Alms", "Donate") until the artwork put the
+# donation on the left, and the pair had to follow it: a tile whose halves are named in the wrong
+# order sends every click and every caption to the other action, silently, on a picture that looks
+# completely normal.
 # The centre tile. It is a place, not an action: never dimmed, and nothing to light.
 CITY = 4
 INK = "#2b2114"
@@ -381,10 +386,10 @@ LIT = ('<feColorMatrix type="saturate" values="1.20"/><feComponentTransfer>'
 # missing nothing lights and the board is merely static, which is the right way to fail.
 HOVER_CSS = ('.dgt .dg-lit{opacity:0}'
              '.dg-hit{fill:transparent}'
-             '.dgt:has(.dg-hit-f:hover) .dg-lit-F{opacity:1}'
-             '.dgt:has(.dg-hit-l:hover) .dg-lit-L{opacity:1}'
-             '.dgt:has(.dg-hit-r:hover) .dg-lit-R{opacity:1}'
-             '.dgt:has(.dg-hit:hover) .dg-edge{stroke:#d8b23a;stroke-opacity:1}')
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-f:hover) .dg-lit-F{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-l:hover) .dg-lit-L{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit-r:hover) .dg-lit-R{opacity:1}'
+             '.dgt:not([data-eligible="0"]):has(.dg-hit:hover) .dg-edge{stroke:#d8b23a;stroke-opacity:1}')
 # Where a two-action tile's scenes meet, as a fraction of its width. Measured: every source pair
 # splits at 0.4993-0.5035 and every merge keeps it, so this is 0.5 and joins.json records why.
 # Read rather than assumed, so a tile that ever genuinely differs is one file away.
@@ -404,7 +409,14 @@ OFFSETS = HERE.parent / "duty_tile_offsets.json"
 
 
 def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
-    """(scale, {i: (dx, dy)}) in GRID UNITS, or (1.0, {}) when there is no file.
+    """(scale, {i: (dx, dy)}, (sx, sy)) in GRID UNITS, or (1.0, {}, (0, 0)) when there is no file.
+
+    THE THIRD VALUE IS THE WHOLE ARRANGEMENT'S POSITION, and it is a different kind of number from
+    the nine. A per-tile offset says where one tile sits against its own acolyte row; the shift
+    says where all nine, rows included, sit inside the box. So it is applied whether or not the
+    per-tile offsets are -- `offsets=False` means "without the nudges", not "somewhere else
+    entirely". That is what keeps the acolytes still relative to the tiles while the block moves:
+    the rows are derived from the unoffset shapes, which carry the shift too.
 
     The file stores screen pixels, because that is what the eye judges in and what the tool's
     pointer moves in. The conversion needs the size the wheel was judged at, so the file records
@@ -413,7 +425,7 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     slightly wrong drag and not like a unit error.
     """
     if not path.is_file():
-        return 1.0, {}
+        return 1.0, {}, (0.0, 0.0)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -423,7 +435,9 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     for k, v in (data.get("offsets") or {}).items():
         if str(k).isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)) * per_unit, float(v.get("dy", 0)) * per_unit)
-    return float(data.get("tile_scale") or 1.0), out
+    sh = data.get("arrangement_shift") or {}
+    shift = (float(sh.get("dx", 0)) * per_unit, float(sh.get("dy", 0)) * per_unit)
+    return float(data.get("tile_scale") or 1.0), out, shift
 
 
 # THE ACOLYTE ROW. Four figures under each tile, one per seat, with that seat's count in the robe.
@@ -496,12 +510,21 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-def acolyte_row(shape: str, counts) -> str:
-    """One row of four under a tile, from the tile's shape BEFORE its offset was applied.
+def acolyte_box(shape: str) -> dict:
+    """Where one tile's row of four sits: {sx, sy, fw, fh, gap}, in grid units.
 
-    Before, deliberately. The grid is frozen: an earlier version derived each row from its own
-    tile's offset bounding box, so moving a tile moved its row with it and the relationship the
-    offsets exist to set was invariant. Tiles move; the row does not.
+    THE ONE PLACE THIS IS WORKED OUT. It was two: this file emitted the row and the drag tool
+    computed an identical copy to lay its frozen grid out against, with FIG_FRAC, the overlap and
+    the aspect written down twice as well. They agreed, which is the only interesting moment to
+    merge them -- once they disagree the tool is showing rows the board does not draw, and every
+    offset judged in it is judged against the wrong thing. That exact fault has already happened
+    here once, with `place`.
+
+    The shape passed in is the tile BEFORE its per-tile offset. Deliberately: the grid is frozen,
+    and an earlier version derived each row from its own tile's offset bounding box, so moving a
+    tile moved its row with it and the relationship the offsets exist to set was invariant. Tiles
+    move; the row does not. The ARRANGEMENT shift does move it, because that is carried in the
+    unoffset shapes themselves.
     """
     n = [float(v) for v in shape.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
     xs, ys = n[0::2], n[1::2]
@@ -510,8 +533,25 @@ def acolyte_row(shape: str, counts) -> str:
     fw = w * FIG_FRAC
     fh = fw / ACOLYTE_ASPECT
     gap = fw * 0.24
-    sx = x0 + (w - (4 * fw + 3 * gap)) / 2
-    sy = y1 - fh * FIG_OVERLAP
+    return {"sx": x0 + (w - (4 * fw + 3 * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
+            "fw": fw, "fh": fh, "gap": gap}
+
+
+def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float:
+    """The lowest acolyte ink on the board, in grid units. The bottom of the drawn block.
+
+    The tiles are not the bottom of this component -- the figures hang below the last row of them
+    -- so anything on the board that wants to line up with what the eye sees as the wheel's foot
+    has to ask for this rather than for the box.
+    """
+    return max(acolyte_box(d)["sy"] + acolyte_box(d)["fh"]
+               for d in laid_shapes(meta, margin, offsets=False))
+
+
+def acolyte_row(shape: str, counts) -> str:
+    """One row of four under a tile, drawn. The geometry is `acolyte_box`."""
+    b = acolyte_box(shape)
+    sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
     uris = acolyte_tints()
     out = []
     for j, seat in enumerate(SEAT_ORDER):
@@ -559,10 +599,13 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
     done, and the offsets re-dragged against it came back a third the size with no column signal
     left in them. What remains in the file is per-tile judgement, which is what it is for.
     """
-    scale, off = tile_placement(box=box)
+    scale, off, (sx, sy) = tile_placement(box=box)
     if not offsets:
         off = {}
-    if scale == 1.0 and not off:
+    # `sx, sy` is NOT dropped with them: it moves the whole block, acolyte rows and all, and those
+    # rows are built from exactly this call with offsets=False. Dropping it here would leave the
+    # rows behind when the arrangement moved, which is the one thing the shift must never do.
+    if scale == 1.0 and not off and not (sx or sy):
         return shapes
     out = []
     for i, d in enumerate(shapes):
@@ -571,6 +614,8 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
         cx = sum(x for x, _ in P) / len(P)
         cy = sum(y for _, y in P) / len(P)
         dx, dy = off.get(i, (0.0, 0.0))
+        dx += sx
+        dy += sy
         Q = [(cx + (x - cx) * scale + dx, cy + (y - cy) * scale + dy) for x, y in P]
         out.append("M" + " L".join("%.2f %.2f" % q for q in Q) + " Z")
     return out
@@ -806,6 +851,51 @@ def arrows_svg(shapes: list[str], length: float = ARROW_LEN, w: float = ARROW_W,
             '<g class="dg-arrows" pointer-events="none">' + "".join(body) + '</g>')
 
 
+def eligible_tiles(acolytes, active: str) -> set[int]:
+    """Which duties `active` may act on: the ones its own acolytes are standing on.
+
+    DERIVED FROM THE COUNTS BEING DRAWN, rather than taken as a second parameter, and that is the
+    whole design. The board already shows four seat figures with a number under every tile, so
+    "the sage player has two acolytes on Clerical" is on screen. If eligibility arrived separately
+    it could disagree with what the picture says -- a tile reading 2 that refuses the click, or a
+    tile reading 0 that accepts one -- and nothing would raise. Deriving it makes that
+    unrepresentable.
+
+    Returned keyed by DUTY, which is the space the caller's counts are in and the space the tile
+    groups are emitted in, so it can be used directly against them. It is NOT square space; see
+    the note beside the acolyte rows.
+
+    This is the only rule in here, and it is a rule about the drawing, not about the game: a seat
+    with no acolytes on a duty has nothing to lift and nothing to spend. Anything narrower --
+    a duty already used this turn, a phase that forbids it -- is the engine's to say, and belongs
+    in a parameter that can only ever SHRINK this set, never grow it.
+    """
+    if active not in SEAT_ORDER:
+        raise ValueError(
+            "active=%r is not one of the seats (%s). A seat name that does not match reads every "
+            "count from the wrong column." % (active, ", ".join(SEAT_ORDER)))
+    if acolytes is None:
+        raise ValueError(
+            "active=%r was given without acolytes, so which duties it may act on is unknown. "
+            "Refusing rather than treating every duty as available: a board that lets a player "
+            "act everywhere is a legal-looking board, and nothing downstream would catch it."
+            % (active,))
+    seat = SEAT_ORDER.index(active)
+    got = acolytes if isinstance(acolytes, dict) else dict(enumerate(acolytes))
+    live = set()
+    for i, counts in got.items():
+        i = int(i)
+        if not (0 <= i < 9) or counts is None:
+            continue
+        if len(counts) != len(SEAT_ORDER):
+            raise ValueError(
+                "acolytes[%r] has %d counts; there are %d seats (%s)."
+                % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
+        if int(counts[seat]) > 0:
+            live.add(i)
+    return live
+
+
 def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   labels: list[str] | None = None, tiles_dir: pathlib.Path | None = TILES,
                   version: str = VERSION, px: int = 448,
@@ -826,6 +916,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   # numbers or every offset lands twice.
                   offsets: bool = True,
                   cells: list[int] | None = None,
+                  # The seat whose turn it is. Given, only the duties that seat's own acolytes
+                  # stand on stay live; every other tile is drawn exactly as now and simply does
+                  # not respond. Left None, all nine respond, which is what every caller got
+                  # before this existed and what the pickers still want.
+                  active: str | None = None,
                   uid: str = "dg") -> str:
     """The grid as one self-contained <svg>, sized by its viewBox and nothing else.
 
@@ -856,6 +951,7 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             "or doubled would draw a board that quietly means something else." % (cells,))
     # shapes[duty] is the outline of the square that duty was dealt
     shapes = [laid[c] for c in cells]
+    live = None if active is None else eligible_tiles(acolytes, active)
     tiles = find_tiles(tiles_dir, version) if tiles_dir else {}
     art = {i: embed(p, px) for i, p in tiles.items()}
     joins = joins_for(version)
@@ -922,7 +1018,12 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     for i, d in enumerate(shapes):
         label = (labels[i] if labels and i < len(labels) else "")
         named = ' data-duty-name="%s"' % label if label else ""
-        out.append(f'<g data-duty-tile="{i}"{named} class="dgt">')
+        able = live is None or i in live
+        # Machine-readable and invisible: whatever ends up handling the click needs to know, and
+        # so does anything reading this board back. Absent entirely when no seat is active, so a
+        # board with no turn in progress makes no claim either way.
+        mark = "" if live is None else ' data-eligible="%d"' % (1 if able else 0)
+        out.append(f'<g data-duty-tile="{i}"{named}{mark} class="dgt">')
         if i in art:
             x0, y0, x1, y1 = bbox(d)
             img = (f'<image href="{art[i]}" x="{x0}" y="{y0}" width="{x1 - x0}" '
@@ -944,7 +1045,25 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             out.append(f'<path d="{d}" fill="{TILE_FILLS[i % len(TILE_FILLS)]}"/>')
         out.append(f'<path d="{d}" fill="none" stroke="{INK}" stroke-opacity="0.85" '
                    f'stroke-width="{box * 0.0035:.2f}" stroke-linejoin="round" class="dg-edge"/>')
-        # The hit areas, last so they sit on top, and clipped so only the tile itself responds.
+        # The hit areas, last so they sit on top, clipped so only the tile itself responds.
+        #
+        # EMITTED ON EVERY TILE, including the ones the active seat cannot use. These carry more
+        # than the click: the game view binds its duty description panel to `.dg-hit`, keyed by
+        # the tile's name and which half, so removing them from closed tiles took away the text
+        # that says what the duty DOES.
+        #
+        # This file did remove them, briefly, on the argument that a control which responds but
+        # cannot be used is a lie. That conflated two different things. Responding to a pointer is
+        # not inviting a click -- nothing here sets a pointer cursor, and the gold edge is the
+        # only thing on the board that says "this is yours to take". Reading what a duty does is
+        # not acting on it, and a player deciding where to put acolytes needs to read the ones
+        # they cannot reach this turn most of all.
+        #
+        # So the hit area stays and the REVEALS are gated instead: see HOVER_CSS, where every rule
+        # that lights something requires `:not([data-eligible="0"])`. Suppression is written into
+        # the positive rule rather than layered over it as an override, so there is no specificity
+        # contest to lose later. `data-eligible` on the group is the contract for whatever comes
+        # to handle clicks: it must refuse a "0".
         x0, y0, x1, y1 = bbox(d)
         out.append(f'<g clip-path="url(#{uid}-c{i})">')
         if i in art and i in TWO_ACTION:
@@ -979,7 +1098,18 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                     "acolytes[%r] has %d counts; there are %d seats (%s). A short row would draw "
                     "one seat's acolytes under another seat's figure."
                     % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
-            out.append(acolyte_row(frozen[int(i)], counts))
+            # TWO INDEX SPACES, and they are not the same one.
+            #
+            # `counts` is keyed by DUTY -- the caller is saying "this many acolytes on Taxation".
+            # `frozen` is keyed by SQUARE, because it is the grid's nine positions. The square a
+            # duty has been dealt to is `cells[duty]`, so that is the shape its row belongs under.
+            #
+            # This read `frozen[int(i)]`, which is only right while cells is the identity. Pass a
+            # real arrangement and every count was drawn under the square that shares its NUMBER
+            # rather than under its own tile -- the Taxation bug again, by a different route, and
+            # silent in exactly the same way. It was dormant because the default arrangement is
+            # the identity and nothing yet passes a shuffled one outside the guards.
+            out.append(acolyte_row(frozen[cells[int(i)]], counts))
         out.append("</g>")
     out.append("</svg>")
     return "".join(out)

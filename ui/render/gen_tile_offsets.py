@@ -49,9 +49,6 @@ import gen_duty_grid as dg  # noqa: E402
 OFFSETS_PATH = UI / "duty_tile_offsets.json"
 WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
-FIG_FRAC = 0.205                    # acolyte width as a fraction of the tile's width
-OVERLAP = 0.60                      # how much of the figure sits above the tile's bottom edge
-ASPECT = 228 / 210.0                # the acolyte asset's own proportion
 TINTS = UI / "assets-gothic" / "population"
 SEATS = [("sage", "#221c16"), ("pewter", "#F2E8CC"), ("plum", "#F2E8CC"), ("bone", "#221c16")]
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
@@ -134,7 +131,41 @@ def decompose(offsets: dict) -> dict:
     }
 
 
-def save_offsets(offsets: dict, note: str = NOTE) -> None:
+def load_shift(path: pathlib.Path = OFFSETS_PATH) -> tuple[float, float]:
+    """Where the whole nine sits in the box, in screen px. Not one of the per-tile nudges."""
+    if not path.is_file():
+        return 0.0, 0.0
+    d = (json.loads(path.read_text(encoding="utf-8")).get("arrangement_shift") or {})
+    return float(d.get("dx", 0.0)), float(d.get("dy", 0.0))
+
+
+def margins_at_zero() -> dict:
+    """The four margins, in screen px, with the arrangement shift taken back out.
+
+    Computed here rather than measured in the browser because a shift is a rigid translation:
+    every margin moves by exactly it, so the page can add the shift itself and be exact. Reading
+    them back off the DOM would mean trusting getBoundingClientRect through a clip-path, which is
+    not reliably the rendered bounds.
+    """
+    box = dg.load()["box"]
+    k = WHEEL_PX / box
+    sx, sy = load_shift()
+    laid = dg.laid_shapes(offsets=True)
+    xs, ys = [], []
+    for d in laid:
+        P = _pts(d)
+        xs += [q[0] for q in P]
+        ys += [q[1] for q in P]
+    grid = acolyte_grid(dg.laid_shapes(offsets=False))
+    foot = max(g["sy"] + g["fh"] for g in grid)
+    return {
+        "l": min(xs) * k - sx, "r": (box - max(xs)) * k + sx,
+        "t": min(ys) * k - sy, "b": (box - max(ys)) * k + sy,
+        "foot": (box - foot) * k + sy,          # clearance below the lowest acolyte
+    }
+
+
+def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) -> None:
     """Write the file, keeping everything in it this function does not own.
 
     TWO THINGS THIS GOT WRONG, both of which only a save could show.
@@ -164,6 +195,10 @@ def save_offsets(offsets: dict, note: str = NOTE) -> None:
         "names": dg.DUTY_NAMES,
         "offsets": {str(i): {"dx": round(float(v["dx"]), 1), "dy": round(float(v["dy"]), 1)}
                     for i, v in sorted(offsets.items(), key=lambda kv: int(kv[0]))},
+        # Where the whole block sits, kept apart from the nine on purpose: it moves the acolyte
+        # rows with the tiles, and they move nothing relative to each other.
+        "arrangement_shift": {"dx": round(float((shift or load_shift())[0]), 1),
+                              "dy": round(float((shift or load_shift())[1]), 1)},
     }
     # Recorded rather than raised: a save that dies here would cost a drag, and a save that
     # silently dropped it is the exact fault this file already had once.
@@ -199,21 +234,14 @@ def scaled_shapes():
 
 
 def acolyte_grid(shapes):
-    """Computed once from the unoffset tiles, then frozen. Nothing here moves again."""
-    grid = []
-    for d in shapes:
-        P = _pts(d)
-        xs = [p[0] for p in P]
-        ys = [p[1] for p in P]
-        x0, x1, y1 = min(xs), max(xs), max(ys)
-        w = x1 - x0
-        fw = w * FIG_FRAC
-        fh = fw / ASPECT
-        gap = fw * 0.24
-        span = 4 * fw + 3 * gap
-        grid.append({"sx": x0 + (w - span) / 2, "sy": y1 - fh * OVERLAP,
-                     "fw": fw, "fh": fh, "gap": gap})
-    return grid
+    """Computed once from the unoffset tiles, then frozen. Nothing here moves again.
+
+    `dg.acolyte_box` does the arithmetic. This file used to repeat it, along with FIG_FRAC, the
+    overlap and the aspect -- a second copy of the geometry the board actually draws, in the one
+    tool whose whole job is to judge tiles against it. Asking the grid is what keeps the rows this
+    page freezes identical to the rows the board emits.
+    """
+    return [dg.acolyte_box(d) for d in shapes]
 
 
 def tint_uris():
@@ -265,6 +293,17 @@ html,body{margin:0;height:100%%;background:#15130f;color:#d8d2c0;
 #wheel{position:absolute;left:50%%;top:50%%;transform:translate(-50%%,-50%%);
   width:%(px).1fpx;height:%(px).1fpx}
 #wheel svg{width:100%%;height:100%%;display:block}
+/* THE REFERENCE RECTANGLE. #gv-wheel on the real board is exactly this square -- 877.8 px, flush
+   with its column left and right, with the banner's bottom edge sitting ON its top edge. So these
+   four lines are the edges the rest of the board actually meets, and the margins in the panel are
+   measured from them. Without it the stage is an unbounded dark field and a margin has nothing to
+   be a margin FROM.
+   pointer-events:none on both, because this is a drag tool and an overlay that eats the pointer
+   would be a strange way to break it. */
+#boxline,#guide{position:absolute;inset:0;pointer-events:none}
+#boxline{border:1px solid rgba(214,58,48,.85)}
+#guide{border:1px dashed rgba(214,58,48,.55)}
+#wheel.nomarks #boxline,#wheel.nomarks #guide{display:none}
 .dgt{cursor:grab}
 .dgt.sel{cursor:grabbing}
 /* The wheel's real hover lighting is live in here because the component is lifted whole, and in a
@@ -279,6 +318,11 @@ html,body{margin:0;height:100%%;background:#15130f;color:#d8d2c0;
 #side{width:330px;flex:none;padding:14px 16px;background:#1d1a15;overflow:auto;
   border-left:1px solid #332d24}
 h1{font-size:15px;margin:0 0 4px}
+h2{font-size:12px;margin:16px 0 4px;color:#8d8672;font-weight:normal;
+  text-transform:uppercase;letter-spacing:.08em}
+#marg td{font-variant-numeric:tabular-nums}
+#marg td.k{text-align:left;color:#cfc7b0}
+#marg tr.eq td{color:#9fc49a}
 p.hint{font-size:12px;color:#9a937f;line-height:1.5;margin:0 0 12px}
 table{border-collapse:collapse;width:100%%;font:12px ui-monospace,Menlo,monospace}
 td,th{padding:3px 6px;text-align:right;border-bottom:1px solid #2b261e}
@@ -293,7 +337,8 @@ textarea{width:100%%;height:150px;margin-top:8px;background:#121510;color:#c6d2b
   border:1px solid #333b2c;font:11px ui-monospace,Menlo,monospace}
 </style></head><body>
 <div id="wrap">
-  <div id="stage"><div id="wheel">%(svg)s</div></div>
+  <div id="stage"><div id="wheel">%(svg)s
+    <div id="boxline"></div><div id="guide"></div></div></div>
   <div id="side">
     <h1>Duty tile offsets</h1>
     <p class="hint">Drag a tile, or click it and use the arrow keys &mdash; 1&nbsp;px, or
@@ -301,6 +346,16 @@ textarea{width:100%%;height:150px;margin-top:8px;background:#121510;color:#c6d2b
     Offsets are screen pixels at this size.</p>
     <table id="tbl"><tr><th class="n" style="text-align:left">tile</th><th>dx</th><th>dy</th></tr>
     </table>
+    <h2>Whole arrangement</h2>
+    <p class="hint">Hold <b>Alt</b> with the arrow keys to move all nine <i>and</i> their acolyte
+    rows together &mdash; nothing moves relative to anything else. Shift for 10&nbsp;px.<br>
+    The solid red line is the wheel&rsquo;s real box on the board: the banner sits on its top edge
+    and the column meets it left and right. The dashed line is the left margin carried round all
+    four sides &mdash; bring the top row down to it and top equals left.</p>
+    <table id="marg"></table>
+    <button id="toplft">Top = Left</button><button id="unshift">Zero the shift</button>
+    <button id="marks">Hide the red box</button>
+    <h2>Saving</h2>
     <button id="save">Save</button><button id="reset">Reset all</button>
     <button id="zero">Zero selected</button>
     <div id="msg">%(msg)s</div>
@@ -310,17 +365,44 @@ textarea{width:100%%;height:150px;margin-top:8px;background:#121510;color:#c6d2b
 <script>
 var NAMES = %(names)s, CAN_SAVE = %(can_save)s, K = %(k).6f;
 var off = %(offsets)s;                       // {i: {dx, dy}} in screen px
+var shift = %(shift)s;                       // where all nine sit, in screen px
+var BASE = %(base)s;                         // the four margins with the shift taken out
 var sel = null;
 
 function tiles(){ return Array.prototype.slice.call(
     document.querySelectorAll('#wheel g.dgt')); }
 
+function margins(){
+  // a shift is a rigid translation, so every margin moves by exactly it
+  return {l: BASE.l + shift.dx, r: BASE.r - shift.dx,
+          t: BASE.t + shift.dy, b: BASE.b - shift.dy, foot: BASE.foot - shift.dy};
+}
+
 function apply(){
   tiles().forEach(function(g,i){
     var o = off[i] || {dx:0,dy:0};
     // screen px -> grid units, because the svg's own coordinates are the viewBox's
-    g.setAttribute('transform','translate('+(o.dx/K).toFixed(3)+','+(o.dy/K).toFixed(3)+')');
+    g.setAttribute('transform','translate('+((o.dx+shift.dx)/K).toFixed(3)+','
+                                           +((o.dy+shift.dy)/K).toFixed(3)+')');
   });
+  // the acolyte rows take the shift and NOTHING else: that is what keeps them still against the
+  // tiles while the block moves. A per-tile nudge must never reach them.
+  var ac = document.getElementById('acol');
+  if (ac) { ac.setAttribute('transform','translate('+(shift.dx/K).toFixed(3)+','
+                                                    +(shift.dy/K).toFixed(3)+')'); }
+  var m = margins(), eq = Math.abs(m.t - m.l) < 0.05;
+  // the dashed inset sits at the LEFT margin on all four sides, so "match the top to the left"
+  // is a thing you can see the top row meet rather than a number to chase
+  var gEl = document.getElementById('guide');
+  if (gEl) { gEl.style.inset = m.l.toFixed(2) + 'px'; }
+  document.getElementById('marg').innerHTML =
+      '<tr><td class="k">shift</td><td>' + (shift.dx>0?'+':'') + shift.dx.toFixed(1)
+    + '</td><td>' + (shift.dy>0?'+':'') + shift.dy.toFixed(1) + '</td></tr>'
+    + '<tr class="' + (eq?'eq':'') + '"><td class="k">top / left</td><td>' + m.t.toFixed(1)
+    + '</td><td>' + m.l.toFixed(1) + '</td></tr>'
+    + '<tr><td class="k">bottom / right</td><td>' + m.b.toFixed(1)
+    + '</td><td>' + m.r.toFixed(1) + '</td></tr>'
+    + '<tr><td class="k">below acolytes</td><td colspan="2">' + m.foot.toFixed(1) + '</td></tr>';
   var rows = ['<tr><th class="n" style="text-align:left">tile</th><th>dx</th><th>dy</th></tr>'];
   NAMES.forEach(function(n,i){
     var o = off[i] || {dx:0,dy:0};
@@ -359,8 +441,16 @@ tiles().forEach(function(g,i){
 });
 
 addEventListener('keydown', function(e){
+  var dd = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+  if (dd && e.altKey) {                      // the whole block, rows included
+    e.preventDefault();
+    var st = e.shiftKey ? 10 : 1;
+    shift = {dx: shift.dx + dd[0]*st, dy: shift.dy + dd[1]*st};
+    apply();
+    return;
+  }
   if (sel === null) return;
-  var d = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+  var d = dd;
   if (!d) return;
   e.preventDefault();
   var step = e.shiftKey ? 10 : 1;
@@ -369,6 +459,16 @@ addEventListener('keydown', function(e){
   apply();
 });
 
+document.getElementById('toplft').onclick = function(){
+  // top margin == left margin, solved rather than nudged toward
+  shift = {dx: shift.dx, dy: shift.dy + (BASE.l + shift.dx) - (BASE.t + shift.dy)};
+  apply();
+  document.getElementById('msg').textContent =
+      'Top margin set equal to the left. Not saved yet.'; };
+document.getElementById('unshift').onclick = function(){ shift = {dx:0,dy:0}; apply(); };
+document.getElementById('marks').onclick = function(){
+  var w = document.getElementById('wheel'), off = w.classList.toggle('nomarks');
+  this.textContent = off ? 'Show the red box' : 'Hide the red box'; };
 document.getElementById('reset').onclick = function(){ off = {}; apply();
   document.getElementById('msg').textContent = 'All offsets cleared. Not saved yet.'; };
 document.getElementById('zero').onclick = function(){
@@ -382,7 +482,7 @@ document.getElementById('save').onclick = function(){
     return;
   }
   fetch('/offsets', {method:'PUT', headers:{'Content-Type':'application/json'},
-                     body: JSON.stringify(off)})
+                     body: JSON.stringify({offsets: off, shift: shift})})
     .then(function(r){
       if (r.ok) { msg.textContent = 'Saved to ui/duty_tile_offsets.json.'; return; }
       // the reason matters far more than the number: a 409 means this tab is out of date
@@ -428,7 +528,8 @@ def build(can_save: bool) -> str:
                    "#221c16" if numink != "#221c16" else "#F2E8CC", fs * 0.17, SAMPLE[i][j]))
     # The acolytes go in AFTER the tiles and outside every tile group, which is what freezes them:
     # a drag transforms one `g.dgt` and cannot reach anything here.
-    svg = svg.replace("</svg>", "".join(marks) + "</svg>")
+    # one group, so the page can translate the rows with the tiles by the arrangement shift
+    svg = svg.replace("</svg>", '<g id="acol">' + "".join(marks) + "</g></svg>")
 
     saved = load_offsets()
     msg = ("Loaded %d offset%s from ui/duty_tile_offsets.json."
@@ -444,6 +545,8 @@ def build(can_save: bool) -> str:
         "names": json.dumps(dg.DUTY_NAMES),
         "can_save": "true" if can_save else "false",
         "offsets": json.dumps({str(i): {"dx": dx, "dy": dy} for i, (dx, dy) in saved.items()}),
+        "shift": json.dumps({"dx": load_shift()[0], "dy": load_shift()[1]}),
+        "base": json.dumps({k: round(v, 2) for k, v in margins_at_zero().items()}),
         "msg": msg,
     }
 
@@ -559,14 +662,32 @@ def serve(port: int):
             except json.JSONDecodeError as exc:
                 self.send_error(400, str(exc))
                 return
+            # {offsets: {...}, shift: {...}}, or a bare {...} of offsets from an older page.
+            # The bare form is still accepted because a tab open across a restart will send it,
+            # and losing a drag to a payload rename would be a silly way to lose one.
+            body = data.get("offsets") if isinstance(data.get("offsets"), dict) else data
+            raw_shift = data.get("shift") if isinstance(data, dict) else None
             clean = {}
-            for k, v in data.items():
+            for k, v in body.items():
                 if not (str(k).isdigit() and 0 <= int(k) < 9):
                     self.send_error(400, "tile index out of range: %r" % (k,))
                     return
                 clean[int(k)] = {"dx": float(v.get("dx", 0)), "dy": float(v.get("dy", 0))}
-            save_offsets(clean)
-            print("saved %s  (%d tiles moved)" % (OFFSETS_PATH, len(clean)))
+            shift = None
+            if isinstance(raw_shift, dict):
+                try:
+                    shift = (float(raw_shift.get("dx", 0)), float(raw_shift.get("dy", 0)))
+                except (TypeError, ValueError):
+                    self.send_error(400, "arrangement shift is not a pair of numbers: %r"
+                                    % (raw_shift,))
+                    return
+                if max(abs(shift[0]), abs(shift[1])) > WHEEL_PX / 2:
+                    self.send_error(400, "arrangement shift of %r would move the wheel off its "
+                                         "own box" % (shift,))
+                    return
+            save_offsets(clean, shift=shift)
+            print("saved %s  (%d tiles, shift %s)"
+                  % (OFFSETS_PATH, len(clean), shift if shift else "unchanged"))
             self.send_response(204)
             self.end_headers()
 

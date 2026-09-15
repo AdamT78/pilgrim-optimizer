@@ -22,11 +22,20 @@ grid's build-out and was caught by eye rather than by anything automatic:
                     earlier shape pass also overshot its cell and bled two columns past the grid
                     box, which is invisible until something clips.
 
-These run in the `ui` lane, which is the lane a design-only pull request actually triggers.
+These run in the `ui` lane, which is the lane a design-only pull request actually triggers -- AND
+in the lane that runs the whole suite, which is not the same environment. The ui lane installs
+pillow and numpy; the full-suite lane installs neither. This file must therefore pass with both
+absent, and anything here that genuinely needs pixels says so with `pytest.importorskip` rather
+than assuming.
+
+That sentence used to name only the ui lane. Two guards were added on the strength of it, verified
+where numpy exists, and failed on the lane nobody had mentioned -- a comment that was true about
+where these run and silent about where else they run.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -431,3 +440,408 @@ def test_the_offsets_tool_watches_every_generator_it_builds_from():
         "session left running across an edit to it will keep serving the old layout, look freshly "
         "rebuilt while doing it, and send you looking for the bug in code that is already correct."
         % (sorted(p.name for p in local), sorted(p.name for p in missed)))
+
+
+SHUFFLE = [2, 5, 3, 8, 4, 6, 1, 7, 0]      # a real arrangement: no duty on its own numbered square
+
+
+@contextlib.contextmanager
+def drawn_without_the_artwork(g):
+    """Emit the acolyte rows without building their four duotone PNGs.
+
+    `acolyte_tints` needs numpy and Pillow. The ui lane installs both. The lane that runs the whole
+    suite installs neither, and the two guards below went in green here and red there -- they had
+    only ever been run where numpy exists, which is not a thing either of them is about.
+
+    `pytest.importorskip` was the other option and is worse. What these check is which SHAPE each
+    row is derived from, and which tiles carry hit areas; the image bytes have no part in either.
+    Skipping would retire a guard against a Taxation-class bug in the lane that runs everything,
+    and leave it running only where somebody remembered to install a plotting library. Stubbing the
+    artwork keeps the geometry and the markup exactly what production emits, and keeps the guard
+    running in both lanes.
+
+    The stub is an empty href, so the <image> elements are still there and still positioned. If a
+    future check needs the real pixels it should ask for them explicitly with importorskip, not
+    quietly acquire a dependency for everything else in the file.
+    """
+    real = g.acolyte_tints
+    g.acolyte_tints = lambda: {seat: "" for seat in g.SEAT_ORDER}
+    try:
+        yield
+    finally:
+        g.acolyte_tints = real
+
+
+def _numerals(svg):
+    """Every acolyte numeral in the emitted markup, as (x, y, value)."""
+    import re
+    body = svg[svg.index('<g class="dg-acolytes'):]
+    return [(float(x), float(y), int(v)) for x, y, v in
+            re.findall(r'<text x="([\d.\-]+)" y="([\d.\-]+)"[^>]*>(\d+)</text>', body)]
+
+
+def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
+    """Counts are keyed by DUTY; the nine acolyte rows are keyed by SQUARE. Not the same index.
+
+    This shipped wrong. The rows were placed with `frozen[duty]` where `frozen` is the grid's nine
+    positions, which is only correct while `cells` is the identity -- and the identity is the
+    default, so every render anyone had looked at was right. Pass a real arrangement and seven of
+    the nine counts were drawn under the square that merely SHARES THEIR NUMBER: a player's
+    acolytes sitting under somebody else's duty, with nothing raised and nothing to notice unless
+    you already knew which duty had been dealt where.
+
+    It is the Taxation bug a second time, and the comment in gen_game_view.py warning against
+    exactly this fault was already in the file when the fault was introduced two functions away.
+    Knowing the shape of a bug does not prevent writing it; a guard does.
+
+    The two duties that happened to land on their own number are why this checks all nine and
+    the ROW rectangle rather than the column -- an earlier version of this check compared x only,
+    so anything in the same column passed and it reported a working fix as still broken.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("the acolyte row geometry lives in gen_tile_offsets.py")
+    grid_mod = __import__("gen_tile_offsets")
+    rows = grid_mod.acolyte_grid(g.laid_shapes(offsets=False))
+
+    wrong = []
+    for duty in range(9):
+        counts = [[0, 0, 0, 0] for _ in range(9)]
+        counts[duty] = [7, 0, 0, 0]                      # one seat, one duty, an unmistakable value
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, cells=SHUFFLE, acolytes=counts)
+        marks = [(x, y) for x, y, v in _numerals(svg) if v == 7]
+        assert len(marks) == 1, "expected exactly one 7, found %d" % len(marks)
+        x, y = marks[0]
+        landed = [i for i, r in enumerate(rows)
+                  if r["sx"] <= x <= r["sx"] + 4 * r["fw"] + 3 * r["gap"]
+                  and r["sy"] <= y <= r["sy"] + r["fh"] * 1.05]
+        if landed != [SHUFFLE[duty]]:
+            wrong.append("duty %d was dealt to square %d but its count is drawn under %s"
+                         % (duty, SHUFFLE[duty], landed or "no row at all"))
+    assert not wrong, (
+        "an acolyte count is drawn under the wrong tile:\n  " + "\n  ".join(wrong) + "\n"
+        "The row belongs under cells[duty], the square that duty was dealt to -- not under the "
+        "square with the same number.")
+
+
+def test_a_duty_the_active_seat_cannot_reach_still_answers_but_never_lights():
+    """Closed tiles must stay READABLE and stop being OFFERED. Those are different things.
+
+    The first version of this removed the hit areas from closed tiles, reasoning that a control
+    which responds but cannot be used is a lie. It conflated responding with inviting. The game
+    view binds its duty description panel to `.dg-hit`, so dropping them took away the text saying
+    what the duty does -- from exactly the tiles a player most needs to read while deciding where
+    to put acolytes next turn. Nothing sets a pointer cursor; the gold edge is the only thing that
+    says "yours to take".
+
+    So: every tile keeps its hit areas, and every rule that LIGHTS something is gated on
+    `:not([data-eligible="0"])` as part of the positive selector rather than layered over it as an
+    override, so there is no specificity contest to lose later.
+    """
+    import re
+    g = grid()
+
+    # EVERY rule that turns an affordance on must depend on a hit area AND on eligibility, and it
+    # has to be checked rule by rule. Asking whether the strings appear anywhere in the stylesheet
+    # is a different question and cannot fail: `.dg-hit` is mentioned by `.dg-hit{fill:transparent}`
+    # too, so a gold rule rewritten to `.dgt:hover` would leave that substring intact and gold back
+    # on unreachable tiles. That was this check's first form, and breaking the link on purpose did
+    # not disturb it.
+    reveals = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", g.HOVER_CSS):
+        if "opacity:1" in body or "stroke:#" in body:
+            reveals.append(sel.strip())
+    assert reveals, "no rule in HOVER_CSS reveals anything; this check would pass vacuously"
+    ungated = [s for s in reveals if ".dg-hit" not in s]
+    assert not ungated, (
+        "these light something without depending on a hit area: %s" % ungated)
+    unchecked = [s for s in reveals if 'not([data-eligible="0"])' not in s]
+    assert not unchecked, (
+        "these light something without checking eligibility: %s\n"
+        "A closed duty would take the gold edge or the lit overlay and read as available."
+        % unchecked)
+
+    counts = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
+              [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
+    groups = lambda svg: {int(m.group(1)): m.group(0) for m in re.finditer(
+        r'<g data-duty-tile="(\d+)".*?(?=<g data-duty-tile="|<g class="dg-acolytes|</svg>)',
+        svg, re.S)}
+
+    for seat in g.SEAT_ORDER:
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active=seat)
+        live = g.eligible_tiles(counts, seat)
+        assert live, "seat %s reaches nothing in this fixture; the check would be vacuous" % seat
+        assert len(live) < 9, "every duty is reachable for %s; nothing is being excluded" % seat
+        for i, body in groups(svg).items():
+            assert "dg-hit" in body, (
+                "duty %d has no hit area, so the game view cannot bind its description panel to "
+                "it and the tile goes silent instead of merely closed" % i)
+            assert ('data-eligible="%d"' % (1 if i in live else 0)) in body, (
+                "duty %d is not marked with whether the %s seat can use it, so a click handler "
+                "has nothing to refuse on" % (i, seat))
+
+    # and with no seat active nothing claims anything, so every tile lights as it always did
+    with drawn_without_the_artwork(g):
+        svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts)
+    bodies = groups(svg)
+    assert all("dg-hit" in b for b in bodies.values())
+    # the TILES, not the whole document: the stylesheet names the attribute in every render,
+    # because the gating lives in the selector. Checking the svg as a whole matched the CSS and
+    # failed on a board that was behaving correctly.
+    marked = [i for i, b in bodies.items() if "data-eligible" in b]
+    assert not marked, (
+        "a board with no turn in progress is claiming something about eligibility on %s" % marked)
+
+
+def test_an_active_seat_without_counts_is_refused_rather_than_assumed():
+    """The dangerous default is 'everything is available', so it must not be reachable.
+
+    A board that lets a player act on all nine duties is a legal-LOOKING board: nothing downstream
+    can tell it from a real one, and the mistake surfaces as a rules bug much later. Both ways of
+    getting there -- no counts at all, and a seat name that matches no column -- raise.
+    """
+    g = grid()
+    counts = [[1, 0, 0, 0]] * 9
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, active="sage")                 # counts missing
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="green")   # not a seat
+    with pytest.raises(ValueError):
+        g.eligible_tiles([[1, 0, 0]] * 9, "sage")                      # short row
+    assert g.eligible_tiles(counts, "sage") == set(range(9))
+    assert g.eligible_tiles(counts, "bone") == set()
+
+
+def test_each_half_of_a_two_action_tile_is_named_the_same_in_both_files():
+    """`TWO_ACTION` and gen_board's `DUTY_TEXT` describe the same two halves, twice.
+
+    The grid names each half in TWO_ACTION -- that is what decides which half of the picture a
+    pointer is on -- and gen_board writes the caption for it under "<duty>|<half>". Two files, one
+    fact, and nothing between them.
+
+    They drifted the moment the Give Alms artwork was redrawn with the donation on the left: the
+    art said donate-then-alms and both files still said alms-then-donate, so every pointer on the
+    left half of that tile described the wrong action. Nothing raised, the picture looked entirely
+    normal, and the only way to notice was to read the tile and the caption at the same time.
+
+    A third place said it too -- the old circular wheel puts the crossed-out building on whichever
+    wedge it draws second -- and that is why this matters more than tidiness: the two drawings
+    share ONE key space, so reordering either alone silently mislabels the other.
+
+    The short name in TWO_ACTION has to appear in the caption's title. That holds for all five
+    pairs and is checked to hold, because a substring rule that matched nothing would pass while
+    guarding nothing.
+    """
+    import re
+    g = grid()
+    board = RENDER / "gen_board.py"
+    if not board.is_file():
+        pytest.skip("gen_board.py is not in this checkout")
+    # read rather than import: gen_board writes a page as a side effect of being executed
+    src = board.read_text(encoding="utf-8")
+    block = src[src.index("DUTY_TEXT = {"):]
+    titles = dict(re.findall(r'"([^"]+\|\d)":\s*\(\s*\n\s*"([^"]+)"', block))
+    assert titles, "no DUTY_TEXT entries were parsed; this check would pass guarding nothing"
+
+    wrong, checked = [], 0
+    for i, pair in sorted(g.TWO_ACTION.items()):
+        name = g.DUTY_NAMES[i]
+        for half, short in enumerate(pair):
+            key = "%s|%d" % (name, half)
+            assert key in titles, "gen_board has no caption for %s" % key
+            checked += 1
+            if short.lower() not in titles[key].lower():
+                wrong.append("%s is %r in the grid but %r in gen_board"
+                             % (key, short, titles[key]))
+    assert checked == 2 * len(g.TWO_ACTION), (
+        "expected %d halves, checked %d" % (2 * len(g.TWO_ACTION), checked))
+    assert not wrong, (
+        "a tile's two halves are named in different orders in the two files:\n  "
+        + "\n  ".join(wrong) + "\n"
+        "Whichever is wrong, the effect is the same: the pointer lands on one action and the "
+        "panel describes the other, on a tile that looks completely normal.")
+
+
+def test_the_arrangement_shift_moves_the_acolyte_rows_with_the_tiles():
+    """The whole block moves; nothing inside it moves relative to anything else.
+
+    Two kinds of number live in duty_tile_offsets.json and they are not interchangeable. A
+    per-tile offset says where ONE tile sits against its own acolyte row -- the rows are frozen,
+    so nudging a tile changes that relationship, which is the entire point of the drag tool. The
+    arrangement shift says where all nine sit inside the box, and it must change no relationship
+    at all.
+
+    The trap is that both are applied in the same function. `placed()` drops the per-tile offsets
+    when called with offsets=False, and that call is exactly what the acolyte rows are derived
+    from. Dropping the shift alongside them would leave every row behind while the tiles moved --
+    a bug that needs the file to be non-zero to appear at all, so it would sit dormant until
+    someone actually used the setting.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("the acolyte row geometry lives in gen_tile_offsets.py")
+    import gen_tile_offsets as tool
+
+    box = g.load()["box"]
+
+    def depths(shift):
+        """Each tile's bottom against its own row, under a given shift."""
+        laid = g.placed(g.place(g.load()["shapes"], box, g.MARGIN), box, offsets=True)
+        rows = tool.acolyte_grid(
+            g.placed(g.place(g.load()["shapes"], box, g.MARGIN), box, offsets=False))
+        out = []
+        for i, d in enumerate(laid):
+            out.append(max(q[1] for q in tool._pts(d)) - rows[i]["sy"])
+        return out, laid, rows
+
+    import json
+    path = g.OFFSETS
+    original = path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        data = json.loads(original) if original else {}
+        data["arrangement_shift"] = {"dx": 0.0, "dy": 0.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        base, laid0, rows0 = depths(0)
+
+        data["arrangement_shift"] = {"dx": -17.0, "dy": -23.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        moved, laid1, rows1 = depths(1)
+
+        # `placed()` writes coordinates as %.2f, so every point carries up to 0.005 units of
+        # rounding and a depth -- a difference of two of them, one of which the row geometry is
+        # derived from -- carries a little more. 0.02 units is 0.018 px on screen. The tolerance
+        # is the quantisation, not slack: what it must not hide is a LEAK, and a leak would grow
+        # with the shift while rounding does not, which is what the second shift below tests.
+        drift = [abs(a - b) for a, b in zip(base, moved)]
+        assert max(drift) < 0.02, (
+            "a tile's depth over its acolyte row changed by up to %.3f units when only the whole "
+            "arrangement moved. The rows are being left behind: `placed()` is dropping the shift "
+            "along with the per-tile offsets when called with offsets=False." % max(drift))
+
+        data["arrangement_shift"] = {"dx": -68.0, "dy": -92.0}      # four times as far
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        far, _, _ = depths(2)
+        far_drift = max(abs(a - b) for a, b in zip(base, far))
+        assert far_drift < 0.02, (
+            "the drift grew to %.3f units at four times the shift, so it is not rounding: some "
+            "part of the arrangement is being left behind in proportion to how far it moves."
+            % far_drift)
+
+        # and it really did move, or the check above passed on two identical boards
+        k = box / tool.WHEEL_PX
+        dx = min(q[0] for q in tool._pts(laid1[0])) - min(q[0] for q in tool._pts(laid0[0]))
+        dy = min(q[1] for q in tool._pts(laid1[0])) - min(q[1] for q in tool._pts(laid0[0]))
+        # same 0.02-unit quantum as above -- these are read back out of %.2f path strings too
+        assert abs(dx - (-17.0 * k)) < 0.02 and abs(dy - (-23.0 * k)) < 0.02, (
+            "the shift did not reach the tiles at all (moved %.3f, %.3f units, wanted %.3f, "
+            "%.3f); this test would have passed while guarding nothing"
+            % (dx, dy, -17.0 * k, -23.0 * k))
+        assert abs((rows1[0]["sy"] - rows0[0]["sy"]) - (-23.0 * k)) < 0.02, (
+            "the shift did not reach the acolyte rows")
+    finally:
+        if original is not None:
+            path.write_text(original, encoding="utf-8")
+
+
+def test_the_tools_pixel_basis_is_the_board_the_offsets_will_be_drawn_on():
+    """WHEEL_PX must be the size the wheel is actually drawn at, or everything downstream lies.
+
+    Three things ride on this number and none of them would complain. The nine offsets are stored
+    as "screen px at wheel width 877.8" and converted back through it, so a stale value scales
+    every one of them. The arrangement shift is the same. And the red reference box the tool draws
+    is asserted to be the wheel's real box on the board -- the banner sits on its top edge and the
+    column meets it left and right -- which is only true while these agree.
+
+    The board's wheel is not a constant there either: `geometry()` fits it to whichever of the
+    column's width or height runs out first, so a change to the frame, the banner or a column gap
+    moves it. That is the realistic way this breaks -- nobody edits WHEEL_PX, somebody widens a
+    gap -- and the failure is a board that looks fine with every tile a percent or two out.
+    """
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("gen_tile_offsets.py is not in this checkout")
+    if not (RENDER / "gen_game_view.py").is_file():
+        pytest.skip("gen_game_view.py is not in this checkout")
+    grid()                                  # puts ui/render on sys.path
+    import gen_game_view as gv
+    import gen_tile_offsets as tool
+
+    drawn = gv.geometry(gv.layout())["wheel"]
+    assert drawn > 0, "the game view reports a zero-width wheel; this check would be vacuous"
+    assert abs(drawn - tool.WHEEL_PX) < 0.05, (
+        "the board draws its wheel %.1f px square, but gen_tile_offsets.WHEEL_PX is %.1f. Every "
+        "saved offset is stored in screen px at that width and converted back through it, so all "
+        "nine are out by %.1f%%, and the red reference box in the tool is no longer the box the "
+        "banner and the column actually meet."
+        % (drawn, tool.WHEEL_PX, abs(drawn - tool.WHEEL_PX) / tool.WHEEL_PX * 100))
+
+    # and the file agrees with the tool, or offsets saved earlier are read back at the wrong scale
+    import json
+    if tool.OFFSETS_PATH.is_file():
+        recorded = json.loads(tool.OFFSETS_PATH.read_text(encoding="utf-8")).get("wheel_px")
+        assert recorded is None or abs(float(recorded) - tool.WHEEL_PX) < 0.05, (
+            "duty_tile_offsets.json records wheel_px %s but the tool is at %.1f; the numbers in "
+            "it were judged on a different board" % (recorded, tool.WHEEL_PX))
+
+
+def test_the_action_box_ends_on_the_acolytes_feet():
+    """The action box is sized from the wheel's visible foot, and that foot is not its box.
+
+    The figures hang below the last row of tiles, so the line the eye reads as the bottom of the
+    component sits above the box's own bottom edge -- 42.3 px above it, as the board stands. The
+    action box is aligned to that line rather than to the row it lives in.
+
+    Two ways this rots, and neither shows up as an error. The number could be frozen into the
+    stylesheet, in which case the next drag or arrangement shift moves the acolytes and the box
+    stays put. Or the wheel could stop being the thing it is measured against -- `geometry()` fits
+    the wheel to whichever of the column's width or height runs out first, so it moves when a gap
+    or the banner does. Both give a board that looks deliberate and is a few px out.
+    """
+    g = grid()
+    if not (RENDER / "gen_game_view.py").is_file():
+        pytest.skip("gen_game_view.py is not in this checkout")
+    import gen_game_view as gv
+
+    G = gv.geometry(gv.layout())
+    box = g.load()["box"]
+    foot = G["banner_h"] + G["wheel"] * (g.acolyte_foot() / box)
+    assert abs(G["act_h"] - foot) < 0.1, (
+        "the action box is %.1f px tall but the acolytes' feet are at %.1f px from the top of "
+        "that column. It is meant to end on that line." % (G["act_h"], foot))
+    assert G["act_h"] < G["main_h"], (
+        "the action box fills its whole row, so it is not being cut to the acolyte line at all "
+        "and this check is comparing two numbers that happen to match")
+
+    # and the foot must actually track the tiles, or the alignment is a coincidence
+    import json
+    path = g.OFFSETS
+    original = path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        data = json.loads(original) if original else {}
+        # RELATIVE to whatever is already saved, not from zero. The board currently carries a
+        # shift, so setting an absolute -60 moves the foot by the difference, and asserting it
+        # moved the full 60 failed on correct code -- a test wrong about the starting point looks
+        # exactly like the bug it was written to catch.
+        was = float((data.get("arrangement_shift") or {}).get("dy", 0.0))
+        before = g.acolyte_foot()
+        data["arrangement_shift"] = {"dx": 0.0, "dy": was - 60.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        after = g.acolyte_foot()
+        G2 = gv.geometry(gv.layout())
+        moved = (before - after) * (G2["wheel"] / box)
+        assert abs(moved - 60.0) < 0.1, (
+            "moving the whole arrangement 60 px up moved the acolyte foot %.1f px, so the foot "
+            "is not tracking the tiles at all." % moved)
+        # THE BOX ITSELF, not just the foot. Asserting only that the foot moved leaves a frozen
+        # constant passing: `act_h = 923.5` is correct for the offsets saved today and wrong the
+        # moment anyone drags, and the first check above cannot see the difference because it
+        # never asks what the box did. Writing this guard without the line below produced exactly
+        # that -- the deliberate regression passed.
+        assert abs((G["act_h"] - G2["act_h"]) - 60.0) < 0.15, (
+            "the acolytes' feet moved 60 px but the action box moved %.1f px. It is not being "
+            "derived from them -- most likely the height is a literal that happens to be right "
+            "for the offsets currently saved." % (G["act_h"] - G2["act_h"]))
+    finally:
+        if original is not None:
+            path.write_text(original, encoding="utf-8")
