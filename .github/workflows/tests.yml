@@ -118,11 +118,17 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
-      # Deliberately F-only: undefined/shadowed names must gate, while existing E501s do not.
+      # Deliberately narrow: undefined/shadowed names must gate, while existing E501s do not.
       # This one runs on EVERY change, design-only included: it is repo-wide, it takes seconds,
       # and it is exactly what caught fourteen undefined-name errors in ui/ the day that tree
       # arrived. Skipping it for design changes would skip it on the least-linted code there is.
-      - run: ruff check --select F
+      #
+      # W605 joined F because this tree writes JavaScript inside Python strings, and a regex like
+      # /\s+/ in a non-raw one is an invalid Python escape that Python passes through anyway. It
+      # works, warns on 3.10 and warns louder on the 3.13 this lane runs, and it is the kind of
+      # thing nobody fixes because nothing fails. Two of them had been carried for four pull
+      # requests when this was added.
+      - run: ruff check --select F,W605
       - name: Require Node.js for turn-script harness tests
         if: needs.changes.outputs.engine == 'true'
         run: |
