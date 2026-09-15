@@ -436,16 +436,34 @@ CSS = """
 /* The page's own chrome. Everything below this block is either the ground, or an override of a
    rule gen_board.py wrote for ITS layout -- its components are wanted, its page is not. */
 *{box-sizing:border-box}
-html,body{height:100%%;margin:0;overflow:hidden;background:#0b0a08}
+
+/* THE GROUND, and it is one surface owned by one element -- THE PAGE, not the stage.
+   The duty grid draws no ground of its own (gen_duty_grid.BACKGROUND is None) and the stage is
+   transparent, so this shows through the channels between the nine tiles and down every gutter,
+   as one connected region of about 32%% of the canvas, AND fills whatever the stage does not
+   reach. Any component that paints its own ground punches an opaque hole in it.
+
+   IT MOVED HERE FROM `.gv-stage`, and that is the whole change.
+   `.gv-stage` is a fixed %(can_w_note)s canvas that #gv-fit then zoom-to-fits, so a background on it
+   is a background on a rectangle in the middle of the screen: on a 3440-wide display the fit
+   leaves about 840 px either side, and those 840 px were the flat colour. The picture looked
+   clipped because it was -- clipped to the canvas, not to the screen. On `html,body` it is
+   stretched to the viewport instead, which is what `gen_tile_offsets` has always done with its
+   own `#stage{flex:1}` and why the ground looked right there and wrong here. Same declaration,
+   different element, and the element was the bug.
+
+   The colour comes LAST. In a multi-layer `background` shorthand the colour must be the final
+   value; put it first, as the old stage rule could because it had one layer, and the whole
+   declaration is dropped and the page is white. */
+html,body{height:100%%;margin:0;overflow:hidden;
+  background:url(%(panorama)s) center/100%% 100%% no-repeat #0b0a08}
 #gv-fit{position:absolute;inset:0}
 
-/* THE GROUND, and it is one surface owned by one element.
-   The duty grid draws no ground of its own (gen_duty_grid.BACKGROUND is None), so this shows
-   through the channels between the nine tiles and down every gutter, as one connected region of
-   about 32%% of the canvas. Swapping this colour for a picture is this one declaration; any
-   component that paints its own ground punches an opaque hole in it. */
+/* Transparent, deliberately and not by omission: `background:none` on a stage that used to paint
+   is what lets the page's field run under the board unbroken. A colour here -- even the same
+   #0b0a08 -- puts the canvas rectangle back as a visible edge against the picture. */
 .gv-stage{position:absolute;top:0;left:0;transform-origin:top left;
-  background:#0b0a08 url(%(ground)s) center/100%% 100%% no-repeat;
+  background:none;
   display:flex;flex-direction:column}
 .gv-top,.gv-main{display:flex;align-items:flex-start}
 .gv-left{display:flex;flex-direction:column}
@@ -1078,9 +1096,12 @@ def main():
 
     page = PAGE % {
         "board_css": gb["CSS"],
-        # dg.ground_uri(), not a local copy: the picker needs the same field, and a second
-        # definition of where the ground lives is a second thing to keep in step.
-        "css": CSS % {"ground": dg.ground_uri(), "pad": G["pad"]},
+        # dg.panorama_uri(), not a local copy: the layout tool paints the same field on its
+        # simulated screen, and a second definition of where it lives is a second thing to keep
+        # in step. can_w_note is the canvas size quoted in the comment above the rule, read from
+        # the geometry rather than typed, so the prose cannot drift from the numbers.
+        "css": CSS % {"panorama": dg.panorama_uri(), "pad": G["pad"],
+                      "can_w_note": "%.0f x %.0f" % (L["canvas_width"], L["canvas_height"])},
         "sizes": SIZES % {
             "can_w": L["canvas_width"], "can_h": L["canvas_height"],
             "pad": G["pad"], "mt": L["margin_top"], "mb": L["margin_bottom"],
