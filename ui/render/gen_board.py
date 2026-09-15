@@ -986,7 +986,7 @@ boards="".join(player_card(p) for p in P)
 TURN='''<div class="turn">
   <div class="phase now first">Sow</div>
   <div class="stage-row"><span class="tick">&#10003;</span>Use or hire buildings</div>
-  <div class="stage-row"><span class="tick">&#10003;</span><span class="hand"><span>Lift acolytes</span><i class="dot">&middot;</i><span>In hand</span><svg viewBox="0 0 16 16" width="13" height="13"><rect x=".6" y=".6" width="14.8" height="14.8" fill="#B9B2A2" stroke="#2A2320" stroke-width="1.1"/></svg><b>&times;&nbsp;3</b></span></div>
+  <div class="stage-row"><span class="tick">&#10003;</span><span class="hand"><span>Lift acolytes</span><i class="dot">&middot;</i><span>In hand</span><b>3&nbsp;Acolytes</b></span></div>
   <div class="stage-row"><span class="tick">&#10003;</span>Walk the route</div>
   <div class="stage-row now"><span class="tick">&#9654;</span>Take a duty</div>
   <div class="stage-row"><span class="tick"></span>Action or Tithe</div>
@@ -1200,17 +1200,25 @@ html,body{height:100%%;margin:0;overflow:hidden;background:#0C0F0A;
 .wheel .act{cursor:pointer}
 .wheel .act rect{transition:fill .08s linear,stroke .08s linear}
 .wheel .act:hover rect{fill:#F8F1DC;stroke:#6B5C3E;stroke-width:1.8}
-/* Cubes in hand: one readout for the turn, and it rides on the step that creates it --
-   lifting acolytes is what puts cubes in the hand. The cube is
-   a neutral stone, as it was before: a handful lifted off a duty tile can hold more than one
-   seat's colour, and painting it in one of them would say something the count does not. */
+/* Acolytes in hand: one readout for the turn, and it rides on the step that creates it --
+   lifting acolytes is what puts them in the hand.
+   IT IS A WORD, NOT A TOKEN, and that is a decision rather than a default. This drew a neutral
+   grey square until the duty tiles started drawing acolytes as figures, at which point the panel
+   was calling them acolytes in words while showing something the board no longer uses for them.
+   The figure itself was the obvious replacement and was not taken: at 13px beside two other
+   segments it competes with the thirty-odd figures on the wheel for the same glance, and the
+   count is the only thing this readout carries.
+   The old comment justified the square as a neutral stone, "because a handful lifted off a duty
+   tile can hold more than one seat's colour". That was not true of this engine and is recorded
+   here so it is not reinstated: `sow_vector` takes ONE player's mancala vector, zeroes the source
+   and distributes along the route, so a lift is always a single seat's own acolytes. A seat colour
+   would have been honest. The word is simply quieter. */
 
 /* one inline-flex row, so the gap either side of the dot is the same number and
    "In hand" inherits the step's own type rather than the small-caps label style */
 .hand{display:inline-flex;align-items:center;gap:7px;line-height:1}
 .hand .dot{font-style:normal;color:#A89B7E}
 .hand b{font-size:13.5px;font-weight:700;color:#2A2320}
-.hand svg{display:block;flex:0 0 auto}
 /* the label keeps its own column, so a message that runs to a second line hangs
    under the first word rather than under the label */
 .last{display:flex;align-items:baseline;gap:7px;padding-top:10px;
