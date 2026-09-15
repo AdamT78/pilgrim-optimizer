@@ -240,6 +240,11 @@ def acolyte_grid(shapes):
     overlap and the aspect -- a second copy of the geometry the board actually draws, in the one
     tool whose whole job is to judge tiles against it. Asking the grid is what keeps the rows this
     page freezes identical to the rows the board emits.
+
+    FOUR SEATS, always, whatever a real game has. The row is drawn for the players at the table,
+    so two players get two figures -- but the row stays CENTRED on its tile at every count, so a
+    tile placed correctly against four is placed correctly against two. Four is simply the widest
+    case, and the widest is the one worth judging a placement against.
     """
     return [dg.acolyte_box(d) for d in shapes]
 

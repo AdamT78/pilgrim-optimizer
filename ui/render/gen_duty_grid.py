@@ -510,8 +510,25 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-def acolyte_box(shape: str) -> dict:
-    """Where one tile's row of four sits: {sx, sy, fw, fh, gap}, in grid units.
+def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER) -> dict:
+    """Where one tile's row sits: {sx, sy, fw, fh, gap}, in grid units.
+
+    SIZED BY HOW MANY SEATS ARE IN THE GAME, not always four. Pilgrim seats two to four, and a
+    two-player board drawing four figures would be showing two players who do not exist.
+
+    The figure itself does NOT grow when there are fewer of them. A figure is a figure; two
+    players should see the same acolyte as four, with more ground either side, not a bigger one.
+
+    Two things are invariant under the seat count, and both are load-bearing rather than
+    incidental:
+
+        the row's centre   `sx + span/2` is the tile's own centre whatever `span` is, so a row of
+                           two sits where a row of four sat. That is what lets the per-tile offsets
+                           in duty_tile_offsets.json mean the same thing at every player count --
+                           they were judged at four and are not re-judged at two.
+        the foot           `sy + fh` has no seat term in it at all. gen_game_view cuts the action
+                           box to that line, so the board's layout cannot shift because a player
+                           joined or left.
 
     THE ONE PLACE THIS IS WORKED OUT. It was two: this file emitted the row and the drag tool
     computed an identical copy to lay its frozen grid out against, with FIG_FRAC, the overlap and
@@ -533,7 +550,8 @@ def acolyte_box(shape: str) -> dict:
     fw = w * FIG_FRAC
     fh = fw / ACOLYTE_ASPECT
     gap = fw * 0.24
-    return {"sx": x0 + (w - (4 * fw + 3 * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
+    k = len(seats)
+    return {"sx": x0 + (w - (k * fw + (k - 1) * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
             "fw": fw, "fh": fh, "gap": gap}
 
 
@@ -548,13 +566,26 @@ def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float
                for d in laid_shapes(meta, margin, offsets=False))
 
 
-def acolyte_row(shape: str, counts) -> str:
-    """One row of four under a tile, drawn. The geometry is `acolyte_box`."""
-    b = acolyte_box(shape)
+def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
+    """One row under a tile, drawn. The geometry is `acolyte_box`.
+
+    A SEAT WITH NO ACOLYTES HERE IS DRAWN AS NOTHING -- no figure, no numeral. A row of figures
+    each labelled 0 says "four players, none of them here", which is the same picture as "four
+    players, one of them here" until you read four small numbers. An absence should look like an
+    absence.
+
+    The others do NOT close up around it. Each seat keeps the slot its position in `seats` gives
+    it, so a gap means a specific player is missing rather than merely that somebody is: the
+    second figure is the second seat on every tile on the board, which is what makes a row
+    readable at a glance across nine of them. Reflowing would make every row a small puzzle.
+    """
+    b = acolyte_box(shape, seats)
     sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
     uris = acolyte_tints()
     out = []
-    for j, seat in enumerate(SEAT_ORDER):
+    for j, seat in enumerate(seats):
+        if int(counts[j]) <= 0:
+            continue
         x = sx + j * (fw + gap)
         fs = fh * 0.50
         ink = SEAT_NUMERAL[seat]
@@ -851,7 +882,7 @@ def arrows_svg(shapes: list[str], length: float = ARROW_LEN, w: float = ARROW_W,
             '<g class="dg-arrows" pointer-events="none">' + "".join(body) + '</g>')
 
 
-def eligible_tiles(acolytes, active: str) -> set[int]:
+def eligible_tiles(acolytes, active: str, seats: tuple[str, ...] = SEAT_ORDER) -> set[int]:
     """Which duties `active` may act on: the ones its own acolytes are standing on.
 
     DERIVED FROM THE COUNTS BEING DRAWN, rather than taken as a second parameter, and that is the
@@ -870,27 +901,29 @@ def eligible_tiles(acolytes, active: str) -> set[int]:
     a duty already used this turn, a phase that forbids it -- is the engine's to say, and belongs
     in a parameter that can only ever SHRINK this set, never grow it.
     """
-    if active not in SEAT_ORDER:
+    if active not in seats:
         raise ValueError(
-            "active=%r is not one of the seats (%s). A seat name that does not match reads every "
-            "count from the wrong column." % (active, ", ".join(SEAT_ORDER)))
+            "active=%r is not one of the seats in this game (%s). A seat name that does not match "
+            "reads every count from the wrong column -- or, at fewer than four players, from a "
+            "column belonging to somebody who is not playing."
+            % (active, ", ".join(seats)))
     if acolytes is None:
         raise ValueError(
             "active=%r was given without acolytes, so which duties it may act on is unknown. "
             "Refusing rather than treating every duty as available: a board that lets a player "
             "act everywhere is a legal-looking board, and nothing downstream would catch it."
             % (active,))
-    seat = SEAT_ORDER.index(active)
+    seat = list(seats).index(active)
     got = acolytes if isinstance(acolytes, dict) else dict(enumerate(acolytes))
     live = set()
     for i, counts in got.items():
         i = int(i)
         if not (0 <= i < 9) or counts is None:
             continue
-        if len(counts) != len(SEAT_ORDER):
+        if len(counts) != len(seats):
             raise ValueError(
                 "acolytes[%r] has %d counts; there are %d seats (%s)."
-                % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
+                % (i, len(counts), len(seats), ", ".join(seats)))
         if int(counts[seat]) > 0:
             live.add(i)
     return live
@@ -921,6 +954,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   # not respond. Left None, all nine respond, which is what every caller got
                   # before this existed and what the pickers still want.
                   active: str | None = None,
+                  # Who is actually playing. Two to four; None means all four. The row under each
+                  # tile is drawn for these seats, in this order, and every row of `acolytes` must
+                  # be the same length -- a four-long row on a two-player board would put a third
+                  # player's acolytes on the board.
+                  seats: tuple[str, ...] | None = None,
                   uid: str = "dg") -> str:
     """The grid as one self-contained <svg>, sized by its viewBox and nothing else.
 
@@ -951,7 +989,19 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             "or doubled would draw a board that quietly means something else." % (cells,))
     # shapes[duty] is the outline of the square that duty was dealt
     shapes = [laid[c] for c in cells]
-    live = None if active is None else eligible_tiles(acolytes, active)
+    seats = tuple(seats) if seats else SEAT_ORDER
+    unknown = [s for s in seats if s not in SEAT_SWATCH]
+    if unknown:
+        raise ValueError(
+            "no colour on record for seat(s) %s; the four this board knows are %s."
+            % (", ".join(map(repr, unknown)), ", ".join(SEAT_ORDER)))
+    if len(set(seats)) != len(seats):
+        raise ValueError("a seat is listed twice in %r, so two columns of counts are the same "
+                         "player" % (list(seats),))
+    if not 1 <= len(seats) <= len(SEAT_ORDER):
+        raise ValueError("%d seats; this board draws between 1 and %d"
+                         % (len(seats), len(SEAT_ORDER)))
+    live = None if active is None else eligible_tiles(acolytes, active, seats)
     tiles = find_tiles(tiles_dir, version) if tiles_dir else {}
     art = {i: embed(p, px) for i, p in tiles.items()}
     joins = joins_for(version)
@@ -1093,11 +1143,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
         for i, counts in sorted(got.items()):
             if not (0 <= int(i) < 9) or counts is None:
                 continue
-            if len(counts) != len(SEAT_ORDER):
+            if len(counts) != len(seats):
                 raise ValueError(
-                    "acolytes[%r] has %d counts; there are %d seats (%s). A short row would draw "
-                    "one seat's acolytes under another seat's figure."
-                    % (i, len(counts), len(SEAT_ORDER), ", ".join(SEAT_ORDER)))
+                    "acolytes[%r] has %d counts; there are %d seats in this game (%s). A row "
+                    "of the wrong length draws one seat's acolytes under another seat's figure."
+                    % (i, len(counts), len(seats), ", ".join(seats)))
             # TWO INDEX SPACES, and they are not the same one.
             #
             # `counts` is keyed by DUTY -- the caller is saying "this many acolytes on Taxation".
@@ -1109,7 +1159,7 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             # rather than under its own tile -- the Taxation bug again, by a different route, and
             # silent in exactly the same way. It was dormant because the default arrangement is
             # the identity and nothing yet passes a shuffled one outside the guards.
-            out.append(acolyte_row(frozen[cells[int(i)]], counts))
+            out.append(acolyte_row(frozen[cells[int(i)]], counts, seats))
         out.append("</g>")
     out.append("</svg>")
     return "".join(out)

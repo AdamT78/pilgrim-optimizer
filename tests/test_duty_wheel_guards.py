@@ -845,3 +845,127 @@ def test_the_action_box_ends_on_the_acolytes_feet():
     finally:
         if original is not None:
             path.write_text(original, encoding="utf-8")
+
+
+def _row_under(g, svg, shape, seats):
+    """The figures drawn under ONE tile, as (x, count), found by that tile's own row rectangle.
+
+    By the RECTANGLE, not the column. Squares 0, 3 and 6 share an x range, so a filter on x alone
+    picks up three rows and reads as one -- which has now produced a wrong answer twice in this
+    file's history, once reporting a working fix as broken.
+    """
+    import re
+    b = g.acolyte_box(shape, seats)
+    lo, hi = b["sx"] - 1.0, b["sx"] + len(seats) * (b["fw"] + b["gap"]) + 1.0
+    top, bot = b["sy"] - 1.0, b["sy"] + b["fh"] * 1.05
+    body = svg[svg.index('<g class="dg-acolytes'):]
+    out = []
+    for x, y, v in re.findall(
+            r'<image href="[^"]*" x="([\d.\-]+)" y="([\d.\-]+)"[^>]*/><text[^>]*>(\d+)</text>',
+            body):
+        if lo <= float(x) <= hi and top <= float(y) <= bot:
+            out.append((float(x), int(v)))
+    return out
+
+
+def test_the_row_is_drawn_for_the_seats_actually_playing():
+    """Pilgrim seats two to four, and a two-player board must not show four players.
+
+    What has to survive a change of player count is the per-tile offsets, and they survive for a
+    reason worth stating rather than hoping: `sx + span/2` is the tile's own centre whatever the
+    span is, so a row of two sits exactly where a row of four sat. The offsets in
+    duty_tile_offsets.json were judged at four seats and are not re-judged at two.
+
+    The figure does not grow when there are fewer of them either. A figure is a figure.
+    """
+    g = grid()
+    for k in (2, 3, 4):
+        seats = g.SEAT_ORDER[:k]
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, acolytes=[[1] * k] * 9, seats=seats)
+        shapes = g.laid_shapes(offsets=False)
+        for i, d in enumerate(shapes):
+            row = _row_under(g, svg, d, seats)
+            assert len(row) == k, (
+                "tile %d drew %d figures for %d seats" % (i, len(row), k))
+        b = g.acolyte_box(shapes[0], seats)
+        span = k * b["fw"] + (k - 1) * b["gap"]
+        pts = [float(v) for v in
+               shapes[0].replace("M", " ").replace("Z", " ").replace("L", " ").split()]
+        centre = (min(pts[0::2]) + max(pts[0::2])) / 2
+        assert abs((b["sx"] + span / 2) - centre) < 1e-6, (
+            "at %d seats the row's centre is %.3f but the tile's is %.3f. The row has stopped "
+            "being centred, so every saved offset now means something different at this player "
+            "count than at the one it was judged at."
+            % (k, b["sx"] + span / 2, centre))
+        assert abs(b["fw"] - g.acolyte_box(shapes[0], g.SEAT_ORDER)["fw"]) < 1e-9, (
+            "the figure changed size with the seat count")
+
+
+def test_the_acolyte_foot_does_not_move_with_the_game():
+    """The action box is cut to this line, so it must not depend on who is playing or on counts.
+
+    If it did, the board's layout would shift when a player joined, left, or simply moved an
+    acolyte -- furniture moving in response to game state, which is the opposite of what furniture
+    is for. It holds because `sy + fh` has neither a seat term nor a count term in it, and that is
+    worth a guard because both would be easy to introduce while making the row cleverer.
+    """
+    g = grid()
+    base = g.acolyte_foot()
+    for k in (1, 2, 3, 4):
+        shapes = g.laid_shapes(offsets=False)
+        foot = max(g.acolyte_box(d, g.SEAT_ORDER[:k])["sy"]
+                   + g.acolyte_box(d, g.SEAT_ORDER[:k])["fh"] for d in shapes)
+        assert abs(foot - base) < 1e-9, (
+            "the acolytes' feet move from %.4f to %.4f between 4 seats and %d. The action box "
+            "height is derived from that line." % (base, foot, k))
+
+
+def test_a_seat_with_no_acolytes_on_a_tile_is_drawn_as_nothing():
+    """An absence should look like an absence, and the others must not close up around it.
+
+    A row of figures each labelled 0 is the same picture as a row with one player present until
+    four small numbers are read. So a zero draws nothing.
+
+    The rest keep their slots. That is the half worth guarding: reflowing to close the gap would
+    make the second figure mean a different player on every tile, and a row is only readable at a
+    glance across nine tiles because position means seat.
+    """
+    g = grid()
+    shapes = g.laid_shapes(offsets=False)
+    with drawn_without_the_artwork(g):
+        full = g.duty_grid_svg(tiles_dir=None, acolytes=[[2, 1, 3, 1]] * 9)
+        holed = g.duty_grid_svg(tiles_dir=None, acolytes=[[2, 0, 3, 0]] * 9)
+        empty = g.duty_grid_svg(tiles_dir=None, acolytes=[[0, 0, 0, 0]] * 9)
+    for i, d in enumerate(shapes):
+        a = _row_under(g, full, d, g.SEAT_ORDER)
+        b = _row_under(g, holed, d, g.SEAT_ORDER)
+        c = _row_under(g, empty, d, g.SEAT_ORDER)
+        assert len(a) == 4, "tile %d: expected four figures, got %d" % (i, len(a))
+        assert len(b) == 2, (
+            "tile %d drew %d figures for counts [2,0,3,0]; the two zeros should draw nothing"
+            % (i, len(b)))
+        assert not c, "tile %d drew %d figures for a row of zeros" % (i, len(c))
+        assert [x for x, _ in b] == [a[0][0], a[2][0]], (
+            "tile %d: the surviving figures are at %s but their slots are %s. Something reflowed "
+            "to close the gap, so the second figure is no longer the second seat."
+            % (i, [x for x, _ in b], [a[0][0], a[2][0]]))
+        assert [v for _, v in b] == [2, 3], "tile %d kept the wrong counts: %s" % (i, b)
+
+
+def test_a_row_of_counts_must_match_the_seats_at_the_table():
+    """A row of the wrong length puts one player's acolytes under another player's figure."""
+    g = grid()
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=[[1, 1, 1, 1]] * 9, seats=("sage", "pewter"))
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=[[1, 1]] * 9, seats=g.SEAT_ORDER)
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=[[1, 1]] * 9, seats=("sage", "sage"))
+    with pytest.raises(ValueError):
+        g.duty_grid_svg(tiles_dir=None, acolytes=[[1, 1]] * 9, seats=("sage", "crimson"))
+    with pytest.raises(ValueError):       # active must be at the table, not merely a seat colour
+        g.duty_grid_svg(tiles_dir=None, acolytes=[[1, 1]] * 9,
+                        seats=("sage", "pewter"), active="bone")
+    assert g.eligible_tiles([[0, 1]] * 9, "pewter", ("sage", "pewter")) == set(range(9))
+    assert g.eligible_tiles([[0, 1]] * 9, "sage", ("sage", "pewter")) == set()
