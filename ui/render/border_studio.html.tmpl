@@ -2,8 +2,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Duty Border Studio</title>
 <style>
-:root{--panel:#E5D8B9;--ink:#2A2320;--emerald:#4BA672;--gold:%(gold)s;--cool:#cfe3ea;
-      --seat:#7d9b52;--sw:%(sw)s;--dur:1800ms;--c:var(--emerald)}
+/* The marking itself is NOT here. It is gen_duty_grid.MARK_CSS, emitted below exactly as the
+   board emits it, because a studio with its own copy stops predicting the board the first time
+   one of them is edited. What IS here is the studio's own chrome: the panel, the stage, and the
+   labels no player will ever see. */
+:root{--panel:#E5D8B9;--ink:#2A2320;--gold:%(gold)s}
 *{box-sizing:border-box}
 body{margin:0;background:#12100d;color:#EDE6D6;
   font:14px/1.5 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
@@ -28,84 +31,29 @@ input[type=range]{width:100%%}
   display:flex;justify-content:center}
 /* The viewBox is square, so width IS height here: capping the width by the leftover viewport
    height is what keeps the whole wheel on screen instead of letting a wide window blow it up to
-   its own width and push six tiles below the fold. `min()` takes whichever runs out first --
-   the column, the window's height, or the point past which the outlines stop gaining anything. */
-svg{display:block;width:100%%;height:auto;
-  max-width:min(100%%, calc(100dvh - 210px), 760px)}
-@supports not (height:100dvh){svg{max-width:min(100%%, calc(100vh - 210px), 760px)}}
+   its own width and push six tiles below the fold. */
+svg{display:block;width:100%%;height:auto;max-width:min(100%%,calc(100dvh - 210px),760px)}
+@supports not (height:100dvh){svg{max-width:min(100%%,calc(100vh - 210px),760px)}}
 .fillp{fill:#272219}
-.edge{fill:none;stroke:%(ink)s;stroke-opacity:.85;stroke-width:var(--sw);stroke-linejoin:round}
+.edge{fill:none;stroke:%(ink)s;stroke-opacity:.85;stroke-width:%(sw)s;stroke-linejoin:round}
 .tname{fill:#8d8471;font:600 30px Georgia,serif;text-anchor:middle;pointer-events:none}
 .tsub{fill:#6b6354;font:22px Georgia,serif;text-anchor:middle;pointer-events:none}
 .cnt{fill:#c9bfa4;font:600 30px Georgia,serif;pointer-events:none}
-.ps{stop-color:var(--c)}
-
-.mark,.pring,.pring-soft{fill:none;stroke:var(--c);
-  stroke-linejoin:round;stroke-linecap:round;opacity:0}
-.mark{stroke-width:calc(var(--sw)*1.7)}
-.dot{fill:var(--c);opacity:0}
-.tile:not(.on) .markwrap{display:none}
-
-body[data-anim=steady] .on .mark{opacity:.95}
-body[data-anim=pulse]  .on .mark{opacity:.95;animation:pulse var(--dur) ease-in-out infinite}
-@keyframes pulse{0%%,100%%{opacity:.30}50%%{opacity:1}}
-body[data-anim=ants] .on .mark{opacity:.95;stroke-dasharray:14 12;animation:ants var(--dur) linear infinite}
-@keyframes ants{to{stroke-dashoffset:-26}}
-
-/* ---- PORTAL: the attached ring effect, on the torn outline ------------------------------- */
-body[data-anim=portal] .on .pring-soft{opacity:1;stroke:var(--c);stroke-opacity:.16;
-  stroke-width:calc(var(--sw)*3.4);filter:url(#soft);
-  stroke-dasharray:%(dash)s;animation:orbit calc(var(--dur)*6.1) linear infinite}
-body[data-anim=portal] .on .pring{opacity:1;stroke:url(#pg);
-  stroke-width:calc(var(--sw)*1.5);filter:url(#glowSmall);
-  stroke-dasharray:%(dash)s;animation:orbit calc(var(--dur)*6.1) linear infinite}
-@keyframes orbit{from{stroke-dashoffset:0}to{stroke-dashoffset:-%(half)s}}
-
-/* ---- PORTAL, DYNAMIC SEGMENTS: same two rings, no fixed pattern -------------------------- */
-/* Deliberately no stroke-dasharray and no animation here. The pattern is rebuilt every frame in
-   script and written inline, because what it does cannot be expressed as keyframes: the segment
-   lengths are the sum of three sine waves at unrelated rates, so the figure never repeats. CSS
-   can interpolate between two states; it cannot be a function of time. */
-body[data-anim^=segments] .on .pring-soft{opacity:1;stroke:var(--c);stroke-opacity:.16;
-  stroke-width:calc(var(--sw)*3.4);filter:url(#soft)}
-body[data-anim^=segments] .on .pring{opacity:1;stroke:url(#pg);
-  stroke-width:calc(var(--sw)*1.5);filter:url(#glowSmall)}
-body[data-anim=portal] .on .dot{offset-path:var(--p);offset-rotate:0deg;filter:url(#dotGlow)}
-body[data-anim=portal] .on .d1{animation:ride calc(var(--dur)*3.8) linear infinite,
-  p1 calc(var(--dur)*1.2) ease-in-out infinite alternate}
-body[data-anim=portal] .on .d2{animation:ride calc(var(--dur)*5.3) linear infinite reverse,
-  p2 calc(var(--dur)*1.6) ease-in-out infinite alternate}
-body[data-anim=portal] .on .d3{animation:ride calc(var(--dur)*4.4) linear infinite,
-  p3 calc(var(--dur)*1.3) ease-in-out infinite alternate-reverse}
-body[data-anim=portal] .on .d4{animation:ride calc(var(--dur)*6.3) linear infinite reverse,
-  p4 calc(var(--dur)*1.7) ease-in-out infinite alternate}
-body[data-anim=portal] .on .d2{offset-distance:25%%}
-body[data-anim=portal] .on .d3{offset-distance:50%%}
-body[data-anim=portal] .on .d4{offset-distance:75%%}
-@keyframes ride{from{offset-distance:0%%}to{offset-distance:100%%}}
-@keyframes p1{0%%{opacity:.35;r:6px}50%%{opacity:.95;r:8.4px}100%%{opacity:.45;r:6.8px}}
-@keyframes p2{0%%{opacity:.18;r:4.6px}50%%{opacity:.58;r:6.2px}100%%{opacity:.26;r:5.2px}}
-@keyframes p3{0%%{opacity:.22;r:4.4px}50%%{opacity:.74;r:7px}100%%{opacity:.31;r:5.2px}}
-@keyframes p4{0%%{opacity:.16;r:4.1px}50%%{opacity:.50;r:5.7px}100%%{opacity:.21;r:4.6px}}
-
-@media (prefers-reduced-motion:reduce){
-  .on .mark,.on .pring,.on .pring-soft,.on .dot{animation:none!important}
-  /* the segments loop checks this too, and does not start */
-  .on .mark{opacity:.95;stroke-dasharray:none;stroke-dashoffset:0}
-  .on .dot{opacity:0}
-}
 .notes{padding:0 24px 40px;max-width:1000px}
 .notes p{color:#a8a08c;font-size:12.5px;line-height:1.6}
 .notes b{color:#EDE6D6}
 code{background:#241f18;padding:1px 5px;border-radius:3px;font-size:11.5px}
 .warn{color:#e0a37a}
 @media (max-width:760px){.panel{width:100%%}.stage{flex-basis:100%%}}
-</style></head><body data-anim="portal">
+</style>
+<style>%(markcss)s</style>
+</head><body>
 <header>
 <h1>Duty Border Studio</h1>
 <p class="sub0">The nine outlines are the real traced shapes from
 <code>duty_grid_shapes.json</code>, at the board's own stroke width, over the ink edge the board
-already draws.</p>
+already draws. Every marking below is <code>gen_duty_grid.MARK_CSS</code>, the same rules the game
+view runs.</p>
 </header>
 <div class="wrap">
 <div class="panel">
@@ -121,152 +69,92 @@ already draws.</p>
   <p class="hint" id="support"></p>
 </div>
 <div class="stage">
-<svg viewBox="0 0 %(box)d %(box)d" id="wheel"><defs><linearGradient id="pg" x1="0%%" y1="0%%" x2="100%%" y2="100%%"><stop class="ps" offset="0%%" stop-opacity=".28"/><stop class="ps" offset="20%%" stop-opacity=".95"/><stop class="ps" offset="45%%" stop-opacity=".70"/><stop class="ps" offset="70%%" stop-opacity=".78"/><stop class="ps" offset="100%%" stop-opacity=".28"/></linearGradient><filter id="glowSmall" x="-40%%" y="-40%%" width="180%%" height="180%%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="soft" x="-60%%" y="-60%%" width="220%%" height="220%%"><feGaussianBlur stdDeviation="11"/></filter><filter id="dotGlow" x="-300%%" y="-300%%" width="600%%" height="600%%"><feGaussianBlur stdDeviation="3.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>%(body)s</svg>
+<svg viewBox="0 0 %(box)d %(box)d" id="wheel" style="%(markvars)s;--dg-msw:%(sw)s">
+<defs>%(markdefs)s</defs>%(body)s</svg>
 </div>
 </div>
 <div class="notes">
 <p><b>Gold is already spoken for.</b> The hover rule turns <code>.dg-edge</code>
-<code>#d8b23a</code>, gated on <code>data-eligible</code>, and that is the only thing on the board
+<code>%(gold)s</code>, gated on <code>data-eligible</code>, and that is the only thing on the board
 saying &ldquo;this is yours to take&rdquo;. A persistent mark wants a different <i>kind</i> of
-signal, not a different shade &mdash; <code>#4BA672</code> at hue 146&deg; is the one already
-designed for it.</p>
+signal, not a different shade &mdash; <code>%(fill)s</code> at hue 146&deg; is the one already
+designed for it, and is what <code>MARK_FILL</code> now is.</p>
 <p><b>The two dynamic-segment variants differ in one number.</b> Normalising to
 <code>pathLength</code> means the segment count is what sets the segment LENGTH: at <i>n</i>
 segments each lit run is about 1/<i>n</i> of the outline, whatever the waves are doing. So v2 is
-simply 18 rather than 9, which halves every run. Sampled over 4000 frames that puts its mean lit
-length at <b>28.99 of 1000</b> against the <code>ants</code> dash of 14 &mdash; 2.07&times; &mdash;
-where the 9-segment version sits at 57.98, or 4.14&times;.</p>
-<p><b>Three portal variants, and the difference between them is what CSS can and cannot say.</b>
-<i>Portal ring + four dots</i> is a fixed dash pattern shifted by keyframes. <i>Dynamic segments</i>
-has no fixed pattern at all: every frame, script sums three sine waves at rates that share no common
-period to get each lit segment and each gap, then scales the whole array to fit
-<code>pathLength</code> exactly. That last step is what removes the seam &mdash; the pattern always
-closes on itself whatever the waves are doing, so nothing ever has to snap back. CSS can interpolate
-between two states; it cannot be a function of time, which is why this one is the only effect here
-that needs a script running.</p>
-<p><b>The portal's dash pattern was rescaled, and that matters more here than on a circle.</b> The
-original sums to 478 against a circumference of 754, so the pattern restarts part-way round and
-leaves a seam &mdash; invisible enough on a smooth ring. Rescaled to 200 it divides
-<code>pathLength="%(plen)d"</code> exactly five times, so there is no seam on any tile, one dash means
-the same length on all nine, and the offset animates by exactly one period.</p>
-<p><b>The orbiting dots use <code>offset-path</code>, not rotation.</b> The original rotates each
-dot about the circle's centre at a fixed radius, which only describes a circle. On a torn outline
-the dots have to follow the actual path. One caveat the panel reports live: <code>offset-path</code>
-does <i>not</i> honour <code>pathLength</code>, so the dots take the same time to go round each
-tile while the perimeters differ by about 9&percnt; &mdash; the dashes stay in lockstep, the dots
-drift apart. At these speeds it reads as life rather than as error, but it is drift, not design.</p>
-<p><b>A border marks a whole tile, and %(twocount)d of the nine carry two actions.</b> Kept as a caveat rather
-than a control, because the control was worse: clipping a closed outline to one half does not give
-you half a border, it gives you a cut one, and it reads as damage. So if eligibility after a Sow is
-ever per action rather than per tile, the border can only say &ldquo;something here&rdquo; &mdash;
-the half-art lighting the hover already uses (<code>dg-lit-L</code> / <code>dg-lit-R</code>) is the
-thing that knows how to mean half a tile.</p>
-<p><b>None of this survives the PNG path.</b> CSS animation is a browser thing; CairoSVG renders the
-static state. Same renderer-dependence that got an SVG filter rejected for the serf compositing.
-Keep frame zero legible on its own: <i>steady</i> survives it, <i>pulse</i> at 0&percnt; does not,
-and <i>portal</i> at frame zero is a dashed ring with the four dots stacked at the path start.</p>
-<p><b>Reduced motion is honoured</b> &mdash; every effect falls back to the steady mark, and the
-portal drops its dots entirely. This marking is how a player is told what they may do, so it cannot
-be the only channel.</p>
+%(seg2)d rather than %(seg)d, which halves every run &mdash; a mean lit length of about 29 of 1000
+against the <code>ants</code> dash of %(ants)d, roughly twice it, where the %(seg)d-segment version
+sits near 58.</p>
+<p><b>Only one of these needs a script, and it is not an implementation detail.</b> CSS can
+interpolate between two states; it cannot be a function of time, and the segment pattern is three
+sine waves at rates sharing no common period, so it never comes back round. The loop is
+<code>gen_duty_grid.MARK_JS</code> &mdash; the same one the game view runs &mdash; and it writes
+<code>stroke-dasharray</code> inline, which beats the stylesheet. Left behind on the way out it
+would override the array <code>ants</code> sets and corrupt every other option, visible only after
+visiting this one first, so it clears both properties whenever the effect changes.</p>
+<p><b>A border marks a whole tile, and %(twocount)d of the nine carry two actions.</b> Clipping a
+closed outline to one half does not give you half a border, it gives you a cut one, and it reads as
+damage. So if eligibility after a Sow is ever per action rather than per tile, the border can only
+say &ldquo;something here&rdquo; &mdash; the half-art lighting the hover already uses
+(<code>dg-lit-L</code> / <code>dg-lit-R</code>) is the thing that knows how to mean half a tile.</p>
+<p><b>None of this survives the PNG path.</b> CSS animation is a browser thing; CairoSVG renders
+the static state, the same renderer-dependence that got an SVG filter rejected for the serf
+compositing. Keep frame zero legible on its own: <i>steady</i> survives it, <i>pulse</i> at
+0&percnt; does not, and <i>portal</i> at frame zero is a dashed ring with the four dots stacked at
+the path start.</p>
+<p><b>Reduced motion is honoured in <code>MARK_CSS</code> itself</b>, not here &mdash; the page
+cannot see those rules, so the component has to carry the media query. The segment loop checks the
+same query separately, because it has no keyframes to suppress.</p>
 </div>
+<script>%(markjs)s</script>
 <script>
 const STATE = %(states)s;
-const ANIMS=%(effects)s;
-const WHICH=[['some','as listed'],['all','all nine'],['one','just one']];
-const S={state:'take',anim:'portal',which:'some',dur:1800};
-const svg=document.getElementById('wheel');
-const COUNTS=%(counts)s, ELIGIBLE=%(eligible)s;
+const ANIMS = %(effects)s;
+const WHICH = [['some','as listed'],['all','all nine'],['one','just one']];
+const S = {state:'take', anim:'segmentsv2', which:'some', dur:1800};
+const svg = document.getElementById('wheel');
+const COUNTS = %(counts)s, ELIGIBLE = %(eligible)s;
 
 function fillSelect(el,items,key){
-  el.innerHTML=items.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
-  el.value=S[key];
-  el.onchange=()=>{S[key]=el.value;apply();};
+  el.innerHTML = items.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+  el.value = S[key];
+  el.onchange = () => { S[key] = el.value; apply(); };
 }
 function fillBtns(host,items,key){
-  host.innerHTML=items.map(([v,l])=>
+  host.innerHTML = items.map(([v,l]) =>
     `<button class="opt" data-k="${key}" data-v="${v}">${l}</button>`).join('');
-  host.querySelectorAll('button').forEach(b=>b.onclick=()=>{S[b.dataset.k]=b.dataset.v;apply();});
+  host.querySelectorAll('button').forEach(b => b.onclick = () => { S[b.dataset.k]=b.dataset.v; apply(); });
 }
 fillSelect(document.getElementById('state'),
-  Object.entries(STATE).map(([k,v])=>[k,v.label]),'state');
-fillSelect(document.getElementById('anim'),ANIMS,'anim');
-fillBtns(document.getElementById('which'),WHICH,'which');
+  Object.entries(STATE).map(([k,v]) => [k, v.label]), 'state');
+fillSelect(document.getElementById('anim'), ANIMS.filter(e => e[0]), 'anim');
+fillBtns(document.getElementById('which'), WHICH, 'which');
 
 function apply(){
-  const st=STATE[S.state];
-  document.body.dataset.anim=S.anim;
-  document.body.style.setProperty('--dur',S.dur+'ms');
-  svg.style.setProperty('--c',st.colour);
-  document.getElementById('durlab').textContent=S.dur+' ms base cycle';
-  document.getElementById('explain').innerHTML=st.note;
-  [...svg.querySelectorAll('.tile')].forEach(g=>{
-    const i=+g.dataset.i;
-    let on = S.which==='all' ? true : S.which==='one' ? i===1 : ELIGIBLE.includes(i);
-    if(S.state!=='take') on = COUNTS[i]>0 && (S.which==='one' ? i===1 : true);
-    g.classList.toggle('on',on);
+  const st = STATE[S.state];
+  svg.setAttribute('data-mark-effect', S.anim);
+  svg.style.setProperty('--dg-mc', st.colour);
+  svg.style.setProperty('--dg-mdur', S.dur + 'ms');
+  document.getElementById('durlab').textContent = S.dur + ' ms base cycle';
+  document.getElementById('explain').innerHTML = st.note;
+  [...svg.querySelectorAll('.dgt')].forEach(g => {
+    const i = +g.dataset.i;
+    let on = S.which === 'all' ? true : S.which === 'one' ? i === 1 : ELIGIBLE.includes(i);
+    if(S.state !== 'take') on = COUNTS[i] > 0 && (S.which === 'one' ? i === 1 : true);
+    if(on) g.setAttribute('data-mark','1'); else g.removeAttribute('data-mark');
     g.querySelector('.cnt').textContent =
-      (S.state==='take') ? '' : (COUNTS[i] ? COUNTS[i]+' ●' : '');
+      (S.state === 'take') ? '' : (COUNTS[i] ? COUNTS[i] + ' ●' : '');
   });
-  document.querySelectorAll('button.opt').forEach(b=>
-    b.setAttribute('aria-pressed',S[b.dataset.k]===b.dataset.v));
-  segments(S.anim.startsWith('segments'));
+  document.querySelectorAll('button.opt').forEach(b =>
+    b.setAttribute('aria-pressed', S[b.dataset.k] === b.dataset.v));
+  if(window.dgMark) window.dgMark(svg, S.anim, S.dur);
 }
-// ---- the dynamic-segment pattern -----------------------------------------------------------
-// One computation per frame for ALL nine, not one per tile. Every marked path carries
-// pathLength="%(plen)d", so the same dash string means the same thing on every outline -- which is
-// the whole reason the normalisation below divides by that and not by a measured perimeter.
-const SEG = %(segments)d, SEG2 = %(segments2)d, PLEN = %(plen)d;
-const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
-let raf = 0;
-const pulse = x => 0.5 + 0.5 * Math.sin(x);
-
-function dashArray(t, n){
-  const v = []; let total = 0;
-  for(let i = 0; i < n; i++){
-    const p = i * 0.83;
-    // Three waves at rates that share no common period, so the figure never comes back round.
-    const lit = 14 + 24*pulse(t*1.15 + p) + 12*pulse(t*0.63 + p*1.9 + 0.7)
-                   + 8*pulse(t*1.87 + p*0.55 + 1.3);
-    const gap = 18 + 20*pulse(t*0.84 + p*1.4 + 2.1) + 10*pulse(t*1.42 + p*0.9 + 0.4);
-    v.push(lit, gap); total += lit + gap;
-  }
-  // Scaled to fit pathLength EXACTLY. That is what removes the seam: the pattern always closes on
-  // itself whatever the waves are doing, so there is no leftover stub where the last gap meets the
-  // first segment -- and no reset, because nothing ever has to snap back.
-  const k = PLEN / total;
-  return v.map(x => (x*k).toFixed(2)).join(' ');
-}
-
-function segmentFrame(ms){
-  const t = ms / 1000 * (1800 / S.dur);        // the speed slider, so it drives this too
-  const d = dashArray(t, S.anim === 'segmentsv2' ? SEG2 : SEG);
-  const o = (-42*t - 10*Math.sin(t*0.55)).toFixed(2);
-  for(const el of svg.querySelectorAll('.on .pring, .on .pring-soft')){
-    el.style.strokeDasharray = d; el.style.strokeDashoffset = o;
-  }
-  raf = requestAnimationFrame(segmentFrame);
-}
-
-// Clearing the inline styles on the way out is not tidiness. Inline beats the stylesheet, so a
-// leftover dash array from this effect would override the one `ants` sets and quietly corrupt
-// every other option -- visible only after visiting this one first.
-function segments(on){
-  if(raf){ cancelAnimationFrame(raf); raf = 0; }
-  if(!on || REDUCED.matches){
-    for(const el of svg.querySelectorAll('.pring, .pring-soft')){
-      el.style.strokeDasharray = ''; el.style.strokeDashoffset = '';
-    }
-    return;
-  }
-  raf = requestAnimationFrame(segmentFrame);
-}
-
 // Say plainly whether this browser can do the dots, rather than showing nothing and looking broken.
 const ok = CSS.supports('offset-path','path("M0 0 L1 1")');
 document.getElementById('support').innerHTML = ok
-  ? 'offset-path supported — the dots follow the real outline.'
+  ? 'offset-path supported — the portal dots follow the real outline.'
   : '<span class="warn">This browser has no offset-path, so the portal’s dots cannot follow '
-    + 'the outline and are hidden. The ring still runs.</span>';
-if(!ok) document.querySelectorAll('.dot').forEach(d=>d.style.display='none');
+    + 'the outline and are hidden. The rings still run.</span>';
+if(!ok) document.querySelectorAll('.dg-mdot').forEach(d => d.style.display = 'none');
 apply();
 </script></body></html>

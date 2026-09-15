@@ -43,28 +43,7 @@ OUT = UI / "generated" / "duty-border-studio.html"
 
 # The portal ring's dash pattern, as proportions. RESCALED at build time so the pattern divides
 # `pathLength` exactly -- see dash_pattern() for why that matters more here than on a circle.
-PORTAL_DASH = (44, 28, 20, 62, 34, 36, 16, 74, 24, 54, 18, 68)
-PORTAL_PERIOD = 200.0       # of 1000, so the pattern repeats five times with no seam
-PATH_LENGTH = 1000          # every marked path is normalised to this, so a dash means one thing
 
-# The "dynamic segments" variants build their dash array every frame from layered sine waves and
-# then scale the whole thing to fit PATH_LENGTH exactly, so there is never a seam and never a reset
-# -- the pattern simply keeps evolving. The waves live in the page, because they are presentation.
-# THE SEGMENT COUNT IS THE ONLY THING THAT DIFFERS between the two, and it is the only number worth
-# having out here, because normalising to PATH_LENGTH means the count is what sets the LENGTH: at n
-# segments each lit run is about 1/n of the outline, whatever the waves are doing.
-#
-# v2 exists to sit near `ants`, whose lit dash is 14 of 1000. Sampling the waves over 4000 frames:
-#
-#     n = 9    mean lit 57.98   4.14x the ants dash
-#     n = 14   mean lit 37.26   2.66x
-#     n = 18   mean lit 28.99   2.07x     <- v2
-#     n = 22   mean lit 23.71   1.69x
-#
-# So "twice ants, and more of them" is 18, derived rather than dialled in by eye.
-SEGMENTS = 9
-SEGMENTS_V2 = 18
-ANTS_DASH = 14              # what `ants` draws, for the comparison above to mean anything
 
 # The two states, and the colour each is proposed in. `take` is the emerald already designed for it
 # -- hue 146 deg, chosen to read as a different KIND of signal from the gold hover rather than as a
@@ -81,10 +60,6 @@ STATES = {
              "One hue for “lift” whoever is playing. Steadier to read, but says nothing "
              "about whose acolytes they are."),
 }
-EFFECTS = (("portal", "portal ring + four dots"),
-           ("segments", "portal ring, dynamic segments"),
-           ("segmentsv2", "portal ring, dynamic segments v2"),
-           ("steady", "steady"), ("pulse", "pulse"), ("ants", "marching ants"))
 
 # A fixture, and named as one. Which duties are open after a Sow is a rules question this file has
 # no business answering; these are here so the page has something to mark.
@@ -103,21 +78,6 @@ def grid():
     return module
 
 
-def dash_pattern(raw=PORTAL_DASH, period=PORTAL_PERIOD) -> str:
-    """The portal's dashes, rescaled so the pattern divides `pathLength` a whole number of times.
-
-    The effect this came from sums to 478 against a circumference of 754, so its pattern restarts
-    part-way round and leaves a seam where the last dash meets the first. On a smooth ring that is
-    invisible. On a torn outline with nine different perimeters it would be nine visible seams in
-    nine different places, and it would read as the artwork being wrong rather than the dashes.
-
-    Scaled to 200 of 1000 the pattern repeats exactly five times on every tile, one dash is the
-    same length everywhere, and the offset animates by exactly one period.
-    """
-    k = period / sum(raw)
-    return " ".join("%.2f" % (v * k) for v in raw)
-
-
 def bounds(d: str):
     n = [float(t) for t in d.replace("M", " ").replace("L", " ").replace("Z", " ").split()]
     return min(n[0::2]), min(n[1::2]), max(n[0::2]), max(n[1::2])
@@ -134,25 +94,18 @@ def tiles(dg):
 
 
 def svg_body(dg, rows) -> str:
-    """Nine tiles. Each carries its own path as a custom property so the dots can ride it.
+    """Nine tiles, each carrying gen_duty_grid's own marking group rather than a lookalike.
 
-    `offset-path` is the only honest way to send a dot round one of these: the effect this came
-    from rotates each dot about a centre at a fixed radius, which is a description of a circle and
-    of nothing else. The cost is that `offset-path` does not honour `pathLength`, so the dots take
-    the same time round perimeters that differ by about 9% and drift apart. The dashes do not.
+    `.dgt` and `data-mark` are the wheel's contract, not this page's: MARK_CSS is scoped to them,
+    so a studio that invented its own class names would need its own copy of every rule -- which is
+    exactly the drift this file exists to avoid.
     """
     out = []
     for t in rows:
-        i, d = t["i"], t["d"]
-        out.append('<g class="tile" data-i="%d" style="--p:path(\'%s\')">' % (i, d))
-        out.append('<path class="fillp" d="%s"/>' % d)
-        out.append('<path class="edge" d="%s"/>' % d)
-        out.append('<g class="markwrap">')
-        for cls in ("mark", "pring-soft", "pring"):
-            out.append('<path class="%s" d="%s" pathLength="%d"/>' % (cls, d, PATH_LENGTH))
-        for k in range(1, 5):
-            out.append('<circle class="dot d%d" cx="0" cy="0" r="7"/>' % k)
-        out.append("</g>")
+        out.append('<g class="dgt" data-i="%d">' % t["i"])
+        out.append('<path class="fillp" d="%s"/>' % t["d"])
+        out.append('<path class="edge" d="%s"/>' % t["d"])
+        out.append(dg.mark_paths(t["d"]))
         cx, cy = (t["x0"] + t["x1"]) / 2, (t["y0"] + t["y1"]) / 2
         out.append('<text class="tname" x="%.1f" y="%.1f">%s</text>' % (cx, cy - 4, t["name"]))
         if t["two"]:
@@ -170,17 +123,21 @@ def build(dg) -> str:
         "box": box,
         "ink": dg.INK,
         "gold": dg.EDGE_HOVER,
+        "fill": dg.MARK_FILL,
         "sw": "%.2f" % (box * dg.EDGE_STROKE),
-        "dash": dash_pattern(),
-        "plen": PATH_LENGTH,
-        "half": PORTAL_PERIOD,
-        "segments": SEGMENTS,
-        "segments2": SEGMENTS_V2,
-        "ants": ANTS_DASH,
+        "seg": dg.MARK_SEGMENTS,
+        "seg2": dg.MARK_SEGMENTS_V2,
+        "ants": dg.MARK_ANTS,
+        # Borrowed whole, never reproduced. Every one of these is the exact text the game view
+        # emits, so the two pages cannot disagree about what an effect looks like.
+        "markcss": dg.MARK_CSS,
+        "markdefs": dg.mark_defs("studio"),
+        "markvars": dg.mark_vars("studio"),
+        "markjs": dg.MARK_JS,
         "body": svg_body(dg, rows),
         "states": json.dumps({k: {"label": v[0], "colour": v[1], "note": v[2]}
                               for k, v in STATES.items()}),
-        "effects": json.dumps(list(EFFECTS)),
+        "effects": json.dumps([list(e) for e in dg.MARK_EFFECTS]),
         "eligible": json.dumps(list(DEMO_ELIGIBLE)),
         "counts": json.dumps(list(DEMO_COUNTS)),
         "twocount": sum(1 for t in rows if t["two"]),
@@ -201,9 +158,10 @@ def main() -> None:
     print("written %s  (%.1f KB)" % (z.output, z.output.stat().st_size / 1024))
     print("  9 outlines at stroke %.2f, ink %s, hover gold %s -- all read from gen_duty_grid"
           % (json.loads(dg.SHAPES.read_text())["box"] * dg.EDGE_STROKE, dg.INK, dg.EDGE_HOVER))
-    print("  %d effects, %d states, portal dashes %s" % (len(EFFECTS), len(STATES), dash_pattern()))
-    print("  dynamic segments: %d and %d, rebuilt per frame, normalised to pathLength %d"
-          % (SEGMENTS, SEGMENTS_V2, PATH_LENGTH))
+    print("  %d effects and %d states, all of the marking borrowed from gen_duty_grid"
+          % (len(dg.MARK_EFFECTS) - 1, len(STATES)))
+    print("  MARK_CSS %d chars, MARK_JS %d chars, segments %d and %d"
+          % (len(dg.MARK_CSS), len(dg.MARK_JS), dg.MARK_SEGMENTS, dg.MARK_SEGMENTS_V2))
     url = z.output.resolve().as_uri()
     print("\n%s" % url)
     if z.open:

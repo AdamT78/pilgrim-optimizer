@@ -438,6 +438,213 @@ HOVER_CSS = ('.dgt .dg-lit{opacity:0}'
 PALETTE_CSS = ('.dg-pal{filter:none}'
                'svg[data-palette="chroma"] .dg-pal-chroma{filter:var(--dg-pal)}'
                'svg[data-palette="full"] .dg-pal-full{filter:var(--dg-pal)}')
+
+# ---------------------------------------------------------------------------------------------
+# MARKING A TILE, for the two states this wheel does not carry yet: which duties the active seat
+# may act on, and which it may lift acolytes from. Both want the tile's edge, and the edge already
+# means one thing -- EDGE_HOVER gold, on hover, gated on data-eligible -- so a persistent mark has
+# to read as a different KIND of signal rather than a different shade. `MARK_FILL` is the emerald
+# designed for that, at hue 146.
+#
+# INERT UNTIL A PAGE ASKS. Nothing below animates on its own: every rule needs `data-mark="1"` on a
+# tile AND `data-mark-effect` on the svg, and this file sets neither. That is deliberate. This
+# component is dropped into pages that have no script to pair with -- the layout tool slots it into
+# a simulated screen, the picker shows two of them at once -- and a wheel that started animating
+# because it was embedded would be a component with an opinion about its own page.
+#
+# WHY IT LIVES HERE AND NOT IN THE PAGES. Two pages draw it: the game view, and gen_border_studio,
+# whose entire claim is that a choice made in it is a choice about the board. That claim holds only
+# while both draw the same rings from the same rules. A second copy is the fault this tree has paid
+# for three times, and the studio exists because of two scripts that died of it.
+MARK_FILL = "#4BA672"       # hue 146 deg -- see the note above about the gold
+MARK_PATH_LENGTH = 1000     # every marked path declares this, so one dash means one length
+MARK_DASH = (44, 28, 20, 62, 34, 36, 16, 74, 24, 54, 18, 68)
+MARK_PERIOD = 200.0         # of MARK_PATH_LENGTH, so the fixed pattern repeats with no seam
+MARK_SEGMENTS = 9           # the wave-driven variant
+MARK_SEGMENTS_V2 = 18       # half the run length; see gen_border_studio for the arithmetic
+MARK_ANTS = 14              # the marching-ants dash, which v2 is sized against
+
+MARK_EFFECTS = (("", "none"),
+                ("portal", "portal ring + four dots"),
+                ("segments", "portal ring, dynamic segments"),
+                ("segmentsv2", "portal ring, dynamic segments v2"),
+                ("steady", "steady"),
+                ("pulse", "pulse"),
+                ("ants", "marching ants"))
+
+
+def mark_dash(raw=MARK_DASH, period=MARK_PERIOD) -> str:
+    """The fixed portal pattern, rescaled to divide MARK_PATH_LENGTH a whole number of times.
+
+    The effect this came from sums to 478 against a circumference of 754, so its pattern restarts
+    part-way round and leaves a seam. Invisible on a smooth ring; here it would be nine seams in
+    nine places and would read as the artwork being wrong rather than the dashes.
+    """
+    k = period / sum(raw)
+    return " ".join("%.2f" % (v * k) for v in raw)
+
+
+def mark_defs(uid: str) -> str:
+    """The gradient and filters the marking needs, id-prefixed like everything else in this file."""
+    return (f'<linearGradient id="{uid}-mg" x1="0%" y1="0%" x2="100%" y2="100%">'
+            f'<stop class="dg-ms" offset="0%" stop-opacity=".28"/>'
+            f'<stop class="dg-ms" offset="20%" stop-opacity=".95"/>'
+            f'<stop class="dg-ms" offset="45%" stop-opacity=".70"/>'
+            f'<stop class="dg-ms" offset="70%" stop-opacity=".78"/>'
+            f'<stop class="dg-ms" offset="100%" stop-opacity=".28"/></linearGradient>'
+            f'<filter id="{uid}-mglow" x="-40%" y="-40%" width="180%" height="180%">'
+            f'<feGaussianBlur stdDeviation="2.4" result="b"/><feMerge>'
+            f'<feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+            f'<filter id="{uid}-msoft" x="-60%" y="-60%" width="220%" height="220%">'
+            f'<feGaussianBlur stdDeviation="11"/></filter>'
+            f'<filter id="{uid}-mdot" x="-300%" y="-300%" width="600%" height="600%">'
+            f'<feGaussianBlur stdDeviation="3.4" result="b"/><feMerge>'
+            f'<feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>')
+
+
+def mark_vars(uid: str) -> str:
+    """Those ids as custom properties on the svg root, so MARK_CSS can stay a constant.
+
+    Same arrangement PALETTE_CSS uses, and for the same reason: an inline <style> inside an SVG is
+    DOCUMENT-scoped, so two wheels on one page share one stylesheet and the last one written would
+    otherwise win for both. Names in the rules, ids on the element.
+    """
+    return (f"--dg-mgrad:url(#{uid}-mg);--dg-mglow:url(#{uid}-mglow);"
+            f"--dg-msoft:url(#{uid}-msoft);--dg-mdot:url(#{uid}-mdot)")
+
+
+def mark_paths(d: str) -> str:
+    """One tile's marking: the plain stroke, the two portal rings, and four dots to ride the edge.
+
+    All five are emitted whatever the effect, and each rule below turns on only what it needs. The
+    alternative -- emitting per effect -- would mean the markup changed when the dropdown did, and
+    the dropdown is a page thing.
+    """
+    pl = MARK_PATH_LENGTH
+    out = [f'<g class="dg-mark" style="--dg-p:path(\'{d}\')">']
+    for cls in ("dg-m", "dg-mring-soft", "dg-mring"):
+        out.append(f'<path class="{cls}" d="{d}" pathLength="{pl}"/>')
+    for k in range(1, 5):
+        out.append(f'<circle class="dg-mdot dg-md{k}" cx="0" cy="0" r="7"/>')
+    out.append("</g>")
+    return "".join(out)
+
+# Scoped to `[data-mark="1"]` on the tile and `[data-mark-effect]` on the svg. A page marks tiles
+# by setting the first and picks an effect with the second; absent either, every rule below is
+# inert and the marking costs nothing but markup.
+MARK_CSS = (
+    '.dg-ms{stop-color:var(--dg-mc,' + MARK_FILL + ')}'
+    '.dg-m,.dg-mring,.dg-mring-soft{fill:none;stroke:var(--dg-mc,' + MARK_FILL + ');'
+    'stroke-linejoin:round;stroke-linecap:round;opacity:0}'
+    '.dg-m{stroke-width:calc(var(--dg-msw,3.5)*1.7)}'
+    '.dg-mdot{fill:var(--dg-mc,' + MARK_FILL + ');opacity:0}'
+    '.dgt:not([data-mark="1"]) .dg-mark{display:none}'
+
+    'svg[data-mark-effect=steady] [data-mark="1"] .dg-m{opacity:.95}'
+    'svg[data-mark-effect=pulse] [data-mark="1"] .dg-m{opacity:.95;'
+    'animation:dg-pulse var(--dg-mdur,1800ms) ease-in-out infinite}'
+    '@keyframes dg-pulse{0%,100%{opacity:.30}50%{opacity:1}}'
+    'svg[data-mark-effect=ants] [data-mark="1"] .dg-m{opacity:.95;stroke-dasharray:'
+    + str(MARK_ANTS) + ' 12;animation:dg-ants var(--dg-mdur,1800ms) linear infinite}'
+    '@keyframes dg-ants{to{stroke-dashoffset:-' + str(MARK_ANTS + 12) + '}}'
+
+    'svg[data-mark-effect^=segments] [data-mark="1"] .dg-mring-soft,'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-mring-soft{opacity:1;stroke-opacity:.16;'
+    'stroke-width:calc(var(--dg-msw,3.5)*3.4);filter:var(--dg-msoft)}'
+    'svg[data-mark-effect^=segments] [data-mark="1"] .dg-mring,'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-mring{opacity:1;stroke:var(--dg-mgrad);'
+    'stroke-width:calc(var(--dg-msw,3.5)*1.5);filter:var(--dg-mglow)}'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-mring,'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-mring-soft{stroke-dasharray:'
+    + mark_dash() + ';animation:dg-orbit calc(var(--dg-mdur,1800ms)*6.1) linear infinite}'
+    '@keyframes dg-orbit{from{stroke-dashoffset:0}to{stroke-dashoffset:-'
+    + ("%g" % MARK_PERIOD) + '}}'
+
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-mdot{offset-path:var(--dg-p);'
+    'offset-rotate:0deg;filter:var(--dg-mdot)}'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-md1{animation:'
+    'dg-ride calc(var(--dg-mdur,1800ms)*3.8) linear infinite,'
+    'dg-p1 calc(var(--dg-mdur,1800ms)*1.2) ease-in-out infinite alternate}'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-md2{offset-distance:25%;animation:'
+    'dg-ride calc(var(--dg-mdur,1800ms)*5.3) linear infinite reverse,'
+    'dg-p2 calc(var(--dg-mdur,1800ms)*1.6) ease-in-out infinite alternate}'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-md3{offset-distance:50%;animation:'
+    'dg-ride calc(var(--dg-mdur,1800ms)*4.4) linear infinite,'
+    'dg-p3 calc(var(--dg-mdur,1800ms)*1.3) ease-in-out infinite alternate-reverse}'
+    'svg[data-mark-effect=portal] [data-mark="1"] .dg-md4{offset-distance:75%;animation:'
+    'dg-ride calc(var(--dg-mdur,1800ms)*6.3) linear infinite reverse,'
+    'dg-p4 calc(var(--dg-mdur,1800ms)*1.7) ease-in-out infinite alternate}'
+    '@keyframes dg-ride{from{offset-distance:0%}to{offset-distance:100%}}'
+    '@keyframes dg-p1{0%{opacity:.35;r:6px}50%{opacity:.95;r:8.4px}100%{opacity:.45;r:6.8px}}'
+    '@keyframes dg-p2{0%{opacity:.18;r:4.6px}50%{opacity:.58;r:6.2px}100%{opacity:.26;r:5.2px}}'
+    '@keyframes dg-p3{0%{opacity:.22;r:4.4px}50%{opacity:.74;r:7px}100%{opacity:.31;r:5.2px}}'
+    '@keyframes dg-p4{0%{opacity:.16;r:4.1px}50%{opacity:.50;r:5.7px}100%{opacity:.21;r:4.6px}}'
+
+    # Reduced motion has to be honoured HERE rather than left to the page, because the page cannot
+    # see these rules. The segment loop checks the same query itself -- it has no keyframes to
+    # suppress -- so both halves of the effect stop for the same reason.
+    '@media (prefers-reduced-motion:reduce){'
+    '[data-mark="1"] .dg-m,[data-mark="1"] .dg-mring,[data-mark="1"] .dg-mring-soft,'
+    '[data-mark="1"] .dg-mdot{animation:none!important}'
+    '[data-mark="1"] .dg-m{opacity:.95;stroke-dasharray:none;stroke-dashoffset:0}'
+    '[data-mark="1"] .dg-mdot{opacity:0}}')
+
+
+# The one effect that cannot be keyframes, and therefore the one thing here that needs a page.
+#
+# `segments` builds its dash array every frame from three sine waves at rates sharing no common
+# period, then scales the array to fit MARK_PATH_LENGTH exactly. That last step is what removes the
+# seam -- the pattern always closes on itself -- and it is also why one computation drives every
+# marked tile: normalised, the same string means the same thing on all nine outlines.
+#
+# CSS can interpolate between two states. It cannot be a function of time, and a figure that never
+# comes back round is not expressible as keyframes. So this is a script, and a page that wants that
+# effect has to run it; `duty_grid_svg` emits no script of its own.
+MARK_JS = """
+window.dgMark = (function(){
+  var raf = 0, reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  var SEG = %d, SEG2 = %d, PLEN = %d;
+  function pulse(x){ return 0.5 + 0.5 * Math.sin(x); }
+  function dashArray(t, n){
+    var v = [], total = 0;
+    for(var i = 0; i < n; i++){
+      var p = i * 0.83;
+      var lit = 14 + 24*pulse(t*1.15 + p) + 12*pulse(t*0.63 + p*1.9 + 0.7)
+                   + 8*pulse(t*1.87 + p*0.55 + 1.3);
+      var gap = 18 + 20*pulse(t*0.84 + p*1.4 + 2.1) + 10*pulse(t*1.42 + p*0.9 + 0.4);
+      v.push(lit, gap); total += lit + gap;
+    }
+    var k = PLEN / total;
+    return v.map(function(x){ return (x*k).toFixed(2); }).join(' ');
+  }
+  // Clearing the inline styles on the way out is not tidiness. Inline beats the stylesheet, so a
+  // dash array left behind here would override the one `ants` sets and quietly corrupt every other
+  // effect -- visible only after visiting this one first.
+  function clear(svg){
+    var r = svg.querySelectorAll('.dg-mring, .dg-mring-soft');
+    for(var i = 0; i < r.length; i++){
+      r[i].style.strokeDasharray = ''; r[i].style.strokeDashoffset = '';
+    }
+  }
+  return function(svg, effect, durMs){
+    if(raf){ cancelAnimationFrame(raf); raf = 0; }
+    clear(svg);
+    if(!svg || !effect || effect.indexOf('segments') !== 0 || reduced.matches) return;
+    var n = effect === 'segmentsv2' ? SEG2 : SEG, dur = durMs || 1800;
+    (function frame(ms){
+      var t = ms / 1000 * (1800 / dur);
+      var d = dashArray(t, n);
+      var o = (-42*t - 10*Math.sin(t*0.55)).toFixed(2);
+      var r = svg.querySelectorAll('[data-mark="1"] .dg-mring, [data-mark="1"] .dg-mring-soft');
+      for(var i = 0; i < r.length; i++){
+        r[i].style.strokeDasharray = d; r[i].style.strokeDashoffset = o;
+      }
+      raf = requestAnimationFrame(frame);
+    })(performance.now());
+  };
+})();
+""" % (MARK_SEGMENTS, MARK_SEGMENTS_V2, MARK_PATH_LENGTH)
+
 JOINS = TILES / "joins.json"
 # Where each tile sits, and how big it is relative to its square. Written by
 # `gen_tile_offsets.py --serve` and read here, for the same reason ui/layout.json is: without the
@@ -1147,11 +1354,19 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             im = shrink(path)
             mats[i] = {m: palette_matrix(im, ref, m) for m in palettes}
 
+    # The marking rides along whenever eligibility is known, and is inert until a page sets
+    # `data-mark-effect` here and `data-mark` on a tile. `--dg-msw` is the board's own edge weight,
+    # so every marking rule scales from the line it is laid over rather than from a number of its
+    # own.
+    marking = live is not None
+    root_style = ((' style="%s;--dg-msw:%.2f"' % (mark_vars(uid), box * EDGE_STROKE))
+                  if marking else "")
     out = [f'<svg class="{klass}" viewBox="0 0 {box} {box}" '
            f'xmlns="http://www.w3.org/2000/svg" role="img" '
-           f'data-palette="{palette or "none"}" '
+           f'data-palette="{palette or "none"}"{root_style} '
            f'aria-label="Duty wheel, nine tiles">'
-           f'<style>{HOVER_CSS}{PALETTE_CSS}</style><defs>'
+           f'<style>{HOVER_CSS}{PALETTE_CSS}{MARK_CSS if marking else ""}</style><defs>'
+           + (mark_defs(uid) if marking else ""),
            f'<filter id="{uid}-dim" color-interpolation-filters="sRGB">{DIM}</filter>'
            f'<filter id="{uid}-lit" color-interpolation-filters="sRGB">{LIT}</filter>']
     for i, d in enumerate(shapes):
@@ -1218,6 +1433,9 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
         out.append(f'<path d="{d}" fill="none" stroke="{INK}" stroke-opacity="0.85" '
                    f'stroke-width="{box * EDGE_STROKE:.2f}" stroke-linejoin="round" '
                    f'class="dg-edge"/>')
+        # After the edge so it lies over it, before the hit areas so it never intercepts a pointer.
+        if marking:
+            out.append(mark_paths(d))
         # The hit areas, last so they sit on top, clipped so only the tile itself responds.
         #
         # EMITTED ON EVERY TILE, including the ones the active seat cannot use. These carry more
