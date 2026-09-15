@@ -373,3 +373,93 @@ def test_both_modules_read_the_same_panorama():
     assert tool.panorama_uri() == dg.panorama_uri(), (
         "the layout tool embeds a different file from gen_duty_grid.panorama_uri(). The two paths "
         "have drifted; one of them is pointing somewhere that no longer exists.")
+
+
+def test_the_field_is_cropped_and_not_stretched():
+    """`cover`, and this is the one property of the background that varies with the screen.
+
+    `100% 100%` stretches: a 2.600:1 panorama on a 1.758:1 laptop is squashed by a third, every
+    figure short and wide and the engraving's line weight anisotropic. `cover` keeps the aspect and
+    crops to the middle instead -- which is also where the composition is empty, so it is the
+    better picture rather than a consolation. Measured through the real exposed ground inside the
+    duty wheel, stretching put 15.5% of the channel area over L50 at 1512x860 against a CEILING of
+    50; cropping puts the board on the composed middle at every size.
+
+    A revert to `100% 100%` is invisible on the screen this was composed for -- the crop there is
+    3 px of height -- so it would be found on a laptop, months later, as "the art looks wrong".
+    """
+    gv = render_module("gen_game_view")
+    tool = render_module("gen_layout_tool")
+    for name, css, selector in (("gen_game_view", gv.CSS, "html,body"),
+                                ("gen_layout_tool", tool.PAGE, "#screen")):
+        decl = rule(css, selector)
+        assert decl and "/cover" in decl, (
+            "%s's `%s` does not size the panorama with `cover` (%r). `100%% 100%%` stretches the "
+            "picture to the viewport and squashes it on anything narrower than 2.6:1."
+            % (name, selector, (decl or "").strip()))
+        assert "100% 100%" not in decl.replace("%%", "%"), (
+            "%s's `%s` still carries a `100%% 100%%` size alongside `cover`." % (name, selector))
+
+
+def wheel_in_panorama(screen, fit):
+    """Which rectangle of the panorama the duty wheel covers, as fractions of the picture.
+
+    Both the board and the background are centred on the viewport, so this is arithmetic rather
+    than rendering: the board is zoom-to-fitted to the canvas, and the background is laid out by
+    `fit` -- either stretched to the viewport or `cover`-scaled and centre-cropped.
+    """
+    import json
+    SW, SH = screen
+    L = json.load(open(REPO / "ui" / "layout.json"))
+    gv = render_module("gen_game_view")
+    G = gv.geometry(L)
+    CW, CH = L["canvas_width"], L["canvas_height"]
+    zoom = min(SW / CW, SH / CH)
+    ox, oy = (SW - CW * zoom) / 2, (SH - CH * zoom) / 2
+    wx1 = CW - G["pad"]; wx0 = wx1 - G["wheel"]
+    wy0 = G["top_h"] + G["banner_h"]; wy1 = wy0 + G["wheel"]
+    sx0, sx1 = ox + wx0 * zoom, ox + wx1 * zoom
+    sy0, sy1 = oy + wy0 * zoom, oy + wy1 * zoom
+    if fit == "stretch":                       # the picture is the viewport
+        return sx0 / SW, sx1 / SW, sy0 / SH, sy1 / SH
+    from PIL import Image
+    PW, PH = Image.open(PANORAMA).size         # cover: scaled to cover, then centre-cropped
+    s = max(SW / PW, SH / PH)
+    dw, dh = PW * s, PH * s
+    px, py = (SW - dw) / 2, (SH - dh) / 2      # negative: the picture overhangs the viewport
+    return (sx0 - px) / dw, (sx1 - px) / dw, (sy0 - py) / dh, (sy1 - py) / dh
+
+
+def test_cover_puts_the_wheel_on_the_same_piece_of_picture_at_every_size():
+    """The invariant `cover` actually buys, and the reason it is not merely an aesthetic choice.
+
+    Stretched, the share of the panorama the board covers grows as the screen narrows, because the
+    canvas is 4:3 and zoom-fitted while the picture is pinned to the viewport: at 3440x1320 the
+    wheel sits over 47.1%-75.1% of the picture, and at 1512x860 over 45.6%-87.3% -- which is out
+    past where the right half's shrine begins. Under `cover` both the board and the picture scale
+    with the screen's height, so the wheel lands on the SAME rectangle of the painting on every
+    display narrower than the panorama.
+
+    That is what made the ceiling reading stop varying. Measured through the real exposed ground
+    inside the wheel, over L50: 2.2%, 2.8%, 14.5%, 14.3%, 15.5% stretched across the five screens
+    in gen_layout_tool.SCREENS; 2.2%, 2.8%, 2.9%, 2.9%, 2.9% cropped.
+
+    Tested as geometry rather than as a render because it IS geometry -- and because a guard that
+    needed a browser could not run in the ui lane at all.
+    """
+    narrow = [(2560, 1300), (1920, 940), (1512, 860)]
+    boxes = [wheel_in_panorama(s, "cover") for s in narrow]
+    for got, screen in zip(boxes[1:], narrow[1:]):
+        assert all(abs(a - b) < 1e-6 for a, b in zip(got, boxes[0])), (
+            "under `cover` the wheel covers %s of the panorama at %s but %s at %s. Both the board "
+            "and the picture are meant to scale with the screen's height, so this rectangle is "
+            "supposed to be the same on every display narrower than 2.6:1."
+            % (tuple(round(v, 4) for v in got), screen,
+               tuple(round(v, 4) for v in boxes[0]), narrow[0]))
+
+    # and the guard has to know that this was NOT already true, or it is asserting a tautology
+    spread = [wheel_in_panorama(s, "stretch") for s in narrow]
+    assert not all(abs(a - b) < 1e-6 for a, b in zip(spread[-1], spread[0])), (
+        "stretched, the wheel already covers the same piece of the panorama at every size -- so "
+        "this guard is not distinguishing `cover` from `100%% 100%%` and proves nothing. Check "
+        "whether the canvas stopped being zoom-fitted.")

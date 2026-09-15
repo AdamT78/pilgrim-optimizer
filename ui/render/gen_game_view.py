@@ -452,11 +452,28 @@ CSS = """
    own `#stage{flex:1}` and why the ground looked right there and wrong here. Same declaration,
    different element, and the element was the bug.
 
+   `cover`, NOT `100%% 100%%`, and the difference is the whole behaviour on anything but an
+   ultrawide. `100%% 100%%` stretches the picture to the viewport, so a 2.600:1 panorama on a
+   1.758:1 laptop is squashed by a third -- every figure short and wide, and the engraving's line
+   weight anisotropic. `cover` keeps the aspect and crops instead: the screen gets the MIDDLE of
+   the panorama at true proportions, and what falls off the ends is the outer quarter each prompt
+   was told to put the subject in.
+
+   That crop is not a consolation, it is the better picture on those screens, and it is measurable.
+   The canvas is 4:3 and zoom-to-fitted, so the narrower the display the WIDER the share of it the
+   board takes -- 24.4%%-75.6%% at 3440x1320 against 12.1%%-87.9%% at 1512x860. Stretched, that put
+   the right half's shrine and candles directly under the duty wheel's channels: measured through
+   the real exposed ground inside the wheel, 15.5%% of it sat over L50 against a CEILING of 50 and
+   a tile-edge luminance of 53.4. Cropped, the board lands on the composed middle at every size.
+
+   On a 2.606:1 display the crop is 3 px of height, so this changes nothing about the screen it
+   was composed for.
+
    The colour comes LAST. In a multi-layer `background` shorthand the colour must be the final
    value; put it first, as the old stage rule could because it had one layer, and the whole
    declaration is dropped and the page is white. */
 html,body{height:100%%;margin:0;overflow:hidden;
-  background:url(%(panorama)s) center/100%% 100%% no-repeat #0b0a08}
+  background:url(%(panorama)s) center/cover no-repeat #0b0a08}
 #gv-fit{position:absolute;inset:0}
 
 /* Transparent, deliberately and not by omission: `background:none` on a stage that used to paint

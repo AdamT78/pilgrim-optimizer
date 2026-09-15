@@ -398,10 +398,14 @@ body{margin:0;background:#12140f;color:#E8E2D3;font:13px/1.5 "Iowan Old Style",G
 #view{flex:1;overflow:auto;background:#0b0d09;padding:12px}
 #fitwrap{position:relative}
 /* THE GROUND, on the simulated screen rather than on the canvas -- see the note on `.t-stage`.
-   #screen is sized to the chosen screen's vw x vh in JS, so `100%% 100%%` here is the same crop
-   the real page gets from `html,body`. Colour LAST in the shorthand, or the declaration drops. */
+   #screen is sized to the chosen screen's vw x vh in JS, so it is this tool's viewport and
+   `cover` here gives the same crop the real page gets from `html,body`. That matters more than
+   it looks: `cover` is the one property of this background that VARIES with the screen being
+   simulated, so a tool that used `100%% 100%%` while the page used `cover` would show the right
+   framing on an ultrawide and the wrong one on every other entry in the list -- which is exactly
+   the list this tool exists to check. Colour LAST, or the declaration drops. */
 #screen{position:relative;transform-origin:top left;outline:1px solid #2c3327;
-  background:url(%(panorama)s) center/100%% 100%% no-repeat #000}
+  background:url(%(panorama)s) center/cover no-repeat #000}
 #legend{margin-top:10px;font:11.5px/1.7 ui-monospace,Menlo,monospace;color:#8fa286}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   margin-right:5px}
