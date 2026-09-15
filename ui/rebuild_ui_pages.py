@@ -63,6 +63,11 @@ GENERATORS = [
     # which is exactly the coupling a rebuild sweep is for. It also redirects that exec's own page
     # write, so watch for board-3-2-step1.html appearing twice in a run if that ever regresses.
     ("gen_game_view.py", [], "game-view.html"),
+    # Named here for the reason the sweep exists. This one reads nine shapes, two colours and a
+    # stroke weight out of gen_duty_grid, and every one of those is a name that can be renamed
+    # somewhere else -- which is exactly how the two throwaway scripts it replaces died, silently,
+    # months before anyone opened them.
+    ("gen_border_studio.py", [], "duty-border-studio.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.

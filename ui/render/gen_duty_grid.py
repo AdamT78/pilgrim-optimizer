@@ -414,12 +414,21 @@ LIT = ('<feColorMatrix type="saturate" values="1.20"/><feComponentTransfer>'
 # So the halves are hit areas stacked over the art and the lighting is selected by `:has()`,
 # which needs no script at all. Chrome 105+, Safari 15.4+, Firefox 121+; where `:has()` is
 # missing nothing lights and the board is merely static, which is the right way to fail.
+# The edge, named rather than written twice. Both numbers below were literals at their use sites
+# until a second page needed to draw the same edge: gen_border_studio lays candidate markings over
+# it, and a studio whose baseline is a different weight or a different gold from the board's is
+# measuring against the wrong thing. That is the fault this tree keeps paying for, so the values
+# live here and both readers take them from here.
+EDGE_STROKE = 0.0035        # of the box, so 3.5 units at the traced 1000
+EDGE_HOVER = "#d8b23a"      # gold, and the ONLY thing on the board that says "yours to take"
+
 HOVER_CSS = ('.dgt .dg-lit{opacity:0}'
              '.dg-hit{fill:transparent}'
              '.dgt:not([data-eligible="0"]):has(.dg-hit-f:hover) .dg-lit-F{opacity:1}'
              '.dgt:not([data-eligible="0"]):has(.dg-hit-l:hover) .dg-lit-L{opacity:1}'
              '.dgt:not([data-eligible="0"]):has(.dg-hit-r:hover) .dg-lit-R{opacity:1}'
-             '.dgt:not([data-eligible="0"]):has(.dg-hit:hover) .dg-edge{stroke:#d8b23a;stroke-opacity:1}')
+             '.dgt:not([data-eligible="0"]):has(.dg-hit:hover) .dg-edge{stroke:' + EDGE_HOVER +
+             ';stroke-opacity:1}')
 # Where a two-action tile's scenes meet, as a fraction of its width. Measured: every source pair
 # splits at 0.4993-0.5035 and every merge keeps it, so this is 0.5 and joins.json records why.
 # Read rather than assumed, so a tile that ever genuinely differs is one file away.
@@ -1207,7 +1216,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
         else:
             out.append(f'<path d="{d}" fill="{TILE_FILLS[i % len(TILE_FILLS)]}"/>')
         out.append(f'<path d="{d}" fill="none" stroke="{INK}" stroke-opacity="0.85" '
-                   f'stroke-width="{box * 0.0035:.2f}" stroke-linejoin="round" class="dg-edge"/>')
+                   f'stroke-width="{box * EDGE_STROKE:.2f}" stroke-linejoin="round" '
+                   f'class="dg-edge"/>')
         # The hit areas, last so they sit on top, clipped so only the tile itself responds.
         #
         # EMITTED ON EVERY TILE, including the ones the active seat cannot use. These carry more

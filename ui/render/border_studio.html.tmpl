@@ -1,0 +1,189 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Duty Border Studio</title>
+<style>
+:root{--panel:#E5D8B9;--ink:#2A2320;--emerald:#4BA672;--gold:%(gold)s;--cool:#cfe3ea;
+      --seat:#7d9b52;--sw:%(sw)s;--dur:1800ms;--c:var(--emerald)}
+*{box-sizing:border-box}
+body{margin:0;background:#12100d;color:#EDE6D6;
+  font:14px/1.5 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+header{padding:20px 24px 0}
+h1{font-size:20px;margin:0 0 3px}
+.sub0{color:#9FC49A;font-size:12.5px;margin:0;max-width:940px}
+.wrap{display:flex;gap:22px;align-items:flex-start;padding:18px 24px 34px;flex-wrap:wrap}
+.panel{background:var(--panel);color:var(--ink);border:1.35px solid var(--ink);border-radius:11px;
+  padding:14px 16px 16px;width:clamp(280px,100%%,364px);flex:0 0 auto}
+.row{display:flex;align-items:flex-start;gap:10px;margin:12px 0}
+.rlab{width:82px;font-weight:700;font-size:12.5px;padding-top:6px;flex:0 0 auto}
+.opts{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+select{width:100%%;padding:6px 8px;border:1px solid #A89B7E;border-radius:7px;background:#EFE6CC;
+  color:var(--ink);font:13px Georgia,serif}
+button.opt{padding:5px 9px;cursor:pointer;background:#EFE6CC;border:1px solid #A89B7E;
+  border-radius:7px;color:var(--ink);font:12px Georgia,serif}
+button.opt:hover{background:#F6EFD9}
+button.opt[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+input[type=range]{width:100%%}
+.hint{font-size:11.5px;color:#5d5443;margin:9px 0 0;line-height:1.45}
+.stage{flex:1 1 520px;min-width:300px;background:#1b1813;border-radius:12px;padding:10px}
+svg{display:block;width:100%%;height:auto}
+.fillp{fill:#272219}
+.edge{fill:none;stroke:%(ink)s;stroke-opacity:.85;stroke-width:var(--sw);stroke-linejoin:round}
+.tname{fill:#8d8471;font:600 30px Georgia,serif;text-anchor:middle;pointer-events:none}
+.tsub{fill:#6b6354;font:22px Georgia,serif;text-anchor:middle;pointer-events:none}
+.cnt{fill:#c9bfa4;font:600 30px Georgia,serif;pointer-events:none}
+.ps{stop-color:var(--c)}
+
+.mark,.pring,.pring-soft{fill:none;stroke:var(--c);
+  stroke-linejoin:round;stroke-linecap:round;opacity:0}
+.mark{stroke-width:calc(var(--sw)*1.7)}
+.dot{fill:var(--c);opacity:0}
+.tile:not(.on) .markwrap{display:none}
+
+body[data-anim=steady] .on .mark{opacity:.95}
+body[data-anim=pulse]  .on .mark{opacity:.95;animation:pulse var(--dur) ease-in-out infinite}
+@keyframes pulse{0%%,100%%{opacity:.30}50%%{opacity:1}}
+body[data-anim=ants] .on .mark{opacity:.95;stroke-dasharray:14 12;animation:ants var(--dur) linear infinite}
+@keyframes ants{to{stroke-dashoffset:-26}}
+
+/* ---- PORTAL: the attached ring effect, on the torn outline ------------------------------- */
+body[data-anim=portal] .on .pring-soft{opacity:1;stroke:var(--c);stroke-opacity:.16;
+  stroke-width:calc(var(--sw)*3.4);filter:url(#soft);
+  stroke-dasharray:%(dash)s;animation:orbit calc(var(--dur)*6.1) linear infinite}
+body[data-anim=portal] .on .pring{opacity:1;stroke:url(#pg);
+  stroke-width:calc(var(--sw)*1.5);filter:url(#glowSmall);
+  stroke-dasharray:%(dash)s;animation:orbit calc(var(--dur)*6.1) linear infinite}
+@keyframes orbit{from{stroke-dashoffset:0}to{stroke-dashoffset:-%(half)s}}
+body[data-anim=portal] .on .dot{offset-path:var(--p);offset-rotate:0deg;filter:url(#dotGlow)}
+body[data-anim=portal] .on .d1{animation:ride calc(var(--dur)*3.8) linear infinite,
+  p1 calc(var(--dur)*1.2) ease-in-out infinite alternate}
+body[data-anim=portal] .on .d2{animation:ride calc(var(--dur)*5.3) linear infinite reverse,
+  p2 calc(var(--dur)*1.6) ease-in-out infinite alternate}
+body[data-anim=portal] .on .d3{animation:ride calc(var(--dur)*4.4) linear infinite,
+  p3 calc(var(--dur)*1.3) ease-in-out infinite alternate-reverse}
+body[data-anim=portal] .on .d4{animation:ride calc(var(--dur)*6.3) linear infinite reverse,
+  p4 calc(var(--dur)*1.7) ease-in-out infinite alternate}
+body[data-anim=portal] .on .d2{offset-distance:25%%}
+body[data-anim=portal] .on .d3{offset-distance:50%%}
+body[data-anim=portal] .on .d4{offset-distance:75%%}
+@keyframes ride{from{offset-distance:0%%}to{offset-distance:100%%}}
+@keyframes p1{0%%{opacity:.35;r:6px}50%%{opacity:.95;r:8.4px}100%%{opacity:.45;r:6.8px}}
+@keyframes p2{0%%{opacity:.18;r:4.6px}50%%{opacity:.58;r:6.2px}100%%{opacity:.26;r:5.2px}}
+@keyframes p3{0%%{opacity:.22;r:4.4px}50%%{opacity:.74;r:7px}100%%{opacity:.31;r:5.2px}}
+@keyframes p4{0%%{opacity:.16;r:4.1px}50%%{opacity:.50;r:5.7px}100%%{opacity:.21;r:4.6px}}
+
+@media (prefers-reduced-motion:reduce){
+  .on .mark,.on .pring,.on .pring-soft,.on .dot{animation:none!important}
+  .on .mark{opacity:.95;stroke-dasharray:none;stroke-dashoffset:0}
+  .on .dot{opacity:0}
+}
+.notes{padding:0 24px 40px;max-width:1000px}
+.notes p{color:#a8a08c;font-size:12.5px;line-height:1.6}
+.notes b{color:#EDE6D6}
+code{background:#241f18;padding:1px 5px;border-radius:3px;font-size:11.5px}
+.warn{color:#e0a37a}
+@media (max-width:760px){.panel{width:100%%}.stage{flex-basis:100%%}}
+</style></head><body data-anim="portal">
+<header>
+<h1>Duty Border Studio</h1>
+<p class="sub0">The nine outlines are the real traced shapes from
+<code>duty_grid_shapes.json</code>, at the board's own stroke width, over the ink edge the board
+already draws.</p>
+</header>
+<div class="wrap">
+<div class="panel">
+  <div class="row"><div class="rlab">State</div><div class="opts">
+    <select id="state"></select></div></div>
+  <div class="row"><div class="rlab">Effect</div><div class="opts">
+    <select id="anim"></select></div></div>
+  <div class="row"><div class="rlab">Marked</div><div class="opts" id="which"></div></div>
+  <div class="row"><div class="rlab">Speed</div><div class="opts" style="flex-direction:column">
+    <input type="range" id="dur" min="500" max="4000" step="50" value="1800">
+    <span class="hint" id="durlab"></span></div></div>
+  <p class="hint" id="explain"></p>
+  <p class="hint" id="support"></p>
+</div>
+<div class="stage">
+<svg viewBox="0 0 %(box)d %(box)d" id="wheel"><defs><linearGradient id="pg" x1="0%%" y1="0%%" x2="100%%" y2="100%%"><stop class="ps" offset="0%%" stop-opacity=".28"/><stop class="ps" offset="20%%" stop-opacity=".95"/><stop class="ps" offset="45%%" stop-opacity=".70"/><stop class="ps" offset="70%%" stop-opacity=".78"/><stop class="ps" offset="100%%" stop-opacity=".28"/></linearGradient><filter id="glowSmall" x="-40%%" y="-40%%" width="180%%" height="180%%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="soft" x="-60%%" y="-60%%" width="220%%" height="220%%"><feGaussianBlur stdDeviation="11"/></filter><filter id="dotGlow" x="-300%%" y="-300%%" width="600%%" height="600%%"><feGaussianBlur stdDeviation="3.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>%(body)s</svg>
+</div>
+</div>
+<div class="notes">
+<p><b>Gold is already spoken for.</b> The hover rule turns <code>.dg-edge</code>
+<code>#d8b23a</code>, gated on <code>data-eligible</code>, and that is the only thing on the board
+saying &ldquo;this is yours to take&rdquo;. A persistent mark wants a different <i>kind</i> of
+signal, not a different shade &mdash; <code>#4BA672</code> at hue 146&deg; is the one already
+designed for it.</p>
+<p><b>The portal's dash pattern was rescaled, and that matters more here than on a circle.</b> The
+original sums to 478 against a circumference of 754, so the pattern restarts part-way round and
+leaves a seam &mdash; invisible enough on a smooth ring. Rescaled to 200 it divides
+<code>pathLength="%(plen)d"</code> exactly five times, so there is no seam on any tile, one dash means
+the same length on all nine, and the offset animates by exactly one period.</p>
+<p><b>The orbiting dots use <code>offset-path</code>, not rotation.</b> The original rotates each
+dot about the circle's centre at a fixed radius, which only describes a circle. On a torn outline
+the dots have to follow the actual path. One caveat the panel reports live: <code>offset-path</code>
+does <i>not</i> honour <code>pathLength</code>, so the dots take the same time to go round each
+tile while the perimeters differ by about 9&percnt; &mdash; the dashes stay in lockstep, the dots
+drift apart. At these speeds it reads as life rather than as error, but it is drift, not design.</p>
+<p><b>A border marks a whole tile, and %(twocount)d of the nine carry two actions.</b> Kept as a caveat rather
+than a control, because the control was worse: clipping a closed outline to one half does not give
+you half a border, it gives you a cut one, and it reads as damage. So if eligibility after a Sow is
+ever per action rather than per tile, the border can only say &ldquo;something here&rdquo; &mdash;
+the half-art lighting the hover already uses (<code>dg-lit-L</code> / <code>dg-lit-R</code>) is the
+thing that knows how to mean half a tile.</p>
+<p><b>None of this survives the PNG path.</b> CSS animation is a browser thing; CairoSVG renders the
+static state. Same renderer-dependence that got an SVG filter rejected for the serf compositing.
+Keep frame zero legible on its own: <i>steady</i> survives it, <i>pulse</i> at 0&percnt; does not,
+and <i>portal</i> at frame zero is a dashed ring with the four dots stacked at the path start.</p>
+<p><b>Reduced motion is honoured</b> &mdash; every effect falls back to the steady mark, and the
+portal drops its dots entirely. This marking is how a player is told what they may do, so it cannot
+be the only channel.</p>
+</div>
+<script>
+const STATE = %(states)s;
+const ANIMS=%(effects)s;
+const WHICH=[['some','as listed'],['all','all nine'],['one','just one']];
+const S={state:'take',anim:'portal',which:'some',dur:1800};
+const svg=document.getElementById('wheel');
+const COUNTS=%(counts)s, ELIGIBLE=%(eligible)s;
+
+function fillSelect(el,items,key){
+  el.innerHTML=items.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  el.value=S[key];
+  el.onchange=()=>{S[key]=el.value;apply();};
+}
+function fillBtns(host,items,key){
+  host.innerHTML=items.map(([v,l])=>
+    `<button class="opt" data-k="${key}" data-v="${v}">${l}</button>`).join('');
+  host.querySelectorAll('button').forEach(b=>b.onclick=()=>{S[b.dataset.k]=b.dataset.v;apply();});
+}
+fillSelect(document.getElementById('state'),
+  Object.entries(STATE).map(([k,v])=>[k,v.label]),'state');
+fillSelect(document.getElementById('anim'),ANIMS,'anim');
+fillBtns(document.getElementById('which'),WHICH,'which');
+
+function apply(){
+  const st=STATE[S.state];
+  document.body.dataset.anim=S.anim;
+  document.body.style.setProperty('--dur',S.dur+'ms');
+  svg.style.setProperty('--c',st.colour);
+  document.getElementById('durlab').textContent=S.dur+' ms base cycle';
+  document.getElementById('explain').innerHTML=st.note;
+  [...svg.querySelectorAll('.tile')].forEach(g=>{
+    const i=+g.dataset.i;
+    let on = S.which==='all' ? true : S.which==='one' ? i===1 : ELIGIBLE.includes(i);
+    if(S.state!=='take') on = COUNTS[i]>0 && (S.which==='one' ? i===1 : true);
+    g.classList.toggle('on',on);
+    g.querySelector('.cnt').textContent =
+      (S.state==='take') ? '' : (COUNTS[i] ? COUNTS[i]+' ●' : '');
+  });
+  document.querySelectorAll('button.opt').forEach(b=>
+    b.setAttribute('aria-pressed',S[b.dataset.k]===b.dataset.v));
+}
+// Say plainly whether this browser can do the dots, rather than showing nothing and looking broken.
+const ok = CSS.supports('offset-path','path("M0 0 L1 1")');
+document.getElementById('support').innerHTML = ok
+  ? 'offset-path supported — the dots follow the real outline.'
+  : '<span class="warn">This browser has no offset-path, so the portal’s dots cannot follow '
+    + 'the outline and are hidden. The ring still runs.</span>';
+if(!ok) document.querySelectorAll('.dot').forEach(d=>d.style.display='none');
+apply();
+</script></body></html>

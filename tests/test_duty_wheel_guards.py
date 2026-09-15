@@ -1168,3 +1168,92 @@ def test_a_row_of_counts_must_match_the_seats_at_the_table():
                         seats=("sage", "pewter"), active="bone")
     assert g.eligible_tiles([[0, 1]] * 9, "pewter", ("sage", "pewter")) == set(range(9))
     assert g.eligible_tiles([[0, 1]] * 9, "sage", ("sage", "pewter")) == set()
+
+
+# ---------------------------------------------------------------------------------------------
+# THE BORDER STUDIO, which draws the wheel's outlines and must not draw its own.
+#
+# gen_border_studio lays candidate markings over the tile edge so a choice made in it is a choice
+# about the board. That only holds while the edge it draws IS the board's edge -- same nine shapes,
+# same stroke weight, same ink, same gold under the hover. A studio that drifted would still look
+# entirely convincing; it would just be answering a question about a different board.
+#
+# Two scripts in this project already died of that, and one of them kept captioning its baseline
+# with a design that had been replaced weeks earlier. The guards below are the cheap version of
+# never doing it a third time.
+
+
+def studio():
+    import importlib.util
+    path = REPO / "ui" / "render" / "gen_border_studio.py"
+    if not path.is_file():
+        pytest.skip("gen_border_studio.py is not in this checkout")
+    spec = importlib.util.spec_from_file_location("_studio", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_studio_draws_the_wheels_own_edge():
+    """Nine shapes, the board's stroke weight, the board's ink, the board's gold.
+
+    All four are read from gen_duty_grid at build time rather than written into the studio, so this
+    guard is really asserting that they still CAN be: it fails the moment one of those names moves
+    and the studio starts carrying a copy instead.
+    """
+    st = studio()
+    dg = st.grid()
+    page = st.build(dg)
+    import json
+    box = json.loads(dg.SHAPES.read_text())["box"]
+    assert page.count('class="tile"') == 9, (
+        "the studio drew %d tiles, not nine." % page.count('class="tile"'))
+    assert 'stroke-width:var(--sw)' in page and '--sw:%.2f' % (box * dg.EDGE_STROKE) in page, (
+        "the studio's baseline edge is not %.2f, the board's own stroke weight. A comparison "
+        "against a heavier or lighter edge than the board draws is a comparison against nothing."
+        % (box * dg.EDGE_STROKE))
+    assert dg.INK in page, "the studio's edge is not the board's ink %s." % dg.INK
+    # `--gold:` and not merely "the string appears somewhere". It appears in the studio's own
+    # prose as well, so the loose version of this assertion passed while the declaration carried a
+    # completely different colour -- and the only reason that was found is that falsifying it
+    # reported NO. A guard that cannot fail is worth nothing, and this one could not.
+    assert ("--gold:%s" % dg.EDGE_HOVER) in page, (
+        "the studio's --gold is not the board's %s. That colour is the one thing on the board "
+        "already meaning 'yours to take', and the studio's whole argument for proposing a "
+        "different hue is that it can see the one that is taken." % dg.EDGE_HOVER)
+
+
+def test_the_portal_dashes_divide_the_path_evenly():
+    """No seam, on any of the nine, and that is arithmetic rather than taste.
+
+    The effect this came from sums to 478 against a circumference of 754, so its pattern restarts
+    part-way round the ring. On a smooth circle that is invisible; on nine torn outlines with
+    different perimeters it would be nine visible seams in nine different places, and it would read
+    as the artwork being wrong rather than the dash pattern.
+    """
+    st = studio()
+    total = sum(float(v) for v in st.dash_pattern().split())
+    assert abs(total - st.PORTAL_PERIOD) < 0.05, (
+        "the rescaled dash pattern sums to %.2f, not the %.2f it is meant to."
+        % (total, st.PORTAL_PERIOD))
+    reps = st.PATH_LENGTH / st.PORTAL_PERIOD
+    assert abs(reps - round(reps)) < 1e-9, (
+        "the pattern repeats %.3f times in a pathLength of %d. It has to be a whole number or the "
+        "last dash meets the first mid-stride and every tile shows a seam."
+        % (reps, st.PATH_LENGTH))
+
+
+def test_the_studio_marks_no_duty_it_was_not_told_to():
+    """Its eligibility is a fixture, and it has to stay one.
+
+    Which duties are open after a Sow is a rules question, and three arrangements in this repo
+    still disagree about which duty is mancala position n. A studio that started deriving its own
+    answer would be quietly asserting one of them.
+    """
+    st = studio()
+    assert set(st.DEMO_ELIGIBLE) <= set(range(9)), "a demo index outside the nine tiles"
+    assert len(st.DEMO_COUNTS) == 9, "the demo acolyte counts are not nine numbers"
+    src = (REPO / "ui" / "render" / "gen_border_studio.py").read_text()
+    assert "GameState" not in src and "sow_vector" not in src, (
+        "gen_border_studio has started reaching into the engine. It draws candidate markings; "
+        "what is actually eligible is not its question.")
