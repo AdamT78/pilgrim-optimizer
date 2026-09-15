@@ -844,15 +844,29 @@ def main():
     # So the drawing takes counts keyed by DUTY, the caller supplies them, and this caller is
     # still a fixture. Wiring it to a real GameState is a rules question first: given a state,
     # which duty is mancala position n.
-    acolytes = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
-                [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]
+    #
+    # Written out for all four seats and then PROJECTED onto the ones actually playing, rather
+    # than sliced. `--seats` can name any subset in any order, so `row[:len(seats)]` would hand
+    # the third player's counts to whoever happens to be third in the list -- right for the
+    # default order and wrong for every other, which is the quiet kind of wrong.
+    FIXTURE = {
+        "sage":   [2, 1, 0, 3, 0, 1, 2, 0, 1],
+        "pewter": [1, 0, 2, 0, 0, 1, 0, 1, 0],
+        "plum":   [0, 0, 1, 2, 0, 1, 0, 0, 3],
+        "bone":   [3, 0, 0, 1, 0, 1, 0, 2, 0],
+    }
+    acolytes = [[FIXTURE[seat][i] for seat in seats] for i in range(9)]
     # `active=lit`, the SAME value that decides which player board is drawn lit. Whose turn it is
     # is one fact, and the wheel and the boards now read it from one place -- so a board can never
     # be lit for one seat while the wheel stays open to another. Passing it also closes every duty
     # that seat has no acolytes on: those tiles are drawn exactly as before and simply stop
     # responding, because a duty you have nobody standing on is not one you can act through.
+    # `seats` and `active=lit` are the SAME values the player boards are built from, so the wheel
+    # cannot disagree with them about who is playing or whose turn it is. At two or three players
+    # the row under each tile is that many figures, centred; a seat with none on a tile is drawn
+    # as nothing at all rather than as a figure labelled 0.
     wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid",
-                             acolytes=acolytes, active=lit)
+                             acolytes=acolytes, active=lit, seats=tuple(seats))
     drawn = len(dg.find_tiles(version=z.duty_version))
 
     page = PAGE % {
