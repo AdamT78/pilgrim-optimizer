@@ -55,6 +55,7 @@ PLAYTEST_SCENARIOS = SCENARIOS / "playtest"
 PLAYTEST_CLOISTERS = "cloisters_reach_2p.json"
 PLAYTEST_CLOISTERS_LOOP = "cloisters_loop_2p.json"
 PLAYTEST_KOGGE_AND_CLOISTERS = "kogge_and_cloisters_2p.json"
+CITY_REVERSAL_ARROWS = frozenset({"city->east", "city->west", "north->city", "south->city"})
 
 
 @pytest.fixture(scope="module")
@@ -739,11 +740,24 @@ def test_cloisters_loop_playtest_turn_candidates_have_no_dead_edge_steps() -> No
         server.server_close()
 
 
-def test_play_view_draws_kogge_city_spoke_reversal_arrows() -> None:
-    server = PlayServer(("127.0.0.1", 0), SCENARIOS / "kogge_active_city_to_east_001.json")
+@pytest.mark.parametrize(
+    "position_name,expected_arrow_count,expected_reversals",
+    [
+        (PLAYTEST_CLOISTERS, 12, frozenset()),
+        (PLAYTEST_CLOISTERS_LOOP, 12, frozenset()),
+        (PLAYTEST_KOGGE_AND_CLOISTERS, 16, CITY_REVERSAL_ARROWS),
+    ],
+)
+def test_play_view_draws_only_position_usable_city_reversal_arrows(
+    position_name: str,
+    expected_arrow_count: int,
+    expected_reversals: frozenset[str],
+) -> None:
+    server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / position_name)
     try:
         drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
-        assert {"city->east", "city->west", "north->city", "south->city"} <= drawn
+        assert len(drawn) == expected_arrow_count
+        assert (drawn & CITY_REVERSAL_ARROWS) == expected_reversals
     finally:
         server.server_close()
 
@@ -774,8 +788,22 @@ def test_kogge_and_cloisters_playtest_position_has_expected_totals() -> None:
     server = PlayServer(("127.0.0.1", 0), PLAYTEST_SCENARIOS / PLAYTEST_KOGGE_AND_CLOISTERS)
     try:
         page = render_play_view_from_payload(server.payload)
+        reversal_occurrences = Counter(
+            str(step["value"])
+            for candidate in server.payload["turn_candidates"]
+            for step in candidate["steps"]
+            if step["kind"] == "edge" and str(step["value"]) in CITY_REVERSAL_ARROWS
+        )
         assert len(server.payload["turn_candidates"]) == 988
         assert len(page.encode("utf-8")) == 1_571_776
+        assert reversal_occurrences == Counter(
+            {
+                "north->city": 145,
+                "south->city": 252,
+                "city->east": 365,
+                "city->west": 338,
+            }
+        )
     finally:
         server.server_close()
 
@@ -819,6 +847,8 @@ def test_every_committed_turn_candidate_edge_is_drawn() -> None:
             drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
             candidates = server.payload["turn_candidates"]
             checked_candidates += len(candidates)
+            # Structural now for City reversals (they are drawn from candidate edges), still a real
+            # corpus guard for the always-drawn map arrows.
             missing = _dead_candidates_by_missing_edges(candidates, drawn)
             if missing:
                 dead.append((scenario_path.name, missing[:5]))
@@ -827,6 +857,26 @@ def test_every_committed_turn_candidate_edge_is_drawn() -> None:
 
     assert checked_candidates > 0, "committed corpus had no turn candidates"
     assert not dead, f"{len(dead)} scenarios still have dead edge candidates: {dead[:5]}"
+
+
+def test_every_drawn_city_reversal_arrow_is_used_by_a_candidate() -> None:
+    checked_reversal_arrows = 0
+    orphaned: list[tuple[str, list[str]]] = []
+    for scenario_path in sorted(SCENARIOS.glob("*.json")):
+        server = PlayServer(("127.0.0.1", 0), scenario_path)
+        try:
+            drawn = set(_arrows_drawn(render_play_view_from_payload(server.payload)))
+            drawn_reversals = drawn & CITY_REVERSAL_ARROWS
+            checked_reversal_arrows += len(drawn_reversals)
+            candidate_edges = _candidate_edges(server.payload["turn_candidates"])
+            unused = sorted(drawn_reversals - candidate_edges)
+            if unused:
+                orphaned.append((scenario_path.name, unused))
+        finally:
+            server.server_close()
+
+    assert checked_reversal_arrows > 0, "committed corpus drew no City reversal arrows to verify"
+    assert not orphaned, f"{len(orphaned)} scenarios drew unused City reversal arrows: {orphaned[:5]}"
 
 
 def test_cloisters_loop_playtest_position_has_expected_action_and_candidate_totals() -> None:
@@ -1480,20 +1530,27 @@ def _arrows_drawn(page: str) -> list[str]:
     return sorted(set(re.findall(r'data-arrow="([^"]+)"', page)))
 
 
+def _candidate_edges(candidates: list[dict]) -> set[str]:
+    return {
+        str(step["value"])
+        for candidate in candidates
+        for step in candidate["steps"]
+        if step["kind"] == "edge"
+    }
+
+
 def _dead_candidates_by_missing_edges(
     candidates: list[dict],
     drawn_edges: set[str],
 ) -> list[tuple[str | None, list[str]]]:
     dead: list[tuple[str | None, list[str]]] = []
     for candidate in candidates:
-        missing = sorted(
-            {
-                str(step["value"])
-                for step in candidate["steps"]
-                if step["kind"] == "edge"
-            }
-            - drawn_edges
-        )
+        edges = {
+            str(step["value"])
+            for step in candidate["steps"]
+            if step["kind"] == "edge"
+        }
+        missing = sorted(edges - drawn_edges)
         if missing:
             dead.append((candidate.get("action_id"), missing))
     return dead

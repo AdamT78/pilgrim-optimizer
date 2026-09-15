@@ -523,6 +523,40 @@ def test_cloisters_loop_city_revisit_can_be_clicked_as_skip_target(page, serve) 
     )
 
 
+def test_cloisters_reach_play_view_does_not_draw_city_east_reversal_arrow(page, serve) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_CLOISTERS)
+    page.goto(base_url, wait_until="networkidle")
+
+    assert page.locator('[data-arrow="city->east"]').count() == 0
+
+
+def test_kogge_and_cloisters_play_view_city_east_reversal_is_present_hit_testable_and_clickable(
+    page,
+    serve,
+) -> None:
+    base_url, _server = serve(SCENARIOS / "playtest" / PLAYTEST_KOGGE_AND_CLOISTERS)
+    page.goto(base_url, wait_until="networkidle")
+
+    city_east = page.query_selector('[data-arrow="city->east"]')
+    assert city_east is not None, "city->east reversal arrow was not drawn"
+    x, y = _centre(page, city_east)
+    assert _is_hit_target(page, city_east, x, y), "city->east centre did not hit-test to itself"
+
+    city_origin = page.query_selector('[data-board-position-index="0"][data-turn-start-candidate="true"]')
+    assert city_origin is not None, "city origin was not offered"
+    _click_handle_centre(page, city_origin, require_hit=True)
+    page.wait_for_timeout(20)
+
+    offered_city_east = page.query_selector('[data-arrow="city->east"][data-turn-offered="true"]')
+    assert offered_city_east is not None, "city->east was not offered after lifting from city"
+    before = _turn_state_snapshot(page)
+    _click_handle_centre(page, offered_city_east, require_hit=True)
+    page.wait_for_timeout(20)
+
+    after = _turn_state_snapshot(page)
+    assert after != before, "city->east click did not change the turn state"
+
+
 def test_kogge_and_cloisters_playtest_city_route_can_enter_city_against_arrows_then_skip_and_pick_duty(
     page,
     serve,

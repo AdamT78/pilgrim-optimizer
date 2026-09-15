@@ -50,6 +50,7 @@ silhouettes and the cornucopia horn) live in the JSON too, since they are shapes
 
 from __future__ import annotations
 
+from collections.abc import Collection
 import json
 import math
 from pathlib import Path
@@ -138,6 +139,14 @@ RING_ARROW_COUNT = 8
 # directions therefore land on opposite sides of the axis. In screen coordinates (x right, y down),
 # "left of travel" for heading angle θ is (sin θ, -cos θ).
 MIDDLE_SPOKE_ARROW_LANE_PITCH = 48.0
+CITY_SPOKE_REVERSAL_ARROWS = frozenset(
+    {
+        "north->city",
+        "south->city",
+        "city->east",
+        "city->west",
+    }
+)
 
 # Turn controls: small plaques standing in the black corners the hexagon leaves, drawn in the
 # board's own root units so they are part of the wheel rather than furniture around it -- the game
@@ -855,7 +864,24 @@ def _render_ring_arrows(layout: dict) -> str:
     return '<g aria-label="Clockwise outer arrows">' + "".join(arrows) + "</g>"
 
 
-def _render_middle_arrows(layout: dict) -> str:
+def _city_spoke_reversal_arrows(
+    city_spoke_reversals: Collection[str] | None,
+) -> set[str]:
+    """Which Kogge-only City-spoke reversals to draw on this board rendering.
+
+    A plain board has all four so the catalogue pages show the full artwork. The play view passes
+    only the reversals that some candidate uses in this position, and those are the only ones drawn.
+    """
+    if city_spoke_reversals is None:
+        return set(CITY_SPOKE_REVERSAL_ARROWS)
+    requested = {str(edge) for edge in city_spoke_reversals}
+    unknown = sorted(requested - CITY_SPOKE_REVERSAL_ARROWS)
+    if unknown:
+        raise ValueError(f"unknown City-spoke reversal arrow(s): {unknown}")
+    return requested
+
+
+def _render_middle_arrows(layout: dict, city_spoke_reversals: set[str]) -> str:
     """The middle arrows, tagged with the pair of positions each one joins.
 
     The four spokes are fixed to north/east/south/west, exactly as the painted board is. Their
@@ -929,6 +955,9 @@ def _render_middle_arrows(layout: dict) -> str:
         destination = str(spec["destination"])
         counterpart_origin = destination
         counterpart_destination = origin
+        counterpart_edge = f"{counterpart_origin}->{counterpart_destination}"
+        if counterpart_edge not in city_spoke_reversals:
+            continue
         middle_specs.append(
             {
                 "arrow_id": f"{counterpart_origin}_to_{counterpart_destination}_kogge",
@@ -1224,6 +1253,7 @@ def render_duty_wheel_svg(
     turn_controls: bool = False,
     turn_counter_values: tuple[int, ...] | None = None,
     turn_control_names: tuple[str, ...] | None = None,
+    city_spoke_reversals: Collection[str] | None = None,
 ) -> str:
     """The whole board: title, ground, arrows, and the nine spaces with their contents.
 
@@ -1235,13 +1265,16 @@ def render_duty_wheel_svg(
     designed around it does not quietly grow a set of controls. `turn_counter_values` asks for one
     counter plaque per value, each struck hidden and keyed by that value, for pages that reveal a
     pre-drawn counter rather than writing text into one. `turn_control_names` narrows the plaques
-    drawn without changing the counter.
+    drawn without changing the counter. `city_spoke_reversals` narrows the Kogge-only reversal
+    arrows (`north->city`, `south->city`, `city->east`, `city->west`) to just the listed subset.
+    Left as `None`, all four are drawn.
     """
     board = layout["board"]
     palette = layout["palette"]
     page = layout["page"]
     state = default_duty_wheel_state(layout) if board_state is None else board_state
     merchant_duty_id = merchant_on or layout["merchant_token"]["starts_on"]
+    reversal_arrows = _city_spoke_reversal_arrows(city_spoke_reversals)
     cx, cy = board["center"]
     frame = board["frame"]
 
@@ -1289,7 +1322,7 @@ def render_duty_wheel_svg(
         f' scale({_num(board["scale"])}) translate({_num(-cx)} {_num(-cy)})">'
         f'<path d="{board["ground_path"]}" fill="url(#hex-gradient)"'
         f' stroke="{palette["ground_edge"]}" stroke-width="4" stroke-linejoin="round"/>'
-        f"{_render_ring_arrows(layout)}{_render_middle_arrows(layout)}"
+        f"{_render_ring_arrows(layout)}{_render_middle_arrows(layout, reversal_arrows)}"
         f'<g aria-label="Board spaces">{"".join(spaces)}</g>'
         "</g>"
         # Outside the scaled group: the corners are measured on the canvas the page is cropped
@@ -1494,8 +1527,13 @@ def render_duty_wheel_panel(
     it and a host page may want the one without the other.
     """
     controls = render_duty_wheel_controls_html(layout) if include_controls else ""
+    # Catalogue/debug wheel: keep the full middle-arrow artwork visible.
     board = render_duty_wheel_svg(
-        layout, board_state, interactive=include_controls, turn_controls=turn_controls
+        layout,
+        board_state,
+        interactive=include_controls,
+        turn_controls=turn_controls,
+        city_spoke_reversals=CITY_SPOKE_REVERSAL_ARROWS,
     )
     return f"{controls}{board}"
 
