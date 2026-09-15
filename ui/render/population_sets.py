@@ -15,10 +15,17 @@ that draws the first, so the comparison could not be made without changing what 
 compared against. The sets are a table; adding one is an entry, and the page that draws it takes
 the name.
 
-WHAT A SET MAY NOT DO. It carries no colours. The four seat colours live in `SEAT_SWATCH` and are
-a property of the players, not of how their people are drawn -- a set that carried its own would
-be a second answer to "what colour is plum".
+WHAT A SET MAY NOT DO. It carries no colours. A seat's colour is a property of the PLAYER, not of
+how their people are drawn, so a set carrying its own would be a second answer to "what colour is
+plum" -- and there are now two surfaces drawing seat-coloured figures that have to agree. The one
+table lives below, and both of them read it.
 """
+
+# The four seats, as the figures wear them. Here rather than in either module that draws them: the
+# duty wheel duotones its photograph with these and the player card fills its hooded mark with
+# them, and a wheel and a card disagreeing about plum is not a thing anyone would look for.
+SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
+SEAT_ORDER = ("sage", "pewter", "plum", "bone")
 
 
 # The hooded figure: a dome, a neck notch, shoulders, a flat base, drawn as a flat seat-coloured
@@ -102,11 +109,18 @@ SETS = {
         "label": "gothic figure",
         "tile": {"kind": "image", "aspect": _GOTHIC_ASPECT, "frac": _GOTHIC_FRAC,
                  "overlap": 0.60, "gap": 0.24, "step": 0.30, "lean": 0.10},
+        # The card draws the config's own PNG, which is the same file the wheel duotones.
+        "card": {"kind": "image"},
     },
     "hood": {
         "label": "hooded mark",
         "tile": {"kind": "hood", "aspect": 1.0 / HOOD_H, "frac": _HOOD_FRAC,
                  "overlap": 0.60, "gap": 0.24, "step": 0.30, "lean": 0.10},
+        # On the card the mark is drawn rather than placed, so it brings its own aspect: the row's
+        # figure WIDTH is derived from it and the template's height, instead of both coming from
+        # the <image> the row replaces. Keeping the height is what keeps the band's vertical
+        # arrangement -- which the template owns and this does not touch.
+        "card": {"kind": "hood", "aspect": 1.0 / HOOD_H},
     },
 }
 # TWO NAMES, AND THEY ARE NOT THE SAME QUESTION.
@@ -122,6 +136,9 @@ SETS = {
 #             is judging against the wrong thing).
 DEFAULT = "gothic"
 WHEEL = "hood"
+# What the PLAYER CARD draws. Separate from WHEEL because they are separate decisions -- the card
+# pairs its acolyte row with a serf row and the wheel does not -- even while both say "hood".
+CARD = "hood"
 
 # -- the card's rows -----------------------------------------------------------------------------
 #
@@ -167,6 +184,11 @@ def get(name: str | None = None) -> dict:
 def tile(name: str | None = None) -> dict:
     """The duty-wheel metrics of one set."""
     return get(name)["tile"]
+
+
+def card(name: str | None = None) -> dict:
+    """How one set draws a figure on the player card."""
+    return get(name)["card"]
 
 
 def board(name: str | None = None) -> dict:

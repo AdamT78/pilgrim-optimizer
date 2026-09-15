@@ -716,8 +716,11 @@ ACOLYTE = HERE.parent / "assets-gothic" / "population" / "acolyte_gothic.png"
 ACOLYTE_ASPECT = pop.tile()["aspect"]
 FIG_FRAC = pop.tile()["frac"]          # figure width as a fraction of the tile's width
 FIG_OVERLAP = pop.tile()["overlap"]    # how much sits above the tile's bottom edge
-SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
-SEAT_ORDER = ("sage", "pewter", "plum", "bone")
+# ONE TABLE, read from population_sets. The player card fills its hooded acolytes from the same
+# one, and a wheel and a card disagreeing about plum is not a thing anyone would go looking
+# for. The names stay here because everything in this file and its guards reads them.
+SEAT_SWATCH = pop.SEAT_SWATCH
+SEAT_ORDER = pop.SEAT_ORDER
 # How a count is drawn: one figure per acolyte, piled upward, and no numeral anywhere. See
 # `acolyte_row` for why five acolytes are five figures rather than one figure and a 5.
 #

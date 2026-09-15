@@ -293,7 +293,7 @@ def test_every_card_row_preset_names_every_metric_a_row_reads(asm):
             % (name, preset["align"]))
 
 
-def test_the_control_opens_on_the_row_the_board_actually_drew(asm):
+def test_the_controls_open_on_the_row_the_board_actually_drew(asm):
     """The guard the two deleted experiment scripts most needed and did not have.
 
     GOES THROUGH THE PICKER'S OWN ANSWER. Written the obvious way -- recompute `population_row`
@@ -301,11 +301,10 @@ def test_the_control_opens_on_the_row_the_board_actually_drew(asm):
     changing the default moved the board and the expectation together and the assertion held for
     every value. That is the same tautology `abs(got - ARROW_OUTSET)` was, one file over.
 
-    What can actually rot, and what this therefore asserts: that the entry the control marks
-    `on` is the one the board draws, and that the control's geometry comes from the template.
-    Assembly consumes the divider and the figure <image> the row is measured from, so a control
-    handed the BUILT board cannot find either -- and that is not hypothetical, it is how this
-    control failed first time out.
+    It has since earned its place twice. It caught the geometry being computed for the default
+    FIGURE while the board drew another one -- the spread control would have snapped the acolytes
+    back to the photograph's width -- and it is why the two controls now share one table keyed by
+    both, instead of two that overwrite each other.
     """
     import importlib.util as _il
     pop = pop_sets()
@@ -315,18 +314,56 @@ def test_the_control_opens_on_the_row_the_board_actually_drew(asm):
 
     root = build(asm, 6, 3)
     template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
-    entries = picker.population_options(asm, root, template)
-    assert entries, "the control offered nothing on a board with two populations drawn"
-    assert len(entries) == len(pop.BOARD_SETS), (
-        "the control offers %d of %d presets" % (len(entries), len(pop.BOARD_SETS)))
+    drawn = {k: [{"x": round(float(n.get("x")), 3), "width": round(float(n.get("width")), 3)}
+                 for n in figures(root, k)] for k in ("serf", "acolyte")}
 
-    on = [e for e in entries if e["on"]]
-    assert len(on) == 1, "%d entries are preselected" % len(on)
-    drawn = {k: [round(float(n.get("x")), 3) for n in figures(root, k)]
-             for k in ("serf", "acolyte")}
-    assert on[0]["geo"] == drawn, (
-        "the control opens on %r, which puts the figures at %s while the board draws them at %s"
-        % (on[0]["value"], on[0]["geo"], drawn))
+    geo = picker.population_geo(asm, root, template)
+    opening = geo["%s/%s" % (pop.CARD, pop.BOARD_DEFAULT)]
+    assert opening == drawn, (
+        "the controls open on %s/%s, which puts the figures at %s while the board draws them at %s"
+        % (pop.CARD, pop.BOARD_DEFAULT, opening, drawn))
+
+    rows = picker.population_options(asm, root, template)
+    on = [e for e in rows if e["on"]]
+    assert len(on) == 1 and on[0]["value"] == pop.BOARD_DEFAULT, (
+        "the spread control preselects %s" % [e["value"] for e in on])
+
+
+def test_the_acolyte_control_carries_a_symbol_of_its_own_for_every_option(asm):
+    """Every option must point at a symbol IT put in the defs.
+
+    `population-acolyte` is whatever the board was built with, so an option that reuses that id
+    swaps the href and the width and changes nothing visible. That is exactly what the image
+    option did first time out: the assertion on the href passed and the picture did not move, and
+    only a screenshot said so.
+    """
+    import importlib.util as _il
+    import copy as _copy
+    import json as _json
+    pop = pop_sets()
+    spec = _il.spec_from_file_location("picker2b", UI / "render" / "gen_picker_2.py")
+    picker = _il.module_from_spec(spec)
+    spec.loader.exec_module(picker)
+
+    config = _copy.deepcopy(_json.loads((ASSETS / "production_test_config.json").read_text()))
+    config.setdefault("counts", {})["acolyte"] = 3
+    asm.apply_seat(config)
+    root = build(asm, 6, 3)
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    defs = root.find(q("defs"))
+    entries = picker.acolyte_options(asm, root, template, defs, config, ASSETS)
+    assert entries and len(entries) == len(pop.SETS)
+
+    ids = {e["value"]: set(e["ids"].values()) for e in entries}
+    for name, got in ids.items():
+        assert "population-acolyte" not in got, (
+            "the %r option points at the id the board was built with, so choosing it can only "
+            "look like a change on a board built the other way" % name)
+        for sid in got:
+            assert defs.find("*[@id='%s']" % sid) is not None, (
+                "the %r option points at #%s, which nothing defines" % (name, sid))
+    assert not set.intersection(*ids.values()), (
+        "two figure options share a symbol: %s" % ids)
 
 
 def test_the_presets_are_not_all_the_same_row(asm):
@@ -351,3 +388,78 @@ def test_the_presets_are_not_all_the_same_row(asm):
     assert len(set(full.values())) < len(full), (
         "a full row is supposed to clamp to the same layout under most presets; if it no longer "
         "does, the tightening in population_step has changed and the note above is stale")
+
+
+def test_four_seats_keep_four_marks_when_the_game_view_merges_them(asm):
+    """The one that would have shipped looking perfect.
+
+    `gen_game_view.merge_defs` collapses symbols sharing a `data-source` and a
+    `preserveAspectRatio`, which is what stops four boards carrying four copies of the same
+    photograph. The drawn mark is not a file, so it has to state a `data-source` of its own -- and
+    if that string did not carry the SEAT, all four would collapse into one and every board would
+    wear the first seat's colour.
+
+    ONE BOARD LOOKS RIGHT WHILE THIS IS WRONG, which is why it is worth a test rather than a look.
+    """
+    import importlib.util as _il
+    import copy as _copy
+    import json as _json
+    pop = pop_sets()
+    if pop.card(pop.CARD)["kind"] == "image":
+        pytest.skip("the card draws a placed image, so there is no per-seat symbol to collapse")
+
+    spec = _il.spec_from_file_location("gameview", UI / "render" / "gen_game_view.py")
+    gv = _il.module_from_spec(spec)
+    spec.loader.exec_module(gv)
+
+    roots = []
+    for seat in asm.SEAT_COLORS:
+        config = _copy.deepcopy(_json.loads((ASSETS / "production_test_config.json").read_text()))
+        config.setdefault("counts", {})["acolyte"] = 2
+        config["seat"] = seat
+        asm.apply_seat(config)
+        root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+        asm.apply_config(root, config, asm.read_json(ASSETS / "metadata" / "layout.json"), ASSETS)
+        asm.embed_assets_once(root, ASSETS)
+        roots.append(root)
+
+    shared, _n, _saved = gv.merge_defs(asm, roots)
+    marks = [e for e in shared.iter(q("symbol"))
+             if str(e.get("data-source", "")).startswith("hood:")]
+    assert len(marks) == len(asm.SEAT_COLORS), (
+        "four seats merged to %d hooded symbols (%s); every board after the first would wear "
+        "another seat's colour"
+        % (len(marks), [e.get("data-source") for e in marks]))
+    fills = {m.find(q("path")).get("fill") for m in marks}
+    assert len(fills) == len(asm.SEAT_COLORS), "the four marks share %d fills: %s" % (len(fills), fills)
+    assert fills == {pop.SEAT_SWATCH[s] for s in asm.SEAT_COLORS}, (
+        "the card's marks are not the seat colours the wheel uses: %s" % sorted(fills))
+
+
+def test_a_drawn_mark_is_sized_to_its_own_shape_and_not_to_the_photographs_box(asm):
+    """Checked against the TEMPLATE's numbers, which is the only independent thing here.
+
+    Asserting that the row and the picker agree about the width cannot fail -- both go through
+    `population_figure_frame`, so breaking it moves the board and the expectation together. The
+    template's `<image>` is the outside fact: it is sized for the photograph, and a mark that
+    simply inherited it would be fitted inside a box wider than itself, leaving the row spaced for
+    a figure it is not drawing.
+    """
+    pop = pop_sets()
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    image = [im for im in template.iter(q("image"))
+             if im.get("data-asset-role") == "acolyte"][0]
+    t_w, t_h = float(image.get("width")), float(image.get("height"))
+
+    for name, spec in ((n, pop.card(n)) for n in pop.SETS):
+        _y, w, h = asm.population_figure_frame(template, "acolyte", name)
+        assert h == t_h, "%r changed the band's height, which belongs to the template" % name
+        if spec["kind"] == "image":
+            assert w == t_w, "%r is a placed image and should keep the template's width" % name
+        else:
+            assert abs(w - t_h * spec["aspect"]) < 1e-9, (
+                "%r is drawn at %.3f wide; its own aspect over the template's height is %.3f"
+                % (name, w, t_h * spec["aspect"]))
+            assert abs(w - t_w) > 1.0, (
+                "%r is drawn at the photograph's width (%.1f), so the shape is being fitted "
+                "inside a box wider than itself" % (name, t_w))

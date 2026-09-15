@@ -476,6 +476,10 @@ def nearest_text(root: ET.Element, x: float, y: float) -> ET.Element:
 # size from the very <image> element the row replaces. A constant for any of those would be a
 # second statement of a fact the template already owns, free to drift the moment the art moves.
 POPULATION_KINDS = ("serf", "acolyte")
+# The hooded mark as the card draws it. Same two numbers the wheel uses and for the same
+# reason: the outline is what keeps pewter and plum off a pale ground, not decoration.
+HOOD_INK = "#2b2114"
+HOOD_STROKE = 0.055
 # THE DEFAULT BOARD SET'S OWN NUMBERS, not a second copy. A set bundles how a population is
 # drawn with where it goes, and the card is one of the two surfaces that place it -- see
 # population_sets.py. These names stay because the guards and `population_step` read them,
@@ -595,8 +599,16 @@ def population_boxes(root: ET.Element) -> dict[str, tuple[float, float]]:
     return {"serf": (left, split), "acolyte": (split + span, left + width)}
 
 
-def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, float]:
-    """(y, width, height) of one figure, from the very <image> the row replaces."""
+def population_figure_frame(root: ET.Element, kind: str,
+                            figure_set: str | None = None) -> tuple[float, float, float]:
+    """(y, width, height) of one figure, from the very <image> the row replaces.
+
+    A DRAWN MARK BRINGS ITS OWN ASPECT. The template <image> is sized for the photograph, so a
+    set that draws its figure rather than placing one keeps the template HEIGHT -- the band
+    vertical arrangement belongs to the template and this does not touch it -- and takes its
+    WIDTH from the shape. Left at the template width the mark would be fitted inside a box wider
+    than itself, and the row would be spaced for a figure it is not drawing.
+    """
     for image in root.iter(q("image")):
         if image.get("data-asset-role") == kind:
             y = parse_number(image.get("y"))
@@ -604,6 +616,9 @@ def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, 
             h = parse_number(image.get("height"))
             if y is None or w is None or h is None:
                 raise BuildError(f"The {kind} image has no y/width/height.")
+            spec = _pop.card(figure_set)
+            if kind == "acolyte" and spec["kind"] != "image":
+                w = h * spec["aspect"]
             return y, w, h
     raise BuildError(f"No {kind} image in the template to take the figure's size from.")
 
@@ -629,7 +644,8 @@ def population_step(count: int, width: float, box: tuple[float, float],
 
 
 def population_row(root: ET.Element, kind: str, count: int,
-                   pop_set: str | None = None) -> list[tuple[float, float, float, float]]:
+                   pop_set: str | None = None,
+                   figure_set: str | None = None) -> list[tuple[float, float, float, float]]:
     """Where each figure of one row goes: a list of (x, y, width, height), left to right.
 
     THE ONE PLACE THIS IS WORKED OUT. The row is CENTRED in its box at every count, so a box that
@@ -644,7 +660,7 @@ def population_row(root: ET.Element, kind: str, count: int,
         return []
     m = _pop.board(pop_set)
     box = population_boxes(root)[kind]
-    y, width, height = population_figure_frame(root, kind)
+    y, width, height = population_figure_frame(root, kind, figure_set)
     step = population_step(count, width, box, pop_set)
     span = width * (1.0 + step * (count - 1))
     # WHERE A SHORT ROW SITS. Centred is the default and the reason is in the docstring; the
@@ -765,6 +781,53 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     # Last, because it removes nodes the loops above address by role and by position.
     draw_population_rows(root, config, assets_dir)
 
+def _place_figures(parents, anchor, places, symbol_id) -> None:
+    """Swap the template anchor for one <use> per figure. Shared by both branches, because the
+    placement is the row and has nothing to do with what the figure is made of."""
+    kind = anchor.get("data-asset-role")
+    parent = parents[anchor]
+    position = list(parent).index(anchor)
+    parent.remove(anchor)
+    for offset, (x, y, w, h) in enumerate(places):
+        use = ET.Element(q("use"), {
+            "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
+            "data-population": kind,
+        })
+        set_href(use, f"#{symbol_id}")
+        parent.insert(position + offset, use)
+
+
+def _hood_symbol(defs: ET.Element, symbol_id: str, seat: str, spec: Mapping[str, Any]) -> None:
+    """The hooded mark in one seat colour, as a <symbol> the row can <use>.
+
+    `data-source` CARRIES THE SEAT, and that is not cosmetic. gen_game_view merges four boards
+    into one document and collapses symbols that share a `data-source` and a `preserveAspectRatio`
+    -- so four seats whose marks all claimed to come from the same place would become one symbol,
+    and every board would wear the first seat colour. One board looks perfect while it happens.
+
+    The viewBox is the shape own box, one unit wide by HOOD_H tall, and `preserveAspectRatio` is
+    left at the default meet: the <use> is already sized to that aspect by
+    `population_figure_frame`, so meet and slice agree and the figure fills its box either way.
+    """
+    if defs.find(f"*[@id='{symbol_id}']") is not None:
+        return
+    fill = _pop.SEAT_SWATCH.get(seat, _pop.SEAT_SWATCH["bone"])
+    symbol = ET.SubElement(defs, q("symbol"), {
+        "id": symbol_id,
+        "viewBox": f"-0.5 0 1 {fmt(_pop.HOOD_H)}",
+        "data-source": f"hood:{seat}",
+    })
+    ET.SubElement(symbol, q("path"), {
+        "d": _pop.hood_path(), "fill": fill, "stroke": HOOD_INK,
+        "stroke-width": fmt(HOOD_STROKE), "stroke-linejoin": "round",
+    })
+    face = _pop.HOOD_FACE
+    ET.SubElement(symbol, q("ellipse"), {
+        "cx": "0", "cy": fmt(face["cy"]), "rx": fmt(face["rx"]), "ry": fmt(face["ry"]),
+        "fill": "#000000", "opacity": "0.22",
+    })
+
+
 def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
                          assets_dir: Path) -> None:
     """Replace each population box's figure, cube and numeral with a row of figures.
@@ -782,6 +845,8 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
     parents = {child: parent for parent in root.iter() for child in parent}
     counts = config.get("counts", {})
     panel_fill = str(config.get("information_panel_fill", "#ead8b4"))
+    figure_set = config.get("population_set") or _pop.CARD
+    seat = str(config.get("seat") or SEAT_COLORS[0])
 
     for kind in POPULATION_KINDS:
         anchor = None
@@ -792,7 +857,14 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
         if anchor is None:
             raise BuildError(f"No {kind} image in the template to build the row from.")
 
-        places = population_row(root, kind, int(counts.get(kind, 0)))
+        places = population_row(root, kind, int(counts.get(kind, 0)),
+                                figure_set=figure_set)
+        spec = _pop.card(figure_set)
+        if kind == "acolyte" and spec["kind"] == "hood":
+            symbol_id = f"population-{kind}"
+            _hood_symbol(defs, symbol_id, seat, spec)
+            _place_figures(parents, anchor, places, symbol_id)
+            continue
         source = resolve_asset(assets_dir, asset_path_for_role(config, kind))
         # The measurement decides, not the asset's name: a figure that is already opaque is used as
         # it is, and one that is not is composited so that stacked copies occlude instead of
@@ -817,16 +889,7 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
         })
         set_href(inner, payload)
 
-        parent = parents[anchor]
-        position = list(parent).index(anchor)
-        parent.remove(anchor)
-        for offset, (x, y, w, h) in enumerate(places):
-            use = ET.Element(q("use"), {
-                "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
-                "data-population": kind,
-            })
-            set_href(use, f"#{symbol_id}")
-            parent.insert(position + offset, use)
+        _place_figures(parents, anchor, places, symbol_id)
 
 
 
