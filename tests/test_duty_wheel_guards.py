@@ -1412,3 +1412,92 @@ def test_the_wheel_and_the_offsets_tool_name_one_set_between_them():
         assert "WHEEL" in line[0], (
             "%s names its own set (%s) instead of reading population_sets.WHEEL"
             % (name, line[0].strip()))
+
+
+# ---------------------------------------------------------------------------------------------
+# OFFSETS PER ACOLYTE SET. A tile nudge places a tile against its acolyte ROW, so a row of a
+# different shape wants different nudges. The failure worth guarding is not that they can be saved
+# separately -- that is visible in the file -- but that the BOARD reads the set it DRAWS. A tool
+# that saves nudges nothing applies is a tool you can drag in for an hour.
+
+
+def test_the_board_reads_the_offsets_of_the_set_it_draws(tmp_path):
+    """Written against a file with two DELIBERATELY different sets, because with one set saved
+    every set inherits it and any wiring at all looks correct."""
+    import json
+    g = grid()
+    path = tmp_path / "offsets.json"
+    path.write_text(json.dumps({
+        "wheel_px": 1000, "tile_scale": 1.0,
+        "sets": {
+            "gothic": {"offsets": {"0": {"dx": 10, "dy": 0}}, "arrangement_shift": {"dx": 0, "dy": 0}},
+            "hood": {"offsets": {"0": {"dx": -40, "dy": 25}}, "arrangement_shift": {"dx": 5, "dy": 5}},
+        }}), encoding="utf-8")
+
+    a = g.tile_placement(path=path, pop_set="gothic")
+    b = g.tile_placement(path=path, pop_set="hood")
+    assert a[1][0] == (10.0, 0.0) and b[1][0] == (-40.0, 25.0), (
+        "tile_placement gave %s and %s" % (a[1][0], b[1][0]))
+    assert a[2] != b[2], "the arrangement shift is not per set"
+
+    # and the shapes the board actually draws move with it
+    real = g.OFFSETS
+    try:
+        g.OFFSETS = path
+        shapes = {name: g.laid_shapes(pop_set=name) for name in ("gothic", "hood")}
+    finally:
+        g.OFFSETS = real
+    assert shapes["gothic"] != shapes["hood"], (
+        "both sets drew the same nine shapes, so the set never reaches `placed`")
+
+
+def test_a_set_with_nothing_saved_inherits_and_says_so():
+    """Inheriting is deliberate -- zero would throw a real arrangement away the first time a second
+    set existed -- but a caller has to be able to tell inherited numbers from its own."""
+    g = grid()
+    data = {"sets": {"gothic": {"offsets": {"1": {"dx": 3, "dy": 4}}}}}
+    block, src = g.offset_block(data, "hood")
+    assert src == "gothic" and block["offsets"] == {"1": {"dx": 3, "dy": 4}}, (
+        "an unsaved set reported %r" % src)
+    block, src = g.offset_block(data, "gothic")
+    assert src == "gothic"
+    # the pre-set file shape, which is the gothic answer from before sets existed
+    legacy = {"offsets": {"2": {"dx": 1, "dy": 1}}, "arrangement_shift": {"dx": 0, "dy": 2}}
+    block, src = g.offset_block(legacy, "hood")
+    assert src == "legacy" and block is legacy
+    assert g.offset_block({}, "hood") == ({}, "none")
+
+
+def test_saving_one_set_cannot_touch_another(tmp_path):
+    """The whole ask. Also checks the one-time migration, because the file predates sets and its
+    top-level numbers ARE the gothic answer -- lifted into `sets`, not left in two places."""
+    import json
+    import importlib
+    tool = importlib.import_module("gen_tile_offsets")
+    path = tmp_path / "offsets.json"
+    legacy = {
+        "prose": "what these numbers turned out to be",
+        "wheel_px": 877.8, "tile_scale": 0.92,
+        "offsets": {"0": {"dx": 2.4, "dy": 20.8}, "5": {"dx": -7.4, "dy": 7.7}},
+        "arrangement_shift": {"dx": 0.0, "dy": -21.0},
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    real_path, real_set = tool.OFFSETS_PATH, tool.POP_SET
+    try:
+        tool.OFFSETS_PATH = path
+        tool.POP_SET = "hood"
+        tool.save_offsets({i: {"dx": float(i), "dy": -1.0} for i in range(9)},
+                          shift=(1.0, 2.0), pop_set="hood")
+    finally:
+        tool.OFFSETS_PATH, tool.POP_SET = real_path, real_set
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after["sets"]["gothic"]["offsets"] == legacy["offsets"], (
+        "the pre-set numbers did not survive as the gothic set: %s"
+        % after["sets"]["gothic"]["offsets"])
+    assert after["sets"]["gothic"]["arrangement_shift"] == legacy["arrangement_shift"]
+    assert after["sets"]["hood"]["offsets"]["3"] == {"dx": 3.0, "dy": -1.0}
+    assert "offsets" not in after and "arrangement_shift" not in after, (
+        "the top-level copies were left behind, so the file now answers twice")
+    assert after["prose"] == legacy["prose"], "a save dropped a key it does not own"

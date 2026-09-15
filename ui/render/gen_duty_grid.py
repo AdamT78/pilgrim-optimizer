@@ -667,7 +667,35 @@ JOINS = TILES / "joins.json"
 OFFSETS = HERE.parent / "duty_tile_offsets.json"
 
 
-def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
+def offset_block(data: dict, pop_set: str | None = None) -> tuple[dict, str]:
+    """One set's saved nudges, and WHICH set they actually came from.
+
+    Offsets say where a tile sits against its acolyte row, so they belong to the row: a mark that
+    is a different shape sits under a different part of the tile, and the nudge that was right for
+    one is not the nudge that is right for the other. They are therefore stored per set under
+    `sets`, and the second value says which one answered -- a caller that wants to know whether it
+    is looking at its own numbers or at somebody else's has to be able to ask.
+
+    A SET WITH NOTHING SAVED INHERITS, and that is deliberate rather than lazy. The alternative is
+    zero, which throws away a real arrangement the moment a second set exists and makes the board
+    jump the first time anyone draws one. Inheriting means a new set opens exactly where the old
+    one left off, which is where you want to start dragging from. It is reported, not hidden.
+
+    The legacy top-level `offsets` is the gothic answer, from before sets existed. It is read as
+    the last fallback and migrated into `sets` on the next save.
+    """
+    sets = data.get("sets") or {}
+    name = pop.DEFAULT if pop_set is None else pop_set
+    for candidate in (name, pop.DEFAULT):
+        if candidate in sets:
+            return sets[candidate], candidate
+    if data.get("offsets") is not None or data.get("arrangement_shift") is not None:
+        return data, "legacy"
+    return {}, "none"
+
+
+def tile_placement(path: pathlib.Path | None = None, box: float = 1000.0,
+                   pop_set: str | None = None):
     """(scale, {i: (dx, dy)}, (sx, sy)) in GRID UNITS, or (1.0, {}, (0, 0)) when there is no file.
 
     THE THIRD VALUE IS THE WHOLE ARRANGEMENT'S POSITION, and it is a different kind of number from
@@ -683,6 +711,11 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     they were grid units would be out by a factor of 1.14, which is small enough to look like a
     slightly wrong drag and not like a unit error.
     """
+    # `OFFSETS` is read HERE rather than bound as the default, because a default binds at def
+    # time: with `path=OFFSETS` in the signature, reassigning the module constant changes nothing
+    # and the file it names can never be pointed elsewhere. That exact trap cost a real debugging
+    # session on ARROW_OUTSET in this same tree.
+    path = OFFSETS if path is None else path
     if not path.is_file():
         return 1.0, {}, (0.0, 0.0)
     try:
@@ -690,11 +723,15 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     except json.JSONDecodeError as exc:
         raise SystemExit("%s is not valid JSON: %s" % (path, exc))
     per_unit = box / float(data.get("wheel_px") or box)
+    # `wheel_px` and `tile_scale` stay top-level: they are properties of the WHEEL -- the size it
+    # was judged at and how far each tile is shrunk to open the channel -- and do not change
+    # because a different figure stands under it.
+    block, _source = offset_block(data, pop_set)
     out = {}
-    for k, v in (data.get("offsets") or {}).items():
+    for k, v in (block.get("offsets") or {}).items():
         if str(k).isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)) * per_unit, float(v.get("dy", 0)) * per_unit)
-    sh = data.get("arrangement_shift") or {}
+    sh = block.get("arrangement_shift") or {}
     shift = (float(sh.get("dx", 0)) * per_unit, float(sh.get("dy", 0)) * per_unit)
     return float(data.get("tile_scale") or 1.0), out, shift
 
@@ -914,7 +951,7 @@ def acolyte_foot(meta: dict | None = None, margin: float | None = None,
     """
     return max(acolyte_box(d, pop_set=pop_set)["sy"]
                + acolyte_box(d, pop_set=pop_set)["fh"]
-               for d in laid_shapes(meta, margin, offsets=False))
+               for d in laid_shapes(meta, margin, offsets=False, pop_set=pop_set))
 
 
 def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER,
@@ -1007,7 +1044,7 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER,
 
 
 def laid_shapes(meta: dict | None = None, margin: float | None = None,
-                offsets: bool = True) -> list[str]:
+                offsets: bool = True, pop_set: str | None = None) -> list[str]:
     """The nine shapes exactly as the board draws them: re-laid, scaled, and offset.
 
     THE ONE PLACE THAT ANSWERS "where are the tiles". gen_tile_offsets.py used to work this out for
@@ -1022,10 +1059,11 @@ def laid_shapes(meta: dict | None = None, margin: float | None = None,
     box = meta["box"]
     margin = MARGIN if margin is None else margin
     laid = meta["shapes"] if margin is None else place(meta["shapes"], box, margin)
-    return placed(laid, box, offsets=offsets)
+    return placed(laid, box, offsets=offsets, pop_set=pop_set)
 
 
-def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
+def placed(shapes: list[str], box: float, offsets: bool = True,
+           pop_set: str | None = None) -> list[str]:
     """The nine shapes scaled about their own centres and moved by their saved offsets.
 
     Scaling about each tile's OWN centre shrinks the picture without moving it, so the gaps between
@@ -1037,7 +1075,7 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
     done, and the offsets re-dragged against it came back a third the size with no column signal
     left in them. What remains in the file is per-tile judgement, which is what it is for.
     """
-    scale, off, (sx, sy) = tile_placement(box=box)
+    scale, off, (sx, sy) = tile_placement(box=box, pop_set=pop_set)
     if not offsets:
         off = {}
     # `sx, sy` is NOT dropped with them: it moves the whole block, acolyte rows and all, and those
@@ -1253,8 +1291,10 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     # Two versions of the same nine, both through laid_shapes so the offsets tool cannot disagree
     # with the board about where a tile starts. The tiles get the saved offsets; the acolyte rows
     # are built from the unoffset shapes and never move, which is the whole point of the offsets.
-    frozen = laid_shapes(meta, margin, offsets=False)
-    laid = laid_shapes(meta, margin, offsets=offsets)
+    # BOTH take the set. The offsets belong to the acolyte row, so a board drawing one set
+    # with another set's nudges is a board whose tiles sit against a row it is not drawing.
+    frozen = laid_shapes(meta, margin, offsets=False, pop_set=pop_set)
+    laid = laid_shapes(meta, margin, offsets=offsets, pop_set=pop_set)
     cells = list(cells or DEFAULT_CELLS)
     if sorted(cells) != list(range(9)):
         raise ValueError(

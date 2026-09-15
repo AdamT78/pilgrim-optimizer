@@ -63,12 +63,14 @@ NOTE = ("Per-tile nudges so each tile sits on its acolyte row the way The City d
         "failed. Screen pixels at the wheel's real drawn size, positive = right / down.")
 
 
-def load_offsets() -> dict[int, tuple[float, float]]:
+def load_offsets(pop_set: str | None = None) -> dict[int, tuple[float, float]]:
+    """The nudges saved for ONE set. `dg.offset_block` decides which, and says where from."""
     if not OFFSETS_PATH.is_file():
         return {}
     data = json.loads(OFFSETS_PATH.read_text(encoding="utf-8"))
+    block, _src = dg.offset_block(data, pop_set)
     out = {}
-    for k, v in (data.get("offsets") or {}).items():
+    for k, v in (block.get("offsets") or {}).items():
         if k.isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)), float(v.get("dy", 0)))
     return out
@@ -107,7 +109,7 @@ def decompose(offsets: dict) -> dict:
     box = dg.load()["box"]
     k = WHEEL_PX / box
     u = []
-    for d in dg.laid_shapes(offsets=False):
+    for d in dg.laid_shapes(offsets=False, pop_set=POP_SET):
         P = _pts(d)
         u.append((sum(p[1] for p in P) / len(P) - box / 2.0) * k)
     n = len(u)
@@ -135,11 +137,13 @@ def decompose(offsets: dict) -> dict:
     }
 
 
-def load_shift(path: pathlib.Path = OFFSETS_PATH) -> tuple[float, float]:
+def load_shift(path: pathlib.Path = OFFSETS_PATH,
+               pop_set: str | None = None) -> tuple[float, float]:
     """Where the whole nine sits in the box, in screen px. Not one of the per-tile nudges."""
     if not path.is_file():
         return 0.0, 0.0
-    d = (json.loads(path.read_text(encoding="utf-8")).get("arrangement_shift") or {})
+    block, _src = dg.offset_block(json.loads(path.read_text(encoding="utf-8")), pop_set)
+    d = block.get("arrangement_shift") or {}
     return float(d.get("dx", 0.0)), float(d.get("dy", 0.0))
 
 
@@ -153,14 +157,14 @@ def margins_at_zero() -> dict:
     """
     box = dg.load()["box"]
     k = WHEEL_PX / box
-    sx, sy = load_shift()
-    laid = dg.laid_shapes(offsets=True)
+    sx, sy = load_shift(pop_set=POP_SET)
+    laid = dg.laid_shapes(offsets=True, pop_set=POP_SET)
     xs, ys = [], []
     for d in laid:
         P = _pts(d)
         xs += [q[0] for q in P]
         ys += [q[1] for q in P]
-    grid = acolyte_grid(dg.laid_shapes(offsets=False))
+    grid = acolyte_grid(dg.laid_shapes(offsets=False, pop_set=POP_SET))
     foot = max(g["sy"] + g["fh"] for g in grid)
     return {
         "l": min(xs) * k - sx, "r": (box - max(xs)) * k + sx,
@@ -169,7 +173,8 @@ def margins_at_zero() -> dict:
     }
 
 
-def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) -> None:
+def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None,
+                 pop_set: str | None = None) -> None:
     """Write the file, keeping everything in it this function does not own.
 
     TWO THINGS THIS GOT WRONG, both of which only a save could show.
@@ -190,19 +195,33 @@ def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) ->
             existing = json.loads(OFFSETS_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             existing = {}
+    name = POP_SET if pop_set is None else pop_set
+    # MIGRATE ONCE, and only when something is actually saved. The file predates sets, so its
+    # top-level `offsets` and `arrangement_shift` ARE the gothic answer -- they are lifted into
+    # `sets.gothic` the first time anything is written, and removed from the top level so there is
+    # one home afterwards. Every other key, including the paragraphs recording what these numbers
+    # turned out to be, is left exactly where it is.
+    sets = dict(existing.get("sets") or {})
+    if not sets and (existing.get("offsets") or existing.get("arrangement_shift")):
+        sets[dg.pop.DEFAULT] = {"offsets": existing.get("offsets") or {},
+                                "arrangement_shift": existing.get("arrangement_shift") or {}}
+    sets[name] = {
+        "offsets": {str(i): {"dx": round(float(v["dx"]), 1), "dy": round(float(v["dy"]), 1)}
+                    for i, v in sorted(offsets.items(), key=lambda kv: int(kv[0]))},
+        # Where the whole block sits, kept apart from the nine on purpose: it moves the acolyte
+        # rows with the tiles, and they move nothing relative to each other.
+        "arrangement_shift": {"dx": round(float((shift or load_shift(pop_set=name))[0]), 1),
+                              "dy": round(float((shift or load_shift(pop_set=name))[1]), 1)},
+    }
     owned = {
+        "sets": sets,
+        "editing": name,
         "note": note,
         "method": "dragged in ui/render/gen_tile_offsets.py against a frozen acolyte grid",
         "units": "screen px at wheel width %g; positive = right / down" % WHEEL_PX,
         "wheel_px": WHEEL_PX,
         "tile_scale": TILE_K,
         "names": dg.DUTY_NAMES,
-        "offsets": {str(i): {"dx": round(float(v["dx"]), 1), "dy": round(float(v["dy"]), 1)}
-                    for i, v in sorted(offsets.items(), key=lambda kv: int(kv[0]))},
-        # Where the whole block sits, kept apart from the nine on purpose: it moves the acolyte
-        # rows with the tiles, and they move nothing relative to each other.
-        "arrangement_shift": {"dx": round(float((shift or load_shift())[0]), 1),
-                              "dy": round(float((shift or load_shift())[1]), 1)},
     }
     # Recorded rather than raised: a save that dies here would cost a drag, and a save that
     # silently dropped it is the exact fault this file already had once.
@@ -211,7 +230,8 @@ def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) ->
     except Exception as exc:                                   # noqa: BLE001
         owned["measured"] = {"error": "decompose() failed: %s" % exc}
     # the caller's own notes first, then what this function owns, then anything else it was keeping
-    body = {k: v for k, v in existing.items() if k not in owned}
+    body = {k: v for k, v in existing.items()
+            if k not in owned and k not in ("offsets", "arrangement_shift")}
     body.update(owned)
     OFFSETS_PATH.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
 
@@ -234,7 +254,7 @@ def scaled_shapes():
     Asking the grid where its tiles are, rather than working it out again, is the only thing that
     keeps this true the next time `place` or the tile scale changes.
     """
-    return dg.laid_shapes(offsets=False)
+    return dg.laid_shapes(offsets=False, pop_set=POP_SET)
 
 
 def acolyte_grid(shapes):
@@ -535,10 +555,23 @@ def build(can_save: bool) -> str:
     svg = svg.replace("<defs>", "<defs>" + defs, 1)
     svg = svg.replace("</svg>", '<g id="acol">' + "".join(marks) + "</g></svg>")
 
-    saved = load_offsets()
-    msg = ("Loaded %d offset%s from ui/duty_tile_offsets.json."
-           % (len(saved), "" if len(saved) == 1 else "s")) if saved else \
-          "No ui/duty_tile_offsets.json yet; everything starts at zero."
+    saved = load_offsets(POP_SET)
+    # WHICH SET THESE NUMBERS BELONG TO, said out loud. A set with nothing saved inherits another
+    # set's nudges so the board does not jump the first time one is drawn, and that is exactly the
+    # state in which somebody drags for twenty minutes believing they are editing what they see.
+    # Save writes to POP_SET and to nothing else.
+    src = "none"
+    if OFFSETS_PATH.is_file():
+        _blk, src = dg.offset_block(json.loads(OFFSETS_PATH.read_text(encoding="utf-8")), POP_SET)
+    if not saved:
+        msg = "No offsets saved yet; everything starts at zero."
+    elif src == POP_SET:
+        msg = ("Editing the %s acolytes: %d offset%s loaded."
+               % (POP_SET, len(saved), "" if len(saved) == 1 else "s"))
+    else:
+        msg = ("Editing the %s acolytes. Nothing is saved for them yet, so these %d are INHERITED "
+               "from %s and Save will write a set of their own."
+               % (POP_SET, len(saved), "the file's pre-set numbers" if src == "legacy" else src))
     if not can_save:
         msg += " Read-only: run with --serve to enable Save."
     return PAGE % {
@@ -549,7 +582,8 @@ def build(can_save: bool) -> str:
         "names": json.dumps(dg.DUTY_NAMES),
         "can_save": "true" if can_save else "false",
         "offsets": json.dumps({str(i): {"dx": dx, "dy": dy} for i, (dx, dy) in saved.items()}),
-        "shift": json.dumps({"dx": load_shift()[0], "dy": load_shift()[1]}),
+        "shift": json.dumps({"dx": load_shift(pop_set=POP_SET)[0],
+                             "dy": load_shift(pop_set=POP_SET)[1]}),
         "base": json.dumps({k: round(v, 2) for k, v in margins_at_zero().items()}),
         "msg": msg,
         "popset_label": pop.SETS[POP_SET]["label"],
@@ -693,7 +727,7 @@ def serve(port: int):
                     self.send_error(400, "arrangement shift of %r would move the wheel off its "
                                          "own box" % (shift,))
                     return
-            save_offsets(clean, shift=shift)
+            save_offsets(clean, shift=shift, pop_set=POP_SET)
             print("saved %s  (%d tiles, shift %s)"
                   % (OFFSETS_PATH, len(clean), shift if shift else "unchanged"))
             self.send_response(204)
@@ -715,12 +749,22 @@ def serve(port: int):
 
 
 def main():
+    # A module global rather than a parameter threaded through nine functions: every one of them
+    # wants the same answer for the life of the process, and `--serve` rebuilds the page per
+    # request out of those same functions.
+    global POP_SET
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--pop-set", default=POP_SET, choices=sorted(pop.SETS),
+                    help="which acolyte set these offsets belong to (default %(default)s). "
+                         "A tile nudge places a tile against its acolyte row, so a row of "
+                         "a different shape wants different nudges; Save writes only this "
+                         "set and cannot touch the others.")
     ap.add_argument("--serve", action="store_true", help="run a local server so Save can write")
     ap.add_argument("--port", type=int, default=8767)
     ap.add_argument("--open", action="store_true")
     ap.add_argument("--output", default=None)
     z = ap.parse_args()
+    POP_SET = z.pop_set
 
     if z.serve:
         server, url = serve(z.port)
