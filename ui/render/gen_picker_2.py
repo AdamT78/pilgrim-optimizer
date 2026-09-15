@@ -208,6 +208,14 @@ function choose(role, i){
       if (t) t.setAttribute('fill', o.inks[d.getAttribute('data-resource-disc')]);
     });
   }
+  // The x of every figure in both rows, precomputed per option by the ASSEMBLER's own
+  // population_row. Nothing here knows where a box starts or how wide a figure is.
+  else if (role === 'rows') {
+    for (const kind of Object.keys(o.geo)) {
+      const els = board.querySelectorAll('[data-population="' + kind + '"]');
+      o.geo[kind].forEach((x, i) => { if (els[i]) els[i].setAttribute('x', x); });
+    }
+  }
   else if (role === 'icon') {
     for (const name of Object.keys(o.geo)) {
       const el = board.querySelector('[data-asset-role="resource:' + name + '"]');
@@ -250,7 +258,7 @@ def thumb(path, px=120):
 
 
 # What the panel calls each control. Only the two that are not one word need saying.
-ROW_LABELS = {"shadow": "Count shadow", "icon": "Icon inset"}
+ROW_LABELS = {"shadow": "Count shadow", "icon": "Icon inset", "rows": "Population rows"}
 
 
 def resource_boxes(asm, root):
@@ -322,6 +330,45 @@ def icon_options(asm, boxes):
                for name, b in boxes.items()}
         entries.append({"value": "%g" % inset, "label": "%g px" % inset, "geo": geo,
                         "on": abs(inset - shipped) < 1e-9})
+    return entries
+
+
+def population_options(asm, root, template):
+    """Where the serf and acolyte figures sit along their boxes, one option per card-row preset.
+
+    TAKES THE TEMPLATE AS WELL AS THE BUILT BOARD, because the two carry different halves of the
+    answer. Assembly CONSUMES both things the geometry is read from -- the `population_divider`
+    image that tells the two boxes apart, and the figure `<image>` whose size the row inherits --
+    replacing them with the `<use>` elements the row is made of. So the built board knows how many
+    figures there are and the template knows where they may go, and neither knows both.
+
+    THE POSITIONS COME FROM THE ASSEMBLER, not from arithmetic here: `population_row` is the one
+    place that answers "where does figure n of this row go", and it reads the box off the
+    template's own divider and the figure's size off the very <image> the row replaced. A copy in
+    this file would be the `179.0` fallback again, one file over -- the picker showing a row the
+    board would not draw, and looking entirely correct while doing it.
+
+    THE COUNT IS READ OFF THE BUILT BOARD rather than taken from the config. What is drawn is what
+    a control has to move; a count taken from the config and a board built from a different one
+    would leave figures behind, and the leftovers would be the ones nothing repositions.
+
+    Returns None when the board draws no population figures at all -- nothing to act on.
+    """
+    counts = {}
+    for use in root.iter(q("use")):
+        kind = use.get("data-population")
+        if kind:
+            counts[kind] = counts.get(kind, 0) + 1
+    if not counts:
+        return None
+    shipped = asm._pop.BOARD_DEFAULT
+    entries = []
+    for name, preset in asm._pop.BOARD_SETS.items():
+        geo = {kind: [round(x, 3) for x, _y, _w, _h in
+                      asm.population_row(template, kind, n, pop_set=name)]
+               for kind, n in counts.items()}
+        entries.append({"value": name, "label": preset["label"], "geo": geo,
+                        "on": name == shipped})
     return entries
 
 
@@ -425,6 +472,14 @@ def main():
     if icon:
         opts["icon"] = icon
 
+    # Where the serf and acolyte rows sit along their boxes. Same shape as the two above: not an
+    # asset, so not a <use> swap -- an x on every figure in both rows.
+    rows_opt = population_options(
+        asm, root,
+        ET.parse(assets_dir / "template" / "player_board_template.svg").getroot())
+    if rows_opt:
+        opts["rows"] = rows_opt
+
     # The swappable slots must be addressable by role after the assembler has rewritten them.
     for role in ("cloth_lit", "cloth_dim", "gems", "portrait"):
         use_by_role(root, role)
@@ -434,7 +489,8 @@ def main():
     svg = ET.tostring(root, encoding="unicode")
 
     rows = "".join(row(role, opts[role])
-                   for role in ("seat", "stones", "turn", "portrait", "shadow", "icon")
+                   for role in ("seat", "stones", "turn", "portrait", "shadow", "icon",
+                                "rows")
                    if role in opts)
     page = PAGE % {"rows": rows, "board": svg, "opts": json.dumps(opts)}
 

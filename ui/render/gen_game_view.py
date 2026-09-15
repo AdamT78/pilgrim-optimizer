@@ -57,7 +57,19 @@ UI = HERE.parent
 REPO = UI.parent
 sys.path.insert(0, str(HERE))
 
-import gen_duty_grid as dg                                          # noqa: E402
+import gen_duty_grid as dg                                # noqa: E402
+import population_sets as pop                             # noqa: E402
+
+# WHICH POPULATION SET THE WHEEL DRAWS. The hooded mark rather than the gothic figure: at the
+# size a wheel acolyte is actually drawn the photographic figure reads as a dark triangle
+# over dense engraving, and a pile of four does not read as four. The hood is a flat seat
+# colour with a dark outline and a neck notch, so every figure in a pile has an edge the one
+# below it does not.
+#
+# NOT A LITERAL. `population_sets.WHEEL` is the one place that chooses, because the offsets
+# tool opens on the same answer -- and a tool judging tile nudges against a row the board
+# has stopped drawing is the exact fault that file has already been fixed for twice.
+POP_SET = pop.WHEEL
 
 # The player board's artwork runs 1905 units wide, and its gold frame -- the part that reads as the
 # board rather than as overhang -- starts at 620 and ends at 1839. The panels beside the column are
@@ -380,7 +392,12 @@ def geometry(L):
     # shift -- both of which move the rows -- so a constant here would be right until the next
     # time anyone opened the drag tool, and then quietly wrong.
     grid_box = dg.load()["box"]
-    act_h = round(banner_h + wheel * (dg.acolyte_foot() / grid_box), 1)
+    # pop_set, not a bare call: `acolyte_foot` is the lowest acolyte ink on the board and the
+    # action box is cut to it, so asking the DEFAULT set where the feet are while DRAWING
+    # another one cuts the box to a line the page does not draw. The two sets agree today --
+    # the hood is sized to the gothic figure's height on purpose -- which is exactly why this
+    # would have gone unnoticed until somebody changed that one number.
+    act_h = round(banner_h + wheel * (dg.acolyte_foot(pop_set=POP_SET) / grid_box), 1)
 
     seats = int(L["seats"])
     boards_h = seats * bh + (seats - 1) * L["board_gap"]
@@ -1159,7 +1176,8 @@ def main():
     # the row under each tile is that many figures, centred; a seat with none on a tile is drawn
     # as nothing at all rather than as a figure labelled 0.
     wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid",
-                             acolytes=acolytes, active=lit, seats=tuple(seats))
+                             acolytes=acolytes, active=lit, seats=tuple(seats),
+                             pop_set=POP_SET)
     drawn = len(dg.find_tiles(version=z.duty_version))
 
     page = PAGE % {

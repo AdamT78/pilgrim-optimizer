@@ -1279,3 +1279,136 @@ def test_the_marking_never_takes_the_pointer():
         "the marking group no longer disclaims pointer events: %r" % group[:90])
 
 
+
+
+# ---------------------------------------------------------------------------------------------
+# THE POPULATION SETS. Two ways of drawing an acolyte, and the numbers that place each of them.
+# What is at risk is not that a set draws -- that is visible -- but the three things that are not:
+# that a caller who asks for nothing still gets the board it always got, that the two sets agree
+# about where the FEET are (the action box is cut to that line), and that a page drawing the hood
+# defines the ids its rows point at, because an unresolved <use> draws nothing and says nothing.
+
+
+def _pop():
+    grid()                      # puts ui/render on sys.path
+    import population_sets
+    return population_sets
+
+
+TILE_KEYS = {"kind", "aspect", "frac", "overlap", "gap", "step", "lean"}
+
+
+def test_every_figure_set_names_every_metric_a_row_reads():
+    """A set is a table entry, so a missing key is a KeyError at draw time on one page only.
+
+    Asserted as a SET COMPARISON rather than key by key: a set that grows a metric the row does not
+    read is as wrong as one missing a metric it does -- the first is a number nobody applies, which
+    is how a dial comes to look like it does something.
+    """
+    pop = _pop()
+    for name, s in pop.SETS.items():
+        assert set(s["tile"]) == TILE_KEYS, (
+            "figure set %r has tile metrics %s; a row reads exactly %s"
+            % (name, sorted(s["tile"]), sorted(TILE_KEYS)))
+        assert s["tile"]["kind"] in ("image", "hood"), (
+            "figure set %r draws %r, which acolyte_row has no branch for" % (name, s["tile"]["kind"]))
+        assert isinstance(s.get("label"), str) and s["label"], (
+            "figure set %r has no label, so a chooser would show its key" % name)
+
+
+def test_the_default_set_still_draws_the_numbers_the_board_shipped_with():
+    """The gothic figure's own metrics, pinned to LITERALS here.
+
+    This is the one guard in this group that holds its own copy of the numbers, deliberately: every
+    other way of writing it compares the module against the table it is now derived from, which
+    cannot fail. `FIG_FRAC == pop.tile("gothic")["frac"]` is an identity, not a check.
+    """
+    g = grid()
+    assert (g.FIG_FRAC, g.FIG_OVERLAP, g.STACK_STEP, g.STACK_LEAN) == (0.205, 0.60, 0.30, 0.10), (
+        "the default set's metrics moved: %s" % [g.FIG_FRAC, g.FIG_OVERLAP, g.STACK_STEP, g.STACK_LEAN])
+    assert abs(g.ACOLYTE_ASPECT - 228 / 210.0) < 1e-12, "the gothic figure's aspect moved"
+
+
+def test_asking_for_nothing_draws_the_gothic_figure():
+    """The default is a contract, not a convenience: the pickers, the layout tool and every guard
+    written before sets existed pass no set at all."""
+    g = grid()
+    counts = {0: [1, 0, 3, 0], 5: [2, 1, 0, 0]}
+    # Stubbed, for the reason `drawn_without_the_artwork` gives at length: the duotone PNGs need
+    # numpy and Pillow, this guard is about which BRANCH the row takes, and skipping would retire
+    # it in the lane that runs everything. THIRD TIME this dependency has escaped into that lane.
+    with drawn_without_the_artwork(g):
+        plain = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="sage")
+        assert plain == g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="sage",
+                                        pop_set="gothic")
+    assert "<image href=" in plain, "the default set stopped drawing the figure asset"
+    assert "-hood-" not in plain, "the default set is drawing the hooded mark"
+
+
+def test_the_two_sets_put_their_feet_on_the_same_line():
+    """The game view cuts the action box to `acolyte_foot`, so the sets disagreeing about a
+    figure's HEIGHT silently moves the box away from the feet it is cut to.
+
+    The hood is sized to the gothic figure's height on purpose -- it is the taller shape, so
+    matching the height is what costs it width -- and that choice is one number in the table.
+    Falsified in the same test with a deliberately mis-sized third set, because an equality that
+    would hold whatever the numbers were is not a check.
+    """
+    g, pop = grid(), _pop()
+    assert abs(g.acolyte_foot(pop_set="hood") - g.acolyte_foot(pop_set="gothic")) < 1e-9, (
+        "the two sets put the lowest acolyte ink on different lines: %.4f against %.4f"
+        % (g.acolyte_foot(pop_set="hood"), g.acolyte_foot(pop_set="gothic")))
+    import copy as _copy
+    pop.SETS["_taller"] = _copy.deepcopy(pop.SETS["hood"])
+    pop.SETS["_taller"]["tile"]["frac"] *= 1.30
+    try:
+        assert abs(g.acolyte_foot(pop_set="_taller") - g.acolyte_foot()) > 1.0, (
+            "a set 30% taller than the default moved the foot by less than a unit, so the "
+            "assertion above would hold for a set of any size and guards nothing")
+    finally:
+        del pop.SETS["_taller"]
+
+
+def test_a_page_drawing_the_hood_defines_every_id_its_rows_point_at():
+    """An unresolved <use> renders NOTHING and raises nothing.
+
+    A wheel with no acolytes is a board somebody will believe, so this is the failure mode worth
+    a guard: the rows and the defs come from two different calls, and only one of them is obvious.
+    """
+    import re
+    g = grid()
+    svg = g.duty_grid_svg(tiles_dir=None, acolytes={0: [2, 1, 0, 0], 8: [1, 0, 3, 0]},
+                          active="sage", pop_set="hood")
+    used = set(re.findall(r'href="#([^"]+)"', svg))
+    defined = set(re.findall(r' id="([^"]+)"', svg))
+    assert used, "the hood set drew no <use> at all"
+    assert used <= defined, "used but never defined here: %s" % sorted(used - defined)
+    assert g.pop_defs("dg", "gothic") == "", "the image set emitted defs it does not need"
+
+
+def test_an_unknown_set_is_refused_rather_than_quietly_replaced():
+    """A fallback here draws the other set and looks entirely correct."""
+    pop = _pop()
+    with pytest.raises(ValueError):
+        pop.tile("no_such_set")
+    with pytest.raises(ValueError):
+        pop.board("gothic")      # a FIGURE set is not a card-row preset
+
+
+def test_the_wheel_and_the_offsets_tool_name_one_set_between_them():
+    """Read out of the SOURCE, not by comparing two imported values.
+
+    Both modules read `population_sets.WHEEL`, so comparing `gen_game_view.POP_SET` to
+    `gen_tile_offsets.POP_SET` is comparing a name to itself and holds however either is written.
+    What can actually rot is one of them being edited to a literal -- at which point the tool keeps
+    judging tile nudges against a row the board has stopped drawing, which is the exact fault that
+    file carries two fixed instances of.
+    """
+    import re
+    for name in ("gen_game_view.py", "gen_tile_offsets.py"):
+        src = (RENDER / name).read_text(encoding="utf-8")
+        line = [ln for ln in src.splitlines() if re.match(r"POP_SET\s*=", ln)]
+        assert len(line) == 1, "%s sets POP_SET %d times" % (name, len(line))
+        assert "WHEEL" in line[0], (
+            "%s names its own set (%s) instead of reading population_sets.WHEEL"
+            % (name, line[0].strip()))

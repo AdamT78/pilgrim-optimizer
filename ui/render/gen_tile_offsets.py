@@ -45,8 +45,14 @@ UI = HERE.parent
 sys.path.insert(0, str(HERE))
 
 import gen_duty_grid as dg  # noqa: E402
+import population_sets as pop  # noqa: E402
 
 OFFSETS_PATH = UI / "duty_tile_offsets.json"
+# Which set this tool OPENS on. The game view's, read from it rather than typed, because the
+# whole claim of this page is that it shows what the board draws -- a tool opening on a set
+# the board no longer uses would be judging offsets against a row nobody sees. The button
+# cycles; this only decides where it starts.
+POP_SET = pop.WHEEL
 WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
@@ -320,6 +326,7 @@ textarea{width:100%%;height:150px;margin-top:8px;background:#121510;color:#c6d2b
     <table id="marg"></table>
     <button id="toplft">Top = Left</button><button id="unshift">Zero the shift</button>
     <button id="marks">Hide the red box</button>
+    <button id="popset">Acolytes: %(popset_label)s</button>
     <h2>Saving</h2>
     <button id="save">Save</button><button id="reset">Reset all</button>
     <button id="zero">Zero selected</button>
@@ -462,6 +469,28 @@ document.getElementById('save').onclick = function(){
 };
 
 apply();
+
+// THE ACOLYTE SET. Every set is already drawn, one group each, so this shows one and hides the
+// rest -- no rebuild, and the offsets being judged never move underneath the switch.
+(function(){
+  var sets = %(popset)s, at = %(popset_at)s;
+  var btn = document.getElementById('popset');
+  function show(name){
+    at = name;
+    document.querySelectorAll('.acset').forEach(function(g){
+      g.style.display = (g.getAttribute('data-set') === name) ? '' : 'none';
+    });
+    var lab = sets.filter(function(s){ return s[0] === name; })[0];
+    if (btn && lab) { btn.textContent = 'Acolytes: ' + lab[1]; }
+  }
+  if (btn) {
+    btn.addEventListener('click', function(){
+      var i = sets.findIndex(function(s){ return s[0] === at; });
+      show(sets[(i + 1) %% sets.length][0]);
+    });
+  }
+  show(at);
+})();
 </script></body></html>
 """
 
@@ -485,10 +514,25 @@ def build(can_save: bool) -> str:
     # once with the row geometry, and both times the numbers applied perfectly and the result
     # still looked wrong. The arithmetic was merged into `dg.acolyte_box` then; the drawing is
     # merged now, and there is nothing left in this file for the two to disagree about.
-    marks = [dg.acolyte_row(shapes[i], SAMPLE[i]) for i in range(len(shapes))]
+    # EVERY set, drawn, one group each -- not the chosen one. Offsets are judged against the
+    # row, and the two sets put their feet in the same place only because the hood is sized
+    # to the gothic figure's height on purpose. Drawing both lets that be SEEN rather than
+    # taken on trust, and switching is then a class toggle rather than a rebuild.
+    marks = []
+    for name in pop.SETS:
+        rows = "".join(dg.acolyte_row(shapes[i], SAMPLE[i], pop_set=name)
+                       for i in range(len(shapes)))
+        hide = "" if name == POP_SET else ' style="display:none"'
+        marks.append('<g class="acset" data-set="%s"%s>%s</g>' % (name, hide, rows))
     # The acolytes go in AFTER the tiles and outside every tile group, which is what freezes them:
     # a drag transforms one `g.dgt` and cannot reach anything here.
     # one group, so the page can translate the rows with the tiles by the arrangement shift
+    # The defs every set needs, injected together: `duty_grid_svg` above was not asked for a
+    # set, so it emitted none. A hood row whose defs are missing draws NOTHING -- an
+    # unresolved <use> is silent -- and a tool showing no acolytes looks like a tool with no
+    # acolytes rather than a broken one.
+    defs = "".join(dg.pop_defs("dg", name) for name in pop.SETS)
+    svg = svg.replace("<defs>", "<defs>" + defs, 1)
     svg = svg.replace("</svg>", '<g id="acol">' + "".join(marks) + "</g></svg>")
 
     saved = load_offsets()
@@ -508,6 +552,9 @@ def build(can_save: bool) -> str:
         "shift": json.dumps({"dx": load_shift()[0], "dy": load_shift()[1]}),
         "base": json.dumps({k: round(v, 2) for k, v in margins_at_zero().items()}),
         "msg": msg,
+        "popset_label": pop.SETS[POP_SET]["label"],
+        "popset": json.dumps([[n, pop.SETS[n]["label"]] for n in pop.SETS]),
+        "popset_at": json.dumps(POP_SET),
     }
 
 
@@ -516,7 +563,8 @@ SELF = pathlib.Path(__file__).resolve()
 
 def _sources() -> list[pathlib.Path]:
     """The Python this page is built from -- the only inputs read once instead of per request."""
-    return [SELF, pathlib.Path(dg.__file__).resolve()]
+    return [SELF, pathlib.Path(dg.__file__).resolve(),
+            pathlib.Path(pop.__file__).resolve()]
 
 
 def _stamp() -> dict[str, int]:

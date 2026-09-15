@@ -264,3 +264,90 @@ def test_every_assembler_of_this_template_draws_the_rows(asm):
     root, _config = picker.build_board(asm, ASSETS, config_path, "sage")
     assert [n for n in root.iter(q("use")) if n.get("data-population")], (
         "gen_picker_2 builds the layer picker and drew no population figures")
+
+
+# ---------------------------------------------------------------------------------------------
+# THE CARD-ROW PRESETS. Where a row sits along its box, as a table rather than as three literals,
+# so the choice can be compared in the picker instead of argued about. What is at risk is the
+# usual failure of a read-only dial: that the option it OPENS on is not the one the board draws,
+# which makes every comparison beside it a comparison against the wrong picture.
+
+BOARD_KEYS = {"label", "step", "pad", "align"}
+
+
+def pop_sets():
+    import sys
+    sys.path.insert(0, str(UI / "render"))
+    import population_sets
+    return population_sets
+
+
+def test_every_card_row_preset_names_every_metric_a_row_reads(asm):
+    pop = pop_sets()
+    for name, preset in pop.BOARD_SETS.items():
+        assert set(preset) == BOARD_KEYS, (
+            "card set %r has %s; a row reads exactly %s"
+            % (name, sorted(preset), sorted(BOARD_KEYS)))
+        assert preset["align"] in ("left", "centre", "right"), (
+            "card set %r aligns %r, which population_row has no branch for"
+            % (name, preset["align"]))
+
+
+def test_the_control_opens_on_the_row_the_board_actually_drew(asm):
+    """The guard the two deleted experiment scripts most needed and did not have.
+
+    GOES THROUGH THE PICKER'S OWN ANSWER. Written the obvious way -- recompute `population_row`
+    with BOARD_DEFAULT and compare -- it was DEAD: the board is built through the same default, so
+    changing the default moved the board and the expectation together and the assertion held for
+    every value. That is the same tautology `abs(got - ARROW_OUTSET)` was, one file over.
+
+    What can actually rot, and what this therefore asserts: that the entry the control marks
+    `on` is the one the board draws, and that the control's geometry comes from the template.
+    Assembly consumes the divider and the figure <image> the row is measured from, so a control
+    handed the BUILT board cannot find either -- and that is not hypothetical, it is how this
+    control failed first time out.
+    """
+    import importlib.util as _il
+    pop = pop_sets()
+    spec = _il.spec_from_file_location("picker2", UI / "render" / "gen_picker_2.py")
+    picker = _il.module_from_spec(spec)
+    spec.loader.exec_module(picker)
+
+    root = build(asm, 6, 3)
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    entries = picker.population_options(asm, root, template)
+    assert entries, "the control offered nothing on a board with two populations drawn"
+    assert len(entries) == len(pop.BOARD_SETS), (
+        "the control offers %d of %d presets" % (len(entries), len(pop.BOARD_SETS)))
+
+    on = [e for e in entries if e["on"]]
+    assert len(on) == 1, "%d entries are preselected" % len(on)
+    drawn = {k: [round(float(n.get("x")), 3) for n in figures(root, k)]
+             for k in ("serf", "acolyte")}
+    assert on[0]["geo"] == drawn, (
+        "the control opens on %r, which puts the figures at %s while the board draws them at %s"
+        % (on[0]["value"], on[0]["geo"], drawn))
+
+
+def test_the_presets_are_not_all_the_same_row(asm):
+    """A dial whose settings all draw the same picture is a dial that does nothing.
+
+    Checked at a count the box is NOT full at. At eight serfs the row fills its box, the existing
+    tightening clamps every step to the same value and all three alignments coincide -- which is
+    correct, documented behaviour and also exactly the count at which this guard would pass on a
+    control that had been broken.
+    """
+    pop = pop_sets()
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    layouts = {name: tuple(round(x, 3) for x, _y, _w, _h in
+                           asm.population_row(template, "acolyte", 3, pop_set=name))
+               for name in pop.BOARD_SETS}
+    assert len(set(layouts.values())) == len(layouts), (
+        "two card presets draw the same row: %s" % layouts)
+
+    full = {name: tuple(round(x, 3) for x, _y, _w, _h in
+                        asm.population_row(template, "serf", 8, pop_set=name))
+            for name in pop.BOARD_SETS}
+    assert len(set(full.values())) < len(full), (
+        "a full row is supposed to clamp to the same layout under most presets; if it no longer "
+        "does, the tightening in population_step has changed and the note above is stale")

@@ -26,9 +26,16 @@ import html
 import json
 import mimetypes
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
+
+# By path, because this module is also LOADED BY PATH -- gen_picker_2 imports it from a
+# file location so the picker shows the board the production assembler builds. A plain
+# `import population_sets` then resolves against whatever cwd the caller happened to have.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import population_sets as _pop  # noqa: E402
 
 _HERE = Path(__file__).resolve().parent          # ui/render
 _UI = _HERE.parent                              # ui
@@ -469,8 +476,12 @@ def nearest_text(root: ET.Element, x: float, y: float) -> ET.Element:
 # size from the very <image> element the row replaces. A constant for any of those would be a
 # second statement of a fact the template already owns, free to drift the moment the art moves.
 POPULATION_KINDS = ("serf", "acolyte")
-POPULATION_STEP = 0.30          # overlap between one figure and the next, as a fraction of a width
-POPULATION_PAD = 20.0           # clear ground kept at each end of a box
+# THE DEFAULT BOARD SET'S OWN NUMBERS, not a second copy. A set bundles how a population is
+# drawn with where it goes, and the card is one of the two surfaces that place it -- see
+# population_sets.py. These names stay because the guards and `population_step` read them,
+# and they mean what they meant: the card as it is drawn when nobody asks for anything else.
+POPULATION_STEP = _pop.board()["step"]   # overlap between one figure and the next, of a width
+POPULATION_PAD = _pop.board()["pad"]     # clear ground kept at each end of a box
 # How hard the alpha ramp is pushed when a figure is made opaque. 4 takes everything above 64/255
 # to solid while leaving a short anti-aliased edge; see `opaque_figure`.
 OPAQUE_ALPHA_GAIN = 4.0
@@ -597,7 +608,8 @@ def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, 
     raise BuildError(f"No {kind} image in the template to take the figure's size from.")
 
 
-def population_step(count: int, width: float, box: tuple[float, float]) -> float:
+def population_step(count: int, width: float, box: tuple[float, float],
+                    pop_set: str | None = None) -> float:
     """How far apart consecutive figures sit, as a fraction of one figure's width.
 
     POPULATION_STEP until a row runs out of box, then only as tight as it has to be. The tightening
@@ -609,13 +621,15 @@ def population_step(count: int, width: float, box: tuple[float, float]) -> float
     where it is 0.294; the acolyte row is 0.30 up to 8 and then 0.263, 0.234, 0.211. A count high
     enough to tighten the acolyte row needs nine ordinations and no missions.
     """
+    m = _pop.board(pop_set)
     if count <= 1:
-        return POPULATION_STEP
-    usable = (box[1] - box[0]) - 2 * POPULATION_PAD
-    return min(POPULATION_STEP, max(0.05, (usable / width - 1.0) / (count - 1)))
+        return m["step"]
+    usable = (box[1] - box[0]) - 2 * m["pad"]
+    return min(m["step"], max(0.05, (usable / width - 1.0) / (count - 1)))
 
 
-def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float, float, float, float]]:
+def population_row(root: ET.Element, kind: str, count: int,
+                   pop_set: str | None = None) -> list[tuple[float, float, float, float]]:
     """Where each figure of one row goes: a list of (x, y, width, height), left to right.
 
     THE ONE PLACE THIS IS WORKED OUT. The row is CENTRED in its box at every count, so a box that
@@ -628,11 +642,21 @@ def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float,
     """
     if count <= 0:
         return []
+    m = _pop.board(pop_set)
     box = population_boxes(root)[kind]
     y, width, height = population_figure_frame(root, kind)
-    step = population_step(count, width, box)
+    step = population_step(count, width, box, pop_set)
     span = width * (1.0 + step * (count - 1))
-    start = (box[0] + box[1]) / 2.0 - span / 2.0
+    # WHERE A SHORT ROW SITS. Centred is the default and the reason is in the docstring; the
+    # other two exist so the choice can be SEEN beside it rather than argued about. A row
+    # that fills its box lands in the same place under all three.
+    align = m.get("align", "centre")
+    if align == "left":
+        start = box[0] + m["pad"]
+    elif align == "right":
+        start = box[1] - m["pad"] - span
+    else:
+        start = (box[0] + box[1]) / 2.0 - span / 2.0
     return [(start + i * width * step, y, width, height) for i in range(count)]
 
 

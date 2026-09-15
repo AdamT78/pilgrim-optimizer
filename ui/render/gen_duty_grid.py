@@ -34,6 +34,10 @@ import base64
 import json
 import pathlib
 import re
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import population_sets as pop           # noqa: E402  (needs the path line above)
 
 HERE = pathlib.Path(__file__).resolve().parent
 SHAPES = HERE.parent / "assets-gothic" / "metadata" / "duty_grid_shapes.json"
@@ -706,9 +710,12 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
 # kept only 42% of each seat's chroma and the four read as grey-brown triangles; this keeps 66%.
 # Pushing to 81% makes them poster-flat, plum worst.
 ACOLYTE = HERE.parent / "assets-gothic" / "population" / "acolyte_gothic.png"
-ACOLYTE_ASPECT = 228 / 210.0
-FIG_FRAC = 0.205              # figure width as a fraction of the tile's width
-FIG_OVERLAP = 0.60            # how much of the figure sits above the tile's bottom edge
+# THE DEFAULT SET'S OWN NUMBERS, not a second copy of them. These names stay because a dozen
+# call sites and guards read them, and what they mean is unchanged: the wheel as it is drawn
+# when nobody asks for anything else. A second set is `pop_set=` on the functions below.
+ACOLYTE_ASPECT = pop.tile()["aspect"]
+FIG_FRAC = pop.tile()["frac"]          # figure width as a fraction of the tile's width
+FIG_OVERLAP = pop.tile()["overlap"]    # how much sits above the tile's bottom edge
 SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
 SEAT_ORDER = ("sage", "pewter", "plum", "bone")
 # How a count is drawn: one figure per acolyte, piled upward, and no numeral anywhere. See
@@ -751,8 +758,8 @@ SEAT_ORDER = ("sage", "pewter", "plum", "bone")
 # alternating sides gives each figure an edge the one below it does not have, so the silhouette
 # breaks where the step alone would not separate it. It is not free -- it widens a pile by twice
 # itself into a gap of 0.24 of a figure, and `acolyte_row` states the clearance that leaves.
-STACK_STEP = 0.30             # fraction of a figure's height between one acolyte and the next
-STACK_LEAN = 0.10             # fraction of a figure's width, alternating side to side
+STACK_STEP = pop.tile()["step"]        # of a figure's HEIGHT, one acolyte to the next
+STACK_LEAN = pop.tile()["lean"]        # of a figure's WIDTH, alternating side to side
 _TINTS: dict[str, str] | None = None
 
 
@@ -804,7 +811,51 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER) -> dict:
+HOOD_STROKE = 0.055           # of a figure's width, centred on the outline
+
+
+def hood_defs(uid: str = "dg", seats: tuple[str, ...] = SEAT_ORDER) -> str:
+    """The hooded mark in each seat's colour, defined once per svg for `<use>`.
+
+    ONE UNIT WIDE with its crown at y=0, so the `<use>` that places it needs only a translate and
+    a scale by the figure width -- the same two numbers the `<image>` of the other set is given.
+
+    THE OUTLINE IS NOT DECORATION, and it is the same argument the gothic figure's halo is built
+    on: pewter and plum fall to 1.2 : 1 against the brightest tile bottom (Give Alms, L 91) and
+    would vanish without something dark around them. `acolyte_tints` dilates the asset's alpha by
+    6 px of its 228 to get it; 0.055 of a width, centred, puts the same 2.6% outside the shape.
+
+    The face is a flat 22% black rather than a fourth colour per seat, measured off the mock-up:
+    its plum body is (138, 90, 146) and its face (106, 70, 109), a ratio of 0.77.
+    """
+    out = []
+    d = pop.hood_path()
+    f = pop.HOOD_FACE
+    for seat in seats:
+        out.append(
+            f'<g id="{uid}-hood-{seat}">'
+            f'<path d="{d}" fill="{SEAT_SWATCH[seat]}" stroke="{INK}" '
+            f'stroke-width="{HOOD_STROKE}" stroke-linejoin="round"/>'
+            f'<ellipse cx="0" cy="{f["cy"]}" rx="{f["rx"]}" ry="{f["ry"]}" '
+            f'fill="#000" opacity="0.22"/></g>')
+    return "".join(out)
+
+
+def pop_defs(uid: str = "dg", pop_set: str | None = None,
+             seats: tuple[str, ...] = SEAT_ORDER) -> str:
+    """Whatever the chosen set has to define before a row can `<use>` it.
+
+    Empty for a set that draws images, because a data URI needs no defs. A page that draws the
+    hood set and forgets this renders NO ACOLYTES AT ALL -- an unresolved `<use>` is silent -- and
+    a board with no acolytes is a board somebody will believe. The id guard in the duty-wheel
+    tests is what catches it: every `url(#...)` and `href="#..."` must name an id the same svg
+    defines.
+    """
+    return hood_defs(uid, seats) if pop.tile(pop_set)["kind"] == "hood" else ""
+
+
+def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER,
+                pop_set: str | None = None) -> dict:
     """Where one tile's row sits: {sx, sy, fw, fh, gap}, in grid units.
 
     SIZED BY HOW MANY SEATS ARE IN THE GAME, not always four. Pilgrim seats two to four, and a
@@ -841,26 +892,30 @@ def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER) -> dict:
     xs, ys = n[0::2], n[1::2]
     x0, x1, y1 = min(xs), max(xs), max(ys)
     w = x1 - x0
-    fw = w * FIG_FRAC
-    fh = fw / ACOLYTE_ASPECT
-    gap = fw * 0.24
+    m = pop.tile(pop_set)
+    fw = w * m["frac"]
+    fh = fw / m["aspect"]
+    gap = fw * m["gap"]
     k = len(seats)
-    return {"sx": x0 + (w - (k * fw + (k - 1) * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
+    return {"sx": x0 + (w - (k * fw + (k - 1) * gap)) / 2, "sy": y1 - fh * m["overlap"],
             "fw": fw, "fh": fh, "gap": gap}
 
 
-def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float:
+def acolyte_foot(meta: dict | None = None, margin: float | None = None,
+                 pop_set: str | None = None) -> float:
     """The lowest acolyte ink on the board, in grid units. The bottom of the drawn block.
 
     The tiles are not the bottom of this component -- the figures hang below the last row of them
     -- so anything on the board that wants to line up with what the eye sees as the wheel's foot
     has to ask for this rather than for the box.
     """
-    return max(acolyte_box(d)["sy"] + acolyte_box(d)["fh"]
+    return max(acolyte_box(d, pop_set=pop_set)["sy"]
+               + acolyte_box(d, pop_set=pop_set)["fh"]
                for d in laid_shapes(meta, margin, offsets=False))
 
 
-def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
+def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER,
+                pop_set: str | None = None, uid: str = "dg") -> str:
     """One row under a tile, drawn: a seat's count is that many FIGURES, piled upward.
 
     THERE IS NO NUMERAL. A count used to be one figure with a small number on its robe, and the
@@ -901,10 +956,11 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
     reader who finds the wheel disagreeing with a majority knows it is a known gap rather than a
     bug in this file.
     """
-    b = acolyte_box(shape, seats)
+    m = pop.tile(pop_set)
+    b = acolyte_box(shape, seats, pop_set)
     sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
-    uris = acolyte_tints()
-    step, lean = fh * STACK_STEP, fw * STACK_LEAN
+    uris = acolyte_tints() if m["kind"] == "image" else None
+    step, lean = fh * m["step"], fw * m["lean"]
     out = []
     for j, seat in enumerate(seats):
         n = int(counts[j])
@@ -929,10 +985,20 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
         # Drawn top DOWN, so each figure is overlapped from below by the next and the one standing
         # on the line is whole. Painted the other way the pile reads as a row lying down.
         for i in range(n):
-            out.append(
-                f'<image href="{uris[seat]}" x="{x + side[i]:.1f}" '
-                f'y="{sy - (n - 1 - i) * step:.1f}" width="{fw:.1f}" height="{fh:.1f}" '
-                f'preserveAspectRatio="xMidYMid meet"/>')
+            fy = sy - (n - 1 - i) * step
+            if uris is not None:
+                out.append(
+                    f'<image href="{uris[seat]}" x="{x + side[i]:.1f}" '
+                    f'y="{fy:.1f}" width="{fw:.1f}" height="{fh:.1f}" '
+                    f'preserveAspectRatio="xMidYMid meet"/>')
+            else:
+                # A <use> of the one hood this svg defines. The mark is DEFINED ONCE and
+                # used up to sixteen times per tile; inlining its 96-point outline at every
+                # acolyte would be about a kilobyte a head.
+                out.append(
+                    f'<use href="#{uid}-hood-{seat}" '
+                    f'transform="translate({x + side[i] + fw / 2:.1f} {fy:.1f}) '
+                    f'scale({fw:.2f})"/>')
         out.append('</g>')
     return "".join(out)
 
@@ -1149,6 +1215,9 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   # transform, so the shapes it starts from must not already carry the file's
                   # numbers or every offset lands twice.
                   offsets: bool = True,
+                  # Which population set draws the acolyte rows. None is the default set and
+                  # the board is byte-identical to what it was before sets existed.
+                  pop_set: str | None = None,
                   cells: list[int] | None = None,
                   # The seat whose turn it is. Given, only the duties that seat's own acolytes
                   # stand on stay live; every other tile is drawn exactly as now and simply does
@@ -1238,7 +1307,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
            f'data-palette="{palette or "none"}"{root_style} '
            f'aria-label="Duty wheel, nine tiles">'
            f'<style>{HOVER_CSS}{PALETTE_CSS}{MARK_CSS if marking else ""}</style><defs>'
-           + (mark_defs(uid) if marking else ""),
+           + (mark_defs(uid) if marking else "")
+           + pop_defs(uid, pop_set),
            f'<filter id="{uid}-dim" color-interpolation-filters="sRGB">{DIM}</filter>'
            f'<filter id="{uid}-lit" color-interpolation-filters="sRGB">{LIT}</filter>']
     for i, d in enumerate(shapes):
@@ -1368,7 +1438,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             # rather than under its own tile -- the Taxation bug again, by a different route, and
             # silent in exactly the same way. It was dormant because the default arrangement is
             # the identity and nothing yet passes a shuffled one outside the guards.
-            out.append(acolyte_row(frozen[cells[int(i)]], counts, seats))
+            out.append(acolyte_row(frozen[cells[int(i)]], counts, seats,
+                                   pop_set=pop_set, uid=uid))
         out.append("</g>")
     out.append("</svg>")
     return "".join(out)
