@@ -476,10 +476,6 @@ def nearest_text(root: ET.Element, x: float, y: float) -> ET.Element:
 # size from the very <image> element the row replaces. A constant for any of those would be a
 # second statement of a fact the template already owns, free to drift the moment the art moves.
 POPULATION_KINDS = ("serf", "acolyte")
-# The hooded mark as the card draws it. Same two numbers the wheel uses and for the same
-# reason: the outline is what keeps pewter and plum off a pale ground, not decoration.
-HOOD_INK = "#2b2114"
-HOOD_STROKE = 0.055
 # THE DEFAULT BOARD SET'S OWN NUMBERS, not a second copy. A set bundles how a population is
 # drawn with where it goes, and the card is one of the two surfaces that place it -- see
 # population_sets.py. These names stay because the guards and `population_step` read them,
@@ -618,6 +614,8 @@ def population_figure_frame(root: ET.Element, kind: str,
                 raise BuildError(f"The {kind} image has no y/width/height.")
             spec = _pop.card(figure_set)
             if kind == "acolyte" and spec["kind"] != "image":
+                inset = spec.get("inset", 0.0) * h
+                y, h = y + inset, h - 2 * inset
                 w = h * spec["aspect"]
             return y, w, h
     raise BuildError(f"No {kind} image in the template to take the figure's size from.")
@@ -805,21 +803,23 @@ def _hood_symbol(defs: ET.Element, symbol_id: str, seat: str, spec: Mapping[str,
     -- so four seats whose marks all claimed to come from the same place would become one symbol,
     and every board would wear the first seat colour. One board looks perfect while it happens.
 
-    The viewBox is the shape own box, one unit wide by HOOD_H tall, and `preserveAspectRatio` is
-    left at the default meet: the <use> is already sized to that aspect by
-    `population_figure_frame`, so meet and slice agree and the figure fills its box either way.
+    The viewBox is the INKED box, not the path bounds: a symbol clips to its viewport and a
+    stroke is centred on its path, so the bare bounds cut half the outline off on every edge --
+    a flat dome and square shoulders, which read as a figure that does not fit. `hood_box`
+    owns that arithmetic and the card set aspect is taken from the same place, so the <use>
+    sizing and the symbol contents cannot disagree.
     """
     if defs.find(f"*[@id='{symbol_id}']") is not None:
         return
     fill = _pop.SEAT_SWATCH.get(seat, _pop.SEAT_SWATCH["bone"])
     symbol = ET.SubElement(defs, q("symbol"), {
         "id": symbol_id,
-        "viewBox": f"-0.5 0 1 {fmt(_pop.HOOD_H)}",
+        "viewBox": " ".join(fmt(v) for v in _pop.hood_box()),
         "data-source": f"hood:{seat}",
     })
     ET.SubElement(symbol, q("path"), {
-        "d": _pop.hood_path(), "fill": fill, "stroke": HOOD_INK,
-        "stroke-width": fmt(HOOD_STROKE), "stroke-linejoin": "round",
+        "d": _pop.hood_path(), "fill": fill, "stroke": _pop.HOOD_INK,
+        "stroke-width": fmt(_pop.HOOD_STROKE), "stroke-linejoin": "round",
     })
     face = _pop.HOOD_FACE
     ET.SubElement(symbol, q("ellipse"), {

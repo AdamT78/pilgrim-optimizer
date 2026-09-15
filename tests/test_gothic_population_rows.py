@@ -453,13 +453,76 @@ def test_a_drawn_mark_is_sized_to_its_own_shape_and_not_to_the_photographs_box(a
 
     for name, spec in ((n, pop.card(n)) for n in pop.SETS):
         _y, w, h = asm.population_figure_frame(template, "acolyte", name)
-        assert h == t_h, "%r changed the band's height, which belongs to the template" % name
         if spec["kind"] == "image":
-            assert w == t_w, "%r is a placed image and should keep the template's width" % name
+            assert (w, h) == (t_w, t_h), (
+                "%r is a placed image and should take the template's box whole" % name)
         else:
-            assert abs(w - t_h * spec["aspect"]) < 1e-9, (
-                "%r is drawn at %.3f wide; its own aspect over the template's height is %.3f"
-                % (name, w, t_h * spec["aspect"]))
+            inset = spec.get("inset", 0.0)
+            assert abs(h - t_h * (1 - 2 * inset)) < 1e-9, (
+                "%r is drawn %.3f tall; the frame less its margin is %.3f"
+                % (name, h, t_h * (1 - 2 * inset)))
+            assert abs(w - h * spec["aspect"]) < 1e-9, (
+                "%r is drawn at %.3f wide; its own aspect over its height is %.3f"
+                % (name, w, h * spec["aspect"]))
             assert abs(w - t_w) > 1.0, (
                 "%r is drawn at the photograph's width (%.1f), so the shape is being fitted "
                 "inside a box wider than itself" % (name, t_w))
+
+
+def test_the_symbols_viewbox_holds_the_whole_mark_including_its_outline(asm):
+    """A <symbol> clips to its viewport and a stroke is centred on its path.
+
+    Set to the path's bare bounds, the viewBox cuts half the outline off on EVERY edge: the dome
+    comes out flat, the shoulders square. It shipped that way and read as a figure too big for its
+    box rather than as one being trimmed, which is why it was reported as a sizing problem.
+
+    Checked as arithmetic on the shape rather than on the rendered pixels: the box must contain
+    every point of the outline grown by half the stroke.
+    """
+    pop = pop_sets()
+    x0, y0, w, h = pop.hood_box()
+    half = pop.HOOD_STROKE / 2
+    xs = [p[0] for p in pop.HOOD_SHAPE]
+    ys = [p[1] for p in pop.HOOD_SHAPE]
+    assert x0 <= min(xs) - half + 1e-12 and x0 + w >= max(xs) + half - 1e-12, (
+        "the box %s clips the outline sideways (path spans %.4f..%.4f, stroke reaches %.4f)"
+        % ((x0, w), min(xs), max(xs), max(xs) + half))
+    assert y0 <= min(ys) - half + 1e-12 and y0 + h >= max(ys) + half - 1e-12, (
+        "the box %s clips the outline vertically (path spans %.4f..%.4f, stroke reaches %.4f)"
+        % ((y0, h), min(ys), max(ys), max(ys) + half))
+    assert abs(pop.card("hood")["aspect"] - w / h) < 1e-12, (
+        "the card set is sized to a different box than the symbol carries, so the <use> and the "
+        "symbol disagree and the mark is letterboxed or cropped")
+
+
+def test_the_marks_margin_is_the_one_the_photograph_leaves(asm):
+    """`inset` is a MEASUREMENT of the asset it replaces, so it must still be true of it.
+
+    The gothic PNGs are not alpha-tight: they carry transparent rows at each end, so the
+    photograph never reaches the edges of the box the template gives it. A drawn mark is tight and
+    does, which put it flush against a band only 174 units deep. This re-measures rather than
+    trusting the number, because the asset can be recut and nothing else would say so.
+    """
+    numpy = pytest.importorskip("numpy")
+    Image = pytest.importorskip("PIL.Image")
+    pop = pop_sets()
+    inset = pop.card("hood").get("inset")
+    assert inset, "the drawn mark leaves no margin; see the note beside `inset`"
+
+    alpha = numpy.asarray(Image.open(ASSETS / "population" / "acolyte_gothic.png")
+                          .convert("RGBA"))[..., 3]
+    rows = numpy.nonzero((alpha > 8).any(axis=1))[0]
+    top = rows.min() / alpha.shape[0]
+    bottom = 1 - (rows.max() + 1) / alpha.shape[0]
+    assert abs(top - inset) < 0.002 and abs(bottom - inset) < 0.002, (
+        "the acolyte asset now leaves %.4f above and %.4f below, but the drawn mark is inset by "
+        "%.4f -- the two figures would no longer sit on the same line" % (top, bottom, inset))
+
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    image = [im for im in template.iter(q("image"))
+             if im.get("data-asset-role") == "acolyte"][0]
+    t_y, t_h = float(image.get("y")), float(image.get("height"))
+    y, _w, h = asm.population_figure_frame(template, "acolyte", "hood")
+    assert abs(y - (t_y + t_h * top)) < 0.5 and abs(h - t_h * (1 - top - bottom)) < 0.5, (
+        "the drawn mark sits at %.2f..%.2f while the photograph's ink sits at %.2f..%.2f"
+        % (y, y + h, t_y + t_h * top, t_y + t_h * (1 - bottom)))

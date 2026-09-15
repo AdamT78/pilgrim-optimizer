@@ -814,7 +814,7 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-HOOD_STROKE = 0.055           # of a figure's width, centred on the outline
+HOOD_STROKE = pop.HOOD_STROKE   # of a figure's width, centred on the outline
 
 
 def hood_defs(uid: str = "dg", seats: tuple[str, ...] = SEAT_ORDER) -> str:
@@ -837,7 +837,7 @@ def hood_defs(uid: str = "dg", seats: tuple[str, ...] = SEAT_ORDER) -> str:
     for seat in seats:
         out.append(
             f'<g id="{uid}-hood-{seat}">'
-            f'<path d="{d}" fill="{SEAT_SWATCH[seat]}" stroke="{INK}" '
+            f'<path d="{d}" fill="{SEAT_SWATCH[seat]}" stroke="{pop.HOOD_INK}" '
             f'stroke-width="{HOOD_STROKE}" stroke-linejoin="round"/>'
             f'<ellipse cx="0" cy="{f["cy"]}" rx="{f["rx"]}" ry="{f["ry"]}" '
             f'fill="#000" opacity="0.22"/></g>')

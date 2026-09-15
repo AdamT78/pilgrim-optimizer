@@ -48,6 +48,26 @@ HOOD_H = 1.2                  # height, in width units -- so the aspect w/h is 1
 # only its top STACK_STEP of height, and the face is what makes that band read as another person
 # rather than as the same silhouette continuing.
 HOOD_FACE = {"cy": 0.336, "rx": 0.207, "ry": 0.2424}
+# The outline, and it is not decoration: the same argument the gothic figure's halo is built on --
+# pewter and plum fall to 1.2 : 1 against the brightest tile bottom and would vanish without
+# something dark around them. Here rather than in either module that draws the mark, because both
+# of them were carrying their own copy.
+HOOD_INK = "#2b2114"
+HOOD_STROKE = 0.055           # of the figure's width, centred on the outline
+
+
+def hood_box() -> tuple[float, float, float, float]:
+    """The mark's INKED box -- the path's own bounds grown by the half of the stroke that falls
+    outside it -- as (x, y, width, height) in width units.
+
+    THIS IS WHAT A <symbol> HAS TO BE GIVEN. A symbol clips to its viewport, and a stroke is
+    centred on its path, so a viewBox set to the path's bare bounds cuts half the outline off on
+    every edge: the dome comes out flat, the shoulders come out square, and it reads as a figure
+    that does not fit rather than as one that is being trimmed. The duty wheel never hit this
+    because it draws the mark in a <g> and places it with a transform, where nothing clips.
+    """
+    h = HOOD_STROKE / 2
+    return (-0.5 - h, -h, 1.0 + 2 * h, HOOD_H + 2 * h)
 
 HOOD_SHAPE = tuple(
     tuple(float(v) for v in pair.split(","))
@@ -85,6 +105,19 @@ HOOD_SHAPE = tuple(
 #
 # `board` metrics:
 #
+# `card` metrics:
+#
+#   kind      "image" places the asset the config names; anything else is DRAWN
+#   aspect    the inked box's width / height, for a drawn mark
+#   inset     clear ground the mark leaves at the top and foot of the template's frame, as a
+#             fraction of that frame's height. MEASURED, not chosen: the gothic PNGs carry a
+#             transparent margin of 5 rows in 210 at each end, so the photograph never reaches the
+#             edges of the box the template gives it. A drawn mark is alpha-tight and would, and
+#             the band is only 174 units deep -- it came out flush against the panel and read as a
+#             figure too big for its box. Matching the margin puts the mark exactly where the
+#             photograph's ink sits. There is a guard that re-measures the asset and fails if this
+#             number stops being true of it.
+#
 #   step      overlap between consecutive figures, as a fraction of a figure's width
 #   pad       clear ground kept at each end of a box, in card units
 #   align     where a short row sits in its box
@@ -120,7 +153,11 @@ SETS = {
         # figure WIDTH is derived from it and the template's height, instead of both coming from
         # the <image> the row replaces. Keeping the height is what keeps the band's vertical
         # arrangement -- which the template owns and this does not touch.
-        "card": {"kind": "hood", "aspect": 1.0 / HOOD_H},
+        # The aspect of the INKED box, so the <use> that sizes the symbol matches what the
+        # symbol actually contains. Taken from `hood_box`, not from HOOD_H, or the mark is
+        # fitted to its path and the stroke is clipped away.
+        "card": {"kind": "hood", "aspect": hood_box()[2] / hood_box()[3],
+                 "inset": 5 / 210.0},
     },
 }
 # TWO NAMES, AND THEY ARE NOT THE SAME QUESTION.
