@@ -444,9 +444,23 @@ def test_cover_puts_the_wheel_on_the_same_piece_of_picture_at_every_size():
     inside the wheel, over L50: 2.2%, 2.8%, 14.5%, 14.3%, 15.5% stretched across the five screens
     in gen_layout_tool.SCREENS; 2.2%, 2.8%, 2.9%, 2.9%, 2.9% cropped.
 
-    Tested as geometry rather than as a render because it IS geometry -- and because a guard that
-    needed a browser could not run in the ui lane at all.
+    Tested as geometry rather than as a render because it IS geometry: the mapping from canvas to
+    picture is arithmetic, and a browser would only render the same numbers more slowly.
+
+    NOT because a browser is unavailable. The ui lane installs chromium for the picker guards, so
+    the exposed-ground reading quoted above could be taken here. It is not, and the reason is the
+    threshold rather than the mechanism: the residual 2.8% sits ABOVE the CEILING of 50 that
+    gen_ground enforces on the flat field, so a guard for it would have to be given a number
+    chosen to pass -- which is a guard that protects nothing. The numbers are recorded until that
+    is decided rather than pinned at a value nobody argued for.
     """
+    # `cover` needs the picture's own aspect, which means reading the file. This runs in the lane
+    # that installs neither numpy nor Pillow as well as the ui one, and a bare `from PIL import`
+    # there is an ERROR rather than a skip -- which is the same dependency escaping that has now
+    # turned a run red twice.
+    if not PANORAMA.is_file():
+        pytest.skip("the committed panorama is not in this checkout")
+    pytest.importorskip("PIL", reason="reading the panorama's aspect needs Pillow")
     narrow = [(2560, 1300), (1920, 940), (1512, 860)]
     boxes = [wheel_in_panorama(s, "cover") for s in narrow]
     for got, screen in zip(boxes[1:], narrow[1:]):
