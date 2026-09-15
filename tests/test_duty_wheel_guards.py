@@ -22,11 +22,20 @@ grid's build-out and was caught by eye rather than by anything automatic:
                     earlier shape pass also overshot its cell and bled two columns past the grid
                     box, which is invisible until something clips.
 
-These run in the `ui` lane, which is the lane a design-only pull request actually triggers.
+These run in the `ui` lane, which is the lane a design-only pull request actually triggers -- AND
+in the lane that runs the whole suite, which is not the same environment. The ui lane installs
+pillow and numpy; the full-suite lane installs neither. This file must therefore pass with both
+absent, and anything here that genuinely needs pixels says so with `pytest.importorskip` rather
+than assuming.
+
+That sentence used to name only the ui lane. Two guards were added on the strength of it, verified
+where numpy exists, and failed on the lane nobody had mentioned -- a comment that was true about
+where these run and silent about where else they run.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -436,6 +445,33 @@ def test_the_offsets_tool_watches_every_generator_it_builds_from():
 SHUFFLE = [2, 5, 3, 8, 4, 6, 1, 7, 0]      # a real arrangement: no duty on its own numbered square
 
 
+@contextlib.contextmanager
+def drawn_without_the_artwork(g):
+    """Emit the acolyte rows without building their four duotone PNGs.
+
+    `acolyte_tints` needs numpy and Pillow. The ui lane installs both. The lane that runs the whole
+    suite installs neither, and the two guards below went in green here and red there -- they had
+    only ever been run where numpy exists, which is not a thing either of them is about.
+
+    `pytest.importorskip` was the other option and is worse. What these check is which SHAPE each
+    row is derived from, and which tiles carry hit areas; the image bytes have no part in either.
+    Skipping would retire a guard against a Taxation-class bug in the lane that runs everything,
+    and leave it running only where somebody remembered to install a plotting library. Stubbing the
+    artwork keeps the geometry and the markup exactly what production emits, and keeps the guard
+    running in both lanes.
+
+    The stub is an empty href, so the <image> elements are still there and still positioned. If a
+    future check needs the real pixels it should ask for them explicitly with importorskip, not
+    quietly acquire a dependency for everything else in the file.
+    """
+    real = g.acolyte_tints
+    g.acolyte_tints = lambda: {seat: "" for seat in g.SEAT_ORDER}
+    try:
+        yield
+    finally:
+        g.acolyte_tints = real
+
+
 def _numerals(svg):
     """Every acolyte numeral in the emitted markup, as (x, y, value)."""
     import re
@@ -472,7 +508,8 @@ def test_a_seats_count_is_drawn_under_the_tile_it_belongs_to():
     for duty in range(9):
         counts = [[0, 0, 0, 0] for _ in range(9)]
         counts[duty] = [7, 0, 0, 0]                      # one seat, one duty, an unmistakable value
-        svg = g.duty_grid_svg(tiles_dir=None, cells=SHUFFLE, acolytes=counts)
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, cells=SHUFFLE, acolytes=counts)
         marks = [(x, y) for x, y, v in _numerals(svg) if v == 7]
         assert len(marks) == 1, "expected exactly one 7, found %d" % len(marks)
         x, y = marks[0]
@@ -532,7 +569,8 @@ def test_a_duty_the_active_seat_cannot_reach_still_answers_but_never_lights():
         svg, re.S)}
 
     for seat in g.SEAT_ORDER:
-        svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active=seat)
+        with drawn_without_the_artwork(g):
+            svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active=seat)
         live = g.eligible_tiles(counts, seat)
         assert live, "seat %s reaches nothing in this fixture; the check would be vacuous" % seat
         assert len(live) < 9, "every duty is reachable for %s; nothing is being excluded" % seat
@@ -545,7 +583,8 @@ def test_a_duty_the_active_seat_cannot_reach_still_answers_but_never_lights():
                 "has nothing to refuse on" % (i, seat))
 
     # and with no seat active nothing claims anything, so every tile lights as it always did
-    svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts)
+    with drawn_without_the_artwork(g):
+        svg = g.duty_grid_svg(tiles_dir=None, acolytes=counts)
     bodies = groups(svg)
     assert all("dg-hit" in b for b in bodies.values())
     # the TILES, not the whole document: the stylesheet names the attribute in every render,
