@@ -392,6 +392,17 @@
       "modifications": "none; used as generated",
       "reproducibleBy": "python3 ui/render/gen_ground.py -- deterministic in --seed, byte-identical to the committed file"
     },
+    "ui/panorama.webp": {
+      "state": "present",
+      "title": "Pilgrim trail at night, two-part panorama behind the game view",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "two halves generated in a ChatGPT session for this project from the left-half and right-half panorama prompts; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the field behind the whole game view, painted on html,body so it fills the viewport; the stage is transparent over it, so this also shows through the duty wheel's channels and every gutter",
+      "modifications": "joined from two 1430x1100 halves into 2860x1100 = 2.600:1, the screen's aspect, which gpt-image-1 cannot render directly and which the prompts composed for by driving each inner half to featureless fog; butt-joined with no overlap, because an overlap costs width and restoring the aspect then costs height at 2.6 px of overlap per px of height; the right half's inner edge measured 1.5 grey levels brighter than the left's, so it is level-matched per channel (R -1.89 G -1.61 B -1.05) fading to nothing over the first 25% of its width, where the subject begins; and both inner edges carried a generated vignette darkening over their last 28 columns, which butted together made a symmetric crease about 2 levels deep and 56 px wide at dead centre -- flattened by a per-column additive correction against each half's own plateau 40-120 px further in. Seam step after both corrections is 0.00 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
     "ui/cube_acolyte_bone.svg": {
       "state": "present",
       "title": "acolyte cube, bone",

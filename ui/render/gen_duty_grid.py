@@ -44,21 +44,51 @@ TILES = HERE.parent / "assets-gothic" / "duty-tiles"
 # whose whole claim is to show what the board will show and which drew its own parchment instead.
 GROUND = HERE.parent / "assets-gothic" / "ui" / "ground.webp"
 
+# The panorama the game view paints on the PAGE rather than on the stage, and the difference is
+# the whole point of it being a second file rather than a bigger GROUND.
+#
+# GROUND is stretched over the stage -- a fixed 1600 x 1200 canvas that is then zoom-to-fitted --
+# so on a 3440-wide screen it stops where the canvas stops and leaves about 840 px of flat colour
+# either side. The panorama is stretched over the viewport instead, so it has no edges to leave,
+# and it is 2.600:1 because that is the screen it is composed for. Neither can do the other's job:
+# a viewport-sized GROUND would have its noise scaled differently on every display, and a
+# stage-sized panorama would be the clipped picture this replaces.
+#
+# The path lives here, beside GROUND, for the reason GROUND's does: more than one page needs it,
+# and a second statement of where a file lives is a second thing to keep in step.
+PANORAMA = HERE.parent / "assets-gothic" / "ui" / "panorama.webp"
 
-def ground_uri() -> str:
-    """The ground as a data: URI, or a transparent pixel if it is not in this checkout.
+# A 1x1 transparent GIF. What a missing field falls back to, so the caller's own flat colour shows
+# and the page is plainer rather than broken.
+_BLANK = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
 
-    Embedded rather than linked: every page that uses it is written to ui/generated/ and then
-    opened from wherever it lands, so a relative src would work in exactly one of those cases and
-    silently show nothing in the rest. Absent, the caller falls back to its own flat colour and
-    the board is plainer rather than broken.
+
+def _embed(path: pathlib.Path, missing: str) -> str:
+    """`path` as a data: URI, or a transparent pixel with a note saying which file is absent.
+
+    Embedded rather than linked: every page that uses one of these is written to ui/generated/ and
+    then opened from wherever it lands, so a relative src would work in exactly one of those cases
+    and silently show nothing in the rest.
     """
     import base64
-    if not GROUND.is_file():
-        print("no %s -- falling back to flat colour. Run "
-              "`python3 ui/render/gen_ground.py` to make it." % GROUND.name)
-        return "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
-    return "data:image/webp;base64," + base64.b64encode(GROUND.read_bytes()).decode("ascii")
+    if not path.is_file():
+        print("no %s -- falling back to flat colour. %s" % (path.name, missing))
+        return _BLANK
+    return "data:image/webp;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def ground_uri() -> str:
+    """The field under the board, stretched over the stage."""
+    return _embed(GROUND, "Run `python3 ui/render/gen_ground.py` to make it.")
+
+
+def panorama_uri() -> str:
+    """The field behind the page, stretched over the viewport.
+
+    No generator to point at: this one is diffusion output, joined and level-matched by hand, and
+    its provenance is the attribution record rather than a script.
+    """
+    return _embed(PANORAMA, "It is a committed asset, not a generated one -- restore it from git.")
 
 # Version B -- grim dark -- chosen over A after both were generated in full and compared in the
 # picker. The case was not only taste. Measured over the eight tiles of each:
