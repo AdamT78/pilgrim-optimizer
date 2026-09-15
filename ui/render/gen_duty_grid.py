@@ -629,6 +629,22 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
     it, so a gap means a specific player is missing rather than merely that somebody is: the
     second pile is the second seat on every tile on the board, which is what makes a row readable
     at a glance across nine of them. Reflowing would make every row a small puzzle.
+
+    A PILE IS A COUNT OF ACOLYTES, NOT A MAJORITY, and the difference is not academic: comparing
+    piles to see whether sowing a particular way wins a duty is the whole reason this is figures
+    rather than numerals. Two buildings break that equivalence, and both are Duty Bonus rather
+    than Movement, so neither changes the number this function is given:
+
+        Scriptorium     "+1 to the acolyte total on all Duty tiles that player occupies" -- a
+                        majority the player holds with nothing extra standing there
+        Customs House   changes how a majority is CLAIMED when taking Taxation, not the counts
+
+    Nothing is drawn for either, deliberately and with Adam's agreement: there is no acolyte to
+    draw, and inventing a figure for one would be the numeral problem again in a worse form -- a
+    picture that cannot be trusted as a count. The sketched answer is a "temporary" acolyte,
+    marked as provisional by blinking or similar, and it is NOT built. Recorded here so that a
+    reader who finds the wheel disagreeing with a majority knows it is a known gap rather than a
+    bug in this file.
     """
     b = acolyte_box(shape, seats)
     sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
