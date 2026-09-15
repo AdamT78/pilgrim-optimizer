@@ -12,8 +12,8 @@ every forked generator in this repo has eventually had.
 
 So this file OWNS only what is new, and borrows everything that already works:
 
-    the gothic player boards     import gen_board_2      build_board + merge_defs
-    the Special Activities hole  import gen_board_2      special_placeholder
+    the gothic player boards     here                    build_board + merge_defs
+    the Special Activities hole  here                    special_placeholder
     the duty grid                import gen_duty_grid    duty_grid_svg
     the alms table, the market,  exec gen_board.py       module-level strings
     the action box, the log,
@@ -36,12 +36,14 @@ WHERE THE NUMBERS COME FROM
 
 `ui/layout.json`, which the layout tool writes. That is the standing arrangement in this repo --
 the tool edits the file and the build reads it, so moving a slider and changing the board are the
-same act. This reads considerably more of it than `gen_board_2.py` does, because this draws all
+same act. This reads considerably more of it than the four-board page did, because this draws all
 three columns rather than one.
 """
 
 import argparse
 import contextlib
+import copy
+import importlib.util
 import io
 import json
 import os
@@ -55,7 +57,6 @@ UI = HERE.parent
 REPO = UI.parent
 sys.path.insert(0, str(HERE))
 
-import gen_board_2 as g2                                            # noqa: E402
 import gen_duty_grid as dg                                          # noqa: E402
 
 # The player board's artwork runs 1905 units wide, and its gold frame -- the part that reads as the
@@ -85,6 +86,212 @@ DEFAULTS = {
     "wheel_slack_to_boxes": True,
 }
 
+
+
+# --------------------------------------------------------------------------------------------
+# THE FOUR GOTHIC BOARDS, AND THE SPECIAL ACTIVITIES HOLE.
+#
+# These came from gen_board_2.py, which was a standalone page answering one question -- what do four
+# gothic boards cost, and look like, where they will actually sit. This file answers it and more, so
+# that page was deleted and the parts of it this file was already importing moved here rather than
+# being left in a module nothing else used.
+#
+# Namespace registration and `q` come with them: merge_defs walks the assembler's own namespaced
+# tree, so it needs the same names the assembler registers.
+SVG_NS = "http://www.w3.org/2000/svg"
+XLINK_NS = "http://www.w3.org/1999/xlink"
+ET.register_namespace("", SVG_NS)
+ET.register_namespace("xlink", XLINK_NS)
+
+
+def q(tag):
+    return f"{{{SVG_NS}}}{tag}"
+
+
+# The game view's own numbers, read from the generator that owns them rather than copied -- with
+# one deliberate exception. gen_board.py's canvas is 1600 x 1067, and the gothic boards do not fit
+# that column: they stand 147.2 px against the current cards' 135, which is 48.8 px more over four
+# seats, before a Special Activities panel is asked for at all.
+#
+# 1600 x 1200 is that column with room. The choice is an ASPECT, not a resolution: the stage is
+# zoom-to-fit, so 1600 x 1200 and 3200 x 2400 are the same picture, and on every screen worth
+# testing the height term wins the fit -- which is also why an ultrawide scores exactly the same as
+# a 1440p monitor here, and why extra width buys nothing. A taller canvas buys column space by
+# rendering everything smaller: 4:3 costs about 11% of apparent size against 3:2.
+CANVAS_W, CANVAS_H = 1600, 1200
+STAGE_PAD = 14
+BOARD_GAP = 30
+VB_W, VB_H = 1905.0, 826.0
+
+# Measured from the current game view: the Special Activities panel is already the head of this
+# column, at exactly the boards' width, and the log already sits at the column's foot with no slack.
+SA_TODAY_H = 153.9
+LOG_H = 210.7
+
+# The Special Activities table's own geometry, from gen_board.py. Six activities are the columns and
+# four seats the rows -- transposed that way deliberately, because a row-per-activity grid needs 194
+# units and would not fit the column at all. These are what decide how big a hole the artwork has to
+# leave: the table is 316 x 147.6 units inside a 352 x 159.6 canvas, which is about 90% x 92%
+# full-bleed. Very little of a gothic frame can be border.
+SA_VB_W, SA_VB_H = 352.0, 159.6
+SA_W, SA_H = 316.0, 147.6
+SA_ROW1, SA_PITCH, SA_CUBE, SA_CUBE_GAP = 82.0, 16.5, 11.96, 3.59
+SA_ACTIVITIES, SA_SEATS = 6, 4
+
+# The seat swatches, for the placeholder's cubes only -- this draws no real asset.
+SA_SWATCH = ("#7d9b52", "#4a6b86", "#8a5a92", "#d8cfbe")
+
+def special_placeholder(width, height, border_y, border_x=0.05):
+    """The Special Activities panel as a hole, drawn before the artwork exists.
+
+    The point of drawing this first is that the artwork cannot be judged on its own. A gothic frame
+    for this panel is handsome or not, but what decides whether it is USABLE is whether the clear
+    area inside it still holds a six-by-four table of cubes at a size anyone can see. So this draws
+    the frame's footprint, the interior a given border allowance would leave, and the real table at
+    its real size inside -- and says plainly whether the second fits the first.
+
+    `border_y` is the fraction of the height spent on frame above and below, `border_x` the fraction
+    of the width spent on it left and right. The first is the one to argue about: the gothic player
+    board spends 26% of its height above its first opening, all arch and stonework, and at that
+    allowance this table would need a panel nearly 300 px tall. The sides are cheaper -- that frame
+    spends about 5% there -- but they are a control and not a constant, because a table 90% as wide
+    as its canvas has very little to give either.
+    """
+    scale = width / SA_VB_W                    # px per table unit, at this render width
+    table_w, table_h = SA_W * scale, SA_H * scale
+    inner_x, inner_w = width * border_x, width * (1 - 2 * border_x)
+    inner_y, inner_h = height * border_y, height * (1 - 2 * border_y)
+    fits = table_w <= inner_w + 0.05 and table_h <= inner_h + 0.05
+
+    ink = "#c9a227" if fits else "#d05a4a"
+    o = ['<svg width="%.1f" height="%.1f" viewBox="0 0 %.1f %.1f" class="sa-placeholder">'
+         % (width, height, width, height)]
+    o.append('<rect x="0.5" y="0.5" width="%.1f" height="%.1f" rx="9" fill="#2a2c26" '
+             'stroke="#6b6250" stroke-width="1"/>' % (width - 1, height - 1))
+    o.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#1d2a22" stroke="%s" '
+             'stroke-width="1" stroke-dasharray="4 3"/>' % (inner_x, inner_y, inner_w, inner_h, ink))
+
+    # The table itself, centred, at the size it actually needs.
+    tx, ty = (width - table_w) / 2, (height - table_h) / 2
+    o.append('<g transform="translate(%.2f %.2f) scale(%.4f)">' % (tx, ty, scale))
+    o.append('<rect x="0" y="0" width="%.1f" height="%.1f" fill="none" stroke="%s" '
+             'stroke-width="%.2f"/>' % (SA_W, SA_H, ink, 1 / scale))
+    col_w = SA_W / SA_ACTIVITIES
+    for c in range(SA_ACTIVITIES):
+        cx = col_w * (c + 0.5)
+        o.append('<circle cx="%.1f" cy="%.1f" r="8" fill="none" stroke="#8b8570" '
+                 'stroke-width="%.2f"/>' % (cx, SA_ROW1 - 34, 1 / scale))
+        for r in range(SA_SEATS):
+            y = SA_ROW1 + r * SA_PITCH - SA_CUBE / 2
+            if (c + r) % 3:                    # a sparse table, which is how it actually looks
+                continue
+            o.append('<rect x="%.1f" y="%.1f" width="%.2f" height="%.2f" fill="%s" stroke="#2A2320"'
+                     ' stroke-width="%.2f"/>' % (cx - SA_CUBE / 2, y, SA_CUBE, SA_CUBE,
+                                                 SA_SWATCH[r], 0.6))
+    o.append("</g></svg>")
+
+    spec = {
+        "width": width, "height": height, "border": border_y, "border_x": border_x,
+        "interior_px": (round(inner_w, 1), round(inner_h, 1)),
+        "table_px": (round(table_w, 1), round(table_h, 1)),
+        "cube_px": round(SA_CUBE * scale, 2),
+        "fits": fits,
+        "height_needed": round(table_h / (1 - 2 * border_y), 1),
+        "width_needed": round(table_w / (1 - 2 * border_x), 1),
+    }
+    return "".join(o), spec
+
+def load_assembler(path):
+    spec = importlib.util.spec_from_file_location("assembler", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# A face per seat, so a column of four boards is four PLAYERS rather than one man four times.
+#
+# Not a rule about who sits where -- a real game deals these -- but a placeholder cast, and it lives
+# here rather than in the layout tool because the tool exists to show what the build produces. A
+# tool showing four faces against a build that draws one would be a mockup, which is the one thing
+# it promises not to be. The fifth portrait is spare; there are five leaders and four seats.
+
+SEAT_PORTRAITS = {
+    "sage": "portraits/leader_male_shaven.png",
+    "pewter": "portraits/leader_female_hooded.png",
+    "plum": "portraits/leader_male_hooded.png",
+    "bone": "portraits/leader_female_blindfolded.png",
+}
+
+
+def build_board(asm, assets_dir, config_path, seat, turn, portrait=None):
+    """One complete board for one seat, exactly as the production assembler would write it."""
+    config = copy.deepcopy(asm.read_json(config_path))
+    for role in ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems"):
+        config.pop(role, None)
+    config["seat"] = seat
+    config["turn"] = turn
+    chosen = portrait or SEAT_PORTRAITS.get(seat)
+    if chosen:
+        config["portrait"] = chosen
+    config["id"] = f"gothic-{seat}"
+    config["aria_label"] = f"Pilgrim gothic player board, {seat} seat"
+    asm.apply_seat(config)
+
+    layout = asm.read_json(assets_dir / "metadata" / "layout.json")
+    root = ET.parse(assets_dir / "template" / "player_board_template.svg").getroot()
+    asm.apply_config(root, config, layout, assets_dir)
+    asm.embed_assets_once(root, assets_dir)
+    asm.assert_no_duplicated_payloads(root)
+    return root
+
+def merge_defs(asm, roots):
+    """Lift every board's <defs> into one, collapsing assets that appear more than once.
+
+    Symbols are matched on `data-source` and `preserveAspectRatio` -- the pair the assembler itself
+    keys on -- so two boards drawing the same file at the same fit share one payload. Everything
+    else in <defs> (clip paths, the gradient, the filter, the turn stylesheet) is identical for
+    every board and is kept once, which also stops four copies of the same id going into one
+    document where only the first would ever be used.
+    """
+    shared = ET.Element(q("defs"))
+    by_source, by_id, tags_once = {}, set(), set()
+    bytes_before = 0
+
+    for root in roots:
+        defs = root.find(q("defs"))
+        root.remove(defs)
+        bytes_before += len(ET.tostring(defs))
+        remap = {}
+        for node in list(defs):
+            if node.tag == q("symbol"):
+                key = (node.get("data-source"), node.get("preserveAspectRatio"))
+                if key in by_source:
+                    remap[node.get("id")] = by_source[key]
+                    continue
+                new_id = "sym-%d" % len(by_source)
+                remap[node.get("id")] = new_id
+                node.set("id", new_id)
+                by_source[key] = new_id
+                shared.append(node)
+                continue
+            node_id = node.get("id")
+            if node_id:
+                if node_id in by_id:
+                    continue
+                by_id.add(node_id)
+            elif node.tag in tags_once:
+                continue           # <style> and friends: one copy is document-wide anyway
+            else:
+                tags_once.add(node.tag)
+            shared.append(node)
+
+        for use in root.iter(q("use")):
+            target = (use.get("href") or "")[1:]
+            if target in remap:
+                asm.set_href(use, "#" + remap[target])
+
+    saved = bytes_before - len(ET.tostring(shared))
+    return shared, len(by_source), saved
 
 def borrow():
     """`gen_board.py`'s finished components, without running it as a program.
@@ -148,7 +355,7 @@ def geometry(L):
     The banner comes out of the wheel's height, one for one, for the same reason: a square that
     cannot grow sideways cannot absorb a band above it.
     """
-    pad = g2.STAGE_PAD
+    pad = STAGE_PAD
     inner_w = L["canvas_width"] - 2 * pad
     inner_h = L["canvas_height"] - L["margin_top"] - L["margin_bottom"]
 
@@ -156,7 +363,7 @@ def geometry(L):
     left_frac = 0.0 if L["width_whole_board"] else FRAME_START
     panel_w = bw * (FRAME_END - left_frac)
     overhang = bw * left_frac
-    bh = round(bw * g2.VB_H / g2.VB_W, 1)
+    bh = round(bw * VB_H / VB_W, 1)
 
     top_h = float(L["special_height"])
     main_h = inner_h - top_h                       # the top row and the main row share one edge
@@ -464,7 +671,7 @@ def building_text():
 # The four seats, and the one place their colours are written down for this page.
 #
 # Every value here comes from a committed asset rather than being picked: the fills are
-# gen_board_2.SA_SWATCH, which the Special Activities placeholder already uses for exactly this
+# SA_SWATCH, which the Special Activities placeholder already uses for exactly this
 # kind of static swatch, and the strokes are the dark face of each seat's own acolyte cube in
 # ui/assets-gothic/ui/. They are the DIM tones on purpose. A market strip or an alms disc says
 # whose it is, not whose turn it is, so tying them to the lit/dim state would animate ownership
@@ -794,7 +1001,7 @@ def main():
     gb = borrow()
     buildings = building_text()
     fills = {seat: (swatch, SEAT_INK[seat])
-             for seat, swatch in zip(asm_seats(), g2.SA_SWATCH)}
+             for seat, swatch in zip(asm_seats(), SA_SWATCH)}
     fills["bone"] = (BONE_FILL, fills["bone"][1])
     old_seats = dict(gb["SEAT"])
     market, n_mkt = recolour_seats(gb["MARKET"], old_seats, fills)
@@ -811,15 +1018,15 @@ def main():
 
     assets_dir = pathlib.Path(z.assets_dir).expanduser().resolve()
     asm_path = pathlib.Path(z.assembler) if z.assembler else HERE / "gen_board_gothic.py"
-    asm = g2.load_assembler(asm_path)
+    asm = load_assembler(asm_path)
     seats = [s.strip() for s in z.seats.split(",")] if z.seats else \
         list(asm.SEAT_COLORS)[:G["seats"]]
     lit = z.lit or seats[0]
     config_path = pathlib.Path(z.config) if z.config else assets_dir / "production_test_config.json"
 
-    roots = [g2.build_board(asm, assets_dir, config_path, s, "lit" if s == lit else "dim")
+    roots = [build_board(asm, assets_dir, config_path, s, "lit" if s == lit else "dim")
              for s in seats]
-    defs, unique_assets, saved = g2.merge_defs(asm, roots)
+    defs, unique_assets, saved = merge_defs(asm, roots)
     boards = []
     for root in roots:
         root.set("width", "%.1f" % G["bw"])
@@ -829,7 +1036,7 @@ def main():
     # At the BOARD's width this panel would sit proud of the action box below it. The cell is a
     # board wide -- that is what puts the alms table and the market on the same two vertical
     # lines as the action box and the wheel -- but the panel inside it is the action box's width.
-    sa, sa_spec = g2.special_placeholder(G["panel_w"], G["top_h"],
+    sa, sa_spec = special_placeholder(G["panel_w"], G["top_h"],
                                          L["frame_border_y"], L["frame_border_x"])
     # ACOLYTES ON THE DUTY TILES, and the counts are a FIXTURE, not the engine's.
     #

@@ -622,14 +622,23 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
                  assets_dir: Path) -> None:
     """Everything that turns the template into one seat's board, including the population rows.
 
-    `assets_dir` is REQUIRED rather than optional, and that is the point of it. This template has
-    four assemblers -- this module, gen_board_2 for the game view's column, gen_picker_2 for the
-    layer picker, and check_frame_layers -- and every one of them calls this function. When the
-    population rows were first added they hung off `build_one` instead, so the production board grew
-    them and the other three quietly went on drawing the cube and the numeral. Nothing errored;
-    gen_board_2's docstring still said "exactly as the production assembler would write it", which
-    had silently stopped being true. A required argument turns that into a TypeError at the call
-    site instead of a board that merely looks a version out of date.
+    `assets_dir` is REQUIRED rather than optional, and that is the point of it. Four things build
+    this template and every one of them calls this function:
+
+        gen_board_gothic   build_one     the production board
+        gen_game_view      build_board   the game view's four-board column
+        gen_picker_2       build_board   the layer picker
+        check_frame_layers build         the frame-layer comparison
+
+    When the population rows were first added they hung off `build_one`, which only the first of
+    those calls -- so the production board grew them and the other three quietly went on drawing
+    the cube and the numeral. Nothing errored, every check passed, and the module building the
+    game view's boards still claimed in its docstring that they were built "exactly as the
+    production assembler would write it", which had silently stopped being true. It was found by
+    someone opening the game view and noticing the old design.
+
+    A required argument turns that into a TypeError at the call site instead of a board that
+    merely looks a version out of date.
     """
     # Replace every image with a declared data-asset-role.
     for image in root.iter(q("image")):

@@ -59,14 +59,14 @@ should this sit", they are "how big, and does it still fit".
 
 WHY THERE IS A FILE
 
-The settings are written to `ui/layout.json`, and `gen_board_2.py` reads it. That is the whole point
+The settings are written to `ui/layout.json`, and `gen_game_view.py` reads it. That is the whole point
 of the file: without it this would be a playground whose numbers you retype into a generator by
 hand, which is two sources of truth and a drift waiting to happen -- this repository has been bitten
 by that twice, once when a committed page compared identical forever and once when the duty tile
 scale silently reverted. With it, moving a slider and changing the layout are the same act.
 
 Saving is explicit and never silent, because `rebuild_ui_pages.py --check` depends on the result.
-Only the player-board column's numbers are read back by `gen_board_2.py`; the other components are
+Only the player-board column's numbers are read back by `gen_game_view.py`; the other components are
 still laid out by `gen_board.py` itself, so their settings here are a proposal rather than something
 a build consumes.
 
@@ -998,7 +998,7 @@ document.addEventListener('fullscreenchange', () => {
 SCREENS.forEach((s, i) => el('screen-pick').add(new Option(s[0], i)));
 el('screen-pick').addEventListener('change', e => { screenIndex = +e.target.value; apply(); });
 
-// THE FILE NAME. `ui/layout.json` is the one gen_board_2.py reads; every other name is a variant
+// THE FILE NAME. `ui/layout.json` is the one gen_game_view.py reads; every other name is a variant
 // you are keeping to compare against, and saying so on the button is the difference between a
 // deliberate experiment and a save that seems to have had no effect on the build.
 function fileName(){
@@ -1091,7 +1091,7 @@ apply();
 # The files that decide what this page contains. Deliberately the SOURCES and not the board page
 # the components are lifted from: that one is generated too, so its mtime moves on every sweep, and
 # a stamp that moved during a sweep would be the very thing this is here to avoid.
-SOURCES = ("gen_layout_tool.py", "gen_board_2.py", "gen_board_gothic.py")
+SOURCES = ("gen_layout_tool.py", "gen_game_view.py", "gen_board_gothic.py")
 
 
 def build_stamp(served):
@@ -1149,7 +1149,9 @@ def count_font(roots, asm, config):
 
 def build(layout, can_save):
     """Assemble the boards once, then hand the page everything it needs to re-lay them out."""
-    spec = importlib.util.spec_from_file_location("gen_board_2", HERE / "gen_board_2.py")
+    # gen_board_2.py is gone; gen_game_view.py owns build_board, merge_defs and the
+    # canvas numbers now, and is the page these components actually land in.
+    spec = importlib.util.spec_from_file_location("gen_game_view", HERE / "gen_game_view.py")
     g = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(g)
 
@@ -1171,7 +1173,7 @@ def build(layout, can_save):
     # sliders whose DEFAULTS were copied from it. If that generator moves, the copy is stale and the
     # tool would open on a canvas the build does not use -- so say so rather than drift quietly.
     if abs(g.STAGE_PAD - DEFAULTS["margin_top"]) > 0.01:
-        raise SystemExit("gen_board_2.STAGE_PAD is now %s, but DEFAULTS['margin_top'] and "
+        raise SystemExit("gen_game_view.STAGE_PAD is now %s, but DEFAULTS['margin_top'] and "
                          "['margin_bottom'] here are still %s. Update them to match."
                          % (g.STAGE_PAD, DEFAULTS["margin_top"]))
 

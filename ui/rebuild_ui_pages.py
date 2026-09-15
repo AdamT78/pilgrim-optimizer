@@ -52,7 +52,6 @@ GENERATORS = [
     ("gen_picker.py", [], "player-board-picker.html"),
     ("gen_board_gothic.py", ["--formats", "html", "--name", "gothic-board"], "gothic-board.html"),
     ("gen_picker_2.py", [], "gothic-board-picker.html"),
-    ("gen_board_2.py", [], "gothic-four-boards.html"),
     ("gen_layout_tool.py", [], "layout-tool.html"),
     # `--tiles` is not decoration. Without it this generator runs in shapes-only mode -- it says so,
     # `version A: 0 of 9`, which is correct behaviour and not a fault -- and never reaches the

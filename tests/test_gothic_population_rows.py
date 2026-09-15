@@ -245,9 +245,9 @@ def test_every_assembler_of_this_template_draws_the_rows(asm):
     THIS IS THE GUARD FOR THE MISTAKE THAT WAS ACTUALLY MADE. The rows were first hung off
     `build_one`, which only the production assembler calls, so gothic-board.html grew them and the
     game view's column and the layer picker quietly went on drawing the cube and the numeral. Every
-    check passed. gen_board_2's docstring still said its boards were built "exactly as the
-    production assembler would write it", which had silently stopped being true, and it was found
-    by someone opening the game view and noticing the old design.
+    check passed. The docstring of the module that built the game view's boards still said they were
+    built "exactly as the production assembler would write it", which had silently stopped being
+    true, and it was found by someone opening the game view and noticing the old design.
 
     The structural fix is that `apply_config` takes `assets_dir` and draws the rows itself, so a
     caller cannot skip them without a TypeError. This is the guard that says so out loud, and it
@@ -255,10 +255,10 @@ def test_every_assembler_of_this_template_draws_the_rows(asm):
     """
     config_path = ASSETS / "production_test_config.json"
 
-    board2 = _load("gen_board_2")
-    root = board2.build_board(asm, ASSETS, config_path, "sage", "lit")
+    view = _load("gen_game_view")
+    root = view.build_board(asm, ASSETS, config_path, "sage", "lit")
     assert [n for n in root.iter(q("use")) if n.get("data-population")], (
-        "gen_board_2 builds the game view's boards and drew no population figures")
+        "gen_game_view builds the game view's boards and drew no population figures")
 
     picker = _load("gen_picker_2")
     root, _config = picker.build_board(asm, ASSETS, config_path, "sage")
