@@ -72,7 +72,7 @@ def build_board(asm, assets_dir, config_path, seat):
     asm.apply_seat(config)
     layout = asm.read_json(assets_dir / "metadata" / "layout.json")
     root = ET.parse(assets_dir / "template" / "player_board_template.svg").getroot()
-    asm.apply_config(root, config, layout)
+    asm.apply_config(root, config, layout, assets_dir)
     asm.embed_assets_once(root, assets_dir)
     asm.assert_no_duplicated_payloads(root)
     return root, config

@@ -41,7 +41,11 @@ READ_SLOTS = """() => {
   return out;
 }"""
 
-SEAT_DECIDED = ("cloth_lit", "cloth_dim", "gems", "acolyte_cube")
+# `acolyte_cube` was here until the population count became a row of figures and both
+# cubes left the template. It was the only seat-coloured thing in that band, which is
+# why it belonged in this list -- and why its removal is worth a line rather than a
+# silent deletion. test_gothic_population_rows asserts no cube role is drawn at all.
+SEAT_DECIDED = ("cloth_lit", "cloth_dim", "gems")
 
 
 @pytest.fixture(scope="module")
@@ -49,6 +53,12 @@ def picker_page(tmp_path_factory):
     """Build the picker once. It is an 11 MB page; building it per test would dominate the run."""
     if not PICKER.is_file():
         pytest.skip("the gothic picker is not in this checkout")
+    # The picker builds a gothic board in a subprocess, and building one measures its population
+    # art to decide whether it has to be composited -- so numpy and Pillow are needed HERE even
+    # though nothing in this file is about population rows. The ui lane installs both; the lane
+    # that runs the whole suite does not, and this is where that escaped to.
+    pytest.importorskip("numpy", reason="building a gothic board measures its population art")
+    pytest.importorskip("PIL.Image", reason="building a gothic board measures its population art")
     out = tmp_path_factory.mktemp("picker") / "picker.html"
     result = subprocess.run([sys.executable, str(PICKER), "--output", str(out)],
                             capture_output=True, text=True, cwd=str(REPO))
@@ -117,9 +127,11 @@ def test_black_stones_survive_a_change_of_seat(page):
         slots = page.evaluate(READ_SLOTS)
         assert "black" in seat_of(slots["gems"]), (
             "changing seat to %s dropped the black stones (now %r)" % (seat, slots["gems"]))
-        # ...and the rest of the seat still follows the seat.
+        # ...and the rest of the seat still follows the seat. Two layers, not one: a single
+        # assertion here would pass on a handler that repainted only the layer it names, which is
+        # the class of bug the whole test is about.
         assert seat in seat_of(slots["cloth_lit"])
-        assert seat in seat_of(slots["acolyte_cube"])
+        assert seat in seat_of(slots["cloth_dim"])
 
 
 def test_returning_to_coloured_stones_gives_this_seats_own(page):

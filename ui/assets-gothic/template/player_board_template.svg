@@ -40,14 +40,10 @@
     <rect x="669" y="213" width="1117" height="174" fill="#6a4d29" filter="url(#paperNoise)" opacity=".16"/>
 
     <image data-asset-role="serf" href="../population/serf_gothic.png" x="766" y="225" width="160" height="148" preserveAspectRatio="xMidYMid meet"/>
-    <image data-asset-role="serf_cube" href="../ui/cube_serf_grey.svg" x="966" y="258" width="70" height="70" preserveAspectRatio="xMidYMid meet"/>
-    <text x="1096" y="334" fill="#24190f" font-family="Georgia,serif" font-size="96" font-weight="700" text-anchor="middle">8</text>
 
     <image data-asset-role="population_divider" href="../ui/population_divider.svg" x="1198" y="220" width="48" height="160" preserveAspectRatio="xMidYMid meet"/>
 
     <image data-asset-role="acolyte" href="../population/acolyte_gothic.png" x="1311" y="225" width="161" height="148" preserveAspectRatio="xMidYMid meet"/>
-    <image data-asset-role="acolyte_cube" href="../ui/cube_acolyte_yellow.svg" x="1512" y="258" width="70" height="70" preserveAspectRatio="xMidYMid meet"/>
-    <text x="1642" y="334" fill="#24190f" font-family="Georgia,serif" font-size="96" font-weight="700" text-anchor="middle">2</text>
   </g>
 
   <g id="resource-piety" clip-path="url(#resourcePietyClip)">

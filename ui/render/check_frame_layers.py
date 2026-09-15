@@ -83,7 +83,7 @@ def legacy_template(path, out):
 def build(asm, assets_dir, template, config, out_svg):
     layout = asm.read_json(assets_dir / "metadata" / "layout.json")
     root = ET.parse(template).getroot()
-    asm.apply_config(root, config, layout)
+    asm.apply_config(root, config, layout, assets_dir)
     asm.embed_assets_once(root, assets_dir)
     asm.assert_no_duplicated_payloads(root)
     out_svg.write_text(ET.tostring(root, encoding="unicode"), encoding="utf-8")

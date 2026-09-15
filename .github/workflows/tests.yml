@@ -101,6 +101,7 @@ jobs:
         run: |
           pytest tests/test_gothic_seat_coherence.py tests/test_gothic_picker_controls.py \
             tests/test_gothic_asset_guards.py tests/test_gothic_resource_boxes.py \
+            tests/test_gothic_population_rows.py \
             tests/test_duty_wheel_guards.py tests/test_ground_guards.py -q
 
   fast:

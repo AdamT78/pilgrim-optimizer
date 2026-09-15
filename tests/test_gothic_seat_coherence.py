@@ -34,7 +34,7 @@ SVG_NS = "http://www.w3.org/2000/svg"
 
 # Roles the config may name explicitly; they are cleared before each build so the seat supplies them
 # and the test is measuring the seat rather than whatever the config happened to be left holding.
-SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems", "acolyte_cube",
+SEAT_ROLES = ("frame_base", "frame_ornaments", "cloth_lit", "cloth_dim", "gems",
               "portrait_background", "portrait_background_lit", "portrait_background_dim")
 
 
@@ -44,6 +44,13 @@ def q(tag: str) -> str:
 
 @pytest.fixture(scope="module")
 def asm():
+    # Building a gothic board now needs numpy and Pillow. `apply_config` draws the population
+    # rows, and drawing one decides whether its figure must be composited before it can be
+    # stacked -- which is a measurement of the asset. Nothing in THIS file is about population
+    # rows, but every test in it builds a board, so the file skips where those are absent rather
+    # than failing there. The ui lane installs both and is the lane a design change triggers.
+    pytest.importorskip("numpy", reason="building a gothic board measures its population art")
+    pytest.importorskip("PIL.Image", reason="building a gothic board measures its population art")
     path = UI / "render" / "gen_board_gothic.py"
     if not path.is_file() or not ASSETS.is_dir():
         pytest.skip("the gothic tree is not in this checkout")
@@ -63,7 +70,7 @@ def build(asm, seat: str, turn: str = "lit") -> ET.Element:
     asm.apply_seat(config)
     layout = asm.read_json(ASSETS / "metadata" / "layout.json")
     root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
-    asm.apply_config(root, config, layout)
+    asm.apply_config(root, config, layout, ASSETS)
     asm.embed_assets_once(root, ASSETS)
     asm.assert_no_duplicated_payloads(root)
     return root
@@ -164,7 +171,7 @@ def test_the_committed_config_is_coherent(asm):
     asm.apply_seat(config)
     layout = asm.read_json(ASSETS / "metadata" / "layout.json")
     root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
-    asm.apply_config(root, config, layout)
+    asm.apply_config(root, config, layout, ASSETS)
     asm.embed_assets_once(root, ASSETS)
     for role, expected in asm.seat_layers(seat).items():
         drawn = drawn_sources(root).get(role)

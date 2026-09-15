@@ -10,6 +10,11 @@ This version is intentionally small:
 
 PNG output requires CairoSVG:
     python3 -m pip install cairosvg
+
+The population rows require numpy and Pillow. A row decides whether its figure has to be
+composited before it can be stacked, and that decision is a measurement of the asset's alpha --
+see `opaque_figure`. Both are already needed to build the duty wheel's seat duotones, so the ui
+lane installs them; a checkout without them can no longer build a player board.
 """
 
 from __future__ import annotations
@@ -37,7 +42,10 @@ def q(tag: str) -> str:
     return f"{{{SVG_NS}}}{tag}"
 
 RESOURCE_NAMES = ("piety", "grain", "stone", "silver")
-COUNT_NAMES = ("serf", "acolyte", *RESOURCE_NAMES)
+# Only the resources are written as numerals now. The serf and acolyte counts are drawn as that
+# many figures instead -- see `draw_population_rows` -- so they have no text node to write into,
+# and leaving them here would send `nearest_text` looking for one that is no longer in the template.
+COUNT_NAMES = RESOURCE_NAMES
 GEM_BY_COLOR = {
     "red": "frames/stones_red.png",
     "black": "frames/stones_black.png",
@@ -114,18 +122,18 @@ def seat_layers(seat: str) -> dict[str, str]:
             "Unknown seat %r. The seat colours are %s. (Red is the source drape, not a seat -- "
             "lit red is darker than dimmed sage, so it cannot join the lit/dim banding.)"
             % (seat, ", ".join(SEAT_COLORS)))
+    # The acolyte cube USED to be here, wearing the seat's colour beside the grey serf cube. Both
+    # cubes left the template when a population count became a row of figures, so the role is no
+    # longer drawn on any board and listing it here would have this function vouch for something
+    # nothing renders. ui/cube_acolyte_{sage,pewter,plum,bone}.svg and ui/cube_serf_grey.svg are
+    # now unreferenced by any board; they are left in the tree with their attribution intact,
+    # for the asset sweep rather than for this change.
     return {
         "frame_base": "frames/frame_base_nocloth.png",
         "frame_ornaments": "frames/frame_ornaments.png",
         "cloth_lit": f"frames/cloth_{seat}.png",
         "cloth_dim": f"frames/cloth_{seat}_dim.png",
         "gems": f"frames/stones_{seat}.png",
-        # The acolyte cube is a player's own marker, so it wears the seat's colour too. It takes the
-        # gemstone treatment rather than the drape's: the drape is dyed wool and reads best
-        # desaturated, while this is a 70 px painted block that has to be unmistakable next to the
-        # grey serf cube a hand's width away. Bone is the one to watch there -- it is drawn warm
-        # cream rather than pearl, which keeps it dE 41 from that grey instead of merging with it.
-        "acolyte_cube": f"ui/cube_acolyte_{seat}.svg",
     }
 
 
@@ -448,7 +456,208 @@ def nearest_text(root: ET.Element, x: float, y: float) -> ET.Element:
     return min(matches, key=lambda pair: pair[0])[1]
 
 
-def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[str, Any]) -> None:
+# --------------------------------------------------------------------------------------------
+# THE POPULATION ROWS.
+#
+# A serf count and an abbey-acolyte count used to be one figure, a cube and a numeral. The numeral
+# carried all of the information and the cube carried none, so reading a board meant reading two
+# small numbers per player. They are now drawn as that many figures, overlapped left to right --
+# the same idea as the piles under the duty tiles, turned on its side.
+#
+# Everything below is measured off the template itself rather than restated here: the panel comes
+# from the `topPanelClip` rect, the two boxes from where the divider sits inside it, and a figure's
+# size from the very <image> element the row replaces. A constant for any of those would be a
+# second statement of a fact the template already owns, free to drift the moment the art moves.
+POPULATION_KINDS = ("serf", "acolyte")
+POPULATION_STEP = 0.30          # overlap between one figure and the next, as a fraction of a width
+POPULATION_PAD = 20.0           # clear ground kept at each end of a box
+# How hard the alpha ramp is pushed when a figure is made opaque. 4 takes everything above 64/255
+# to solid while leaving a short anti-aliased edge; see `opaque_figure`.
+OPAQUE_ALPHA_GAIN = 4.0
+# Below this mean alpha a figure is composited before it is drawn. The serf asset measures 184/255
+# and the acolyte 251/255, so only the serf is treated -- but the test is the MEASUREMENT, not the
+# name of the asset, so a redrawn acolyte does not silently start bleeding.
+OPAQUE_ALPHA_FLOOR = 240
+
+
+def _pixels():
+    """numpy and Pillow, or a message that says which build just asked for them and why.
+
+    Without this the failure is a bare ModuleNotFoundError from inside `import numpy`, several
+    frames down, in whatever subprocess happened to be building a board -- which is how it reached
+    CI twice: once in the lane that runs the whole suite, and once through the picker guards, which
+    build the picker by subprocess and report only its stderr.
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+    except ModuleNotFoundError as missing:
+        raise BuildError(
+            "building a gothic player board needs numpy and Pillow (%s is missing). A population "
+            "row decides whether its figure must be composited before it can be stacked, and "
+            "deciding means measuring the asset's alpha -- see opaque_figure. The ui lane installs "
+            "both; a lane or checkout that only builds boards incidentally has to install them too, "
+            "or skip." % missing.name) from missing
+    return np, Image
+
+
+def opaque_figure(path: Path, panel_fill: str) -> bytes:
+    """The figure as PNG bytes, composited onto `panel_fill` and made opaque.
+
+    WHY THIS EXISTS. Overlapping copies of the serf bled into each other while the acolytes
+    stacked cleanly, and the cause is not the edge treatment -- the serf asset is semi-transparent
+    through its whole body. Measured on the alpha channel: mean 184/255 where there is ink, and 62%
+    of pixels four pixels INSIDE the silhouette are still partially transparent, against 251/255
+    and 0% for the acolyte. A stacked serf shows the figure behind it through itself.
+
+    Compositing onto the panel first and hardening the alpha afterwards is what preserves the
+    drawing. Hardening the alpha alone does not: those mid-alpha pixels are carrying the figure's
+    lightness, so forcing them opaque turns it into a heavy dark blob. A single figure drawn on the
+    panel is unchanged by this -- max channel difference 13, mean 0.7, confined to the anti-aliased
+    rim -- which is asserted in the guards rather than asserted here.
+
+    THE COST, stated because it constrains where this may be used: the panel colour is baked in, so
+    the result is only correct on that background. It is therefore derived at build time from the
+    config's own `information_panel_fill` and never committed -- the same arrangement
+    gen_duty_grid.acolyte_tints() uses for the duty wheel's four seat duotones.
+
+    An SVG filter can do this without baking anything, and was built and compared before this was
+    chosen. It was rejected because filters are a renderer-dependent path: this module's PNG output
+    goes through CairoSVG, whose filter support is not the browser's, so the HTML and the PNG could
+    disagree with nothing to say which was right. Baked pixels are the same in every renderer.
+    """
+    import io
+
+    np, Image = _pixels()
+
+    rgb = tuple(int(panel_fill.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    source = np.asarray(Image.open(path).convert("RGBA")).astype(float)
+    alpha = source[..., 3:4] / 255.0
+    composited = source[..., :3] * alpha + np.array(rgb, dtype=float) * (1.0 - alpha)
+    hardened = np.clip(source[..., 3] * OPAQUE_ALPHA_GAIN, 0.0, 255.0)
+    out = np.dstack([composited, hardened]).astype(np.uint8)
+    buffer = io.BytesIO()
+    Image.fromarray(out, "RGBA").save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def mean_ink_alpha(path: Path) -> float:
+    """Mean alpha where the figure has ink. The number `OPAQUE_ALPHA_FLOOR` is compared against."""
+    np, Image = _pixels()
+    alpha = np.asarray(Image.open(path).convert("RGBA")).astype(int)[..., 3]
+    inked = alpha[alpha > 24]
+    return float(inked.mean()) if inked.size else 255.0
+
+
+def population_boxes(root: ET.Element) -> dict[str, tuple[float, float]]:
+    """The x range each population row has to live in, read off the template.
+
+    The top panel is one rounded rect with a divider image standing in the middle of it, so the two
+    boxes are the panel either side of that divider. Both are found by what they ARE -- the clip
+    path the panel is defined by, the asset role the divider is placed by -- rather than by
+    coordinates copied out of the file.
+    """
+    rect = None
+    for clip in root.iter(q("clipPath")):
+        if clip.get("id") == "topPanelClip":
+            rect = clip.find(q("rect"))
+            break
+    if rect is None:
+        raise BuildError("No #topPanelClip rect in the template; the population panel is gone.")
+    left = parse_number(rect.get("x"))
+    width = parse_number(rect.get("width"))
+    if left is None or width is None:
+        raise BuildError("#topPanelClip has no x/width.")
+
+    divider = None
+    for image in root.iter(q("image")):
+        if image.get("data-asset-role") == "population_divider":
+            divider = image
+            break
+    if divider is None:
+        raise BuildError("No population_divider image; cannot tell the two boxes apart.")
+    split = parse_number(divider.get("x"))
+    span = parse_number(divider.get("width"))
+    if split is None or span is None:
+        raise BuildError("The population divider has no x/width.")
+
+    return {"serf": (left, split), "acolyte": (split + span, left + width)}
+
+
+def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, float]:
+    """(y, width, height) of one figure, from the very <image> the row replaces."""
+    for image in root.iter(q("image")):
+        if image.get("data-asset-role") == kind:
+            y = parse_number(image.get("y"))
+            w = parse_number(image.get("width"))
+            h = parse_number(image.get("height"))
+            if y is None or w is None or h is None:
+                raise BuildError(f"The {kind} image has no y/width/height.")
+            return y, w, h
+    raise BuildError(f"No {kind} image in the template to take the figure's size from.")
+
+
+def population_step(count: int, width: float, box: tuple[float, float]) -> float:
+    """How far apart consecutive figures sit, as a fraction of one figure's width.
+
+    POPULATION_STEP until a row runs out of box, then only as tight as it has to be. The tightening
+    is what lets the figures stay at the size the art was drawn for: ordination moves serfs into the
+    abbey one at a time, so the acolyte box has to hold the player's whole pool -- 11, being 3 in
+    the abbey and 8 in the village -- while the serf box holds 8 at the start.
+
+    In practice it almost never engages. The serf row is 0.30 for every count it can reach except 8,
+    where it is 0.294; the acolyte row is 0.30 up to 8 and then 0.263, 0.234, 0.211. A count high
+    enough to tighten the acolyte row needs nine ordinations and no missions.
+    """
+    if count <= 1:
+        return POPULATION_STEP
+    usable = (box[1] - box[0]) - 2 * POPULATION_PAD
+    return min(POPULATION_STEP, max(0.05, (usable / width - 1.0) / (count - 1)))
+
+
+def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float, float, float, float]]:
+    """Where each figure of one row goes: a list of (x, y, width, height), left to right.
+
+    THE ONE PLACE THIS IS WORKED OUT. The row is CENTRED in its box at every count, so a box that
+    empties does not leave its figures hanging off one side.
+
+    Drawing order is left to right, which means the RIGHTMOST figure paints last and is the only
+    one drawn whole. That is deliberate: every buried figure then shows its left edge, which carries
+    no head ink on either asset -- the crown spans 43-87% of the serf's width and 38-67% of the
+    acolyte's -- so the row reads as a crowd seen from the side rather than as a line of faces.
+    """
+    if count <= 0:
+        return []
+    box = population_boxes(root)[kind]
+    y, width, height = population_figure_frame(root, kind)
+    step = population_step(count, width, box)
+    span = width * (1.0 + step * (count - 1))
+    start = (box[0] + box[1]) / 2.0 - span / 2.0
+    return [(start + i * width * step, y, width, height) for i in range(count)]
+
+
+def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[str, Any],
+                 assets_dir: Path) -> None:
+    """Everything that turns the template into one seat's board, including the population rows.
+
+    `assets_dir` is REQUIRED rather than optional, and that is the point of it. Four things build
+    this template and every one of them calls this function:
+
+        gen_board_gothic   build_one     the production board
+        gen_game_view      build_board   the game view's four-board column
+        gen_picker_2       build_board   the layer picker
+        check_frame_layers build         the frame-layer comparison
+
+    When the population rows were first added they hung off `build_one`, which only the first of
+    those calls -- so the production board grew them and the other three quietly went on drawing
+    the cube and the numeral. Nothing errored, every check passed, and the module building the
+    game view's boards still claimed in its docstring that they were built "exactly as the
+    production assembler would write it", which had silently stopped being true. It was found by
+    someone opening the game view and noticing the old design.
+
+    A required argument turns that into a TypeError at the call site instead of a board that
+    merely looks a version out of date.
+    """
     # Replace every image with a declared data-asset-role.
     for image in root.iter(q("image")):
         role = image.get("data-asset-role")
@@ -456,11 +665,7 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
             set_href(image, asset_path_for_role(config, role))
 
     # Counts.
-    count_points = {
-        "serf": layout["population"]["serf"]["count"],
-        "acolyte": layout["population"]["acolyte"]["count"],
-        **{name: layout["resources"][name]["count"] for name in RESOURCE_NAMES},
-    }
+    count_points = {name: layout["resources"][name]["count"] for name in RESOURCE_NAMES}
     counts = config.get("counts", {})
     for name in COUNT_NAMES:
         x, y = count_points[name]
@@ -532,6 +737,74 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     root.set("data-board-id", slug(str(config.get("id", "pilgrim_player_board_v2"))))
     if config.get("seat"):
         root.set("data-seat", str(config["seat"]))
+
+    # Last, because it removes nodes the loops above address by role and by position.
+    draw_population_rows(root, config, assets_dir)
+
+def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
+                         assets_dir: Path) -> None:
+    """Replace each population box's figure, cube and numeral with a row of figures.
+
+    Runs after apply_config, which has already resolved the template's asset roles, and BEFORE
+    embed_assets_once, which turns the remaining template <image> elements into symbols. The rows
+    are emitted here as one <symbol> per kind plus a <use> for each figure, which is the same shape
+    embed_assets_once produces -- so eleven acolytes cost one copy of the artwork, and
+    assert_no_duplicated_payloads stays satisfied.
+    """
+    defs = root.find(q("defs"))
+    if defs is None:
+        defs = ET.Element(q("defs"))
+        root.insert(0, defs)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    counts = config.get("counts", {})
+    panel_fill = str(config.get("information_panel_fill", "#ead8b4"))
+
+    for kind in POPULATION_KINDS:
+        anchor = None
+        for image in root.iter(q("image")):
+            if image.get("data-asset-role") == kind:
+                anchor = image
+                break
+        if anchor is None:
+            raise BuildError(f"No {kind} image in the template to build the row from.")
+
+        places = population_row(root, kind, int(counts.get(kind, 0)))
+        source = resolve_asset(assets_dir, asset_path_for_role(config, kind))
+        # The measurement decides, not the asset's name: a figure that is already opaque is used as
+        # it is, and one that is not is composited so that stacked copies occlude instead of
+        # showing through each other.
+        if mean_ink_alpha(source) < OPAQUE_ALPHA_FLOOR:
+            payload = ("data:image/png;base64,"
+                       + base64.b64encode(opaque_figure(source, panel_fill)).decode("ascii"))
+        else:
+            payload = data_uri(source)
+
+        width, height = intrinsic_size(source)
+        symbol_id = f"population-{kind}"
+        symbol = ET.SubElement(defs, q("symbol"), {
+            "id": symbol_id,
+            "viewBox": f"0 0 {fmt(width)} {fmt(height)}",
+            "preserveAspectRatio": anchor.get("preserveAspectRatio", "xMidYMid meet"),
+            "data-source": asset_path_for_role(config, kind),
+        })
+        inner = ET.SubElement(symbol, q("image"), {
+            "x": "0", "y": "0", "width": fmt(width), "height": fmt(height),
+            "preserveAspectRatio": "none",
+        })
+        set_href(inner, payload)
+
+        parent = parents[anchor]
+        position = list(parent).index(anchor)
+        parent.remove(anchor)
+        for offset, (x, y, w, h) in enumerate(places):
+            use = ET.Element(q("use"), {
+                "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
+                "data-population": kind,
+            })
+            set_href(use, f"#{symbol_id}")
+            parent.insert(position + offset, use)
+
+
 
 
 def embed_assets_once(root: ET.Element, assets_dir: Path) -> None:
@@ -739,7 +1012,7 @@ def build_one(args: argparse.Namespace) -> Path:
             config.setdefault("counts", {})[key] = value
 
     root = ET.parse(template_path).getroot()
-    apply_config(root, config, layout)
+    apply_config(root, config, layout, assets_dir)
     embed_assets_once(root, assets_dir)
     assert_no_duplicated_payloads(root)
 

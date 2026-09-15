@@ -6,7 +6,6 @@
   "portrait": "portraits/leader_male_shaven.png",
   "serf": "population/serf_gothic.png",
   "acolyte": "population/acolyte_gothic.png",
-  "serf_cube": "ui/cube_serf_grey.svg",
   "population_divider": "ui/population_divider.svg",
   "resources": {
     "piety": "resources/piety_gothic.png",
