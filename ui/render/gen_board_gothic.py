@@ -122,18 +122,18 @@ def seat_layers(seat: str) -> dict[str, str]:
             "Unknown seat %r. The seat colours are %s. (Red is the source drape, not a seat -- "
             "lit red is darker than dimmed sage, so it cannot join the lit/dim banding.)"
             % (seat, ", ".join(SEAT_COLORS)))
+    # The acolyte cube USED to be here, wearing the seat's colour beside the grey serf cube. Both
+    # cubes left the template when a population count became a row of figures, so the role is no
+    # longer drawn on any board and listing it here would have this function vouch for something
+    # nothing renders. ui/cube_acolyte_{sage,pewter,plum,bone}.svg and ui/cube_serf_grey.svg are
+    # now unreferenced by any board; they are left in the tree with their attribution intact,
+    # for the asset sweep rather than for this change.
     return {
         "frame_base": "frames/frame_base_nocloth.png",
         "frame_ornaments": "frames/frame_ornaments.png",
         "cloth_lit": f"frames/cloth_{seat}.png",
         "cloth_dim": f"frames/cloth_{seat}_dim.png",
         "gems": f"frames/stones_{seat}.png",
-        # The acolyte cube is a player's own marker, so it wears the seat's colour too. It takes the
-        # gemstone treatment rather than the drape's: the drape is dyed wool and reads best
-        # desaturated, while this is a 70 px painted block that has to be unmistakable next to the
-        # grey serf cube a hand's width away. Bone is the one to watch there -- it is drawn warm
-        # cream rather than pearl, which keeps it dE 41 from that grey instead of merging with it.
-        "acolyte_cube": f"ui/cube_acolyte_{seat}.svg",
     }
 
 
@@ -618,7 +618,19 @@ def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float,
     return [(start + i * width * step, y, width, height) for i in range(count)]
 
 
-def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[str, Any]) -> None:
+def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[str, Any],
+                 assets_dir: Path) -> None:
+    """Everything that turns the template into one seat's board, including the population rows.
+
+    `assets_dir` is REQUIRED rather than optional, and that is the point of it. This template has
+    four assemblers -- this module, gen_board_2 for the game view's column, gen_picker_2 for the
+    layer picker, and check_frame_layers -- and every one of them calls this function. When the
+    population rows were first added they hung off `build_one` instead, so the production board grew
+    them and the other three quietly went on drawing the cube and the numeral. Nothing errored;
+    gen_board_2's docstring still said "exactly as the production assembler would write it", which
+    had silently stopped being true. A required argument turns that into a TypeError at the call
+    site instead of a board that merely looks a version out of date.
+    """
     # Replace every image with a declared data-asset-role.
     for image in root.iter(q("image")):
         role = image.get("data-asset-role")
@@ -699,10 +711,11 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     if config.get("seat"):
         root.set("data-seat", str(config["seat"]))
 
-
+    # Last, because it removes nodes the loops above address by role and by position.
+    draw_population_rows(root, config, assets_dir)
 
 def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
-                         layout: Mapping[str, Any], assets_dir: Path) -> None:
+                         assets_dir: Path) -> None:
     """Replace each population box's figure, cube and numeral with a row of figures.
 
     Runs after apply_config, which has already resolved the template's asset roles, and BEFORE
@@ -764,17 +777,7 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
             set_href(use, f"#{symbol_id}")
             parent.insert(position + offset, use)
 
-        # The cube and the numeral go with it. Both said the same thing the row now says, and a
-        # numeral beside a row of figures is free to disagree with the number of figures drawn --
-        # the same argument that took the numerals off the duty tiles.
-        for image in list(root.iter(q("image"))):
-            if image.get("data-asset-role") == f"{kind}_cube":
-                parents[image].remove(image)
-        point = layout.get("population", {}).get(kind, {}).get("count")
-        if point:
-            numeral = nearest_text(root, float(point[0]), float(point[1]))
-            # recomputed: this loop has been adding and removing nodes since `parents` was built
-            {child: parent for parent in root.iter() for child in parent}[numeral].remove(numeral)
+
 
 
 def embed_assets_once(root: ET.Element, assets_dir: Path) -> None:
@@ -982,8 +985,7 @@ def build_one(args: argparse.Namespace) -> Path:
             config.setdefault("counts", {})[key] = value
 
     root = ET.parse(template_path).getroot()
-    apply_config(root, config, layout)
-    draw_population_rows(root, config, layout, assets_dir)
+    apply_config(root, config, layout, assets_dir)
     embed_assets_once(root, assets_dir)
     assert_no_duplicated_payloads(root)
 

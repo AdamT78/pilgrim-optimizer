@@ -40,6 +40,13 @@ def q(tag: str) -> str:
 
 @pytest.fixture(scope="module")
 def asm():
+    # Building a gothic board now needs numpy and Pillow. `apply_config` draws the population
+    # rows, and drawing one decides whether its figure must be composited before it can be
+    # stacked -- which is a measurement of the asset. Nothing in THIS file is about population
+    # rows, but every test in it builds a board, so the file skips where those are absent rather
+    # than failing there. The ui lane installs both and is the lane a design change triggers.
+    pytest.importorskip("numpy", reason="building a gothic board measures its population art")
+    pytest.importorskip("PIL.Image", reason="building a gothic board measures its population art")
     path = UI / "render" / "gen_board_gothic.py"
     if not path.is_file() or not ASSETS.is_dir():
         pytest.skip("the gothic tree is not in this checkout")
@@ -58,7 +65,7 @@ def build(asm, layout):
     asm.apply_seat(config)
     board_layout = asm.read_json(ASSETS / "metadata" / "layout.json")
     root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
-    asm.apply_config(root, config, board_layout)
+    asm.apply_config(root, config, board_layout, ASSETS)
     return root
 
 

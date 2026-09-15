@@ -68,8 +68,7 @@ def build(asm, serfs, acolytes):
     asm.apply_seat(config)
     layout = asm.read_json(ASSETS / "metadata" / "layout.json")
     root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
-    asm.apply_config(root, config, layout)
-    asm.draw_population_rows(root, config, layout, ASSETS)
+    asm.apply_config(root, config, layout, ASSETS)
     return root
 
 
@@ -223,3 +222,45 @@ def test_compositing_changes_how_a_figure_stacks_and_not_how_it_looks(asm):
     assert inked.mean() >= asm.OPAQUE_ALPHA_FLOOR, (
         "the composited figure is still only %.0f/255 opaque, so stacked copies will keep showing "
         "through each other" % inked.mean())
+
+
+def _load(name):
+    path = UI / "render" / f"{name}.py"
+    if not path.is_file():
+        pytest.skip(f"{name}.py is not in this checkout")
+    spec = importlib.util.spec_from_file_location(f"_pop_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    import sys
+    sys.path.insert(0, str(UI / "render"))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(UI / "render"))
+    return module
+
+
+def test_every_assembler_of_this_template_draws_the_rows(asm):
+    """Four things build this template, and the rows have to appear in all of them.
+
+    THIS IS THE GUARD FOR THE MISTAKE THAT WAS ACTUALLY MADE. The rows were first hung off
+    `build_one`, which only the production assembler calls, so gothic-board.html grew them and the
+    game view's column and the layer picker quietly went on drawing the cube and the numeral. Every
+    check passed. gen_board_2's docstring still said its boards were built "exactly as the
+    production assembler would write it", which had silently stopped being true, and it was found
+    by someone opening the game view and noticing the old design.
+
+    The structural fix is that `apply_config` takes `assets_dir` and draws the rows itself, so a
+    caller cannot skip them without a TypeError. This is the guard that says so out loud, and it
+    fails if a fifth assembler ever appears that goes around it.
+    """
+    config_path = ASSETS / "production_test_config.json"
+
+    board2 = _load("gen_board_2")
+    root = board2.build_board(asm, ASSETS, config_path, "sage", "lit")
+    assert [n for n in root.iter(q("use")) if n.get("data-population")], (
+        "gen_board_2 builds the game view's boards and drew no population figures")
+
+    picker = _load("gen_picker_2")
+    root, _config = picker.build_board(asm, ASSETS, config_path, "sage")
+    assert [n for n in root.iter(q("use")) if n.get("data-population")], (
+        "gen_picker_2 builds the layer picker and drew no population figures")
