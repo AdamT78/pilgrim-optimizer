@@ -659,3 +659,52 @@ def test_the_layout_tool_saves_every_setting_it_was_given():
         "the layout tool's save leaves out %s. Save overwrites ui/layout.json, so every one of "
         "those is removed from the file the moment anyone presses it -- including settings the "
         "tool has no control for and never meant to touch." % ", ".join(missing))
+
+
+def test_the_screen_budget_page_agrees_with_the_layout_it_draws():
+    """The page has sliders, so geometry() genuinely exists twice.
+
+    Moving a slider has to re-run the layout arithmetic in the browser, which cannot be done
+    from Python, so the same expression lives in `gen_screen_budget.py`'s JavaScript as well as
+    in `gen_game_view`. That duplication is not removable without giving up the controls, so it
+    is guarded instead: the generator stamps the real geometry()'s answers for a spread of
+    layouts into the page, and the page recomputes them on load and refuses to draw if they
+    disagree.
+
+    This is the half a browser cannot check. The page can only tell that its own JavaScript
+    matches the numbers baked in beside it -- both of which were written at the same moment and
+    will stay in agreement forever. What it cannot tell is whether either still matches the
+    module, which is the thing that actually moves. So this asks the BUILT page, and the module
+    as it is today.
+    """
+    import json
+    import re
+    gv = render_module("gen_game_view")
+    page = REPO / "ui" / "generated" / "screen-budget.html"
+    if not page.is_file():
+        pytest.skip("the screen budget page has not been built in this checkout")
+    text = page.read_text(encoding="utf-8")
+    m = re.search(r"^var EXPECT = (\[.*\]);$", text, re.M)
+    assert m, (
+        "the screen budget page no longer stamps an EXPECT table. That table is the page's "
+        "only tie to gen_game_view -- without it the diagram is a drawing of numbers that were "
+        "true once.")
+    cases = json.loads(m.group(1))
+    assert cases, "the EXPECT table is empty, so the page is checking nothing"
+
+    wrong = []
+    for case in cases:
+        full = dict(gv.DEFAULTS)
+        full.update(case["L"])
+        G = gv.geometry(full)
+        for key, want in case["want"].items():
+            got = G[key]
+            same = (got == want if isinstance(want, str)
+                    else abs(float(got) - float(want)) < 1e-6)
+            if not same:
+                wrong.append("%s: %s was built as %s, geometry() now says %s"
+                             % (case["label"], key, want, got))
+    assert not wrong, (
+        "the screen budget page was built against a different layout than gen_game_view "
+        "describes now, so it draws a board nobody has. Rebuild it:\n  %s"
+        % "\n  ".join(wrong))

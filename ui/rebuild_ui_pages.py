@@ -68,6 +68,11 @@ GENERATORS = [
     # somewhere else -- which is exactly how the two throwaway scripts it replaces died, silently,
     # months before anyone opened them.
     ("gen_border_studio.py", [], "duty-border-studio.html"),
+    # Reads DEFAULTS, the stage constants and geometry() out of gen_game_view and stamps the
+    # answers into the page, including a table the page re-derives in JavaScript and checks
+    # itself against. Every one of those is a name that can be renamed elsewhere, and the page
+    # is the kind that looks entirely convincing while being about numbers that have moved.
+    ("gen_screen_budget.py", [], "screen-budget.html"),
 ]
 
 # Written as a side effect of a run rather than as a page in its own right.
