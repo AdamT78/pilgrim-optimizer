@@ -30,6 +30,8 @@ ALMS_TABLE_HTML = PROTOTYPES_DIR / "alms_table.html"
 ALMS_TABLE_SVG = PROTOTYPES_DIR / "alms_table.svg"
 ALMS_TABLE_SOURCE = PROTOTYPE_SOURCES_DIR / "alms_table.py.txt"
 SEALS_HTML = PROTOTYPES_DIR / "seal_prototypes.html"
+DUTY_TILE_TURN_HTML = PROTOTYPES_DIR / "duty_tile_turn.html"
+DUTY_TILE_TURN_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_tile_turn_build.py.txt"
 
 # The four glyphs a seal can be struck with, and the numbers the page is drawn to.
 SEAL_GLYPHS = ("square", "shield", "S", "A")
@@ -412,3 +414,46 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "Alms Table SVG prototype baseline" in content
     assert "prototypes/seal_prototypes.html" in content
     assert "Wax seals prototype baseline" in content
+
+
+def test_duty_tile_turn_prototype_page_and_source_exist() -> None:
+    assert DUTY_TILE_TURN_HTML.is_file()
+    assert DUTY_TILE_TURN_SOURCE.is_file()
+
+
+def test_duty_tile_turn_prototype_is_identifiable() -> None:
+    content = DUTY_TILE_TURN_HTML.read_text(encoding="utf-8")
+    assert "explain a game turn for Player 3" in content
+    assert content.count('class="dgt"') == 9
+    # The commentary is the point of this baseline: it is a proposal with its argument attached,
+    # and a page that lost the panel would still look right while saying nothing.
+    assert content.count('class="n" data-cells') == 7
+
+
+def test_duty_tile_turn_prototype_carries_its_pictures() -> None:
+    """The pictures are embedded, because nothing in the repository serves them.
+
+    They were cropped from images generated with ChatGPT (OpenAI) and live nowhere else in the
+    tree -- so a baseline that referenced them by path would render as empty boxes the moment it
+    was opened from a checkout, and look like a design decision rather than a missing file.
+    """
+    content = DUTY_TILE_TURN_HTML.read_text(encoding="utf-8")
+    assert "data:image/webp;base64" in content
+    assert "src=" not in content.split("<svg", 1)[-1][:2000]
+
+
+def test_duty_tile_turn_prototype_is_linked_from_the_index() -> None:
+    assert "prototypes/duty_tile_turn.html" in INDEX_HTML.read_text(encoding="utf-8")
+
+
+def test_duty_tile_turn_prototype_records_that_its_art_is_generated() -> None:
+    """The one place its provenance is written down.
+
+    `verify_assets.py` walks ui/assets and ui/assets-gothic; nothing checks tools/. The pictures
+    here are embedded rather than committed as files, so this README section is the only record
+    that they are OpenAI-generated and not hand-drawn.
+    """
+    readme = README_MD.read_text(encoding="utf-8")
+    assert "## Duty tile turn prototype" in readme
+    assert "generated with ChatGPT (OpenAI)" in readme
+    assert "not** manually illustrated" in readme

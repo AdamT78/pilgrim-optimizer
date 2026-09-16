@@ -1884,3 +1884,44 @@ Notes:
 - Generated map rendering is visual/debug only.
 - There is still no `GameState` integration.
 - No gameplay or rules logic belongs in the UI debug layer.
+
+## Duty tile turn prototype
+
+`prototypes/duty_tile_turn.html` walks one turn for Player 3 across nine tiles, and its
+commentary is the author's, in the panel beside the board. It is a DESIGN PROPOSAL, not a
+baseline to reverse-engineer: none of it is drawn by a renderer, and steps 3 onwards of the
+checklist above do not apply to it yet.
+
+What it proposes, in one line each:
+
+- Acolytes on a duty tile are drawn as stacked coloured rectangles rather than figures, so they
+  cost less height and cover no action art. Each rectangle is one acolyte and is the exact step a
+  stacked figure would have shown, so a column is the same height either way and the white gaps
+  between them are countable.
+- Everything a player needs after the Sow phase lives on the selected tile: the duty and its
+  value at the top, what the space pays in the panel, and what each half does over its own
+  picture. That is proposed to replace the corresponding section of the action board.
+- Selecting a tile removes its acolytes, which frees the panel for the tithe resource to be shown
+  as a picture rather than an icon.
+
+Open questions the page does not settle, recorded here because they will be argued about again:
+
+- **Green is asked to mean three things.** The border studio designed emerald for *takeable after
+  a Sow*; the commentary also proposes it for *this seat has presence*, and green again for
+  *parity* on the duty value. The first two appear on the same tile at the same time.
+- **Red and green for minority and parity** is the one distinction on this board a red-green
+  colour-blind player cannot make, and the value already says it: +1 against +2.
+- **A tile that grows to hold a text box** has nowhere to grow inside a 3x3. The space freed when
+  the acolytes are removed is available at exactly the moment the text is wanted.
+- **The Merchant is absent**, and it is what decides whether the tithe resource is payable.
+
+### The pictures in it
+
+The wheat, stone and two action pictures are crops of images generated with ChatGPT (OpenAI), cut
+at their own resolution to the aspect of the box each fills and embedded as data URIs. They are
+**not** manually illustrated, and are not CC0, public domain, or royalty-free stock. They are
+placeholders standing in for art that does not exist yet, and nothing here is production art.
+
+`prototype_sources/duty_tile_turn_build.py.txt` is the script that drew it, kept under the same
+rule as the others: read for intent, never imported, run, or refactored. It was written outside
+the repository and reads its pictures from a path that does not exist here.
