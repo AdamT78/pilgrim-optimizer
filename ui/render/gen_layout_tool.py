@@ -969,8 +969,18 @@ function apply(){
      seats: seats, width_whole_board: L.width_whole_board,
      column_gap_1: L.column_gap_1, column_gap_2: L.column_gap_2, row_gap: L.row_gap,
      wheel_slack_to_boxes: L.wheel_slack_to_boxes, act_rule: +fmt(L.act_rule),
-     framed: L.framed,
-     margin_top: +fmt(L.margin_top), margin_bottom: +fmt(L.margin_bottom)}, null, 2);
+     framed: L.framed, panorama_x: +fmt(L.panorama_x),
+     // banner_height has no control here either, and was being dropped on every save long
+     // before the three below joined it. It happens to equal its default today, which is
+     // exactly why nobody noticed.
+     banner_height: +fmt(L.banner_height),
+     margin_top: +fmt(L.margin_top), margin_bottom: +fmt(L.margin_bottom),
+     // CARRIED, NOT EDITED. This tool has no control for these three, and Save writes the whole
+     // file -- so leaving them out of this literal does not leave them alone, it deletes them.
+     // The comment above says every setting the tool owns is here; the ones it does NOT own have
+     // to be here too, for the same reason and more quietly.
+     special_activities: L.special_activities, ground_color: L.ground_color,
+     compare: L.compare}, null, 2);
 }
 
 const setFramed = list => {

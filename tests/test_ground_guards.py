@@ -625,3 +625,37 @@ def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
     assert rest == 0.0, (
         "de-vignetting touched pixels outside its %d-column window (max change %.3f). It is meant "
         "to lift a ramp at one edge, not to grade the picture." % (gen_panorama.EDGE, rest))
+
+
+def test_the_layout_tool_saves_every_setting_it_was_given():
+    """Save writes the WHOLE file, so a key left out of its payload is a key deleted.
+
+    The tool posts one JSON object and the server writes it over ui/layout.json. It validates
+    that nothing UNKNOWN is present and says nothing about what is absent -- so a setting the
+    tool has no control for is not left alone by a save, it is removed, and the board silently
+    goes back to the default for it on the next build.
+
+    That had already happened once before anyone added a setting: `banner_height` has been in
+    the file and out of the payload for as long as both existed, and it went unnoticed because
+    the file's value and the default are both 88.0. Three more joined it -- the panorama's
+    position, whether Special Activities is drawn, and the flat ground colour -- and those do
+    not agree with their defaults, so the first save would have undone the layout.
+
+    Asked of the BUILT page, not the template: the payload is written inside a JavaScript object
+    literal in a Python string, and what matters is the keys that reach the browser.
+    """
+    import re
+    gv = render_module("gen_game_view")
+    page = REPO / "ui" / "generated" / "layout-tool.html"
+    if not page.is_file():
+        pytest.skip("the layout tool has not been built in this checkout")
+    text = page.read_text(encoding="utf-8")
+    start = text.find("el('json').value = JSON.stringify(")
+    assert start != -1, "the tool no longer builds its save payload with JSON.stringify"
+    block = text[start:text.find("null, 2)", start)]
+    keys = set(re.findall(r"(\w+):\s", block))
+    missing = sorted(set(gv.DEFAULTS) - keys)
+    assert not missing, (
+        "the layout tool's save leaves out %s. Save overwrites ui/layout.json, so every one of "
+        "those is removed from the file the moment anyone presses it -- including settings the "
+        "tool has no control for and never meant to touch." % ", ".join(missing))
