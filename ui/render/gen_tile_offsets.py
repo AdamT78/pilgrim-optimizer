@@ -53,7 +53,19 @@ OFFSETS_PATH = UI / "duty_tile_offsets.json"
 # the board no longer uses would be judging offsets against a row nobody sees. The button
 # cycles; this only decides where it starts.
 POP_SET = pop.WHEEL
-WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
+# The wheel's real drawn size in the game view. TYPED, NOT DERIVED, and that is the point:
+# `gv.geometry(gv.layout())["wheel"]` is one line and would make this impossible to get
+# wrong -- and would also make the guard that checks it assert a value against itself. It
+# earned its keep the day the canvas widened: the wheel moved 877.8 -> 878.0 and the guard
+# said so, which a derived constant would have swallowed in silence.
+#
+# 878.0 rather than 877.85 because the canvas is now wide enough that the wheel is bound by
+# HEIGHT, so it no longer moves when the player boards do.
+#
+# The SAVED offsets do not shift with this. They convert through `wheel_px` recorded in
+# duty_tile_offsets.json -- the width they were actually judged at -- which stays 877.8
+# until something is dragged and saved again.
+WHEEL_PX = 878.0
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
           [1, 1, 1, 1], [2, 0, 0, 0], [0, 1, 0, 2], [1, 0, 3, 0]]

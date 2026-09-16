@@ -96,6 +96,39 @@ DEFAULTS = {
     "margin_top": 28.0, "margin_bottom": 28.0,
     "act_rule": 7.0,
     "wheel_slack_to_boxes": True,
+    # WHICH PART OF THE PANORAMA IS ON SCREEN, as a percentage across it. The picture is 2.6:1
+    # and `cover` crops it to whatever the display is, so on anything narrower the ends fall
+    # off -- and the ends are where both scenes are. 50 is centred, which is what this was
+    # before it was a number; 0 pins the left edge and 100 the right. It is here rather than in
+    # the panorama file because it is a property of the SCREEN, not of the picture: the same
+    # panorama wants a different part shown on a 16:10 laptop than on an ultrawide.
+    # Whether the Special Activities panel is drawn above the player boards. OFF, and the
+    # boards column stops being the leftover under a full-width band and runs the whole inner
+    # height instead -- which is what lets a board be 586 wide rather than 484.
+    #
+    # The alms table and the market do NOT move. They are above the action box and the wheel and
+    # they stay there; what changes is that their row no longer reaches across the board column
+    # and pushes it down. So this is a change to ONE column's height, not to the top row.
+    "special_activities": True,
+    # A FLAT GROUND INSTEAD OF THE PANORAMA, or None to paint the picture. This is not a theme:
+    # it follows from the layout. Once the canvas is wide enough to fill the display there is no
+    # margin for the panorama's scenes to appear in, and what remains of it behind the board is
+    # an even field anyway -- so the picture costs half a megabyte to show a colour. Set it to
+    # the colour that field already is and nothing on screen changes except the file size.
+    #
+    # #4d4844 is sampled from the clearing panorama where the board sits; it is L* 31.5 against
+    # a tile edge ink of L* 13.5, which is the separation the tiles were lightened for.
+    "ground_color": None,
+    "panorama_x": 50.0,
+    # A SECOND SIZE TO COMPARE AGAINST, or None for no comparison. Given, the page carries both
+    # layouts and a button in the banner swaps them, because the question "is the bigger board
+    # worth what it costs" cannot be answered from two screenshots taken at different times on
+    # different monitors -- it needs the same screen, seconds apart.
+    #
+    # Only the keys that DIFFER go in here; everything else comes from the layout above, so the
+    # comparison cannot drift on a key nobody meant to change.
+    "compare": {"canvas_width": 1730, "board_width": 483.9, "special_activities": True,
+                "ground_color": None, "label": "with SA"},
 }
 
 
@@ -128,15 +161,29 @@ def q(tag):
 # 1600 x 1200 is that column with room. The choice is an ASPECT, not a resolution: the stage is
 # zoom-to-fit, so 1600 x 1200 and 3200 x 2400 are the same picture, and on every screen worth
 # testing the height term wins the fit -- which is also why an ultrawide scores exactly the same as
-# a 1440p monitor here, and why extra width buys nothing. A taller canvas buys column space by
-# rendering everything smaller: 4:3 costs about 11% of apparent size against 3:2.
+# a 1440p monitor here. A taller canvas buys column space by rendering everything smaller: 4:3
+# costs about 11% of apparent size against 3:2.
+#
+# "EXTRA WIDTH BUYS NOTHING" used to end that sentence and it was half true, which is worse than
+# wrong. Extra SCREEN width buys nothing: the height term wins the fit, so a wider display only
+# widens the margin. Extra CANVAS width is a different question -- it is the only thing the board
+# column and the wheel have to share, and widening it is what lets one grow without the other
+# paying. ui/layout.json overrides both of these; the pair here is the fallback, not the layout.
+#
+# What the canvas cannot buy is size for a component that is capped by HEIGHT, and all of them
+# are: the wheel is square, the boards are a fixed aspect, and the action box follows the board.
+# Width past the point where height binds becomes gutter.
 CANVAS_W, CANVAS_H = 1600, 1200
 STAGE_PAD = 14
 BOARD_GAP = 30
 VB_W, VB_H = 1905.0, 826.0
 
-# Measured from the current game view: the Special Activities panel is already the head of this
-# column, at exactly the boards' width, and the log already sits at the column's foot with no slack.
+# Measured from the game view as it was when the panel was drawn: the Special Activities panel
+# was the head of this column, at exactly the boards' width, and the log sits at the column's foot
+# with no slack. `special_activities` can now turn that head off -- the CELL stays, as a spacer
+# that holds the alms table and the market over the action box and the wheel, and the boards take
+# the height back. This number is what the panel was, kept because it is what a returning panel
+# would have to fit into.
 SA_TODAY_H = 153.9
 LOG_H = 210.7
 
@@ -402,6 +449,20 @@ def geometry(L):
     seats = int(L["seats"])
     boards_h = seats * bh + (seats - 1) * L["board_gap"]
 
+    # THE BOARD COLUMN'S OWN BOX, which is not the main row's. It starts `row_gap` below the top
+    # of whatever is above it and runs to the bottom, and that is the height four boards have to
+    # fit inside -- NOT `main_h`, which is what I measured against first and which is 36.8 px too
+    # generous. A board sized to main_h overflows by exactly that, and a flex column answers an
+    # overflow by shrinking its children, so the boards come back 4% short and the artwork is
+    # squashed rather than clipped. Nothing reports it; the boards just look a little wrong.
+    left_top = float(L["row_gap"])
+    if L.get("special_activities", True):
+        left_h = main_h - left_top
+        left_lift = 0.0
+    else:
+        left_h = inner_h - left_top
+        left_lift = top_h          # the column rises into the space the panel had
+
     return {
         "pad": pad, "inner_w": inner_w, "inner_h": inner_h,
         "bw": bw, "bh": bh, "panel_w": panel_w, "overhang": overhang,
@@ -412,7 +473,7 @@ def geometry(L):
         "slack": max(0.0, (main_h - banner_h) - wheel),
         # fitted to the wheel's height, because the map is the one component taller than it is wide
         "map_w": wheel * MAP_ASPECT,
-        "left_top": float(L["row_gap"]),
+        "left_top": left_top, "left_h": left_h, "left_lift": left_lift,
     }
 
 
