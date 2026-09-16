@@ -58,17 +58,26 @@ SETS = {
         "right": UI / "sources" / "panorama_right.webp",
         "out": UI / "panorama.webp",
         "label": "cold night fog, inner edges at #1e1d1b",
+        "prompt": "background/left.txt, background/right.txt",
     },
     "mist": {
         "left": UI / "sources" / "panorama_mist_left.webp",
         "right": UI / "sources" / "panorama_mist_right.webp",
         "out": UI / "panorama_mist.webp",
         "label": "pale daylight mist, inner edges near #464442",
+        "prompt": "background/left_v2.txt, background/right_v2.txt",
+    },
+    "clearing": {
+        "left": UI / "sources" / "panorama_clearing_left.webp",
+        "right": UI / "sources" / "panorama_clearing_right.webp",
+        "out": UI / "panorama_clearing.webp",
+        "label": "night at the edges opening into a pale clearing where the board sits",
+        "prompt": "background/left_v3.txt, background/right_v3.txt",
     },
 }
 # Which one the board draws. gen_duty_grid.PANORAMA reads this rather than naming a file, so the
 # page and the generator cannot disagree about which picture is the background.
-DEFAULT = "mist"
+DEFAULT = "clearing"
 
 
 def panorama_set(name: str | None = None) -> dict:

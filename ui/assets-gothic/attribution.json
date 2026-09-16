@@ -425,6 +425,28 @@
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
     },
+    "ui/sources/panorama_clearing_left.webp": {
+      "state": "present",
+      "title": "Pilgrim trail, night at the edges, left half of the clearing panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left_v3.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the left half of ui/panorama_clearing.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is anchored against the INNER edge of the half rather than its outer edge, because the board covers a fixed slice of the panorama at every display aspect and the outer edge is the first thing a narrow screen crops.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "ui/sources/panorama_clearing_right.webp": {
+      "state": "present",
+      "title": "Pilgrim trail, night at the edges, right half of the clearing panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right_v3.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the right half of ui/panorama_clearing.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a kneeling monk and a grazing deer, with ruins among the trees -- is anchored against the INNER edge of the half rather than its outer edge, because the board covers a fixed slice of the panorama at every display aspect and the outer edge is the first thing a narrow screen crops.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
     "ui/ground.webp": {
       "state": "present",
       "title": "Board ground, dark warm field",
@@ -454,9 +476,20 @@
       "collection": "Pilgrim gothic v2",
       "source": "two halves generated in a ChatGPT session for this project from the left_v2 and right_v2 background prompts; no upstream URL, no seed on record",
       "licence": "openai-generated",
-      "role": "the field behind the whole game view and THE ONE THE BOARD DRAWS -- gen_panorama.DEFAULT names it. The stage is transparent over it, so this is also what shows through the duty wheel's channels and between the tiles, which is what it was regenerated for: behind the wheel it sits at L* 37.0 against a tile edge ink of L* 13.5, where the night field sat at 12.9 and the edge separated by 0.6.",
+      "role": "KEPT, NOT DRAWN: the field behind the whole game view -- gen_panorama still builds it and its guard still holds it byte-identical, so the three can be compared rather than remembered. The stage is transparent over it, so this is also what shows through the duty wheel's channels and between the tiles, which is what it was regenerated for: behind the wheel it sits at L* 37.0 against a tile edge ink of L* 13.5, where the night field sat at 12.9 and the edge separated by 0.6.",
       "modifications": "joined by ui/render/gen_panorama.py --set mist from the two halves under ui/sources/: de-vignetted at both inner edges, then level-matched per channel with the correction faded out over the first quarter of the right half. Butt-joined with no overlap. Seam step after both corrections is at most 0.11 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86.",
       "reproducibleBy": "python3 ui/render/gen_panorama.py --set mist -- byte-identical to the committed file from the two committed halves; `--check` asserts it. The HALVES are not reproducible; the join is."
+    },
+    "ui/panorama_clearing.webp": {
+      "state": "present",
+      "title": "Pilgrim trail, night at the edges opening into a pale clearing",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "two halves generated in a ChatGPT session for this project from the left_v3 and right_v3 background prompts; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the field behind the whole game view and THE ONE THE BOARD DRAWS -- gen_panorama.DEFAULT names it. Dark at the outer quarters and pale only where the board sits, which is the arrangement the duty tiles need: behind the board it sits at L* 32.1 against a tile edge ink of L* 13.5.",
+      "modifications": "joined by ui/render/gen_panorama.py --set clearing from the two halves under ui/sources/: de-vignetted at both inner edges, then level-matched per channel with the correction faded out over the first quarter of the right half. Butt-joined with no overlap. Seam step after both corrections is at most 0.16 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86.",
+      "reproducibleBy": "python3 ui/render/gen_panorama.py --set clearing -- byte-identical to the committed file from the two committed halves; `--check` asserts it. The HALVES are not reproducible; the join is."
     },
     "ui/cube_acolyte_bone.svg": {
       "state": "present",
