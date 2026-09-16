@@ -22,6 +22,26 @@ commit that removed the others.
 The four single-action tiles — Allocation, Build Roads, Taxation and the City — have only
 `V_whole_tile.txt`. They are one scene, so there is nothing to merge.
 
+### A second route, added for Construct
+
+```
+NN_name/V_option3_step2_merge_cross.txt
+```
+
+A cross-merge: TWO pair images are attached and ONE panel is taken from each, rather than both
+panels of a single pair. It exists because a pair can come back with one panel worth keeping and
+one not, and regenerating the pair to fix the second half throws away the first.
+
+The committed Construct C tile was not made this way. It was **composited by code** — the same two
+panels, cropped a fifth of their width from the inner side, level-matched per channel and butted at
+the centre through a 20 px cross-fade. That is worth knowing before you reach for either: a
+composite keeps the artwork exactly as generated and puts the join at 0.5, where the board's
+lit/dim mask already splits, but it cannot make anything FLOW across the join. It worked there only
+because the two inner edges were 43 levels apart before cropping and 0.8 after — measure that
+first, on the columns that would actually touch, not on the panels as wholes. The prompt route
+redraws a band instead, so weather and ground carry across; the cost is a regeneration, and the
+figures may not come back as they are.
+
 `V` is `A` (engraved plate) or `B` (grim dark). **B is the chosen set**; A is kept as the record of
 that comparison. Generating A again is only worth it if you are revisiting the decision.
 
