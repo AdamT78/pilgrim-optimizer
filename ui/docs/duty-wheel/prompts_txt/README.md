@@ -22,14 +22,78 @@ commit that removed the others.
 The four single-action tiles — Allocation, Build Roads, Taxation and the City — have only
 `V_whole_tile.txt`. They are one scene, so there is nothing to merge.
 
+### A second route, added for Construct
+
+```
+NN_name/V_option3_step2_merge_cross.txt
+```
+
+A cross-merge: TWO pair images are attached and ONE panel is taken from each, rather than both
+panels of a single pair. It exists because a pair can come back with one panel worth keeping and
+one not, and regenerating the pair to fix the second half throws away the first.
+
+The committed Construct C tile was not made this way. It was **composited by code** — the same two
+panels, cropped a fifth of their width from the inner side, level-matched per channel and butted at
+the centre through a 20 px cross-fade. That is worth knowing before you reach for either: a
+composite keeps the artwork exactly as generated and puts the join at 0.5, where the board's
+lit/dim mask already splits, but it cannot make anything FLOW across the join. It worked there only
+because the two inner edges were 43 levels apart before cropping and 0.8 after — measure that
+first, on the columns that would actually touch, not on the panels as wholes. The prompt route
+redraws a band instead, so weather and ground carry across; the cost is a regeneration, and the
+figures may not come back as they are.
+
 `V` is `A` (engraved plate) or `B` (grim dark). **B is the chosen set**; A is kept as the record of
 that comparison. Generating A again is only worth it if you are revisiting the decision.
 
 ## The background, which is not a tile
 
 ```
-background/left.txt        background/right.txt
+background/left.txt        background/right.txt          the night field
+background/left_v2.txt     background/right_v2.txt       the mist field -- what the board draws
+background/left_v3.txt     background/right_v3.txt       not generated yet
 ```
+
+`_v2` is the same two scenes with the empty middle made PALE instead of dark, and it exists for a
+measured reason rather than a taste. The wheel paints no ground of its own, so what shows between
+the duty tiles is this picture; behind the wheel the night field sits at L\* 12.9 and the tile
+edge ink is L\* 13.5, which is to say a tile's outline was the same value as what was behind it.
+The v2 prompts hold the mist near `#464442` in a band, and both halves must name the SAME inner
+edge value or the butt join needs an overlap.
+
+The band is a target and the model overshot it: the committed halves came back at L\* 37 rather
+than 29. That is worth knowing before regenerating, because the direction has a cost as well as a
+benefit -- the wheel's acolyte marks sit on this field too, and pewter is the one a lighter ground
+closes on. Measured as dE76 against the field behind the wheel, night gave edge 8.3 and pewter
+37.7; mist gives edge 24.3 and pewter 24.6. Everything now separates by about the same margin,
+which is the argument for it.
+
+### Where a subject has to sit, which is not where v1 and v2 put it
+
+**The board covers panorama 24.4% to 75.6% on every display, whatever its shape.** The stage is a
+fixed 1600x1200 canvas that is zoom-to-fitted, and the panorama is `center/cover`, so both are
+scaled by the same height and shrink together; changing the display changes only how much panorama
+is VISIBLE either side of it. Worked from those two numbers alone:
+
+| display | visible panorama | exposed left | exposed right |
+| --- | --- | --- | --- |
+| 2.606:1, as composed | 0 – 100% | 0 – 24.4% | 75.6 – 100% |
+| 1.882:1 | 13.8 – 86.2% | 13.8 – 24.4% | 75.6 – 86.2% |
+| 1.778:1 (16:9) | 15.8 – 84.2% | 15.8 – 24.4% | 75.6 – 84.2% |
+| 1.600:1 (16:10) | 19.2 – 80.8% | 19.2 – 24.4% | 75.6 – 80.8% |
+
+So the strip that is both uncovered AND visible on every screen is the **five points just outside
+the board** — roughly 19–24% and 76–81%. Everything further out is seen only on wide displays.
+
+v1 and v2 said "the outer quarter" and then pushed the subject to the OUTER edge of it: measured,
+they centre their detail at 9.8% and 88.4%. That is the part a 16:10 display throws away first. On
+a 1.882:1 screen the left shrine falls off entirely and the right one is cut at 86.2%, which leaves
+a wide empty field beside the board and a clipped scene at the edge.
+
+v3 inverts it. The focal point — statue, candles, kneeling figures — is anchored against the INNER
+edge of the strip, and the scene thins OUTWARD from there rather than inward, so a wide display
+gets more of it rather than a different picture. v3 also takes the outer scene back to the night
+register, which v2 lifted along with the mist: dark at the edges, pale only where the board sits,
+which is the arrangement the tiles actually need.
 
 `background/` has no `NN_` prefix on purpose. `NN` is a one-based position in `DUTY_NAMES` and it
 decides which square a tile is drawn in; the panorama behind the whole game view is not a duty and

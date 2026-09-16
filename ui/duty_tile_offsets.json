@@ -5,85 +5,85 @@
     "gothic": {
       "offsets": {
         "0": {
-          "dx": 2.4,
-          "dy": 20.8
+          "dx": 2.4005,
+          "dy": 20.8047
         },
         "1": {
-          "dx": 5.9,
-          "dy": 14.3
+          "dx": 5.9013,
+          "dy": 14.3033
         },
         "2": {
-          "dx": 3.2,
-          "dy": 20.6
+          "dx": 3.2007,
+          "dy": 20.6047
         },
         "3": {
-          "dx": 10.3,
-          "dy": 10.5
+          "dx": 10.3023,
+          "dy": 10.5024
         },
         "5": {
-          "dx": -7.4,
-          "dy": 7.7
+          "dx": -7.4017,
+          "dy": 7.7018
         },
         "6": {
-          "dx": 1.5,
-          "dy": 4.4
+          "dx": 1.5003,
+          "dy": 4.401
         },
         "7": {
-          "dx": 2.0,
-          "dy": 3.2
+          "dx": 2.0005,
+          "dy": 3.2007
         },
         "8": {
-          "dx": -2.3,
-          "dy": 2.7
+          "dx": -2.3005,
+          "dy": 2.7006
         }
       },
       "arrangement_shift": {
         "dx": 0.0,
-        "dy": -21.0
+        "dy": -21.0048
       }
     },
     "hood": {
       "offsets": {
         "0": {
           "dx": 0.0,
-          "dy": 18.9
+          "dy": 18.9043
         },
         "1": {
-          "dx": 6.0,
-          "dy": 14.4
+          "dx": 6.0014,
+          "dy": 14.4033
         },
         "2": {
-          "dx": 3.2,
-          "dy": 20.6
+          "dx": 3.2007,
+          "dy": 20.6047
         },
         "3": {
-          "dx": 7.0,
-          "dy": 17.3
+          "dx": 7.0016,
+          "dy": 17.3039
         },
         "4": {
-          "dx": 6.8,
-          "dy": 15.0
+          "dx": 6.8015,
+          "dy": 15.0034
         },
         "5": {
-          "dx": -1.5,
-          "dy": 16.3
+          "dx": -1.5003,
+          "dy": 16.3037
         },
         "6": {
-          "dx": 7.4,
-          "dy": 23.1
+          "dx": 7.4017,
+          "dy": 23.1053
         },
         "7": {
-          "dx": 6.1,
-          "dy": 16.4
+          "dx": 6.1014,
+          "dy": 16.4037
         },
         "8": {
-          "dx": 4.5,
-          "dy": 18.2
+          "dx": 4.501,
+          "dy": 18.2041
         }
       },
       "arrangement_shift": {
         "dx": 0.0,
-        "dy": -22.0
+        "dy": -22.005
       }
     }
   },
@@ -91,7 +91,7 @@
   "note": "Per-tile nudges so each tile sits on its acolyte row the way The City does. Judged by eye: see gen_tile_offsets.py for the three derivable rules that were tried and why each failed. Screen pixels at the wheel's real drawn size, positive = right / down.",
   "method": "dragged in ui/render/gen_tile_offsets.py against a frozen acolyte grid",
   "units": "screen px at wheel width 877.8; positive = right / down",
-  "wheel_px": 877.8,
+  "wheel_px": 878.0,
   "tile_scale": 0.92,
   "names": [
     "Allocation",

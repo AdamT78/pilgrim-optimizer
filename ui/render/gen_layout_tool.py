@@ -224,7 +224,8 @@ COMPONENTS = [("sa", "svg", "sa"), ("alms", "svg", "alms"), ("mkt", "div", "mkt"
 
 # Every control the page's script addresses by id, checked against the built page. See build().
 # The sliders here are the same list the script calls KEYS; the rest are the controls around them.
-CONTROL_IDS = ["seats", "board_width", "board_gap", "special_height", "frame_border_y",
+CONTROL_IDS = ["seats", "board_width", "board_gap", "special_height", "panorama_x",
+               "frame_border_y",
                "frame_border_x", "column_gap_1", "column_gap_2", "row_gap", "canvas_height",
                "act_rule",
                "margin_top", "margin_bottom",
@@ -272,13 +273,19 @@ def panorama_uri() -> str:
     opens and still looks deliberate. It says so rather than failing the build, because a layout
     tool that will not start is worse than one with a plain background.
 
-    It is read from the same place gen_duty_grid.PANORAMA points at, and that duplication is the
-    pre-existing one this module already carries for the ground: it loads gen_game_view by PATH
-    rather than importing the render package, so it cannot reach dg without restructuring how the
-    tool starts. The guard in tests/test_ground_guards.py is what holds the two paths equal.
+    It asks `gen_duty_grid.panorama_path()` rather than naming a file, which it used to do. That
+    worked for exactly as long as there was one panorama to name: a second was committed and made
+    the default, and this page went on painting the first, correctly and invisibly. The duplication
+    left is the pre-existing one -- this module loads gen_game_view by PATH rather than importing
+    the render package -- and the guard in tests/test_ground_guards.py holds the two equal.
     """
     import base64
-    p = UI / "assets-gothic" / "ui" / "panorama.webp"
+    # Which panorama is gen_panorama's to say and gen_duty_grid's to pass on. This file named
+    # its own path and the two agreed for as long as there was only one picture to name;
+    # the moment a second was committed and made default, this page went on painting the
+    # first and looked entirely correct doing it.
+    from gen_duty_grid import panorama_path
+    p = panorama_path()
     if not p.is_file():
         print("no %s -- the simulated screen falls back to flat colour. It is a committed asset, "
               "not a generated one -- restore it from git." % p.name)
@@ -413,7 +420,7 @@ body{margin:0;background:#12140f;color:#E8E2D3;font:13px/1.5 "Iowan Old Style",G
    framing on an ultrawide and the wrong one on every other entry in the list -- which is exactly
    the list this tool exists to check. Colour LAST, or the declaration drops. */
 #screen{position:relative;transform-origin:top left;outline:1px solid #2c3327;
-  background:url(%(panorama)s) center/cover no-repeat #000}
+  background:url(%(panorama)s) var(--pano-x, 50%%) 50%%/cover no-repeat #000}
 #legend{margin-top:10px;font:11.5px/1.7 ui-monospace,Menlo,monospace;color:#8fa286}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   margin-right:5px}
@@ -499,6 +506,9 @@ body.live #livehint{display:block}
 
   <label>special activities height <b id="v-special_height"></b></label>
   <input type="range" id="special_height" min="120" max="320" step="1">
+
+  <label>panorama across <b id="v-panorama_x"></b></label>
+  <input type="range" id="panorama_x" min="0" max="100" step="0.5">
 
   <label style="margin-top:14px;color:#EFE8D6;font-weight:600">frame borders
     <b id="v-framed"></b></label>
@@ -605,7 +615,7 @@ const PAD = %(pad)s;
 // past it to x 1902, which is why the board's bounding box is not the board's visual edge.
 const FRAME_START = 620 / 1905, FRAME_END = 1839 / 1905;
 const CAN_SAVE = %(can_save)s;
-const KEYS = ['seats','board_width','board_gap','special_height','frame_border_y',
+const KEYS = ['seats','board_width','board_gap','special_height','panorama_x','frame_border_y',
               'frame_border_x','column_gap_1','column_gap_2','row_gap','canvas_height','act_rule',
               'margin_top','margin_bottom'];
 let screenIndex = 0;
@@ -632,6 +642,10 @@ function drawSpecial(w, h, by, bx){
 
 function apply(){
   for (const k of KEYS) L[k] = parseFloat(el(k).value);
+  // The panorama moves on the SCREEN element, not on the stage: the stage is transparent and
+  // the picture is painted behind it, so this is the one control here that changes something
+  // outside the canvas rather than inside it.
+  el('screen').style.setProperty('--pano-x', L.panorama_x + '%%');
   L.width_whole_board = el('width_basis').value === 'board';
   L.wheel_slack_to_boxes = el('slack_use').value === 'boxes';
   L.framed = [...document.querySelectorAll('#framed button.on')].map(b => b.dataset.slot);
@@ -955,8 +969,18 @@ function apply(){
      seats: seats, width_whole_board: L.width_whole_board,
      column_gap_1: L.column_gap_1, column_gap_2: L.column_gap_2, row_gap: L.row_gap,
      wheel_slack_to_boxes: L.wheel_slack_to_boxes, act_rule: +fmt(L.act_rule),
-     framed: L.framed,
-     margin_top: +fmt(L.margin_top), margin_bottom: +fmt(L.margin_bottom)}, null, 2);
+     framed: L.framed, panorama_x: +fmt(L.panorama_x),
+     // banner_height has no control here either, and was being dropped on every save long
+     // before the three below joined it. It happens to equal its default today, which is
+     // exactly why nobody noticed.
+     banner_height: +fmt(L.banner_height),
+     margin_top: +fmt(L.margin_top), margin_bottom: +fmt(L.margin_bottom),
+     // CARRIED, NOT EDITED. This tool has no control for these three, and Save writes the whole
+     // file -- so leaving them out of this literal does not leave them alone, it deletes them.
+     // The comment above says every setting the tool owns is here; the ones it does NOT own have
+     // to be here too, for the same reason and more quietly.
+     special_activities: L.special_activities, ground_color: L.ground_color,
+     compare: L.compare}, null, 2);
 }
 
 const setFramed = list => {

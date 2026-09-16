@@ -215,6 +215,16 @@ def rule(css, selector):
 PANORAMA = REPO / "ui" / "assets-gothic" / "ui" / "panorama.webp"
 
 
+def panorama_drawn():
+    """The panorama the board actually paints, which is no longer a fixed file.
+
+    Two are committed now and one is chosen, so a guard naming `panorama.webp` is a guard about
+    the picture that happens to be OLDER rather than about the picture on screen. Asked of
+    gen_panorama, which is the one place that answers it.
+    """
+    return render_module("gen_panorama").panorama_set()["out"]
+
+
 def test_the_page_paints_the_field_and_the_stage_does_not():
     """One surface, and after this change it is the page rather than the stage.
 
@@ -226,9 +236,17 @@ def test_the_page_paints_the_field_and_the_stage_does_not():
     gv = render_module("gen_game_view")
     page = rule(gv.CSS, "html,body")
     stage = rule(gv.CSS, ".gv-stage")
-    assert page and "url(%(panorama)s)" in page, (
-        "gen_game_view's `html,body` rule no longer paints the panorama. That rule is the ground "
-        "for the whole view; without it the page is the flat colour and the picture is gone.")
+    # The rule carries the ground, whatever the ground is: the page can be given the panorama or
+    # a flat colour, and which it gets is a layout decision. What must not change is WHERE it is
+    # painted, so this asks that the html,body rule still has a background at all, and separately
+    # that asking for the picture still produces the picture.
+    assert page and "background:%(ground)s" in page, (
+        "gen_game_view's `html,body` rule no longer paints the ground. That rule is the ground "
+        "for the whole view; without it the page has none.")
+    lit = dict(gv.layout()); lit["ground_color"] = None
+    assert "url(data:image/webp" in gv.ground_css(lit), (
+        "asked for the panorama, the page ground came out without it (%r). The picture is gone "
+        "and the flat colour is all that is left." % gv.ground_css(lit)[:80])
     assert stage is not None, ".gv-stage has no rule at all -- the stage is what gets zoom-fitted"
     assert "url(" not in stage, (
         "`.gv-stage` paints a background image again (%r). The stage is the 1600x1200 canvas, so a "
@@ -246,13 +264,20 @@ def test_the_colour_comes_last_in_the_shorthand():
     layer; this one cannot, and the difference is invisible in a diff.
     """
     gv = render_module("gen_game_view")
-    page = rule(gv.CSS, "html,body")
-    decl = [d for d in page.split(";") if d.strip().startswith("background")]
-    assert decl, "no `background` declaration in `html,body`"
-    body = decl[0].split(":", 1)[1]
+    # ASKED OF `ground_css`, not of the template. The rule now reads `background:%(ground)s` and
+    # the shorthand is assembled in that function, so the template no longer contains the ordering
+    # this guard is about -- it would pass on a string with no colour in it at all.
+    L = dict(gv.layout()); L["ground_color"] = None
+    body = gv.ground_css(L)
     assert body.rstrip().endswith("#0b0a08"), (
         "the colour is not the final value of the background shorthand: %r. Put the colour last, "
         "or the declaration is invalid and dropped and the page renders white." % body.strip())
+    # and the flat alternative is a bare colour, with nothing after it to invalidate
+    L["ground_color"] = "#4d4844"
+    flat = gv.ground_css(L)
+    assert flat.strip() == "#4d4844" and "url(" not in flat, (
+        "a flat ground came out as %r; it has to be the whole value, or the image and the colour "
+        "are both in the shorthand and the picture wins." % flat)
 
 
 def test_the_page_rule_is_written_after_the_stylesheet_it_has_to_beat():
@@ -295,13 +320,14 @@ def test_the_panorama_is_embedded_and_is_the_committed_file():
     dg = grid_module()
     if not PANORAMA.is_file():
         pytest.skip("the committed panorama is not in this checkout")
+    drawn = panorama_drawn()
     uri = dg.panorama_uri()
     assert uri.startswith("data:image/webp;base64,"), (
         "panorama_uri() returned %r... -- either the asset is missing (the fallback is a "
         "transparent pixel) or it stopped being embedded." % uri[:60])
-    assert base64.b64decode(uri.split(",", 1)[1]) == PANORAMA.read_bytes(), (
-        "panorama_uri() does not embed ui/assets-gothic/ui/panorama.webp. Some other file is "
-        "being served as the ground.")
+    assert base64.b64decode(uri.split(",", 1)[1]) == drawn.read_bytes(), (
+        "panorama_uri() does not embed %s, which is the set gen_panorama names as the default. "
+        "Some other file is being served as the ground." % drawn.name)
 
 
 def test_the_panorama_is_the_shape_its_composition_assumes():
@@ -322,11 +348,17 @@ def test_the_panorama_is_the_shape_its_composition_assumes():
         pytest.skip("the committed panorama is not in this checkout")
     pytest.importorskip("PIL", reason="reading the asset's size needs Pillow")
     from PIL import Image
-    w, h = Image.open(PANORAMA).size
-    assert 2.55 <= w / h <= 2.65, (
-        "the panorama is %dx%d = %.3f:1. It is composed as two %.2f:1 halves butted together and "
-        "its subjects sit in the outer quarters; at another aspect the board covers them."
-        % (w, h, w / h, w / h / 2))
+    # EVERY committed set, not just the one drawn. A panorama that is not the default today is
+    # a panorama somebody switches to, and the shape is the part that cannot be judged by eye
+    # afterwards -- at the wrong aspect the board covers the subjects and nothing says so.
+    for p in [spec["out"] for spec in render_module("gen_panorama").SETS.values()]:
+        if not p.is_file():
+            continue
+        w, h = Image.open(p).size
+        assert 2.55 <= w / h <= 2.65, (
+            "%s is %dx%d = %.3f:1. It is composed as two %.2f:1 halves butted together and "
+            "its subjects sit in the outer quarters; at another aspect the board covers them."
+            % (p.name, w, h, w / h, w / h / 2))
 
 
 def test_the_layout_tool_shows_the_field_the_page_shows():
@@ -368,8 +400,10 @@ def test_both_modules_read_the_same_panorama():
     tool = render_module("gen_layout_tool")
     if not PANORAMA.is_file():
         pytest.skip("the committed panorama is not in this checkout")
-    assert dg.PANORAMA.resolve() == PANORAMA.resolve(), (
-        "gen_duty_grid.PANORAMA points at %s, not the committed asset." % dg.PANORAMA)
+    drawn = panorama_drawn()
+    assert dg.panorama_path().resolve() == drawn.resolve(), (
+        "gen_duty_grid.panorama_path() points at %s, not %s, which is the set gen_panorama names "
+        "as the default." % (dg.panorama_path(), drawn))
     assert tool.panorama_uri() == dg.panorama_uri(), (
         "the layout tool embeds a different file from gen_duty_grid.panorama_uri(). The two paths "
         "have drifted; one of them is pointing somewhere that no longer exists.")
@@ -390,7 +424,10 @@ def test_the_field_is_cropped_and_not_stretched():
     """
     gv = render_module("gen_game_view")
     tool = render_module("gen_layout_tool")
-    for name, css, selector in (("gen_game_view", gv.CSS, "html,body"),
+    # gen_game_view's is built rather than written, so it is asked for with the panorama on --
+    # the flat-colour case has no size to state and nothing for `cover` to be wrong about.
+    gv_L = dict(gv.layout()); gv_L["ground_color"] = None
+    for name, css, selector in (("gen_game_view", "x{background:%s}" % gv.ground_css(gv_L), "x"),
                                 ("gen_layout_tool", tool.PAGE, "#screen")):
         decl = rule(css, selector)
         assert decl and "/cover" in decl, (
@@ -399,6 +436,26 @@ def test_the_field_is_cropped_and_not_stretched():
             % (name, selector, (decl or "").strip()))
         assert "100% 100%" not in decl.replace("%%", "%"), (
             "%s's `%s` still carries a `100%% 100%%` size alongside `cover`." % (name, selector))
+
+    # AND THE PAGE, not only the template it came from. Everything above reads the SOURCE string,
+    # where `%%` is how a literal percent is written -- so a template that is correct there can
+    # still emit `50.0%% 50%%/cover`, which is not a CSS length and drops the whole declaration.
+    # That shipped, and every guard in this file stayed green while it did: the escaping depends
+    # on how many times the string is formatted, and CSS is one `%` pass here and two elsewhere.
+    # The general form of the fault is a doubled percent surviving into the output, so that is
+    # what this looks for rather than the one declaration that had it.
+    page = REPO / "ui" / "generated" / "game-view.html"
+    if not page.is_file():
+        pytest.skip("the game view has not been built in this checkout")
+    # The WHOLE file, not a prefix. The first attempt read the first 200 KB and passed the
+    # falsification, because the embedded panorama is half a megabyte of base64 and pushes the
+    # rule that had the fault well past any prefix worth guessing at. base64 has no percent in
+    # its alphabet, so scanning all of it costs a moment and cannot collide.
+    head = page.read_text(encoding="utf-8")
+    assert "%%" not in head, (
+        "the built game view carries a doubled percent in its CSS, which is not a valid length: "
+        "%r. A template escaped for two format passes was given one, or the other way round."
+        % head[max(0, head.find("%%") - 70):head.find("%%") + 12])
 
 
 def wheel_in_panorama(screen, fit):
@@ -505,21 +562,34 @@ def test_the_committed_panorama_is_the_one_the_script_makes():
     _sys.path.insert(0, str(RENDER))
     import gen_panorama
 
-    for half in (gen_panorama.LEFT, gen_panorama.RIGHT):
-        assert half.is_file(), (
-            "%s is missing. The halves are diffusion output with no seed on record: without them "
-            "the panorama cannot be rebuilt, only restored." % half)
+    # EVERY set, because the promise is per picture. The one that is not the default is the one
+    # nobody looks at, so it is the one whose halves quietly stop reproducing it.
+    checked = 0
+    for name, spec in sorted(gen_panorama.SETS.items()):
+        if not spec["out"].is_file():
+            continue
+        for half in (spec["left"], spec["right"]):
+            assert half.is_file(), (
+                "%s is missing. The halves are diffusion output with no seed on record: without "
+                "them the %s panorama cannot be rebuilt, only restored." % (half, name))
 
-    im, _step, seam = gen_panorama.join()
-    assert gen_panorama.encode(im) == PANORAMA.read_bytes(), (
-        "ui/assets-gothic/ui/panorama.webp is not what gen_panorama.py now produces (%d bytes "
-        "committed, %d regenerated). Either the join changed and the picture was not rebuilt, or "
-        "the picture was edited outside the script -- and its attribution record claims the two "
-        "are interchangeable. Run `python3 ui/render/gen_panorama.py`."
-        % (PANORAMA.stat().st_size, len(gen_panorama.encode(im))))
-    assert max(abs(v) for v in seam.values()) < 0.5, (
-        "the join leaves a step of %.2f grey levels at the seam. Both corrections are supposed to "
-        "bring it to zero; a step this size means one of them stopped applying." % max(seam.values()))
+        im, _step, seam = gen_panorama.join(pano_set=name)
+        assert gen_panorama.encode(im) == spec["out"].read_bytes(), (
+            "%s is not what gen_panorama.py now produces (%d bytes committed, %d regenerated). "
+            "Either the join changed and the picture was not rebuilt, or the picture was edited "
+            "outside the script -- and its attribution record claims the two are interchangeable. "
+            "Run `python3 ui/render/gen_panorama.py --set %s`."
+            % (spec["out"].name, spec["out"].stat().st_size,
+               len(gen_panorama.encode(im)), name))
+        assert max(abs(v) for v in seam.values()) < 0.5, (
+            "the %s join leaves a step of %.2f grey levels at the seam. Both corrections are "
+            "supposed to bring it to zero; a step this size means one of them stopped applying."
+            % (name, max(abs(v) for v in seam.values())))
+        checked += 1
+    assert checked >= 2, (
+        "only %d panorama set(s) were checked. Two are committed, and a set whose picture is "
+        "missing from the tree is skipped here -- so this passing means less than it looks."
+        % checked)
 
 
 def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
@@ -539,10 +609,11 @@ def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
     _sys.path.insert(0, str(RENDER))
     import gen_panorama
     from PIL import Image
-    if not gen_panorama.LEFT.is_file():
+    left = gen_panorama.panorama_set()["left"]
+    if not left.is_file():
         pytest.skip("the halves are not in this checkout")
 
-    a = np.asarray(Image.open(gen_panorama.LEFT).convert("RGB")).astype(float)
+    a = np.asarray(Image.open(left).convert("RGB")).astype(float)
     b = gen_panorama.devignette(a, "right")
     edge = np.abs(b[:, -gen_panorama.EDGE:, :] - a[:, -gen_panorama.EDGE:, :]).mean()
     rest = np.abs(b[:, :-gen_panorama.EDGE, :] - a[:, :-gen_panorama.EDGE, :]).max()
@@ -554,3 +625,37 @@ def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
     assert rest == 0.0, (
         "de-vignetting touched pixels outside its %d-column window (max change %.3f). It is meant "
         "to lift a ramp at one edge, not to grade the picture." % (gen_panorama.EDGE, rest))
+
+
+def test_the_layout_tool_saves_every_setting_it_was_given():
+    """Save writes the WHOLE file, so a key left out of its payload is a key deleted.
+
+    The tool posts one JSON object and the server writes it over ui/layout.json. It validates
+    that nothing UNKNOWN is present and says nothing about what is absent -- so a setting the
+    tool has no control for is not left alone by a save, it is removed, and the board silently
+    goes back to the default for it on the next build.
+
+    That had already happened once before anyone added a setting: `banner_height` has been in
+    the file and out of the payload for as long as both existed, and it went unnoticed because
+    the file's value and the default are both 88.0. Three more joined it -- the panorama's
+    position, whether Special Activities is drawn, and the flat ground colour -- and those do
+    not agree with their defaults, so the first save would have undone the layout.
+
+    Asked of the BUILT page, not the template: the payload is written inside a JavaScript object
+    literal in a Python string, and what matters is the keys that reach the browser.
+    """
+    import re
+    gv = render_module("gen_game_view")
+    page = REPO / "ui" / "generated" / "layout-tool.html"
+    if not page.is_file():
+        pytest.skip("the layout tool has not been built in this checkout")
+    text = page.read_text(encoding="utf-8")
+    start = text.find("el('json').value = JSON.stringify(")
+    assert start != -1, "the tool no longer builds its save payload with JSON.stringify"
+    block = text[start:text.find("null, 2)", start)]
+    keys = set(re.findall(r"(\w+):\s", block))
+    missing = sorted(set(gv.DEFAULTS) - keys)
+    assert not missing, (
+        "the layout tool's save leaves out %s. Save overwrites ui/layout.json, so every one of "
+        "those is removed from the file the moment anyone presses it -- including settings the "
+        "tool has no control for and never meant to touch." % ", ".join(missing))
