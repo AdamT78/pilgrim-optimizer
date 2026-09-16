@@ -403,6 +403,28 @@
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
     },
+    "ui/sources/panorama_mist_left.webp": {
+      "state": "present",
+      "title": "Pilgrim trail in pale mist, left half of the lighter background panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left_v2.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the left half of ui/panorama_mist.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is confined to the outer quarter, and the rest is a PALE mist carrying no nameable outline. Pale is the point: the night halves put L* 12.9 behind the wheel against a tile edge ink of L* 13.5, so a duty tile's outline was the same value as the ground and did nothing.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "ui/sources/panorama_mist_right.webp": {
+      "state": "present",
+      "title": "Pilgrim trail in pale mist, right half of the lighter background panorama",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right_v2.txt; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the right half of ui/panorama_mist.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a kneeling monk and a grazing deer, with ruins among the trees -- is confined to the outer quarter, and the rest is a PALE mist carrying no nameable outline. Pale is the point: the night halves put L* 12.9 behind the wheel against a tile edge ink of L* 13.5, so a duty tile's outline was the same value as the ground and did nothing.",
+      "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
+      "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
     "ui/ground.webp": {
       "state": "present",
       "title": "Board ground, dark warm field",
@@ -421,9 +443,20 @@
       "collection": "Pilgrim gothic v2",
       "source": "two halves generated in a ChatGPT session for this project from the left-half and right-half panorama prompts; no upstream URL, no seed on record",
       "licence": "openai-generated",
-      "role": "the field behind the whole game view, painted on html,body so it fills the viewport; the stage is transparent over it, so this also shows through the duty wheel's channels and every gutter",
+      "role": "KEPT, NOT DRAWN: the darker night field the wheel was originally composed against and every measurement in ui/README.md was taken over. gen_panorama.SETS still builds it and its guard still holds it byte-identical, so the two can be compared rather than remembered. the field behind the whole game view, painted on html,body so it fills the viewport; the stage is transparent over it, so this also shows through the duty wheel's channels and every gutter",
       "modifications": "joined by ui/render/gen_panorama.py from the two halves under ui/sources/: de-vignetted at both inner edges, then level-matched per channel with the correction faded out over the first quarter of the right half. Butt-joined with no overlap -- an overlap costs width, and restoring 2.600:1 then costs height at 2.6 px of overlap per px of height. Seam step after both corrections is 0.00 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86. The script is the statement of what was done; this is the summary of it.",
       "reproducibleBy": "python3 ui/render/gen_panorama.py -- byte-identical to the committed file from the two committed halves; `--check` asserts it. The HALVES are not reproducible; the join is."
+    },
+    "ui/panorama_mist.webp": {
+      "state": "present",
+      "title": "Pilgrim trail in pale mist, two-part panorama behind the game view",
+      "creator": "Generated with ChatGPT (OpenAI)",
+      "collection": "Pilgrim gothic v2",
+      "source": "two halves generated in a ChatGPT session for this project from the left_v2 and right_v2 background prompts; no upstream URL, no seed on record",
+      "licence": "openai-generated",
+      "role": "the field behind the whole game view and THE ONE THE BOARD DRAWS -- gen_panorama.DEFAULT names it. The stage is transparent over it, so this is also what shows through the duty wheel's channels and between the tiles, which is what it was regenerated for: behind the wheel it sits at L* 37.0 against a tile edge ink of L* 13.5, where the night field sat at 12.9 and the edge separated by 0.6.",
+      "modifications": "joined by ui/render/gen_panorama.py --set mist from the two halves under ui/sources/: de-vignetted at both inner edges, then level-matched per channel with the correction faded out over the first quarter of the right half. Butt-joined with no overlap. Seam step after both corrections is at most 0.11 levels at 1, 4, 16 and 64 columns either side. Encoded to WebP at quality 86.",
+      "reproducibleBy": "python3 ui/render/gen_panorama.py --set mist -- byte-identical to the committed file from the two committed halves; `--check` asserts it. The HALVES are not reproducible; the join is."
     },
     "ui/cube_acolyte_bone.svg": {
       "state": "present",

@@ -60,7 +60,21 @@ GROUND = HERE.parent / "assets-gothic" / "ui" / "ground.webp"
 #
 # The path lives here, beside GROUND, for the reason GROUND's does: more than one page needs it,
 # and a second statement of where a file lives is a second thing to keep in step.
-PANORAMA = HERE.parent / "assets-gothic" / "ui" / "panorama.webp"
+# WHICH panorama is gen_panorama.py's to say, not this file's. Two are committed -- the night
+# field the wheel was composed against and the lighter mist field -- and naming a path here
+# would be a second answer to a question that already has one, free to drift the moment the
+# default moves. Imported lazily inside the function because this module is imported by the
+# no-numpy lane and gen_panorama reaches for numpy at module scope.
+PANORAMA_FALLBACK = HERE.parent / "assets-gothic" / "ui" / "panorama.webp"
+
+
+def panorama_path() -> pathlib.Path:
+    """The picture the board paints behind the page, as gen_panorama's default set names it."""
+    try:
+        import gen_panorama
+    except Exception:
+        return PANORAMA_FALLBACK
+    return gen_panorama.panorama_set()["out"]
 
 # A 1x1 transparent GIF. What a missing field falls back to, so the caller's own flat colour shows
 # and the page is plainer rather than broken.
@@ -92,7 +106,8 @@ def panorama_uri() -> str:
     No generator to point at: this one is diffusion output, joined and level-matched by hand, and
     its provenance is the attribution record rather than a script.
     """
-    return _embed(PANORAMA, "It is a committed asset, not a generated one -- restore it from git.")
+    return _embed(panorama_path(),
+                  "It is a committed asset, not a generated one -- restore it from git.")
 
 # Version B -- grim dark -- chosen over A after both were generated in full and compared in the
 # picker. The case was not only taste. Measured over the eight tiles of each:

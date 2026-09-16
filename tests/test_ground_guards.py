@@ -215,6 +215,16 @@ def rule(css, selector):
 PANORAMA = REPO / "ui" / "assets-gothic" / "ui" / "panorama.webp"
 
 
+def panorama_drawn():
+    """The panorama the board actually paints, which is no longer a fixed file.
+
+    Two are committed now and one is chosen, so a guard naming `panorama.webp` is a guard about
+    the picture that happens to be OLDER rather than about the picture on screen. Asked of
+    gen_panorama, which is the one place that answers it.
+    """
+    return render_module("gen_panorama").panorama_set()["out"]
+
+
 def test_the_page_paints_the_field_and_the_stage_does_not():
     """One surface, and after this change it is the page rather than the stage.
 
@@ -295,13 +305,14 @@ def test_the_panorama_is_embedded_and_is_the_committed_file():
     dg = grid_module()
     if not PANORAMA.is_file():
         pytest.skip("the committed panorama is not in this checkout")
+    drawn = panorama_drawn()
     uri = dg.panorama_uri()
     assert uri.startswith("data:image/webp;base64,"), (
         "panorama_uri() returned %r... -- either the asset is missing (the fallback is a "
         "transparent pixel) or it stopped being embedded." % uri[:60])
-    assert base64.b64decode(uri.split(",", 1)[1]) == PANORAMA.read_bytes(), (
-        "panorama_uri() does not embed ui/assets-gothic/ui/panorama.webp. Some other file is "
-        "being served as the ground.")
+    assert base64.b64decode(uri.split(",", 1)[1]) == drawn.read_bytes(), (
+        "panorama_uri() does not embed %s, which is the set gen_panorama names as the default. "
+        "Some other file is being served as the ground." % drawn.name)
 
 
 def test_the_panorama_is_the_shape_its_composition_assumes():
@@ -322,11 +333,17 @@ def test_the_panorama_is_the_shape_its_composition_assumes():
         pytest.skip("the committed panorama is not in this checkout")
     pytest.importorskip("PIL", reason="reading the asset's size needs Pillow")
     from PIL import Image
-    w, h = Image.open(PANORAMA).size
-    assert 2.55 <= w / h <= 2.65, (
-        "the panorama is %dx%d = %.3f:1. It is composed as two %.2f:1 halves butted together and "
-        "its subjects sit in the outer quarters; at another aspect the board covers them."
-        % (w, h, w / h, w / h / 2))
+    # EVERY committed set, not just the one drawn. A panorama that is not the default today is
+    # a panorama somebody switches to, and the shape is the part that cannot be judged by eye
+    # afterwards -- at the wrong aspect the board covers the subjects and nothing says so.
+    for p in [spec["out"] for spec in render_module("gen_panorama").SETS.values()]:
+        if not p.is_file():
+            continue
+        w, h = Image.open(p).size
+        assert 2.55 <= w / h <= 2.65, (
+            "%s is %dx%d = %.3f:1. It is composed as two %.2f:1 halves butted together and "
+            "its subjects sit in the outer quarters; at another aspect the board covers them."
+            % (p.name, w, h, w / h, w / h / 2))
 
 
 def test_the_layout_tool_shows_the_field_the_page_shows():
@@ -368,8 +385,10 @@ def test_both_modules_read_the_same_panorama():
     tool = render_module("gen_layout_tool")
     if not PANORAMA.is_file():
         pytest.skip("the committed panorama is not in this checkout")
-    assert dg.PANORAMA.resolve() == PANORAMA.resolve(), (
-        "gen_duty_grid.PANORAMA points at %s, not the committed asset." % dg.PANORAMA)
+    drawn = panorama_drawn()
+    assert dg.panorama_path().resolve() == drawn.resolve(), (
+        "gen_duty_grid.panorama_path() points at %s, not %s, which is the set gen_panorama names "
+        "as the default." % (dg.panorama_path(), drawn))
     assert tool.panorama_uri() == dg.panorama_uri(), (
         "the layout tool embeds a different file from gen_duty_grid.panorama_uri(). The two paths "
         "have drifted; one of them is pointing somewhere that no longer exists.")
@@ -505,21 +524,34 @@ def test_the_committed_panorama_is_the_one_the_script_makes():
     _sys.path.insert(0, str(RENDER))
     import gen_panorama
 
-    for half in (gen_panorama.LEFT, gen_panorama.RIGHT):
-        assert half.is_file(), (
-            "%s is missing. The halves are diffusion output with no seed on record: without them "
-            "the panorama cannot be rebuilt, only restored." % half)
+    # EVERY set, because the promise is per picture. The one that is not the default is the one
+    # nobody looks at, so it is the one whose halves quietly stop reproducing it.
+    checked = 0
+    for name, spec in sorted(gen_panorama.SETS.items()):
+        if not spec["out"].is_file():
+            continue
+        for half in (spec["left"], spec["right"]):
+            assert half.is_file(), (
+                "%s is missing. The halves are diffusion output with no seed on record: without "
+                "them the %s panorama cannot be rebuilt, only restored." % (half, name))
 
-    im, _step, seam = gen_panorama.join()
-    assert gen_panorama.encode(im) == PANORAMA.read_bytes(), (
-        "ui/assets-gothic/ui/panorama.webp is not what gen_panorama.py now produces (%d bytes "
-        "committed, %d regenerated). Either the join changed and the picture was not rebuilt, or "
-        "the picture was edited outside the script -- and its attribution record claims the two "
-        "are interchangeable. Run `python3 ui/render/gen_panorama.py`."
-        % (PANORAMA.stat().st_size, len(gen_panorama.encode(im))))
-    assert max(abs(v) for v in seam.values()) < 0.5, (
-        "the join leaves a step of %.2f grey levels at the seam. Both corrections are supposed to "
-        "bring it to zero; a step this size means one of them stopped applying." % max(seam.values()))
+        im, _step, seam = gen_panorama.join(pano_set=name)
+        assert gen_panorama.encode(im) == spec["out"].read_bytes(), (
+            "%s is not what gen_panorama.py now produces (%d bytes committed, %d regenerated). "
+            "Either the join changed and the picture was not rebuilt, or the picture was edited "
+            "outside the script -- and its attribution record claims the two are interchangeable. "
+            "Run `python3 ui/render/gen_panorama.py --set %s`."
+            % (spec["out"].name, spec["out"].stat().st_size,
+               len(gen_panorama.encode(im)), name))
+        assert max(abs(v) for v in seam.values()) < 0.5, (
+            "the %s join leaves a step of %.2f grey levels at the seam. Both corrections are "
+            "supposed to bring it to zero; a step this size means one of them stopped applying."
+            % (name, max(abs(v) for v in seam.values())))
+        checked += 1
+    assert checked >= 2, (
+        "only %d panorama set(s) were checked. Two are committed, and a set whose picture is "
+        "missing from the tree is skipped here -- so this passing means less than it looks."
+        % checked)
 
 
 def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
@@ -539,10 +571,11 @@ def test_the_devignette_is_not_a_no_op_and_not_a_free_hand():
     _sys.path.insert(0, str(RENDER))
     import gen_panorama
     from PIL import Image
-    if not gen_panorama.LEFT.is_file():
+    left = gen_panorama.panorama_set()["left"]
+    if not left.is_file():
         pytest.skip("the halves are not in this checkout")
 
-    a = np.asarray(Image.open(gen_panorama.LEFT).convert("RGB")).astype(float)
+    a = np.asarray(Image.open(left).convert("RGB")).astype(float)
     b = gen_panorama.devignette(a, "right")
     edge = np.abs(b[:, -gen_panorama.EDGE:, :] - a[:, -gen_panorama.EDGE:, :]).mean()
     rest = np.abs(b[:, :-gen_panorama.EDGE, :] - a[:, :-gen_panorama.EDGE, :]).max()

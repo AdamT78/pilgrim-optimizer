@@ -41,9 +41,43 @@ import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
 UI = HERE.parent / "assets-gothic" / "ui"
-LEFT = UI / "sources" / "panorama_left.webp"
-RIGHT = UI / "sources" / "panorama_right.webp"
-OUT = UI / "panorama.webp"
+# TWO PANORAMAS, AND THE OLD ONE IS NOT A FOSSIL. The night field is the picture the wheel was
+# composed against and every measurement in ui/README.md was taken over; the mist field is the
+# lighter one, and what it buys is the TILE EDGE. Measured behind the wheel, the night field sits
+# at L* 12.9 against a tile edge ink of L* 13.5 -- 0.6 apart, which is to say the outline of a duty
+# tile is the same value as what is behind it and does nothing. Keeping both is what lets that be
+# compared rather than remembered.
+#
+# The cost is stated because it is real and it points the other way: the wheel's acolyte marks sit
+# on this same field, and pewter (L* 43.8) and plum (L* 45.3) are the two that a lighter ground
+# closes on. Every seat keeps its dark outline, so the marks do not vanish -- but they read more by
+# outline and less by fill than they did.
+SETS = {
+    "night": {
+        "left": UI / "sources" / "panorama_left.webp",
+        "right": UI / "sources" / "panorama_right.webp",
+        "out": UI / "panorama.webp",
+        "label": "cold night fog, inner edges at #1e1d1b",
+    },
+    "mist": {
+        "left": UI / "sources" / "panorama_mist_left.webp",
+        "right": UI / "sources" / "panorama_mist_right.webp",
+        "out": UI / "panorama_mist.webp",
+        "label": "pale daylight mist, inner edges near #464442",
+    },
+}
+# Which one the board draws. gen_duty_grid.PANORAMA reads this rather than naming a file, so the
+# page and the generator cannot disagree about which picture is the background.
+DEFAULT = "mist"
+
+
+def panorama_set(name: str | None = None) -> dict:
+    """One set by name, or the default. Raises rather than falling back to the other picture."""
+    name = DEFAULT if name is None else name
+    if name not in SETS:
+        raise SystemExit("no panorama set %r; this file has %s"
+                         % (name, ", ".join(sorted(SETS))))
+    return SETS[name]
 
 # The vignette measured ~28 columns wide on both halves; 40 is that with room, and the plateau is
 # read from the next 80 columns in. Widening this is safe (the correction is zero where there is
@@ -82,10 +116,19 @@ def devignette(a, side: str, edge: int = EDGE):
     return np.clip(b, 0, 255)
 
 
-def join(left_path: pathlib.Path = LEFT, right_path: pathlib.Path = RIGHT):
+def join(left_path: pathlib.Path | None = None, right_path: pathlib.Path | None = None,
+         pano_set: str | None = None):
     """The finished panorama as a PIL image, plus the numbers worth printing."""
     np = _np()
     from PIL import Image
+
+    # Resolved HERE and not as default arguments. A default binds at def time, so `left_path=LEFT`
+    # would have pinned this function to one set the moment the module was imported and no caller
+    # could have moved it. That exact trap has cost this tree two debugging sessions -- ARROW_OUTSET
+    # and tile_placement -- and it is the reason a set is named rather than a path defaulted.
+    spec = panorama_set(pano_set)
+    left_path = spec["left"] if left_path is None else left_path
+    right_path = spec["right"] if right_path is None else right_path
 
     for p in (left_path, right_path):
         if not p.is_file():
@@ -123,13 +166,20 @@ def encode(im, quality: int = QUALITY) -> bytes:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", type=pathlib.Path, default=OUT)
+    ap.add_argument("--set", dest="pano_set", default=DEFAULT, choices=sorted(SETS),
+                    help="which panorama to join (default: %s, the one the board draws)" % DEFAULT)
+    ap.add_argument("--out", type=pathlib.Path, default=None,
+                    help="defaults to the chosen set's own output path")
     ap.add_argument("--quality", type=int, default=QUALITY)
     ap.add_argument("--check", action="store_true",
                     help="compare against the committed file and write nothing")
     z = ap.parse_args()
 
-    im, step, seam = join()
+    spec = panorama_set(z.pano_set)
+    if z.out is None:
+        z.out = spec["out"]
+    im, step, seam = join(pano_set=z.pano_set)
+    print("%s -- %s" % (z.pano_set, spec["label"]))
     print("%dx%d  %.4f:1" % (im.width, im.height, im.width / im.height))
     print("  level step at the join, per channel:  R %+.2f  G %+.2f  B %+.2f" % tuple(step))
     print("  seam after both corrections:          " +

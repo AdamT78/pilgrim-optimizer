@@ -272,13 +272,19 @@ def panorama_uri() -> str:
     opens and still looks deliberate. It says so rather than failing the build, because a layout
     tool that will not start is worse than one with a plain background.
 
-    It is read from the same place gen_duty_grid.PANORAMA points at, and that duplication is the
-    pre-existing one this module already carries for the ground: it loads gen_game_view by PATH
-    rather than importing the render package, so it cannot reach dg without restructuring how the
-    tool starts. The guard in tests/test_ground_guards.py is what holds the two paths equal.
+    It asks `gen_duty_grid.panorama_path()` rather than naming a file, which it used to do. That
+    worked for exactly as long as there was one panorama to name: a second was committed and made
+    the default, and this page went on painting the first, correctly and invisibly. The duplication
+    left is the pre-existing one -- this module loads gen_game_view by PATH rather than importing
+    the render package -- and the guard in tests/test_ground_guards.py holds the two equal.
     """
     import base64
-    p = UI / "assets-gothic" / "ui" / "panorama.webp"
+    # Which panorama is gen_panorama's to say and gen_duty_grid's to pass on. This file named
+    # its own path and the two agreed for as long as there was only one picture to name;
+    # the moment a second was committed and made default, this page went on painting the
+    # first and looked entirely correct doing it.
+    from gen_duty_grid import panorama_path
+    p = panorama_path()
     if not p.is_file():
         print("no %s -- the simulated screen falls back to flat colour. It is a committed asset, "
               "not a generated one -- restore it from git." % p.name)

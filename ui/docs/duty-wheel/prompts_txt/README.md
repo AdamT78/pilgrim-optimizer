@@ -48,8 +48,23 @@ that comparison. Generating A again is only worth it if you are revisiting the d
 ## The background, which is not a tile
 
 ```
-background/left.txt        background/right.txt
+background/left.txt        background/right.txt          the night field
+background/left_v2.txt     background/right_v2.txt       the mist field -- what the board draws
 ```
+
+`_v2` is the same two scenes with the empty middle made PALE instead of dark, and it exists for a
+measured reason rather than a taste. The wheel paints no ground of its own, so what shows between
+the duty tiles is this picture; behind the wheel the night field sits at L\* 12.9 and the tile
+edge ink is L\* 13.5, which is to say a tile's outline was the same value as what was behind it.
+The v2 prompts hold the mist near `#464442` in a band, and both halves must name the SAME inner
+edge value or the butt join needs an overlap.
+
+The band is a target and the model overshot it: the committed halves came back at L\* 37 rather
+than 29. That is worth knowing before regenerating, because the direction has a cost as well as a
+benefit -- the wheel's acolyte marks sit on this field too, and pewter is the one a lighter ground
+closes on. Measured as dE76 against the field behind the wheel, night gave edge 8.3 and pewter
+37.7; mist gives edge 24.3 and pewter 24.6. Everything now separates by about the same margin,
+which is the argument for it.
 
 `background/` has no `NN_` prefix on purpose. `NN` is a one-based position in `DUTY_NAMES` and it
 decides which square a tile is drawn in; the panorama behind the whole game view is not a duty and
