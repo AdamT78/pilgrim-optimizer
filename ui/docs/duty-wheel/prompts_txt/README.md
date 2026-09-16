@@ -50,6 +50,7 @@ that comparison. Generating A again is only worth it if you are revisiting the d
 ```
 background/left.txt        background/right.txt          the night field
 background/left_v2.txt     background/right_v2.txt       the mist field -- what the board draws
+background/left_v3.txt     background/right_v3.txt       not generated yet
 ```
 
 `_v2` is the same two scenes with the empty middle made PALE instead of dark, and it exists for a
@@ -65,6 +66,34 @@ benefit -- the wheel's acolyte marks sit on this field too, and pewter is the on
 closes on. Measured as dE76 against the field behind the wheel, night gave edge 8.3 and pewter
 37.7; mist gives edge 24.3 and pewter 24.6. Everything now separates by about the same margin,
 which is the argument for it.
+
+### Where a subject has to sit, which is not where v1 and v2 put it
+
+**The board covers panorama 24.4% to 75.6% on every display, whatever its shape.** The stage is a
+fixed 1600x1200 canvas that is zoom-to-fitted, and the panorama is `center/cover`, so both are
+scaled by the same height and shrink together; changing the display changes only how much panorama
+is VISIBLE either side of it. Worked from those two numbers alone:
+
+| display | visible panorama | exposed left | exposed right |
+| --- | --- | --- | --- |
+| 2.606:1, as composed | 0 – 100% | 0 – 24.4% | 75.6 – 100% |
+| 1.882:1 | 13.8 – 86.2% | 13.8 – 24.4% | 75.6 – 86.2% |
+| 1.778:1 (16:9) | 15.8 – 84.2% | 15.8 – 24.4% | 75.6 – 84.2% |
+| 1.600:1 (16:10) | 19.2 – 80.8% | 19.2 – 24.4% | 75.6 – 80.8% |
+
+So the strip that is both uncovered AND visible on every screen is the **five points just outside
+the board** — roughly 19–24% and 76–81%. Everything further out is seen only on wide displays.
+
+v1 and v2 said "the outer quarter" and then pushed the subject to the OUTER edge of it: measured,
+they centre their detail at 9.8% and 88.4%. That is the part a 16:10 display throws away first. On
+a 1.882:1 screen the left shrine falls off entirely and the right one is cut at 86.2%, which leaves
+a wide empty field beside the board and a clipped scene at the edge.
+
+v3 inverts it. The focal point — statue, candles, kneeling figures — is anchored against the INNER
+edge of the strip, and the scene thins OUTWARD from there rather than inward, so a wide display
+gets more of it rather than a different picture. v3 also takes the outer scene back to the night
+register, which v2 lifted along with the mist: dark at the edges, pale only where the board sits,
+which is the arrangement the tiles actually need.
 
 `background/` has no `NN_` prefix on purpose. `NN` is a one-based position in `DUTY_NAMES` and it
 decides which square a tile is drawn in; the panorama behind the whole game view is not a duty and
