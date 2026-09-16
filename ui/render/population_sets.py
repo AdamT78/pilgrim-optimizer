@@ -174,7 +174,9 @@ SETS = {
 DEFAULT = "gothic"
 WHEEL = "hood"
 # What the PLAYER CARD draws. Separate from WHEEL because they are separate decisions -- the card
-# pairs its acolyte row with a serf row and the wheel does not -- even while both say "hood".
+# draws TWO rows, and each stands under a key figure the wheel has no use for -- even while both
+# say "hood". The card's two rows draw the same mark as each other: a serf and an abbey acolyte
+# are one piece in two places, and what tells the boxes apart is the key, not the figure.
 CARD = "hood"
 
 # -- the card's rows -----------------------------------------------------------------------------

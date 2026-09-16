@@ -488,6 +488,11 @@ OPAQUE_ALPHA_GAIN = 4.0
 # Below this mean alpha a figure is composited before it is drawn. The serf asset measures 184/255
 # and the acolyte 251/255, so only the serf is treated -- but the test is the MEASUREMENT, not the
 # name of the asset, so a redrawn acolyte does not silently start bleeding.
+#
+# ONLY THE PHOTOGRAPH SETS REACH THIS NOW. A set that draws its mark stacks a shape with no alpha
+# to bleed, and the photographs it leaves behind are drawn once each, as the keys. Kept because
+# `gothic` is still a set anyone can ask for, and because this is a measurement of an asset that
+# is still in the tree -- deleting it would mean re-deriving it the next time one is stacked.
 OPAQUE_ALPHA_FLOOR = 240
 
 
@@ -604,6 +609,13 @@ def population_figure_frame(root: ET.Element, kind: str,
     vertical arrangement belongs to the template and this does not touch it -- and takes its
     WIDTH from the shape. Left at the template width the mark would be fitted inside a box wider
     than itself, and the row would be spaced for a figure it is not drawing.
+
+    THIS USED TO ASK WHETHER THE KIND WAS "acolyte", which was true for as long as the hooded
+    mark was the acolyte's alone. It is now what both boxes draw, and a set is a statement about
+    a FIGURE rather than about a box -- so the question is what the set draws, and nothing else.
+    The half-change is worth naming because it looks deliberate: this condition left in place
+    spaces serf photographs for a mark they are not, and the one in `draw_population_rows` left
+    in place draws the mark at the photograph's width.
     """
     for image in root.iter(q("image")):
         if image.get("data-asset-role") == kind:
@@ -613,12 +625,55 @@ def population_figure_frame(root: ET.Element, kind: str,
             if y is None or w is None or h is None:
                 raise BuildError(f"The {kind} image has no y/width/height.")
             spec = _pop.card(figure_set)
-            if kind == "acolyte" and spec["kind"] != "image":
+            if spec["kind"] != "image":
                 inset = spec.get("inset", 0.0) * h
                 y, h = y + inset, h - 2 * inset
                 w = h * spec["aspect"]
             return y, w, h
     raise BuildError(f"No {kind} image in the template to take the figure's size from.")
+
+
+def population_key(root: ET.Element, kind: str,
+                   figure_set: str | None = None) -> tuple[float, float, float, float] | None:
+    """The artwork a box stops drawing, kept once at its left as the thing that names it.
+
+    WHY A BOX NEEDS NAMING AT ALL. While the two boxes drew two different photographs they told
+    you apart by themselves. Drawing the same mark in both -- which is what the pieces are, one
+    kind of piece in two places -- takes that away, and a panel whose halves are identical is a
+    panel you have to remember the meaning of. So the photograph each box gave up comes back
+    once, at the left, as a label: the serf over the village count, the gothic acolyte over the
+    abbey count.
+
+    THERE IS NO NEW NUMBER HERE, deliberately. The key is the template's own <image> frame moved
+    to the start of its box -- the size the art was drawn for, at the place the box begins. A
+    scale factor was the obvious thing to add and it would have been a constant with no
+    measurement behind it; the one number in this file that is not measured is the one that
+    would drift.
+
+    RETURNS None WHEN THE SET PLACES A PHOTOGRAPH, and that is a derivation rather than a flag.
+    A key exists because the box no longer draws its own artwork; a set that still does has its
+    artwork in the row already, and a key would be a second copy of the picture beside itself.
+    """
+    if _pop.card(figure_set)["kind"] == "image":
+        return None
+    box = population_boxes(root)[kind]
+    frame = _template_figure(root, kind)
+    if frame is None:
+        raise BuildError(f"No {kind} image in the template to take the key from.")
+    _, y, w, h = frame
+    return box[0] + _pop.board()["pad"], y, w, h
+
+
+def _template_figure(root: ET.Element,
+                     kind: str) -> tuple[float, float, float, float] | None:
+    """(x, y, width, height) of the template's own figure <image>, before anything is decided."""
+    for image in root.iter(q("image")):
+        if image.get("data-asset-role") == kind:
+            vals = [parse_number(image.get(a)) for a in ("x", "y", "width", "height")]
+            if any(v is None for v in vals):
+                raise BuildError(f"The {kind} image has no x/y/width/height.")
+            return tuple(vals)                      # type: ignore[return-value]
+    return None
 
 
 def population_step(count: int, width: float, box: tuple[float, float],
@@ -658,6 +713,13 @@ def population_row(root: ET.Element, kind: str, count: int,
         return []
     m = _pop.board(pop_set)
     box = population_boxes(root)[kind]
+    # THE ROW GENUINELY HAS LESS ROOM once a key stands in the box, and this is the one place
+    # that says so. Laying the row in the whole box and drawing the key over it would put the
+    # first figure under the key at the counts that matter -- and the counts that matter are the
+    # high ones, which is exactly when nobody is checking.
+    key = population_key(root, kind, figure_set)
+    if key is not None:
+        box = (key[0] + key[2], box[1])
     y, width, height = population_figure_frame(root, kind, figure_set)
     step = population_step(count, width, box, pop_set)
     span = width * (1.0 + step * (count - 1))
@@ -779,13 +841,23 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     # Last, because it removes nodes the loops above address by role and by position.
     draw_population_rows(root, config, assets_dir)
 
-def _place_figures(parents, anchor, places, symbol_id) -> None:
+def _place_figures(parents, anchor, places, symbol_id, key=None) -> None:
     """Swap the template anchor for one <use> per figure. Shared by both branches, because the
-    placement is the row and has nothing to do with what the figure is made of."""
+    placement is the row and has nothing to do with what the figure is made of.
+
+    `key` keeps the anchor instead, moved to that frame: the box's label is the picture the box
+    stopped drawing, so the element that held it is the element that should still hold it.
+    """
     kind = anchor.get("data-asset-role")
     parent = parents[anchor]
     position = list(parent).index(anchor)
-    parent.remove(anchor)
+    if key is None:
+        parent.remove(anchor)
+    else:
+        for name, value in zip(("x", "y", "width", "height"), key):
+            anchor.set(name, fmt(value))
+        anchor.set("data-population-key", kind or "")
+        position += 1                      # the row is drawn after the key, not over it
     for offset, (x, y, w, h) in enumerate(places):
         use = ET.Element(q("use"), {
             "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
@@ -860,10 +932,15 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
         places = population_row(root, kind, int(counts.get(kind, 0)),
                                 figure_set=figure_set)
         spec = _pop.card(figure_set)
-        if kind == "acolyte" and spec["kind"] == "hood":
+        if spec["kind"] == "hood":
             symbol_id = f"population-{kind}"
             _hood_symbol(defs, symbol_id, seat, spec)
-            _place_figures(parents, anchor, places, symbol_id)
+            # The anchor is KEPT rather than removed, and becomes the key. It is already the
+            # right artwork in the right place in the tree, and leaving it there is what hands
+            # it to `embed_assets_once` -- so the photograph is embedded exactly once, by the
+            # path every other template image takes, instead of a second copy arriving here.
+            _place_figures(parents, anchor, places, symbol_id,
+                           key=population_key(root, kind, figure_set))
             continue
         source = resolve_asset(assets_dir, asset_path_for_role(config, kind))
         # The measurement decides, not the asset's name: a figure that is already opaque is used as

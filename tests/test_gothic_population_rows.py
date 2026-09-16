@@ -84,6 +84,15 @@ def span(asm, root, kind):
     return min(lefts), max(lefts) + width
 
 
+def key_of(root, kind):
+    """The box's key figure, as the board drew it: (left, right), or None if there is none."""
+    for node in root.iter(q("image")):
+        if node.get("data-population-key") == kind:
+            x, w = float(node.get("x")), float(node.get("width"))
+            return x, x + w
+    return None
+
+
 def test_a_count_is_that_many_figures(asm):
     """The picture is the count. Nothing on the board states it a second time.
 
@@ -113,16 +122,27 @@ def test_the_cube_and_the_numeral_are_gone_and_the_resources_keep_theirs(asm):
         assert f"count-{name}" in ids, f"the {name} numeral went with them"
 
 
-def test_every_row_is_centred_in_its_own_box(asm):
-    """A box that empties must not leave its figures hanging off one side."""
+def test_every_row_is_centred_in_the_room_its_key_leaves_it(asm):
+    """A box that empties must not leave its figures hanging off one side.
+
+    THE BOX THE ROW IS CENTRED IN IS NOT THE WHOLE BOX any more. A key figure stands at the left
+    of each, so the row is centred in what is left of it -- and the key's own edge is what says
+    where that starts, read off the element the board drew rather than recomputed here. Asking
+    `population_key` again would move the expectation with the board and hold for any answer.
+    """
     for count in range(1, 12):
         root = build(asm, min(count, 8), count)
         boxes = asm.population_boxes(root)
         for kind, n in (("serf", min(count, 8)), ("acolyte", count)):
             lo, hi = boxes[kind]
+            key = key_of(root, kind)
+            assert key is not None, (
+                "the %s box has no key, so this guard is measuring the old arrangement and "
+                "would pass whatever the row did" % kind)
+            lo = key[1]
             left, right = span(asm, root, kind)
             assert abs((left + right) / 2 - (lo + hi) / 2) < 0.6, (
-                "%s row of %d is centred at %.2f, its box at %.2f"
+                "%s row of %d is centred at %.2f, the room left to it at %.2f"
                 % (kind, n, (left + right) / 2, (lo + hi) / 2))
 
 
@@ -526,3 +546,164 @@ def test_the_marks_margin_is_the_one_the_photograph_leaves(asm):
     assert abs(y - (t_y + t_h * top)) < 0.5 and abs(h - t_h * (1 - top - bottom)) < 0.5, (
         "the drawn mark sits at %.2f..%.2f while the photograph's ink sits at %.2f..%.2f"
         % (y, y + h, t_y + t_h * top, t_y + t_h * (1 - bottom)))
+
+
+def test_both_boxes_draw_the_same_mark_and_neither_draws_a_photograph(asm):
+    """The whole point of the change, and the half of it that is easy to leave undone.
+
+    Two conditions gated the drawn mark on `kind == "acolyte"` -- one for the geometry and one
+    for the branch -- and either left behind gives a board that still looks deliberate. The
+    geometry alone spaces serf photographs for a mark they are not; the branch alone draws the
+    mark at the photograph's width. So this asserts BOTH: the same symbol shape under both
+    boxes, and the same drawn width.
+    """
+    root = build(asm, 8, 3)
+    for kind in ("serf", "acolyte"):
+        nodes = figures(root, kind)
+        assert nodes, "the %s box drew no figures" % kind
+        for node in nodes:
+            href = node.get("href") or node.get("{http://www.w3.org/1999/xlink}href")
+            assert href == "#population-%s" % kind, (
+                "a %s figure points at %r, not at its own symbol" % (kind, href))
+    widths = {kind: float(figures(root, kind)[0].get("width")) for kind in ("serf", "acolyte")}
+    assert abs(widths["serf"] - widths["acolyte"]) < 0.01, (
+        "the two boxes draw marks of different widths (%.2f and %.2f), so one of them is still "
+        "sized for the photograph" % (widths["serf"], widths["acolyte"]))
+    # and the mark is NARROWER than the photograph it replaced, which is what pays for the key
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    photo = asm._template_figure(template, "serf")
+    assert widths["serf"] < photo[2], (
+        "the drawn mark is %.2f wide against the photograph's %.2f; it is the narrower mark that "
+        "frees the room a key stands in" % (widths["serf"], photo[2]))
+
+
+def test_the_key_is_drawn_once_and_is_not_one_of_the_count(asm):
+    """The quiet failure this guard is for: a key that joins the row reads as one extra piece.
+
+    Nothing about the board would look wrong. It would say nine serfs where there are eight, and
+    a number on a player board is read and believed -- there is no second statement of the count
+    left to disagree with it, because removing the numeral is what the rows were for.
+    """
+    for serfs, acolytes in ((8, 3), (1, 0), (0, 0), (8, 11)):
+        root = build(asm, serfs, acolytes)
+        for kind, n in (("serf", serfs), ("acolyte", acolytes)):
+            keys = [node for node in root.iter(q("image"))
+                    if node.get("data-population-key") == kind]
+            assert len(keys) == 1, (
+                "%d keys in the %s box at count %d; a key is the box's label and there is one box"
+                % (len(keys), kind, n))
+            assert len(figures(root, kind)) == n, (
+                "the %s box drew %d figures for a count of %d -- if the key has joined the row, "
+                "the board is stating a number that is one too many"
+                % (kind, len(figures(root, kind)), n))
+            # AND IT CANNOT BE READ AS ONE. The half above is machine-safe on its own -- the key
+            # is an <image> and the row is <use> elements, so no count here could ever include
+            # it. The eye has no such rule: a key sized and shaped like the marks beside it IS
+            # one more piece, whatever the markup says. What keeps them apart is that the key is
+            # the photograph at the template's own frame, which is a different picture at a
+            # different width from the mark. That is the part worth guarding, because it is the
+            # part a later tidy-up would undo.
+            if n:
+                key = key_of(root, kind)
+                mark = float(figures(root, kind)[0].get("width"))
+                assert abs((key[1] - key[0]) - mark) > 1.0, (
+                    "the %s key is %.2f wide against a mark of %.2f. At the same size it reads "
+                    "as one more piece in the row, and the row is the only statement of the "
+                    "count left on the board" % (kind, key[1] - key[0], mark))
+
+
+def test_the_key_stands_at_the_left_of_its_box_and_the_row_clears_it(asm):
+    """Whatever the count, no figure is drawn over the label.
+
+    The overlap would appear at the HIGH counts first -- the row tightens from both ends as it
+    fills -- which is the worst place for it: eleven acolytes is the state a board reaches once
+    in a game, late, with nobody checking the panel against anything.
+    """
+    for count in range(0, 12):
+        root = build(asm, min(count, 8), count)
+        boxes = asm.population_boxes(root)
+        for kind, n in (("serf", min(count, 8)), ("acolyte", count)):
+            lo, hi = boxes[kind]
+            key = key_of(root, kind)
+            assert lo <= key[0] and key[1] <= hi, (
+                "the %s key runs %.1f..%.1f, outside its box %.1f..%.1f" % (kind, *key, lo, hi))
+            assert key[0] - lo < (hi - lo) / 4, (
+                "the %s key starts %.1f into a box %.1f wide, which is not its left"
+                % (kind, key[0] - lo, hi - lo))
+            if n:
+                left, right = span(asm, root, kind)
+                assert left >= key[1] - 0.01, (
+                    "the %s row of %d starts at %.2f, over a key that ends at %.2f"
+                    % (kind, n, left, key[1]))
+                assert right <= hi + 0.01, (
+                    "the %s row of %d ends at %.2f, past its box at %.2f" % (kind, n, right, hi))
+
+
+def test_the_counts_that_matter_still_fit_beside_a_key(asm):
+    """A full-size key is the tightest option, and these are the two counts that pay for it.
+
+    Eight is the village at the start. Eleven is the whole pool in the abbey, which ordination
+    can reach one piece at a time and which is what the acolyte box has to be sized for. The
+    numbers are pinned rather than merely checked for fitting: they are what the size of the key
+    was chosen against, so a change to either that does not move them is a change that was
+    measured, and one that does move them should say so here.
+    """
+    root = build(asm, 8, 11)
+    for kind, n, want in (("serf", 8, 0.230), ("acolyte", 11, 0.169)):
+        nodes = figures(root, kind)
+        assert len(nodes) == n
+        width = float(nodes[0].get("width"))
+        step = (float(nodes[1].get("x")) - float(nodes[0].get("x"))) / width
+        assert abs(step - want) < 0.002, (
+            "%s at %d sits at step %.3f where the key was sized against %.3f" % (kind, n, step, want))
+        assert step >= 0.05, "the step floor has been reached, so the row is no longer a count"
+
+
+def test_asking_for_the_photographs_draws_the_board_that_had_no_key(asm):
+    """The gothic card set still draws what it always drew, key included -- which is none.
+
+    A key exists because a box stopped drawing its own artwork. A set that still places a
+    photograph has that artwork in the row already, so a key would be a second copy of the
+    picture standing beside itself. That is derived rather than flagged, which is the cheap way
+    to get it right and the easy way to get it silently wrong: a key that appeared here would
+    look like a deliberate label, and the row it shortened would look like a spacing choice.
+
+    Pinned against the TEMPLATE's own widths rather than against `population_figure_frame`,
+    because the frame function is what the change touched -- asking it would move the board and
+    the expectation together.
+    """
+    import copy
+    import json
+
+    config = copy.deepcopy(json.loads((ASSETS / "production_test_config.json").read_text()))
+    config.setdefault("counts", {})["serf"] = 8
+    config["counts"]["acolyte"] = 3
+    config["population_set"] = "gothic"
+    asm.apply_seat(config)
+    layout = asm.read_json(ASSETS / "metadata" / "layout.json")
+    template = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    root = ET.parse(ASSETS / "template" / "player_board_template.svg").getroot()
+    asm.apply_config(root, config, layout, ASSETS)
+
+    keys = [n for n in root.iter(q("image")) if n.get("data-population-key")]
+    assert keys == [], (
+        "the photograph set drew %d key(s). The picture is already in the row; a key here is the "
+        "same figure twice, and it has taken room from the row to be it." % len(keys))
+    for kind, count in (("serf", 8), ("acolyte", 3)):
+        nodes = figures(root, kind)
+        assert len(nodes) == count
+        want = asm._template_figure(template, kind)[2]
+        assert abs(float(nodes[0].get("width")) - want) < 0.01, (
+            "%s figures are %.2f wide where the template says %.2f; the drawn-mark width has "
+            "reached the set that places a photograph"
+            % (kind, float(nodes[0].get("width")), want))
+        # AND THE ROW STILL HAS THE WHOLE BOX. Drawing no key and making room for one are two
+        # separate things, and only the first is guaranteed by which branch this set takes --
+        # `population_row` asks about the key for every set. A row shortened for a key nobody
+        # drew sits off-centre in a box with nothing in the gap, which reads as a spacing
+        # choice rather than as a fault. Written without this, the guard could not fail.
+        lo, hi = asm.population_boxes(root)[kind]
+        left, right = span(asm, root, kind)
+        assert abs((left + right) / 2 - (lo + hi) / 2) < 0.6, (
+            "the %s row is centred at %.2f and its whole box at %.2f, so room has been made for "
+            "a key this set does not draw" % (kind, (left + right) / 2, (lo + hi) / 2))
