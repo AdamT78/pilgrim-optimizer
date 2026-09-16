@@ -46,6 +46,7 @@ import copy
 import importlib.util
 import io
 import json
+from html import escape as html_escape
 import os
 import pathlib
 import re
@@ -519,7 +520,7 @@ MARK_SELECT = ('<label class="gv-mark"><span>Mark</span><select id="gv-mark">%s<
 BANNER = ('<div class="gv-banner" id="gv-banner">'
           '<span class="lab" id="gv-banner-lab">Duty</span>'
           '<div class="bd" id="gv-banner-body"><span class="rest">Point at a duty action or '
-          'building to read it.</span></div>' + MARK_SELECT + VIEW_BUTTON + '</div>')
+          'building to read it.</span></div>' + MARK_SELECT + '%(cmpbtn)s' + VIEW_BUTTON + '</div>')
 
 CSS = """
 /* The page's own chrome. Everything below this block is either the ground, or an override of a
@@ -562,7 +563,7 @@ CSS = """
    value; put it first, as the old stage rule could because it had one layer, and the whole
    declaration is dropped and the page is white. */
 html,body{height:100%%;margin:0;overflow:hidden;
-  background:url(%(panorama)s) center/cover no-repeat #0b0a08}
+  background:%(ground)s}
 #gv-fit{position:absolute;inset:0}
 
 /* Transparent, deliberately and not by omission: `background:none` on a stage that used to paint
@@ -612,6 +613,15 @@ html,body{height:100%%;margin:0;overflow:hidden;
   width:36px;height:36px;padding:0;cursor:pointer;background:#EFE6CC;
   border:1.2px solid #2A2320;border-radius:7px;box-shadow:0 1px 0 rgba(42,35,32,.22)}
 #gv-viewbtn:hover{background:#F7EFD8}
+/* The size comparison. Deliberately plain and lettered rather than iconic: it is a thing to
+   answer a question with and then stop using, not a control the game needs. */
+#gv-cmpbtn{flex:0 0 auto;margin-left:8px;padding:3px 9px;border:1px solid #C9BB99;
+  border-radius:5px;background:#EFE6CE;color:#4A4133;cursor:pointer;
+  font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.03em}
+#gv-cmpbtn:hover{background:#F7EFD8}
+#gv-cmpbtn .b{display:none}
+html.gv-cmp #gv-cmpbtn .a{display:none}
+html.gv-cmp #gv-cmpbtn .b{display:inline}
 .gv-mark{flex:0 0 auto;display:flex;align-items:center;gap:7px;
   font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#6B6355}
 .gv-mark select{font:12.5px Georgia,serif;color:#2A2320;background:#EFE6CC;
@@ -649,6 +659,101 @@ html,body{height:100%%;margin:0;overflow:hidden;
 # The measurements, emitted rather than left to the components. Every one of these comes out of
 # geometry(), so the page and the figures the generator prints cannot disagree -- which is the
 # whole reason the numbers live in one function instead of being written twice.
+def ground_css(L) -> str:
+    """The `background` shorthand for the page: a flat colour, or the panorama positioned.
+
+    One function because the two are alternatives and the rule is written once. The colour goes
+    LAST in the shorthand when there is an image -- a colour before the image makes the whole
+    declaration invalid and the page comes up white, which this file has a guard about.
+    """
+    flat = L.get("ground_color")
+    if flat:
+        return str(flat)
+    return "url(%s) %.1f%% 50%%/cover no-repeat #0b0a08" % (
+        dg.panorama_uri(), float(L["panorama_x"]))
+
+
+def sizes_css(L, G) -> str:
+    """One layout's numbers as CSS. A FUNCTION because there are two of them now.
+
+    It was a dict literal inline in `build`, which was fine while the page carried one layout.
+    A second copy of that literal is a second place to add a key to, and the failure is silent:
+    the comparison would simply stop moving whatever was forgotten, and look like a layout that
+    does not depend on it.
+    """
+    return SIZES % {
+        "can_w": L["canvas_width"], "can_h": L["canvas_height"],
+        "pad": G["pad"], "mt": L["margin_top"], "mb": L["margin_bottom"],
+        "top_h": G["top_h"], "main_h": G["main_h"], "bw": G["bw"], "bh": G["bh"],
+        "overhang": G["overhang"], "panel_w": G["panel_w"],
+        "wheel_room": G["wheel_room"], "wheel": G["wheel"],
+        "gap1": L["column_gap_1"], "gap2": L["column_gap_2"],
+        "left_mt": G["left_top"] - G["left_lift"], "left_h": G["left_h"],
+        "board_gap": L["board_gap"], "banner_h": G["banner_h"],
+        "map_w": G["map_w"], "act_h": G["act_h"]}
+
+
+def compare_layout(L):
+    """(layout, geometry) for the size being compared against, or (None, None)."""
+    over = L.get("compare")
+    if not over:
+        return None, None
+    alt = dict(L)
+    alt.update({k: v for k, v in over.items() if k != "label"})
+    alt["label"] = over.get("label")
+    alt["compare"] = None
+    return alt, geometry(alt)
+
+
+COMPARE_BUTTON = ('<button id="gv-cmpbtn" type="button" title="Compare board sizes (B)">'
+                  '<span class="a">%s</span><span class="b">%s</span></button>')
+
+# The switch. It moves a class on <html> -- not on the stage -- because the scoped block has to
+# outrank the unscoped one by specificity alone, and the fit has to be redone: the two layouts
+# have different canvas widths, so the zoom that fits one letterboxes the other.
+COMPARE_JS = """
+(function(){
+  var A = {w: %(a_w)s, h: %(a_h)s}, B = {w: %(b_w)s, h: %(b_h)s};
+  var root = document.documentElement, btn = document.getElementById('gv-cmpbtn');
+  if (!btn) { return; }
+  function set(on){
+    root.classList.toggle('gv-cmp', on);
+    window.__gvCanvas = on ? B : A;
+    window.dispatchEvent(new Event('resize'));
+  }
+  btn.addEventListener('click', function(){ set(!root.classList.contains('gv-cmp')); });
+  window.addEventListener('keydown', function(e){
+    if ((e.key === 'b' || e.key === 'B') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      set(!root.classList.contains('gv-cmp'));
+    }
+  });
+  set(false);
+})();
+"""
+
+
+def scoped(css: str, prefix: str) -> str:
+    """Every rule in a SIZES block, rewritten to apply only under `prefix`.
+
+    SIZES is a flat list of `selector{decls}` with comments between, which is what makes this
+    safe to do by text: there is no nesting and no at-rule for a prefix to land inside. Asserted
+    rather than assumed -- a future @media in there would silently get the prefix in the wrong
+    place, and the page would look right until the comparison was used.
+    """
+    assert "@" not in css, "SIZES has grown an at-rule; scoping it by text is no longer safe"
+    out = []
+    for chunk in css.split("}"):
+        if "{" not in chunk:
+            out.append(chunk)
+            continue
+        head, decls = chunk.split("{", 1)
+        # keep any comment that precedes the selector where it is
+        cut = head.rfind("*/") + 2 if "*/" in head else 0
+        lead, sel = head[:cut], head[cut:].strip()
+        out.append("%s%s %s{%s" % (lead, prefix, sel, decls))
+    return "}".join(out)
+
+
 SIZES = """
 #gv-stage{width:%(can_w).1fpx;height:%(can_h).1fpx;padding:%(mt).1fpx %(pad).1fpx %(mb).1fpx}
 #gv-top{height:%(top_h).1fpx}
@@ -657,7 +762,16 @@ SIZES = """
 .gv-cell-sa>svg{margin-left:%(overhang).1fpx}
 .gv-cell-alms{width:%(panel_w).1fpx;height:%(top_h).1fpx;margin-left:%(gap1).1fpx}
 .gv-cell-mkt{width:%(wheel_room).1fpx;height:%(top_h).1fpx;margin-left:%(gap2).1fpx}
-#gv-left{width:%(bw).1fpx;margin-top:%(left_top).1fpx;height:%(left_h).1fpx;gap:%(board_gap).1fpx}
+#gv-left{width:%(bw).1fpx;margin-top:%(left_mt).1fpx;height:%(left_h).1fpx;gap:%(board_gap).1fpx}
+/* THE BOARDS ARE SIZED HERE, not only by the width and height attributes `build` writes on
+   each board root. Those attributes are baked once, so a page carrying two layouts kept
+   drawing one size inside the other size's column: clipped on the right in the narrower
+   mode, and the artwork silently squashed when the column was too short for four of them.
+   `flex:0 0 auto` is the half that stops the squashing -- a flex column shrinks its
+   children before it admits to overflowing, so boards that do not fit come out short
+   rather than cut off, which reads as bad art rather than as a layout fault. */
+#gv-left>svg{flex:0 0 auto;width:%(bw).1fpx;height:%(bh).1fpx}
+.gv-cell-sa>svg{width:%(bw).1fpx}
 #gv-act{width:%(panel_w).1fpx;height:%(act_h).1fpx;margin-left:%(gap1).1fpx}
 #gv-wheelcol{width:%(wheel_room).1fpx;height:%(main_h).1fpx;margin-left:%(gap2).1fpx}
 #gv-banner{height:%(banner_h).1fpx}
@@ -727,6 +841,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <script>%(markjs)s</script>
 <script>%(mark)s</script>
 <script>%(fit)s</script>
+<script>%(cmpjs)s</script>
 <script>%(inspect)s</script>
 <script>%(view)s</script>
 </body></html>
@@ -737,8 +852,12 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 # therefore true of the layout even when the window shows it smaller.
 FIT_JS = """
 (function(){
-  var stage = document.getElementById('gv-stage'), W = %(can_w)s, H = %(can_h)s;
+  var stage = document.getElementById('gv-stage');
+  // Read at every fit, not captured once: the compare button swaps the canvas under us and then
+  // fires a resize, so a W closed over at load would letterbox the other layout.
+  function canvas(){ return window.__gvCanvas || {w: %(can_w)s, h: %(can_h)s}; }
   function fit(){
+    var C = canvas(), W = C.w, H = C.h;
     var k = Math.min(window.innerWidth / W, window.innerHeight / H);
     stage.style.transform = 'translate(' + ((window.innerWidth - W*k)/2).toFixed(1) + 'px,'
                           + ((window.innerHeight - H*k)/2).toFixed(1) + 'px) scale(' + k + ')';
@@ -1052,6 +1171,26 @@ def asm_seats():
     return list(gen_board_gothic.SEAT_COLORS)
 
 
+def acolyte_mark(x, y, w, h, fill, stroke):
+    """One hooded acolyte drawn inside a win place, at the seat's colour.
+
+    The same outline the duty tiles and the player boards draw, from population_sets, fitted to
+    the slot by its INKED box -- the path grown by half its stroke -- so the figure lands inside
+    the dashes rather than touching them. `stroke` is the seat's own edge and is not used: the
+    mark carries its own ink, which is what keeps it the same figure in every place it appears.
+    """
+    bx, by, bw, bh = pop.hood_box()
+    k = min(w / bw, h / bh)
+    cx = x + w / 2 - (bx + bw / 2) * k
+    cy = y + h / 2 - (by + bh / 2) * k
+    f = pop.HOOD_FACE
+    return ('<g transform="translate(%.2f %.2f) scale(%.4f)">'
+            '<path d="%s" fill="%s" stroke="%s" stroke-width="%s" stroke-linejoin="round"/>'
+            '<ellipse cx="0" cy="%s" rx="%s" ry="%s" fill="#000000" opacity="0.22"/></g>'
+            % (cx, cy, k, pop.hood_path(), fill, pop.HOOD_INK, pop.HOOD_STROKE,
+               f["cy"], f["rx"], f["ry"]))
+
+
 def alms_panel(gb, fills, width):
     """The alms table with the current seats, built rather than borrowed.
 
@@ -1070,9 +1209,24 @@ def alms_panel(gb, fills, width):
     rename = dict(zip(old, order))
     players = [dict(p, seat=rename[p["seat"]]) for p in gb["P"]]
     seats = {k: fills[k] for k in order}
+    # THIS BOARD'S FRAME, not gen_board's. Three differences, and each answers something the
+    # cell here does that gen_board's column does not:
+    #
+    #   vb_x=0, units=WIDE_W   there is no board overhang to the left of this cell, so the
+    #                          thirty units reserved for one were thirty units of nothing and
+    #                          the panel came out 38 px narrower than the action box below it
+    #   reward_row=False       the Ordination glyphs at 2 and 4 sat on a row of their own under
+    #                          the discs. Taking it out is what brings the panel to the
+    #                          Buildings table's height, which is the other thing asked for
+    #   slot=ACOLYTE_SLOT      the win places were squares; they are the shape of the thing that
+    #                          stands in them now
     return ap.panel_svg(players, seats, gb["INK"], gb["PARCH"],
                         positions={k: 0 for k in order},
-                        width=width, win_seats=[rename.get("blue", order[1])])
+                        width=width, win_seats=[rename.get("blue", order[1])],
+                        vb_x=0, units=ap.WIDE_W, height=ap.WIDE_AH,
+                        reward_row=False, slot=ap.ACOLYTE_SLOT,
+                        topy=ap.WIDE_TOPY, win_cy=ap.WIDE_WIN_CY,
+                        disc_order="column", win_mark=acolyte_mark)
 
 
 VIEW_JS = """
@@ -1131,14 +1285,28 @@ def _image_size(p):
         return im.size
 
 
-def _unsize(svg):
+def _unsize(svg, align_bottom: bool = False):
     """Strip a component's baked-in width and height so its slot can size it.
 
     gen_board.py draws the alms table at 339.4 px because that is what ITS column is. Here the
     cell decides, and an svg carrying both a viewBox and explicit dimensions ignores the cell.
+
+    `align_bottom` SETTLES THE SPARE HEIGHT, which is a question the cell cannot answer on its
+    own. These panels are wider than they are tall and their cells are taller still, so each fits
+    by WIDTH and the leftover height goes somewhere. The default puts half above and half below,
+    which floats the panel: the market sat 17.6 px clear of the banner beneath it and the alms
+    8.2 px clear of the action box, and both read as a gap rather than as a pair of stacked
+    boxes. Aligned to the bottom, the spare height is all above, where it is ground the page
+    already shows, and the panel meets what it sits on.
     """
     import re
-    return re.sub(r'\s(width|height)="[\d.]+"', "", svg, count=2)
+    out = re.sub(r'\s(width|height)="[\d.]+"', "", svg, count=2)
+    if align_bottom:
+        assert "preserveAspectRatio" not in out.split(">", 1)[0], (
+            "this svg already states a preserveAspectRatio; overriding it silently would change "
+            "how it fits as well as where it sits")
+        out = out.replace("<svg", '<svg preserveAspectRatio="xMidYMax meet"', 1)
+    return out
 
 
 def sized(markup, w, h):
@@ -1236,6 +1404,7 @@ def main():
     # cannot disagree with them about who is playing or whose turn it is. At two or three players
     # the row under each tile is that many figures, centred; a seat with none on a tile is drawn
     # as nothing at all rather than as a figure labelled 0.
+    alt_L, alt_G = compare_layout(L)
     wheel = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=z.duty_version, klass="wheel gv-grid",
                              acolytes=acolytes, active=lit, seats=tuple(seats),
                              pop_set=POP_SET)
@@ -1247,24 +1416,30 @@ def main():
         # simulated screen, and a second definition of where it lives is a second thing to keep
         # in step. can_w_note is the canvas size quoted in the comment above the rule, read from
         # the geometry rather than typed, so the prose cannot drift from the numbers.
-        "css": CSS % {"panorama": dg.panorama_uri(), "pad": G["pad"],
+        "css": CSS % {"ground": ground_css(L), "pad": G["pad"],
                       "can_w_note": "%.0f x %.0f" % (L["canvas_width"], L["canvas_height"])},
-        "sizes": SIZES % {
-            "can_w": L["canvas_width"], "can_h": L["canvas_height"],
-            "pad": G["pad"], "mt": L["margin_top"], "mb": L["margin_bottom"],
-            "top_h": G["top_h"], "main_h": G["main_h"], "bw": G["bw"],
-            "overhang": G["overhang"], "panel_w": G["panel_w"],
-            "wheel_room": G["wheel_room"], "wheel": G["wheel"],
-            "gap1": L["column_gap_1"], "gap2": L["column_gap_2"],
-            "left_top": G["left_top"], "left_h": G["main_h"] - G["left_top"],
-            "board_gap": L["board_gap"], "banner_h": G["banner_h"],
-            "map_w": G["map_w"], "act_h": G["act_h"]},
-        "sa": sa,
-        "alms": _unsize(alms_panel(gb, fills, G["panel_w"])),
-        "market": market,
+        "sizes": sizes_css(L, G) + (
+            scoped(sizes_css(alt_L, alt_G), "html.gv-cmp") if alt_L else ""),
+        # The banner is formatted HERE rather than passed through PAGE. It is a value substituted
+        # into the page, and a value is not re-scanned for placeholders -- so a `%(cmpbtn)s` left
+        # inside it reaches the browser as those nine literal characters. It did.
+        "banner": BANNER % {"cmpbtn": (
+            COMPARE_BUTTON % (html_escape(str(L.get("label") or "boards %g" % L["board_width"])),
+                              html_escape(str(alt_L.get("label") or "boards %g" % alt_L["board_width"])))
+            if alt_L else "")},
+        "cmpjs": (COMPARE_JS % {"a_w": L["canvas_width"], "a_h": L["canvas_height"],
+                                "b_w": alt_L["canvas_width"], "b_h": alt_L["canvas_height"]})
+                 if alt_L else "",
+        # Empty when the panel is off. The CELL stays, at the board's width, because it is
+        # what holds the alms table and the market over the action box and the wheel --
+        # remove the spacer and they slide left onto the boards.
+        "sa": sa if L.get("special_activities", True) else "",
+        "alms": _unsize(alms_panel(gb, fills, G["panel_w"]), align_bottom=True),
+        # Bottom-aligned for the same reason as the alms table: it fits its cell by width,
+        # and the spare height was leaving it 17.6 px clear of the banner below it.
+        "market": _unsize(market, align_bottom=True),
         "boards": "\n      ".join(boards),
         "turn": turn,
-        "banner": BANNER,
         "wheel": wheel,
         "map": gb["_map_svg"],
         "defs": ET.tostring(defs, encoding="unicode"),

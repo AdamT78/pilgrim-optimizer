@@ -1,7 +1,7 @@
 {
-  "canvas_width": 1730,
+  "canvas_width": 1900,
   "canvas_height": 1200,
-  "board_width": 483.9,
+  "board_width": 586.6,
   "board_gap": 30,
   "special_height": 178,
   "frame_border_y": 0.1,
@@ -20,5 +20,14 @@
   ],
   "margin_top": 28,
   "margin_bottom": 28.0,
-  "banner_height": 88.0
+  "banner_height": 88.0,
+  "special_activities": false,
+  "compare": {
+    "canvas_width": 1730,
+    "board_width": 483.9,
+    "special_activities": true,
+    "label": "with SA",
+    "ground_color": null
+  },
+  "ground_color": "#4d4844"
 }

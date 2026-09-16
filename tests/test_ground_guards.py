@@ -236,9 +236,17 @@ def test_the_page_paints_the_field_and_the_stage_does_not():
     gv = render_module("gen_game_view")
     page = rule(gv.CSS, "html,body")
     stage = rule(gv.CSS, ".gv-stage")
-    assert page and "url(%(panorama)s)" in page, (
-        "gen_game_view's `html,body` rule no longer paints the panorama. That rule is the ground "
-        "for the whole view; without it the page is the flat colour and the picture is gone.")
+    # The rule carries the ground, whatever the ground is: the page can be given the panorama or
+    # a flat colour, and which it gets is a layout decision. What must not change is WHERE it is
+    # painted, so this asks that the html,body rule still has a background at all, and separately
+    # that asking for the picture still produces the picture.
+    assert page and "background:%(ground)s" in page, (
+        "gen_game_view's `html,body` rule no longer paints the ground. That rule is the ground "
+        "for the whole view; without it the page has none.")
+    lit = dict(gv.layout()); lit["ground_color"] = None
+    assert "url(data:image/webp" in gv.ground_css(lit), (
+        "asked for the panorama, the page ground came out without it (%r). The picture is gone "
+        "and the flat colour is all that is left." % gv.ground_css(lit)[:80])
     assert stage is not None, ".gv-stage has no rule at all -- the stage is what gets zoom-fitted"
     assert "url(" not in stage, (
         "`.gv-stage` paints a background image again (%r). The stage is the 1600x1200 canvas, so a "
@@ -256,13 +264,20 @@ def test_the_colour_comes_last_in_the_shorthand():
     layer; this one cannot, and the difference is invisible in a diff.
     """
     gv = render_module("gen_game_view")
-    page = rule(gv.CSS, "html,body")
-    decl = [d for d in page.split(";") if d.strip().startswith("background")]
-    assert decl, "no `background` declaration in `html,body`"
-    body = decl[0].split(":", 1)[1]
+    # ASKED OF `ground_css`, not of the template. The rule now reads `background:%(ground)s` and
+    # the shorthand is assembled in that function, so the template no longer contains the ordering
+    # this guard is about -- it would pass on a string with no colour in it at all.
+    L = dict(gv.layout()); L["ground_color"] = None
+    body = gv.ground_css(L)
     assert body.rstrip().endswith("#0b0a08"), (
         "the colour is not the final value of the background shorthand: %r. Put the colour last, "
         "or the declaration is invalid and dropped and the page renders white." % body.strip())
+    # and the flat alternative is a bare colour, with nothing after it to invalidate
+    L["ground_color"] = "#4d4844"
+    flat = gv.ground_css(L)
+    assert flat.strip() == "#4d4844" and "url(" not in flat, (
+        "a flat ground came out as %r; it has to be the whole value, or the image and the colour "
+        "are both in the shorthand and the picture wins." % flat)
 
 
 def test_the_page_rule_is_written_after_the_stylesheet_it_has_to_beat():
@@ -409,7 +424,10 @@ def test_the_field_is_cropped_and_not_stretched():
     """
     gv = render_module("gen_game_view")
     tool = render_module("gen_layout_tool")
-    for name, css, selector in (("gen_game_view", gv.CSS, "html,body"),
+    # gen_game_view's is built rather than written, so it is asked for with the panorama on --
+    # the flat-colour case has no size to state and nothing for `cover` to be wrong about.
+    gv_L = dict(gv.layout()); gv_L["ground_color"] = None
+    for name, css, selector in (("gen_game_view", "x{background:%s}" % gv.ground_css(gv_L), "x"),
                                 ("gen_layout_tool", tool.PAGE, "#screen")):
         decl = rule(css, selector)
         assert decl and "/cover" in decl, (
@@ -418,6 +436,26 @@ def test_the_field_is_cropped_and_not_stretched():
             % (name, selector, (decl or "").strip()))
         assert "100% 100%" not in decl.replace("%%", "%"), (
             "%s's `%s` still carries a `100%% 100%%` size alongside `cover`." % (name, selector))
+
+    # AND THE PAGE, not only the template it came from. Everything above reads the SOURCE string,
+    # where `%%` is how a literal percent is written -- so a template that is correct there can
+    # still emit `50.0%% 50%%/cover`, which is not a CSS length and drops the whole declaration.
+    # That shipped, and every guard in this file stayed green while it did: the escaping depends
+    # on how many times the string is formatted, and CSS is one `%` pass here and two elsewhere.
+    # The general form of the fault is a doubled percent surviving into the output, so that is
+    # what this looks for rather than the one declaration that had it.
+    page = REPO / "ui" / "generated" / "game-view.html"
+    if not page.is_file():
+        pytest.skip("the game view has not been built in this checkout")
+    # The WHOLE file, not a prefix. The first attempt read the first 200 KB and passed the
+    # falsification, because the embedded panorama is half a megabyte of base64 and pushes the
+    # rule that had the fault well past any prefix worth guessing at. base64 has no percent in
+    # its alphabet, so scanning all of it costs a moment and cannot collide.
+    head = page.read_text(encoding="utf-8")
+    assert "%%" not in head, (
+        "the built game view carries a doubled percent in its CSS, which is not a valid length: "
+        "%r. A template escaped for two format passes was given one, or the other way round."
+        % head[max(0, head.find("%%") - 70):head.find("%%") + 12])
 
 
 def wheel_in_panorama(screen, fit):

@@ -224,7 +224,8 @@ COMPONENTS = [("sa", "svg", "sa"), ("alms", "svg", "alms"), ("mkt", "div", "mkt"
 
 # Every control the page's script addresses by id, checked against the built page. See build().
 # The sliders here are the same list the script calls KEYS; the rest are the controls around them.
-CONTROL_IDS = ["seats", "board_width", "board_gap", "special_height", "frame_border_y",
+CONTROL_IDS = ["seats", "board_width", "board_gap", "special_height", "panorama_x",
+               "frame_border_y",
                "frame_border_x", "column_gap_1", "column_gap_2", "row_gap", "canvas_height",
                "act_rule",
                "margin_top", "margin_bottom",
@@ -419,7 +420,7 @@ body{margin:0;background:#12140f;color:#E8E2D3;font:13px/1.5 "Iowan Old Style",G
    framing on an ultrawide and the wrong one on every other entry in the list -- which is exactly
    the list this tool exists to check. Colour LAST, or the declaration drops. */
 #screen{position:relative;transform-origin:top left;outline:1px solid #2c3327;
-  background:url(%(panorama)s) center/cover no-repeat #000}
+  background:url(%(panorama)s) var(--pano-x, 50%%) 50%%/cover no-repeat #000}
 #legend{margin-top:10px;font:11.5px/1.7 ui-monospace,Menlo,monospace;color:#8fa286}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;
   margin-right:5px}
@@ -505,6 +506,9 @@ body.live #livehint{display:block}
 
   <label>special activities height <b id="v-special_height"></b></label>
   <input type="range" id="special_height" min="120" max="320" step="1">
+
+  <label>panorama across <b id="v-panorama_x"></b></label>
+  <input type="range" id="panorama_x" min="0" max="100" step="0.5">
 
   <label style="margin-top:14px;color:#EFE8D6;font-weight:600">frame borders
     <b id="v-framed"></b></label>
@@ -611,7 +615,7 @@ const PAD = %(pad)s;
 // past it to x 1902, which is why the board's bounding box is not the board's visual edge.
 const FRAME_START = 620 / 1905, FRAME_END = 1839 / 1905;
 const CAN_SAVE = %(can_save)s;
-const KEYS = ['seats','board_width','board_gap','special_height','frame_border_y',
+const KEYS = ['seats','board_width','board_gap','special_height','panorama_x','frame_border_y',
               'frame_border_x','column_gap_1','column_gap_2','row_gap','canvas_height','act_rule',
               'margin_top','margin_bottom'];
 let screenIndex = 0;
@@ -638,6 +642,10 @@ function drawSpecial(w, h, by, bx){
 
 function apply(){
   for (const k of KEYS) L[k] = parseFloat(el(k).value);
+  // The panorama moves on the SCREEN element, not on the stage: the stage is transparent and
+  // the picture is painted behind it, so this is the one control here that changes something
+  // outside the canvas rather than inside it.
+  el('screen').style.setProperty('--pano-x', L.panorama_x + '%%');
   L.width_whole_board = el('width_basis').value === 'board';
   L.wheel_slack_to_boxes = el('slack_use').value === 'boxes';
   L.framed = [...document.querySelectorAll('#framed button.on')].map(b => b.dataset.slot);
