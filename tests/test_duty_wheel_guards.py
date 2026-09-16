@@ -766,10 +766,16 @@ def test_the_offsets_page_draws_the_block_where_the_board_draws_it():
         # from either, so both are stubbed rather than the guard skipped.
         with drawn_without_the_artwork(g), built_without_the_palette(g):
             page = tool.build(False)
+        # BOTH, and this gate is the reason this guard went red in CI after passing here.
+        # `shrink` needs Pillow and `palette_stats` needs numpy, and the lane that runs the whole
+        # suite installs the first and not the second -- so a gate asking only about Pillow said
+        # yes and then built a page that could not be built. The simulation used locally blocked
+        # numpy and Pillow TOGETHER, which is the one combination that hides this.
         try:
+            import numpy                                              # noqa: F401
             import PIL.Image                                          # noqa: F401
             unstubbed = True
-        except Exception:
+        except ImportError:
             unstubbed = False
         if unstubbed:
             # the stubs do not move anything. Asserted here rather than asserted by the comment.
