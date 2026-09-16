@@ -109,7 +109,11 @@ def decompose(offsets: dict) -> dict:
     box = dg.load()["box"]
     k = WHEEL_PX / box
     u = []
-    for d in dg.laid_shapes(offsets=False, pop_set=POP_SET):
+    # Without the shift: `u` asks how far below the wheel's centre each tile sits in the
+    # ARRANGEMENT, and the shift is a separate number applied on top of the whole of it. Left
+    # in, it lands entirely in `uniform_px` and reads as a mechanical push that belongs in a
+    # layout constant -- which is the one conclusion this block exists to draw.
+    for d in dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False):
         P = _pts(d)
         u.append((sum(p[1] for p in P) / len(P) - box / 2.0) * k)
     n = len(u)
@@ -157,19 +161,21 @@ def margins_at_zero() -> dict:
     """
     box = dg.load()["box"]
     k = WHEEL_PX / box
-    sx, sy = load_shift(pop_set=POP_SET)
-    laid = dg.laid_shapes(offsets=True, pop_set=POP_SET)
+    # Asked for WITHOUT the shift rather than measured with it and the shift subtracted back
+    # off. The same number added in one place and taken out in another is how this page came to
+    # draw the block at twice the shift while reporting it once.
+    laid = dg.laid_shapes(offsets=True, pop_set=POP_SET, shift=False)
     xs, ys = [], []
     for d in laid:
         P = _pts(d)
         xs += [q[0] for q in P]
         ys += [q[1] for q in P]
-    grid = acolyte_grid(dg.laid_shapes(offsets=False, pop_set=POP_SET))
+    grid = acolyte_grid(dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False))
     foot = max(g["sy"] + g["fh"] for g in grid)
     return {
-        "l": min(xs) * k - sx, "r": (box - max(xs)) * k + sx,
-        "t": min(ys) * k - sy, "b": (box - max(ys)) * k + sy,
-        "foot": (box - foot) * k + sy,          # clearance below the lowest acolyte
+        "l": min(xs) * k, "r": (box - max(xs)) * k,
+        "t": min(ys) * k, "b": (box - max(ys)) * k,
+        "foot": (box - foot) * k,               # clearance below the lowest acolyte
     }
 
 
@@ -254,7 +260,9 @@ def scaled_shapes():
     Asking the grid where its tiles are, rather than working it out again, is the only thing that
     keeps this true the next time `place` or the tile scale changes.
     """
-    return dg.laid_shapes(offsets=False, pop_set=POP_SET)
+    # `shift=False` because THIS PAGE APPLIES THE SHIFT ITSELF, as a live transform on the tile
+    # groups and on `#acol`. Shapes that already carried it were drawn at twice it.
+    return dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False)
 
 
 def acolyte_grid(shapes):
@@ -522,8 +530,18 @@ def build(can_save: bool) -> str:
     # the file a third: the tool opened 27.1 px per tile away from what the board draws. It is the
     # grid's job to lay the tiles out; the only thing this page wants is for it to stop short of
     # the offsets, which it moves itself.
+    # pop_set even with offsets=False: the per-tile nudges are dropped but the ARRANGEMENT
+    # SHIFT is not, and the shift is per set. Left off, the tile layer carried one set's
+    # shift while `acolyte_grid` below carried another, and the rows the offsets are judged
+    # against sat 23.9 units from the tiles.
+    # `shift=False` alongside it. The nudges are dropped because the page applies them; the
+    # SHIFT has to be dropped for exactly the same reason, and was not. `apply()` adds it to
+    # every tile group and to `#acol`, so a base that carried it put the whole block at twice
+    # the saved number while the panel, which builds its margins from BASE + shift, reported
+    # the number the board actually draws. Picture and read-out disagreed, and the picture is
+    # what an arrangement is judged by.
     svg = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION,
-                           klass="wheel", offsets=False)
+                           klass="wheel", offsets=False, pop_set=POP_SET, shift=False)
     # `dg.acolyte_row` DRAWS these, and this file no longer draws anything of its own.
     #
     # It used to emit its own figures -- its own copy of the duotone builder, its own seat palette,

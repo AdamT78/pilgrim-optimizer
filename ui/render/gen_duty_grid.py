@@ -1044,7 +1044,8 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER,
 
 
 def laid_shapes(meta: dict | None = None, margin: float | None = None,
-                offsets: bool = True, pop_set: str | None = None) -> list[str]:
+                offsets: bool = True, pop_set: str | None = None,
+                shift: bool = True) -> list[str]:
     """The nine shapes exactly as the board draws them: re-laid, scaled, and offset.
 
     THE ONE PLACE THAT ANSWERS "where are the tiles". gen_tile_offsets.py used to work this out for
@@ -1059,11 +1060,11 @@ def laid_shapes(meta: dict | None = None, margin: float | None = None,
     box = meta["box"]
     margin = MARGIN if margin is None else margin
     laid = meta["shapes"] if margin is None else place(meta["shapes"], box, margin)
-    return placed(laid, box, offsets=offsets, pop_set=pop_set)
+    return placed(laid, box, offsets=offsets, pop_set=pop_set, shift=shift)
 
 
 def placed(shapes: list[str], box: float, offsets: bool = True,
-           pop_set: str | None = None) -> list[str]:
+           pop_set: str | None = None, shift: bool = True) -> list[str]:
     """The nine shapes scaled about their own centres and moved by their saved offsets.
 
     Scaling about each tile's OWN centre shrinks the picture without moving it, so the gaps between
@@ -1081,6 +1082,15 @@ def placed(shapes: list[str], box: float, offsets: bool = True,
     # `sx, sy` is NOT dropped with them: it moves the whole block, acolyte rows and all, and those
     # rows are built from exactly this call with offsets=False. Dropping it here would leave the
     # rows behind when the arrangement moved, which is the one thing the shift must never do.
+    #
+    # `shift=False` is a SEPARATE question and there is exactly one caller: a page that applies
+    # the shift itself, live, as a transform. Handed shapes that already carry it, such a page
+    # draws the block at TWICE the saved number while its own read-out says the saved number --
+    # which is what gen_tile_offsets.py did from the day the shift was added. The rows move with
+    # the tiles, so nothing inside the arrangement looks wrong; only its position in the box is,
+    # and only against a margin nobody was measuring by eye.
+    if not shift:
+        sx = sy = 0.0
     if scale == 1.0 and not off and not (sx or sy):
         return shapes
     out = []
@@ -1256,6 +1266,11 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   # transform, so the shapes it starts from must not already carry the file's
                   # numbers or every offset lands twice.
                   offsets: bool = True,
+                  # False draws the tiles WITHOUT the saved arrangement shift, for the same
+                  # caller and the same reason: it translates the whole block itself, so a
+                  # shift baked into the shapes would be applied twice. The acolyte rows go
+                  # with it -- the shift moves the arrangement, rows included.
+                  shift: bool = True,
                   # Which population set draws the acolyte rows. None is the default set and
                   # the board is byte-identical to what it was before sets existed.
                   pop_set: str | None = None,
@@ -1293,8 +1308,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     # are built from the unoffset shapes and never move, which is the whole point of the offsets.
     # BOTH take the set. The offsets belong to the acolyte row, so a board drawing one set
     # with another set's nudges is a board whose tiles sit against a row it is not drawing.
-    frozen = laid_shapes(meta, margin, offsets=False, pop_set=pop_set)
-    laid = laid_shapes(meta, margin, offsets=offsets, pop_set=pop_set)
+    frozen = laid_shapes(meta, margin, offsets=False, pop_set=pop_set, shift=shift)
+    laid = laid_shapes(meta, margin, offsets=offsets, pop_set=pop_set, shift=shift)
     cells = list(cells or DEFAULT_CELLS)
     if sorted(cells) != list(range(9)):
         raise ValueError(
