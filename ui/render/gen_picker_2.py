@@ -167,13 +167,38 @@ const slot = r => board.querySelector('[data-asset-role="' + r + '"]');
 // Seat and stones are two settings over one <use>, so they are kept as state and the gemstone slot
 // is repainted from both. Letting each control write the slot directly is what would make changing
 // seat silently drop you back to coloured stones.
-const state = {seat: null, stones: 'colour'};
+const GEO = %(geo)s;
+const state = {seat: null, stones: 'colour', acolyte: null, rows: null};
 const bySeat = v => OPTS.seat.find(o => o.value === v);
 
 function paintStones(){
   const black = (OPTS.stones || []).find(o => o.value === 'black');
   const id = (state.stones === 'black' && black) ? black.id : bySeat(state.seat).parts.gems;
   slot('gems').setAttribute('href', '#' + id);
+}
+// The acolyte row: which figure, in which seat's colour, at which widths. Called by the seat
+// control too -- the mark wears the seat, so a seat change with no repaint leaves the previous
+// colour standing on a board that has moved on.
+// The whole population band: which figure, in which seat's colour, at which widths and spacing.
+// ONE function, because the figure and the spread are not independent -- the figure decides the
+// width the spread is applied to, so writing them from two places makes the last click win.
+function paintRows(){
+  const o = (OPTS.acolyte || []).find(x => x.value === state.acolyte);
+  const g = GEO[(state.acolyte || '') + '/' + (state.rows || '')];
+  if (o) {
+    const id = o.ids[state.seat] || Object.values(o.ids)[0];
+    board.querySelectorAll('[data-population="acolyte"]')
+         .forEach(u => u.setAttribute('href', '#' + id));
+  }
+  if (!g) return;
+  for (const kind of Object.keys(g)) {
+    const els = board.querySelectorAll('[data-population="' + kind + '"]');
+    g[kind].forEach((box, i) => {
+      if (!els[i]) return;
+      els[i].setAttribute('x', box.x);
+      els[i].setAttribute('width', box.width);
+    });
+  }
 }
 function paintSeat(){
   const o = bySeat(state.seat);
@@ -187,6 +212,7 @@ function paintSeat(){
   // turn control shows the other a click later and must not find the previous seat's colour.
   const oval = {portrait_background_lit: 'underlay-portrait-lit',
                 portrait_background_dim: 'underlay-portrait-dim'};
+  paintRows();
   for (const [k, id] of Object.entries(oval))
     board.querySelector('[id="' + id + '"]').setAttribute('fill', o.fills[k]);
   const sw = document.getElementById('sw-seatcolour');
@@ -208,6 +234,10 @@ function choose(role, i){
       if (t) t.setAttribute('fill', o.inks[d.getAttribute('data-resource-disc')]);
     });
   }
+  // The x of every figure in both rows, precomputed per option by the ASSEMBLER's own
+  // population_row. Nothing here knows where a box starts or how wide a figure is.
+  else if (role === 'acolyte') { state.acolyte = o.value; paintRows(); }
+  else if (role === 'rows')    { state.rows = o.value; paintRows(); }
   else if (role === 'icon') {
     for (const name of Object.keys(o.geo)) {
       const el = board.querySelector('[data-asset-role="resource:' + name + '"]');
@@ -225,8 +255,10 @@ function choose(role, i){
 }
 document.querySelectorAll('button.opt').forEach(b =>
   b.onclick = () => choose(b.dataset.role, +b.dataset.i));
-// Seat first: everything else is painted relative to it.
-['seat', 'stones', 'turn', 'portrait', 'shadow', 'icon'].forEach(r => {
+// The acolyte figure BEFORE the seat, and the seat before everything else. paintSeat repaints the
+// acolyte row, so a seat painted while the figure is still unchosen paints nothing and the row
+// keeps the href the assembler left on it -- correct by luck, and only while the two agree.
+['acolyte', 'seat', 'stones', 'turn', 'portrait', 'shadow', 'icon', 'rows'].forEach(r => {
   if (!OPTS[r]) return;
   const i = OPTS[r].findIndex(o => o.on);
   choose(r, i < 0 ? 0 : i);
@@ -250,7 +282,8 @@ def thumb(path, px=120):
 
 
 # What the panel calls each control. Only the two that are not one word need saying.
-ROW_LABELS = {"shadow": "Count shadow", "icon": "Icon inset"}
+ROW_LABELS = {"shadow": "Count shadow", "icon": "Icon inset", "rows": "Population rows",
+              "acolyte": "Acolyte figure"}
 
 
 def resource_boxes(asm, root):
@@ -323,6 +356,90 @@ def icon_options(asm, boxes):
         entries.append({"value": "%g" % inset, "label": "%g px" % inset, "geo": geo,
                         "on": abs(inset - shipped) < 1e-9})
     return entries
+
+
+def population_counts(root):
+    """How many of each population the board actually drew."""
+    counts = {}
+    for use in root.iter(q("use")):
+        kind = use.get("data-population")
+        if kind:
+            counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def population_geo(asm, root, template):
+    """Every row layout the two controls can ask for, keyed by BOTH of them.
+
+    ONE TABLE BECAUSE THE TWO CONTROLS MULTIPLY. The figure decides how wide a mark is and the
+    preset decides how they are spaced, so a control that owned only its own axis would overwrite
+    the other one: picking a spread and then a figure put the acolytes back on the spread the
+    board shipped with. Written as separate tables it looked right until both were touched, which
+    is the kind of wrong nobody clicks their way into on purpose.
+
+    The positions come from the assembler's own `population_row` against the TEMPLATE, because
+    assembly consumes both the divider that tells the boxes apart and the <image> the figure size
+    is read from.
+    """
+    counts = population_counts(root)
+    if not counts:
+        return None
+    geo = {}
+    for figure in asm._pop.SETS:
+        for preset in asm._pop.BOARD_SETS:
+            geo["%s/%s" % (figure, preset)] = {
+                kind: [{"x": round(x, 3), "width": round(w, 3)}
+                       for x, _y, w, _h in asm.population_row(
+                           template, kind, n, pop_set=preset, figure_set=figure)]
+                for kind, n in counts.items()}
+    return geo
+
+
+def acolyte_options(asm, root, template, defs, config, assets_dir):
+    """Which figure the card's acolyte row is made of.
+
+    ONE SYMBOL PER SEAT for the drawn mark, because it wears the seat's colour and the seat is a
+    control of its own: a single symbol would keep whichever colour it was built with and the
+    board would quietly disagree with its own drape. `paintRows` is therefore called by the seat
+    control as well -- the same trap the note in `paintSeat` records, where naming the roles by
+    hand left the acolyte cube on the previous seat's colour.
+    """
+    if not population_counts(root).get("acolyte"):
+        return None
+    shipped = asm._pop.CARD
+    entries = []
+    for name in asm._pop.SETS:
+        spec = asm._pop.card(name)
+        if spec["kind"] == "hood":
+            ids = {}
+            for seat in asm.SEAT_COLORS:
+                sid = "opt_pop_%s_%s" % (name, seat)
+                asm._hood_symbol(defs, sid, seat, spec)
+                ids[seat] = sid
+        else:
+            # ITS OWN SYMBOL, not the one already on the board. `population-acolyte` is whatever
+            # the board was BUILT with -- which is the hood -- so pointing the image option at it
+            # swapped the href, swapped the width, and changed nothing you could see. The href
+            # check passed and the picture did not move.
+            sid = add_symbol(asm, defs, "opt_pop_%s" % name,
+                             asm.resolve_asset(assets_dir,
+                                               asm.asset_path_for_role(config, "acolyte")))
+            ids = {seat: sid for seat in asm.SEAT_COLORS}
+        entries.append({"value": name, "label": asm._pop.SETS[name]["label"],
+                        "ids": ids, "on": name == shipped})
+    return entries
+
+
+def population_options(asm, root, template):
+    """Where the rows sit along their boxes, one option per card-row preset.
+
+    Carries no geometry of its own: see `population_geo`, which is keyed by this AND the figure.
+    """
+    if not population_counts(root):
+        return None
+    shipped = asm._pop.BOARD_DEFAULT
+    return [{"value": name, "label": preset["label"], "on": name == shipped}
+            for name, preset in asm._pop.BOARD_SETS.items()]
 
 
 def row(role, entries):
@@ -425,6 +542,20 @@ def main():
     if icon:
         opts["icon"] = icon
 
+    # Where the serf and acolyte rows sit along their boxes. Same shape as the two above: not an
+    # asset, so not a <use> swap -- an x on every figure in both rows.
+    template = ET.parse(assets_dir / "template" / "player_board_template.svg").getroot()
+    geo = population_geo(asm, root, template)
+    rows_opt = population_options(asm, root, template)
+    if rows_opt:
+        opts["rows"] = rows_opt
+
+    # Which figure the acolyte row is made of. The one control here that adds symbols of its own,
+    # because the drawn mark is not a file on disk.
+    ac = acolyte_options(asm, root, template, defs, config, assets_dir)
+    if ac:
+        opts["acolyte"] = ac
+
     # The swappable slots must be addressable by role after the assembler has rewritten them.
     for role in ("cloth_lit", "cloth_dim", "gems", "portrait"):
         use_by_role(root, role)
@@ -434,9 +565,11 @@ def main():
     svg = ET.tostring(root, encoding="unicode")
 
     rows = "".join(row(role, opts[role])
-                   for role in ("seat", "stones", "turn", "portrait", "shadow", "icon")
+                   for role in ("seat", "stones", "turn", "portrait", "shadow", "icon",
+                                "acolyte", "rows")
                    if role in opts)
-    page = PAGE % {"rows": rows, "board": svg, "opts": json.dumps(opts)}
+    page = PAGE % {"rows": rows, "board": svg, "opts": json.dumps(opts),
+                   "geo": json.dumps(geo or {})}
 
     out = pathlib.Path(args.output) if args.output else \
         UI / "generated" / "gothic-board-picker.html"

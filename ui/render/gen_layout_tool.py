@@ -190,6 +190,14 @@ FRAMEABLE = [("sa", "special"), ("alms", "alms"), ("mkt", "market"),
 # CSS pixels are not a physical unit: 1512 of them span 11.9 inches on that MacBook and 13.8 inches
 # on a 34 inch ultrawide, so drawing the MacBook's screen 1:1 on the ultrawide shows it 14% too
 # large. Computed from each panel's real geometry, at its default scaling.
+# WHICH ARRANGEMENT THIS TOOL SIMULATES. The whole claim of this page is "what will the board
+# look like at 1512x860", so it has to draw the wheel the GAME VIEW draws -- and the tile
+# offsets are per acolyte set now, so the default set is a different arrangement by up to 52
+# units. A tool simulating a screen against the wrong arrangement is this tree's oldest
+# recurring fault; see the note about `.t-stage` and `#screen` in the ground guards.
+import population_sets as _pop  # noqa: E402
+POP_SET = _pop.WHEEL
+
 SCREENS = [
     # 0 x 0 means "do not simulate": measure the window this is running in. On the machine you are
     # designing for, that is not an approximation of the real thing, it IS the real thing.
@@ -1199,7 +1207,7 @@ def build(layout, can_save):
     # The duty grid replaces the circular wheel. It carries its own geometry, so unlike the
     # lifted components it does not depend on gen_board.py having been run.
     from gen_duty_grid import VERSION, DUTY_NAMES, duty_grid_svg
-    parts["wheel"] = duty_grid_svg(labels=DUTY_NAMES, version=VERSION)
+    parts["wheel"] = duty_grid_svg(labels=DUTY_NAMES, version=VERSION, pop_set=POP_SET)
     sa = {"vb_w": g.SA_VB_W, "w": g.SA_W, "h": g.SA_H, "row1": g.SA_ROW1, "pitch": g.SA_PITCH,
           "cube": g.SA_CUBE, "acts": g.SA_ACTIVITIES, "seats": g.SA_SEATS,
           "swatch": list(g.SA_SWATCH)}

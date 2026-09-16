@@ -34,6 +34,10 @@ import base64
 import json
 import pathlib
 import re
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import population_sets as pop           # noqa: E402  (needs the path line above)
 
 HERE = pathlib.Path(__file__).resolve().parent
 SHAPES = HERE.parent / "assets-gothic" / "metadata" / "duty_grid_shapes.json"
@@ -150,8 +154,11 @@ DUTY_NAMES = ["Allocation", "Clerical", "Construct", "Build Roads", "The City",
 # Pass `cells=` to draw a real game's board: cells[duty] is the 0..8 grid square that duty
 # occupies, top-left to bottom-right. The default below is what this component has always drawn.
 #
-# The ARROWS do not depend on this. They describe which squares are adjacent, which is a property
-# of the grid and does not shuffle.
+# NOTHING ABOUT ROUTING DEPENDS ON THIS. A sow runs over the SHAPES, which do not shuffle, and
+# the graph saying which shape follows which is `configs/board.json` -- now the only copy, since
+# the ring arrows took their hand-written `RING`/`CITY_ROUTES` out with them. Marking a shape
+# during a sow will need one position->square mapping to get from that graph to these cells;
+# see ui/docs/duty-wheel/sow-marking.md.
 DEFAULT_CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # Which tiles carry two actions, and so have a join and two hover halves. Three duty tiles have
 # a single action (Allocation, Build Roads, Taxation) and the city has none; measuring a join on
@@ -660,7 +667,35 @@ JOINS = TILES / "joins.json"
 OFFSETS = HERE.parent / "duty_tile_offsets.json"
 
 
-def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
+def offset_block(data: dict, pop_set: str | None = None) -> tuple[dict, str]:
+    """One set's saved nudges, and WHICH set they actually came from.
+
+    Offsets say where a tile sits against its acolyte row, so they belong to the row: a mark that
+    is a different shape sits under a different part of the tile, and the nudge that was right for
+    one is not the nudge that is right for the other. They are therefore stored per set under
+    `sets`, and the second value says which one answered -- a caller that wants to know whether it
+    is looking at its own numbers or at somebody else's has to be able to ask.
+
+    A SET WITH NOTHING SAVED INHERITS, and that is deliberate rather than lazy. The alternative is
+    zero, which throws away a real arrangement the moment a second set exists and makes the board
+    jump the first time anyone draws one. Inheriting means a new set opens exactly where the old
+    one left off, which is where you want to start dragging from. It is reported, not hidden.
+
+    The legacy top-level `offsets` is the gothic answer, from before sets existed. It is read as
+    the last fallback and migrated into `sets` on the next save.
+    """
+    sets = data.get("sets") or {}
+    name = pop.DEFAULT if pop_set is None else pop_set
+    for candidate in (name, pop.DEFAULT):
+        if candidate in sets:
+            return sets[candidate], candidate
+    if data.get("offsets") is not None or data.get("arrangement_shift") is not None:
+        return data, "legacy"
+    return {}, "none"
+
+
+def tile_placement(path: pathlib.Path | None = None, box: float = 1000.0,
+                   pop_set: str | None = None):
     """(scale, {i: (dx, dy)}, (sx, sy)) in GRID UNITS, or (1.0, {}, (0, 0)) when there is no file.
 
     THE THIRD VALUE IS THE WHOLE ARRANGEMENT'S POSITION, and it is a different kind of number from
@@ -676,6 +711,11 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     they were grid units would be out by a factor of 1.14, which is small enough to look like a
     slightly wrong drag and not like a unit error.
     """
+    # `OFFSETS` is read HERE rather than bound as the default, because a default binds at def
+    # time: with `path=OFFSETS` in the signature, reassigning the module constant changes nothing
+    # and the file it names can never be pointed elsewhere. That exact trap cost a real debugging
+    # session on ARROW_OUTSET in this same tree.
+    path = OFFSETS if path is None else path
     if not path.is_file():
         return 1.0, {}, (0.0, 0.0)
     try:
@@ -683,11 +723,15 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
     except json.JSONDecodeError as exc:
         raise SystemExit("%s is not valid JSON: %s" % (path, exc))
     per_unit = box / float(data.get("wheel_px") or box)
+    # `wheel_px` and `tile_scale` stay top-level: they are properties of the WHEEL -- the size it
+    # was judged at and how far each tile is shrunk to open the channel -- and do not change
+    # because a different figure stands under it.
+    block, _source = offset_block(data, pop_set)
     out = {}
-    for k, v in (data.get("offsets") or {}).items():
+    for k, v in (block.get("offsets") or {}).items():
         if str(k).isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)) * per_unit, float(v.get("dy", 0)) * per_unit)
-    sh = data.get("arrangement_shift") or {}
+    sh = block.get("arrangement_shift") or {}
     shift = (float(sh.get("dx", 0)) * per_unit, float(sh.get("dy", 0)) * per_unit)
     return float(data.get("tile_scale") or 1.0), out, shift
 
@@ -703,11 +747,17 @@ def tile_placement(path: pathlib.Path = OFFSETS, box: float = 1000.0):
 # kept only 42% of each seat's chroma and the four read as grey-brown triangles; this keeps 66%.
 # Pushing to 81% makes them poster-flat, plum worst.
 ACOLYTE = HERE.parent / "assets-gothic" / "population" / "acolyte_gothic.png"
-ACOLYTE_ASPECT = 228 / 210.0
-FIG_FRAC = 0.205              # figure width as a fraction of the tile's width
-FIG_OVERLAP = 0.60            # how much of the figure sits above the tile's bottom edge
-SEAT_SWATCH = {"sage": "#7d9b52", "pewter": "#4a6b86", "plum": "#8a5a92", "bone": "#A8A296"}
-SEAT_ORDER = ("sage", "pewter", "plum", "bone")
+# THE DEFAULT SET'S OWN NUMBERS, not a second copy of them. These names stay because a dozen
+# call sites and guards read them, and what they mean is unchanged: the wheel as it is drawn
+# when nobody asks for anything else. A second set is `pop_set=` on the functions below.
+ACOLYTE_ASPECT = pop.tile()["aspect"]
+FIG_FRAC = pop.tile()["frac"]          # figure width as a fraction of the tile's width
+FIG_OVERLAP = pop.tile()["overlap"]    # how much sits above the tile's bottom edge
+# ONE TABLE, read from population_sets. The player card fills its hooded acolytes from the same
+# one, and a wheel and a card disagreeing about plum is not a thing anyone would go looking
+# for. The names stay here because everything in this file and its guards reads them.
+SEAT_SWATCH = pop.SEAT_SWATCH
+SEAT_ORDER = pop.SEAT_ORDER
 # How a count is drawn: one figure per acolyte, piled upward, and no numeral anywhere. See
 # `acolyte_row` for why five acolytes are five figures rather than one figure and a 5.
 #
@@ -748,8 +798,8 @@ SEAT_ORDER = ("sage", "pewter", "plum", "bone")
 # alternating sides gives each figure an edge the one below it does not have, so the silhouette
 # breaks where the step alone would not separate it. It is not free -- it widens a pile by twice
 # itself into a gap of 0.24 of a figure, and `acolyte_row` states the clearance that leaves.
-STACK_STEP = 0.30             # fraction of a figure's height between one acolyte and the next
-STACK_LEAN = 0.10             # fraction of a figure's width, alternating side to side
+STACK_STEP = pop.tile()["step"]        # of a figure's HEIGHT, one acolyte to the next
+STACK_LEAN = pop.tile()["lean"]        # of a figure's WIDTH, alternating side to side
 _TINTS: dict[str, str] | None = None
 
 
@@ -801,7 +851,51 @@ def acolyte_tints() -> dict[str, str]:
     return out
 
 
-def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER) -> dict:
+HOOD_STROKE = pop.HOOD_STROKE   # of a figure's width, centred on the outline
+
+
+def hood_defs(uid: str = "dg", seats: tuple[str, ...] = SEAT_ORDER) -> str:
+    """The hooded mark in each seat's colour, defined once per svg for `<use>`.
+
+    ONE UNIT WIDE with its crown at y=0, so the `<use>` that places it needs only a translate and
+    a scale by the figure width -- the same two numbers the `<image>` of the other set is given.
+
+    THE OUTLINE IS NOT DECORATION, and it is the same argument the gothic figure's halo is built
+    on: pewter and plum fall to 1.2 : 1 against the brightest tile bottom (Give Alms, L 91) and
+    would vanish without something dark around them. `acolyte_tints` dilates the asset's alpha by
+    6 px of its 228 to get it; 0.055 of a width, centred, puts the same 2.6% outside the shape.
+
+    The face is a flat 22% black rather than a fourth colour per seat, measured off the mock-up:
+    its plum body is (138, 90, 146) and its face (106, 70, 109), a ratio of 0.77.
+    """
+    out = []
+    d = pop.hood_path()
+    f = pop.HOOD_FACE
+    for seat in seats:
+        out.append(
+            f'<g id="{uid}-hood-{seat}">'
+            f'<path d="{d}" fill="{SEAT_SWATCH[seat]}" stroke="{pop.HOOD_INK}" '
+            f'stroke-width="{HOOD_STROKE}" stroke-linejoin="round"/>'
+            f'<ellipse cx="0" cy="{f["cy"]}" rx="{f["rx"]}" ry="{f["ry"]}" '
+            f'fill="#000" opacity="0.22"/></g>')
+    return "".join(out)
+
+
+def pop_defs(uid: str = "dg", pop_set: str | None = None,
+             seats: tuple[str, ...] = SEAT_ORDER) -> str:
+    """Whatever the chosen set has to define before a row can `<use>` it.
+
+    Empty for a set that draws images, because a data URI needs no defs. A page that draws the
+    hood set and forgets this renders NO ACOLYTES AT ALL -- an unresolved `<use>` is silent -- and
+    a board with no acolytes is a board somebody will believe. The id guard in the duty-wheel
+    tests is what catches it: every `url(#...)` and `href="#..."` must name an id the same svg
+    defines.
+    """
+    return hood_defs(uid, seats) if pop.tile(pop_set)["kind"] == "hood" else ""
+
+
+def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER,
+                pop_set: str | None = None) -> dict:
     """Where one tile's row sits: {sx, sy, fw, fh, gap}, in grid units.
 
     SIZED BY HOW MANY SEATS ARE IN THE GAME, not always four. Pilgrim seats two to four, and a
@@ -838,26 +932,30 @@ def acolyte_box(shape: str, seats: tuple[str, ...] = SEAT_ORDER) -> dict:
     xs, ys = n[0::2], n[1::2]
     x0, x1, y1 = min(xs), max(xs), max(ys)
     w = x1 - x0
-    fw = w * FIG_FRAC
-    fh = fw / ACOLYTE_ASPECT
-    gap = fw * 0.24
+    m = pop.tile(pop_set)
+    fw = w * m["frac"]
+    fh = fw / m["aspect"]
+    gap = fw * m["gap"]
     k = len(seats)
-    return {"sx": x0 + (w - (k * fw + (k - 1) * gap)) / 2, "sy": y1 - fh * FIG_OVERLAP,
+    return {"sx": x0 + (w - (k * fw + (k - 1) * gap)) / 2, "sy": y1 - fh * m["overlap"],
             "fw": fw, "fh": fh, "gap": gap}
 
 
-def acolyte_foot(meta: dict | None = None, margin: float | None = None) -> float:
+def acolyte_foot(meta: dict | None = None, margin: float | None = None,
+                 pop_set: str | None = None) -> float:
     """The lowest acolyte ink on the board, in grid units. The bottom of the drawn block.
 
     The tiles are not the bottom of this component -- the figures hang below the last row of them
     -- so anything on the board that wants to line up with what the eye sees as the wheel's foot
     has to ask for this rather than for the box.
     """
-    return max(acolyte_box(d)["sy"] + acolyte_box(d)["fh"]
-               for d in laid_shapes(meta, margin, offsets=False))
+    return max(acolyte_box(d, pop_set=pop_set)["sy"]
+               + acolyte_box(d, pop_set=pop_set)["fh"]
+               for d in laid_shapes(meta, margin, offsets=False, pop_set=pop_set))
 
 
-def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
+def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER,
+                pop_set: str | None = None, uid: str = "dg") -> str:
     """One row under a tile, drawn: a seat's count is that many FIGURES, piled upward.
 
     THERE IS NO NUMERAL. A count used to be one figure with a small number on its robe, and the
@@ -898,10 +996,11 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
     reader who finds the wheel disagreeing with a majority knows it is a known gap rather than a
     bug in this file.
     """
-    b = acolyte_box(shape, seats)
+    m = pop.tile(pop_set)
+    b = acolyte_box(shape, seats, pop_set)
     sx, sy, fw, fh, gap = b["sx"], b["sy"], b["fw"], b["fh"], b["gap"]
-    uris = acolyte_tints()
-    step, lean = fh * STACK_STEP, fw * STACK_LEAN
+    uris = acolyte_tints() if m["kind"] == "image" else None
+    step, lean = fh * m["step"], fw * m["lean"]
     out = []
     for j, seat in enumerate(seats):
         n = int(counts[j])
@@ -926,16 +1025,27 @@ def acolyte_row(shape: str, counts, seats: tuple[str, ...] = SEAT_ORDER) -> str:
         # Drawn top DOWN, so each figure is overlapped from below by the next and the one standing
         # on the line is whole. Painted the other way the pile reads as a row lying down.
         for i in range(n):
-            out.append(
-                f'<image href="{uris[seat]}" x="{x + side[i]:.1f}" '
-                f'y="{sy - (n - 1 - i) * step:.1f}" width="{fw:.1f}" height="{fh:.1f}" '
-                f'preserveAspectRatio="xMidYMid meet"/>')
+            fy = sy - (n - 1 - i) * step
+            if uris is not None:
+                out.append(
+                    f'<image href="{uris[seat]}" x="{x + side[i]:.1f}" '
+                    f'y="{fy:.1f}" width="{fw:.1f}" height="{fh:.1f}" '
+                    f'preserveAspectRatio="xMidYMid meet"/>')
+            else:
+                # A <use> of the one hood this svg defines. The mark is DEFINED ONCE and
+                # used up to sixteen times per tile; inlining its 96-point outline at every
+                # acolyte would be about a kilobyte a head.
+                out.append(
+                    f'<use href="#{uid}-hood-{seat}" '
+                    f'transform="translate({x + side[i] + fw / 2:.1f} {fy:.1f}) '
+                    f'scale({fw:.2f})"/>')
         out.append('</g>')
     return "".join(out)
 
 
 def laid_shapes(meta: dict | None = None, margin: float | None = None,
-                offsets: bool = True) -> list[str]:
+                offsets: bool = True, pop_set: str | None = None,
+                shift: bool = True) -> list[str]:
     """The nine shapes exactly as the board draws them: re-laid, scaled, and offset.
 
     THE ONE PLACE THAT ANSWERS "where are the tiles". gen_tile_offsets.py used to work this out for
@@ -950,10 +1060,11 @@ def laid_shapes(meta: dict | None = None, margin: float | None = None,
     box = meta["box"]
     margin = MARGIN if margin is None else margin
     laid = meta["shapes"] if margin is None else place(meta["shapes"], box, margin)
-    return placed(laid, box, offsets=offsets)
+    return placed(laid, box, offsets=offsets, pop_set=pop_set, shift=shift)
 
 
-def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
+def placed(shapes: list[str], box: float, offsets: bool = True,
+           pop_set: str | None = None, shift: bool = True) -> list[str]:
     """The nine shapes scaled about their own centres and moved by their saved offsets.
 
     Scaling about each tile's OWN centre shrinks the picture without moving it, so the gaps between
@@ -965,12 +1076,21 @@ def placed(shapes: list[str], box: float, offsets: bool = True) -> list[str]:
     done, and the offsets re-dragged against it came back a third the size with no column signal
     left in them. What remains in the file is per-tile judgement, which is what it is for.
     """
-    scale, off, (sx, sy) = tile_placement(box=box)
+    scale, off, (sx, sy) = tile_placement(box=box, pop_set=pop_set)
     if not offsets:
         off = {}
     # `sx, sy` is NOT dropped with them: it moves the whole block, acolyte rows and all, and those
     # rows are built from exactly this call with offsets=False. Dropping it here would leave the
     # rows behind when the arrangement moved, which is the one thing the shift must never do.
+    #
+    # `shift=False` is a SEPARATE question and there is exactly one caller: a page that applies
+    # the shift itself, live, as a transform. Handed shapes that already carry it, such a page
+    # draws the block at TWICE the saved number while its own read-out says the saved number --
+    # which is what gen_tile_offsets.py did from the day the shift was added. The rows move with
+    # the tiles, so nothing inside the arrangement looks wrong; only its position in the box is,
+    # and only against a margin nobody was measuring by eye.
+    if not shift:
+        sx = sy = 0.0
     if scale == 1.0 and not off and not (sx or sy):
         return shapes
     out = []
@@ -1087,136 +1207,6 @@ def place(shapes: list[str], box: float, margin: float = MARGIN) -> list[str]:
 
 
 
-# ---------------------------------------------------------------------------------------------
-# Arrows
-#
-# Two movements, both of them read off `configs/board.json` rather than written down again:
-#
-#   the ring    The Merchant rides the eight duty tiles clockwise, one step per round end, and
-#               never enters the City. Its route is north -> north_east -> east -> south_east ->
-#               south -> south_west -> west -> north_west -> north.
-#   the City    Not symmetric. The City feeds OUT to north and south, and takes IN from east and
-#               west -- four edges, not eight.
-#
-# On a 3x3 that ring is exactly eight horizontal and vertical steps, which is why these are all
-# straight: the old wheel needed curved ring arrows because it was a circle, and this is not.
-#
-# NOTE these are a property of the GRID, not of which duty sits where. The walk top-left ->
-# top-centre -> top-right -> ... is the same whatever art is in the cells, so these arrows stay
-# correct even while DUTY_NAMES disagrees with the board graph (it currently does -- see the
-# duty-wheel README). Fixing that moves the artwork, not these.
-RING = [(0, 1), (1, 2), (2, 5), (5, 8), (8, 7), (7, 6), (6, 3), (3, 0)]
-CITY_ROUTES = [(4, 1), (4, 7), (5, 4), (3, 4)]
-# One length and one width for all twelve. The head is anchored at the tile it points AT rather
-# than centred in the channel, so no arrow crosses into the next duty and the length can still be
-# uniform -- centring cannot do both. Measured from the channel centre, the nearest destination
-# edge is 13.5 units away and the furthest 42.0, so a centred arrow short enough to clear every
-# destination would be 27 units long and its tail would reach under the source tile on none of
-# the twelve. Anchored at the head, 90 clears the widest source gap (75.5) with margin.
-ARROW_LEN = 90.0
-ARROW_W = 23.0             # what the City arrows were; the ring's was heavier and read as a bar
-# The gap you actually SEE between the arrow head and the tile it points at. Stated as the gap
-# rather than as an inset because both shapes are stroked and the strokes sit centred on their
-# paths: the arrow's reaches ARROW_W*0.22/2 beyond its tip, the tile outline's reaches
-# box*0.0035/2 beyond its edge. An inset of 2.0 therefore left the two inked edges overlapping by
-# 2.3 units -- no gap at all -- which is what `_inset` now corrects for.
-ARROW_GAP = 5.0
-ARROW_STROKE = 0.14        # outline weight, as a fraction of the arrow's width
-# The arrows are filled, not just outlined, so that the half of an arrow lying over dense
-# engraving still reads as one shape. That fill USED to be `BACKGROUND`, which was fine only
-# while the ground was a flat colour: a ground of None (the page shows through) or an <image>
-# leaves nothing for an arrow to be filled WITH, and an arrow cannot be filled with a picture.
-# So it is its own colour, and it is parchment because that is what the arrows are made of --
-# not because that is what is behind them.
-ARROW_FILL = "#e7bd83"
-
-
-def _channel(a: str, b: str) -> tuple[float, float, float]:
-    """Where an arrow between two cells sits, and which way it points."""
-    ax0, ay0, ax1, ay1 = bbox(a)
-    bx0, by0, bx1, by1 = bbox(b)
-    if abs((ax0 + ax1) - (bx0 + bx1)) > abs((ay0 + ay1) - (by0 + by1)):
-        x = (ax1 + bx0) / 2 if ax1 < bx0 else (bx1 + ax0) / 2
-        return x, (max(ay0, by0) + min(ay1, by1)) / 2, (0 if ax1 < bx0 else 180)
-    y = (ay1 + by0) / 2 if ay1 < by0 else (by1 + ay0) / 2
-    return (max(ax0, bx0) + min(ax1, bx1)) / 2, y, (90 if ay1 < by0 else 270)
-
-
-def _ray_hit(shape: str, x: float, y: float, ang: float, limit: float = 300.0) -> float:
-    """Distance from (x, y) along `ang` to the first crossing of this outline.
-
-    The outlines are polylines of 140 points, so this is an exact segment intersection rather
-    than a rasterised probe -- no PIL, and it stays right if the shapes are ever resampled.
-    """
-    import math
-    dx, dy = math.cos(math.radians(ang)), math.sin(math.radians(ang))
-    n = [float(v) for v in shape.replace("M", " ").replace("Z", " ").replace("L", " ").split()]
-    pts = [(n[i], n[i + 1]) for i in range(0, len(n), 2)]
-    best = limit
-    for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
-        ex, ey = x2 - x1, y2 - y1
-        den = dx * ey - dy * ex
-        if abs(den) < 1e-9:
-            continue
-        t = ((x1 - x) * ey - (y1 - y) * ex) / den          # along the ray
-        u = ((x1 - x) * dy - (y1 - y) * dx) / den          # along the segment
-        if 0 <= t < best and 0.0 <= u <= 1.0:
-            best = t
-    return best
-
-
-
-def arrow(length: float, w: float, stroke: str, fill: str) -> str:
-    """A flat-tailed arrow, outlined in the same ink as the tile edges.
-
-    Outline AND fill, not outline alone: over cross-hatching a hollow arrow lets the engraving
-    through its middle and the shape dissolves. The stroke is a smaller fraction of the width
-    than it was when these were small, or at this size it reads as a black bar.
-    """
-    return (f'<path d="M{-length / 2:.1f} {-w * .3:.1f} L{length / 2 - w * .8:.1f} {-w * .3:.1f} '
-            f'L{length / 2 - w * .8:.1f} {-w * .85:.1f} L{length / 2:.1f} 0 '
-            f'L{length / 2 - w * .8:.1f} {w * .85:.1f} L{length / 2 - w * .8:.1f} {w * .3:.1f} '
-            f'L{-length / 2:.1f} {w * .3:.1f} Z" fill="{fill}" stroke="{stroke}" '
-            f'stroke-width="{w * ARROW_STROKE:.2f}" stroke-linejoin="round"/>')
-
-
-def _inset(w: float, box: float) -> float:
-    """How far back the arrow's PATH must stop for ARROW_GAP of clear ground to show."""
-    return ARROW_GAP + (w * ARROW_STROKE) / 2 + (box * 0.0035) / 2
-
-
-def arrows_svg(shapes: list[str], length: float = ARROW_LEN, w: float = ARROW_W,
-               fill: str = ARROW_FILL, box: float = 1000, uid: str = "dg") -> str:
-    """Both routes, one size, each rising out from under the tile it leaves.
-
-    The whole arrow is drawn above the tiles and then masked by the SOURCE tile's outline, so the
-    tail is hidden exactly where that tile covers it. Its head is placed at the DESTINATION tile's
-    outline, so it stops there instead of crossing into the next duty.
-
-    Every arrow is therefore the same length and the same width, while the length you can SEE is
-    set by the torn edges -- short where a tile bulges into the channel, long where it falls away.
-
-    `pointer-events:none` so they never steal a hover from the tile beneath.
-    """
-    defs, body = [], []
-    for n, (a, b) in enumerate(RING + CITY_ROUTES):
-        x, y, ang = _channel(shapes[a], shapes[b])
-        reach = _ray_hit(shapes[b], x, y, ang) - _inset(w, box)   # to the destination outline
-        defs.append(f'<mask id="{uid}-am{n}" maskUnits="userSpaceOnUse" x="0" y="0" '
-                    f'width="{box}" height="{box}">'
-                    f'<rect width="{box}" height="{box}" fill="#fff"/>'
-                    f'<path d="{shapes[a]}" fill="#000"/></mask>')
-        # the mask goes on an OUTER group with no transform of its own. A transform on the same
-        # element establishes the user space the mask is then resolved in, so putting both here
-        # would measure the tile outline in the arrow's rotated frame and mask the wrong region.
-        body.append(f'<g mask="url(#{uid}-am{n})">'
-                    f'<g transform="translate({x:.1f} {y:.1f}) rotate({ang})">'
-                    f'<g transform="translate({reach - length / 2:.1f} 0)">'
-                    f'{arrow(length, w, INK, fill)}</g></g></g>')
-    return ('<defs>' + "".join(defs) + '</defs>'
-            '<g class="dg-arrows" pointer-events="none">' + "".join(body) + '</g>')
-
-
 def eligible_tiles(acolytes, active: str, seats: tuple[str, ...] = SEAT_ORDER) -> set[int]:
     """Which duties `active` may act on: the ones its own acolytes are standing on.
 
@@ -1270,19 +1260,20 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
                   margin: float | None = MARGIN, background: str = BACKGROUND,
                   palette: str | None = PALETTE,
                   palettes: tuple[str, ...] = ("chroma", "full"),
-                  # OFF by default now. The arrows were the only thing on the board saying which
-                  # duty follows which, so removing them removes that information from the view
-                  # entirely -- it is not merely decluttering. They also no longer line up: the
-                  # tiles carry per-tile offsets and the arrows are drawn from the untouched
-                  # adjacency, so they cross the gaps at angles that match nothing. Pass
-                  # arrows=True to get them back.
-                  arrows: bool = False,
                   acolytes: list[list[int]] | dict[int, list[int]] | None = None,
                   # False draws the tiles WITHOUT the saved offsets, for a caller that applies
                   # them itself. gen_tile_offsets.py is the one: it moves tiles live with a
                   # transform, so the shapes it starts from must not already carry the file's
                   # numbers or every offset lands twice.
                   offsets: bool = True,
+                  # False draws the tiles WITHOUT the saved arrangement shift, for the same
+                  # caller and the same reason: it translates the whole block itself, so a
+                  # shift baked into the shapes would be applied twice. The acolyte rows go
+                  # with it -- the shift moves the arrangement, rows included.
+                  shift: bool = True,
+                  # Which population set draws the acolyte rows. None is the default set and
+                  # the board is byte-identical to what it was before sets existed.
+                  pop_set: str | None = None,
                   cells: list[int] | None = None,
                   # The seat whose turn it is. Given, only the duties that seat's own acolytes
                   # stand on stay live; every other tile is drawn exactly as now and simply does
@@ -1315,8 +1306,10 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
     # Two versions of the same nine, both through laid_shapes so the offsets tool cannot disagree
     # with the board about where a tile starts. The tiles get the saved offsets; the acolyte rows
     # are built from the unoffset shapes and never move, which is the whole point of the offsets.
-    frozen = laid_shapes(meta, margin, offsets=False)
-    laid = laid_shapes(meta, margin, offsets=offsets)
+    # BOTH take the set. The offsets belong to the acolyte row, so a board drawing one set
+    # with another set's nudges is a board whose tiles sit against a row it is not drawing.
+    frozen = laid_shapes(meta, margin, offsets=False, pop_set=pop_set, shift=shift)
+    laid = laid_shapes(meta, margin, offsets=offsets, pop_set=pop_set, shift=shift)
     cells = list(cells or DEFAULT_CELLS)
     if sorted(cells) != list(range(9)):
         raise ValueError(
@@ -1372,7 +1365,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
            f'data-palette="{palette or "none"}"{root_style} '
            f'aria-label="Duty wheel, nine tiles">'
            f'<style>{HOVER_CSS}{PALETTE_CSS}{MARK_CSS if marking else ""}</style><defs>'
-           + (mark_defs(uid) if marking else ""),
+           + (mark_defs(uid) if marking else "")
+           + pop_defs(uid, pop_set),
            f'<filter id="{uid}-dim" color-interpolation-filters="sRGB">{DIM}</filter>'
            f'<filter id="{uid}-lit" color-interpolation-filters="sRGB">{LIT}</filter>']
     for i, d in enumerate(shapes):
@@ -1473,10 +1467,6 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             out.append(f'<rect class="dg-hit dg-hit-f" x="{x0}" y="{y0}" '
                        f'width="{x1 - x0}" height="{y1 - y0}"/>')
         out.append("</g></g>")
-    if arrows:
-        # `laid`, not `shapes`: the arrows are between SQUARES, and shapes has been
-        # reindexed by duty. Passing the reindexed list makes them follow the shuffle.
-        out.append(arrows_svg(laid, box=box, uid=uid))
     if acolytes:
         # AFTER every tile group and outside all of them. That is what freezes the rows against
         # the tiles: nothing a tile's own transform or offset does can reach these.
@@ -1506,7 +1496,8 @@ def duty_grid_svg(meta: dict | None = None, klass: str = "wheel",
             # rather than under its own tile -- the Taxation bug again, by a different route, and
             # silent in exactly the same way. It was dormant because the default arrangement is
             # the identity and nothing yet passes a shuffled one outside the guards.
-            out.append(acolyte_row(frozen[cells[int(i)]], counts, seats))
+            out.append(acolyte_row(frozen[cells[int(i)]], counts, seats,
+                                   pop_set=pop_set, uid=uid))
         out.append("</g>")
     out.append("</svg>")
     return "".join(out)

@@ -45,8 +45,14 @@ UI = HERE.parent
 sys.path.insert(0, str(HERE))
 
 import gen_duty_grid as dg  # noqa: E402
+import population_sets as pop  # noqa: E402
 
 OFFSETS_PATH = UI / "duty_tile_offsets.json"
+# Which set this tool OPENS on. The game view's, read from it rather than typed, because the
+# whole claim of this page is that it shows what the board draws -- a tool opening on a set
+# the board no longer uses would be judging offsets against a row nobody sees. The button
+# cycles; this only decides where it starts.
+POP_SET = pop.WHEEL
 WHEEL_PX = 877.8                    # the wheel's real drawn size in the game view
 TILE_K = 0.92                       # tiles scaled about their centres, to open the channel
 SAMPLE = [[2, 1, 0, 3], [1, 0, 0, 0], [0, 2, 1, 0], [3, 0, 2, 1], [0, 0, 0, 0],
@@ -57,12 +63,14 @@ NOTE = ("Per-tile nudges so each tile sits on its acolyte row the way The City d
         "failed. Screen pixels at the wheel's real drawn size, positive = right / down.")
 
 
-def load_offsets() -> dict[int, tuple[float, float]]:
+def load_offsets(pop_set: str | None = None) -> dict[int, tuple[float, float]]:
+    """The nudges saved for ONE set. `dg.offset_block` decides which, and says where from."""
     if not OFFSETS_PATH.is_file():
         return {}
     data = json.loads(OFFSETS_PATH.read_text(encoding="utf-8"))
+    block, _src = dg.offset_block(data, pop_set)
     out = {}
-    for k, v in (data.get("offsets") or {}).items():
+    for k, v in (block.get("offsets") or {}).items():
         if k.isdigit() and 0 <= int(k) < 9:
             out[int(k)] = (float(v.get("dx", 0)), float(v.get("dy", 0)))
     return out
@@ -101,7 +109,11 @@ def decompose(offsets: dict) -> dict:
     box = dg.load()["box"]
     k = WHEEL_PX / box
     u = []
-    for d in dg.laid_shapes(offsets=False):
+    # Without the shift: `u` asks how far below the wheel's centre each tile sits in the
+    # ARRANGEMENT, and the shift is a separate number applied on top of the whole of it. Left
+    # in, it lands entirely in `uniform_px` and reads as a mechanical push that belongs in a
+    # layout constant -- which is the one conclusion this block exists to draw.
+    for d in dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False):
         P = _pts(d)
         u.append((sum(p[1] for p in P) / len(P) - box / 2.0) * k)
     n = len(u)
@@ -129,11 +141,13 @@ def decompose(offsets: dict) -> dict:
     }
 
 
-def load_shift(path: pathlib.Path = OFFSETS_PATH) -> tuple[float, float]:
+def load_shift(path: pathlib.Path = OFFSETS_PATH,
+               pop_set: str | None = None) -> tuple[float, float]:
     """Where the whole nine sits in the box, in screen px. Not one of the per-tile nudges."""
     if not path.is_file():
         return 0.0, 0.0
-    d = (json.loads(path.read_text(encoding="utf-8")).get("arrangement_shift") or {})
+    block, _src = dg.offset_block(json.loads(path.read_text(encoding="utf-8")), pop_set)
+    d = block.get("arrangement_shift") or {}
     return float(d.get("dx", 0.0)), float(d.get("dy", 0.0))
 
 
@@ -147,23 +161,26 @@ def margins_at_zero() -> dict:
     """
     box = dg.load()["box"]
     k = WHEEL_PX / box
-    sx, sy = load_shift()
-    laid = dg.laid_shapes(offsets=True)
+    # Asked for WITHOUT the shift rather than measured with it and the shift subtracted back
+    # off. The same number added in one place and taken out in another is how this page came to
+    # draw the block at twice the shift while reporting it once.
+    laid = dg.laid_shapes(offsets=True, pop_set=POP_SET, shift=False)
     xs, ys = [], []
     for d in laid:
         P = _pts(d)
         xs += [q[0] for q in P]
         ys += [q[1] for q in P]
-    grid = acolyte_grid(dg.laid_shapes(offsets=False))
+    grid = acolyte_grid(dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False))
     foot = max(g["sy"] + g["fh"] for g in grid)
     return {
-        "l": min(xs) * k - sx, "r": (box - max(xs)) * k + sx,
-        "t": min(ys) * k - sy, "b": (box - max(ys)) * k + sy,
-        "foot": (box - foot) * k + sy,          # clearance below the lowest acolyte
+        "l": min(xs) * k, "r": (box - max(xs)) * k,
+        "t": min(ys) * k, "b": (box - max(ys)) * k,
+        "foot": (box - foot) * k,               # clearance below the lowest acolyte
     }
 
 
-def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) -> None:
+def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None,
+                 pop_set: str | None = None) -> None:
     """Write the file, keeping everything in it this function does not own.
 
     TWO THINGS THIS GOT WRONG, both of which only a save could show.
@@ -184,19 +201,33 @@ def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) ->
             existing = json.loads(OFFSETS_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             existing = {}
+    name = POP_SET if pop_set is None else pop_set
+    # MIGRATE ONCE, and only when something is actually saved. The file predates sets, so its
+    # top-level `offsets` and `arrangement_shift` ARE the gothic answer -- they are lifted into
+    # `sets.gothic` the first time anything is written, and removed from the top level so there is
+    # one home afterwards. Every other key, including the paragraphs recording what these numbers
+    # turned out to be, is left exactly where it is.
+    sets = dict(existing.get("sets") or {})
+    if not sets and (existing.get("offsets") or existing.get("arrangement_shift")):
+        sets[dg.pop.DEFAULT] = {"offsets": existing.get("offsets") or {},
+                                "arrangement_shift": existing.get("arrangement_shift") or {}}
+    sets[name] = {
+        "offsets": {str(i): {"dx": round(float(v["dx"]), 1), "dy": round(float(v["dy"]), 1)}
+                    for i, v in sorted(offsets.items(), key=lambda kv: int(kv[0]))},
+        # Where the whole block sits, kept apart from the nine on purpose: it moves the acolyte
+        # rows with the tiles, and they move nothing relative to each other.
+        "arrangement_shift": {"dx": round(float((shift or load_shift(pop_set=name))[0]), 1),
+                              "dy": round(float((shift or load_shift(pop_set=name))[1]), 1)},
+    }
     owned = {
+        "sets": sets,
+        "editing": name,
         "note": note,
         "method": "dragged in ui/render/gen_tile_offsets.py against a frozen acolyte grid",
         "units": "screen px at wheel width %g; positive = right / down" % WHEEL_PX,
         "wheel_px": WHEEL_PX,
         "tile_scale": TILE_K,
         "names": dg.DUTY_NAMES,
-        "offsets": {str(i): {"dx": round(float(v["dx"]), 1), "dy": round(float(v["dy"]), 1)}
-                    for i, v in sorted(offsets.items(), key=lambda kv: int(kv[0]))},
-        # Where the whole block sits, kept apart from the nine on purpose: it moves the acolyte
-        # rows with the tiles, and they move nothing relative to each other.
-        "arrangement_shift": {"dx": round(float((shift or load_shift())[0]), 1),
-                              "dy": round(float((shift or load_shift())[1]), 1)},
     }
     # Recorded rather than raised: a save that dies here would cost a drag, and a save that
     # silently dropped it is the exact fault this file already had once.
@@ -205,7 +236,8 @@ def save_offsets(offsets: dict, note: str = NOTE, shift: tuple | None = None) ->
     except Exception as exc:                                   # noqa: BLE001
         owned["measured"] = {"error": "decompose() failed: %s" % exc}
     # the caller's own notes first, then what this function owns, then anything else it was keeping
-    body = {k: v for k, v in existing.items() if k not in owned}
+    body = {k: v for k, v in existing.items()
+            if k not in owned and k not in ("offsets", "arrangement_shift")}
     body.update(owned)
     OFFSETS_PATH.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
 
@@ -228,7 +260,9 @@ def scaled_shapes():
     Asking the grid where its tiles are, rather than working it out again, is the only thing that
     keeps this true the next time `place` or the tile scale changes.
     """
-    return dg.laid_shapes(offsets=False)
+    # `shift=False` because THIS PAGE APPLIES THE SHIFT ITSELF, as a live transform on the tile
+    # groups and on `#acol`. Shapes that already carried it were drawn at twice it.
+    return dg.laid_shapes(offsets=False, pop_set=POP_SET, shift=False)
 
 
 def acolyte_grid(shapes):
@@ -320,6 +354,7 @@ textarea{width:100%%;height:150px;margin-top:8px;background:#121510;color:#c6d2b
     <table id="marg"></table>
     <button id="toplft">Top = Left</button><button id="unshift">Zero the shift</button>
     <button id="marks">Hide the red box</button>
+    <button id="popset">Acolytes: %(popset_label)s</button>
     <h2>Saving</h2>
     <button id="save">Save</button><button id="reset">Reset all</button>
     <button id="zero">Zero selected</button>
@@ -462,6 +497,28 @@ document.getElementById('save').onclick = function(){
 };
 
 apply();
+
+// THE ACOLYTE SET. Every set is already drawn, one group each, so this shows one and hides the
+// rest -- no rebuild, and the offsets being judged never move underneath the switch.
+(function(){
+  var sets = %(popset)s, at = %(popset_at)s;
+  var btn = document.getElementById('popset');
+  function show(name){
+    at = name;
+    document.querySelectorAll('.acset').forEach(function(g){
+      g.style.display = (g.getAttribute('data-set') === name) ? '' : 'none';
+    });
+    var lab = sets.filter(function(s){ return s[0] === name; })[0];
+    if (btn && lab) { btn.textContent = 'Acolytes: ' + lab[1]; }
+  }
+  if (btn) {
+    btn.addEventListener('click', function(){
+      var i = sets.findIndex(function(s){ return s[0] === at; });
+      show(sets[(i + 1) %% sets.length][0]);
+    });
+  }
+  show(at);
+})();
 </script></body></html>
 """
 
@@ -473,8 +530,18 @@ def build(can_save: bool) -> str:
     # the file a third: the tool opened 27.1 px per tile away from what the board draws. It is the
     # grid's job to lay the tiles out; the only thing this page wants is for it to stop short of
     # the offsets, which it moves itself.
+    # pop_set even with offsets=False: the per-tile nudges are dropped but the ARRANGEMENT
+    # SHIFT is not, and the shift is per set. Left off, the tile layer carried one set's
+    # shift while `acolyte_grid` below carried another, and the rows the offsets are judged
+    # against sat 23.9 units from the tiles.
+    # `shift=False` alongside it. The nudges are dropped because the page applies them; the
+    # SHIFT has to be dropped for exactly the same reason, and was not. `apply()` adds it to
+    # every tile group and to `#acol`, so a base that carried it put the whole block at twice
+    # the saved number while the panel, which builds its margins from BASE + shift, reported
+    # the number the board actually draws. Picture and read-out disagreed, and the picture is
+    # what an arrangement is judged by.
     svg = dg.duty_grid_svg(labels=dg.DUTY_NAMES, version=dg.VERSION,
-                           klass="wheel", arrows=False, offsets=False)
+                           klass="wheel", offsets=False, pop_set=POP_SET, shift=False)
     # `dg.acolyte_row` DRAWS these, and this file no longer draws anything of its own.
     #
     # It used to emit its own figures -- its own copy of the duotone builder, its own seat palette,
@@ -485,16 +552,44 @@ def build(can_save: bool) -> str:
     # once with the row geometry, and both times the numbers applied perfectly and the result
     # still looked wrong. The arithmetic was merged into `dg.acolyte_box` then; the drawing is
     # merged now, and there is nothing left in this file for the two to disagree about.
-    marks = [dg.acolyte_row(shapes[i], SAMPLE[i]) for i in range(len(shapes))]
+    # EVERY set, drawn, one group each -- not the chosen one. Offsets are judged against the
+    # row, and the two sets put their feet in the same place only because the hood is sized
+    # to the gothic figure's height on purpose. Drawing both lets that be SEEN rather than
+    # taken on trust, and switching is then a class toggle rather than a rebuild.
+    marks = []
+    for name in pop.SETS:
+        rows = "".join(dg.acolyte_row(shapes[i], SAMPLE[i], pop_set=name)
+                       for i in range(len(shapes)))
+        hide = "" if name == POP_SET else ' style="display:none"'
+        marks.append('<g class="acset" data-set="%s"%s>%s</g>' % (name, hide, rows))
     # The acolytes go in AFTER the tiles and outside every tile group, which is what freezes them:
     # a drag transforms one `g.dgt` and cannot reach anything here.
     # one group, so the page can translate the rows with the tiles by the arrangement shift
+    # The defs every set needs, injected together: `duty_grid_svg` above was not asked for a
+    # set, so it emitted none. A hood row whose defs are missing draws NOTHING -- an
+    # unresolved <use> is silent -- and a tool showing no acolytes looks like a tool with no
+    # acolytes rather than a broken one.
+    defs = "".join(dg.pop_defs("dg", name) for name in pop.SETS)
+    svg = svg.replace("<defs>", "<defs>" + defs, 1)
     svg = svg.replace("</svg>", '<g id="acol">' + "".join(marks) + "</g></svg>")
 
-    saved = load_offsets()
-    msg = ("Loaded %d offset%s from ui/duty_tile_offsets.json."
-           % (len(saved), "" if len(saved) == 1 else "s")) if saved else \
-          "No ui/duty_tile_offsets.json yet; everything starts at zero."
+    saved = load_offsets(POP_SET)
+    # WHICH SET THESE NUMBERS BELONG TO, said out loud. A set with nothing saved inherits another
+    # set's nudges so the board does not jump the first time one is drawn, and that is exactly the
+    # state in which somebody drags for twenty minutes believing they are editing what they see.
+    # Save writes to POP_SET and to nothing else.
+    src = "none"
+    if OFFSETS_PATH.is_file():
+        _blk, src = dg.offset_block(json.loads(OFFSETS_PATH.read_text(encoding="utf-8")), POP_SET)
+    if not saved:
+        msg = "No offsets saved yet; everything starts at zero."
+    elif src == POP_SET:
+        msg = ("Editing the %s acolytes: %d offset%s loaded."
+               % (POP_SET, len(saved), "" if len(saved) == 1 else "s"))
+    else:
+        msg = ("Editing the %s acolytes. Nothing is saved for them yet, so these %d are INHERITED "
+               "from %s and Save will write a set of their own."
+               % (POP_SET, len(saved), "the file's pre-set numbers" if src == "legacy" else src))
     if not can_save:
         msg += " Read-only: run with --serve to enable Save."
     return PAGE % {
@@ -505,9 +600,13 @@ def build(can_save: bool) -> str:
         "names": json.dumps(dg.DUTY_NAMES),
         "can_save": "true" if can_save else "false",
         "offsets": json.dumps({str(i): {"dx": dx, "dy": dy} for i, (dx, dy) in saved.items()}),
-        "shift": json.dumps({"dx": load_shift()[0], "dy": load_shift()[1]}),
+        "shift": json.dumps({"dx": load_shift(pop_set=POP_SET)[0],
+                             "dy": load_shift(pop_set=POP_SET)[1]}),
         "base": json.dumps({k: round(v, 2) for k, v in margins_at_zero().items()}),
         "msg": msg,
+        "popset_label": pop.SETS[POP_SET]["label"],
+        "popset": json.dumps([[n, pop.SETS[n]["label"]] for n in pop.SETS]),
+        "popset_at": json.dumps(POP_SET),
     }
 
 
@@ -516,7 +615,8 @@ SELF = pathlib.Path(__file__).resolve()
 
 def _sources() -> list[pathlib.Path]:
     """The Python this page is built from -- the only inputs read once instead of per request."""
-    return [SELF, pathlib.Path(dg.__file__).resolve()]
+    return [SELF, pathlib.Path(dg.__file__).resolve(),
+            pathlib.Path(pop.__file__).resolve()]
 
 
 def _stamp() -> dict[str, int]:
@@ -645,7 +745,7 @@ def serve(port: int):
                     self.send_error(400, "arrangement shift of %r would move the wheel off its "
                                          "own box" % (shift,))
                     return
-            save_offsets(clean, shift=shift)
+            save_offsets(clean, shift=shift, pop_set=POP_SET)
             print("saved %s  (%d tiles, shift %s)"
                   % (OFFSETS_PATH, len(clean), shift if shift else "unchanged"))
             self.send_response(204)
@@ -667,12 +767,22 @@ def serve(port: int):
 
 
 def main():
+    # A module global rather than a parameter threaded through nine functions: every one of them
+    # wants the same answer for the life of the process, and `--serve` rebuilds the page per
+    # request out of those same functions.
+    global POP_SET
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--pop-set", default=POP_SET, choices=sorted(pop.SETS),
+                    help="which acolyte set these offsets belong to (default %(default)s). "
+                         "A tile nudge places a tile against its acolyte row, so a row of "
+                         "a different shape wants different nudges; Save writes only this "
+                         "set and cannot touch the others.")
     ap.add_argument("--serve", action="store_true", help="run a local server so Save can write")
     ap.add_argument("--port", type=int, default=8767)
     ap.add_argument("--open", action="store_true")
     ap.add_argument("--output", default=None)
     z = ap.parse_args()
+    POP_SET = z.pop_set
 
     if z.serve:
         server, url = serve(z.port)

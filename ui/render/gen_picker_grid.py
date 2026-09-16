@@ -413,7 +413,7 @@ function fitShapes() {
   const wrap = document.getElementById('shapes-wrap');
   const svg = wrap && wrap.querySelector('svg');
   if (!svg) return;
-  const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  const vb = svg.getAttribute('viewBox').split(/\\s+/).map(Number);
   const a = avail('shapes-wrap'), fit = document.getElementById('sv-fit').checked;
   const w = fit ? Math.max(300, Math.min(a.w, a.h * vb[2] / vb[3])) : 980;
   wrap.style.width = w.toFixed(0) + 'px';
@@ -450,7 +450,7 @@ if (pick) pick.onchange = () => {
   // repoint all nine cells at the chosen picture. They are <use> elements sharing one sprite,
   // so this costs no new bytes -- which is the point of embedding each picture once.
   for (const u of document.querySelectorAll('.sv-pic')) {
-    if (!/^\d+$/.test(pick.value)) { u.removeAttribute('href'); continue; }
+    if (!/^\\d+$/.test(pick.value)) { u.removeAttribute('href'); continue; }
     u.setAttribute('href', '#src' + VER + pick.value);
   }
 };

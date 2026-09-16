@@ -116,7 +116,16 @@ def test_the_offsets_tool_lays_the_tiles_out_where_the_board_does():
     import re
 
     import gen_tile_offsets as tool
-    assert tool.scaled_shapes() == g.laid_shapes(offsets=False), (
+    # pop_set: the offsets are per acolyte set, so "where the board draws them" is a question
+    # that now needs to name a set. The tool's own is the one to ask with -- comparing it against
+    # the default would fail for a tool that is working perfectly on another set.
+    # shift=False for the same reason the tool asks for it: the page translates the whole block
+    # itself, so it starts from an arrangement that does not already carry the shift. This guard
+    # asked WITH the shift and passed for weeks -- because the set it was asking about had a
+    # saved shift of zero, and at zero the two are the same nine strings. It went red the first
+    # time a real shift was saved, which is the only time it could have.
+    assert tool.scaled_shapes() == g.laid_shapes(offsets=False, pop_set=tool.POP_SET,
+                                                 shift=False), (
         "gen_tile_offsets.py is not drawing the tiles where gen_duty_grid.py draws them, so an "
         "offset dragged in the tool will not put a tile where you put it. The tool must ask "
         "gen_duty_grid.laid_shapes() rather than working the layout out again.")
@@ -282,24 +291,6 @@ def test_a_shuffled_arrangement_is_drawn_and_a_broken_one_is_refused():
             g.duty_grid_svg(tiles_dir=None, cells=bad)
 
 
-def test_the_arrows_do_not_depend_on_the_arrangement():
-    """Which squares are adjacent is a property of the grid, not of which duty was dealt where,
-    so shuffling the tiles must not move a single arrow.
-
-    `arrows=True` is passed EXPLICITLY. The default became False when the arrows were taken off the
-    board, and this guard then failed -- correctly, and usefully: it asserts `a and a == b`, so an
-    empty `a` fails rather than passing vacuously, which is the difference between noticing a
-    changed default and silently testing nothing. What it guards is how the arrows behave when
-    drawn, not whether they are drawn, so it asks for them.
-    """
-    g = grid()
-    import re
-    arrows = lambda svg: re.findall(r'<g transform="translate\([^"]+\) rotate\([^"]+\)"', svg)
-    a = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True))
-    b = arrows(g.duty_grid_svg(tiles_dir=None, arrows=True, cells=[2, 5, 3, 8, 4, 6, 1, 7, 0]))
-    assert a and a == b, "the arrows moved when the arrangement changed"
-
-
 def test_two_grids_on_one_page_do_not_share_ids():
     """Every id the component emits must be namespaced to its instance.
 
@@ -328,66 +319,6 @@ def test_two_grids_on_one_page_do_not_share_ids():
     refs = set(re.findall(r'url\(#([^)]+)\)', svg))
     assert refs <= ids(svg), (
         "these are referenced but never defined here: %s" % sorted(refs - ids(svg)))
-
-
-def test_every_arrow_clears_its_destination_and_reaches_under_its_source():
-    """The arrow geometry, which is four constants that have to agree with the torn outlines.
-
-    Each arrow is one length, anchored at the tile it points AT and masked by the tile it leaves.
-    Two things must hold for all twelve, and neither is visible in the markup:
-
-        the head stops short of the destination outline, or the arrow crosses into the next duty
-        the tail ends inside the source outline, or it floats in the channel with a visible butt
-
-    They pull against each other -- a shorter arrow clears more easily but stops reaching under --
-    and the margin between them is thin: the channels vary, and the widest source gap is 75.5
-    units against ARROW_LEN 90. Changing ARROW_LEN, ARROW_GAP, ARROW_W, ARROW_STROKE or MARGIN
-    can break either end, and the render still looks plausible at a glance.
-    """
-    g = grid()
-    meta = g.load()
-    laid = g.place(meta["shapes"], meta["box"], g.MARGIN)
-    bad = []
-    for a, b in g.RING + g.CITY_ROUTES:
-        x, y, ang = g._channel(laid[a], laid[b])
-        dest = g._ray_hit(laid[b], x, y, ang)
-        head = dest - g._inset(g.ARROW_W, meta["box"])
-        tail = head - g.ARROW_LEN
-        src = -g._ray_hit(laid[a], x, y, (ang + 180) % 360)
-        if head >= dest:
-            bad.append("%d->%d head reaches %.1f, destination outline at %.1f" % (a, b, head, dest))
-        if tail >= src:
-            bad.append("%d->%d tail ends at %.1f, source outline at %.1f -- it would float"
-                       % (a, b, tail, src))
-    assert not bad, "arrow geometry no longer fits the tiles:\n  " + "\n  ".join(bad)
-
-
-def test_the_arrow_gap_is_the_gap_that_is_drawn():
-    """ARROW_GAP must be the clear ground you SEE, not the distance between two path tips.
-
-    Both shapes are stroked and strokes sit centred on their paths, so an inset that ignores them
-    is consumed by ink: this is how ARROW_INSET = 2.0 came to leave the arrow and tile outlines
-    OVERLAPPING by 2.3 units while claiming a 2-unit gap.
-
-    The stroke is read back out of the EMITTED markup rather than from the constant `_inset`
-    reads, because otherwise the two sides of this check are the same number and it cannot fail.
-    What it is really guarding is that `arrow()` and `_inset()` still agree about how much ink
-    there is -- which is exactly what stops being true when one of them is edited to a literal.
-    """
-    import re
-    g = grid()
-    box = g.load()["box"]
-    svg = g.duty_grid_svg(tiles_dir=None, arrows=True)
-    widths = {float(w) for w in re.findall(r'stroke-width="([\d.]+)" stroke-linejoin', svg)}
-    drawn = [w for w in widths if abs(w - g.ARROW_W * g.ARROW_STROKE) < 0.01]
-    assert drawn, ("no arrow stroke of the expected weight is in the markup; `arrow()` and "
-                   "ARROW_STROKE have parted company (found %s)" % sorted(widths))
-    ink = drawn[0] / 2 + box * 0.0035 / 2          # half the arrow's ink, half the tile's
-    assert g._inset(g.ARROW_W, box) - ink == pytest.approx(g.ARROW_GAP, abs=0.02), (
-        "_inset does not allow for the ink actually drawn: the gap on screen is %.2f units, not "
-        "the %.2f that ARROW_GAP promises"
-        % (g._inset(g.ARROW_W, box) - ink, g.ARROW_GAP))
-    assert g.ARROW_GAP > 0, "a zero or negative gap puts the arrow head against the tile"
 
 
 def test_the_offsets_tool_watches_every_generator_it_builds_from():
@@ -471,6 +402,28 @@ def drawn_without_the_artwork(g):
     finally:
         g.acolyte_tints = real
 
+
+@contextlib.contextmanager
+def built_without_the_palette(g):
+    """Emit a wheel without measuring the tile art for its palette matrices.
+
+    `drawn_without_the_artwork` above stubs the acolyte tints, which is not enough for anything
+    that builds a whole page: `duty_grid_svg` imports Pillow itself, to measure the reference tile
+    and match the other eight to it. That is a SECOND pixel dependency in the same call and it
+    cannot be reached from outside.
+
+    It can be switched off, though, without touching production: the matrices are only computed
+    when the reference tile is among the ones loaded. Pointed at a tile index that does not exist,
+    the loop does not run and nothing else changes -- the matrices are `<filter>` defs and no
+    coordinate in the svg comes from them. Every clip path, transform and row is byte-identical
+    with and without, which is asserted where this is used.
+    """
+    real = g.PALETTE_REF
+    g.PALETTE_REF = -1
+    try:
+        yield
+    finally:
+        g.PALETTE_REF = real
 
 def _piles(svg):
     """Every acolyte pile in the emitted markup, as (seat, [(x, y), ...]) in document order.
@@ -717,11 +670,15 @@ def test_the_arrangement_shift_moves_the_acolyte_rows_with_the_tiles():
     original = path.read_text(encoding="utf-8") if path.is_file() else None
     try:
         data = json.loads(original) if original else {}
-        data["arrangement_shift"] = {"dx": 0.0, "dy": 0.0}
+        # INTO THE SET, not the top level. The file keys its numbers by acolyte set now, so a
+        # top-level `arrangement_shift` is read by nothing and this guard silently patched a key
+        # the loader had stopped looking at -- it failed loudly, which is the good version.
+        block = data.setdefault("sets", {}).setdefault(g.pop.DEFAULT, {})
+        block["arrangement_shift"] = {"dx": 0.0, "dy": 0.0}
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         base, laid0, rows0 = depths(0)
 
-        data["arrangement_shift"] = {"dx": -17.0, "dy": -23.0}
+        block["arrangement_shift"] = {"dx": -17.0, "dy": -23.0}
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         moved, laid1, rows1 = depths(1)
 
@@ -736,7 +693,7 @@ def test_the_arrangement_shift_moves_the_acolyte_rows_with_the_tiles():
             "arrangement moved. The rows are being left behind: `placed()` is dropping the shift "
             "along with the per-tile offsets when called with offsets=False." % max(drift))
 
-        data["arrangement_shift"] = {"dx": -68.0, "dy": -92.0}      # four times as far
+        block["arrangement_shift"] = {"dx": -68.0, "dy": -92.0}     # four times as far
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         far, _, _ = depths(2)
         far_drift = max(abs(a - b) for a, b in zip(base, far))
@@ -756,6 +713,122 @@ def test_the_arrangement_shift_moves_the_acolyte_rows_with_the_tiles():
             % (dx, dy, -17.0 * k, -23.0 * k))
         assert abs((rows1[0]["sy"] - rows0[0]["sy"]) - (-23.0 * k)) < 0.02, (
             "the shift did not reach the acolyte rows")
+    finally:
+        if original is not None:
+            path.write_text(original, encoding="utf-8")
+
+
+def test_the_offsets_page_draws_the_block_where_the_board_draws_it():
+    """Compose the page the way the page composes itself, and land on the board's own tiles.
+
+    The guard above proves the shift moves the rows with the tiles. This one asks a different
+    question that had the opposite answer for as long as the setting existed: is the block in the
+    right PLACE? The tool builds its base wheel with `offsets=False` because its JS moves tiles
+    itself -- and `offsets=False` deliberately keeps the arrangement shift, so the rows are not
+    left behind. Then `apply()` adds the shift again, to every tile group and to `#acol`. The
+    block was drawn at twice the saved number.
+
+    Nothing inside the arrangement looks wrong when that happens, which is why it survived: the
+    rows double with the tiles, so every relationship the drag tool exists to set is intact. Only
+    the block's position in the box is wrong -- and the panel reported it correctly, because its
+    margins are BASE + shift and BASE had the shift taken back out. Picture and read-out
+    disagreed, and an arrangement is judged by the picture.
+
+    So: the page's OWN emitted numbers, its OWN drawn shapes, and the grid's own answer for where
+    the board puts the tiles. Nothing here recomputes a layout, which is what stops this becoming
+    another check that moves with the thing it is checking.
+    """
+    g = grid()
+    if not (RENDER / "gen_tile_offsets.py").is_file():
+        pytest.skip("the page lives in gen_tile_offsets.py")
+    import gen_tile_offsets as tool
+    import json
+    import re
+
+    def centre(d):
+        P = tool._pts(d)
+        return sum(q[0] for q in P) / len(P), sum(q[1] for q in P) / len(P)
+
+    path = g.OFFSETS
+    original = path.read_text(encoding="utf-8") if path.is_file() else None
+    try:
+        data = json.loads(original) if original else {}
+        block = data.setdefault("sets", {}).setdefault(tool.POP_SET, {})
+        # DELIBERATELY non-zero, and not a round multiple of anything: the fault is invisible at
+        # zero, and the set this tool opens on may well have zero saved.
+        block["arrangement_shift"] = {"dx": 37.0, "dy": -29.0}
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+        # FOURTH time this dependency has escaped into the lane that has no numpy, and this is
+        # the first guard to build a whole PAGE, so it walks into both halves of it: the gothic
+        # acolytes are four duotoned PNGs, and `duty_grid_svg` measures the tile art for its
+        # palette matrices. The page's GEOMETRY is what is under test and no coordinate comes
+        # from either, so both are stubbed rather than the guard skipped.
+        with drawn_without_the_artwork(g), built_without_the_palette(g):
+            page = tool.build(False)
+        # BOTH, and this gate is the reason this guard went red in CI after passing here.
+        # `shrink` needs Pillow and `palette_stats` needs numpy, and the lane that runs the whole
+        # suite installs the first and not the second -- so a gate asking only about Pillow said
+        # yes and then built a page that could not be built. The simulation used locally blocked
+        # numpy and Pillow TOGETHER, which is the one combination that hides this.
+        try:
+            import numpy                                              # noqa: F401
+            import PIL.Image                                          # noqa: F401
+            unstubbed = True
+        except ImportError:
+            unstubbed = False
+        if unstubbed:
+            # the stubs do not move anything. Asserted here rather than asserted by the comment.
+            full = tool.build(False)
+            assert (re.findall(r'<clipPath id="dg-c\d"><path d="M[^"]+"', full)
+                    == re.findall(r'<clipPath id="dg-c\d"><path d="M[^"]+"', page)), (
+                "stubbing the artwork or the palette changed where the tiles are, so this guard "
+                "is no longer measuring the page the tool actually serves.")
+        # what the page tells its own JavaScript -- read back out of the page, not recomputed
+        sh = json.loads(re.search(r"var shift = (\{.*?\});", page).group(1))
+        pg_off = json.loads(re.search(r"var off = (\{.*?\});", page).group(1))
+        K = float(re.search(r"K = ([0-9.]+);", page).group(1))
+        assert (sh["dx"], sh["dy"]) == (37.0, -29.0), (
+            "the page did not pick up the shift under test (%r); this guard would be checking a "
+            "board that never moved" % (sh,))
+
+        clips = dict(re.findall(r'<clipPath id="dg-c(\d)"><path d="(M[^"]+)"', page))
+        assert len(clips) == 9, "expected nine tile clip paths in the page, found %d" % len(clips)
+
+        board = [centre(d) for d in g.laid_shapes(offsets=True, pop_set=tool.POP_SET)]
+        worst = (0.0, -1)
+        for i in range(9):
+            bx, by = centre(clips[str(i)])
+            o = pg_off.get(str(i)) or {"dx": 0.0, "dy": 0.0}
+            # exactly what apply() does: screen px -> grid units, offset and shift together
+            px = bx + (o["dx"] + sh["dx"]) / K
+            py = by + (o["dy"] + sh["dy"]) / K
+            d = max(abs(px - board[i][0]), abs(py - board[i][1]))
+            if d > worst[0]:
+                worst = (d, i)
+        # the %.2f the paths are written at, doubled because two of them are differenced
+        assert worst[0] < 0.02, (
+            "tile %d lands %.2f grid units (%.1f screen px) from where the board draws it once "
+            "the page's own transform is applied. The shift is being counted twice: the base svg "
+            "is built with it AND apply() adds it. A shift of (%.0f, %.0f) px was under test."
+            % (worst[1], worst[0], worst[0] * K, sh["dx"], sh["dy"]))
+
+        # and the panel agrees with the picture it is beside, which is the half that was right
+        base = json.loads(re.search(r"var BASE = (\{.*?\});", page).group(1))
+        xs, ys = [], []
+        for d in g.laid_shapes(offsets=True, pop_set=tool.POP_SET):
+            for q in tool._pts(d):
+                xs.append(q[0])
+                ys.append(q[1])
+        box = g.load()["box"]
+        assert abs((base["l"] + sh["dx"]) - min(xs) * K) < 0.05, (
+            "the panel reports a left margin of %.2f px where the board's is %.2f"
+            % (base["l"] + sh["dx"], min(xs) * K))
+        assert abs((base["t"] + sh["dy"]) - min(ys) * K) < 0.05, (
+            "the panel reports a top margin of %.2f px where the board's is %.2f"
+            % (base["t"] + sh["dy"], min(ys) * K))
+        assert abs((base["r"] - sh["dx"]) - (box - max(xs)) * K) < 0.05, (
+            "the panel's right margin does not match the board's")
     finally:
         if original is not None:
             path.write_text(original, encoding="utf-8")
@@ -821,7 +894,10 @@ def test_the_action_box_ends_on_the_acolytes_feet():
 
     G = gv.geometry(gv.layout())
     box = g.load()["box"]
-    foot = G["banner_h"] + G["wheel"] * (g.acolyte_foot() / box)
+    # The set the PAGE draws, not the default: the foot is the lowest acolyte ink and the
+    # offsets are per set, so the two answers differ by the whole arrangement shift between them.
+    import gen_game_view as _gv
+    foot = G["banner_h"] + G["wheel"] * (g.acolyte_foot(pop_set=_gv.POP_SET) / box)
     assert abs(G["act_h"] - foot) < 0.1, (
         "the action box is %.1f px tall but the acolytes' feet are at %.1f px from the top of "
         "that column. It is meant to end on that line." % (G["act_h"], foot))
@@ -839,11 +915,17 @@ def test_the_action_box_ends_on_the_acolytes_feet():
         # shift, so setting an absolute -60 moves the foot by the difference, and asserting it
         # moved the full 60 failed on correct code -- a test wrong about the starting point looks
         # exactly like the bug it was written to catch.
-        was = float((data.get("arrangement_shift") or {}).get("dy", 0.0))
-        before = g.acolyte_foot()
-        data["arrangement_shift"] = {"dx": 0.0, "dy": was - 60.0}
+        #
+        # And INTO THE SET the page draws, for the same reason: the file keys its numbers by
+        # acolyte set now, so a top-level shift is read by nothing. Patching one moved the foot by
+        # exactly zero, which this falsification reported as the bug it exists to catch -- the
+        # good failure, but only because the number it prints is unmistakable.
+        block = data.setdefault("sets", {}).setdefault(_gv.POP_SET, {})
+        was = float((block.get("arrangement_shift") or {}).get("dy", 0.0))
+        before = g.acolyte_foot(pop_set=_gv.POP_SET)
+        block["arrangement_shift"] = {"dx": 0.0, "dy": was - 60.0}
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        after = g.acolyte_foot()
+        after = g.acolyte_foot(pop_set=_gv.POP_SET)
         G2 = gv.geometry(gv.layout())
         moved = (before - after) * (G2["wheel"] / box)
         assert abs(moved - 60.0) < 0.1, (
@@ -1355,3 +1437,262 @@ def test_the_marking_never_takes_the_pointer():
     group = dg.mark_paths("M 0 0 L 10 0 L 10 10 Z")
     assert group.startswith('<g class="dg-mark" pointer-events="none"'), (
         "the marking group no longer disclaims pointer events: %r" % group[:90])
+
+
+
+
+# ---------------------------------------------------------------------------------------------
+# THE POPULATION SETS. Two ways of drawing an acolyte, and the numbers that place each of them.
+# What is at risk is not that a set draws -- that is visible -- but the three things that are not:
+# that a caller who asks for nothing still gets the board it always got, that the two sets agree
+# about where the FEET are (the action box is cut to that line), and that a page drawing the hood
+# defines the ids its rows point at, because an unresolved <use> draws nothing and says nothing.
+
+
+def _pop():
+    grid()                      # puts ui/render on sys.path
+    import population_sets
+    return population_sets
+
+
+TILE_KEYS = {"kind", "aspect", "frac", "overlap", "gap", "step", "lean"}
+
+
+def test_every_figure_set_names_every_metric_a_row_reads():
+    """A set is a table entry, so a missing key is a KeyError at draw time on one page only.
+
+    Asserted as a SET COMPARISON rather than key by key: a set that grows a metric the row does not
+    read is as wrong as one missing a metric it does -- the first is a number nobody applies, which
+    is how a dial comes to look like it does something.
+    """
+    pop = _pop()
+    for name, s in pop.SETS.items():
+        assert set(s["tile"]) == TILE_KEYS, (
+            "figure set %r has tile metrics %s; a row reads exactly %s"
+            % (name, sorted(s["tile"]), sorted(TILE_KEYS)))
+        assert s["tile"]["kind"] in ("image", "hood"), (
+            "figure set %r draws %r, which acolyte_row has no branch for" % (name, s["tile"]["kind"]))
+        assert isinstance(s.get("label"), str) and s["label"], (
+            "figure set %r has no label, so a chooser would show its key" % name)
+
+
+def test_the_default_set_still_draws_the_numbers_the_board_shipped_with():
+    """The gothic figure's own metrics, pinned to LITERALS here.
+
+    This is the one guard in this group that holds its own copy of the numbers, deliberately: every
+    other way of writing it compares the module against the table it is now derived from, which
+    cannot fail. `FIG_FRAC == pop.tile("gothic")["frac"]` is an identity, not a check.
+    """
+    g = grid()
+    assert (g.FIG_FRAC, g.FIG_OVERLAP, g.STACK_STEP, g.STACK_LEAN) == (0.205, 0.60, 0.30, 0.10), (
+        "the default set's metrics moved: %s" % [g.FIG_FRAC, g.FIG_OVERLAP, g.STACK_STEP, g.STACK_LEAN])
+    assert abs(g.ACOLYTE_ASPECT - 228 / 210.0) < 1e-12, "the gothic figure's aspect moved"
+
+
+def test_asking_for_nothing_draws_the_gothic_figure():
+    """The default is a contract, not a convenience: the pickers, the layout tool and every guard
+    written before sets existed pass no set at all."""
+    g = grid()
+    counts = {0: [1, 0, 3, 0], 5: [2, 1, 0, 0]}
+    # Stubbed, for the reason `drawn_without_the_artwork` gives at length: the duotone PNGs need
+    # numpy and Pillow, this guard is about which BRANCH the row takes, and skipping would retire
+    # it in the lane that runs everything. THIRD TIME this dependency has escaped into that lane.
+    with drawn_without_the_artwork(g):
+        plain = g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="sage")
+        assert plain == g.duty_grid_svg(tiles_dir=None, acolytes=counts, active="sage",
+                                        pop_set="gothic")
+    assert "<image href=" in plain, "the default set stopped drawing the figure asset"
+    assert "-hood-" not in plain, "the default set is drawing the hooded mark"
+
+
+def test_the_two_sets_put_their_feet_on_the_same_line():
+    """The game view cuts the action box to `acolyte_foot`, so the sets disagreeing about a
+    figure's HEIGHT silently moves the box away from the feet it is cut to.
+
+    The hood is sized to the gothic figure's height on purpose -- it is the taller shape, so
+    matching the height is what costs it width -- and that choice is one number in the table.
+    Falsified in the same test with a deliberately mis-sized third set, because an equality that
+    would hold whatever the numbers were is not a check.
+    """
+    g, pop = grid(), _pop()
+    # AGAINST ONE SHAPE, which is the change this guard needed when the tile offsets became per
+    # set: `acolyte_foot` walks the laid-out board, and the two sets are now laid out differently
+    # on purpose, so comparing it between them measures the arrangement rather than the figure.
+    # What must hold is the figure's own height, and that is per shape.
+    shape = g.laid_shapes(offsets=False, pop_set="gothic")[0]
+    foot = lambda n: (g.acolyte_box(shape, pop_set=n)["sy"]
+                      + g.acolyte_box(shape, pop_set=n)["fh"])
+    assert abs(foot("hood") - foot("gothic")) < 1e-9, (
+        "on one tile the two sets put the figure's foot on different lines: %.4f against %.4f"
+        % (foot("hood"), foot("gothic")))
+    import copy as _copy
+    pop.SETS["_taller"] = _copy.deepcopy(pop.SETS["hood"])
+    pop.SETS["_taller"]["tile"]["frac"] *= 1.30
+    try:
+        assert abs(foot("_taller") - foot("gothic")) > 1.0, (
+            "a set 30% taller than the default moved the foot by less than a unit, so the "
+            "assertion above would hold for a set of any size and guards nothing")
+    finally:
+        del pop.SETS["_taller"]
+
+
+def test_a_page_drawing_the_hood_defines_every_id_its_rows_point_at():
+    """An unresolved <use> renders NOTHING and raises nothing.
+
+    A wheel with no acolytes is a board somebody will believe, so this is the failure mode worth
+    a guard: the rows and the defs come from two different calls, and only one of them is obvious.
+    """
+    import re
+    g = grid()
+    svg = g.duty_grid_svg(tiles_dir=None, acolytes={0: [2, 1, 0, 0], 8: [1, 0, 3, 0]},
+                          active="sage", pop_set="hood")
+    used = set(re.findall(r'href="#([^"]+)"', svg))
+    defined = set(re.findall(r' id="([^"]+)"', svg))
+    assert used, "the hood set drew no <use> at all"
+    assert used <= defined, "used but never defined here: %s" % sorted(used - defined)
+    assert g.pop_defs("dg", "gothic") == "", "the image set emitted defs it does not need"
+
+
+def test_an_unknown_set_is_refused_rather_than_quietly_replaced():
+    """A fallback here draws the other set and looks entirely correct."""
+    pop = _pop()
+    with pytest.raises(ValueError):
+        pop.tile("no_such_set")
+    with pytest.raises(ValueError):
+        pop.board("gothic")      # a FIGURE set is not a card-row preset
+
+
+def test_the_wheel_and_the_offsets_tool_name_one_set_between_them():
+    """Read out of the SOURCE, not by comparing two imported values.
+
+    Both modules read `population_sets.WHEEL`, so comparing `gen_game_view.POP_SET` to
+    `gen_tile_offsets.POP_SET` is comparing a name to itself and holds however either is written.
+    What can actually rot is one of them being edited to a literal -- at which point the tool keeps
+    judging tile nudges against a row the board has stopped drawing, which is the exact fault that
+    file carries two fixed instances of.
+    """
+    import re
+    # The layout tool joined the list when the offsets became per set: it simulates "what will the
+    # board look like at this size", and the two sets are up to 52 units apart, so a tool drawing
+    # the default while the board draws another is judging screens against the wrong arrangement.
+    for name in ("gen_game_view.py", "gen_tile_offsets.py", "gen_layout_tool.py"):
+        src = (RENDER / name).read_text(encoding="utf-8")
+        line = [ln for ln in src.splitlines() if re.match(r"POP_SET\s*=", ln)]
+        assert len(line) == 1, "%s sets POP_SET %d times" % (name, len(line))
+        assert "WHEEL" in line[0], (
+            "%s names its own set (%s) instead of reading population_sets.WHEEL"
+            % (name, line[0].strip()))
+
+
+# ---------------------------------------------------------------------------------------------
+# OFFSETS PER ACOLYTE SET. A tile nudge places a tile against its acolyte ROW, so a row of a
+# different shape wants different nudges. The failure worth guarding is not that they can be saved
+# separately -- that is visible in the file -- but that the BOARD reads the set it DRAWS. A tool
+# that saves nudges nothing applies is a tool you can drag in for an hour.
+
+
+def test_the_board_reads_the_offsets_of_the_set_it_draws(tmp_path):
+    """Written against a file with two DELIBERATELY different sets, because with one set saved
+    every set inherits it and any wiring at all looks correct."""
+    import json
+    g = grid()
+    path = tmp_path / "offsets.json"
+    path.write_text(json.dumps({
+        "wheel_px": 1000, "tile_scale": 1.0,
+        "sets": {
+            "gothic": {"offsets": {"0": {"dx": 10, "dy": 0}}, "arrangement_shift": {"dx": 0, "dy": 0}},
+            "hood": {"offsets": {"0": {"dx": -40, "dy": 25}}, "arrangement_shift": {"dx": 5, "dy": 5}},
+        }}), encoding="utf-8")
+
+    a = g.tile_placement(path=path, pop_set="gothic")
+    b = g.tile_placement(path=path, pop_set="hood")
+    assert a[1][0] == (10.0, 0.0) and b[1][0] == (-40.0, 25.0), (
+        "tile_placement gave %s and %s" % (a[1][0], b[1][0]))
+    assert a[2] != b[2], "the arrangement shift is not per set"
+
+    # and the shapes the board actually draws move with it
+    real = g.OFFSETS
+    try:
+        g.OFFSETS = path
+        shapes = {name: g.laid_shapes(pop_set=name) for name in ("gothic", "hood")}
+    finally:
+        g.OFFSETS = real
+    assert shapes["gothic"] != shapes["hood"], (
+        "both sets drew the same nine shapes, so the set never reaches `placed`")
+
+
+def test_a_set_with_nothing_saved_inherits_and_says_so():
+    """Inheriting is deliberate -- zero would throw a real arrangement away the first time a second
+    set existed -- but a caller has to be able to tell inherited numbers from its own."""
+    g = grid()
+    data = {"sets": {"gothic": {"offsets": {"1": {"dx": 3, "dy": 4}}}}}
+    block, src = g.offset_block(data, "hood")
+    assert src == "gothic" and block["offsets"] == {"1": {"dx": 3, "dy": 4}}, (
+        "an unsaved set reported %r" % src)
+    block, src = g.offset_block(data, "gothic")
+    assert src == "gothic"
+    # the pre-set file shape, which is the gothic answer from before sets existed
+    legacy = {"offsets": {"2": {"dx": 1, "dy": 1}}, "arrangement_shift": {"dx": 0, "dy": 2}}
+    block, src = g.offset_block(legacy, "hood")
+    assert src == "legacy" and block is legacy
+    assert g.offset_block({}, "hood") == ({}, "none")
+
+
+def test_saving_one_set_cannot_touch_another(tmp_path):
+    """The whole ask. Also checks the one-time migration, because the file predates sets and its
+    top-level numbers ARE the gothic answer -- lifted into `sets`, not left in two places."""
+    import json
+    import importlib
+    tool = importlib.import_module("gen_tile_offsets")
+    path = tmp_path / "offsets.json"
+    legacy = {
+        "prose": "what these numbers turned out to be",
+        "wheel_px": 877.8, "tile_scale": 0.92,
+        "offsets": {"0": {"dx": 2.4, "dy": 20.8}, "5": {"dx": -7.4, "dy": 7.7}},
+        "arrangement_shift": {"dx": 0.0, "dy": -21.0},
+    }
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+
+    real_path, real_set = tool.OFFSETS_PATH, tool.POP_SET
+    try:
+        tool.OFFSETS_PATH = path
+        tool.POP_SET = "hood"
+        tool.save_offsets({i: {"dx": float(i), "dy": -1.0} for i in range(9)},
+                          shift=(1.0, 2.0), pop_set="hood")
+    finally:
+        tool.OFFSETS_PATH, tool.POP_SET = real_path, real_set
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after["sets"]["gothic"]["offsets"] == legacy["offsets"], (
+        "the pre-set numbers did not survive as the gothic set: %s"
+        % after["sets"]["gothic"]["offsets"])
+    assert after["sets"]["gothic"]["arrangement_shift"] == legacy["arrangement_shift"]
+    assert after["sets"]["hood"]["offsets"]["3"] == {"dx": 3.0, "dy": -1.0}
+    assert "offsets" not in after and "arrangement_shift" not in after, (
+        "the top-level copies were left behind, so the file now answers twice")
+    assert after["prose"] == legacy["prose"], "a save dropped a key it does not own"
+
+
+def test_the_offsets_tool_draws_its_tiles_where_it_draws_its_acolyte_grid():
+    """Both halves of that page must carry the SAME arrangement shift.
+
+    `offsets=False` drops the per-tile nudges and keeps the shift -- that is what holds the rows
+    still against the tiles while the block moves -- and the shift is per set now. The tool's base
+    wheel was asking for the default set while its frozen acolyte grid asked for the one being
+    edited, which put the rows 23.9 units from the tiles they are dragged against. Nothing about
+    that page looks wrong; the numbers just come out different.
+
+    BOTH HALVES ALSO HAVE TO AGREE ABOUT THE SHIFT, which is the same question one level up. The
+    page applies the shift itself, so both halves start without it; this guard asked for the base
+    WITH it and held anyway for as long as the set under test had zero saved, which is the state
+    a new set starts in. The first real shift is what made it mean anything.
+    """
+    grid()
+    import gen_tile_offsets as tool
+    import gen_duty_grid as g
+    base = g.duty_grid_svg(tiles_dir=None, klass="wheel", offsets=False, pop_set=tool.POP_SET,
+                           shift=False)
+    for d in tool.scaled_shapes():
+        assert d in base, (
+            "the tool measures its acolyte grid off a shape its own wheel does not draw; the two "
+            "are asking for different sets")

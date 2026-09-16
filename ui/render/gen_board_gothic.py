@@ -26,9 +26,16 @@ import html
 import json
 import mimetypes
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
+
+# By path, because this module is also LOADED BY PATH -- gen_picker_2 imports it from a
+# file location so the picker shows the board the production assembler builds. A plain
+# `import population_sets` then resolves against whatever cwd the caller happened to have.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import population_sets as _pop  # noqa: E402
 
 _HERE = Path(__file__).resolve().parent          # ui/render
 _UI = _HERE.parent                              # ui
@@ -469,14 +476,23 @@ def nearest_text(root: ET.Element, x: float, y: float) -> ET.Element:
 # size from the very <image> element the row replaces. A constant for any of those would be a
 # second statement of a fact the template already owns, free to drift the moment the art moves.
 POPULATION_KINDS = ("serf", "acolyte")
-POPULATION_STEP = 0.30          # overlap between one figure and the next, as a fraction of a width
-POPULATION_PAD = 20.0           # clear ground kept at each end of a box
+# THE DEFAULT BOARD SET'S OWN NUMBERS, not a second copy. A set bundles how a population is
+# drawn with where it goes, and the card is one of the two surfaces that place it -- see
+# population_sets.py. These names stay because the guards and `population_step` read them,
+# and they mean what they meant: the card as it is drawn when nobody asks for anything else.
+POPULATION_STEP = _pop.board()["step"]   # overlap between one figure and the next, of a width
+POPULATION_PAD = _pop.board()["pad"]     # clear ground kept at each end of a box
 # How hard the alpha ramp is pushed when a figure is made opaque. 4 takes everything above 64/255
 # to solid while leaving a short anti-aliased edge; see `opaque_figure`.
 OPAQUE_ALPHA_GAIN = 4.0
 # Below this mean alpha a figure is composited before it is drawn. The serf asset measures 184/255
 # and the acolyte 251/255, so only the serf is treated -- but the test is the MEASUREMENT, not the
 # name of the asset, so a redrawn acolyte does not silently start bleeding.
+#
+# ONLY THE PHOTOGRAPH SETS REACH THIS NOW. A set that draws its mark stacks a shape with no alpha
+# to bleed, and the photographs it leaves behind are drawn once each, as the keys. Kept because
+# `gothic` is still a set anyone can ask for, and because this is a measurement of an asset that
+# is still in the tree -- deleting it would mean re-deriving it the next time one is stacked.
 OPAQUE_ALPHA_FLOOR = 240
 
 
@@ -584,8 +600,23 @@ def population_boxes(root: ET.Element) -> dict[str, tuple[float, float]]:
     return {"serf": (left, split), "acolyte": (split + span, left + width)}
 
 
-def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, float]:
-    """(y, width, height) of one figure, from the very <image> the row replaces."""
+def population_figure_frame(root: ET.Element, kind: str,
+                            figure_set: str | None = None) -> tuple[float, float, float]:
+    """(y, width, height) of one figure, from the very <image> the row replaces.
+
+    A DRAWN MARK BRINGS ITS OWN ASPECT. The template <image> is sized for the photograph, so a
+    set that draws its figure rather than placing one keeps the template HEIGHT -- the band
+    vertical arrangement belongs to the template and this does not touch it -- and takes its
+    WIDTH from the shape. Left at the template width the mark would be fitted inside a box wider
+    than itself, and the row would be spaced for a figure it is not drawing.
+
+    THIS USED TO ASK WHETHER THE KIND WAS "acolyte", which was true for as long as the hooded
+    mark was the acolyte's alone. It is now what both boxes draw, and a set is a statement about
+    a FIGURE rather than about a box -- so the question is what the set draws, and nothing else.
+    The half-change is worth naming because it looks deliberate: this condition left in place
+    spaces serf photographs for a mark they are not, and the one in `draw_population_rows` left
+    in place draws the mark at the photograph's width.
+    """
     for image in root.iter(q("image")):
         if image.get("data-asset-role") == kind:
             y = parse_number(image.get("y"))
@@ -593,11 +624,60 @@ def population_figure_frame(root: ET.Element, kind: str) -> tuple[float, float, 
             h = parse_number(image.get("height"))
             if y is None or w is None or h is None:
                 raise BuildError(f"The {kind} image has no y/width/height.")
+            spec = _pop.card(figure_set)
+            if spec["kind"] != "image":
+                inset = spec.get("inset", 0.0) * h
+                y, h = y + inset, h - 2 * inset
+                w = h * spec["aspect"]
             return y, w, h
     raise BuildError(f"No {kind} image in the template to take the figure's size from.")
 
 
-def population_step(count: int, width: float, box: tuple[float, float]) -> float:
+def population_key(root: ET.Element, kind: str,
+                   figure_set: str | None = None) -> tuple[float, float, float, float] | None:
+    """The artwork a box stops drawing, kept once at its left as the thing that names it.
+
+    WHY A BOX NEEDS NAMING AT ALL. While the two boxes drew two different photographs they told
+    you apart by themselves. Drawing the same mark in both -- which is what the pieces are, one
+    kind of piece in two places -- takes that away, and a panel whose halves are identical is a
+    panel you have to remember the meaning of. So the photograph each box gave up comes back
+    once, at the left, as a label: the serf over the village count, the gothic acolyte over the
+    abbey count.
+
+    THERE IS NO NEW NUMBER HERE, deliberately. The key is the template's own <image> frame moved
+    to the start of its box -- the size the art was drawn for, at the place the box begins. A
+    scale factor was the obvious thing to add and it would have been a constant with no
+    measurement behind it; the one number in this file that is not measured is the one that
+    would drift.
+
+    RETURNS None WHEN THE SET PLACES A PHOTOGRAPH, and that is a derivation rather than a flag.
+    A key exists because the box no longer draws its own artwork; a set that still does has its
+    artwork in the row already, and a key would be a second copy of the picture beside itself.
+    """
+    if _pop.card(figure_set)["kind"] == "image":
+        return None
+    box = population_boxes(root)[kind]
+    frame = _template_figure(root, kind)
+    if frame is None:
+        raise BuildError(f"No {kind} image in the template to take the key from.")
+    _, y, w, h = frame
+    return box[0] + _pop.board()["pad"], y, w, h
+
+
+def _template_figure(root: ET.Element,
+                     kind: str) -> tuple[float, float, float, float] | None:
+    """(x, y, width, height) of the template's own figure <image>, before anything is decided."""
+    for image in root.iter(q("image")):
+        if image.get("data-asset-role") == kind:
+            vals = [parse_number(image.get(a)) for a in ("x", "y", "width", "height")]
+            if any(v is None for v in vals):
+                raise BuildError(f"The {kind} image has no x/y/width/height.")
+            return tuple(vals)                      # type: ignore[return-value]
+    return None
+
+
+def population_step(count: int, width: float, box: tuple[float, float],
+                    pop_set: str | None = None) -> float:
     """How far apart consecutive figures sit, as a fraction of one figure's width.
 
     POPULATION_STEP until a row runs out of box, then only as tight as it has to be. The tightening
@@ -609,13 +689,16 @@ def population_step(count: int, width: float, box: tuple[float, float]) -> float
     where it is 0.294; the acolyte row is 0.30 up to 8 and then 0.263, 0.234, 0.211. A count high
     enough to tighten the acolyte row needs nine ordinations and no missions.
     """
+    m = _pop.board(pop_set)
     if count <= 1:
-        return POPULATION_STEP
-    usable = (box[1] - box[0]) - 2 * POPULATION_PAD
-    return min(POPULATION_STEP, max(0.05, (usable / width - 1.0) / (count - 1)))
+        return m["step"]
+    usable = (box[1] - box[0]) - 2 * m["pad"]
+    return min(m["step"], max(0.05, (usable / width - 1.0) / (count - 1)))
 
 
-def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float, float, float, float]]:
+def population_row(root: ET.Element, kind: str, count: int,
+                   pop_set: str | None = None,
+                   figure_set: str | None = None) -> list[tuple[float, float, float, float]]:
     """Where each figure of one row goes: a list of (x, y, width, height), left to right.
 
     THE ONE PLACE THIS IS WORKED OUT. The row is CENTRED in its box at every count, so a box that
@@ -628,11 +711,28 @@ def population_row(root: ET.Element, kind: str, count: int) -> list[tuple[float,
     """
     if count <= 0:
         return []
+    m = _pop.board(pop_set)
     box = population_boxes(root)[kind]
-    y, width, height = population_figure_frame(root, kind)
-    step = population_step(count, width, box)
+    # THE ROW GENUINELY HAS LESS ROOM once a key stands in the box, and this is the one place
+    # that says so. Laying the row in the whole box and drawing the key over it would put the
+    # first figure under the key at the counts that matter -- and the counts that matter are the
+    # high ones, which is exactly when nobody is checking.
+    key = population_key(root, kind, figure_set)
+    if key is not None:
+        box = (key[0] + key[2], box[1])
+    y, width, height = population_figure_frame(root, kind, figure_set)
+    step = population_step(count, width, box, pop_set)
     span = width * (1.0 + step * (count - 1))
-    start = (box[0] + box[1]) / 2.0 - span / 2.0
+    # WHERE A SHORT ROW SITS. Centred is the default and the reason is in the docstring; the
+    # other two exist so the choice can be SEEN beside it rather than argued about. A row
+    # that fills its box lands in the same place under all three.
+    align = m.get("align", "centre")
+    if align == "left":
+        start = box[0] + m["pad"]
+    elif align == "right":
+        start = box[1] - m["pad"] - span
+    else:
+        start = (box[0] + box[1]) / 2.0 - span / 2.0
     return [(start + i * width * step, y, width, height) for i in range(count)]
 
 
@@ -741,6 +841,65 @@ def apply_config(root: ET.Element, config: Mapping[str, Any], layout: Mapping[st
     # Last, because it removes nodes the loops above address by role and by position.
     draw_population_rows(root, config, assets_dir)
 
+def _place_figures(parents, anchor, places, symbol_id, key=None) -> None:
+    """Swap the template anchor for one <use> per figure. Shared by both branches, because the
+    placement is the row and has nothing to do with what the figure is made of.
+
+    `key` keeps the anchor instead, moved to that frame: the box's label is the picture the box
+    stopped drawing, so the element that held it is the element that should still hold it.
+    """
+    kind = anchor.get("data-asset-role")
+    parent = parents[anchor]
+    position = list(parent).index(anchor)
+    if key is None:
+        parent.remove(anchor)
+    else:
+        for name, value in zip(("x", "y", "width", "height"), key):
+            anchor.set(name, fmt(value))
+        anchor.set("data-population-key", kind or "")
+        position += 1                      # the row is drawn after the key, not over it
+    for offset, (x, y, w, h) in enumerate(places):
+        use = ET.Element(q("use"), {
+            "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
+            "data-population": kind,
+        })
+        set_href(use, f"#{symbol_id}")
+        parent.insert(position + offset, use)
+
+
+def _hood_symbol(defs: ET.Element, symbol_id: str, seat: str, spec: Mapping[str, Any]) -> None:
+    """The hooded mark in one seat colour, as a <symbol> the row can <use>.
+
+    `data-source` CARRIES THE SEAT, and that is not cosmetic. gen_game_view merges four boards
+    into one document and collapses symbols that share a `data-source` and a `preserveAspectRatio`
+    -- so four seats whose marks all claimed to come from the same place would become one symbol,
+    and every board would wear the first seat colour. One board looks perfect while it happens.
+
+    The viewBox is the INKED box, not the path bounds: a symbol clips to its viewport and a
+    stroke is centred on its path, so the bare bounds cut half the outline off on every edge --
+    a flat dome and square shoulders, which read as a figure that does not fit. `hood_box`
+    owns that arithmetic and the card set aspect is taken from the same place, so the <use>
+    sizing and the symbol contents cannot disagree.
+    """
+    if defs.find(f"*[@id='{symbol_id}']") is not None:
+        return
+    fill = _pop.SEAT_SWATCH.get(seat, _pop.SEAT_SWATCH["bone"])
+    symbol = ET.SubElement(defs, q("symbol"), {
+        "id": symbol_id,
+        "viewBox": " ".join(fmt(v) for v in _pop.hood_box()),
+        "data-source": f"hood:{seat}",
+    })
+    ET.SubElement(symbol, q("path"), {
+        "d": _pop.hood_path(), "fill": fill, "stroke": _pop.HOOD_INK,
+        "stroke-width": fmt(_pop.HOOD_STROKE), "stroke-linejoin": "round",
+    })
+    face = _pop.HOOD_FACE
+    ET.SubElement(symbol, q("ellipse"), {
+        "cx": "0", "cy": fmt(face["cy"]), "rx": fmt(face["rx"]), "ry": fmt(face["ry"]),
+        "fill": "#000000", "opacity": "0.22",
+    })
+
+
 def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
                          assets_dir: Path) -> None:
     """Replace each population box's figure, cube and numeral with a row of figures.
@@ -758,6 +917,8 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
     parents = {child: parent for parent in root.iter() for child in parent}
     counts = config.get("counts", {})
     panel_fill = str(config.get("information_panel_fill", "#ead8b4"))
+    figure_set = config.get("population_set") or _pop.CARD
+    seat = str(config.get("seat") or SEAT_COLORS[0])
 
     for kind in POPULATION_KINDS:
         anchor = None
@@ -768,7 +929,19 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
         if anchor is None:
             raise BuildError(f"No {kind} image in the template to build the row from.")
 
-        places = population_row(root, kind, int(counts.get(kind, 0)))
+        places = population_row(root, kind, int(counts.get(kind, 0)),
+                                figure_set=figure_set)
+        spec = _pop.card(figure_set)
+        if spec["kind"] == "hood":
+            symbol_id = f"population-{kind}"
+            _hood_symbol(defs, symbol_id, seat, spec)
+            # The anchor is KEPT rather than removed, and becomes the key. It is already the
+            # right artwork in the right place in the tree, and leaving it there is what hands
+            # it to `embed_assets_once` -- so the photograph is embedded exactly once, by the
+            # path every other template image takes, instead of a second copy arriving here.
+            _place_figures(parents, anchor, places, symbol_id,
+                           key=population_key(root, kind, figure_set))
+            continue
         source = resolve_asset(assets_dir, asset_path_for_role(config, kind))
         # The measurement decides, not the asset's name: a figure that is already opaque is used as
         # it is, and one that is not is composited so that stacked copies occlude instead of
@@ -793,16 +966,7 @@ def draw_population_rows(root: ET.Element, config: Mapping[str, Any],
         })
         set_href(inner, payload)
 
-        parent = parents[anchor]
-        position = list(parent).index(anchor)
-        parent.remove(anchor)
-        for offset, (x, y, w, h) in enumerate(places):
-            use = ET.Element(q("use"), {
-                "x": fmt(x), "y": fmt(y), "width": fmt(w), "height": fmt(h),
-                "data-population": kind,
-            })
-            set_href(use, f"#{symbol_id}")
-            parent.insert(position + offset, use)
+        _place_figures(parents, anchor, places, symbol_id)
 
 
 
