@@ -48,6 +48,11 @@ import sys
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import gen_duty_grid as dg          # noqa: E402  (needs the path line above)
+
+MARGIN_FOR_SCALE = dg.MARGIN        # the board's own outer margin, so the two agree by reading
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SHAPES = REPO / "ui" / "assets-gothic" / "metadata" / "duty_grid_shapes.json"
 
@@ -57,6 +62,18 @@ SMOOTH = 5            # circular moving average over the radii, in samples
 INK = 128             # below this is a line, above it is parchment
 MIN_AREA = 5000       # px; anything smaller is speckle, not a cell
 AREA_TOL = 0.01       # how far the radial polygon may fall short of its own region
+
+# HOW MUCH CHANNEL THERE IS BETWEEN NEIGHBOURS, as a fraction of a cell's width -- and the reason
+# it is here rather than inherited from the sheet. `place()` already says the tiles' positions on
+# a generated sheet "are an accident while their shapes are not"; the SPACING is the same accident
+# one step on, and taking the scale from `box / sheet_width` quietly inherits it. Two sheets from
+# the same prompt came back at 5.5% and 13.4% between neighbours, which is a visibly different
+# board from the same shapes.
+#
+# 5.5% is the tighter of the two and the one that reads as a wheel rather than as six things on a
+# page. Cells are scaled so that three of them, two channels and two margins fill the box exactly,
+# which also makes the traced size independent of how many cells the sheet happened to carry.
+CHANNEL = 0.055
 
 # WHICH OF THE SIX GOES WHERE, and which of the nine are mirrors. Positions are the board's own
 # reading order, so index 4 is the centre -- `DUTY_NAMES[4]` is The City, which is why the sheet
@@ -197,7 +214,10 @@ def trace(path: pathlib.Path, box: float = BOX) -> tuple[dict, list]:
             "by position, so a sheet with a different count cannot be placed without saying what "
             "the new cells are for." % (path.name, len(masks)))
 
-    scale = box / w
+    # SCALE TO THE ARRANGEMENT, not to the sheet. See CHANNEL above.
+    widths = [float(crop(m).shape[1]) for m in masks]
+    want = (box - 2 * MARGIN_FOR_SCALE) / (3 + 2 * CHANNEL)
+    scale = want / (sum(widths) / len(widths))
     traced, report = [], []
     for i, m in enumerate(masks):
         pts, keep = outline(m)
@@ -227,6 +247,8 @@ def trace(path: pathlib.Path, box: float = BOX) -> tuple[dict, list]:
         origin.append({"cell": cell, "mirrored": flip})
     return {
         "box": box,
+        "cell_width": round(sum(widths) / len(widths) * scale, 1),
+        "channel": CHANNEL,
         "parchment": parch,
         "source": "%s, contours traced and smoothed by trace_grid_sheet.py" % path.name,
         "cells": len(masks),
@@ -252,6 +274,8 @@ def main() -> None:
     print("traced %s -> %s" % (args.sheet.name, out))
     print("  parchment %s, box %.0f, %d cells -> %d shapes"
           % (data["parchment"], data["box"], data["cells"], len(data["shapes"])))
+    print("  scaled to a %.1f%% channel between neighbours: cells come out %.1f units wide, "
+          "against the committed set's 305" % (CHANNEL * 100, data["cell_width"]))
     ws = [r["w"] for r in report]
     print("  widths %d..%d px, spread %.1f%% (the committed set holds 5%%)"
           % (min(ws), max(ws), (max(ws) / min(ws) - 1) * 100))
