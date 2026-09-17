@@ -16,6 +16,7 @@ searches/
 replays/
 benchmarks/
 tools/ui_debug/generated/*.html
+tools/ui_debug/generated/*.svg
 _to_delete/
 pilgrim_optimizer.egg-info/
 *.tar.gz

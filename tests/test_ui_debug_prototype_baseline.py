@@ -1,4 +1,8 @@
+import json
+import math
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DEBUG_DIR = REPO_ROOT / "tools" / "ui_debug"
@@ -32,6 +36,20 @@ ALMS_TABLE_SOURCE = PROTOTYPE_SOURCES_DIR / "alms_table.py.txt"
 SEALS_HTML = PROTOTYPES_DIR / "seal_prototypes.html"
 DUTY_TILE_TURN_HTML = PROTOTYPES_DIR / "duty_tile_turn.html"
 DUTY_TILE_TURN_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_tile_turn_build.py.txt"
+
+DUTY_WHEEL_V2_HTML = PROTOTYPES_DIR / "duty_wheel_v2.html"
+DUTY_WHEEL_V2_SVG = PROTOTYPES_DIR / "duty_wheel_v2.svg"
+DUTY_WHEEL_V2_LAYOUT = UI_DEBUG_DIR / "duty_wheel_v2_layout.json"
+DUTY_WHEEL_V2_BUILD = UI_DEBUG_DIR / "build_duty_wheel_v2.py"
+DUTY_WHEEL_V2_RENDER = UI_DEBUG_DIR / "render_duty_wheel_v2.py"
+DUTY_WHEEL_V2_GENERATE = UI_DEBUG_DIR / "generate_duty_wheel_v2.py"
+
+# The nine faces of the v2 wheel, by position and in grid order, top-left to bottom-right.
+DUTY_WHEEL_V2_POSITIONS = (
+    "north_west", "north", "north_east",
+    "west", "centre", "east",
+    "south_west", "south", "south_east",
+)
 
 # The four glyphs a seal can be struck with, and the numbers the page is drawn to.
 SEAL_GLYPHS = ("square", "shield", "S", "A")
@@ -408,6 +426,10 @@ def test_index_page_links_to_every_prototype() -> None:
     assert "Duty wheel prototype baseline" in content
     assert "prototypes/duty_wheel.svg" in content
     assert "Duty wheel SVG prototype baseline" in content
+    assert "prototypes/duty_wheel_v2.html" in content
+    assert "Duty wheel v2 prototype baseline" in content
+    assert "prototypes/duty_wheel_v2.svg" in content
+    assert "Duty wheel v2 SVG prototype baseline" in content
     assert "prototypes/alms_table.html" in content
     assert "Alms Table prototype baseline" in content
     assert "prototypes/alms_table.svg" in content
@@ -457,3 +479,212 @@ def test_duty_tile_turn_prototype_records_that_its_art_is_generated() -> None:
     assert "## Duty tile turn prototype" in readme
     assert "generated with ChatGPT (OpenAI)" in readme
     assert "not** manually illustrated" in readme
+
+
+# --------------------------------------------------------------------------- duty wheel v2
+#
+# v2 is the oval wheel. Unlike every other prototype here it is its renderer's OUTPUT rather than
+# a hand-drawn baseline, so there is no artwork to protect -- what these guard is the geometry it
+# claims, because a wheel that is three per cent asymmetric, or whose channel has drifted, still
+# looks exactly like a wheel. Everything below is recomputed from the committed outlines; the
+# `checks` block in the layout is checked against that recomputation rather than trusted.
+
+
+def _v2_layout() -> dict:
+    return json.loads(DUTY_WHEEL_V2_LAYOUT.read_text(encoding="utf-8"))
+
+
+def _v2_points(cell: dict) -> list[tuple[float, float]]:
+    """A face's outline from `d_poly`, which is the M/L/Z copy of the Bezier path."""
+    n = [float(v) for v in cell["d_poly"].replace("M", " ").replace("L", " ")
+         .replace("Z", " ").split()]
+    return [(n[i], n[i + 1]) for i in range(0, len(n), 2)]
+
+
+def _v2_faces() -> dict[str, list[tuple[float, float]]]:
+    return {c["position"]: _v2_points(c) for c in _v2_layout()["cells"]}
+
+
+def _nearest(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> float:
+    return min(math.dist(p, q) for p in a for q in b)
+
+
+def _shape_distance(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> float:
+    """How far two outlines are apart AS SHAPES.
+
+    Not a point-by-point difference: a face and its own mirror may be sampled starting at
+    different places and running in opposite directions, which says nothing about whether they
+    are the same shape.
+    """
+    return max(max(min(math.dist(p, q) for q in b) for p in a),
+               max(min(math.dist(p, q) for p in a) for q in b))
+
+
+def test_duty_wheel_v2_files_exist() -> None:
+    assert DUTY_WHEEL_V2_HTML.is_file()
+    assert DUTY_WHEEL_V2_SVG.is_file()
+    assert DUTY_WHEEL_V2_LAYOUT.is_file()
+    assert DUTY_WHEEL_V2_BUILD.is_file()
+    assert DUTY_WHEEL_V2_RENDER.is_file()
+    assert DUTY_WHEEL_V2_GENERATE.is_file()
+    # v2 is a second baseline, not a replacement: v1 stays where it is.
+    assert DUTY_WHEEL_HTML.is_file()
+    assert DUTY_WHEEL_SVG.is_file()
+    assert (UI_DEBUG_DIR / "duty_wheel_layout.json").is_file()
+
+
+def test_duty_wheel_v2_prototype_is_identifiable() -> None:
+    content = DUTY_WHEEL_V2_HTML.read_text(encoding="utf-8")
+    assert "PILGRIM" in content
+    assert "Duty wheel v2" in content
+
+
+def test_duty_wheel_v2_names_its_faces_by_position_and_never_by_duty() -> None:
+    """The nine are places, not duties.
+
+    Duty tiles are shuffled at setup, so which duty stands on which face is an arrangement and
+    not a fact -- the same point `gen_duty_grid.DUTY_NAMES` makes about its own list. A duty name
+    appearing in this layout would be that arrangement quietly hardening into an identity.
+    """
+    layout = _v2_layout()
+    positions = [c["position"] for c in layout["cells"]]
+    assert positions == list(DUTY_WHEEL_V2_POSITIONS)
+    assert [c["index"] for c in layout["cells"]] == list(range(9))
+    blob = json.dumps(layout)
+    for duty in DUTY_NAMES:
+        assert duty not in blob
+
+
+def test_duty_wheel_v2_holds_geometry_and_not_gameplay_numbers() -> None:
+    layout = _v2_layout()
+    assert layout["version"] == 2
+    assert set(layout["drawn"]) == {"north_west", "north", "west", "centre"}
+    for cell in layout["cells"]:
+        assert cell["d"].startswith("M ") and cell["d"].endswith(" Z")
+        # cubic Beziers, with an M/L/Z copy beside them because gen_duty_grid._points()
+        # parses only M, L and Z
+        assert " C " in cell["d"]
+        assert " C " not in cell["d_poly"]
+        assert len(_v2_points(cell)) == layout["control_points"]
+
+
+def test_duty_wheel_v2_channel_is_the_width_it_claims() -> None:
+    """The frame is the gap between faces, and it is even because both neighbours are inset from
+    the same curve. If that ever becomes two separate shrinks these numbers spread."""
+    layout = _v2_layout()
+    faces = _v2_faces()
+    ring = ["north_west", "north", "north_east", "east",
+            "south_east", "south", "south_west", "west"]
+    between = [_nearest(faces[ring[k]], faces[ring[(k + 1) % 8]]) for k in range(8)]
+    around = [_nearest(faces["centre"], faces[n]) for n in ring]
+
+    assert min(between) == pytest.approx(layout["frame"]["between_faces"], abs=0.15)
+    assert max(between) == pytest.approx(layout["frame"]["between_faces"], abs=0.15)
+    # the heavier ring round the centre sits slightly under its target where the outline curves
+    # away from a face; 2% is the measured dip, not a licence to drift
+    assert min(around) > layout["frame"]["around_centre"] * 0.97
+    assert max(around) < layout["frame"]["around_centre"] * 1.03
+    assert min(around) > max(between) * 1.4          # it has to READ as heavier
+
+    assert layout["checks"]["frame_between_faces"] == [
+        pytest.approx(min(between), abs=0.02), pytest.approx(max(between), abs=0.02)]
+    assert layout["checks"]["frame_around_centre"] == [
+        pytest.approx(min(around), abs=0.02), pytest.approx(max(around), abs=0.02)]
+
+
+def test_duty_wheel_v2_is_mirrored_and_not_rotated() -> None:
+    """Five faces are a flip of another and four are their own flip.
+
+    Point symmetry would satisfy a half-turn check and fail this one, which is the distinction
+    the wheel was rebuilt for: west is east FLIPPED, not east turned.
+    """
+    layout = _v2_layout()
+    faces = _v2_faces()
+    cx = layout["ellipse"]["cx"]
+    cy = layout["ellipse"]["cy"]
+
+    def flip(pts, axis):
+        return ([(2 * cx - x, y) for x, y in pts] if axis == "vertical"
+                else [(x, 2 * cy - y) for x, y in pts])
+
+    worst = 0.0
+    for dst, m in layout["mirrors"].items():
+        worst = max(worst, _shape_distance(faces[dst], flip(faces[m["of"]], m["axis"])))
+    assert worst < 0.01
+    assert layout["checks"]["mirror_error"] == pytest.approx(worst, abs=0.01)
+
+    own = max(_shape_distance(faces[n], flip(faces[n], axis)) for n, axis in (
+        ("north", "vertical"), ("south", "vertical"), ("east", "horizontal"),
+        ("west", "horizontal"), ("centre", "vertical"), ("centre", "horizontal")))
+    assert own < 0.01
+
+
+def test_duty_wheel_v2_stays_inside_its_ellipse() -> None:
+    layout = _v2_layout()
+    e = layout["ellipse"]
+    worst = max(math.hypot((x - e["cx"]) / e["rx"], (y - e["cy"]) / e["ry"])
+                for pts in _v2_faces().values() for x, y in pts)
+    assert worst <= 1.0
+    # and it nearly touches: a wheel sitting well inside its own rim has lost the room it claims
+    assert worst > 0.98
+
+
+def test_duty_wheel_v2_ring_faces_are_within_a_sixth_of_each_other() -> None:
+    """Equal 45-degree spokes give equal ellipse sector area, which is what keeps the faces even
+    while the wheel still reads as three across the top."""
+    faces = _v2_faces()
+
+    def area(pts):
+        n = len(pts)
+        return 0.5 * abs(sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1]
+                             for i in range(n)))
+
+    ring = [area(p) for n, p in faces.items() if n != "centre"]
+    assert max(ring) / min(ring) < 1.17
+
+
+def test_duty_wheel_v2_svg_baseline_is_the_wheel_on_its_own() -> None:
+    content = DUTY_WHEEL_V2_SVG.read_text(encoding="utf-8")
+    assert content.startswith("<?xml")
+    assert "<svg" in content
+    for position in DUTY_WHEEL_V2_POSITIONS:
+        assert 'id="%s"' % position in content
+    # the standalone SVG carries no debug labels, unlike the one embedded in the page
+    assert 'id="labels"' not in content
+    assert 'id="labels"' in DUTY_WHEEL_V2_HTML.read_text(encoding="utf-8")
+
+
+def test_duty_wheel_v2_records_that_it_is_its_renderers_output() -> None:
+    """The one place the inversion is written down.
+
+    Every other prototype here is a hand-drawn baseline its renderer is measured against. This
+    one is generated, so somebody who edits the HTML by hand needs to find out from the README
+    that the next run will overwrite them.
+    """
+    readme = README_MD.read_text(encoding="utf-8")
+    assert "## Duty wheel v2 renderer extraction" in readme
+    assert "renderer's committed output" in readme
+    assert "the v2 duty wheel are the two" in readme
+    page = DUTY_WHEEL_V2_HTML.read_text(encoding="utf-8")
+    assert "committed output" in page
+
+
+def test_duty_wheel_v2_records_that_its_aspect_is_unsettled() -> None:
+    """The aspect costs 31% of tile area at today's canvas and pays at a wider one. That is a
+    live decision, and it travels with the file rather than living in a chat log."""
+    layout = _v2_layout()
+    assert layout["aspect"] == pytest.approx(1.778, abs=0.001)
+    assert "2283" in layout["aspect_is_open"]
+    assert "THE ASPECT" in DUTY_WHEEL_V2_BUILD.read_text(encoding="utf-8")
+    assert "2283" in README_MD.read_text(encoding="utf-8")
+
+
+def test_duty_wheel_v2_build_script_is_live_code_and_not_a_frozen_reference() -> None:
+    """`build_duty_wheel_v2.py` deliberately breaks this folder's `prototype_sources/*.py.txt`
+    rule: the nine outlines are not the base, the constants that produce them are, and one of
+    those is still open. A frozen `.txt` copy would mean editing geometry by hand."""
+    assert DUTY_WHEEL_V2_BUILD.suffix == ".py"
+    assert not (PROTOTYPE_SOURCES_DIR / "duty_wheel_v2_build.py.txt").exists()
+    source = DUTY_WHEEL_V2_BUILD.read_text(encoding="utf-8")
+    for constant in ("ASPECT", "D_FRAME", "D_HUB", "ROUND_RIM", "HUB_LOBE", "SPOKES"):
+        assert constant in source
