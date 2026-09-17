@@ -1,0 +1,1254 @@
+"""REFERENCE COPY -- NOT RUN, NOT IMPORTED, NOT REFACTORED.
+
+This is the throwaway script that drew tools/ui_debug/prototypes/duty_tile_turn.html, kept as
+`.txt` under the convention in tools/ui_debug/README.md. It was written and run OUTSIDE the
+repository, against a scratch directory, and it reads four cropped pictures from the author's
+Downloads folder -- so it will not run from here, and is not meant to. It is kept for intent.
+
+WHAT IT BORROWS FROM THE REPOSITORY, rather than restating:
+
+    gen_duty_grid   the nine traced outlines, the ink, the edge stroke weight, the hover gold,
+                    the marking colour and the "steady"/"pulse" effects, the acolyte row and
+                    its box, the recorded joins
+    population_sets the seat swatches, the hooded mark, the figure metrics
+    gen_board       DUTY_TEXT, read as a literal with `ast` rather than by importing the module,
+                    which writes a page as a side effect
+
+WHAT IT DEFINES FOR ITSELF, and why:
+
+    dimming         gen_duty_grid.DIM is the identity at DIM_SATURATE 1.00 -- saturate 1.00,
+                    slope 1.00, intercept 0 on every channel -- so it dims nothing
+    lighting        gen_duty_grid.LIT warms sepia artwork correctly and turns the plum seat into
+                    a salmon (#db7178), which reads as a fifth player rather than a lit third
+                    one; this keeps the hue and moves value and saturation instead
+
+THE PICTURES are crops of images generated with ChatGPT (OpenAI), at their own resolution and cut
+to the aspect of the box each fills. They are embedded in the prototype as data URIs. They are
+NOT manually illustrated, and are not CC0, public domain, or royalty-free stock.
+"""
+
+#!/usr/bin/env python3
+"""Sandbox: the border studio's nine shapes, still, with names and acolyte stacks.
+
+Nothing in the repository is touched. The outlines, the fill, the ink, the stroke weight and the
+acolyte row all come from the real modules, so this is the board's own drawing with the animation
+left off -- not a lookalike.
+
+TWO THINGS ARE DELIBERATELY NOT THE BORDER STUDIO'S
+
+`gen_border_studio.py` reads the RAW traced shapes. The board does not draw those: `laid_shapes()`
+re-lays the nine as an even 3x3 and spreads them, and `acolyte_box` measures its row against that
+arrangement. Drawing raw shapes and hanging real acolyte rows off them would put the figures where
+the board never puts them, so this uses the laid arrangement -- which is also what gen_game_view
+draws, and the acolytes were asked for as gen_game_view has them.
+
+The halo behind each acolyte is WHITE here. In the board it is #221c16, and it is not decoration:
+pewter and plum fall to 1.2 : 1 against the brightest tile bottom and vanish without it. Inverting
+it is a legibility change against a dark fill, not a cosmetic one, so it is done by rebuilding the
+tints rather than by putting a stroke on top of the finished figure.
+"""
+from __future__ import annotations
+
+import ast
+import base64
+import io
+import pathlib
+import re
+import sys
+
+REPO = pathlib.Path.home() / "mnt" / "pilgrim-optimizer"
+sys.path.insert(0, str(REPO / "ui" / "render"))
+import gen_duty_grid as dg          # noqa: E402
+import population_sets as pop       # noqa: E402
+
+OUT = pathlib.Path.home() / "mnt" / "Downloads" / "duty-shapes-acolytes.html"
+OUT_THREE = pathlib.Path.home() / "mnt" / "Downloads" / "duty-three-clerical.html"
+
+# WHAT EACH CELL DRAWS, as an index into DUTY_NAMES -- or None for a bare tile: outline, fill and
+# the top rectangle, and nothing else. The cell still supplies its own GEOMETRY; the plan only
+# says whose content goes in it. Keeping those two apart is what lets the same Clerical appear
+# three times without three copies of anything.
+PLAN_NINE = list(range(9))
+
+# The border studio's own palette, copied from ui/render/border_studio.html.tmpl.
+FILL = "#272219"
+NAME = "#8d8471"
+SUB = "#6b6354"
+PAGE_BG = "#4d4844"
+HALO = (255, 255, 255)
+
+# The SVG set -- `population_sets.SETS["hood"]` -- rather than the gothic photograph. It draws a
+# <use> of one defined mark instead of an <image> per acolyte, so the whole row costs one outline
+# however many are standing on it. Its figure is a different SHAPE as well as a different drawing
+# (aspect 0.83 against 1.09, width 0.157 of a tile against 0.205), and `acolyte_row` reads all of
+# that from the set -- which is why the set is named here once and never measured by hand.
+POP_SET = "hood"
+UID = "sb"
+# The set's own figure width, read once before anything scales it.
+
+
+# A bit bigger, and standing on a straight line.
+#
+# GROW is applied about each tile's OWN centre, which is how `placed` already scales: the tile
+# grows and the channels give up exactly what it takes, with nothing moving. 1.07 is measured
+# against the channels rather than chosen -- see the print-out at the end, which states the
+# narrowest gap left and refuses a value that closes one.
+GROW = 1.07
+
+# RECTANGLES INSTEAD OF THE TRACED OUTLINES.
+#
+# "rect" builds an even 3x3 of identical squares -- the box is square and so is a 3x3, so equal
+# margins and equal channels make equal squares; a non-square tile would need one of the two to
+# be unequal. "traced" keeps the hand-drawn shapes, grown and flat-based, so the two can be put
+# side by side rather than argued about.
+#
+# The rectangles are NOT the traced tiles' bounding boxes. Those differ by 14 units in width and
+# would leave nine tiles of nine sizes with uneven channels -- which is the thing a rectangle is
+# presumably being asked for to avoid.
+SHAPES_ARE = "rect"
+RECT_MARGIN = 24.0      # from the box edge
+RECT_CHANNEL = 16.0     # between tiles
+
+# The traced bottoms scallop by 21.5 to 30.3 units, 7.5% to 10.5% of a tile's height. Flattening
+# pushes that edge DOWN to the tile's lowest point rather than pulling it up to the highest, so
+# the shape gains the scallops instead of losing them and no acolyte's feet move up. The depth is
+# measured per tile, because one constant would cut into the side walls of the shallow ones and
+# leave a wave on the deep ones.
+FLAT_PAD = 2.0
+
+# THE LINE THE ACOLYTES STAND ON, in GRID UNITS above the flat base -- not a fraction of the
+# tile, because "a couple of pixels" is an absolute distance and a fraction would make it four
+# different distances across nine tiles of different heights.
+#
+# The floor is the tile's own edge: the outline is stroked 3.5 units wide and CENTRED, so 1.75 of
+# it lies inside the base. A line closer than that to the base is drawn on top of the edge and
+# reads as one thick smudge rather than as two things.
+#
+# The row is not re-derived to reach the line. `acolyte_box` owns where a row sits and what size
+# its figures are, and a second opinion about that is the drift this project keeps paying for --
+# so the row is built as the board builds it and then TRANSLATED onto the line.
+LINE_ABOVE = 15.0
+
+# A BIT SMALLER, changed at the one number that owns it. `population_sets` states a figure's width
+# as a fraction of the tile, and `acolyte_box` derives the figure, the gap between seats, the lean
+# and the stacking step from it -- so scaling that fraction shrinks the figures AND re-spaces the
+# four slots around them. Scaling the finished row instead would have shrunk the gaps with the
+# figures and left the row no longer centred on the tile it belongs to.
+FIG_SHRINK = 0.88
+
+# THE FOUR SEATS DIVIDE THE TILE'S WHOLE WIDTH, one quarter each, figure centred in its quarter.
+#
+# This replaces the hand-set gap. The gap is now DERIVED: `gap` is stated as a fraction of a
+# figure and a figure is `frac` of the tile, so the gap that makes one seat exactly a quarter is
+#
+#     fw + gap = W / 4      ->      gap_frac = (0.25 - frac) / frac
+#
+# in which the tile's width cancels out. That matters more than it looks: the same number is
+# correct for a 306.7-unit rectangle and for the traced tiles, which differ by 14 units across
+# the nine, so the quarters stay quarters whichever shape set is switched on.
+#
+# `acolyte_box` then centres the row as it always has, and the arithmetic lands the first figure
+# on the first quarter's centre by itself -- no second opinion about where a seat goes.
+EQUAL_QUARTERS = True
+LINE_INK = "#6b6354"
+
+# THE PANEL ACROSS THE TOP. Its height is not a number picked to look right -- it is the height of
+# the title block itself, measured from the same two offsets that draw the title and the action
+# row. So the panel is exactly as deep as the text it displaces, and the text lands directly under
+# it: move either offset and the panel follows instead of drifting away from it.
+TITLE_DY = 34.0         # title baseline below the top of its block
+ACTION_DY = 64.0        # action row baseline below the top of its block
+BLOCK_PAD = 8.0         # below the action row's descender, so the rule does not touch the type
+# Depth of ONE text band -- the title above the panel, the actions below it. Derived from the
+# type rather than left over from the old block: a 30-unit serif descends about 0.22 of its size,
+# so the baseline at TITLE_DY plus 6.6 of descender plus 7 of air. Left at the old arithmetic
+# this came out at 42 and the title's descender cleared the panel by 0.9 px, which is touching.
+BAND = TITLE_DY + 13.6
+
+# The panel needs a fill of its own, and the reason is measured rather than aesthetic: the tile
+# fill #272219 and the ink border #2b2114 come out at 1.00 : 1: a black border on a near-black
+# tile is not a faint border, it is no border. The panel is a shade lighter so the border has two
+# different things to sit between. It will end up carrying the resource art, which will do this
+# job properly; until then this is what makes the rectangle visible at all.
+PANEL_FILL = "#332d22"      # 1.16 : 1 against the tile -- deliberately quiet, not a stripe
+
+# The split between a tile's TWO duty actions, drawn from under the panel down to the line the
+# acolytes stand on. Only the five two-action tiles get one: Allocation, Build Roads and Taxation
+# carry a single action across the whole tile and the City carries none, so a divider there would
+# be dividing nothing. Its x is the tile's RECORDED join from joins.json -- the same number the
+# two action names are centred on and the same one the hover halves are cut on -- so the line
+# cannot disagree with the captions above it.
+# WHICH TILES GET NO PANEL. Empty: every tile carries the rectangle, the City and Taxation
+# included, so the nine read as one set of things.
+#
+# The mechanism stays because the rules may yet want it. The position carrying the taxation
+# category must have no tithe counter (docs/rules/DutyTiles.md) and the City is not a duty at
+# all, so those two panels have nothing to put in them -- which is an argument for leaving them
+# EMPTY rather than for leaving them out, and an empty panel in a row of nine says "nothing
+# here" where a missing one says "not this kind of tile".
+#
+# Keyed by the tile's NAME, not by its cell: the duty tiles are shuffled onto positions at setup,
+# so an absence keyed by cell would stay behind when the tile it belongs to moved.
+NO_PANEL: set[str] = set()
+
+# ONE TILE, AS A TRIAL: the acolytes stand inside the top rectangle, on its lower border, and the
+# rectangle is made tall enough to hold the tallest pile that tile currently carries -- purple's
+# four on Clerical. The height is DERIVED from the row's own metrics rather than dialled in:
+#
+#     pile = fh + (n - 1) * fh * step
+#
+# which is exactly how `acolyte_row` stacks them (each figure sits one `step` of a figure's
+# HEIGHT above the one below, and the bottom one is whole). So the panel is as deep as four
+# acolytes actually are, and it follows them if the figure size or the step ever moves.
+# Keyed by tile NAME, so making cell 1 an Allocation tile silently took its pieces out of the
+# panel and dropped them to the tile's foot, and took its value badge away with them. Both had
+# been true of "Clerical" rather than of that cell. Named here too, so the row stays one set.
+ACOLYTES_IN_PANEL = {"Clerical", "Allocation"}
+PANEL_PILE_PAD = 9.0
+
+# A SECOND TRIAL ON THE SAME TILE: one seat shows a single acolyte standing on a coloured bar
+# instead of a stack, with bar + figure exactly as tall as the stack would have been.
+#
+#     stack of n = fh + (n - 1) * fh * step        (this is `acolyte_row`'s own arithmetic)
+#     bar        = stack of n - fh
+#
+# so the bar carries the count and the figure says whose it is. The height is derived from the
+# count rather than set, which is the whole point: a bar that did not equal the stack it replaces
+# would make two seats on one tile uncomparable, and that is a fault nobody would see.
+BAR_SEATS = {"Clerical": ("pewter", "plum")}
+
+# The red divider runs the full depth of the tile on these, rather than stopping at the art area.
+FULL_SPLIT = {"Clerical"}
+
+# A value set at the right end of the title's own row. Held as DATA per tile rather than drawn
+# into the title string, because it is a different thing from the name: the name identifies the
+# tile and this is a quantity that changes during a game. Only Clerical carries one for now.
+BADGE = {"Clerical": "+2", "Allocation": "+2"}
+BADGE_INSET = 12.0
+
+# RECTANGLES INSTEAD OF ACOLYTES on a tile: one per piece, stacked in the seat's own slot and
+# separated by the same white stroke the figures carry.
+#
+# A rectangle is the SEGMENT height the bar used -- fh * step, the step a stacked acolyte shows
+# above the one below -- and a figure's width. Taken from those two numbers rather than set, so
+# a column of n rectangles is the same height the corresponding part of a stack was, and the
+# four slots stay exactly where the figures put them.
+#
+# Naming a tile here removes every acolyte from it, the bar-and-figure seats included: two
+# representations of the same thing on one tile would make it unreadable rather than richer.
+RECTS = {"Clerical": {"sage": 2, "pewter": 1, "plum": 3, "bone": 2}}
+
+# The white edge on a piece, as a fraction of its WIDTH -- the same way `population_sets` states
+# the hood's stroke, so the two stay comparable. The hood carries 0.055 because it is a silhouette
+# that has to survive against a bright tile bottom; a rectangle has a hard edge of its own and
+# needs far less, and at the hood's weight the stroke was eating a seventh of a 15.3-unit piece.
+#
+# The stroke is CENTRED on the outline, so half of it lies inside: at 0.024 that is 0.5 units off
+# each edge rather than 1.2, which is what gives the colour back.
+# PER-CELL OVERRIDES, for a page that draws the same tile more than once. Keyed by CELL, not by
+# tile name -- the name is shared by all three Clericals, so anything keyed by it would change
+# all of them at once, which is exactly what these exist to avoid.
+#
+# They belong to a PLAN and are passed in with it, not read from module scope. Left at module
+# scope they applied to every page: cell 0 of the nine-tile page is Allocation, which quietly
+# lost its acolytes to cell 0's rectangle counts. The figure check is what said so.
+# The "steady" marking from gen_border_studio, which is the plain stroke and no animation:
+# `.dg-m` at opacity .95, stroke MARK_FILL, width `--dg-msw * 1.7` where the studio's msw is the
+# board's own edge weight. Read off gen_duty_grid rather than retyped -- a studio that drew 4.0
+# against the board's 3.5 would be comparing against something that does not exist.
+MARK_W = 1.7           # of the edge stroke, from MARK_CSS's calc()
+MARK_OPACITY = 0.95
+# "pulse" from the border studio: the same stroke, breathing between .30 and 1 over 1800ms on an
+# ease-in-out. Keyframes, timing and both stops are gen_duty_grid's, so this is that effect and
+# not a lookalike -- the studio exists precisely so a choice made in it is a choice about the
+# board. NOTE this is the one thing on the page that moves; everything else is still.
+MARK_DUR = "1800ms"
+
+# HOW FAR THE PANEL IS HELD OFF THE TILE'S SIDES, and it is the marking that sets it rather than
+# taste. A stroke is CENTRED on its path, so the steady mark puts half its width -- 2.98 units --
+# inside the outline, and a panel flush with the tile's edge is drawn under it: the mark eats the
+# panel's own border and the two read as one thick smear at the join.
+#
+# Derived, so if the mark is ever retuned the panel moves with it instead of drifting under it.
+# The same inset goes on EVERY tile, marked or not: the panel's position must not depend on a
+# state the tile happens to be in, or the row of panels would jump as tiles were marked.
+PANEL_CLEAR = 2.2      # visible gap between the mark's inner edge and the panel
+
+# Art in a panel. The file is a band CROPPED from the screenshot at its own resolution -- the
+# pixels are the original pixels, cut to the panel's aspect rather than squashed into it -- and
+# it is drawn with `slice`, so if the panel's aspect ever moves the image is cropped further
+# rather than distorted. `meet` would letterbox it and leave the panel's fill showing at the ends.
+PANEL_ART = pathlib.Path.home() / "mnt" / "Downloads" / "wheat_band.webp"
+STONE_ART = pathlib.Path.home() / "mnt" / "Downloads" / "stone_band.webp"
+
+# ART IN THE ACTION HALVES: from just under the panel down to the tile's foot, cut at the split.
+# The outer sides and the foot take the SAME inset the panel takes, so the art clears the green
+# mark for the same reason and by the same number; the inner edge stands off the dashed divider
+# so the divider stays a line between two pictures rather than a line on one of them.
+ACT_ART = {"left": pathlib.Path.home() / "mnt" / "Downloads" / "act_devotion.webp",
+           "right": pathlib.Path.home() / "mnt" / "Downloads" / "act_silversmith.webp"}
+ACT_TOP_GAP = 4.0      # below the panel
+
+# The action names ride ON the art now, so they are set in white with a black outline rather than
+# in the muted ink. Measured before the change: against the art behind them "Devotion" read at
+# 1.32 : 1 and "Silversmith" at 1.90 : 1 -- on the plain tile fill the same colour managed only
+# 2.66 : 1. White on black clears 15 : 1 against anything either picture contains.
+#
+# paint-order puts the stroke UNDER the fill. Without it a centred stroke eats half its width off
+# every stem, and at this size that closes up the counters of a and e.
+ACTION_DROP = 24.0     # baseline below the panel: closer than the old 34
+ACTION_HALO = 3.2      # black outline on the white type
+
+# A label set INSIDE a panel, in the action names' own class so it is the same type treated the
+# same way -- white, black-outlined, paint-order stroke -- rather than a second style that has to
+# be kept in step with them. Centred on the panel's own box, both ways.
+PANEL_LABEL_SIZE = 26.0
+ACT_SPLIT_GAP = 3.0    # each side of the dashed divider
+
+# PANNING ONE PICTURE INSIDE ITS BOX. The crops were cut to the box's aspect, so at natural size
+# they fill it exactly and there is nothing to pan into -- 0 px of slack, measured. Zooming buys
+# the slack: drawn 1.14 wider than the box, the picture is 14% taller than the box too, and `pan`
+# says which slice of that shows. 0 is the top of the picture (so its subject sits LOW in the
+# box), 1 the bottom, 0.5 what it did before.
+ACT_ZOOM = {"right": 1.14}
+ACT_PAN = {"right": 0.0}
+
+# The cells that carry the finished tile: the wheat panel, both action pictures, all three
+# labels and no pieces. Built from one set rather than written out four times -- four copies of
+# the same four entries is four places for them to drift apart.
+# THE NINE TILES, one entry each, in reading order.
+#
+# Written as a LIST rather than as sets of cell numbers because what keeps being asked of this
+# page is that tiles move -- a row down, a tile left, one copied over another. Against sets, each
+# move meant editing eight separate mappings and hoping they agreed; against a list it is a list
+# operation, and a tile carries its whole configuration with it wherever it goes.
+#
+#   duty   index into DUTY_NAMES
+#   rects  pieces per seat; None means "use the tile's own table"; {} means "draw none"
+#   badge  whether the value is shown at the right of the title
+#   mark   None, "steady" or "pulse"
+#   lit    (seat, position from the base line, 1-based) or None
+#   art    False, True for the default panel picture, or a path for a different one -- the
+#          action halves are the same either way
+#   gold   which label is in the board's hover gold, or None
+#   square an empty square at the left of the title row -- the slot the resource counter and the
+#          Merchant were drawn into in the earlier studies, held open here with nothing in it
+def tile(duty, rects=None, badge=False, mark=None, lit=None, art=False, gold=None,
+         square=False):
+    return {"duty": duty, "rects": rects, "badge": badge, "mark": mark, "lit": lit,
+            "art": art, "gold": gold, "square": square}
+
+
+PIECES = {"sage": 2, "pewter": 1, "plum": 2, "bone": 2}
+
+TILES = [
+    tile(0, rects={"plum": 1}, mark="pulse"),                # Allocation, pulsing, one piece
+    tile(0, rects={}),                                       # Allocation, bare
+    tile(1, rects=PIECES),                                   # Clerical, pieces only
+    tile(1, badge=True, mark="steady", lit=("plum", 3)),     # Clerical, marked, one piece lit
+    tile(1, rects={}, badge=True, art=True),                 # the finished tile
+    tile(1, rects={}, badge=True, art=True, gold="Take Tithe"),
+    tile(1, rects={}, badge=True, art=True, gold="Devotion"),
+    tile(1, rects={}, badge=True, art=True, gold="Silversmith"),
+    # badge=False: BADGE has no value for Ordination, and inventing one is how Allocation ended
+    # up wearing a "+2" that had to be taken off again. The table now says what is drawn.
+    tile(5, rects={}, art=STONE_ART, gold="Mission", square=True),           # Ordination
+]
+
+# The last shift is BAKED IN above rather than applied here. It was written as
+# `TILES = TILES[1:] + TILES[-1:]`, which leaves the last two entries as the SAME object -- so
+# editing tile 9 silently edited tile 8 as well, and the page came back with two Ordinations.
+# A shift is a one-off move; keeping it as a live line makes two cells share a description.
+
+PLAN_THREE = [t["duty"] for t in TILES]
+
+THREE_OVER = {
+    "rects": {c: t["rects"] for c, t in enumerate(TILES) if t["rects"] is not None},
+    "no_badge": {c for c, t in enumerate(TILES) if not t["badge"]},
+    "lit_piece": {c: t["lit"] for c, t in enumerate(TILES) if t["lit"]},
+    "mark": {c: t["mark"] for c, t in enumerate(TILES) if t["mark"]},
+    # `is True` rather than truthiness: a PATH is also truthy, and `PANEL_ART if t["art"]`
+    # would have quietly given every tile the wheat regardless of what it asked for.
+    "art": {c: (PANEL_ART if t["art"] is True else t["art"])
+            for c, t in enumerate(TILES) if t["art"]},
+    "act_art": {c: ACT_ART for c, t in enumerate(TILES) if t["art"]},
+    "panel_label": {c: "Take Tithe" for c, t in enumerate(TILES) if t["art"]},
+    "gold": {c: t["gold"] for c, t in enumerate(TILES) if t["gold"]},
+    "square": {c for c, t in enumerate(TILES) if t["square"]},
+}
+FULL_GOLD = THREE_OVER["gold"]
+
+# DIM AND LIT FOR A PIECE.
+#
+# `gen_duty_grid.DIM` cannot be used: DIM_SATURATE is 1.00, which its own docstring says makes
+# the filter interpolate to identity -- saturate 1.00, slope 1.00, intercept 0 on every channel.
+# It returns the colour it was given, so it dims nothing. Dimming is therefore defined here.
+#
+# LIT is NOT the board's either, and that is a decision rather than an oversight: the board's LIT
+# boosts red at slope 1.34 and cuts blue at 0.78, which warms sepia artwork correctly and turns
+# plum into salmon (#db7178) -- a fifth player, not a lit third one. This keeps the hue and moves
+# value and saturation, so a lit piece is unmistakably the same seat.
+DIM_V, DIM_S = 0.55, 0.80
+LIT_V, LIT_S = 1.42, 0.88
+
+RECT_STROKE = 0.024
+RECT_RADIUS = 3.6          # units; about a quarter of a piece's height
+
+# The dashed divider is a GUIDE, not furniture: it showed where the two action pictures meet
+# while there was nothing else to show it. Now the pictures meet each other and the seam does the
+# work, so it is off. Kept behind a flag rather than deleted -- it is the only thing on the tile
+# that states the recorded join, and that is worth being able to switch back on.
+SHOW_SPLIT = False
+
+SPLIT_INK = "#e05a4a"
+SPLIT_W = 1.6
+
+# Four seats, and a count each, chosen to show a lone figure, a tall pile and an empty slot.
+COUNTS = {0: [3, 1, 0, 2], 1: [0, 2, 4, 1], 2: [1, 0, 2, 0], 3: [2, 3, 0, 1],
+          4: [1, 1, 1, 1], 5: [0, 1, 0, 5], 6: [4, 0, 1, 2], 7: [1, 2, 3, 0],
+          8: [2, 0, 1, 1]}
+
+
+def duty_text() -> dict:
+    """gen_board.py's DUTY_TEXT, read as a literal rather than by running the module.
+
+    It is the one table that names the ACTIONS -- "Devotion", "Silversmith" -- for all thirteen
+    hit areas, including the three tiles that carry only one. Parsing the literal keeps this page
+    out of gen_board's import side effects, which include writing a page of its own.
+    """
+    src = (REPO / "ui" / "render" / "gen_board.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                getattr(t, "id", "") == "DUTY_TEXT" for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise SystemExit("gen_board.py no longer assigns DUTY_TEXT at module level")
+
+
+def white_tints() -> dict[str, str]:
+    """`acolyte_tints`, with the dark silhouette rebuilt in white."""
+    import colorsys
+
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    src = Image.open(dg.ACOLYTE).convert("RGBA")
+    out = {}
+    for seat, hexv in dg.SEAT_SWATCH.items():
+        r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        dark = colorsys.hsv_to_rgb(h, min(1, s * 1.3), v * 0.30)
+        light = colorsys.hsv_to_rgb(h, min(1, s * 0.95), min(1, v * 1.10))
+        a = np.asarray(src).astype(float)
+        lum = (0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]) / 255.0
+        lum = np.clip((lum - 0.06) / 0.84, 0, 1) ** 0.80
+        o = np.zeros_like(a)
+        for c in range(3):
+            o[..., c] = (dark[c] + (light[c] - dark[c]) * lum) * 255
+        o[..., 3] = a[..., 3]
+        fig = Image.fromarray(o.astype("uint8"), "RGBA")
+        alpha = np.asarray(fig)[..., 3]
+        halo = Image.fromarray(alpha).filter(ImageFilter.MaxFilter(13))
+        sil = Image.new("RGBA", fig.size, HALO + (255,))
+        sil.putalpha(halo)
+        base = Image.new("RGBA", fig.size, (0, 0, 0, 0))
+        base.alpha_composite(sil)
+        base.alpha_composite(fig)
+        buf = io.BytesIO()
+        base.save(buf, "PNG")
+        out[seat] = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return out
+
+
+def pointlist(d: str) -> list[list[float]]:
+    return [[float(m.group(1)), float(m.group(2))]
+            for m in re.finditer(r"(-?\d+\.?\d*)[ ,]+(-?\d+\.?\d*)", d)]
+
+
+def as_path(pts) -> str:
+    return "M " + " L ".join("%.1f %.1f" % (x, y) for x, y in pts) + " Z"
+
+
+def rect_grid(box: float) -> list[str]:
+    """Nine identical squares, evenly spaced. Same path grammar as the traced shapes."""
+    side = (box - 2 * RECT_MARGIN - 2 * RECT_CHANNEL) / 3.0
+    out = []
+    for i in range(9):
+        c, r = i % 3, i // 3
+        x = RECT_MARGIN + c * (side + RECT_CHANNEL)
+        y = RECT_MARGIN + r * (side + RECT_CHANNEL)
+        out.append(as_path([[x, y], [x + side, y], [x + side, y + side], [x, y + side]]))
+    return out
+
+
+def tile_shapes() -> list[str]:
+    """The nine outlines this page draws, whichever kind they are.
+
+    ONE function, called by the page and by the checks below it. They read from the same place on
+    purpose: a check that rebuilds its own copy of the thing it is checking is a check that can
+    pass while the page is wrong, and this file has already had that argument once.
+    """
+    if SHAPES_ARE == "rect":
+        return rect_grid(dg.load()["box"])
+    return [grow(flat_base(d), GROW) for d in dg.laid_shapes(pop_set=POP_SET)]
+
+
+def flat_base(d: str) -> str:
+    """Push the tile's scalloped bottom down onto one straight line at its lowest point."""
+    pts = pointlist(d)
+    ys = [p[1] for p in pts]
+    xs = [p[0] for p in pts]
+    y0, y1, x0, x1 = min(ys), max(ys), min(xs), max(xs)
+    lo, hi = x0 + (x1 - x0) * 0.10, x1 - (x1 - x0) * 0.10
+    bottom = [y for x, y in pts if lo <= x <= hi and y > y0 + (y1 - y0) * 0.70]
+    cut = y1 - ((y1 - min(bottom)) + FLAT_PAD) if bottom else y1
+    for pt in pts:
+        if pt[1] > cut:
+            pt[1] = y1
+    return as_path(pts)
+
+
+def grow(d: str, k: float) -> str:
+    """Scale one outline about its own centre, so it takes room from the channel and moves not."""
+    pts = pointlist(d)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    for pt in pts:
+        pt[0] = cx + (pt[0] - cx) * k
+        pt[1] = cy + (pt[1] - cy) * k
+    return as_path(pts)
+
+
+
+# ADAM'S COMMENTARY, verbatim. Held as data next to the page rather than pasted into the markup,
+# so a tile moving does not silently leave its note pointing at the wrong cell -- each entry
+# names the CELLS it is about, and the page uses that to light them when the note is hovered.
+#
+# One editorial change, and it is flagged here rather than made silently: the paragraph beginning
+# "Hovering over one of the 3 areas" appears in the source after the Row 3 Column 3 line, but it
+# describes the gold marking, which is what Row 2 Column 3 / Row 3 Column 1 / Row 3 Column 2 show
+# and that group was left without a body. It is placed with that group.
+INTRO = [
+    "This prototype does not include graphical design or production pictures, instead it tries "
+    "to explain a game turn for Player 3.",
+    "In this prototype acolutes are represented by colored rectangles in order to a) save space "
+    "and b) make the reading of the board easier. This design does not cover over any art as the "
+    "current design does when acolytes are added to Duty tiles. However, this prototype needs "
+    "logic for when more than 4 acolytes are present (i.e., limit 3 or 4 plus number).",
+    "The Idea is to contain all text and decisions to the selected duty tile after the Sow phase, "
+    "i.e., this replace the corresponding section of the action board. Also, all clickable "
+    "actions are gathered &ldquo;in one place&rdquo;. However, with many acolytes for all players "
+    "in a 4 player game (extremely unusual / unlikely), the Tithe resource on the Board can look "
+    "a bit obscured, but don&rsquo;t think this is a big issue.",
+    "Currently, the Merchant is not included in this prototype.",
+]
+
+NOTES = [
+    ([0], "Row 1 Column 1",
+     "Player has acolytes on Duty tile Allocation, as indicated by the pulsing green border."),
+    ([1], "Row 1 Column 2",
+     "Selecting this duty tile lift acolytes to hand"),
+    ([2], "Row 1 Column 3",
+     "Next Duty tile is Clerical, which looks like this"),
+    ([3], "Row 2 Column 1",
+     "Next Duty tile is Clerical, the new Acolyte is marked in the Lit color to show what was "
+     "already there beginning of turn. Since Player 3 now has majority, the duty value is 2, "
+     "shown in the top right corner. All Duty tiles will have +1 in red if minority, +1 in green "
+     "if parity or +2 if majority. Clerical, together with all other duty tiles where Player 3 "
+     "has presence, will have green Duty tile borders."),
+    ([4], "Row 2 Column 2",
+     "Player 3 selects Duty tile Clerical, i.e., selecting this Duty tile to either a) Take Tithe "
+     "or b) take a Duty action. At this stage the acolytes are removed in order to give place for "
+     "the Tithe resource to be fully presented (i.e., instead of using a resource icon). Duty "
+     "Value 2 is still shown, the temporary removal of acolytes does not require to remember "
+     "anything of Player 3. At this stage the 3 areas are selectable."),
+    ([5, 6, 7], "Row 2 Column 3, Row 3 Column 1 and Row 3 Column 2",
+     "Hovering over one of the 3 areas / choices marks the corresponding name in gold. Note: not "
+     "shown in the prototype, the Duty tile could increases in size, in order to give space to a "
+     "text box under the Duty Actions that appears with text what the different options do."),
+    ([8], "Row 3 Column 3",
+     "Row 3 Column 3 is just another example of a different Duty with a different Tithe "
+     "resource."),
+]
+
+FOOTNOTE = ("For Row 1 Column 1, 2, 3 and Row 2 Column 1 the lower part of the Duty tils could / "
+            "should include the pictures of the corresponding actions, and also the text what "
+            "they do probably.")
+
+def data_uri(path: pathlib.Path) -> str:
+    mime = {".webp": "image/webp", ".png": "image/png"}[path.suffix.lower()]
+    return "data:%s;base64,%s" % (mime, base64.b64encode(path.read_bytes()).decode("ascii"))
+
+
+def shade(hexv: str, v: float, sat: float) -> str:
+    """One seat colour moved in value and saturation, keeping its hue."""
+    import colorsys
+    r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, s_, v_ = colorsys.rgb_to_hsv(r, g, b)
+    out = colorsys.hsv_to_rgb(h, min(1.0, s_ * sat), min(1.0, v_ * v))
+    return "#" + "".join("%02x" % round(c * 255) for c in out)
+
+
+def lit(hexv: str) -> str:
+    """One colour put through the board's own LIT filter, in sRGB, by hand.
+
+    `gen_duty_grid.LIT` is a saturate of 1.20 followed by a linear transfer per channel, and the
+    filters that use it declare color-interpolation-filters="sRGB" -- so this is the same
+    arithmetic on the same numbers, not a lighter purple chosen by eye. If the filter is ever
+    retuned, this follows it by being re-derived from those constants rather than by someone
+    remembering a hex.
+    """
+    sat = 1.20
+    r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    rr = (0.213 + 0.787 * sat) * r + (0.715 - 0.715 * sat) * g + (0.072 - 0.072 * sat) * b
+    gg = (0.213 - 0.213 * sat) * r + (0.715 + 0.285 * sat) * g + (0.072 - 0.072 * sat) * b
+    bb = (0.213 - 0.213 * sat) * r + (0.715 - 0.715 * sat) * g + (0.072 + 0.928 * sat) * b
+    out = (rr * 1.34 + 0.10, gg * 1.14 + 0.055, bb * 0.78 + 0.0)
+    return "#" + "".join("%02x" % round(min(1.0, max(0.0, c)) * 255) for c in out)
+
+
+def bbox(d: str):
+    xs, ys = [], []
+    for m in re.finditer(r"(-?\d+\.?\d*)[ ,]+(-?\d+\.?\d*)", d):
+        xs.append(float(m.group(1)))
+        ys.append(float(m.group(2)))
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def safe_top(d: str, span: float = 0.66) -> float:
+    """The lowest point of the tile's top edge across its middle -- where text stops sticking out.
+
+    The outlines are traced and wavy, so a title set from the bounding box's top sits outside the
+    ink on every tile. Measured per tile because the nine differ.
+    """
+    x0, y0, x1, y1 = bbox(d)
+    lo, hi = x0 + (x1 - x0) * (1 - span) / 2, x1 - (x1 - x0) * (1 - span) / 2
+    top = [y for x, y in ((float(m.group(1)), float(m.group(2)))
+                          for m in re.finditer(r"(-?\d+\.?\d*)[ ,]+(-?\d+\.?\d*)", d))
+           if lo <= x <= hi and y < y0 + (y1 - y0) * 0.40]
+    return max(top) if top else y0
+
+
+# Shorter names for five of the thirteen, asked for after seeing them on the tiles. The tile's
+# own title carries the verb -- "Construct" over "Building" and "Road" -- so the action only has
+# to say which of the two it is.
+#
+# This renames the SANDBOX's copy. gen_board.DUTY_TEXT still says the long names, and it is what
+# the game view's inspect banner reads, so the two disagree until that file is changed too.
+RENAME = {
+    "Construct a building": "Building",
+    "Construct a road": "Road",
+    "Donate a building": "Building",
+    "Produce wheat": "Wheat",
+    "Produce stone": "Stone",
+}
+
+
+def renamed(text: dict) -> dict:
+    """DUTY_TEXT with the five short names applied, and a check that all five were found.
+
+    A rename map is the quietest thing in a codebase to get wrong: a key that matches nothing
+    changes nothing, the page still builds, and the old name is still on the tile. "Donate a
+    Building" was asked for with a capital B and the table says "Donate a building", so this
+    would already have missed one silently.
+    """
+    out, hit = {}, set()
+    for k, v in text.items():
+        title = v[0]
+        if title in RENAME:
+            hit.add(title)
+            out[k] = (RENAME[title],) + tuple(v[1:])
+        else:
+            out[k] = v
+    missing = sorted(set(RENAME) - hit)
+    if missing:
+        raise SystemExit(
+            "these action names are not in gen_board.DUTY_TEXT, so renaming them did nothing: %s\n"
+            "The table now says: %s"
+            % (", ".join(missing), ", ".join(sorted(v[0] for v in text.values()))))
+    return out
+
+
+def span_at(d: str, y: float, band: float = 26.0) -> tuple[float, float]:
+    """How wide the outline actually is at one height.
+
+    The bounding box is wider than the tile at every height the captions use, because the traced
+    top curves in. Fitting "Silversmith" to the box put it over the edge; fitting it to the ink
+    at its own baseline does not. Measured in a band around y, since the outline is a polyline
+    and may have no vertex exactly there.
+    """
+    pts = [(float(m.group(1)), float(m.group(2)))
+           for m in re.finditer(r"(-?\d+\.?\d*)[ ,]+(-?\d+\.?\d*)", d)]
+    near = [x for x, yy in pts if abs(yy - y) <= band]
+    if len(near) < 2:
+        x0, _y0, x1, _y1 = bbox(d)
+        return x0, x1
+    return min(near), max(near)
+
+
+def actions(text: dict, name: str) -> list[str]:
+    """The action name or names on one tile, in the drawing's own order."""
+    return [text[k][0] for k in ("%s|0" % name, "%s|1" % name) if k in text]
+
+
+CSS = """
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{margin:0;background:__BG__;color:#e9e0cc;
+     font:14px/1.6 "Iowan Old Style",Palatino,Georgia,serif;
+     display:flex;align-items:center;justify-content:center}
+/* THE WHEEL IS SQUARE -- viewBox 0 0 1000 1000 -- so the largest it can be on any screen is a
+   square of the SHORTER side. Sized in viewport units rather than in pixels so it is right on
+   whatever this is opened on, instead of right on the one screen a number was measured from.
+   The caption floats over the ground and takes no space from it. */
+#wrap{display:flex;gap:18px;width:100%;height:100%;padding:14px;align-items:flex-start}
+#board{width:min(calc(100vw - 460px), calc(100vh - 28px));
+       height:min(calc(100vw - 460px), calc(100vh - 28px));flex:0 0 auto}
+svg{display:block;width:100%;height:100%}
+#notes{flex:1 1 auto;min-width:300px;max-width:430px;height:100%;overflow-y:auto;padding-right:6px;
+       font:13px/1.62 "Iowan Old Style",Palatino,Georgia,serif;color:#cdc2a9}
+#notes h1{font:600 15px/1.3 Georgia,serif;color:#efe6d2;margin:2px 0 10px}
+#notes p{margin:0 0 10px}
+#notes .n{border-top:1px solid #3a352a;padding:11px 0 2px;cursor:default;border-radius:6px}
+#notes .n:hover{background:#2a251b}
+#notes .n b{display:block;font:600 12px/1.3 system-ui,sans-serif;letter-spacing:.06em;
+            text-transform:uppercase;color:#a08f68;margin-bottom:5px}
+#notes .foot{border-top:1px solid #3a352a;margin-top:12px;padding-top:11px;color:#a99e86;
+             font-size:12.5px}
+#notes .foot b{color:#cdc2a9}
+/* Hovering a note lights the tiles it is about: the note names its cells, so the page can say
+   which tile it means without a label printed on the tile. */
+.dgt{transition:opacity .12s linear}
+svg.focus .dgt{opacity:.22}
+svg.focus .dgt.on{opacity:1}
+.fillp{fill:__FILL__}
+.edge{fill:none;stroke:__INK__;stroke-opacity:.85;stroke-width:__SW__;stroke-linejoin:round}
+.tname{fill:__NAME__;font:600 30px Georgia,serif;text-anchor:middle}
+.tsub{fill:#ffffff;stroke:#000000;stroke-width:__HALO__;stroke-linejoin:round;
+      paint-order:stroke fill;font:600 22px Georgia,serif;text-anchor:middle}
+.tval{fill:__NAME__;font:600 30px Georgia,serif;text-anchor:end}
+.ground{stroke:__LINE__;stroke-width:2.4;stroke-opacity:.55;stroke-linecap:round}
+.panel{fill:__PANEL__;stroke:__INK__;stroke-opacity:.85;stroke-width:__SW__}
+.panel-art{fill:none}
+.slot{fill:__PANEL__;stroke:__INK__;stroke-opacity:.85;stroke-width:__SW__}
+.tsub.gold{fill:__GOLD__}
+.split{stroke:__SPLIT__;stroke-width:__SPLITW__;stroke-dasharray:7 6;stroke-linecap:round}
+.mark{fill:none;stroke:__MARK__;stroke-width:__MARKW__;stroke-linejoin:round;
+      stroke-linecap:round;opacity:__MARKO__}
+.mark-pulse{animation:dg-pulse __MARKDUR__ ease-in-out infinite}
+@keyframes dg-pulse{0%,100%{opacity:.30}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.mark-pulse{animation:none;opacity:__MARKO__}}
+"""
+
+PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Duty shapes, names and acolytes</title><style>__CSS__</style></head><body>
+<div id="wrap">
+  <div id="board">__SVG__</div>
+  <div id="notes">__NOTES__</div>
+</div>
+<script>
+// A note lights the tiles it names. The cell numbers come from the note itself, so a tile that
+// moves takes its note's reference with it rather than leaving the text pointing at a neighbour.
+(function(){
+  var svg = document.querySelector('#board svg'),
+      tiles = [].slice.call(document.querySelectorAll('g.dgt'));
+  [].forEach.call(document.querySelectorAll('#notes .n'), function (n) {
+    var cells = (n.dataset.cells || '').split(',').filter(String).map(Number);
+    n.addEventListener('mouseenter', function () {
+      svg.classList.add('focus');
+      cells.forEach(function (c) { if (tiles[c]) { tiles[c].classList.add('on'); } });
+    });
+    n.addEventListener('mouseleave', function () {
+      svg.classList.remove('focus');
+      tiles.forEach(function (t) { t.classList.remove('on'); });
+    });
+  });
+}());
+</script>
+</body></html>"""
+
+
+FRAC_PRISTINE = pop.SETS[POP_SET]["tile"]["frac"]
+
+# The mark's half-width plus a gap, plus half the panel's own stroke so the gap is between the
+# two INKS rather than between their centre lines.
+_EDGE = dg.load()["box"] * dg.EDGE_STROKE
+PANEL_INSET = _EDGE * MARK_W / 2 + PANEL_CLEAR + _EDGE / 2
+
+
+def build(plan=None, over=None) -> str:
+    text = renamed(duty_text())
+    # SET FROM THE PRISTINE VALUE, never from the current one. `build` mutates the shared
+    # population set, and the moment it was called twice -- once per page -- the shrink applied
+    # twice and every figure came out at 0.88 squared. The page still built and still looked
+    # plausible; only a number printed at the end said otherwise.
+    _t = pop.SETS[POP_SET]["tile"]
+    _t["frac"] = FRAC_PRISTINE * FIG_SHRINK
+    if EQUAL_QUARTERS:
+        if _t["frac"] >= 0.25:
+            raise SystemExit(
+                "a figure is %.3f of the tile, so four of them cannot fit in four quarters"
+                % _t["frac"])
+        _t["gap"] = (0.25 - _t["frac"]) / _t["frac"]
+    laid = tile_shapes()
+    joins = dg.joins_for()
+    box = dg.load()["box"]
+
+    # The hood is an OUTLINED SHAPE, so its border is a stroke rather than a dilated halo: white
+    # is one value, set where hood_defs reads it. `pop_defs` has to be emitted or the row draws
+    # NOTHING -- an unresolved <use> is silent, and a board with no acolytes is one somebody
+    # believes. The count printed at the end is what checks it did.
+    pop.HOOD_INK = "#ffffff"
+    plan = PLAN_NINE if plan is None else plan
+    over = over or {}
+    o_rects, o_badge, o_lit = (over.get("rects", {}), over.get("no_badge", set()),
+                               over.get("lit_top", {}))
+    o_mark, o_art = over.get("mark", {}), over.get("art", {})
+    o_act, o_plabel = over.get("act_art", {}), over.get("panel_label", {})
+    o_gold = over.get("gold", {})
+    o_litp, o_square = over.get("lit_piece", {}), over.get("square", set())
+    parts = ['<svg viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">' % (box, box),
+             "<defs>%s</defs>" % dg.pop_defs(UID, POP_SET, dg.SEAT_ORDER)]
+    for cell, d in enumerate(laid):
+        i = plan[cell]
+        x0, y0, x1, y1 = bbox(d)
+        cx = (x0 + x1) / 2
+        top = safe_top(d)
+        parts.append('<g class="dgt" data-i="%d">' % cell)
+        parts.append('<path class="fillp" d="%s"/>' % d)
+        parts.append('<path class="edge" d="%s"/>' % d)
+        mk = o_mark.get(cell)
+        if mk in ("steady", "pulse"):
+            parts.append('<path class="mark mark-%s" d="%s"/>' % (mk, d))
+        if i is None:
+            # A BARE TILE: the same rectangle and the same top panel at the same depth as its
+            # neighbours, and nothing in it. The panel keeps its own default height rather than
+            # borrowing whatever the Clericals grew to, so the row of panels still lines up.
+            parts.append('<rect class="panel" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>'
+                         % (x0 + PANEL_INSET, y0 + BAND,
+                            (x1 - x0) - 2 * PANEL_INSET, ACTION_DY + BLOCK_PAD))
+            parts.append("</g>")
+            continue
+        name = dg.DUTY_NAMES[i]
+        acts = actions(text, name)
+        # The panel, then the block pushed down by exactly its height. A tile with no panel is
+        # not a tile with an empty one: nothing is drawn and nothing is displaced, so its title
+        # sits where every title sat before the panel existed.
+        # THE TILE, TOP TO BOTTOM: title band, panel, action band, art, acolyte line.
+        #
+        # Both text bands are the SAME depth and both set their type at TITLE_DY into their own
+        # band, so the title above the panel and the actions below it are hung off one number
+        # rather than two that have to be kept in agreement. The action band is reserved on every
+        # tile including the City, which has no actions to put in it -- the panels sit in a grid
+        # and a band that changed depth per tile would stagger the art areas across the row.
+        in_panel = name in ACOLYTES_IN_PANEL
+        # `in`, not `.get(...) or ...`: an EMPTY override means "this tile draws no pieces",
+        # and truthiness cannot tell that apart from "no override", which would silently put the
+        # acolytes back.
+        squares = o_rects[cell] if cell in o_rects else RECTS.get(name)
+        has_rects = squares is not None
+        panel_h = ACTION_DY + BLOCK_PAD
+        if in_panel:
+            m = pop.tile(POP_SET)
+            bx = dg.acolyte_box(d, pop_set=POP_SET)
+            # The panel is sized to WHAT THIS TILE ACTUALLY DRAWS, not to the acolyte counts it
+            # would have drawn. A tile showing squares has no pile, and sizing it to a pile that
+            # is not there leaves a panel with a hand's width of nothing under the pieces.
+            if has_rects:
+                tall = (bx["fh"] * m["step"] * max(squares.values())) if squares else 0.0
+            else:
+                tall = bx["fh"] + (max(COUNTS[i]) - 1) * bx["fh"] * m["step"]
+            panel_h = max(panel_h, tall + PANEL_PILE_PAD)
+
+        title_y = y0 + TITLE_DY
+        panel_top = y0 + BAND
+        panel_bot = panel_top + (panel_h if name not in NO_PANEL else 0.0)
+        row_y = panel_bot + ACTION_DROP
+        art_top = panel_bot + BAND
+
+        t_l, t_r = span_at(d, title_y)
+        t_size = min(30.0, (t_r - t_l - 20) / (len(name) * 0.52))
+        if cell in o_square:
+            # Squared off against the TITLE'S OWN CAP HEIGHT rather than the band's, so it sits
+            # on the same optical line as the word beside it. A 30-unit serif caps at about 0.7
+            # of its size; the square matches that and is centred on it.
+            cap = t_size * 0.70
+            parts.append('<rect class="slot" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>'
+                         % (x0 + PANEL_INSET, title_y - cap, cap, cap))
+        parts.append('<text class="tname" x="%.1f" y="%.1f" font-size="%.1f">%s</text>'
+                     % ((t_l + t_r) / 2, title_y, t_size, name))
+        badge = None if cell in o_badge else BADGE.get(name)
+        if badge:
+            # Right-anchored on the title's own baseline, so the two sit on one row whatever the
+            # title's width does -- the title is centred and shrinks to fit, and anchoring this
+            # to the title's box instead would move it every time a name got longer.
+            parts.append('<text class="tval" x="%.1f" y="%.1f">%s</text>'
+                         % (t_r - BADGE_INSET, title_y, badge))
+        if name not in NO_PANEL:
+            px, pw = x0 + PANEL_INSET, (x1 - x0) - 2 * PANEL_INSET
+            art = o_art.get(cell)
+            if art is not None and art.is_file():
+                cid = "art%d" % cell
+                parts.append('<clipPath id="%s"><rect x="%.1f" y="%.1f" width="%.1f" '
+                             'height="%.1f"/></clipPath>' % (cid, px, panel_top, pw, panel_h))
+                parts.append('<image href="%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f" '
+                             'preserveAspectRatio="xMidYMid slice" clip-path="url(#%s)"/>'
+                             % (data_uri(art), px, panel_top, pw, panel_h, cid))
+                parts.append('<rect class="panel panel-art" x="%.1f" y="%.1f" width="%.1f" '
+                             'height="%.1f"/>' % (px, panel_top, pw, panel_h))
+            label = o_plabel.get(cell)
+            if label:
+                # Centred across the panel, and set at the SAME drop from its box's top edge that
+                # the action names take from theirs -- one offset, so the panel's label and the
+                # two below it read as one row of labels rather than three separate decisions.
+                gk = " gold" if o_gold.get(cell) == label else ""
+                parts.append('<text class="tsub%s" x="%.1f" y="%.1f" font-size="%.1f">%s</text>'
+                             % (gk, px + pw / 2, panel_top + ACTION_DROP,
+                                PANEL_LABEL_SIZE, label))
+            else:
+                parts.append('<rect class="panel" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>'
+                             % (px, panel_top, pw, panel_h))
+
+        # THE TWO NAMES SIT OVER THE HALVES THEY BELONG TO, on one row. The split is the tile's
+        # RECORDED join -- joins.json, which every two-action tile currently puts at 0.5 -- and
+        # not a hard half, because the join is where the two scenes actually meet and the hover
+        # halves are cut on the same number. Reading it means a tile that ever genuinely differs
+        # moves its captions with its artwork instead of against it.
+        act_art = o_act.get(cell)
+        if act_art and len(acts) == 2:
+            mid = x0 + (x1 - x0) * joins.get(i, 0.5)
+            a_top = panel_bot + ACT_TOP_GAP
+            a_bot = y1 - PANEL_INSET
+            boxes = (("left", x0 + PANEL_INSET, mid - ACT_SPLIT_GAP),
+                     ("right", mid + ACT_SPLIT_GAP, x1 - PANEL_INSET))
+            for half, bx0, bx1 in boxes:
+                src = act_art.get(half)
+                if src is None or not src.is_file():
+                    raise SystemExit(
+                        "action art for the %s half is missing (%s). The half would draw the "
+                        "tile's plain fill and look deliberate." % (half, src))
+                cid = "act%d%s" % (cell, half)
+                bw, bh = bx1 - bx0, a_bot - a_top
+                parts.append('<clipPath id="%s"><rect x="%.1f" y="%.1f" width="%.1f" '
+                             'height="%.1f"/></clipPath>' % (cid, bx0, a_top, bw, bh))
+                z = ACT_ZOOM.get(half, 1.0)
+                dw, dh = bw * z, bh * z
+                ox = bx0 - (dw - bw) / 2
+                oy = a_top - (dh - bh) * ACT_PAN.get(half, 0.5)
+                parts.append('<image href="%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f" '
+                             'preserveAspectRatio="xMidYMid slice" clip-path="url(#%s)"/>'
+                             % (data_uri(src), ox, oy, dw, dh, cid))
+
+        ink_l, ink_r = span_at(d, row_y)
+        if len(acts) == 2:
+            j = joins.get(i, 0.5)
+            mid = x0 + (x1 - x0) * j
+            for k, act in enumerate(acts):
+                lo, hi = (ink_l, mid) if k == 0 else (mid, ink_r)
+                size = min(22.0, (hi - lo - 18) / (len(act) * 0.46))
+                gk = " gold" if o_gold.get(cell) == act else ""
+                parts.append('<text class="tsub%s" x="%.1f" y="%.1f" font-size="%.1f">%s</text>'
+                             % (gk, (lo + hi) / 2, row_y, size, act))
+        elif acts:
+            size = min(22.0, (ink_r - ink_l - 24) / (len(acts[0]) * 0.46))
+            gk = " gold" if o_gold.get(cell) == acts[0] else ""
+            parts.append('<text class="tsub%s" x="%.1f" y="%.1f" font-size="%.1f">%s</text>'
+                         % (gk, (ink_l + ink_r) / 2, row_y, size, acts[0]))
+
+        base_y = y1
+        line_y = panel_bot if in_panel else (base_y - LINE_ABOVE)
+        # The divider runs the height of the ART AREA, which is not the same thing as "down to
+        # the acolyte line". On a tile whose acolytes have moved up into the panel the two ends
+        # coincided and the line came out zero-length -- drawn, valid, and invisible.
+        full = name in FULL_SPLIT
+        split_top = panel_bot if full else art_top
+        split_end = y1 if full else (base_y - LINE_ABOVE)
+        if SHOW_SPLIT and len(acts) == 2:
+            sx = x0 + (x1 - x0) * joins.get(i, 0.5)
+            parts.append('<line class="split" x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f"/>'
+                         % (sx, split_top, sx, split_end))
+        box_i = dg.acolyte_box(d, pop_set=POP_SET)
+        foot = box_i["sy"] + box_i["fh"]
+        counts = [0, 0, 0, 0] if has_rects else list(COUNTS[i])
+        bars = []
+        for seat in (() if has_rects else BAR_SEATS.get(name, ())):
+            j = dg.SEAT_ORDER.index(seat)
+            if counts[j] > 0:
+                bars.append((j, seat, counts[j]))
+                counts[j] = 0                  # these seats are drawn below, not by the row
+        parts.append('<g transform="translate(0 %.1f)">%s</g>'
+                     % (line_y - foot, dg.acolyte_row(d, counts, pop_set=POP_SET, uid=UID)))
+        # THE LINE IS FOR PIECES TO STAND ON, so a tile that draws none does not get one. It
+        # had been gated on "are the acolytes in the panel" alone, which is a different question:
+        # the Ordination tile is not a panel tile and draws nothing, and got a rule across its
+        # foot with nothing above it.
+        stands = bool(sum(counts)) or bool(bars) or bool(squares)
+        if not in_panel and stands:
+            l_l, l_r = span_at(d, line_y, band=18.0)
+            parts.append('<line class="ground" x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f"/>'
+                         % (l_l + 6, line_y, l_r - 6, line_y))
+        fw, fh, gap = box_i["fw"], box_i["fh"], box_i["gap"]
+        step = pop.tile(POP_SET)["step"]
+        seg_h = fh * step
+        for j, seat, n in bars:
+            # ONE SEGMENT PER HIDDEN ACOLYTE, not one bar of their combined height. Each is
+            # exactly the step a stacked figure would have shown -- fh * step -- so the column is
+            # the same height either way and the white strokes between them are countable. That
+            # is the whole gain: a solid bar says "more than one" and a segmented one says how
+            # many, without going back to drawing a figure per acolyte.
+            #
+            # A single acolyte gets NO segments, which is right: a seat at 1 must look identical
+            # whether it is drawn this way or stacked, or the two representations disagree at the
+            # commonest count on the board.
+            seg = fh * step
+            bar_h = (n - 1) * seg
+            bx = box_i["sx"] + j * (fw + gap)
+            for k in range(n - 1):
+                parts.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="%.1f" '
+                             'fill="%s" stroke="%s" stroke-width="%.2f"/>'
+                             % (bx, line_y - (k + 1) * seg, fw, seg, RECT_RADIUS,
+                                pop.SEAT_SWATCH[seat], pop.HOOD_INK, fw * RECT_STROKE))
+            parts.append('<use href="#%s-hood-%s" transform="translate(%.1f %.1f) scale(%.2f)"/>'
+                         % (UID, seat, bx + fw / 2, line_y - bar_h - fh, fw))
+        lit_seat, lit_at = o_litp.get(cell, (None, None))
+        for seat, n in (squares or {}).items():
+            j = dg.SEAT_ORDER.index(seat)
+            sxp = box_i["sx"] + j * (fw + gap)
+            for k in range(n):
+                # The TOP one is the last drawn, k == n - 1: the stack grows upward from the line.
+                base = pop.SEAT_SWATCH[seat]
+                # k counts UP from the line, so k + 1 is the piece's position from the base --
+                # the same way a player would count them.
+                is_lit = (seat == lit_seat and (k + 1) == lit_at)
+                fill = shade(base, LIT_V, LIT_S) if is_lit else shade(base, DIM_V, DIM_S)
+                parts.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="%.1f" '
+                             'fill="%s" stroke="%s" stroke-width="%.2f"/>'
+                             % (sxp, line_y - (k + 1) * seg_h, fw, seg_h, RECT_RADIUS,
+                                fill, pop.HOOD_INK, fw * RECT_STROKE))
+        parts.append("</g>")
+    parts.append("</svg>")
+
+    css = (CSS.replace("__BG__", PAGE_BG).replace("__FILL__", FILL)
+              .replace("__INK__", dg.INK).replace("__SW__", "%.2f" % (box * dg.EDGE_STROKE))
+              .replace("__NAME__", NAME).replace("__SUB__", SUB)
+              .replace("__LINE__", LINE_INK).replace("__PANEL__", PANEL_FILL)
+              .replace("__SPLIT__", SPLIT_INK).replace("__SPLITW__", "%.2f" % SPLIT_W)
+              .replace("__MARK__", dg.MARK_FILL)
+              .replace("__MARKW__", "%.2f" % (box * dg.EDGE_STROKE * MARK_W))
+              .replace("__MARKO__", "%.2f" % MARK_OPACITY)
+              .replace("__HALO__", "%.2f" % ACTION_HALO)
+              .replace("__GOLD__", dg.EDGE_HOVER).replace("__MARKDUR__", MARK_DUR))
+    cap = ("<b>The nine shapes, still</b>Outlines, fill, ink and stroke from gen_duty_grid; "
+           "action names from gen_board.DUTY_TEXT, shortened. No animation, no art, nothing in "
+           "the repository touched.")
+    if plan is not PLAN_NINE and plan != PLAN_NINE:
+        # DERIVED from the table, not written alongside it. Every rearrangement so far has left a
+        # hand-written caption describing the arrangement before last, which is a small lie on a
+        # page whose whole job is to be looked at.
+        drawn = sorted({dg.DUTY_NAMES[x] for x in plan if x is not None})
+        art = sum(1 for t in TILES if t["art"])
+        gold = sum(1 for t in TILES if t["gold"])
+        marked = sum(1 for t in TILES if t["mark"])
+        cap = ("<b>%s &mdash; nine states</b>%d tile%s with pictures, %d of them with a label in "
+               "the board's hover gold; %d marked. The rest carry pieces only, in the seat "
+               "colours dimmed." % (", ".join(drawn), art, "" if art == 1 else "s", gold, marked))
+    # The derived caption is "<b>title</b>rest"; split it so the title is a heading and the
+    # rest is a line under it, rather than one bold run that reads as a sentence fused to a word.
+    head, _, sub = cap.partition("</b>")
+    notes = ["<h1>%s</h1>" % head.replace("<b>", ""),
+             '<p style="color:#a99e86;font-size:12.3px;margin-top:-4px">%s</p>' % sub]
+    notes += ["<p>%s</p>" % t for t in INTRO]
+    for cells, head, body in NOTES:
+        notes.append('<div class="n" data-cells="%s"><b>%s</b>%s</div>'
+                     % (",".join(str(c) for c in cells), head, body))
+    notes.append('<p class="foot"><b>Note:</b> %s</p>' % FOOTNOTE)
+
+    return (PAGE.replace("__CSS__", css).replace("__NOTES__", "".join(notes)).replace("__SVG__", "".join(parts))
+                .replace("__CAP__", cap))
+
+
+OUT.parent.mkdir(parents=True, exist_ok=True)
+OUT.write_text(build(), encoding="utf-8")
+print("wrote %s  (%.0f KB)" % (OUT, OUT.stat().st_size / 1024))
+OUT_THREE.write_text(build(PLAN_THREE, THREE_OVER), encoding="utf-8")
+print("wrote %s  (%.0f KB)  plan %s"
+      % (OUT_THREE, OUT_THREE.stat().st_size / 1024,
+         [dg.DUTY_NAMES[x] if x is not None else "-" for x in PLAN_THREE]))
+_t = renamed(duty_text())
+print("action names found: %d of 13 hit areas" % len(_t))
+_html = OUT.read_text(encoding="utf-8")
+_uses = _html.count('<use href="#%s-hood-' % UID)
+_defs = sum(_html.count('id="%s-hood-%s"' % (UID, _s)) for _s in dg.SEAT_ORDER)
+# One figure per acolyte, EXCEPT on a seat drawn as a bar, where the whole count becomes a single
+# figure standing on it. Stated as arithmetic rather than relaxed to a range: the bar is exactly
+# the case where a miscount would be invisible, since the bar's height looks plausible whatever
+# it is.
+_expected = sum(sum(v) for v in COUNTS.values())
+_bars = 0
+for _n in RECTS:
+    # A tile drawn as squares contributes NO figures at all, so its whole row comes off the
+    # expectation. Left in, this count would have passed while the squares quietly drew nothing.
+    _expected -= sum(COUNTS[dg.DUTY_NAMES.index(_n)])
+for _n, _seats in BAR_SEATS.items():
+    if _n in RECTS:
+        continue
+    for _seat in _seats:
+        _c = COUNTS[dg.DUTY_NAMES.index(_n)][dg.SEAT_ORDER.index(_seat)]
+        if _c > 0:
+            _expected -= _c - 1
+            _bars += 1
+print("acolytes drawn: %d uses against %d expected (%d seat(s) drawn as a bar); %d hood defs"
+      % (_uses, _expected, _bars, _defs))
+if _uses != _expected or _defs != len(dg.SEAT_ORDER):
+    raise SystemExit("the row and its definitions disagree -- an unresolved <use> draws nothing")
+
+# What GROW cost the channels, stated rather than assumed. A tile that grows into its neighbour
+# is the one way this change can go wrong and it is invisible on a dark fill against a dark page.
+_laid = tile_shapes()
+_bt = pop.SETS[POP_SET]["tile"]
+_b = dg.acolyte_box(_laid[0], pop_set=POP_SET)
+_x0, _y0, _x1, _y1 = bbox(_laid[0])
+_W = _x1 - _x0
+_pitch = _b["fw"] + _b["gap"]
+print("figure %.1f x %.1f units at %.0f%% width; seat pitch %.2f units against a quarter of "
+      "%.2f; first seat centred at %.2f, quarter centre %.2f"
+      % (_b["fw"], _b["fh"], FIG_SHRINK * 100, _pitch, _W / 4,
+         _b["sx"] + _b["fw"] / 2 - _x0, _W / 8))
+if abs(_pitch - _W / 4) > 0.05 or abs(_b["sx"] + _b["fw"] / 2 - _x0 - _W / 8) > 0.05:
+    raise SystemExit("the seats are not on the tile's quarters -- centring and pitch disagree")
+if 4 * _b["fw"] + 3 * _b["gap"] > (_x1 - _x0):
+    raise SystemExit("the four seat slots no longer fit inside a tile")
+_bb = [bbox(_d) for _d in _laid]
+_gaps = ([_bb[3 * _r + _c + 1][0] - _bb[3 * _r + _c][2] for _r in range(3) for _c in range(2)]
+         + [_bb[3 * _r + 3 + _c][1] - _bb[3 * _r + _c][3] for _r in range(2) for _c in range(3)])
+_edge = min([_b[0] for _b in _bb] + [_b[1] for _b in _bb]
+            + [1000 - _b[2] for _b in _bb] + [1000 - _b[3] for _b in _bb])
+print("%s: tile %.1f x %.1f, narrowest channel %.1f units, narrowest outer margin %.1f units"
+      % (SHAPES_ARE, bbox(_laid[0])[2] - bbox(_laid[0])[0],
+         bbox(_laid[0])[3] - bbox(_laid[0])[1], min(_gaps), _edge))
+# Where the line lands, and what is left under it. A line the figures do not stand on is the one
+# fault this change can have, and it is a number rather than an opinion.
+_EDGE_HALF = (dg.load()["box"] * dg.EDGE_STROKE) / 2
+if LINE_ABOVE <= _EDGE_HALF:
+    raise SystemExit(
+        "LINE_ABOVE %.1f is inside the tile's own edge stroke, which reaches %.2f units in from "
+        "the base -- the line would be drawn on top of it" % (LINE_ABOVE, _EDGE_HALF))
+print("top panel %.1f units deep -- the title block's own height -- of a %.1f-unit tile; %s"
+      % (ACTION_DY + BLOCK_PAD, bbox(_laid[0])[3] - bbox(_laid[0])[1],
+         ("no panel on " + ", ".join(sorted(NO_PANEL))) if NO_PANEL
+         else "on all nine tiles"))
+_unknown = NO_PANEL - set(dg.DUTY_NAMES)
+if _unknown:
+    raise SystemExit("NO_PANEL names no such tile: %s -- the panel would be drawn on every tile "
+                     "and nothing would say so" % ", ".join(sorted(_unknown)))
+for _n in sorted(ACOLYTES_IN_PANEL):
+    _i = dg.DUTY_NAMES.index(_n)
+    _bx = dg.acolyte_box(_laid[_i], pop_set=POP_SET)
+    _sq = RECTS.get(_n)
+    if _sq:
+        _tall = _bx["fh"] * pop.tile(POP_SET)["step"] * max(_sq.values())
+        _what = "%d rectangle(s) = %.1f units" % (max(_sq.values()), _tall)
+    else:
+        _tall = _bx["fh"] + (max(COUNTS[_i]) - 1) * _bx["fh"] * pop.tile(POP_SET)["step"]
+        _what = "%d figures = %.1f units" % (max(COUNTS[_i]), _tall)
+    print("%s: tallest column is %s; its panel is %.1f (the other eight stay at %.1f)"
+          % (_n, _what, max(ACTION_DY + BLOCK_PAD, _tall + PANEL_PILE_PAD),
+             ACTION_DY + BLOCK_PAD))
+for _n, _sq in sorted(RECTS.items()):
+    _i = dg.DUTY_NAMES.index(_n)
+    _bx = dg.acolyte_box(_laid[_i], pop_set=POP_SET)
+    _sg = _bx["fh"] * pop.tile(POP_SET)["step"]
+    print("%s: no acolytes; rectangles %.1f x %.1f units -- %s"
+          % (_n, _bx["fw"], _sg, ", ".join("%s x%d (%.1f tall)" % (_s, _c, _c * _sg)
+                                           for _s, _c in _sq.items())))
+for _n, _seats in sorted(BAR_SEATS.items()):
+    if _n in RECTS:
+        continue
+    _i = dg.DUTY_NAMES.index(_n)
+    _bx = dg.acolyte_box(_laid[_i], pop_set=POP_SET)
+    for _seat in _seats:
+        _cnt = COUNTS[_i][dg.SEAT_ORDER.index(_seat)]
+        _stack = _bx["fh"] + (_cnt - 1) * _bx["fh"] * pop.tile(POP_SET)["step"]
+        _seg = _bx["fh"] * pop.tile(POP_SET)["step"]
+        print("%s/%-6s %d acolytes stack to %5.1f units; %d segment(s) of %4.1f + figure %.1f "
+              "= %5.1f" % (_n, _seat, _cnt, _stack, _cnt - 1, _seg, _bx["fh"],
+                           (_cnt - 1) * _seg + _bx["fh"]))
+_bx0 = dg.acolyte_box(_laid[0], pop_set=POP_SET)
+print("piece edge %.2f units against the hood's %.2f; corner radius %.1f of a %.1f-unit piece"
+      % (_bx0["fw"] * RECT_STROKE, _bx0["fw"] * pop.HOOD_STROKE, RECT_RADIUS,
+         _bx0["fh"] * pop.tile(POP_SET)["step"]))
+if RECT_RADIUS * 2 > _bx0["fh"] * pop.tile(POP_SET)["step"]:
+    raise SystemExit("a radius of %.1f rounds a %.1f-unit piece into a lozenge"
+                     % (RECT_RADIUS, _bx0["fh"] * pop.tile(POP_SET)["step"]))
+for _c, _e in sorted(THREE_OVER["mark"].items()):
+    print("cell %d marked %s (%s)" % (_c, _e, dg.EDGE_HOVER if False else dg.MARK_FILL))
+for _c, (_s, _k) in sorted(THREE_OVER["lit_piece"].items()):
+    # Resolve exactly as the drawing code does -- per-cell override if there is one, otherwise
+    # the tile's own table. A check that looks somewhere else is a check that reports on a
+    # different drawing from the one on the page.
+    _cell_rects = (THREE_OVER["rects"][_c] if _c in THREE_OVER["rects"]
+                   else RECTS.get(dg.DUTY_NAMES[PLAN_THREE[_c]], {}))
+    _have = _cell_rects.get(_s, 0)
+    if _k > _have:
+        raise SystemExit("cell %d asks for %s piece %d and only draws %d -- nothing would be lit"
+                         % (_c, _s, _k, _have))
+    print("cell %d: %s piece %d of %d is lit (%s); every other piece dim (%s)"
+          % (_c, _s, _k, _have, shade(pop.SEAT_SWATCH[_s], LIT_V, LIT_S),
+             shade(pop.SEAT_SWATCH[_s], DIM_V, DIM_S)))
+for _c, _r in sorted(THREE_OVER["rects"].items()):
+    print("cell %d overrides its counts: %s" % (_c, _r))
+# Each cell checked against ITS OWN tile's labels. Written against Clerical's when every cell
+# was a Clerical, this refused "Mission" on an Ordination tile -- a guard reporting on a drawing
+# other than the one on the page.
+_text = renamed(duty_text())
+_bad = {}
+for _c, _g in FULL_GOLD.items():
+    _labels = ("Take Tithe",) + tuple(actions(_text, dg.DUTY_NAMES[PLAN_THREE[_c]]))
+    if _g not in _labels:
+        _bad[_c] = "%s (this tile draws %s)" % (_g, ", ".join(_labels))
+if _bad:
+    raise SystemExit("gold names a label this tile does not draw: %s -- nothing would turn gold "
+                     "and nothing would say so" % _bad)
+_nobadge = [c for c, t in enumerate(TILES)
+            if t["badge"] and dg.DUTY_NAMES[t["duty"]] not in BADGE]
+if _nobadge:
+    raise SystemExit("tiles %s ask for a value badge and BADGE has none for their duty, so "
+                     "nothing is drawn and the table disagrees with the page" % _nobadge)
+print("gold %s on %s" % (dg.EDGE_HOVER, ", ".join("cell %d: %s" % kv
+                                                  for kv in sorted(FULL_GOLD.items()))))
+print("action names %.1f units below the panel (was %.1f), white with a %.1f-unit black outline"
+      % (ACTION_DROP, TITLE_DY, ACTION_HALO))
+print("panel inset %.2f units: mark half %.2f + gap %.1f + panel stroke half %.2f"
+      % (PANEL_INSET, _EDGE * MARK_W / 2, PANEL_CLEAR, _EDGE / 2))
+for _c, _m in sorted(THREE_OVER["act_art"].items()):
+    from PIL import Image as _I2
+    _pi = PANEL_INSET
+    _bw = (306.7 / 2) - _pi - ACT_SPLIT_GAP
+    _bh = 306.7 - _pi - (BAND + ACTION_DY + BLOCK_PAD + ACT_TOP_GAP)
+    print("cell %d action art: box %.1f x %.1f units (%.3f)" % (_c, _bw, _bh, _bw / _bh))
+    for _h, _f in sorted(_m.items()):
+        _w, _hh = _I2.open(_f).size
+        print("   %-6s %s  %dx%d px (%.3f)" % (_h, _f.name, _w, _hh, _w / _hh))
+for _c, _a in sorted(THREE_OVER["art"].items(), key=lambda kv: (kv[1].name, kv[0])):
+    if _a.is_file():
+        from PIL import Image as _I
+        _w, _h = _I.open(_a).size
+        _pw = 306.7 - 2 * PANEL_INSET
+        print("cell %d art: %s, %dx%d px (%.3f) into a panel of %.1fx%.1f (%.3f) -- cropped, "
+              "not squashed" % (_c, _a.name, _w, _h, _w / _h, _pw, ACTION_DY + BLOCK_PAD,
+                                _pw / (ACTION_DY + BLOCK_PAD)))
+    else:
+        raise SystemExit("panel art %s is not on disk; the panel would draw its plain fill and "
+                         "nothing would say so" % _a)
+print("steady mark: %s at %.2f units (edge %.2f x %.1f), opacity %.2f"
+      % (dg.MARK_FILL, dg.load()["box"] * dg.EDGE_STROKE * MARK_W,
+         dg.load()["box"] * dg.EDGE_STROKE, MARK_W, MARK_OPACITY))
+print("acolytes stand %.1f units above the base (%.1f px on a 1117 px wheel); the edge stroke "
+      "reaches %.2f units in" % (LINE_ABOVE, LINE_ABOVE * 1117 / 1000, _EDGE_HALF))
+if min(_gaps) < 6.0:
+    raise SystemExit("GROW %.2f closes a channel to %.1f units -- the tiles touch" % (GROW, min(_gaps)))
+for _i, _n in enumerate(dg.DUTY_NAMES):
+    print("  %-12s %s" % (_n, " / ".join(actions(_t, _n)) or "(none -- not a duty)"))

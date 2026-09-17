@@ -1190,7 +1190,8 @@ def _path(pts) -> str:
     return "M " + " L ".join("%.1f %.1f" % (x, y) for x, y in pts) + " Z"
 
 
-def place(shapes: list[str], box: float, margin: float = MARGIN) -> list[str]:
+def place(shapes: list[str], box: float, margin: float = MARGIN,
+          box_h: float | None = None) -> list[str]:
     """Re-lay the nine outlines as an even 3x3, each keeping the exact size it was traced at.
 
     Translation only -- no scaling anywhere. The tiles were traced off a generated sheet whose
@@ -1203,12 +1204,18 @@ def place(shapes: list[str], box: float, margin: float = MARGIN) -> list[str]:
     edge and preferable to the alternative, which pins the margins and lets the channels drift.
     """
     pts = [_points(d) for d in shapes]
+    # THE BOX HAS TWO SIDES, and they were one number for as long as the wheel was square. A
+    # landscape wheel breaks that in the quiet direction: given only `box`, the three rows are
+    # pushed apart until they touch the margins of a SQUARE, so cells wider than they are tall
+    # come out correctly spaced across and swimming in vertical channel. The default keeps every
+    # existing caller exactly where it was.
+    box_h = box if box_h is None else box_h
 
-    def spread(axis: int, bands: list[list[int]]) -> None:
+    def spread(axis: int, bands: list[list[int]], extent: float) -> None:
         for band in bands:
             lo = [min(p[axis] for p in pts[i]) for i in band]
             size = [max(p[axis] for p in pts[i]) - lo[k] for k, i in enumerate(band)]
-            gap = (box - sum(size) - 2 * margin) / 2
+            gap = (extent - sum(size) - 2 * margin) / 2
             at = margin
             for k, i in enumerate(band):
                 shift = at - lo[k]
@@ -1216,8 +1223,8 @@ def place(shapes: list[str], box: float, margin: float = MARGIN) -> list[str]:
                     p[axis] += shift
                 at += size[k] + gap
 
-    spread(0, [[3 * r + c for c in range(3)] for r in range(3)])     # x, within each row
-    spread(1, [[3 * r + c for r in range(3)] for c in range(3)])     # y, within each column
+    spread(0, [[3 * r + c for c in range(3)] for r in range(3)], box)      # x, within each row
+    spread(1, [[3 * r + c for r in range(3)] for c in range(3)], box_h)    # y, within each column
     return [_path(p) for p in pts]
 
 

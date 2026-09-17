@@ -12,9 +12,9 @@ Future work can extract structured geometry/layout data one prototype at a time 
 Each kind of file here has one job, and mixing them up is how this layer starts to drift:
 
 - **Prototype HTML** (`prototypes/*.html`) are visual baselines. Once a prototype lands it is
-  not edited; renderers are judged against it. The wax seals are the one exception, and are
-  documented as such below: that page was never drawn by hand, so it is its renderer's committed
-  output rather than a baseline the renderer is measured against.
+  not edited; renderers are judged against it. The wax seals and the v2 duty wheel are the two
+  exceptions, and are documented as such below: neither page was ever drawn by hand, so each is
+  its renderer's committed output rather than a baseline the renderer is measured against.
 - **Prototype sources** (`prototype_sources/*.py.txt`) are reference copies of the throwaway
   scripts that drew a baseline. They are kept as `.txt` on purpose: they are read for intent when
   reverse-engineering, never imported, run, or refactored.
@@ -1884,3 +1884,102 @@ Notes:
 - Generated map rendering is visual/debug only.
 - There is still no `GameState` integration.
 - No gameplay or rules logic belongs in the UI debug layer.
+
+## Duty tile turn prototype
+
+`prototypes/duty_tile_turn.html` walks one turn for Player 3 across nine tiles, and its
+commentary is the author's, in the panel beside the board. It is a DESIGN PROPOSAL, not a
+baseline to reverse-engineer: none of it is drawn by a renderer, and steps 3 onwards of the
+checklist above do not apply to it yet.
+
+What it proposes, in one line each:
+
+- Acolytes on a duty tile are drawn as stacked coloured rectangles rather than figures, so they
+  cost less height and cover no action art. Each rectangle is one acolyte and is the exact step a
+  stacked figure would have shown, so a column is the same height either way and the white gaps
+  between them are countable.
+- Everything a player needs after the Sow phase lives on the selected tile: the duty and its
+  value at the top, what the space pays in the panel, and what each half does over its own
+  picture. That is proposed to replace the corresponding section of the action board.
+- Selecting a tile removes its acolytes, which frees the panel for the tithe resource to be shown
+  as a picture rather than an icon.
+
+Open questions the page does not settle, recorded here because they will be argued about again:
+
+- **Green is asked to mean three things.** The border studio designed emerald for *takeable after
+  a Sow*; the commentary also proposes it for *this seat has presence*, and green again for
+  *parity* on the duty value. The first two appear on the same tile at the same time.
+- **Red and green for minority and parity** is the one distinction on this board a red-green
+  colour-blind player cannot make, and the value already says it: +1 against +2.
+- **A tile that grows to hold a text box** has nowhere to grow inside a 3x3. The space freed when
+  the acolytes are removed is available at exactly the moment the text is wanted.
+- **The Merchant is absent**, and it is what decides whether the tithe resource is payable.
+
+### The pictures in it
+
+The wheat, stone and two action pictures are crops of images generated with ChatGPT (OpenAI), cut
+at their own resolution to the aspect of the box each fills and embedded as data URIs. They are
+**not** manually illustrated, and are not CC0, public domain, or royalty-free stock. They are
+placeholders standing in for art that does not exist yet, and nothing here is production art.
+
+`prototype_sources/duty_tile_turn_build.py.txt` is the script that drew it, kept under the same
+rule as the others: read for intent, never imported, run, or refactored. It was written outside
+the repository and reads its pictures from a path that does not exist here.
+
+## Duty wheel v2 renderer extraction
+
+`prototypes/duty_wheel_v2.html` is the oval duty wheel: a hub and eight spokes on a true ellipse,
+mirrored about both axes. It is v2 in the sense `piety_track_v2` and `player_boards_v2` are — a
+second baseline beside the first, not a replacement. `duty_wheel_layout.json`,
+`render_duty_wheel.py` and `prototypes/duty_wheel.html` are untouched and still describe the
+circular board the game draws today.
+
+**This one runs backwards, and that is deliberate.** Everywhere else in this folder the baseline
+came first — drawn by hand, committed, then reverse-engineered into a layout JSON that a renderer
+was measured against. Here `build_duty_wheel_v2.py` computes the geometry, `render_duty_wheel_v2.py`
+draws it, and the prototype is that drawing committed. So `duty_wheel_v2.html` and the `.svg` beside
+it are the renderer's OUTPUT, not references it has to match pixel for pixel. The wax seals are the
+same case; those two are the exceptions named at the top of this file.
+
+The practical consequence: to change the wheel, change a constant in `build_duty_wheel_v2.py` and
+re-run it, then `generate_duty_wheel_v2.py --baseline` to refresh the committed pair. Hand-editing
+the prototype achieves nothing, because the next run overwrites it.
+
+`build_duty_wheel_v2.py` is a **live script, not a `prototype_sources/*.py.txt` reference copy.**
+That is the one rule here it does not follow, and the reason is that the nine outlines are not the
+base — the dozen constants at the top of it are, and at least one of them is still open. Freezing
+it as read-only text would mean the next change to the aspect gets done by hand instead of by
+editing a number.
+
+### What the geometry guarantees
+
+Every face is inset by half the frame width along each of its edges and trimmed where the insets
+cross. Because both neighbours give up their half on the *same* curve, rather than each being
+shrunk on its own, the channel between them is the frame width by construction and not by
+adjustment. The rim is the ellipse for the same reason: the faces are inset from it, never clipped
+to it. Two spokes are authored and the other six are their mirrors, so the symmetry is exact rather
+than close — `mirror_error` is a zero, not a small number.
+
+The nine entries are named by **position, not by duty**. Duty tiles are shuffled at setup, so which
+duty stands on which face is an arrangement and not a fact — the same point `gen_duty_grid.DUTY_NAMES`
+makes about its own list. `index` is the 0–8 grid square, top-left to bottom-right, which is the
+order `gen_duty_grid`'s `cells=` argument already speaks, so a real game's board maps onto these
+without renaming anything. The centre is the City.
+
+The outlines are cubic Béziers. `gen_duty_grid._points()` parses only `M`, `L` and `Z`, so each
+cell also carries `d_poly`, the same outline as a polyline, until that side is taught to take a
+`C`. `gen_duty_grid.place()` must **not** be used on these: it re-lays the nine as an even 3×3,
+which is right for the traced tiles because their positions were an accident of the sheet they came
+off, and wrong for these because their positions *are* the geometry.
+
+### The aspect is not settled
+
+`ASPECT` is 1.778 and the file says so in its own header. Measured against the tile that ships
+today — mean 63,148 units² of a square 1000 box, taken off `laid_shapes()` rather than off
+`TILE_FRAC` — these faces come out at **69% of a shipped tile** at today's canvas of 1600, because
+the wheel is already width-bound at 877.8 units and going landscape only throws the height away.
+At a canvas of 2283, where `gen_screen_budget.best_canvas` puts the crossing for this aspect, they
+come out at **2.19×**, for a 3.5% drop in stage scale on the MacBook and none on the ultrawide.
+
+So the shape work does not pay for itself until the canvas moves with it. That decision is not made
+here; it is recorded here so it travels with the file.
