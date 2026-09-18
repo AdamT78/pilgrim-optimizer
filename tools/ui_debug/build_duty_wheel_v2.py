@@ -51,10 +51,17 @@ re-run; everything downstream follows.
 Run from the repo root:
 
     python3 tools/ui_debug/build_duty_wheel_v2.py
+    python3 tools/ui_debug/build_duty_wheel_v2.py --aspect 1.5 \
+        --out duty_wheel_v2_1500_layout.json
+
+The second is how duty_wheel_v2_1500_layout.json is made, and it has to stay that way: that file
+is read by generate_wheel_space_check.py, and a layout nothing can regenerate is a layout that
+quietly becomes wrong the first time anything else here moves.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 from pathlib import Path
@@ -67,10 +74,24 @@ VERSION = 2
 # ---------------------------------------------------------------- parameters
 
 BOX = 1000.0
-ASPECT = 1.778                      # wheel width : height -- see THE ASPECT above
 MARGIN = 5.0                        # bare ground outside the ellipse
 
-HUB_RX, HUB_RY = 156.0, 107.0       # the centre face, before its inset
+# parse_known_args, not parse_args: these constants are needed at IMPORT time, so the parse runs
+# on import too, and under pytest sys.argv belongs to pytest. Unknown flags are ignored rather
+# than fatal.
+_ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+_ap.add_argument("--aspect", type=float, default=1.778, help="wheel width : height")
+_ap.add_argument("--out", default=None, help="layout file to write")
+ARGS = _ap.parse_known_args()[0]
+
+ASPECT = ARGS.aspect                # see THE ASPECT above; 1.778 is the default, not a verdict
+
+# The centre face was drawn at 156.0 x 107.0 against the rim it had at aspect 1.778. Held as a
+# PROPORTION of the rim rather than in units, so changing ASPECT rescales it instead of leaving
+# a hub the wrong size in a taller box. Written as a ratio against that reference rim, so at
+# 1.778 it comes back to exactly 156.0 x 107.0 and the layout does not move.
+REF_RX, REF_RY = 495.0, 276.2       # the rim at aspect 1.778
+HUB_REF_X, HUB_REF_Y = 156.0, 107.0
 HUB_LOBE = 0.040                    # 8-fold swell peaking on the spokes
 HUB_BULGE = 0.018                   # slower wander on top of it
 
@@ -119,6 +140,7 @@ SELF = {"north": "MV", "west": "MH", "centre": "MV"}
 BOX_H = round(BOX / ASPECT, 1)
 CX, CY = BOX / 2.0, BOX_H / 2.0
 RX, RY = BOX / 2.0 - MARGIN, BOX_H / 2.0 - MARGIN
+HUB_RX, HUB_RY = HUB_REF_X * (RX / REF_RX), HUB_REF_Y * (RY / REF_RY)
 N_PT = 700
 
 rng = np.random.default_rng(SEED)
@@ -508,8 +530,11 @@ def layout(polys: dict) -> dict:
 def main() -> None:
     polys = build()
     data = layout(polys)
-    OUT.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
-    print("wrote %s" % OUT)
+    out = Path(ARGS.out) if ARGS.out else OUT
+    if not out.is_absolute():
+        out = OUT.parent / out
+    out.write_text(json.dumps(data, indent=1) + "\n", encoding="utf-8")
+    print("wrote %s  (aspect %.3f)" % (out, ASPECT))
     for k, v in data["checks"].items():
         print("  %-28s %s" % (k, v))
 

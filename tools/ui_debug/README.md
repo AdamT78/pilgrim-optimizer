@@ -1983,3 +1983,86 @@ come out at **2.19×**, for a 3.5% drop in stage scale on the MacBook and none o
 
 So the shape work does not pay for itself until the canvas moves with it. That decision is not made
 here; it is recorded here so it travels with the file.
+
+## Wheel space check
+
+`generate_wheel_space_check.py` answers one question: how much room does the duty wheel actually
+get, and what does everything else cost it. It is a measuring instrument, not a view of the game,
+and it is the only thing in this folder whose output is meant to be read as numbers rather than
+looked at.
+
+    python3 tools/ui_debug/generate_wheel_space_check.py --open
+
+The player boards in it are real — `build_board()` per seat then `merge_defs()`, the same calls
+`gen_game_view` makes, at the same 1905 × 826 aspect and sized from `geometry()`. Special
+Activities is the real `special_placeholder()`, which goes red for itself when the cube table
+stops fitting. Everything else is a plain box at the correct size: alms table, market, banner,
+action box.
+
+The slider moves `board_width` and the page reads geometry stamped for every width it can reach,
+so nothing in it re-implements the layout. The action-box button drops the `panel_w` term out of
+`wheel_room` — `gen_game_view`'s own formula with one term removed — and hands that width to the
+wheel. Rules across the window mark where the canvas ends, because on a screen wider than the
+canvas a good deal of it is doing nothing and that is easier to believe from a picture.
+
+`wheel_space_check.html.tmpl` is the page it fills in. It is a template and not a prototype: it
+carries no geometry of its own, only the markup and the script that lay out whatever the
+generator stamps into it.
+
+**The output is not committed.** It lands in `generated/` like the other debug artifacts, and at
+about 9 MB carrying the portrait art it is the last thing that should go into the repository.
+Rebuild it instead; it takes seconds.
+
+### Two wheels, and the aspect still open
+
+The generator carries `duty_wheel_v2_layout.json` at aspect 1.778 and
+`duty_wheel_v2_1500_layout.json` at 1.500, and the page toggles between them. Both are output of
+the same script:
+
+    python3 tools/ui_debug/build_duty_wheel_v2.py
+    python3 tools/ui_debug/build_duty_wheel_v2.py --aspect 1.5 \
+        --out duty_wheel_v2_1500_layout.json
+
+The 1.500 file used to be a source file, because nothing could make it again: the hub was sized
+in units, so a taller box left the centre face at its old size against a rim that had moved. It
+is held as a proportion of the rim now — written as a ratio against the rim the hub was drawn
+against, so the 1.778 layout comes back byte-for-byte and nothing downstream of it shifts.
+`test_both_duty_wheel_v2_layouts_rebuild_byte_for_byte` rebuilds both and compares bytes, which
+is what stops either one drifting away from the constants that are supposed to produce it.
+
+`ASPECT` still defaults to 1.778, which is where the faces were authored and is not a verdict;
+the flag is what makes the other one cheap to look at.
+
+Why it matters which one wins: measured against the tile that ships today, 1.500 gives a face
+0.83× its area at the current canvas of 1600 against 0.69× for 1.778, because the wheel is
+already width-bound and going wider only throws height away. 1.500 also wants a canvas of 2039
+where 1.778 wants 2283 — and 2039 is under the point where either of the two measured screens
+starts losing stage scale, so it costs nothing on both where 1.778 costs 3.4% on the laptop.
+
+## Aspect comparison
+
+`generate_wheel_aspect_compare.py` is the picture that goes with the paragraph above: the wheel
+at both aspects, on both screens that were actually measured, each panel labelled with the size
+it comes out at in real device pixels.
+
+    python3 tools/ui_debug/generate_wheel_aspect_compare.py --open
+
+Nothing in it is a number chosen here. The outlines are the two committed layouts, the room the
+wheel gets is `gen_game_view.geometry()`, and the screens are the entries in
+`gen_screen_budget.REFERENCE` marked `measured` — read off the machines rather than estimated.
+Change any of those and re-run.
+
+A panel's width on the page is its real-pixel width as a fraction of the largest of the four, so
+the picture carries the finding rather than leaving it to the caption. The finding is the one
+`gen_screen_budget` already records in prose and is worth seeing drawn: the 34-inch ultrawide
+shows a wheel far wider in centimetres and resolves it into 964 real pixels where the 14-inch
+laptop gets 1204, because the ultrawide reports a pixel ratio of one. The laptop sets the
+resolution the artwork has to meet, and the big monitor never will.
+
+The face multiples come out identical in both columns, which is correct rather than a bug: a face
+and the shipped tile it is quoted against both scale with the stage, so that ratio depends on the
+aspect and not on the screen. The pixel counts are where the screens differ.
+
+The canvas is held at 1600 — what the game ships today — so the aspect is the only thing moving.
+`gen_screen_budget` is the page for the canvas trade. Output goes to `generated/` and is not
+committed.

@@ -1,5 +1,7 @@
 import json
 import math
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -40,6 +42,7 @@ DUTY_TILE_TURN_SOURCE = PROTOTYPE_SOURCES_DIR / "duty_tile_turn_build.py.txt"
 DUTY_WHEEL_V2_HTML = PROTOTYPES_DIR / "duty_wheel_v2.html"
 DUTY_WHEEL_V2_SVG = PROTOTYPES_DIR / "duty_wheel_v2.svg"
 DUTY_WHEEL_V2_LAYOUT = UI_DEBUG_DIR / "duty_wheel_v2_layout.json"
+DUTY_WHEEL_V2_LAYOUT_1500 = UI_DEBUG_DIR / "duty_wheel_v2_1500_layout.json"
 DUTY_WHEEL_V2_BUILD = UI_DEBUG_DIR / "build_duty_wheel_v2.py"
 DUTY_WHEEL_V2_RENDER = UI_DEBUG_DIR / "render_duty_wheel_v2.py"
 DUTY_WHEEL_V2_GENERATE = UI_DEBUG_DIR / "generate_duty_wheel_v2.py"
@@ -677,6 +680,34 @@ def test_duty_wheel_v2_records_that_its_aspect_is_unsettled() -> None:
     assert "2283" in layout["aspect_is_open"]
     assert "THE ASPECT" in DUTY_WHEEL_V2_BUILD.read_text(encoding="utf-8")
     assert "2283" in README_MD.read_text(encoding="utf-8")
+
+
+def test_both_duty_wheel_v2_layouts_rebuild_byte_for_byte(tmp_path: Path) -> None:
+    """The 1.500 wheel used to be a source file, because nothing could make it again. It is
+    output now, and this is what keeps it that way: a layout no script can regenerate goes
+    quietly wrong the first time a constant beside it moves, and nothing notices.
+
+    Byte-for-byte, not close-enough. The hub is held as a ratio against the rim it had at 1.778
+    precisely so the 1.778 layout comes back unchanged; if that stops being true the refactor has
+    silently moved the wheel that everything downstream is measured against.
+    """
+    pytest.importorskip("numpy", reason="the faces are built from parametric curves")
+    for layout, extra in ((DUTY_WHEEL_V2_LAYOUT, ()),
+                          (DUTY_WHEEL_V2_LAYOUT_1500, ("--aspect", "1.5"))):
+        out = tmp_path / layout.name
+        result = subprocess.run(
+            [sys.executable, str(DUTY_WHEEL_V2_BUILD), "--out", str(out), *extra],
+            capture_output=True, text=True, cwd=str(REPO_ROOT))
+        assert result.returncode == 0, (
+            "build_duty_wheel_v2.py failed for %s\n\n%s"
+            % (layout.name, "\n".join(
+                x for x in (result.stdout.strip(), result.stderr.strip()) if x)[-3000:]))
+        assert out.read_bytes() == layout.read_bytes(), (
+            "%s is no longer what build_duty_wheel_v2.py produces. Either a constant moved and "
+            "the file was not regenerated, or the file was edited by hand. Rebuild with\n"
+            "    python3 tools/ui_debug/build_duty_wheel_v2.py%s"
+            % (layout.name, "".join(" " + a for a in extra) +
+               (" --out " + layout.name if extra else "")))
 
 
 def test_duty_wheel_v2_build_script_is_live_code_and_not_a_frozen_reference() -> None:
