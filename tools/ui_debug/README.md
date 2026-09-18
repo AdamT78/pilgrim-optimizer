@@ -2038,3 +2038,31 @@ Why it matters which one wins: measured against the tile that ships today, 1.500
 already width-bound and going wider only throws height away. 1.500 also wants a canvas of 2039
 where 1.778 wants 2283 — and 2039 is under the point where either of the two measured screens
 starts losing stage scale, so it costs nothing on both where 1.778 costs 3.4% on the laptop.
+
+## Aspect comparison
+
+`generate_wheel_aspect_compare.py` is the picture that goes with the paragraph above: the wheel
+at both aspects, on both screens that were actually measured, each panel labelled with the size
+it comes out at in real device pixels.
+
+    python3 tools/ui_debug/generate_wheel_aspect_compare.py --open
+
+Nothing in it is a number chosen here. The outlines are the two committed layouts, the room the
+wheel gets is `gen_game_view.geometry()`, and the screens are the entries in
+`gen_screen_budget.REFERENCE` marked `measured` — read off the machines rather than estimated.
+Change any of those and re-run.
+
+A panel's width on the page is its real-pixel width as a fraction of the largest of the four, so
+the picture carries the finding rather than leaving it to the caption. The finding is the one
+`gen_screen_budget` already records in prose and is worth seeing drawn: the 34-inch ultrawide
+shows a wheel far wider in centimetres and resolves it into 964 real pixels where the 14-inch
+laptop gets 1204, because the ultrawide reports a pixel ratio of one. The laptop sets the
+resolution the artwork has to meet, and the big monitor never will.
+
+The face multiples come out identical in both columns, which is correct rather than a bug: a face
+and the shipped tile it is quoted against both scale with the stage, so that ratio depends on the
+aspect and not on the screen. The pixel counts are where the screens differ.
+
+The canvas is held at 1600 — what the game ships today — so the aspect is the only thing moving.
+`gen_screen_budget` is the page for the canvas trade. Output goes to `generated/` and is not
+committed.
