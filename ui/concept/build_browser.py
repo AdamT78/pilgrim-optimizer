@@ -48,8 +48,10 @@ import base64
 import html
 import io
 import json
+import os
 import pathlib
 import sys
+import urllib.parse
 import webbrowser
 
 try:
@@ -315,7 +317,22 @@ def where(subject: dict, spec: dict) -> pathlib.Path:
     return HERE / (spec.get("rel") or "%s/%s.png" % (subject["id"], spec["kind"]))
 
 
-def collect() -> tuple[list, list, list]:
+def source_link(path: pathlib.Path, out_dir: pathlib.Path) -> str:
+    """A path from the finished page back to the file it is showing.
+
+    Everything on this page is downscaled to MAX_EDGE and re-encoded, so saving an image out of
+    the page gets the preview -- for a panorama, 1200 x 462 of a 2860 x 1100 original. The card
+    therefore carries a link to the file itself.
+
+    Relative, not absolute: the page is rebuilt by whoever runs the script, so a path from the
+    output directory works for all of them, where a baked-in /Users/... would work for one. It
+    does mean the link dies if the HTML is moved or mailed on its own, which is the same trade
+    the embedded images already make in the other direction.
+    """
+    return urllib.parse.quote(os.path.relpath(path, out_dir).replace(os.sep, "/"))
+
+
+def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
     """Every declared image: found, reported missing, or absent-but-expected. Nothing is globbed."""
     # One pass over the figures before anything is encoded: the target is the narrowest plinth in
     # the set, so it cannot be known from any single image.
@@ -341,7 +358,7 @@ def collect() -> tuple[list, list, list]:
                     panels.append({"kind": kind, "title": title, "uri": None, "w": 4.0, "h": 3.0,
                                    "src": str(path), "name": path.name, "bytes": 0,
                                    "dims": "not in this checkout", "note": "",
-                                   "origin": spec.get("origin")})
+                                   "origin": spec.get("origin"), "source": None})
                 else:
                     missing.append("%s / %s: %s" % (ch["label"], kind, path))
                 continue
@@ -355,7 +372,8 @@ def collect() -> tuple[list, list, list]:
                 dims = "%d \u00d7 %d" % source
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,
-                           "dims": dims, "note": note, "origin": spec.get("origin")})
+                           "dims": dims, "note": note, "origin": spec.get("origin"),
+                           "source": source_link(path, out_dir)})
             print("  %-16s %-12s %5g x %-6g %6.0f KB embedded  <- %s"
                   % (ch["id"], kind, w, h, size / 1024, path.name))
         found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")},
@@ -371,6 +389,11 @@ def caption(p: dict) -> str:
     default is stated once in the footer and only the exceptions are marked here.
     """
     text = html.escape(" \u00b7 ".join(x for x in (p["name"], p["dims"], p["note"]) if x))
+    if p.get("source"):
+        # `download` is kept for the case where this is ever served over http, but on a file://
+        # page Chromium ignores it and navigates instead -- so the label says open, not save.
+        text += (' \u00b7 <a class="dl" href="%s" download>open the original</a>'
+                 % html.escape(p["source"], quote=True))
     src = p.get("origin")
     if src:
         text += (' \u00b7 source <a href="%s" target="_blank" rel="noopener noreferrer">%s</a>'
@@ -494,6 +517,7 @@ PAGE = """<!doctype html>
  figcaption b{color:#cbbb98;font-weight:600;font-size:13px}
  figcaption span{color:#5f5749;font-size:11.5px}
  figcaption a{color:#8a7a52}
+ figcaption a.dl{color:#9a8a5e}
  figcaption a:hover{color:#cbbb98}
  .hint a{color:#5f5749}
  .hint code{color:#6b6250;font-size:11px}
@@ -541,7 +565,11 @@ who made it and its checksum. Images are downscaled and re-encoded for this page
   });
 
   document.addEventListener("click", function(e){
-    var card = e.target.closest ? e.target.closest(".card") : null;
+    if (!e.target.closest) return;
+    // the caption's source link lives INSIDE the card, so its click bubbles here and used to
+    // open the overlay on top of the download. A link is never a request to zoom.
+    if (e.target.closest("a")) return;
+    var card = e.target.closest(".card");
     if (!card) return;
     lbImg.src = card.dataset.full;
     lb.classList.add("on");
@@ -621,7 +649,7 @@ def main() -> int:
            else HERE / "generated" / "concept_browser.html")
 
     resolve_portraits()
-    subjects, missing, absent = collect()
+    subjects, missing, absent = collect(out.parent)
     page = render(subjects, missing)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
