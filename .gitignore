@@ -27,3 +27,12 @@ pilgrim_optimizer.egg-info/
 # --select F` reported in this working tree, while CI -- which sees tracked files -- was clean: a
 # check that fails on scratch is a check you learn to skim past.
 Claude outputs/
+
+# Concept art: the folder is committed, these two parts of it are not.
+#
+# _reference/ holds third-party images kept for inspiration and never used in the game. Looking at
+# one is fine; committing it would put somebody else's work in every clone forever, and the credit
+# we would have to write beside it would probably name the wrong person -- a Pinterest link is a
+# re-post, not an artist. The manifest records the URL so the reference survives without the file,
+# and build_browser.py draws a card that links out when the file is not there.
+ui/concept/_reference/

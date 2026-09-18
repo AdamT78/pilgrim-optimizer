@@ -55,6 +55,7 @@ anywhere — they locate the repository by looking for the renderer, not by coun
       inputs/       pre-rendered stages of the pipeline that gen_board.py composes
       generated/    the rebuilt pages. GIT-IGNORED
       studies/      frozen decision records, grouped by component. Never regenerated
+      concept/      concept art filed by subject, with the browser that collects it
       docs/         hybrid-svg-png.md, the rendering contract the assets are built to
       scratch/      upstream generators rescued from a temp directory, not yet portable
 
