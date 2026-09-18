@@ -155,12 +155,24 @@ SUBJECTS.append({
     "ink": "#6b6250",
     "stack": True,
     "kinds": [
+        # The composed file is LOSSY webp -- it is the one the game ships. The halves it was
+        # made from are lossless and twice the data, so they are the archival form and the card
+        # links them too. Whoever wants a panorama to work from wants these, not the delivery copy.
         {"kind": "panorama_dark", "title": "Dark centre", "root": "assets",
-         "rel": "ui/assets-gothic/ui/panorama.webp"},
+         "rel": "ui/assets-gothic/ui/panorama.webp",
+         "also": [("lossless left half", "ui/assets-gothic/ui/sources/panorama_left.webp"),
+                  ("lossless right half", "ui/assets-gothic/ui/sources/panorama_right.webp")]},
         {"kind": "panorama_clearing", "title": "Clearing", "root": "assets",
-         "rel": "ui/assets-gothic/ui/panorama_clearing.webp"},
+         "rel": "ui/assets-gothic/ui/panorama_clearing.webp",
+         "also": [("lossless left half",
+                   "ui/assets-gothic/ui/sources/panorama_clearing_left.webp"),
+                  ("lossless right half",
+                   "ui/assets-gothic/ui/sources/panorama_clearing_right.webp")]},
         {"kind": "panorama_mist", "title": "Mist", "root": "assets",
-         "rel": "ui/assets-gothic/ui/panorama_mist.webp"},
+         "rel": "ui/assets-gothic/ui/panorama_mist.webp",
+         "also": [("lossless left half", "ui/assets-gothic/ui/sources/panorama_mist_left.webp"),
+                  ("lossless right half",
+                   "ui/assets-gothic/ui/sources/panorama_mist_right.webp")]},
     ],
 })
 
@@ -373,7 +385,12 @@ def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,
                            "dims": dims, "note": note, "origin": spec.get("origin"),
-                           "source": source_link(path, out_dir)})
+                           "source": source_link(path, out_dir),
+                           # further files worth reaching for this one: a higher-quality form,
+                           # the parts it was composed from. Silently dropped if absent.
+                           "also": [(label, source_link(ROOT / rel, out_dir))
+                                    for label, rel in spec.get("also", [])
+                                    if (ROOT / rel).is_file()]})
             print("  %-16s %-12s %5g x %-6g %6.0f KB embedded  <- %s"
                   % (ch["id"], kind, w, h, size / 1024, path.name))
         found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")},
@@ -394,6 +411,9 @@ def caption(p: dict) -> str:
         # page Chromium ignores it and navigates instead -- so the label says open, not save.
         text += (' \u00b7 <a class="dl" href="%s" download>open the original</a>'
                  % html.escape(p["source"], quote=True))
+    for label, href in p.get("also") or []:
+        text += (' \u00b7 <a class="dl" href="%s" download>%s</a>'
+                 % (html.escape(href, quote=True), html.escape(label)))
     src = p.get("origin")
     if src:
         text += (' \u00b7 source <a href="%s" target="_blank" rel="noopener noreferrer">%s</a>'
