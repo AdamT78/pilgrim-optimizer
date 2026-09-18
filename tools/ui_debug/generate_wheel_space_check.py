@@ -30,9 +30,10 @@ The wheel is centred in its column and lifted so its own centre line -- which is
 THE ASPECT IS NOT SETTLED
 
 Two wheels are carried: duty_wheel_v2_layout.json at 1.778, and duty_wheel_v2_1500_layout.json
-at 1.500. The second is not yet reproducible from build_duty_wheel_v2.py, which still has
-ASPECT = 1.778 and a hub sized in units rather than as a fraction of the rim. Until that lands,
-this JSON is the only copy of the 1.500 wheel.
+at 1.500. Both come out of build_duty_wheel_v2.py -- the second with
+`--aspect 1.5 --out duty_wheel_v2_1500_layout.json` -- and a test rebuilds both and compares
+bytes, so neither can drift from the constants that make it. Which aspect the game takes is a
+separate question, and it does not pay for itself until the canvas moves with it.
 
 The page it writes goes to generated/, which this folder already treats as local debug output:
 git-ignored, rebuilt on demand, never committed. It is ~9 MB and carries the portrait art, which

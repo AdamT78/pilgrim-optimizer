@@ -2013,14 +2013,25 @@ generator stamps into it.
 about 9 MB carrying the portrait art it is the last thing that should go into the repository.
 Rebuild it instead; it takes seconds.
 
-### Two wheels, and one of them is not reproducible yet
+### Two wheels, and the aspect still open
 
 The generator carries `duty_wheel_v2_layout.json` at aspect 1.778 and
-`duty_wheel_v2_1500_layout.json` at 1.500, and the page toggles between them. Only the first can
-be regenerated: `build_duty_wheel_v2.py` still has `ASPECT = 1.778` and sizes the hub in units
-rather than as a fraction of the rim, so a taller box would leave the centre face the wrong size.
-Until that change lands, **the 1.500 JSON is the only copy of that wheel** and should be treated
-as a source file rather than as output.
+`duty_wheel_v2_1500_layout.json` at 1.500, and the page toggles between them. Both are output of
+the same script:
+
+    python3 tools/ui_debug/build_duty_wheel_v2.py
+    python3 tools/ui_debug/build_duty_wheel_v2.py --aspect 1.5 \
+        --out duty_wheel_v2_1500_layout.json
+
+The 1.500 file used to be a source file, because nothing could make it again: the hub was sized
+in units, so a taller box left the centre face at its old size against a rim that had moved. It
+is held as a proportion of the rim now — written as a ratio against the rim the hub was drawn
+against, so the 1.778 layout comes back byte-for-byte and nothing downstream of it shifts.
+`test_both_duty_wheel_v2_layouts_rebuild_byte_for_byte` rebuilds both and compares bytes, which
+is what stops either one drifting away from the constants that are supposed to produce it.
+
+`ASPECT` still defaults to 1.778, which is where the faces were authored and is not a verdict;
+the flag is what makes the other one cheap to look at.
 
 Why it matters which one wins: measured against the tile that ships today, 1.500 gives a face
 0.83× its area at the current canvas of 1600 against 0.69× for 1.778, because the wheel is
