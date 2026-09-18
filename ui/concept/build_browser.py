@@ -453,8 +453,11 @@ PAGE = """<!doctype html>
  .tab small{color:#5f5749;font-size:11px}
  .tab[aria-current] small{color:#8a7a52}
  /* A class with display: beats the UA sheet's [hidden]{display:none}, so hiding a sheet from
-    JS silently does nothing without this rule. Every sheet was visible at once until it existed. */
- .sheet[hidden]{display:none}
+    JS silently does nothing without this rule. Every sheet was visible at once until it existed.
+    !important, not just specificity: .sheet.stack{display:block} ties with .sheet[hidden] at
+    (0,2,0) and wins on order, which put the stacked panorama sheet on every tab. Any future
+    variant class would do the same, so this rule has to beat all of them rather than the one. */
+ .sheet[hidden]{display:none!important}
  /* Equal HEIGHT, not equal width: the three are a square portrait, a wide turnaround sheet and a
     tall figure, and only a common height lets you compare the drawing across them. */
  /* Each card grows in proportion to its own aspect ratio from a zero basis, so the widths come
