@@ -253,9 +253,16 @@ def figure_target(paths: list[pathlib.Path]) -> float | None:
     return min(widths) if widths else None
 
 
-def encode(path: pathlib.Path, base: float | None = None) -> tuple[str, int, int, int]:
-    """One image as a WebP data URI, plus its embedded size and the bytes it costs."""
+def encode(path: pathlib.Path,
+           base: float | None = None) -> tuple[str, int, int, int, tuple[int, int]]:
+    """One image as a WebP data URI, its embedded size, its cost, and the SOURCE's own size.
+
+    The last of those is what the caption should quote. Everything on this page is downscaled to
+    MAX_EDGE to keep the file portable, so the embedded dimensions describe the preview and not
+    the archive -- quoting them tells a reader the file is smaller than it is.
+    """
     im = Image.open(path)
+    source = im.size
     keep = "RGBA" if (im.mode in ("RGBA", "LA") or "transparency" in im.info) else "RGB"
     im = im.convert(keep)
     if base:
@@ -265,7 +272,7 @@ def encode(path: pathlib.Path, base: float | None = None) -> tuple[str, int, int
     im.save(buf, "WEBP", quality=QUALITY, method=6)
     raw = buf.getvalue()
     return ("data:image/webp;base64," + base64.b64encode(raw).decode("ascii"),
-            im.width, im.height, len(raw))
+            im.width, im.height, len(raw), source)
 
 
 def wheel_svg(path: pathlib.Path) -> tuple[str, float, float, int, str]:
@@ -343,9 +350,9 @@ def collect() -> tuple[list, list, list]:
                 dims = "%g \u00d7 %g units" % (w, h)
             else:
                 lift = bases.get(spec["kind"])
-                uri, w, h, size = encode(path, lift)
+                uri, w, h, size, source = encode(path, lift)
                 note = "base levelled to %d px" % lift if lift else ""
-                dims = "%d \u00d7 %d" % (w, h)
+                dims = "%d \u00d7 %d" % source
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,
                            "dims": dims, "note": note, "origin": spec.get("origin")})
