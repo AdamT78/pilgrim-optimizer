@@ -68,9 +68,12 @@ QUALITY = 86                        # WebP quality; the sources stay untouched a
 # pictures. They are levelled HERE rather than by editing the files: the sources stay as the
 # generator made them, and the rule that makes them agree lives in one place where it can be
 # seen and changed.
-FIGURE_KIND = "figure"
-FIGURE_CANVAS = (1086, 1448)        # the canvas the figures are drawn on
-FIGURE_FLOOR = 16                   # plinth bottom to canvas bottom, shared by all of them
+# Levelled per KIND, not across all of them: the display figures stand on stone plinths and the
+# plastic sculpts on moulded pucks, so they are two sets that each need to agree internally and
+# have no reason to agree with each other. A kind can only be levelled if it has alpha to measure.
+LEVELLED_KINDS = ("figure", "sculpt_plastic")
+FIGURE_CANVAS = (1086, 1448)        # the canvas these are drawn on
+FIGURE_FLOOR = 16                   # base bottom to canvas bottom, shared within a kind
 
 # Seat order and the seat-to-portrait cast, mirroring ui/render. Kept as literals so this script
 # runs against a downloads folder with no repo present, and checked against the repo when there
@@ -98,6 +101,8 @@ SUBJECTS = [
              "rel": "ui/assets-gothic/portraits/%s.png" % SEAT_PORTRAITS[seat]},
             {"kind": "concept", "title": "Concept sheet"},
             {"kind": "figure", "title": "Figure"},
+            {"kind": "mini_engraved", "title": "Mini, engraved"},
+            {"kind": "sculpt_plastic", "title": "Sculpt, plastic"},
         ],
     }
     for n, seat in enumerate(SEATS, start=1)
@@ -288,10 +293,13 @@ def collect() -> tuple[list, list, list]:
     """Every declared image: found, reported missing, or absent-but-expected. Nothing is globbed."""
     # One pass over the figures before anything is encoded: the target is the narrowest plinth in
     # the set, so it cannot be known from any single image.
-    base = figure_target([where(s, k) for s in SUBJECTS for k in s["kinds"]
-                          if k["kind"] == FIGURE_KIND])
-    if base:
-        print("  levelling the figures to the narrowest plinth in the set: %d px" % base)
+    bases = {}
+    for kind in LEVELLED_KINDS:
+        found_target = figure_target([where(s, k) for s in SUBJECTS for k in s["kinds"]
+                                      if k["kind"] == kind])
+        if found_target:
+            bases[kind] = found_target
+            print("  levelling %-14s to the narrowest base in that set: %d px" % (kind, found_target))
     found, missing, absent = [], [], []
     for ch in SUBJECTS:
         panels = []
@@ -315,9 +323,9 @@ def collect() -> tuple[list, list, list]:
                 uri, w, h, size, note = wheel_svg(path)
                 dims = "%g \u00d7 %g units" % (w, h)
             else:
-                lift = base if spec["kind"] == FIGURE_KIND else None
+                lift = bases.get(spec["kind"])
                 uri, w, h, size = encode(path, lift)
-                note = "plinth levelled to %d px" % base if lift else ""
+                note = "base levelled to %d px" % lift if lift else ""
                 dims = "%d \u00d7 %d" % (w, h)
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,

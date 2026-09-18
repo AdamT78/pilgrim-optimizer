@@ -3,219 +3,6 @@
   "imported": "2026-09-18",
   "images": [
     {
-      "path": "player_1/concept.png",
-      "subject": "player_1",
-      "kind": "concept",
-      "original_filename": "player_1_concept.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 2817400,
-      "sha256": "10f8574a737f42521aabc627536a0f28bda55ba4dbb09f619e630f70b4a80e15",
-      "pixels": [
-        1448,
-        1086
-      ]
-    },
-    {
-      "path": "player_1/figure.png",
-      "subject": "player_1",
-      "kind": "figure",
-      "original_filename": "player_1_figure.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 1343729,
-      "sha256": "1d45d225baed53bff48cec4fa7f7f8419692cf06660b618d6c06c26fbd9739a9",
-      "pixels": [
-        1086,
-        1448
-      ]
-    },
-    {
-      "path": "player_2/concept.png",
-      "subject": "player_2",
-      "kind": "concept",
-      "original_filename": "player_2_concept.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 2867402,
-      "sha256": "6154a63b9c0f9d72ffe3aa35ce2be28eb509ac3795524772c4d71116035511d4",
-      "pixels": [
-        1448,
-        1086
-      ]
-    },
-    {
-      "path": "player_2/figure.png",
-      "subject": "player_2",
-      "kind": "figure",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 04_34_57 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 1159956,
-      "sha256": "29fbdef0c8f2566079ee595b89fb9e9be230e27c61656ea700cca4c5e5715570",
-      "pixels": [
-        1086,
-        1448
-      ],
-      "supersedes": "player_2_figure.png"
-    },
-    {
-      "path": "player_3/concept.png",
-      "subject": "player_3",
-      "kind": "concept",
-      "original_filename": "player_3_concept.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 2471885,
-      "sha256": "dde1dd089be80db3233e8486246555682aef727c4880f1e4f829bc5dbe5d3f67",
-      "pixels": [
-        1448,
-        1086
-      ]
-    },
-    {
-      "path": "player_3/figure.png",
-      "subject": "player_3",
-      "kind": "figure",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 04_46_58 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 1499682,
-      "sha256": "56df642c0eb82f8c4a72d951b9d429c757b5e1c2934af2e1a8de89ee99bd1269",
-      "pixels": [
-        1087,
-        1447
-      ],
-      "supersedes": "player_3_figure.png"
-    },
-    {
-      "path": "player_4/concept.png",
-      "subject": "player_4",
-      "kind": "concept",
-      "original_filename": "player_4_concept.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 3254253,
-      "sha256": "e7e7973ac67f3c97ec3493ba6220dc6287ebc615195d440ee841bc0ef877d72c",
-      "pixels": [
-        1448,
-        1086
-      ]
-    },
-    {
-      "path": "player_4/figure.png",
-      "subject": "player_4",
-      "kind": "figure",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 04_19_16 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 1359235,
-      "sha256": "e2524c89644752952f42e0fd7443f5e0fac70c8f1257e5ac34fd06a98b6f96aa",
-      "pixels": [
-        1086,
-        1448
-      ],
-      "supersedes": "player_4_figure.png"
-    },
-    {
-      "path": "duty_wheel_concept/labelled.png",
-      "subject": "duty_wheel_concept",
-      "kind": "labelled",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 02_24_31 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 3188664,
-      "sha256": "fec9031f109c50993e93cd62dc320421639ace4708b42f80a3460743e745caa9",
-      "pixels": [
-        1672,
-        941
-      ]
-    },
-    {
-      "path": "duty_wheel_concept/unlabelled.png",
-      "subject": "duty_wheel_concept",
-      "kind": "unlabelled",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 02_54_19 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 3257895,
-      "sha256": "a02f7aa92049cfb9180a09833abbef618f60ebf2740b2a116e50823be47d57ca",
-      "pixels": [
-        1672,
-        941
-      ]
-    },
-    {
-      "path": "duty_wheel_concept/outlines.png",
-      "subject": "duty_wheel_concept",
-      "kind": "outlines",
-      "original_filename": "ChatGPT Image Sep 18, 2026, 02_58_46 PM.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 1907853,
-      "sha256": "ea297d861dd7aea09a6311371c59a56d53543f4a64c288b2cf6f7ec5e9a1cd2a",
-      "pixels": [
-        1536,
-        1024
-      ]
-    },
-    {
-      "path": "_reference/reference_poster.jpeg",
-      "subject": "duty_wheel_concept",
-      "kind": "reference",
-      "original_filename": "image0.jpeg",
-      "origin": "Third-party artwork found at https://kr.pinterest.com/pin/909867930987080612/ -- Pinterest is a re-posting site, so that link is probably not the original creator. Reference only; never used in the game and never committed.",
-      "committed": false,
-      "bytes": 298250,
-      "sha256": "024867184eb324759ae2f978713c3669ef46e65ca72a88aadf3a127b09aeb6d7",
-      "pixels": [
-        735,
-        1041
-      ]
-    },
-    {
-      "path": "tithe_resources/counters.png",
-      "subject": "tithe_resources",
-      "kind": "counters",
-      "original_filename": "tithe_resource_counters.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 3254329,
-      "sha256": "673baedcf9faec2ecec013ac52f0962e5090e36480fac1fb129f1b86a7177815",
-      "pixels": [
-        1536,
-        1024
-      ]
-    },
-    {
-      "path": "tithe_resources/board_frame.png",
-      "subject": "tithe_resources",
-      "kind": "board_frame",
-      "original_filename": "tithe_resource_board_frame.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 3369639,
-      "sha256": "d26c128423f66c57855385e840a01dbbcc4d75b80e38fa56a663b71df0fa6370",
-      "pixels": [
-        1536,
-        1024
-      ]
-    },
-    {
-      "path": "tithe_resources/render_3d.png",
-      "subject": "tithe_resources",
-      "kind": "render_3d",
-      "original_filename": "tithe_resource_3d.png",
-      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
-      "committed": true,
-      "bytes": 2664628,
-      "sha256": "78621bbd34d051297ae34360911d1d57aedf388a33e810f281fae7d75eef3d84",
-      "pixels": [
-        1448,
-        1086
-      ]
-    },
-    {
       "path": "acolytes_on_board/board_0.png",
       "subject": "acolytes_on_board",
       "kind": "board_0",
@@ -252,6 +39,331 @@
       "committed": true,
       "bytes": 2810850,
       "sha256": "468b0b9e7770fa13e8bcdeb3764e54720beed51ff7e8b4b32d608844aab58a77",
+      "pixels": [
+        1448,
+        1086
+      ]
+    },
+    {
+      "path": "_reference/reference_poster.jpeg",
+      "subject": "duty_wheel_concept",
+      "kind": "reference",
+      "original_filename": "image0.jpeg",
+      "origin": "Third-party artwork found at https://kr.pinterest.com/pin/909867930987080612/ -- Pinterest is a re-posting site, so that link is probably not the original creator. Reference only; never used in the game and never committed.",
+      "committed": false,
+      "bytes": 298250,
+      "sha256": "024867184eb324759ae2f978713c3669ef46e65ca72a88aadf3a127b09aeb6d7",
+      "pixels": [
+        735,
+        1041
+      ]
+    },
+    {
+      "path": "duty_wheel_concept/labelled.png",
+      "subject": "duty_wheel_concept",
+      "kind": "labelled",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 02_24_31 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3188664,
+      "sha256": "fec9031f109c50993e93cd62dc320421639ace4708b42f80a3460743e745caa9",
+      "pixels": [
+        1672,
+        941
+      ]
+    },
+    {
+      "path": "duty_wheel_concept/outlines.png",
+      "subject": "duty_wheel_concept",
+      "kind": "outlines",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 02_58_46 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1907853,
+      "sha256": "ea297d861dd7aea09a6311371c59a56d53543f4a64c288b2cf6f7ec5e9a1cd2a",
+      "pixels": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "path": "duty_wheel_concept/unlabelled.png",
+      "subject": "duty_wheel_concept",
+      "kind": "unlabelled",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 02_54_19 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3257895,
+      "sha256": "a02f7aa92049cfb9180a09833abbef618f60ebf2740b2a116e50823be47d57ca",
+      "pixels": [
+        1672,
+        941
+      ]
+    },
+    {
+      "path": "player_1/concept.png",
+      "subject": "player_1",
+      "kind": "concept",
+      "original_filename": "player_1_concept.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2817400,
+      "sha256": "10f8574a737f42521aabc627536a0f28bda55ba4dbb09f619e630f70b4a80e15",
+      "pixels": [
+        1448,
+        1086
+      ]
+    },
+    {
+      "path": "player_1/figure.png",
+      "subject": "player_1",
+      "kind": "figure",
+      "original_filename": "player_1_figure.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1343729,
+      "sha256": "1d45d225baed53bff48cec4fa7f7f8419692cf06660b618d6c06c26fbd9739a9",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "player_1/mini_engraved.png",
+      "subject": "player_1",
+      "kind": "mini_engraved",
+      "original_filename": "player_1_mini_v1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2976167,
+      "sha256": "25e3bb5f1c87020a7a057bbc3fc63816580d0b5bdaa8703dffbd4763b57bcb04",
+      "pixels": [
+        1086,
+        1449
+      ]
+    },
+    {
+      "path": "player_1/sculpt_plastic.png",
+      "subject": "player_1",
+      "kind": "sculpt_plastic",
+      "original_filename": "player_1_plastic.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1000004,
+      "sha256": "f932e7ac235a1d1fc8f5168b07666a81cbf5110797ce51afd15e9bf488c8a183",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "player_2/concept.png",
+      "subject": "player_2",
+      "kind": "concept",
+      "original_filename": "player_2_concept.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2867402,
+      "sha256": "6154a63b9c0f9d72ffe3aa35ce2be28eb509ac3795524772c4d71116035511d4",
+      "pixels": [
+        1448,
+        1086
+      ]
+    },
+    {
+      "path": "player_2/figure.png",
+      "subject": "player_2",
+      "kind": "figure",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_34_57 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1159956,
+      "sha256": "29fbdef0c8f2566079ee595b89fb9e9be230e27c61656ea700cca4c5e5715570",
+      "pixels": [
+        1086,
+        1448
+      ],
+      "supersedes": "player_2_figure.png"
+    },
+    {
+      "path": "player_2/mini_engraved.png",
+      "subject": "player_2",
+      "kind": "mini_engraved",
+      "original_filename": "player_2_mini_v1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2965709,
+      "sha256": "a60048ed724fae647a6f39b15ab4c05bd5fefcec0bae9f46c01b47e113797022",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "player_2/sculpt_plastic.png",
+      "subject": "player_2",
+      "kind": "sculpt_plastic",
+      "original_filename": "player_2_plastic.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1017756,
+      "sha256": "002a614b3f04ac72214331083df02629127585528de206f9451aa0bea116196c",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "player_3/concept.png",
+      "subject": "player_3",
+      "kind": "concept",
+      "original_filename": "player_3_concept.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2471885,
+      "sha256": "dde1dd089be80db3233e8486246555682aef727c4880f1e4f829bc5dbe5d3f67",
+      "pixels": [
+        1448,
+        1086
+      ]
+    },
+    {
+      "path": "player_3/figure.png",
+      "subject": "player_3",
+      "kind": "figure",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_46_58 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1499682,
+      "sha256": "56df642c0eb82f8c4a72d951b9d429c757b5e1c2934af2e1a8de89ee99bd1269",
+      "pixels": [
+        1087,
+        1447
+      ],
+      "supersedes": "player_3_figure.png"
+    },
+    {
+      "path": "player_3/mini_engraved.png",
+      "subject": "player_3",
+      "kind": "mini_engraved",
+      "original_filename": "player_3_mini_v1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3160208,
+      "sha256": "183909b1750d7d1d48bb32a1737b109742113819339cc8cdcef91f39f0a73678",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "player_3/sculpt_plastic.png",
+      "subject": "player_3",
+      "kind": "sculpt_plastic",
+      "original_filename": "player_3_plastic.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1097405,
+      "sha256": "608fe0d2c30aa490c5bda540977c295148a0a1b4915e146fb787da03d133b2be",
+      "pixels": [
+        1087,
+        1447
+      ]
+    },
+    {
+      "path": "player_4/concept.png",
+      "subject": "player_4",
+      "kind": "concept",
+      "original_filename": "player_4_concept.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3254253,
+      "sha256": "e7e7973ac67f3c97ec3493ba6220dc6287ebc615195d440ee841bc0ef877d72c",
+      "pixels": [
+        1448,
+        1086
+      ]
+    },
+    {
+      "path": "player_4/figure.png",
+      "subject": "player_4",
+      "kind": "figure",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_19_16 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1359235,
+      "sha256": "e2524c89644752952f42e0fd7443f5e0fac70c8f1257e5ac34fd06a98b6f96aa",
+      "pixels": [
+        1086,
+        1448
+      ],
+      "supersedes": "player_4_figure.png"
+    },
+    {
+      "path": "player_4/mini_engraved.png",
+      "subject": "player_4",
+      "kind": "mini_engraved",
+      "original_filename": "player_4_mini_v1.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3028865,
+      "sha256": "667775f8afd2f49a8447cc711cfe42254ee830d372b98c03bd4599bd86acb06d",
+      "pixels": [
+        1086,
+        1449
+      ]
+    },
+    {
+      "path": "player_4/sculpt_plastic.png",
+      "subject": "player_4",
+      "kind": "sculpt_plastic",
+      "original_filename": "player_4_plastic.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 1100283,
+      "sha256": "569b731ea4c15eb1f4e5ad96f38944392002174ceb3e4a0ec58977a7468a9915",
+      "pixels": [
+        1086,
+        1448
+      ]
+    },
+    {
+      "path": "tithe_resources/board_frame.png",
+      "subject": "tithe_resources",
+      "kind": "board_frame",
+      "original_filename": "tithe_resource_board_frame.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3369639,
+      "sha256": "d26c128423f66c57855385e840a01dbbcc4d75b80e38fa56a663b71df0fa6370",
+      "pixels": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "path": "tithe_resources/counters.png",
+      "subject": "tithe_resources",
+      "kind": "counters",
+      "original_filename": "tithe_resource_counters.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 3254329,
+      "sha256": "673baedcf9faec2ecec013ac52f0962e5090e36480fac1fb129f1b86a7177815",
+      "pixels": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "path": "tithe_resources/render_3d.png",
+      "subject": "tithe_resources",
+      "kind": "render_3d",
+      "original_filename": "tithe_resource_3d.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 2664628,
+      "sha256": "78621bbd34d051297ae34360911d1d57aedf388a33e810f281fae7d75eef3d84",
       "pixels": [
         1448,
         1086
