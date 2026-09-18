@@ -1983,3 +1983,47 @@ come out at **2.19×**, for a 3.5% drop in stage scale on the MacBook and none o
 
 So the shape work does not pay for itself until the canvas moves with it. That decision is not made
 here; it is recorded here so it travels with the file.
+
+## Wheel space check
+
+`generate_wheel_space_check.py` answers one question: how much room does the duty wheel actually
+get, and what does everything else cost it. It is a measuring instrument, not a view of the game,
+and it is the only thing in this folder whose output is meant to be read as numbers rather than
+looked at.
+
+    python3 tools/ui_debug/generate_wheel_space_check.py --open
+
+The player boards in it are real — `build_board()` per seat then `merge_defs()`, the same calls
+`gen_game_view` makes, at the same 1905 × 826 aspect and sized from `geometry()`. Special
+Activities is the real `special_placeholder()`, which goes red for itself when the cube table
+stops fitting. Everything else is a plain box at the correct size: alms table, market, banner,
+action box.
+
+The slider moves `board_width` and the page reads geometry stamped for every width it can reach,
+so nothing in it re-implements the layout. The action-box button drops the `panel_w` term out of
+`wheel_room` — `gen_game_view`'s own formula with one term removed — and hands that width to the
+wheel. Rules across the window mark where the canvas ends, because on a screen wider than the
+canvas a good deal of it is doing nothing and that is easier to believe from a picture.
+
+`wheel_space_check.html.tmpl` is the page it fills in. It is a template and not a prototype: it
+carries no geometry of its own, only the markup and the script that lay out whatever the
+generator stamps into it.
+
+**The output is not committed.** It lands in `generated/` like the other debug artifacts, and at
+about 9 MB carrying the portrait art it is the last thing that should go into the repository.
+Rebuild it instead; it takes seconds.
+
+### Two wheels, and one of them is not reproducible yet
+
+The generator carries `duty_wheel_v2_layout.json` at aspect 1.778 and
+`duty_wheel_v2_1500_layout.json` at 1.500, and the page toggles between them. Only the first can
+be regenerated: `build_duty_wheel_v2.py` still has `ASPECT = 1.778` and sizes the hub in units
+rather than as a fraction of the rim, so a taller box would leave the centre face the wrong size.
+Until that change lands, **the 1.500 JSON is the only copy of that wheel** and should be treated
+as a source file rather than as output.
+
+Why it matters which one wins: measured against the tile that ships today, 1.500 gives a face
+0.83× its area at the current canvas of 1600 against 0.69× for 1.778, because the wheel is
+already width-bound and going wider only throws height away. 1.500 also wants a canvas of 2039
+where 1.778 wants 2283 — and 2039 is under the point where either of the two measured screens
+starts losing stage scale, so it costs nothing on both where 1.778 costs 3.4% on the laptop.

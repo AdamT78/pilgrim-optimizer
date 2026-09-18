@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Duty wheel in place</title>
+<style>
+ html,body{margin:0;height:100%;background:#0b0907;overflow:hidden;
+   font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8b8071}
+ #stage{position:absolute;transform-origin:top left;background:#17130d}
+ .r{position:absolute;box-sizing:border-box;border-radius:3px;
+    background:#2a2c26;border:1px solid #6b6250}
+ .r em{position:absolute;left:10px;top:8px;font-style:normal;font-size:12px;
+    white-space:pre;color:#8d8471}
+ .r u{position:absolute;inset:8% 5%;border:1px dashed #6b6250;opacity:.5;
+    text-decoration:none;border-radius:2px}
+ .ghost{background:none;border:1px dashed #5a4b3e}
+ .slack{background:repeating-linear-gradient(135deg,#2a211c 0 8px,#221b17 8px 16px);
+   border:1px dashed #6b4a40}
+ .slack em{color:#a8695e}
+ #sa{background:none;border:none}
+ #sa svg{display:block}
+ #col{position:absolute;box-sizing:border-box;border:1px dashed #47412f;background:none}
+ #col.over{border-color:#c8402a}
+ #col em{position:absolute;left:0;top:-22px;font-style:normal;font-size:12px;white-space:pre;
+   color:#7b7160;background:rgba(23,19,13,.92);padding:2px 6px;border-radius:2px}
+ #col.over em{color:#e0705f}
+ #boards{position:absolute;display:flex;flex-direction:column}
+ #boards svg{display:block;flex:0 0 auto}
+ #wheel{position:absolute}
+ #wheel svg{display:block;width:100%;height:100%}
+ .edge{position:fixed;left:0;right:0;height:0;border-top:1px dashed #6f6350;pointer-events:none}
+ .edge span{position:absolute;left:14px;top:4px;font-size:11px;color:#8a7c64;
+   background:rgba(11,9,7,.85);padding:1px 6px;border-radius:2px}
+ .edge.bot span{top:-18px}
+ .vedge{position:fixed;top:0;bottom:0;width:0;border-left:1px dashed #4d4536;pointer-events:none}
+ #hud{position:fixed;right:16px;top:26px;text-align:right;white-space:pre;color:#7b7160;
+   pointer-events:none;font-size:12px;line-height:1.55}
+ #hud b{color:#c9b27a;font-weight:400}
+ #hud s{color:#e0705f;text-decoration:none}
+ #panel{position:fixed;left:16px;bottom:14px;color:#6f6556;font-size:12px;
+   background:rgba(11,9,7,.9);padding:8px 12px;border:1px solid #2e2820;border-radius:3px}
+ #panel input{width:300px;vertical-align:middle}
+ #panel b{color:#c9b27a}
+ #panel button{font:inherit;color:#cbbb98;background:#241d16;border:1px solid #4a4133;
+   border-radius:3px;padding:3px 9px;cursor:pointer}
+ #panel button.off{color:#e0b0a5;border-color:#7a4a3e}
+ #act.gone{background:none;border:1px dashed #6b4a40}
+ #act.gone em{color:#a8695e}
+ #err{position:fixed;left:0;right:0;top:0;background:#5a1d16;color:#ffd9d2;padding:8px 14px;
+   font-size:13px;display:none;z-index:9;white-space:pre-wrap}
+ body.bare #hud,body.bare #panel,body.bare .r em,body.bare #col,body.bare .edge,
+ body.bare .vedge,body.bare .ghost{display:none}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">__DEFS__</svg>
+<div id="err"></div>
+<div id="stage">
+  <div class="r" id="sa"></div>
+  <div class="r" id="alms"><em></em><u></u></div>
+  <div class="r" id="mkt"><em></em><u></u></div>
+  <div class="r" id="ban"><em></em></div>
+  <div class="r" id="act"><em></em><u></u></div>
+  <div class="r slack" id="slack"><em></em></div>
+  <div class="r ghost" id="mapbox"><em></em></div>
+  <div id="col"><em></em></div>
+  <div id="boards"></div>
+  <div id="wheel"></div>
+</div>
+
+<div class="edge top" id="etop"><span></span></div>
+<div class="edge bot" id="ebot"><span></span></div>
+<div class="vedge" id="eleft"></div>
+<div class="vedge" id="eright"></div>
+<div id="hud"></div>
+<div id="panel">
+  player board width <b id="bwv">&nbsp;</b>
+  <input type="range" id="bws" min="0" max="1" step="1">
+  &nbsp;&#183;&nbsp; <button id="actbtn" type="button">action box: on</button>
+  &nbsp;&#183;&nbsp; 1 2 3 canvas &#183; a aspect &#183; x action box &#183; h hide
+</div>
+
+<script>
+window.onerror = function(m, src, line){
+  var e = document.getElementById("err");
+  e.style.display = "block";
+  e.textContent = "This page hit an error and stopped drawing:\n" + m + "  (line " + line + ")";
+};
+
+var L = __LAYOUTS__, WH = __WHEELS__, BOARDS = __BOARDS__, SA = __SA__;
+var WIDTHS = __WIDTHS__, SHIP = __SHIP__;
+var canvas = 1600, aspect = "1.5", wi = WIDTHS.indexOf(405), showAct = true;
+if (wi < 0) wi = Math.floor(WIDTHS.length / 2);
+
+function px(el, x, y, w, h){
+  el.style.left = x + "px"; el.style.top = y + "px";
+  el.style.width = Math.max(0, w) + "px"; el.style.height = Math.max(0, h) + "px";
+}
+function lab(id, t){ document.getElementById(id).getElementsByTagName("em")[0].textContent = t; }
+
+function paint(){
+  var bw = WIDTHS[wi], g = L[canvas + "|" + bw];
+  if (!g) throw new Error("no layout stamped for canvas " + canvas + " at board width " + bw);
+  var a = parseFloat(aspect), d = WH[aspect];
+  var vw = innerWidth, vh = innerHeight, dpr = devicePixelRatio || 1;
+  var k = Math.min(vw / g.cw, vh / g.ch);
+  function real(u){ return Math.round(u * k * dpr); }
+
+  var st = document.getElementById("stage");
+  st.style.width = g.cw + "px"; st.style.height = g.ch + "px";
+  st.style.transform = "scale(" + k + ")";
+  var ox = (vw - g.cw * k) / 2, oy = (vh - g.ch * k) / 2;
+  st.style.left = ox + "px"; st.style.top = oy + "px";
+
+  var et = document.getElementById("etop"), eb = document.getElementById("ebot");
+  et.style.top = oy + "px"; eb.style.top = (oy + g.ch * k) + "px";
+  document.getElementById("eleft").style.left = ox + "px";
+  document.getElementById("eright").style.left = (ox + g.cw * k) + "px";
+  var spareV = Math.round(vh - g.ch * k), spareH = Math.round(vw - g.cw * k);
+  et.firstChild.textContent = "canvas top  ·  " + g.cw + " × " + g.ch +
+    " units at " + (k * 100).toFixed(1) + "%  ·  bound by " +
+    (spareV <= spareH ? "height" : "width");
+  eb.firstChild.textContent = "canvas bottom  ·  " + spareV +
+    " px of window height unused, " + spareH + " px of width unused";
+
+  var mainY = g.mt + g.top_h, roomH = g.main_h - g.banner_h;
+  var ax = g.pad + g.bw + g.gap1;                       // action box / alms column
+  // Turn the action box off and its whole column goes with it, so the wheel starts where the
+  // box did and gains panel_w + gap2. wheel_room is inner_w - bw - panel_w - gap1 - gap2, so
+  // this is that same formula with the panel term dropped, not a number of my own.
+  var room = showAct ? g.wheel_room : g.wheel_room + g.panel_w + g.gap2;
+  var ww = Math.min(room, roomH * a), wh = ww / a;
+  var cx0 = showAct ? ax + g.panel_w + g.gap2 : ax;     // the wheel's column
+  var colY = mainY - g.left_lift + g.left_top;
+  // The boards run from colY at bh each with board_gap between, so the gap between the second
+  // and the third is centred on `seam`. The wheel's own centre line is the WEST face's, so
+  // putting one on the other is what "west sits between board 2 and 3" means in numbers.
+  var seam = colY + 2 * g.bh + 1.5 * g.board_gap;
+  var wx = cx0 + (room - ww) / 2;                       // centred in its column
+  var wy = seam - wh / 2;
+
+  // top row: the real Special Activities placeholder, then the alms and market cells
+  var sa = document.getElementById("sa");
+  px(sa, g.pad + g.overhang, g.mt, g.panel_w, g.top_h);
+  sa.innerHTML = SA[bw];
+  px(document.getElementById("alms"), ax, g.mt, g.panel_w, g.top_h);
+  px(document.getElementById("mkt"), wx, g.mt, ww, g.top_h);
+  lab("alms", "alms table  " + real(g.panel_w) + " × " + real(g.top_h) + " px");
+  lab("mkt", "market  " + real(ww) + " × " + real(g.top_h) + " px");
+
+  // the action box ends on the acolytes' feet, not at the bottom of the row
+  var act = document.getElementById("act");
+  px(act, ax, mainY, g.panel_w, g.act_h);
+  act.className = "r" + (showAct ? "" : " gone");
+  lab("act", showAct
+      ? "action box\n" + real(g.panel_w) + " × " + real(g.act_h) + " px"
+      : "action box OFF\n" + real(g.panel_w + g.gap2) + " px handed to the wheel");
+
+  // the banner rides with the wheel rather than sitting at the top of the row
+  px(document.getElementById("ban"), wx, wy - g.banner_h, ww, g.banner_h);
+  lab("ban", "banner  " + real(ww) + " × " + real(g.banner_h) + " px");
+  var w = document.getElementById("wheel");
+  px(w, wx, wy, ww, wh);
+  var p = "";
+  for (var i = 0; i < d.faces.length; i++)
+    p += '<path fill="' + (d.faces[i].pos === "centre" ? "#e8dcc0" : "#efe3c8") +
+         '" d="' + d.faces[i].d + '"/>';
+  w.innerHTML = '<svg viewBox="0 0 ' + d.box + ' ' + d.box_h + '">' + p + "</svg>";
+
+  var sl = Math.max(0, mainY + g.main_h - (wy + wh));
+  px(document.getElementById("slack"), wx, wy + wh, ww, sl);
+  lab("slack", sl > 14 ? "free under the wheel  " + real(ww) + " × " + real(sl) +
+      " px  (" + Math.round(100 * sl / g.main_h) + "% of the row)" : "");
+
+  // map view swaps the map IN for the wheel, in a box the size of the SQUARE wheel
+  px(document.getElementById("mapbox"), wx, wy, g.square_wheel, g.square_wheel);
+  window.__seam = {seam: seam, west: wy + wh / 2};   // so the check can be made from outside
+  lab("mapbox", "map view wants this square  " + real(g.square_wheel) + " px");
+
+  var pbh = g.bh;                       // gen_game_view's own board height for this width
+  var need = 4 * pbh + 3 * g.board_gap;
+  var bx = document.getElementById("boards");
+  px(bx, g.pad, colY, g.bw, need);
+  bx.style.gap = g.board_gap + "px";
+  bx.innerHTML = BOARDS.map(function(b){
+    return b.replace("<svg", '<svg width="' + g.bw + '" height="' + pbh + '"');
+  }).join("");
+
+  var col = document.getElementById("col");
+  px(col, g.pad, colY, g.bw, g.left_h);
+  var over = need > g.left_h + 0.5;
+  col.className = over ? "over" : "";
+  lab("col", "board column  " + real(g.bw) + " × " + real(g.left_h) + " px  ·  " +
+      "four boards need " + real(need) + " px" + (over ? "  — OVER by " +
+      real(need - g.left_h) : "  — fits"));
+
+  document.getElementById("bwv").textContent = bw + " units";
+
+  var sq = g.square_wheel * k * dpr, ship = SHIP * sq * sq;
+  var out = [
+    ["screen", vw + " × " + vh + " css  " + dpr.toFixed(2) + "×"],
+    ["canvas", g.cw + " × " + g.ch + "   stage " + (k * 100).toFixed(1) + "%"],
+    ["aspect", a.toFixed(3)],
+    ["wheel", real(ww) + " × " + real(wh) + " real px"],
+    ["board", real(g.bw) + " × " + real(pbh) + " real px each"],
+    ["action", showAct ? real(g.act_h) + " px tall"
+       : "off, wheel +" + real(g.panel_w + g.gap2) + " px wide"],
+    ["", ""]
+  ];
+  ["north", "north_west", "east"].forEach(function(pos){
+    var f, j;
+    for (j = 0; j < d.faces.length; j++) if (d.faces[j].pos === pos) f = d.faces[j];
+    var ar = f.frac * real(ww) * real(wh);
+    out.push([pos === "north_west" ? "corner" : pos,
+      Math.round(Math.sqrt(ar)) + " square   " + (ar / ship).toFixed(2) + "× shipped"]);
+  });
+  if (over) out.push(["", ""], ["!", "boards overflow the column by " +
+    Math.round(100 * (need / g.left_h - 1)) + "%"]);
+  document.getElementById("hud").innerHTML = out.map(function(r){
+    if (!r[0]) return "";
+    if (r[0] === "!") return '<s>' + r[1] + '</s>';
+    return '<b>' + r[0] + '</b>  ' + r[1];
+  }).join("\n");
+}
+
+function toggleAct(){
+  showAct = !showAct;
+  var b = document.getElementById("actbtn");
+  b.textContent = "action box: " + (showAct ? "on" : "off");
+  b.className = showAct ? "" : "off";
+  paint();
+}
+document.getElementById("actbtn").addEventListener("click", toggleAct);
+
+var sl = document.getElementById("bws");
+sl.min = 0; sl.max = WIDTHS.length - 1; sl.value = wi;
+sl.addEventListener("input", function(){ wi = +sl.value; paint(); });
+addEventListener("resize", paint);
+addEventListener("keydown", function(e){
+  if (e.key === "1") canvas = 1600;
+  else if (e.key === "2") canvas = 2039;
+  else if (e.key === "3") canvas = 2283;
+  else if (e.key === "a") aspect = (aspect === "1.5" ? "1.778" : "1.5");
+  else if (e.key === "x") { toggleAct(); return; }
+  else if (e.key === "h") { document.body.classList.toggle("bare"); return; }
+  else return;
+  paint();
+});
+paint();
+</script>
+</html>
