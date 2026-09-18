@@ -49,21 +49,60 @@ OUT = HERE / "generated" / "wheel_aspect_compare.html"
 
 CANVAS = 1600                       # what the game ships today; see the docstring
 SHIP = 0.06315                      # one shipped duty tile / the square wheel box
-FACES = ("north", "north_west", "east")
+# The four faces that are distinct. north_east mirrors north_west and east mirrors west, so the
+# bottom row and east carry no area a label here does not already give.
+FACES = ("north_west", "north", "north_east", "west")
 LAYOUTS = ((1.778, "duty_wheel_v2_layout.json"), (1.500, "duty_wheel_v2_1500_layout.json"))
+
+LABEL_H = 0.034                     # label type as a fraction of the box height, so it scales
+
+
+def centroid(d_poly: str) -> tuple[float, float]:
+    """The polygon centroid of one face, for standing a label in the middle of it.
+
+    Off `d_poly` and not off `d`: the Beziers bulge outward from their control polygon, so a
+    centroid taken from the curve would sit a hair further out. These faces are convex enough
+    that the polygon centroid lands well inside the ink either way, which the rendered page is
+    the check on -- a number half outside its own tile is visible immediately.
+    """
+    n = [float(t) for t in d_poly.replace("M", " ").replace("L", " ").replace("Z", " ").split()]
+    xs, ys = n[0::2], n[1::2]
+    a = cx = cy = 0.0
+    for i in range(len(xs)):
+        j = (i + 1) % len(xs)
+        cross = xs[i] * ys[j] - xs[j] * ys[i]
+        a += cross
+        cx += (xs[i] + xs[j]) * cross
+        cy += (ys[i] + ys[j]) * cross
+    a *= 0.5
+    return cx / (6.0 * a), cy / (6.0 * a)
+
+
+def inside(d_poly: str, x: float, y: float) -> bool:
+    """Ray cast: is this point within the face it is meant to label."""
+    n = [float(t) for t in d_poly.replace("M", " ").replace("L", " ").replace("Z", " ").split()]
+    xs, ys = n[0::2], n[1::2]
+    hit = False
+    for i in range(len(xs)):
+        j = (i - 1) % len(xs)
+        if (ys[i] > y) != (ys[j] > y) and \
+                x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i]:
+            hit = not hit
+    return hit
 
 
 def wheel(path: pathlib.Path) -> dict:
-    """A committed layout, as the markup for one panel plus each face's share of the box."""
+    """A committed layout: the face paths, each face's share of the box, and where to label it."""
     d = json.loads(path.read_text(encoding="utf-8"))
-    body = "".join(
-        '<path fill="%s" d="%s"/>' % ("#e2d7bb" if c["position"] == "centre" else "#efe3c8",
-                                      c["d"])
-        for c in d["cells"])
     return {
-        "svg": '<svg viewBox="0 0 %g %g" preserveAspectRatio="xMidYMid meet">%s</svg>'
-               % (d["box"], d["box_h"], body),
+        "box": (d["box"], d["box_h"]),
+        "paths": "".join(
+            '<path fill="%s" d="%s"/>' % ("#e2d7bb" if c["position"] == "centre" else "#efe3c8",
+                                          c["d"])
+            for c in d["cells"]),
         "frac": {c["position"]: c["area"] / (d["box"] * d["box_h"]) for c in d["cells"]},
+        "at": {c["position"]: centroid(c["d_poly"]) for c in d["cells"]},
+        "poly": {c["position"]: c["d_poly"] for c in d["cells"]},
     }
 
 
@@ -85,16 +124,44 @@ def cases() -> list[dict]:
             w = wheel(HERE / name)
             ww = min(geo["wheel_room"], room_h * aspect)
             px_w, px_h = ww * k * dpr, (ww / aspect) * k * dpr
+            box_w, box_h = w["box"]
+
+            # The labels live INSIDE the svg, in box units, so they scale with the panel exactly
+            # as the faces do -- which is the point, since the panels are drawn in proportion to
+            # each other. A label in CSS pixels would stay the same size and break that.
+            big, small = LABEL_H * box_h, LABEL_H * box_h * 0.82
+            marks = ""
+            for face in FACES:
+                area = w["frac"][face] * px_w * px_h
+                x, y = w["at"][face]
+                # The centroid is where the BLOCK should sit, not where the first baseline should.
+                # Two lines hung off the centroid read low in the face; lift by the difference.
+                y -= 0.18 * big
+                # A label outside its own face is a wrong picture, not an ugly one, and these
+                # outlines change whenever a constant in build_duty_wheel_v2.py moves. Fail here
+                # rather than ship a page that quietly misattributes an area.
+                assert inside(w["poly"][face], x, y), (
+                    "the %s label at aspect %.3f falls outside the %s face" % (face, aspect, face))
+                marks += (
+                    '<text x="%.1f" y="%.1f" font-size="%.1f" fill="#4a4034" '
+                    'text-anchor="middle" font-family="ui-monospace,Menlo,monospace">'
+                    '<tspan x="%.1f" dy="0">%s px&#178;</tspan>'
+                    '<tspan x="%.1f" dy="%.1f" font-size="%.1f" fill="#7d7160">%.2f&#215; tile'
+                    "</tspan></text>"
+                ) % (x, y, big, x, "{:,}".format(round(area)), x, big * 1.05, small,
+                     area / ship_px)
+
             out.append({
                 "screen": screen["name"], "vw": screen["vw"], "vh": screen["vh"], "dpr": dpr,
                 "scale": k, "bound": "height" if screen["vh"] / ch <= screen["vw"] / CANVAS
                                       else "width",
-                "aspect": aspect, "svg": w["svg"],
+                "aspect": aspect,
+                "svg": '<svg viewBox="0 0 %g %g" preserveAspectRatio="xMidYMid meet">%s%s</svg>'
+                       % (box_w, box_h, w["paths"], marks),
                 "w": round(px_w), "h": round(px_h),
                 # width-bound means the aspect buys height and costs nothing sideways
                 "wide": ww >= geo["wheel_room"] - 0.05,
-                "faces": [{"name": f.replace("north_west", "corner"),
-                           "side": round((w["frac"][f] * px_w * px_h) ** 0.5),
+                "faces": [{"name": f, "side": round((w["frac"][f] * px_w * px_h) ** 0.5),
                            "ship": w["frac"][f] * px_w * px_h / ship_px} for f in FACES],
             })
     return out
@@ -120,18 +187,15 @@ for aspect, _ in LAYOUTS:
     for name in SCREENS:
         c = next(x for x in CASES
                  if x["screen"] == name and abs(x["aspect"] - aspect) < 1e-9)
-        faces = " &#183; ".join("%s %d square, %.2f&#215;" % (f["name"], f["side"], f["ship"])
-                                for f in c["faces"])
         GRID += (
             '<figure class="panel" style="--w:{pct}%;--a:{aspect}">'
             '<figcaption><b>aspect {aspect_t}</b><span>{w} &#215; {h} real px</span>'
             '<span class="who">{name}</span></figcaption>'
             '<div class="art">{svg}</div>'
-            '<div class="faces">{faces}</div>'
             "</figure>"
         ).format(pct=round(100.0 * c["w"] / BIG, 2), aspect=c["aspect"],
                  aspect_t="%.3f" % c["aspect"], w=c["w"], h=c["h"], svg=c["svg"],
-                 faces=faces, name=name)
+                 name=name)
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -165,7 +229,6 @@ PAGE = """<!doctype html>
  .art{width:var(--w);max-width:100%;aspect-ratio:var(--a);background:#17130d;
    border-radius:3px;overflow:hidden}
  .art svg{display:block;width:100%;height:100%}
- .faces{margin-top:7px;font-size:11.5px;color:#5f5749}
  footer{margin-top:30px;padding-top:16px;border-top:1px solid #221d16;font-size:12px;
    color:#5f5749;max-width:86ch}
  footer b{color:#8b8071;font-weight:400}
@@ -174,8 +237,9 @@ PAGE = """<!doctype html>
 <h1>The duty wheel at 1.778 and at 1.500, on the two screens that were measured</h1>
 <p class="lede">Canvas __CANVAS__. Each panel is drawn at its real-pixel width relative to the
 largest of the four, so the sizes on this page are in proportion to the sizes on those machines.
-Face figures are the side of a square of the same area, and that area as a multiple of one duty
-tile as the game ships it today.</p>
+Each face carries its own area in real device pixels, and that area as a multiple of one duty
+tile as the game ships it today. Only the four distinct faces are marked: the bottom row mirrors
+the top and east mirrors west, so they repeat these areas exactly.</p>
 <div class="grid">__GRID__</div>
 <footer>__NOTE__</footer>
 </div>
