@@ -63,6 +63,15 @@ ROOT = HERE.parents[1]                                  # the repository
 MAX_EDGE = 1200                     # long edge of an embedded image, in pixels
 QUALITY = 86                        # WebP quality; the sources stay untouched at full size
 
+# The figures are drawn one at a time, so each arrives on its own plinth at its own scale. They
+# are meant to be read as one set, and a set whose bases disagree reads as four unrelated
+# pictures. They are levelled HERE rather than by editing the files: the sources stay as the
+# generator made them, and the rule that makes them agree lives in one place where it can be
+# seen and changed.
+FIGURE_KIND = "figure"
+FIGURE_CANVAS = (1086, 1448)        # the canvas the figures are drawn on
+FIGURE_FLOOR = 16                   # plinth bottom to canvas bottom, shared by all of them
+
 # Seat order and the seat-to-portrait cast, mirroring ui/render. Kept as literals so this script
 # runs against a downloads folder with no repo present, and checked against the repo when there
 # is one -- see resolve_portraits().
@@ -156,11 +165,77 @@ SUBJECTS.append({
 })
 
 
-def encode(path: pathlib.Path) -> tuple[str, int, int, int]:
+def plinth(im: Image.Image) -> dict | None:
+    """Where the miniature meets the ground: the widest row of its base.
+
+    Off the alpha channel, not the colour: the base is the lowest thing in the picture and the
+    only part guaranteed to be opaque all the way across. Measured at its WIDEST row rather than
+    at the bottom edge, because the base is an ellipse seen from slightly above and its bottom
+    edge is a good deal narrower than its true width.
+    """
+    mask = im.getchannel("A").point(lambda v: 255 if v > 200 else 0)
+    box = mask.getbbox()
+    if not box:
+        return None
+    _, top, _, below = box
+    bottom = below - 1
+    height = bottom - top + 1
+    best = {"width": 0}
+    for y in range(max(top, bottom - int(height * 0.25)), bottom + 1):
+        row = mask.crop((0, y, mask.width, y + 1)).getbbox()
+        if row and row[2] - row[0] > best["width"]:
+            best = {"width": row[2] - row[0], "left": row[0], "right": row[2], "row": y}
+    if not best["width"]:
+        return None
+    best["bottom"] = bottom
+    return best
+
+
+def level(im: Image.Image, target: float) -> Image.Image:
+    """Scale a figure so its plinth is `target` wide, then stand it on the shared floor line.
+
+    Placed by the PLINTH and not by the picture: the base is the thing being made to agree, and
+    the figure above it is free to be whatever height it is. That is the trade -- one set of
+    bases, four heights -- and it is the right way round, because a miniature is identified by
+    the base it stands on.
+    """
+    here = plinth(im)
+    if not here:
+        return im
+    k = target / here["width"]
+    scaled = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+    now = plinth(scaled) or here
+    canvas = Image.new("RGBA", FIGURE_CANVAS, (0, 0, 0, 0))
+    canvas.alpha_composite(scaled, (
+        round(FIGURE_CANVAS[0] / 2 - (now["left"] + now["right"]) / 2),
+        FIGURE_CANVAS[1] - FIGURE_FLOOR - 1 - now["bottom"]))
+    return canvas
+
+
+def figure_target(paths: list[pathlib.Path]) -> float | None:
+    """The narrowest plinth in the set, so levelling only ever scales DOWN.
+
+    Levelling up would mean enlarging one of the sources, which is the one operation here that
+    invents detail that was never drawn.
+    """
+    widths = []
+    for p in paths:
+        if not p.is_file():
+            continue
+        with Image.open(p) as im:
+            found = plinth(im.convert("RGBA"))
+        if found:
+            widths.append(found["width"])
+    return min(widths) if widths else None
+
+
+def encode(path: pathlib.Path, base: float | None = None) -> tuple[str, int, int, int]:
     """One image as a WebP data URI, plus its embedded size and the bytes it costs."""
     im = Image.open(path)
     keep = "RGBA" if (im.mode in ("RGBA", "LA") or "transparency" in im.info) else "RGB"
     im = im.convert(keep)
+    if base:
+        im = level(im, base)
     im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, "WEBP", quality=QUALITY, method=6)
@@ -211,6 +286,12 @@ def where(subject: dict, spec: dict) -> pathlib.Path:
 
 def collect() -> tuple[list, list, list]:
     """Every declared image: found, reported missing, or absent-but-expected. Nothing is globbed."""
+    # One pass over the figures before anything is encoded: the target is the narrowest plinth in
+    # the set, so it cannot be known from any single image.
+    base = figure_target([where(s, k) for s in SUBJECTS for k in s["kinds"]
+                          if k["kind"] == FIGURE_KIND])
+    if base:
+        print("  levelling the figures to the narrowest plinth in the set: %d px" % base)
     found, missing, absent = [], [], []
     for ch in SUBJECTS:
         panels = []
@@ -234,8 +315,10 @@ def collect() -> tuple[list, list, list]:
                 uri, w, h, size, note = wheel_svg(path)
                 dims = "%g \u00d7 %g units" % (w, h)
             else:
-                uri, w, h, size = encode(path)
-                note, dims = "", "%d \u00d7 %d" % (w, h)
+                lift = base if spec["kind"] == FIGURE_KIND else None
+                uri, w, h, size = encode(path, lift)
+                note = "plinth levelled to %d px" % base if lift else ""
+                dims = "%d \u00d7 %d" % (w, h)
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,
                            "dims": dims, "note": note, "origin": spec.get("origin")})

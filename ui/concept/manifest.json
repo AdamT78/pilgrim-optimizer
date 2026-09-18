@@ -1,5 +1,5 @@
 {
-  "note": "Where each file under ui/concept/ came from, and what it was called before it was renamed. The rename is what makes the folder readable; this file is what stops the rename destroying the only link back to the export. build_browser.py names the page; this names the provenance. A test checks the two agree.",
+  "note": "Where each file under ui/concept/ came from, and what it was called before it was renamed. The rename is what makes the folder readable; this file is what stops the rename destroying the only link back to the export. build_browser.py names the page; this names the provenance. A test checks the two agree. A row with `supersedes` was regenerated: the name there is what the file used to be made from, kept so the earlier version can still be found in git history.",
   "imported": "2026-09-18",
   "images": [
     {
@@ -48,15 +48,16 @@
       "path": "player_2/figure.png",
       "subject": "player_2",
       "kind": "figure",
-      "original_filename": "player_2_figure.png",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_34_57 PM.png",
       "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
       "committed": true,
-      "bytes": 1293698,
-      "sha256": "39b22e4b2769c070ae136e214b728740e20d195bc0fa38ef39a1ee277a158aca",
+      "bytes": 1159956,
+      "sha256": "29fbdef0c8f2566079ee595b89fb9e9be230e27c61656ea700cca4c5e5715570",
       "pixels": [
         1086,
         1448
-      ]
+      ],
+      "supersedes": "player_2_figure.png"
     },
     {
       "path": "player_3/concept.png",
@@ -76,15 +77,16 @@
       "path": "player_3/figure.png",
       "subject": "player_3",
       "kind": "figure",
-      "original_filename": "player_3_figure.png",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_46_58 PM.png",
       "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
       "committed": true,
-      "bytes": 1551567,
-      "sha256": "336b608ab6250c5845171ff74032294bc8290b40eafbd894247077ff8117fdac",
+      "bytes": 1499682,
+      "sha256": "56df642c0eb82f8c4a72d951b9d429c757b5e1c2934af2e1a8de89ee99bd1269",
       "pixels": [
-        1086,
-        1448
-      ]
+        1087,
+        1447
+      ],
+      "supersedes": "player_3_figure.png"
     },
     {
       "path": "player_4/concept.png",
@@ -104,15 +106,16 @@
       "path": "player_4/figure.png",
       "subject": "player_4",
       "kind": "figure",
-      "original_filename": "player_4_figure.png",
+      "original_filename": "ChatGPT Image Sep 18, 2026, 04_19_16 PM.png",
       "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
       "committed": true,
-      "bytes": 2062005,
-      "sha256": "bcbf2f1ad08e6f8eb3d66e3d18da9f704a893a65aa0f5cc58e07df0e608a648f",
+      "bytes": 1359235,
+      "sha256": "e2524c89644752952f42e0fd7443f5e0fac70c8f1257e5ac34fd06a98b6f96aa",
       "pixels": [
-        1024,
-        1536
-      ]
+        1086,
+        1448
+      ],
+      "supersedes": "player_4_figure.png"
     },
     {
       "path": "duty_wheel_concept/labelled.png",
