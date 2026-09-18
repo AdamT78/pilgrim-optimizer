@@ -143,6 +143,25 @@ SUBJECTS.append({
     ],
 })
 
+# Production art, borrowed and not copied: these live in ui/assets-gothic/ and the game uses them.
+# `stack` because they are 2.6:1 -- three of them sharing a row would be 470 px wide each, which
+# is not a size anyone can judge a background at.
+SUBJECTS.append({
+    "id": "panorama_backgrounds",
+    "label": "Panorama backgrounds",
+    "tag": "production art",
+    "ink": "#6b6250",
+    "stack": True,
+    "kinds": [
+        {"kind": "panorama_dark", "title": "Dark centre", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama.webp"},
+        {"kind": "panorama_clearing", "title": "Clearing", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama_clearing.webp"},
+        {"kind": "panorama_mist", "title": "Mist", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama_mist.webp"},
+    ],
+})
+
 # Components, not people: same shape of entry, a different subject. The table is a list of
 # subjects rather than a list of players, which is why this costs one block and no plumbing.
 SUBJECTS.append({
@@ -332,7 +351,8 @@ def collect() -> tuple[list, list, list]:
                            "dims": dims, "note": note, "origin": spec.get("origin")})
             print("  %-16s %-12s %5g x %-6g %6.0f KB embedded  <- %s"
                   % (ch["id"], kind, w, h, size / 1024, path.name))
-        found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")}, "panels": panels})
+        found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")},
+                      "stack": ch.get("stack", False), "panels": panels})
     return found, missing, absent
 
 
@@ -385,7 +405,8 @@ def render(chars: list, missing: list) -> str:
                  html.escape(p["title"]), caption(p))
         if not cards:
             cards = '<p class="none">No images found for this subject.</p>'
-        sheets += '<section class="sheet"%s>%s</section>' % (
+        sheets += '<section class="sheet%s"%s>%s</section>' % (
+            " stack" if ch.get("stack") else "",
             "" if len(sheets) == 0 else " hidden", cards)
 
     gaps = ""
@@ -446,6 +467,9 @@ PAGE = """<!doctype html>
  .card{margin:0;min-width:0;max-width:calc(var(--a) * min(72vh, 720px))}
  .shot{width:100%;aspect-ratio:var(--a);background:#17130d;
    border:1px solid #221d16;border-radius:4px;overflow:hidden;cursor:zoom-in}
+ .sheet.stack{display:block}
+ .sheet.stack .card{max-width:min(100%,calc(var(--a) * min(52vh,520px)));margin:0 0 24px}
+ .sheet.stack .card:last-child{margin-bottom:0}
  @media (max-width:900px){
    /* three in a row is unreadable on a phone; stack them and let each take the full width */
    .sheet{display:block}
