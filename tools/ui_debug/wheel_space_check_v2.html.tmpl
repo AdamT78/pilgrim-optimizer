@@ -55,6 +55,19 @@
    font-size:13px;display:none;z-index:9;white-space:pre-wrap}
  body.bare #hud,body.bare #panel,body.bare #figread,
  body.bare .vedge,body.bare .vlab{display:none}
+ /* IMAGE MODE. The pieces stop taking pointer events so a drag that starts over an acolyte
+    still reaches the wheel underneath -- without this the tile you most want to frame is the
+    one you cannot, because it is the one with a piece standing on it. */
+ body.imgmode .fig{pointer-events:none}
+ /* The past-native warning is CHROME, not artwork, so `h` takes it away with the rest of the
+    furniture -- otherwise the one view meant for judging the wheel clean would have red on it. */
+ body.bare .warn{display:none}
+ body.imgmode #wheel{cursor:move}
+ #dump{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;display:none;
+   background:#14100b;border:1px solid #4a4133;border-radius:4px;padding:10px}
+ #dump textarea{width:62ch;height:40vh;background:#0b0907;color:#cbbb98;border:0;
+   font:12px/1.5 ui-monospace,Menlo,monospace;resize:none}
+ #dump .lab{color:#6f6556;font-size:11px;margin-bottom:6px}
 </style>
 
 <div id="err"></div>
@@ -63,6 +76,7 @@
 <div id="tray"></div>
 <div id="hud"></div>
 <div id="figread"></div>
+<div id="dump"><div class="lab">framing &#183; copy this, then press Escape</div><textarea spellcheck="false"></textarea></div>
 <div id="panel">
   <div class="row">wheel <button id="wbtn" type="button">&nbsp;</button>
     &nbsp;&#183;&nbsp; <b id="sizev">&nbsp;</b></div>
@@ -72,7 +86,11 @@
   <div class="row"><label for="ow"><input type="checkbox" id="ow" checked> only Duty wheel</label>
     <span id="owv"></span></div>
   <div class="hint">a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; h hide<br>
-    drag from the tray top right to mint a piece &#183; double-click a piece to remove it</div>
+    drag from the tray top right to mint a piece &#183; double-click a piece to remove it<br>
+    <b>i</b> duty pictures &#183; then click a face &#183; <b>&larr; &rarr;</b> (or <b>[ ]</b>, <b>, .</b>)
+    change picture &#183; drag move &#183; scroll zoom &#183; x clear face &#183; j copy framing<br>
+    a <b style="color:#e0705f">red outline</b> means that tile is drawn past the picture's own
+    resolution &#183; select it and press <b>n</b> to pull it back</div>
 </div>
 
 <script>
@@ -83,6 +101,7 @@ window.onerror = function(m, src, line){
 };
 
 var WH = __WHEELS__, KEYS = __KEYS__, ROWS = __ROWS__, PALETTES = __PALETTES__;
+var TILES = __TILES__, PROD_PX = __PRODPX__;
 var WR = __WRANGE__, HR = __HRANGE__, SR = __SRANGE__;
 var CANVASES = __CANVASES__, START = __START__;
 var key = KEYS[0], pal = 0, wheelOnly = true;
@@ -93,6 +112,15 @@ var wPx = START[0], hPx = START[1];      // REAL DEVICE pixels, both of them
 var baseW = wPx, baseH = hPx, scale = 1;
 var V = null;                            // where paint() last put the wheel, in CSS px
 
+// THE DRESSING. One entry per face that is carrying a duty picture, keyed by the face's position
+// rather than its index, so it survives the 1.5 <-> 1.778 switch -- the two layouts have the same
+// nine positions and a framing found on one is worth carrying to the other.
+//   t  index into TILES        s  scale, 1 = covers the face's bounding box
+//   dx dy  offsets in units of the face's OWN bounding box, not pixels and not box units, so a
+//          framing holds its place under the width, height and scale sliders.
+var DRESS = {}, imgMode = false, selFace = null, pan = null;
+var SMIN = 0.15, SMAX = 8;
+
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
 function hit(x, y, poly){                // ray cast, in box units
@@ -102,6 +130,85 @@ function hit(x, y, poly){                // ray cast, in box units
     if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+
+function faceAt(pos){
+  var fs = WH[key].faces;
+  for (var i = 0; i < fs.length; i++) if (fs[i].pos === pos) return fs[i];
+  return null;
+}
+
+// The picture's rectangle in BOX UNITS -- and it is the WHOLE picture, drawn at the picture's
+// OWN aspect. At s = 1 it is the smallest such rectangle that still covers the face's bounding
+// box, so the face starts fully painted and s is an honest zoom from there.
+//
+// The first version sized this rect to the face's bounding box and let the renderer fit the
+// picture into it with preserveAspectRatio="slice". That crops to fit -- a square picture in a
+// 1.75:1 box silently loses 43% of its height BEFORE anything is chosen, and dragging then only
+// moves around inside the part that survived. A framing tool that hides part of the source is
+// not a framing tool, so the rect carries the whole thing and the face does the cropping.
+//
+// Centred on the face's AREA CENTROID, not its bbox middle: these faces are curved wedges whose
+// bbox centre can fall outside the face entirely, and zooming about a point that is not on the
+// tile feels broken however correct the arithmetic is.
+function frame(f, g, d, tile){
+  var k = Math.max(f.bw / tile.w, f.bh / tile.h) * g.s;
+  var w = tile.w * k, h = tile.h * k;
+  return {w: w, h: h,
+          x: f.cx * d.box   - w / 2 + g.dx * f.bw,
+          y: f.cy * d.box_h - h / 2 + g.dy * f.bh};
+}
+
+// THE ZOOM STOPS AT THE PICTURE'S OWN RESOLUTION -- the scale at which one source pixel is one
+// DEVICE pixel. Past it the browser is inventing detail and the crop looks sharper on screen than
+// anything the board could ever print, which is the sort of thing you only notice after choosing.
+//
+// Not a constant, because it depends on how big the wheel currently is: the same scale is well
+// under native on a 600 px wheel and past it on a 2600 px one. So it is recomputed against V on
+// every zoom. The two axes are checked separately and the STRICTER wins -- a stretched wheel
+// magnifies more on one axis than the other, and capping on the gentler one would let the tighter
+// one run past native unnoticed.
+function nativeMax(f, tile, d){
+  if (!V) return SMAX;
+  var dpr = devicePixelRatio || 1;
+  var perUnit = Math.max(V.ww / d.box * dpr, V.wh / d.box_h * dpr);
+  return 1 / (Math.max(f.bw / tile.w, f.bh / tile.h) * perUnit);
+}
+
+// 1.0 means the picture is drawn at exactly its own resolution; below that there is detail in the
+// file still in hand, above it the browser is upscaling.
+function nativeAt(f, g, d){
+  var c = nativeMax(f, TILES[g.t], d);
+  return c > 0 ? g.s / c : 0;
+}
+
+// THE OTHER LIMIT, and the one with consequences off this page.
+//
+// The board does not draw these files. gen_duty_grid re-encodes every tile to PROD_PX before the
+// wheel is built, so a crop holding fewer than PROD_PX of the source's own pixels is finer than
+// anything the shipped asset pipeline carries -- the detail you framed by is not lost on screen,
+// it is lost in the build. Unlike the native limit this does NOT move with the wheel: it is a
+// fact about the assets, so a framing that clears it clears it at every size.
+//
+// Face-independent by construction: the ratio works out to srcDim / (s * PROD_PX) whatever the
+// face's shape, which is why all nine come out at the same number.
+function prodMax(f, tile){
+  if (!PROD_PX) return SMAX;
+  var srcDim = (f.bw / tile.w >= f.bh / tile.h) ? tile.w : tile.h;
+  return srcDim / PROD_PX;
+}
+
+// How many of the source's OWN pixels fall across the face's bounding box at this framing.
+function cropPx(f, g){
+  var t = TILES[g.t], cover = Math.max(f.bw / t.w, f.bh / t.h);
+  return f.bw / (cover * g.s);
+}
+
+// Window point -> box units. The wheel is an absolutely placed box with no transform on it, so
+// this is the whole conversion; V is where paint() last put it.
+function toBox(e){
+  var d = WH[key];
+  return [(e.clientX - V.wx) / V.ww * d.box, (e.clientY - V.wy) / V.wh * d.box_h];
 }
 
 // STOCK is the fixed tray, COPIES are the only things that move. A copy's position is held as a
@@ -186,16 +293,70 @@ function paint(){
   var el = document.getElementById("wheel");
   el.style.left = x + "px"; el.style.top = y + "px";
   el.style.width = wCss + "px"; el.style.height = hCss + "px";
-  var P = PALETTES[pal], p = "";
-  for (var i = 0; i < d.faces.length; i++)
-    p += '<path fill="' + (d.faces[i].pos === "centre" ? P.centre : P.face) +
-         '" d="' + d.faces[i].d + '"/>';
+  // V IS SET BEFORE THE DRAWING, not after it. The past-native test below reads V, and with the
+  // assignment further down every warning was computed against the PREVIOUS frame's wheel size --
+  // so growing the wheel lit nothing until some unrelated repaint happened to come along. The
+  // numbers were right and the colour was one paint behind, which is the hardest kind to spot.
+  V = {dpr: dpr, wx: x, wy: y, ww: wCss, wh: hCss};
+  var P = PALETTES[pal], p = "", defs = "", over = "", ghost = "", marks = "";
+  for (var i = 0; i < d.faces.length; i++){
+    var f = d.faces[i];
+    // The tile colour stays painted UNDER the picture, so a picture zoomed in past the face's
+    // edge shows tile rather than a hole punched through to the page.
+    p += '<path fill="' + (f.pos === "centre" ? P.centre : P.face) + '" d="' + f.d + '"/>';
+    var g = DRESS[f.pos];
+    if (!g || !TILES.length) continue;
+    // Clipped by the face's OWN outline, not an approximation of it: the same `d` the fill uses.
+    defs += '<clipPath id="clip-' + f.pos + '"><path d="' + f.d + '"/></clipPath>';
+    // Checked for EVERY dressed face, not just the selected one: growing the wheel puts them all
+    // past native together, and a warning that only ever spoke about the face you happened to have
+    // clicked was how this went unnoticed in the first place.
+    if (nativeAt(f, g, d) > 1.02)
+      marks += '<path class="warn" d="' + f.d + '" fill="none" stroke="#e0705f" ' +
+               'stroke-width="2" vector-effect="non-scaling-stroke"/>';
+    var r = frame(f, g, d, TILES[g.t]);
+    // preserveAspectRatio="none": the rect already HAS the picture's aspect, so there is nothing
+    // left to fit and nothing for the renderer to crop on its own initiative.
+    over += '<g clip-path="url(#clip-' + f.pos + ')"><image href="' + TILES[g.t].src +
+            '" x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h +
+            '" preserveAspectRatio="none"/></g>';
+  }
+  // THE GHOST. The whole picture, dimmed, drawn under the clipped copies and only for the face
+  // being edited: inside the outline is what the tile will show, everything faint around it is
+  // what is being cut. Without it you are framing a picture you cannot see the edges of.
+  if (imgMode && selFace && DRESS[selFace] && TILES.length){
+    var gf = faceAt(selFace), gg = DRESS[selFace];
+    if (gf){
+      var gr = frame(gf, gg, d, TILES[gg.t]);
+      // The box around the whole picture goes red too, since that box IS the thing that has got
+      // too big -- the outline says which tile, this says what about it.
+      var gpast = nativeAt(gf, gg, d) > 1.02;
+      ghost = '<image href="' + TILES[gg.t].src + '" x="' + gr.x + '" y="' + gr.y +
+              '" width="' + gr.w + '" height="' + gr.h +
+              '" preserveAspectRatio="none" opacity="0.3"/>' +
+              '<rect class="' + (gpast ? "warn" : "") + '" x="' + gr.x + '" y="' + gr.y +
+              '" width="' + gr.w + '" height="' + gr.h + '" fill="none" stroke="' +
+              (gpast ? "#e0705f" : "#e8c97a") + '" stroke-opacity="' + (gpast ? "0.9" : "0.45") +
+              '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    }
+  }
+  if (imgMode && selFace){
+    var sf2 = faceAt(selFace), sg2 = DRESS[selFace];
+    // non-scaling-stroke, because the box is being stretched anisotropically and a plain stroke
+    // would come out thick on one axis and thin on the other -- which reads as a drawing bug.
+    if (sf2) marks += '<path d="' + sf2.d + '" fill="none" stroke="' +
+                      (sg2 && nativeAt(sf2, sg2, d) > 1.02 ? "#e0705f" : "#e8c97a") +
+                      '" stroke-width="2" vector-effect="non-scaling-stroke" ' +
+                      'stroke-dasharray="7 5"/>';
+  }
   // preserveAspectRatio="none" is what makes the height slider a lever at all: left at its
   // default the SVG would letterbox inside the box and the slider would move nothing but margin.
+  // Order is the whole design: tile fills, then the dim whole picture, then the crisp clipped
+  // copies over it, then the outlines on top of everything.
   el.innerHTML = '<svg viewBox="0 0 ' + d.box + ' ' + d.box_h +
-                 '" preserveAspectRatio="none">' + p + "</svg>";
+                 '" preserveAspectRatio="none"><defs>' + defs + '</defs>' +
+                 p + ghost + over + marks + "</svg>";
 
-  V = {dpr: dpr, wx: x, wy: y, ww: wCss, wh: hCss};
   STOCK.forEach(function(s){
     var z = size(s.spec);
     s.el.hidden = false;
@@ -325,6 +486,29 @@ function readout(){
   if (order.length)
     lines.push(order.map(function(k){ return k + " " + tally[k]; }).join(" · "));
   if (off) lines.push("<s>" + off + " off the wheel</s>");
+  if (imgMode){
+    var dressed = Object.keys(DRESS);
+    lines.push("<b>duty pictures</b>  " + (TILES.length ? dressed.length + " of 9 faces"
+                                                        : "<s>none found on disk</s>"));
+    if (selFace){
+      var g = DRESS[selFace];
+      if (g){
+        var sf3 = faceAt(selFace), nf = nativeAt(sf3, g, WH[key]);
+        lines.push(selFace + "  " + TILES[g.t].title + "  ×" + g.s.toFixed(2) + "  " +
+                   (nf > 1.02 ? "<s>" + nf.toFixed(2) + "× past native (n to pull back)</s>"
+                    : nf > 0.98 ? "<b>at native</b>"
+                    : Math.round(nf * 100) + "% of native"));
+        // The production line. Reported, never enforced -- it is a statement about the assets and
+        // the right answer to breaking it is often a bigger source file, not a looser crop.
+        if (PROD_PX){
+          var held = cropPx(sf3, g), pct = Math.round(100 * held / PROD_PX);
+          lines.push("  crop holds " + Math.round(held) + " src px · board draws " + PROD_PX +
+                     " · " + (held < PROD_PX ? "<s>" + pct + "% — finer than the build</s>"
+                                             : pct + "%"));
+        }
+      } else lines.push(selFace + "  <s>empty — → to place</s>");
+    } else if (TILES.length) lines.push("<s>click a face</s>");
+  }
   document.getElementById("figread").innerHTML = lines.join("\n");
 }
 
@@ -455,13 +639,130 @@ function nextWheel(){
 }
 document.getElementById("wbtn").addEventListener("click", nextWheel);
 
+// IMAGE MODE. Everything below is inert until `i` turns it on, and turning it off puts the page
+// back exactly as it was -- no piece is moved and no dressing is lost.
+var wheelBox = document.getElementById("wheel");
+
+function setMode(on){
+  imgMode = on;
+  document.body.classList.toggle("imgmode", on);
+  paint();
+}
+
+function pickFace(e){
+  var b = toBox(e), fs = WH[key].faces;
+  for (var i = 0; i < fs.length; i++) if (hit(b[0], b[1], fs[i].poly)) return fs[i];
+  return null;
+}
+
+wheelBox.addEventListener("pointerdown", function(e){
+  if (!imgMode || !V) return;
+  var f = pickFace(e);
+  selFace = f ? f.pos : null;
+  if (f && DRESS[f.pos]){
+    pan = {id: e.pointerId, x: e.clientX, y: e.clientY, pos: f.pos};
+    try { wheelBox.setPointerCapture(e.pointerId); } catch (_){}
+  }
+  paint();
+});
+
+wheelBox.addEventListener("pointermove", function(e){
+  if (!pan || e.pointerId !== pan.id) return;
+  var d = WH[key], f = faceAt(pan.pos), g = DRESS[pan.pos];
+  if (!f || !g) return;
+  // The drag is in CSS px; the offsets are in face-box units. Converting through the live wheel
+  // box means a drag moves the picture by exactly the distance the cursor moved, at any size.
+  g.dx += (e.clientX - pan.x) / V.ww * d.box   / f.bw;
+  g.dy += (e.clientY - pan.y) / V.wh * d.box_h / f.bh;
+  pan.x = e.clientX; pan.y = e.clientY;
+  paint();
+});
+
+function endPan(e){
+  if (!pan) return;
+  try { wheelBox.releasePointerCapture(pan.id); } catch (_){}
+  pan = null;
+}
+wheelBox.addEventListener("pointerup", endPan);
+wheelBox.addEventListener("pointercancel", endPan);
+
+// NOT passive. A wheel listener defaults to passive on some engines, and preventDefault() is then
+// ignored SILENTLY -- the picture would zoom and the page would scroll at the same time, with
+// nothing in the console to say why.
+wheelBox.addEventListener("wheel", function(e){
+  if (!imgMode || !selFace) return;
+  var g = DRESS[selFace];
+  if (!g) return;
+  e.preventDefault();
+  var d = WH[key], f = faceAt(selFace);
+  var next = g.s * Math.exp(-e.deltaY * 0.0015);
+  // Only the zoom-IN direction is capped. Clamping both ways would make one scroll-down jump the
+  // scale when the framing is already past native -- which it can be, since growing the wheel
+  // raises the magnification without anyone touching the zoom.
+  if (f && next > g.s) next = Math.min(next, nativeMax(f, TILES[g.t], d));
+  g.s = clamp(next, SMIN, SMAX);
+  paint();
+}, {passive: false});
+
+function cycle(step){
+  if (!imgMode || !selFace || !TILES.length) return;
+  var g = DRESS[selFace];
+  if (!g) DRESS[selFace] = {t: step > 0 ? 0 : TILES.length - 1, s: 1, dx: 0, dy: 0};
+  else g.t = (g.t + step + TILES.length) % TILES.length;
+  paint();
+}
+
+function dumpFraming(){
+  var out = {};
+  for (var k in DRESS) if (DRESS.hasOwnProperty(k)){
+    var g = DRESS[k];
+    out[k] = {picture: TILES[g.t].src.split("/").pop(), scale: +g.s.toFixed(4),
+              dx: +g.dx.toFixed(4), dy: +g.dy.toFixed(4)};
+  }
+  var box = document.getElementById("dump"), ta = box.querySelector("textarea");
+  ta.value = JSON.stringify({wheel: key, faces: out}, null, 2);
+  box.style.display = "block";
+  ta.focus(); ta.select();
+}
+
 addEventListener("resize", paint);
 addEventListener("keydown", function(e){
+  // Only where text is actually being TYPED. The framing box is a real textarea and takes focus
+  // so its contents can be selected and copied, and without a guard every shortcut would be typed
+  // into it as well. But guarding on INPUT wholesale was wrong: the three sliders are inputs and
+  // keep focus after a click, so touching one silently disabled every key on the page -- i, t, a
+  // and the brackets alike -- with nothing to say why. A range or a checkbox is not typing.
+  var el = e.target, tn = el && el.tagName;
+  var typing = tn === "TEXTAREA" ||
+               (tn === "INPUT" && /^(text|search|url|email|number|password|tel)$/i.test(el.type || "text"));
+  if (typing && e.key !== "Escape") return;
   if (e.key === "a") nextWheel();
   else if (e.key === "m") matchAspect();
   else if (e.key === "c") COPIES.slice().forEach(discard);
   else if (e.key === "t") { pal = (pal + 1) % PALETTES.length; paint(); }
   else if (e.key === "h") document.body.classList.toggle("bare");
+  else if (e.key === "i") setMode(!imgMode);
+  // Three bindings each, because [ and ] are not direct keys on every layout -- on a Swedish or
+  // Norwegian Mac they are Option+8 and Option+9, which is a poor thing to require of a control
+  // you are meant to tap repeatedly. The arrows are prevented from ALSO nudging a focused slider.
+  else if (e.key === "[" || e.key === ",") cycle(-1);
+  else if (e.key === "]" || e.key === ".") cycle(1);
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && imgMode && selFace){
+    e.preventDefault(); cycle(e.key === "ArrowLeft" ? -1 : 1);
+  }
+  else if (e.key === "x" && imgMode && selFace){ delete DRESS[selFace]; paint(); }
+  // Opt-in, never automatic. Pulling the scale back on its own when a slider grows the wheel
+  // would silently re-crop the tile, and a framing chosen at one wheel size would quietly be a
+  // different framing at another.
+  else if (e.key === "n" && imgMode && selFace && DRESS[selFace]){
+    var gn = DRESS[selFace], fn = faceAt(selFace);
+    if (fn) gn.s = Math.min(gn.s, nativeMax(fn, TILES[gn.t], WH[key]));
+    paint();
+  }
+  // preventDefault, or this very keystroke arrives at the textarea dumpFraming() just focused
+  // and replaces the selected JSON with the letter "j" -- which is exactly what it did.
+  else if (e.key === "j" && imgMode){ e.preventDefault(); dumpFraming(); }
+  else if (e.key === "Escape") document.getElementById("dump").style.display = "none";
 });
 paint();
 </script>

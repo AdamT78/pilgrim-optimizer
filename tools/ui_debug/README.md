@@ -2073,6 +2073,33 @@ piece still fits once the wheel shrinks. `t` cycles the tile colour through slat
 parchment, because which of those is right is a live question and the answer depends on which
 pieces are on the board, not on one test piece.
 
+The first piece in every tray row is the acolyte, drawn as vector from `population_sets` rather
+than read off disk. It is the mark the board already puts on a duty tile, so it is the one piece
+whose size the game has already decided — everything to its right is a proposal about what might
+stand there instead, and the comparison only means anything with the incumbent in the row. Being
+vector it needs no generated art, so it is the only piece present on a fresh clone.
+
+`i` turns on image mode, which is where the nine version-C duty pictures get framed into the tile
+shapes. Click a face, arrow keys change the picture, drag moves it and scroll zooms it; each face
+keeps its own framing as offsets in its own bounding box, so a framing survives the sliders and
+the wheel switch. `j` copies all nine out as JSON, which is the artefact that can go back into
+`gen_duty_grid`. The picture is clipped by the face's real outline and drawn at its own aspect —
+sized to the face's bounding box instead, a square source in a 1.75:1 box loses 43% of its height
+to the fit before anything is chosen, and the crop is invisible.
+
+Zoom stops where one source pixel is one device pixel, but that limit moves with the wheel, so the
+size sliders can still carry a framing past it: any face that ends up there is outlined in red and
+`n` pulls the selected one back. The wheel is deliberately not capped — its size is the question
+the page asks — and the framing is never adjusted for you, since that would silently re-crop a
+tile. A second limit is reported and not enforced: `gen_duty_grid` re-encodes each tile to its own
+`px` before the board is built, so a crop holding fewer source pixels than that is finer than the
+build carries, and the fix for breaking it is usually a bigger source file.
+
+This is also the one page here that is **not portable**. Those nine files are 2.2 MB each, so they
+are linked from `ui/assets-gothic/` rather than inlined — base64 would have made the page 27 MB,
+and re-encoding them small would mean choosing a crop by looking at a resample. It therefore only
+works from its place in the repository.
+
 ## The tray pieces, and judging a new sculpt
 
 `make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
