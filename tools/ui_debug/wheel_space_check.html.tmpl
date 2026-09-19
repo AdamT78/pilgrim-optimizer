@@ -28,6 +28,21 @@
  #boards svg{display:block;flex:0 0 auto}
  #wheel{position:absolute}
  #wheel svg{display:block;width:100%;height:100%}
+ /* No drop shadow and no outline: the point is what a bare piece looks like on the tile, and
+    anything drawn under it would be answering a different question. */
+ .fig{position:absolute;display:block;touch-action:none;
+   user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+ /* An AUTHOR `display:block` beats the user agent's `[hidden]{display:none}` outright -- origin
+    wins before specificity is even consulted -- so without this line `el.hidden = true` would
+    quietly do nothing and a figure with no art would still take up space. */
+ .fig[hidden]{display:none!important}
+ .fig.stock{cursor:copy}                 /* the tray mints, it never moves */
+ .fig.copy{cursor:grab}
+ .fig.copy.drag{cursor:grabbing}
+ #figread{position:fixed;right:16px;bottom:14px;text-align:right;white-space:pre;
+   color:#7b7160;font-size:12px;line-height:1.55;pointer-events:none}
+ #figread b{color:#c9b27a;font-weight:400}
+ #figread s{color:#e0705f;text-decoration:none}
  .edge{position:fixed;left:0;right:0;height:0;border-top:1px dashed #6f6350;pointer-events:none}
  .edge span{position:absolute;left:14px;top:4px;font-size:11px;color:#8a7c64;
    background:rgba(11,9,7,.85);padding:1px 6px;border-radius:2px}
@@ -48,8 +63,10 @@
  #act.gone em{color:#a8695e}
  #err{position:fixed;left:0;right:0;top:0;background:#5a1d16;color:#ffd9d2;padding:8px 14px;
    font-size:13px;display:none;z-index:9;white-space:pre-wrap}
+ /* `h` strips the instrumentation. The FIGURE stays -- it is the thing being looked at, not a
+    readout about it -- but its readout goes with the rest. */
  body.bare #hud,body.bare #panel,body.bare .r em,body.bare #col,body.bare .edge,
- body.bare .vedge,body.bare .ghost{display:none}
+ body.bare .vedge,body.bare .ghost,body.bare #figread{display:none}
 </style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">__DEFS__</svg>
@@ -72,11 +89,13 @@
 <div class="vedge" id="eleft"></div>
 <div class="vedge" id="eright"></div>
 <div id="hud"></div>
+<div id="figread"></div>
 <div id="panel">
   player board width <b id="bwv">&nbsp;</b>
   <input type="range" id="bws" min="0" max="1" step="1">
   &nbsp;&#183;&nbsp; <button id="actbtn" type="button">action box: on</button>
-  &nbsp;&#183;&nbsp; 1 2 3 canvas &#183; a aspect &#183; x action box &#183; h hide
+  &nbsp;&#183;&nbsp; 1 2 3 canvas &#183; a aspect &#183; x action box &#183; h hide &#183; c clear pieces
+  <br>drag from the two figures top right to mint a piece &#183; double-click a piece to remove it
 </div>
 
 <script>
@@ -88,8 +107,40 @@ window.onerror = function(m, src, line){
 
 var L = __LAYOUTS__, WH = __WHEELS__, BOARDS = __BOARDS__, SA = __SA__;
 var WIDTHS = __WIDTHS__, SHIP = __SHIP__;
+var FIGURES = __FIGURES__;
 var canvas = 1600, aspect = "1.5", wi = WIDTHS.indexOf(405), showAct = true;
 if (wi < 0) wi = Math.floor(WIDTHS.length / 2);
+
+function faceOf(pos, a){
+  var f = WH[a].faces;
+  for (var i = 0; i < f.length; i++) if (f[i].pos === pos) return f[i];
+  throw new Error("no face named " + pos + " at aspect " + a);
+}
+var V = null;                     // what paint() last drew: stage scale and the wheel's box
+
+// STOCK is the fixed tray: one unmovable figure per size, parked in the corner. Pressing one
+// mints a COPY, and copies are the only things that move. Copy positions are held as FRACTIONS
+// of the wheel box rather than as stage units, so a piece keeps its tile when the slider resizes
+// the wheel or the canvas changes underneath it.
+var STOCK_INSET = 18, STOCK_GAP = 16;             // real device px, like everything else here
+function makeImg(spec, cls, z){
+  var el = document.createElement("img");
+  el.className = "fig " + cls; el.alt = ""; el.draggable = false; el.hidden = true;
+  el.style.zIndex = z; el.src = spec.uri;
+  document.getElementById("stage").appendChild(el);
+  return el;
+}
+var STOCK = FIGURES.map(function(spec){ return {spec: spec, el: makeImg(spec, "stock", 3)}; });
+var COPIES = [], zTop = 10;
+
+function hit(x, y, poly){         // ray cast, in box units
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++){
+    var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 
 function px(el, x, y, w, h){
   el.style.left = x + "px"; el.style.top = y + "px";
@@ -162,7 +213,7 @@ function paint(){
   px(w, wx, wy, ww, wh);
   var p = "";
   for (var i = 0; i < d.faces.length; i++)
-    p += '<path fill="' + (d.faces[i].pos === "centre" ? "#e8dcc0" : "#efe3c8") +
+    p += '<path fill="' + (d.faces[i].pos === "centre" ? d.palette.centre : d.palette.face) +
          '" d="' + d.faces[i].d + '"/>';
   w.innerHTML = '<svg viewBox="0 0 ' + d.box + ' ' + d.box_h + '">' + p + "</svg>";
 
@@ -220,7 +271,169 @@ function paint(){
     if (r[0] === "!") return '<s>' + r[1] + '</s>';
     return '<b>' + r[0] + '</b>  ' + r[1];
   }).join("\n");
+
+  // Everything the figure needs, in the units paint() just drew in. Dragging reads this instead
+  // of recomputing the layout, which is what keeps a mouse move off the boards.
+  V = {k: k, dpr: dpr, ox: ox, oy: oy, cw: g.cw, ch: g.ch, wx: wx, wy: wy, ww: ww, wh: wh};
+  place();
 }
+
+// Each piece is sized in REAL DEVICE pixels and nothing else. A stage unit is k * dpr device
+// pixels, so dividing its px by that is what keeps it the same physical size when the slider,
+// the canvas or the window changes the stage scale under it.
+function size(spec){
+  var h = spec.px / (V.k * V.dpr);
+  return {w: h * spec.ar, h: h};
+}
+
+// The tray parks in the top-RIGHT corner of the WHEEL's own box, which the ellipse always leaves
+// empty at every aspect and slider stop, so it never lands on a face or on the boxes above. The
+// two are base-aligned so the stock reads as two pieces standing side by side rather than two
+// images floating at different heights.
+function placeStock(){
+  var inset = STOCK_INSET / (V.k * V.dpr), gap = STOCK_GAP / (V.k * V.dpr);
+  var total = 0, tall = 0;
+  STOCK.forEach(function(s, i){
+    var z = size(s.spec);
+    total += z.w + (i ? gap : 0);
+    tall = Math.max(tall, z.h);
+  });
+  var x = V.wx + V.ww - inset - total, base = V.wy + inset + tall;
+  STOCK.forEach(function(s){
+    var z = size(s.spec);
+    s.el.hidden = false;
+    s.el.style.left = x + "px"; s.el.style.top = (base - z.h) + "px";
+    s.el.style.width = z.w + "px"; s.el.style.height = z.h + "px";
+    x += z.w + gap;
+  });
+}
+
+function placeCopy(p){
+  var z = size(p.spec), d = WH[aspect];
+  var x = V.wx + p.u * V.ww - z.w / 2, y = V.wy + p.v * V.wh - z.h / 2;
+  // Clamp on the piece's BOX, not its centre, so it can never be dragged off the canvas edge.
+  x = Math.max(0, Math.min(V.cw - z.w, x));
+  y = Math.max(0, Math.min(V.ch - z.h, y));
+  p.u = (x + z.w / 2 - V.wx) / V.ww;              // write the clamp back, so it sticks
+  p.v = (y + z.h / 2 - V.wy) / V.wh;
+  p.el.hidden = false;
+  p.el.style.left = x + "px"; p.el.style.top = y + "px";
+  p.el.style.width = z.w + "px"; p.el.style.height = z.h + "px";
+  // A piece stands on its BASE, so the tile it occupies is the one under the bottom centre of
+  // the art -- not under its middle, which for a tall figure can be a face further out.
+  var bx = (x + z.w / 2 - V.wx) / V.ww * d.box, by = (y + z.h - V.wy) / V.wh * d.box_h;
+  p.on = null;
+  for (var i = 0; i < d.faces.length; i++)
+    if (hit(bx, by, d.faces[i].poly)){ p.on = d.faces[i]; break; }
+}
+
+// Bounded whatever the count: a line per size, then one tally line across the faces. Listing
+// every piece would grow the readout off the screen as soon as the board got interesting.
+function readout(){
+  var lines = [], tally = {}, off = 0, order = [];
+  STOCK.forEach(function(s){
+    var n = 0;
+    COPIES.forEach(function(p){ if (p.spec.px === s.spec.px) n++; });
+    lines.push("<b>" + s.spec.px + " px</b>  " + Math.round(s.spec.px * s.spec.ar) + " × " +
+               s.spec.px + "  ·  " + n + " placed");
+  });
+  COPIES.forEach(function(p){
+    if (!p.on){ off++; return; }
+    if (!tally[p.on.pos]){ tally[p.on.pos] = 0; order.push(p.on.pos); }
+    tally[p.on.pos]++;
+  });
+  if (order.length)
+    lines.push(order.map(function(k){ return k + " " + tally[k]; }).join(" · "));
+  if (off) lines.push("<s>" + off + " off the wheel</s>");
+  document.getElementById("figread").innerHTML = lines.join("\n");
+}
+
+function place(){
+  if (!V) return;
+  placeStock();
+  COPIES.forEach(placeCopy);
+  readout();
+}
+
+function grab(p, e, dx, dy){
+  p.drag = {id: e.pointerId, dx: dx, dy: dy, moved: false};
+  try { p.el.setPointerCapture(e.pointerId); } catch (_){}
+  p.el.classList.add("drag");
+  p.el.style.zIndex = ++zTop;                     // the one being moved comes to the front
+}
+
+function drop(p){
+  if (!p.drag) return;
+  var moved = p.drag.moved;
+  try { p.el.releasePointerCapture(p.drag.id); } catch (_){}
+  p.drag = null;
+  p.el.classList.remove("drag");
+  // A plain click on the tray mints a copy exactly ON the stock, where it would look like
+  // nothing had happened. Step a never-moved NEW piece clear so it is visibly its own thing.
+  // Only a new one: clicking a piece already on the board must leave it where it stands.
+  if (!moved && p.fresh){
+    var z = size(p.spec);
+    p.u -= (z.w * 1.2) / V.ww;
+    p.v += (z.h * (0.5 + 0.28 * (COPIES.indexOf(p) % 4))) / V.wh;
+    placeCopy(p); readout();
+  }
+  p.fresh = false;
+}
+
+function discard(p){
+  var i = COPIES.indexOf(p);
+  if (i < 0) return;
+  COPIES.splice(i, 1);
+  p.el.parentNode.removeChild(p.el);
+  readout();
+}
+
+function wire(p){
+  p.el.addEventListener("pointerdown", function(e){
+    if (e.button !== 0 || !V || p.drag) return;   // left button held, as asked -- nothing else
+    var r = p.el.getBoundingClientRect();
+    grab(p, e, e.clientX - r.left, e.clientY - r.top);
+    e.preventDefault(); e.stopPropagation();
+  });
+  p.el.addEventListener("pointermove", function(e){
+    if (!p.drag || e.pointerId !== p.drag.id || !V) return;
+    // clientX/Y are window CSS pixels; the stage is translated to (ox,oy) and then scaled by k
+    // about its top left, so the scale has to come back out before the number means a stage unit.
+    var z = size(p.spec);
+    var x = (e.clientX - p.drag.dx - V.ox) / V.k, y = (e.clientY - p.drag.dy - V.oy) / V.k;
+    p.u = (x + z.w / 2 - V.wx) / V.ww;
+    p.v = (y + z.h / 2 - V.wy) / V.wh;
+    p.drag.moved = true;
+    placeCopy(p); readout();      // only this piece; place() would relay the whole tray as well
+  });
+  p.el.addEventListener("pointerup", function(){ drop(p); });
+  p.el.addEventListener("pointercancel", function(){ drop(p); });
+  p.el.addEventListener("dblclick", function(e){ discard(p); e.preventDefault(); });
+}
+
+// Pressing a stock figure mints a copy under the cursor and hands the drag straight to it, so
+// picking a piece off the tray and putting it on a tile is one motion rather than click-then-find.
+function mint(spec, e, dx, dy){
+  var p = {spec: spec, el: makeImg(spec, "copy", ++zTop), u: 0, v: 0, on: null, fresh: true};
+  COPIES.push(p);
+  wire(p);
+  var z = size(spec);
+  var x = (e.clientX - dx - V.ox) / V.k, y = (e.clientY - dy - V.oy) / V.k;
+  p.u = (x + z.w / 2 - V.wx) / V.ww;
+  p.v = (y + z.h / 2 - V.wy) / V.wh;
+  placeCopy(p);
+  grab(p, e, dx, dy);
+  readout();
+}
+
+STOCK.forEach(function(s){
+  s.el.addEventListener("pointerdown", function(e){
+    if (e.button !== 0 || !V) return;
+    var r = s.el.getBoundingClientRect();
+    mint(s.spec, e, e.clientX - r.left, e.clientY - r.top);
+    e.preventDefault();
+  });
+});
 
 function toggleAct(){
   showAct = !showAct;
@@ -242,6 +455,7 @@ addEventListener("keydown", function(e){
   else if (e.key === "a") aspect = (aspect === "1.5" ? "1.778" : "1.5");
   else if (e.key === "x") { toggleAct(); return; }
   else if (e.key === "h") { document.body.classList.toggle("bare"); return; }
+  else if (e.key === "c") { COPIES.slice().forEach(discard); return; }   // clear the board
   else return;
   paint();
 });
