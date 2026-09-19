@@ -103,8 +103,8 @@ SUBJECTS = [
              "rel": "ui/assets-gothic/portraits/%s.png" % SEAT_PORTRAITS[seat]},
             {"kind": "concept", "title": "Concept sheet"},
             {"kind": "figure", "title": "Figure"},
-            {"kind": "mini_engraved", "title": "Mini, engraved"},
             {"kind": "sculpt_plastic", "title": "Sculpt, plastic"},
+            {"kind": "mini_engraved", "title": "Mini, engraved"},
         ],
     }
     for n, seat in enumerate(SEATS, start=1)
@@ -174,6 +174,31 @@ SUBJECTS.append({
                   ("lossless right half",
                    "ui/assets-gothic/ui/sources/panorama_mist_right.webp")]},
     ],
+})
+
+# The nine duty actions, as SQUARES. The game view never shows them this way: gen_duty_grid cuts
+# each one to its tile shape and the wheel shows a wedge of it, so a whole half of some of these
+# pictures has never been on screen. That is exactly why they are here uncut -- this page is for
+# looking at the art, and the tile shape is a separate decision applied later.
+#
+# Literals, like the seat cast above, so this runs without a renderer present; resolve_duty_tiles()
+# hands authority to gen_duty_grid wherever there is one. The version matters: A was engraved and
+# B grim dark, and `gen_duty_grid.VERSION` says which set the board actually draws.
+DUTY_VERSION = "C"
+DUTY_TILES = [("01", "allocation", "Allocation"), ("02", "clerical", "Clerical"),
+              ("03", "construct", "Construct"), ("04", "build_roads", "Build Roads"),
+              ("05", "city", "The City"), ("06", "ordination", "Ordination"),
+              ("07", "produce", "Produce"), ("08", "taxation", "Taxation"),
+              ("09", "give_alms", "Give Alms")]
+SUBJECTS.append({
+    "id": "duty_actions",
+    "label": "Duty actions",
+    "tag": "production art",
+    "ink": "#c2a24a",
+    "kinds": [{"kind": "duty_%s" % slug, "title": title, "root": "assets",
+               "rel": "ui/assets-gothic/duty-tiles/%s/%s_%s_%s.webp"
+                      % (DUTY_VERSION, nn, slug, DUTY_VERSION)}
+              for nn, slug, title in DUTY_TILES],
 })
 
 # Components, not people: same shape of entry, a different subject. The table is a list of
@@ -445,12 +470,15 @@ def render(chars: list, missing: list) -> str:
                           "<figcaption><b>%s</b><span>%s</span></figcaption></figure>"
                           % (a, a, inner, html.escape(p["title"]), caption(p)))
                 continue
+            # The overlay reads the card's own <img> rather than a data-full copy of the same
+            # URI. Carrying it twice put every picture in the file twice -- 25.5 MB of a 25.3 MB
+            # page was base64, 84 URIs for 43 images -- and no reader ever saw the difference.
             cards += (
-                '<figure class="card" data-full="%s" style="--a:%.4f;flex:%.4f 1 0">'
+                '<figure class="card" style="--a:%.4f;flex:%.4f 1 0">'
                 '<div class="shot"><img src="%s" alt="%s" loading="lazy"></div>'
                 "<figcaption><b>%s</b><span>%s</span></figcaption>"
                 "</figure>"
-            ) % (p["uri"], a, a, p["uri"],
+            ) % (a, a, p["uri"],
                  html.escape("%s, %s" % (ch["label"], p["title"])),
                  html.escape(p["title"]), caption(p))
         if not cards:
@@ -586,12 +614,23 @@ who made it and its checksum. Images are downscaled and re-encoded for this page
 
   document.addEventListener("click", function(e){
     if (!e.target.closest) return;
+    // A secondary click is a request for the browser's own menu, not for the overlay. A real
+    // right-click never reaches here -- it only raises `contextmenu` -- but CONTROL-CLICK, which
+    // is how a Mac has asked for that menu since before the two-button mouse, arrives as an
+    // ordinary left click with ctrlKey set. Without this line the overlay opened on top of the
+    // menu and "save image as" looked like it had been replaced by a zoom. Cmd and shift are
+    // here for the same reason: they mean open-in-a-tab and open-in-a-window, never zoom.
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     // the caption's source link lives INSIDE the card, so its click bubbles here and used to
     // open the overlay on top of the download. A link is never a request to zoom.
     if (e.target.closest("a")) return;
     var card = e.target.closest(".card");
     if (!card) return;
-    lbImg.src = card.dataset.full;
+    // The card's own image IS the full-size copy, so there is nothing to look up. A card whose
+    // art is not in the repository has no <img> at all and has nothing to enlarge.
+    var img = card.querySelector("img");
+    if (!img) return;
+    lbImg.src = img.src;
     lb.classList.add("on");
   });
   lb.addEventListener("click", function(){ lb.classList.remove("on"); lbImg.src = ""; });
@@ -658,6 +697,55 @@ def resolve_portraits() -> None:
             "rel": "ui/assets-gothic/portraits/%s.png" % SEAT_PORTRAITS[seat]}
 
 
+def resolve_duty_tiles() -> None:
+    """Take the duty tile set from gen_duty_grid rather than from the copy above.
+
+    Same bargain as resolve_portraits: the literals let this run against a bare downloads folder,
+    and where there IS a renderer it is the authority. It matters more here than for the cast,
+    because WHICH VERSION is drawn is a live decision -- the folder holds three complete sets and
+    `gen_duty_grid.VERSION` is the only thing that says which one the board uses. A page showing
+    version C while the game had moved to D would be quietly, confidently wrong.
+
+    find_tiles() is asked for the paths rather than the names being rebuilt here, so a tile that
+    has not been drawn yet is simply absent from the page instead of appearing as a broken card.
+    """
+    render_dir = ROOT / "ui" / "render"
+    if not (render_dir / "gen_duty_grid.py").is_file():
+        print("  (no ui/render in this checkout; keeping the built-in duty tiles)")
+        return
+    sys.path.insert(0, str(render_dir))
+    try:
+        import gen_duty_grid as dg
+    except Exception as exc:                                        # noqa: BLE001
+        print("  (could not read the duty tiles from ui/render: %s)" % exc)
+        return
+
+    version = getattr(dg, "VERSION", None) or DUTY_VERSION
+    if version != DUTY_VERSION:
+        print("  (gen_duty_grid draws version %s, this page assumed %s -- following the repo)"
+              % (version, DUTY_VERSION))
+    try:
+        tiles = dg.find_tiles(version=version)
+    except Exception as exc:                                        # noqa: BLE001
+        print("  (gen_duty_grid could not list its tiles: %s)" % exc)
+        return
+    if not tiles:
+        print("  (no version %s tiles on disk; keeping the built-in list)" % version)
+        return
+
+    names = getattr(dg, "DUTY_NAMES", None) or []
+    subject = next(s for s in SUBJECTS if s["id"] == "duty_actions")
+    subject["kinds"] = [
+        {"kind": "duty_%02d" % (i + 1),
+         "title": names[i] if i < len(names) else "Tile %02d" % (i + 1),
+         "root": "assets",
+         "rel": os.path.relpath(tiles[i], ROOT).replace(os.sep, "/")}
+        for i in sorted(tiles)]
+    missing = len(names) - len(tiles) if names else 0
+    print("  duty tiles: version %s, %d from gen_duty_grid%s"
+          % (version, len(tiles), ", %d not drawn yet" % missing if missing > 0 else ""))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", default=None,
@@ -669,6 +757,7 @@ def main() -> int:
            else HERE / "generated" / "concept_browser.html")
 
     resolve_portraits()
+    resolve_duty_tiles()
     subjects, missing, absent = collect(out.parent)
     page = render(subjects, missing)
     out.parent.mkdir(parents=True, exist_ok=True)
