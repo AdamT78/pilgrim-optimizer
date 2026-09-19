@@ -470,12 +470,15 @@ def render(chars: list, missing: list) -> str:
                           "<figcaption><b>%s</b><span>%s</span></figcaption></figure>"
                           % (a, a, inner, html.escape(p["title"]), caption(p)))
                 continue
+            # The overlay reads the card's own <img> rather than a data-full copy of the same
+            # URI. Carrying it twice put every picture in the file twice -- 25.5 MB of a 25.3 MB
+            # page was base64, 84 URIs for 43 images -- and no reader ever saw the difference.
             cards += (
-                '<figure class="card" data-full="%s" style="--a:%.4f;flex:%.4f 1 0">'
+                '<figure class="card" style="--a:%.4f;flex:%.4f 1 0">'
                 '<div class="shot"><img src="%s" alt="%s" loading="lazy"></div>'
                 "<figcaption><b>%s</b><span>%s</span></figcaption>"
                 "</figure>"
-            ) % (p["uri"], a, a, p["uri"],
+            ) % (a, a, p["uri"],
                  html.escape("%s, %s" % (ch["label"], p["title"])),
                  html.escape(p["title"]), caption(p))
         if not cards:
@@ -623,7 +626,11 @@ who made it and its checksum. Images are downscaled and re-encoded for this page
     if (e.target.closest("a")) return;
     var card = e.target.closest(".card");
     if (!card) return;
-    lbImg.src = card.dataset.full;
+    // The card's own image IS the full-size copy, so there is nothing to look up. A card whose
+    // art is not in the repository has no <img> at all and has nothing to enlarge.
+    var img = card.querySelector("img");
+    if (!img) return;
+    lbImg.src = img.src;
     lb.classList.add("on");
   });
   lb.addEventListener("click", function(){ lb.classList.remove("on"); lbImg.src = ""; });
