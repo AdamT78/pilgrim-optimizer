@@ -43,6 +43,26 @@ complete on the machine that found the image, honest on a fresh clone, an error 
 The test enforces the rule rather than trusting it — anything the manifest marks
 `"committed": false` must live under a path `.gitignore` covers.
 
+## The figures are levelled when the page is built
+
+Each figure was drawn on its own, so each arrived on its own plinth at its own scale — the four
+bases ranged over 24% and one was on a different canvas entirely. Four miniatures whose bases
+disagree read as four unrelated pictures rather than as a set.
+
+`build_browser.py` fixes that at build time rather than by editing the files. It measures each
+figure's plinth from the alpha channel — the widest row of the base, not its bottom edge, because
+the base is an ellipse seen from slightly above and its bottom edge is much narrower than its true
+width — scales every figure so those widths agree, and stands them all on one floor line.
+
+The target is the NARROWEST plinth in the set, so levelling only ever scales down. Scaling up
+would enlarge a source, which is the one operation here that invents detail nobody drew.
+
+Two consequences worth knowing. The figures end up at different heights, which is correct: a
+miniature is identified by the base it stands on, and the figure above it is free to be as tall as
+it is. And the files on disk are still exactly what the generator produced — the rule that makes
+them agree lives in one place in the script, where it can be read and changed, rather than being
+baked into pixels.
+
 ## Two things here that are not files here
 
 The four portraits are production art, read from `ui/assets-gothic/portraits/` through the same

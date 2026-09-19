@@ -48,8 +48,10 @@ import base64
 import html
 import io
 import json
+import os
 import pathlib
 import sys
+import urllib.parse
 import webbrowser
 
 try:
@@ -62,6 +64,18 @@ ROOT = HERE.parents[1]                                  # the repository
 
 MAX_EDGE = 1200                     # long edge of an embedded image, in pixels
 QUALITY = 86                        # WebP quality; the sources stay untouched at full size
+
+# The figures are drawn one at a time, so each arrives on its own plinth at its own scale. They
+# are meant to be read as one set, and a set whose bases disagree reads as four unrelated
+# pictures. They are levelled HERE rather than by editing the files: the sources stay as the
+# generator made them, and the rule that makes them agree lives in one place where it can be
+# seen and changed.
+# Levelled per KIND, not across all of them: the display figures stand on stone plinths and the
+# plastic sculpts on moulded pucks, so they are two sets that each need to agree internally and
+# have no reason to agree with each other. A kind can only be levelled if it has alpha to measure.
+LEVELLED_KINDS = ("figure", "sculpt_plastic")
+FIGURE_CANVAS = (1086, 1448)        # the canvas these are drawn on
+FIGURE_FLOOR = 16                   # base bottom to canvas bottom, shared within a kind
 
 # Seat order and the seat-to-portrait cast, mirroring ui/render. Kept as literals so this script
 # runs against a downloads folder with no repo present, and checked against the repo when there
@@ -89,6 +103,8 @@ SUBJECTS = [
              "rel": "ui/assets-gothic/portraits/%s.png" % SEAT_PORTRAITS[seat]},
             {"kind": "concept", "title": "Concept sheet"},
             {"kind": "figure", "title": "Figure"},
+            {"kind": "mini_engraved", "title": "Mini, engraved"},
+            {"kind": "sculpt_plastic", "title": "Sculpt, plastic"},
         ],
     }
     for n, seat in enumerate(SEATS, start=1)
@@ -129,6 +145,37 @@ SUBJECTS.append({
     ],
 })
 
+# Production art, borrowed and not copied: these live in ui/assets-gothic/ and the game uses them.
+# `stack` because they are 2.6:1 -- three of them sharing a row would be 470 px wide each, which
+# is not a size anyone can judge a background at.
+SUBJECTS.append({
+    "id": "panorama_backgrounds",
+    "label": "Panorama backgrounds",
+    "tag": "production art",
+    "ink": "#6b6250",
+    "stack": True,
+    "kinds": [
+        # The composed file is LOSSY webp -- it is the one the game ships. The halves it was
+        # made from are lossless and twice the data, so they are the archival form and the card
+        # links them too. Whoever wants a panorama to work from wants these, not the delivery copy.
+        {"kind": "panorama_dark", "title": "Dark centre", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama.webp",
+         "also": [("lossless left half", "ui/assets-gothic/ui/sources/panorama_left.webp"),
+                  ("lossless right half", "ui/assets-gothic/ui/sources/panorama_right.webp")]},
+        {"kind": "panorama_clearing", "title": "Clearing", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama_clearing.webp",
+         "also": [("lossless left half",
+                   "ui/assets-gothic/ui/sources/panorama_clearing_left.webp"),
+                  ("lossless right half",
+                   "ui/assets-gothic/ui/sources/panorama_clearing_right.webp")]},
+        {"kind": "panorama_mist", "title": "Mist", "root": "assets",
+         "rel": "ui/assets-gothic/ui/panorama_mist.webp",
+         "also": [("lossless left half", "ui/assets-gothic/ui/sources/panorama_mist_left.webp"),
+                  ("lossless right half",
+                   "ui/assets-gothic/ui/sources/panorama_mist_right.webp")]},
+    ],
+})
+
 # Components, not people: same shape of entry, a different subject. The table is a list of
 # subjects rather than a list of players, which is why this costs one block and no plumbing.
 SUBJECTS.append({
@@ -156,17 +203,90 @@ SUBJECTS.append({
 })
 
 
-def encode(path: pathlib.Path) -> tuple[str, int, int, int]:
-    """One image as a WebP data URI, plus its embedded size and the bytes it costs."""
+def plinth(im: Image.Image) -> dict | None:
+    """Where the miniature meets the ground: the widest row of its base.
+
+    Off the alpha channel, not the colour: the base is the lowest thing in the picture and the
+    only part guaranteed to be opaque all the way across. Measured at its WIDEST row rather than
+    at the bottom edge, because the base is an ellipse seen from slightly above and its bottom
+    edge is a good deal narrower than its true width.
+    """
+    mask = im.getchannel("A").point(lambda v: 255 if v > 200 else 0)
+    box = mask.getbbox()
+    if not box:
+        return None
+    _, top, _, below = box
+    bottom = below - 1
+    height = bottom - top + 1
+    best = {"width": 0}
+    for y in range(max(top, bottom - int(height * 0.25)), bottom + 1):
+        row = mask.crop((0, y, mask.width, y + 1)).getbbox()
+        if row and row[2] - row[0] > best["width"]:
+            best = {"width": row[2] - row[0], "left": row[0], "right": row[2], "row": y}
+    if not best["width"]:
+        return None
+    best["bottom"] = bottom
+    return best
+
+
+def level(im: Image.Image, target: float) -> Image.Image:
+    """Scale a figure so its plinth is `target` wide, then stand it on the shared floor line.
+
+    Placed by the PLINTH and not by the picture: the base is the thing being made to agree, and
+    the figure above it is free to be whatever height it is. That is the trade -- one set of
+    bases, four heights -- and it is the right way round, because a miniature is identified by
+    the base it stands on.
+    """
+    here = plinth(im)
+    if not here:
+        return im
+    k = target / here["width"]
+    scaled = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+    now = plinth(scaled) or here
+    canvas = Image.new("RGBA", FIGURE_CANVAS, (0, 0, 0, 0))
+    canvas.alpha_composite(scaled, (
+        round(FIGURE_CANVAS[0] / 2 - (now["left"] + now["right"]) / 2),
+        FIGURE_CANVAS[1] - FIGURE_FLOOR - 1 - now["bottom"]))
+    return canvas
+
+
+def figure_target(paths: list[pathlib.Path]) -> float | None:
+    """The narrowest plinth in the set, so levelling only ever scales DOWN.
+
+    Levelling up would mean enlarging one of the sources, which is the one operation here that
+    invents detail that was never drawn.
+    """
+    widths = []
+    for p in paths:
+        if not p.is_file():
+            continue
+        with Image.open(p) as im:
+            found = plinth(im.convert("RGBA"))
+        if found:
+            widths.append(found["width"])
+    return min(widths) if widths else None
+
+
+def encode(path: pathlib.Path,
+           base: float | None = None) -> tuple[str, int, int, int, tuple[int, int]]:
+    """One image as a WebP data URI, its embedded size, its cost, and the SOURCE's own size.
+
+    The last of those is what the caption should quote. Everything on this page is downscaled to
+    MAX_EDGE to keep the file portable, so the embedded dimensions describe the preview and not
+    the archive -- quoting them tells a reader the file is smaller than it is.
+    """
     im = Image.open(path)
+    source = im.size
     keep = "RGBA" if (im.mode in ("RGBA", "LA") or "transparency" in im.info) else "RGB"
     im = im.convert(keep)
+    if base:
+        im = level(im, base)
     im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, "WEBP", quality=QUALITY, method=6)
     raw = buf.getvalue()
     return ("data:image/webp;base64," + base64.b64encode(raw).decode("ascii"),
-            im.width, im.height, len(raw))
+            im.width, im.height, len(raw), source)
 
 
 def wheel_svg(path: pathlib.Path) -> tuple[str, float, float, int, str]:
@@ -209,8 +329,32 @@ def where(subject: dict, spec: dict) -> pathlib.Path:
     return HERE / (spec.get("rel") or "%s/%s.png" % (subject["id"], spec["kind"]))
 
 
-def collect() -> tuple[list, list, list]:
+def source_link(path: pathlib.Path, out_dir: pathlib.Path) -> str:
+    """A path from the finished page back to the file it is showing.
+
+    Everything on this page is downscaled to MAX_EDGE and re-encoded, so saving an image out of
+    the page gets the preview -- for a panorama, 1200 x 462 of a 2860 x 1100 original. The card
+    therefore carries a link to the file itself.
+
+    Relative, not absolute: the page is rebuilt by whoever runs the script, so a path from the
+    output directory works for all of them, where a baked-in /Users/... would work for one. It
+    does mean the link dies if the HTML is moved or mailed on its own, which is the same trade
+    the embedded images already make in the other direction.
+    """
+    return urllib.parse.quote(os.path.relpath(path, out_dir).replace(os.sep, "/"))
+
+
+def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
     """Every declared image: found, reported missing, or absent-but-expected. Nothing is globbed."""
+    # One pass over the figures before anything is encoded: the target is the narrowest plinth in
+    # the set, so it cannot be known from any single image.
+    bases = {}
+    for kind in LEVELLED_KINDS:
+        found_target = figure_target([where(s, k) for s in SUBJECTS for k in s["kinds"]
+                                      if k["kind"] == kind])
+        if found_target:
+            bases[kind] = found_target
+            print("  levelling %-14s to the narrowest base in that set: %d px" % (kind, found_target))
     found, missing, absent = [], [], []
     for ch in SUBJECTS:
         panels = []
@@ -226,7 +370,7 @@ def collect() -> tuple[list, list, list]:
                     panels.append({"kind": kind, "title": title, "uri": None, "w": 4.0, "h": 3.0,
                                    "src": str(path), "name": path.name, "bytes": 0,
                                    "dims": "not in this checkout", "note": "",
-                                   "origin": spec.get("origin")})
+                                   "origin": spec.get("origin"), "source": None})
                 else:
                     missing.append("%s / %s: %s" % (ch["label"], kind, path))
                 continue
@@ -234,14 +378,23 @@ def collect() -> tuple[list, list, list]:
                 uri, w, h, size, note = wheel_svg(path)
                 dims = "%g \u00d7 %g units" % (w, h)
             else:
-                uri, w, h, size = encode(path)
-                note, dims = "", "%d \u00d7 %d" % (w, h)
+                lift = bases.get(spec["kind"])
+                uri, w, h, size, source = encode(path, lift)
+                note = "base levelled to %d px" % lift if lift else ""
+                dims = "%d \u00d7 %d" % source
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
                            "src": str(path), "name": path.name, "bytes": size,
-                           "dims": dims, "note": note, "origin": spec.get("origin")})
+                           "dims": dims, "note": note, "origin": spec.get("origin"),
+                           "source": source_link(path, out_dir),
+                           # further files worth reaching for this one: a higher-quality form,
+                           # the parts it was composed from. Silently dropped if absent.
+                           "also": [(label, source_link(ROOT / rel, out_dir))
+                                    for label, rel in spec.get("also", [])
+                                    if (ROOT / rel).is_file()]})
             print("  %-16s %-12s %5g x %-6g %6.0f KB embedded  <- %s"
                   % (ch["id"], kind, w, h, size / 1024, path.name))
-        found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")}, "panels": panels})
+        found.append({**{k: ch[k] for k in ("id", "label", "tag", "ink")},
+                      "stack": ch.get("stack", False), "panels": panels})
     return found, missing, absent
 
 
@@ -253,6 +406,14 @@ def caption(p: dict) -> str:
     default is stated once in the footer and only the exceptions are marked here.
     """
     text = html.escape(" \u00b7 ".join(x for x in (p["name"], p["dims"], p["note"]) if x))
+    if p.get("source"):
+        # `download` is kept for the case where this is ever served over http, but on a file://
+        # page Chromium ignores it and navigates instead -- so the label says open, not save.
+        text += (' \u00b7 <a class="dl" href="%s" download>open the original</a>'
+                 % html.escape(p["source"], quote=True))
+    for label, href in p.get("also") or []:
+        text += (' \u00b7 <a class="dl" href="%s" download>%s</a>'
+                 % (html.escape(href, quote=True), html.escape(label)))
     src = p.get("origin")
     if src:
         text += (' \u00b7 source <a href="%s" target="_blank" rel="noopener noreferrer">%s</a>'
@@ -294,7 +455,8 @@ def render(chars: list, missing: list) -> str:
                  html.escape(p["title"]), caption(p))
         if not cards:
             cards = '<p class="none">No images found for this subject.</p>'
-        sheets += '<section class="sheet"%s>%s</section>' % (
+        sheets += '<section class="sheet%s"%s>%s</section>' % (
+            " stack" if ch.get("stack") else "",
             "" if len(sheets) == 0 else " hidden", cards)
 
     gaps = ""
@@ -341,8 +503,11 @@ PAGE = """<!doctype html>
  .tab small{color:#5f5749;font-size:11px}
  .tab[aria-current] small{color:#8a7a52}
  /* A class with display: beats the UA sheet's [hidden]{display:none}, so hiding a sheet from
-    JS silently does nothing without this rule. Every sheet was visible at once until it existed. */
- .sheet[hidden]{display:none}
+    JS silently does nothing without this rule. Every sheet was visible at once until it existed.
+    !important, not just specificity: .sheet.stack{display:block} ties with .sheet[hidden] at
+    (0,2,0) and wins on order, which put the stacked panorama sheet on every tab. Any future
+    variant class would do the same, so this rule has to beat all of them rather than the one. */
+ .sheet[hidden]{display:none!important}
  /* Equal HEIGHT, not equal width: the three are a square portrait, a wide turnaround sheet and a
     tall figure, and only a common height lets you compare the drawing across them. */
  /* Each card grows in proportion to its own aspect ratio from a zero basis, so the widths come
@@ -355,6 +520,9 @@ PAGE = """<!doctype html>
  .card{margin:0;min-width:0;max-width:calc(var(--a) * min(72vh, 720px))}
  .shot{width:100%;aspect-ratio:var(--a);background:#17130d;
    border:1px solid #221d16;border-radius:4px;overflow:hidden;cursor:zoom-in}
+ .sheet.stack{display:block}
+ .sheet.stack .card{max-width:min(100%,calc(var(--a) * min(52vh,520px)));margin:0 0 24px}
+ .sheet.stack .card:last-child{margin-bottom:0}
  @media (max-width:900px){
    /* three in a row is unreadable on a phone; stack them and let each take the full width */
    .sheet{display:block}
@@ -369,6 +537,7 @@ PAGE = """<!doctype html>
  figcaption b{color:#cbbb98;font-weight:600;font-size:13px}
  figcaption span{color:#5f5749;font-size:11.5px}
  figcaption a{color:#8a7a52}
+ figcaption a.dl{color:#9a8a5e}
  figcaption a:hover{color:#cbbb98}
  .hint a{color:#5f5749}
  .hint code{color:#6b6250;font-size:11px}
@@ -416,7 +585,11 @@ who made it and its checksum. Images are downscaled and re-encoded for this page
   });
 
   document.addEventListener("click", function(e){
-    var card = e.target.closest ? e.target.closest(".card") : null;
+    if (!e.target.closest) return;
+    // the caption's source link lives INSIDE the card, so its click bubbles here and used to
+    // open the overlay on top of the download. A link is never a request to zoom.
+    if (e.target.closest("a")) return;
+    var card = e.target.closest(".card");
     if (!card) return;
     lbImg.src = card.dataset.full;
     lb.classList.add("on");
@@ -496,7 +669,7 @@ def main() -> int:
            else HERE / "generated" / "concept_browser.html")
 
     resolve_portraits()
-    subjects, missing, absent = collect()
+    subjects, missing, absent = collect(out.parent)
     page = render(subjects, missing)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")

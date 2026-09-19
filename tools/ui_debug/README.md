@@ -2039,6 +2039,83 @@ already width-bound and going wider only throws height away. 1.500 also wants a 
 where 1.778 wants 2283 — and 2039 is under the point where either of the two measured screens
 starts losing stage scale, so it costs nothing on both where 1.778 costs 3.4% on the laptop.
 
+## Sizing the wheel directly
+
+`generate_wheel_space_check_v2.py` asks the opposite question to the page above. That one answers
+how much room the wheel *gets*, with the size coming out of `gen_game_view.geometry()` and no way
+to type one in. This one answers how big the wheel *needs* to be, which means letting you set the
+size and then judging it. Neither number is the other's answer: pick a size here, then go back to
+v1 to find out whether the layout can afford it.
+
+    python3 tools/ui_debug/generate_wheel_space_check_v2.py --open
+
+There is no canvas and no transform on this page, which is the reason it is a separate file
+rather than a mode of the other one. v1 draws into a stage scaled by `k` and reports real pixels
+as `units × k × dpr`; here a CSS pixel is exactly `dpr` device pixels and every number on the
+page is a real device pixel with nothing to divide back out. The moment a stage scale comes back,
+so does the arithmetic and the chance of quoting a size that is not the size on the glass. It
+also costs 400 KB against v1's 9 MB, because it never builds the boards.
+
+Width and height are separate sliders and a third scales both together, holding the shape. The
+height slider genuinely stretches: the two layouts are *built* at their aspects by
+`build_duty_wheel_v2.py` — hub held as a ratio of the rim, spokes recomputed — so a ratio that is
+not the layout's own is not that layout at another size, it is the drawing pulled out of shape
+with faces the builder would never produce. The readout says so whenever it happens and `m` snaps
+back. Vertical rules mark where each of v1's three canvases ends, by v1's own `min(vw/cw, vh/ch)`
+rule, so they move when the window does while the wheel does not — and they are the canvas edge,
+not the wheel's column, which is a distinction the page repeats because it is the easy misreading.
+
+Pieces are dragged onto it from a tray in the top-right corner. Pressing one mints a copy and
+hands it the drag, so taking a piece to a tile is one motion; double-click removes one, `c`
+clears. A copy holds its position as a fraction of the wheel box, so it keeps its tile while the
+sliders move the wheel underneath — which is the whole point, since the question is whether a
+piece still fits once the wheel shrinks. `t` cycles the tile colour through slate, cream and
+parchment, because which of those is right is a live question and the answer depends on which
+pieces are on the board, not on one test piece.
+
+## The tray pieces, and judging a new sculpt
+
+`make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
+the full-resolution originals in `ui/concept/`.
+
+    python3 tools/ui_debug/make_tray_figures.py
+
+Two rules pull against each other and the file says which wins. A piece is a plinth standing on a
+tile, so the players are levelled on the plinth first, targeting the narrowest so nothing is ever
+upscaled — the rule `ui/concept/build_browser.py` already uses for this kind. But the nominal size
+is a height, and once the plinths agree the heights cannot also be made to agree. So the set is
+scaled until the tallest lands exactly on the nominal and the rest come in under it: nothing
+overshoots the size on its label, and the relative heights stay honest instead of being flattened.
+
+Nothing is ever upscaled to reach a size, and a size taller than its own source is refused rather
+than invented. The downscale itself is worth reading before copying: PIL weights an RGBA image's
+colour channels by alpha when it resamples, so data that is already premultiplied gets
+premultiplied twice and the un-premultiply then divides by an alpha the colour no longer matches.
+On a synthetic half-covered edge that turns a true colour of 110 into 1575, which clips to white
+— a pale rim around every piece. The colour and the alpha are resampled as two separate images
+instead. Every run measures the result and refuses to write a set whose part-transparent rim comes
+out lighter than its body, because the art's own edges are shaded and run about −20.
+
+`check_sculpt.py` judges a freshly generated sculpt before it is filed, against the set already in
+`ui/concept/` or against a spec you are converging on.
+
+    python3 tools/ui_debug/check_sculpt.py ~/Downloads/new_sculpt.png --sizes 90,120,150
+
+It reports plinth width, wall height, the viewing angle, and the ratios of the last two to the
+base's own width — ratios rather than pixels, so a figure that came back larger than its siblings
+still compares directly. The wall took three wrong methods before a right one, and two of the
+wrong ones produced confident numbers: silhouette width fails because the robe flares out as wide
+as the base, and the silhouette's vertical run fails because it travels up through the whole
+figure and, restricted to the base's robe-free edges, grows inward as the disc's top surface comes
+into view. Shading works — the wall is lit flat and there is a specular spike where the rounded
+rim catches the light.
+
+Which is why every run writes an overlay with the measured lines drawn on the art. A measurement
+of a picture is only worth the picture that shows where it landed. Look at it.
+
+`sculpt_metrics.py` holds the measuring and the alpha-safe downscale that both of those share. It
+exists because the third copy of those functions was the one that made the case.
+
 ## Aspect comparison
 
 `generate_wheel_aspect_compare.py` is the picture that goes with the paragraph above: the wheel
