@@ -121,6 +121,17 @@ SUBJECTS.append({
     "kinds": [
         {"kind": "wheel_1500", "title": "Aspect 1.500", "root": "assets",
          "layout": "tools/ui_debug/duty_wheel_v2_1500_layout.json"},
+        # The other wheel in this repository: the nine TRACED outlines that gen_border_studio.py
+        # puts candidate edge treatments on, shown here with every one of those treatments taken
+        # off. What belongs under the built wheel is the shape itself, not a proposal about how
+        # to mark it -- so no edge stroke, no marking group, no labels, no counts.
+        #
+        # `palette_from` is the layout above, so the two cards cannot end up drawing the same
+        # wheel in two different palettes. It is the file's own colours either way; naming it
+        # here just stops a second copy of them existing in this one.
+        {"kind": "traced_tiles", "title": "Traced tiles, from gen_border_studio", "root": "assets",
+         "shapes": "ui/assets-gothic/metadata/duty_grid_shapes.json",
+         "palette_from": "tools/ui_debug/duty_wheel_v2_1500_layout.json"},
     ],
 })
 
@@ -227,6 +238,31 @@ SUBJECTS.append({
     ],
 })
 
+# The wordmark, and the wordmark on the ground it is meant to sit on. TWO CARDS, ONE FILE: the
+# second is derived here rather than saved as a second PNG, because a flat recolour of a picture
+# already in this folder is not a new picture -- it is a rule about how to show that one. Filed as
+# a rule, regenerating the wordmark moves both cards; filed as a PNG, the copy would go stale and
+# nothing on this page would say so.
+#
+# The shape of this mark lives entirely in its alpha channel: only 0.4% of the canvas is fully
+# opaque and 20% is part-alpha hairline, so recolouring it is a channel swap and never a repaint.
+LOGO_GROUND = "#8a8279"
+LOGO_INK = "#13120f"
+SUBJECTS.append({
+    "id": "logo",
+    "label": "Logos",
+    "tag": "wordmark",
+    "ink": "#c9bfae",
+    "kinds": [
+        {"kind": "wordmark", "title": "As generated, no background"},
+        # `rel` points back at the card above rather than deriving its own name: the two cards
+        # must not be able to drift onto different sources, which is exactly what would happen
+        # the first time someone filed a logo/wordmark_ground.png by hand.
+        {"kind": "wordmark_ground", "title": "On %s, ink %s" % (LOGO_GROUND, LOGO_INK),
+         "rel": "logo/wordmark.png", "ground": LOGO_GROUND, "ink_fill": LOGO_INK},
+    ],
+})
+
 
 def plinth(im: Image.Image) -> dict | None:
     """Where the miniature meets the ground: the widest row of its base.
@@ -293,12 +329,18 @@ def figure_target(paths: list[pathlib.Path]) -> float | None:
 
 
 def encode(path: pathlib.Path,
-           base: float | None = None) -> tuple[str, int, int, int, tuple[int, int]]:
+           base: float | None = None,
+           ground: str | None = None,
+           fill: str | None = None) -> tuple[str, int, int, int, tuple[int, int]]:
     """One image as a WebP data URI, its embedded size, its cost, and the SOURCE's own size.
 
     The last of those is what the caption should quote. Everything on this page is downscaled to
     MAX_EDGE to keep the file portable, so the embedded dimensions describe the preview and not
     the archive -- quoting them tells a reader the file is smaller than it is.
+
+    `fill` repaints every colour while keeping the alpha, and `ground` lays the result on an
+    opaque background. Both are for artwork whose shape is its alpha -- a wordmark -- and both
+    refuse a source without alpha rather than silently producing a rectangle of flat colour.
     """
     im = Image.open(path)
     source = im.size
@@ -306,6 +348,19 @@ def encode(path: pathlib.Path,
     im = im.convert(keep)
     if base:
         im = level(im, base)
+    if (fill or ground) and im.mode != "RGBA":
+        raise SystemExit("%s has no alpha, so there is no shape to recolour or to lay on a "
+                         "ground -- this card would be a plain rectangle" % path)
+    if fill:
+        im = Image.merge("RGBA", (*Image.new("RGB", im.size, fill).split(), im.getchannel("A")))
+    if ground:
+        # Flattened BEFORE the thumbnail, deliberately. PIL weights an RGBA resize by alpha and
+        # then divides it back out, which invents light pixels along a part-transparent edge.
+        # Composite first and the resize that follows is plain opaque RGB, with no alpha left to
+        # get wrong.
+        flat = Image.new("RGBA", im.size, ground)
+        flat.alpha_composite(im)
+        im = flat.convert("RGB")
     im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, "WEBP", quality=QUALITY, method=6)
@@ -341,6 +396,39 @@ def wheel_svg(path: pathlib.Path) -> tuple[str, float, float, int, str]:
             d["box"], d["box_h"], len(raw), note)
 
 
+def shapes_svg(path: pathlib.Path,
+               palette_from: pathlib.Path | None = None) -> tuple[str, float, float, int, str]:
+    """The nine traced duty-tile outlines, filled flat and carrying nothing else.
+
+    A different file from the layout above and a different KIND of file: that one is geometry this
+    project generates, this one is an outline somebody traced, which is why it has shapes and no
+    palette. gen_border_studio.py draws these to try edge treatments on -- the ink edge, the
+    marking group, the hover gold, the names and the counts. None of that is here. Stripped to the
+    fill, the card answers the only question worth asking next to the built wheel: are these the
+    same nine shapes?
+
+    Vector for the same reason the layout is: rasterising an outline that is exact at any size, in
+    order to compare it against one that is also exact at any size, throws away the property both
+    of them were kept for.
+    """
+    d = json.loads(path.read_text(encoding="utf-8"))
+    pal = {}
+    if palette_from and palette_from.is_file():
+        pal = json.loads(palette_from.read_text(encoding="utf-8")).get("palette", {})
+    ground = pal.get("ground", "#17130d")
+    face = pal.get("face", "#efe3c8")
+    box = d["box"]
+    box_h = d.get("box_h") or box
+    body = "".join('<path fill="%s" d="%s"/>' % (face, s) for s in d["shapes"])
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g" viewBox="0 0 %g %g">'
+           '<rect width="%g" height="%g" fill="%s"/>%s</svg>'
+           % (box, box_h, box, box_h, box, box_h, ground, body))
+    raw = svg.encode("utf-8")
+    note = "%d traced outlines, filled; no edge, marking or labels" % len(d["shapes"])
+    return ("data:image/svg+xml;base64," + base64.b64encode(raw).decode("ascii"),
+            box, box_h, len(raw), note)
+
+
 def where(subject: dict, spec: dict) -> pathlib.Path:
     """The file this entry means.
 
@@ -350,7 +438,7 @@ def where(subject: dict, spec: dict) -> pathlib.Path:
     written down twice is a name that eventually disagrees with itself.
     """
     if spec.get("root") == "assets":
-        return ROOT / (spec.get("rel") or spec["layout"])
+        return ROOT / (spec.get("rel") or spec.get("layout") or spec["shapes"])
     return HERE / (spec.get("rel") or "%s/%s.png" % (subject["id"], spec["kind"]))
 
 
@@ -402,9 +490,14 @@ def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
             if "layout" in spec:
                 uri, w, h, size, note = wheel_svg(path)
                 dims = "%g \u00d7 %g units" % (w, h)
+            elif "shapes" in spec:
+                pal = spec.get("palette_from")
+                uri, w, h, size, note = shapes_svg(path, ROOT / pal if pal else None)
+                dims = "%g \u00d7 %g units" % (w, h)
             else:
                 lift = bases.get(spec["kind"])
-                uri, w, h, size, source = encode(path, lift)
+                uri, w, h, size, source = encode(path, lift,
+                                                 spec.get("ground"), spec.get("ink_fill"))
                 note = "base levelled to %d px" % lift if lift else ""
                 dims = "%d \u00d7 %d" % source
             panels.append({"kind": kind, "title": title, "uri": uri, "w": w, "h": h,
