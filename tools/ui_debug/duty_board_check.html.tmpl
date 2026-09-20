@@ -1,0 +1,466 @@
+<!doctype html><html lang=en><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Duty board &#183; mixed stacks</title>
+<style>
+@font-face{font-family:"PB";src:url(__FONTURI_CSS__) format("truetype");font-display:block}
+/* NO SCROLLBAR. A pixel here is a pixel on the board, and a scrollbar would mean the thing is
+   bigger than the space it claims to fit. */
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
+  font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+#wrap{height:100%;display:flex;align-items:center;justify-content:center}
+/* The readout and the controls live in the side gutter, fixed, so they take NOTHING from the
+   height budget. The board is the only thing allowed to claim vertical space. */
+#note{position:fixed;left:10px;top:12px;width:248px;color:#5f574a;white-space:pre-wrap;
+  pointer-events:none}
+#note b{color:#c9b27a;font-weight:400}
+#note s{color:#e0705f;text-decoration:none}
+.stage{position:relative;background:__GROUND__;flex:none}
+.cell{position:absolute}
+/* The banner doubles as its tile's shape control: a big inert target that never fights the
+   sculpts for the pointer. */
+.ban{position:absolute;left:50%;transform:translateX(-50%);z-index:3;cursor:pointer}
+.ban img{display:block;width:100%;height:100%}
+.ban b{position:absolute;left:50%;transform:translate(-50%,-50%);font-family:"PB",serif;
+  text-transform:uppercase;white-space:nowrap;line-height:1}
+.figs{position:absolute;z-index:4}
+.fig{position:absolute;cursor:grab;touch-action:none}
+.fig img{display:block;width:100%;height:100%;pointer-events:none}
+.fig.drag{cursor:grabbing}
+.fig.moved::after{content:"";position:absolute;left:50%;bottom:-3px;width:4px;height:4px;
+  margin-left:-2px;border-radius:50%;background:#c9b27a;opacity:.7}
+.acts{position:absolute;left:50%;transform:translateX(-50%);display:flex;justify-content:center;
+  align-items:center;z-index:2}
+.acts .slot{display:flex;align-items:center;justify-content:center;border-radius:2px;
+  background:#c4b28d;box-shadow:0 1px 0 rgba(0,0,0,.4) inset,0 1px 3px rgba(0,0,0,.5)}
+.acts svg{display:block}
+.noicon{color:#4a4338;font-size:9px}
+.shape{position:absolute;left:0;right:0;z-index:5;text-align:center;color:#4f483d;font-size:10px;
+  pointer-events:none}
+.shape em{font-style:normal;color:#8b8071}
+#ui{position:fixed;left:10px;bottom:12px;width:256px;color:#6b6152}
+#ui .row{display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap}
+#ui button{font:inherit;color:#8b8071;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 8px;cursor:pointer}
+#ui button:hover{border-color:#5a4c36}
+#ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
+#ui input[type=range]{width:104px;accent-color:#c9b27a;background:transparent}
+#ui .val{color:#c9b27a;min-width:28px;text-align:right}
+#ui .lab{color:#4f483d;min-width:48px}
+#ui .hint{color:#3f3930;line-height:1.5}
+</style>
+<svg width=0 height=0 style="position:absolute" aria-hidden=true><defs id=hazedefs></defs></svg>
+<div id=wrap><div class=stage id=stage></div></div>
+<div id=note></div>
+<div id=ui>
+  <div class=row><span class=lab>deal</span>
+    <button id=btyp aria-pressed=true>typical</button><button id=bone>one each</button>
+    <button id=bcrowd>crowded</button><button id=bsweep>sweep</button></div>
+  <div class=row><span class=lab>seating</span>
+    <button id=bgrp aria-pressed=true>grouped</button><button id=barr>arrival</button></div>
+  <div class=row><span class=lab>depth</span>
+    <button id=bhaze aria-pressed=true>haze</button><button id=bdark>darken</button>
+    <button id=boff>off</button>
+    <input id=sh type=range min=0 max=100 step=1><span class=val id=shv></span></div>
+  <div class=row><span class=lab>sculpt</span><span id=szbtns></span>
+    <button id=bban aria-pressed=true>banner</button>
+    <button id=bico aria-pressed=true>icons</button></div>
+  <div class=row><span class=lab>spread</span>
+    <input id=sprd type=range min=0 max=140 step=1><span class=val id=sprdv></span>
+    <span class=lab>set-back</span>
+    <input id=dep type=range min=0 max=60 step=1><span class=val id=depv></span></div>
+  <div class=row><span class=lab>rank gap</span>
+    <input id=rg type=range min=0 max=90 step=1><span class=val id=rgv></span>
+    <button id=breset>reset drags</button><button id=bdump>dump</button></div>
+  <div class="row hint">click a banner to cycle that tile &#183; drag a sculpt to pin it<br>
+    g seating &#183; b banner &#183; i icons &#183; s shadow &#183;
+    r reset &#183; d deal &#183; f full</div>
+</div>
+<script>
+var BANNERS = __BANNERS__, NAMES = __NAMES__, ICONS = __ICONS__, FIGS = __FIGS__;
+var SHAPES = __SHAPES__, SIZES = __SIZES__, D = __DEFAULTS__;
+var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
+    BANNER_TRACK = __BANNERTRACK__, BANNER_INK = __BANNERINK__;
+
+// REAL DEVICE PIXELS IN, CSS PIXELS OUT. The art is filed at its real size -- a 120 px sculpt is
+// 120 device pixels -- so on a 2x display it must be drawn at 60 css px to BE 120. Divided by the
+// LIVE ratio rather than an assumed 2, or this is true size on one machine and a lie on the next.
+var DPR = devicePixelRatio || 1;
+function px(v){ return (v / DPR) + "px"; }
+
+// Only sizes that actually got embedded can be offered. A button for a size whose art never
+// rendered would silently draw an empty board.
+var HAVE = SIZES.filter(function(s){ return FIGS[String(s)]; });
+var SIZE = HAVE.indexOf(D.size) >= 0 ? D.size : (HAVE[0] || 0);
+var SPREAD = D.spread, BACK = D.back, RANK = D.rank, SHADE = D.shade;
+var GROUPED = true, MODE = "haze", BANNER = true, ICON = true, shadow = true;
+var SEED = 1, BUD = 0, CELL = 0, zTop = 60;
+var BOARD = [], PINNED = {};
+
+// ---------------------------------------------------------------- the deal
+// Seeded, so a deal is repeatable and two screenshots can be compared. An unseeded random would
+// make every rebuild a different board and every comparison worthless.
+function rnd(){ SEED = (SEED * 1103515245 + 12345) & 0x7fffffff; return SEED / 0x7fffffff; }
+
+function byTotal(lo, hi){
+  var pick = SHAPES.filter(function(s){ return s.total >= lo && s.total <= hi; });
+  return pick[Math.floor(rnd() * pick.length)].parts;
+}
+
+// TYPICAL IS NOT UNIFORM -- see the generator's header for where these weights come from and
+// how far they should be trusted. Dealing evenly across the fifteen shapes would show a board
+// no game produces.
+var SWEEP_AT = 0;
+function deal(kind){
+  if (kind === "sweep"){ SWEEP_AT = (SWEEP_AT + (BOARD.length ? 9 : 0)) % SHAPES.length; }
+  else SWEEP_AT = 0;
+  BOARD = [];
+  for (var i = 0; i < 9; i++){
+    if (kind === "one")        BOARD.push([1, 1, 1]);
+    else if (kind === "crowd") BOARD.push(byTotal(4, 5));
+    // NINE TILES, FIFTEEN SHAPES. Pressing sweep again turns the page rather than showing the
+    // same nine forever -- without this the last six shapes had no way of being reached, which
+    // is the opposite of what a sweep is for.
+    else if (kind === "sweep") BOARD.push(SHAPES[(SWEEP_AT + i) % SHAPES.length].parts);
+    else {
+      var r = rnd();
+      // Weights read off the fixture counts rather than chosen: of occupied positions, 86%
+      // hold one acolyte, 13% two, 1.5% three. Scaled by a 28% chance the position is empty.
+      if (r < 0.280)      BOARD.push([]);
+      else if (r < 0.896) BOARD.push([1]);
+      else if (r < 0.941) BOARD.push([1, 1]);
+      else if (r < 0.987) BOARD.push([2]);
+      else if (r < 0.993) BOARD.push([2, 1]);
+      else if (r < 0.998) BOARD.push([1, 1, 1]);
+      else                BOARD.push(byTotal(4, 5));
+    }
+  }
+  PINNED = {};                                  // a new deal invalidates every old pin
+  build();
+}
+
+// ---------------------------------------------------------------- formation
+// RE-LAY THE WHOLE GROUP. Each total has its own arrangement and adding a sculpt repositions
+// everyone, so a tile always reads as deliberate rather than as an accreted pile. Ranks hold at
+// most three; a back rank is offset half a step so nobody hides directly behind anybody.
+// x is measured from the tile centre, y as height above the front rank's baseline, both in real
+// device pixels.
+function formation(n){
+  var S = SPREAD, B = BACK, R = RANK;
+  // AN EMPTY TILE MUST RETURN NO SLOTS. Without this the chain falls through to the five-slot
+  // case, the seat queue has nothing to fill them with, and the board build throws on the first
+  // empty tile -- which under a typical deal is most of them.
+  if (n <= 0) return [];
+  if (n === 1) return [{x: 0, y: 0}];
+  if (n === 2) return [{x: -S / 2, y: 0}, {x: S / 2, y: 0}];
+  // Three abreast with the middle set BACK: a flat row of three identical silhouettes is the
+  // hardest case to read, and lifting the centre one breaks the repeat.
+  if (n === 3) return [{x: -S, y: 0}, {x: 0, y: B}, {x: S, y: 0}];
+  if (n === 4) return [{x: -S / 2 - S / 4, y: R}, {x: S / 2 - S / 4, y: R},
+                       {x: -S / 2 + S / 4, y: 0}, {x: S / 2 + S / 4, y: 0}];
+  return [{x: -S / 2, y: R}, {x: S / 2, y: R},
+          {x: -S, y: 0}, {x: 0, y: B}, {x: S, y: 0}];
+}
+
+// The seat queue is LOOKED UP, not derived: the generator built both rules and the test holds
+// them to it. A page that recomputed them would be a second copy free to drift.
+function queueFor(parts){
+  if (!parts.length) return [];                 // an empty tile, which is a real state
+  var key = parts.join("+");
+  for (var i = 0; i < SHAPES.length; i++)
+    if (SHAPES[i].parts.join("+") === key)
+      return SHAPES[i].queues[GROUPED ? "grouped" : "arrival"];
+  // Anything else is a shape the generator never built. Drawing it as an empty tile would hide
+  // the fault behind a plausible picture, which is how the empty-tile bug survived as long as
+  // it did -- so say so instead.
+  console.error("no seat queue for shape " + key + "; the tile will draw empty");
+  return [];
+}
+
+// ---------------------------------------------------------------- depth cue
+var HAZE_STEPS = 8, HAZE_MAX = 0.62;
+(function hazeLadder(){
+  var x = "";
+  for (var k = 1; k <= HAZE_STEPS; k++){
+    // color-interpolation-filters DEFAULTS TO linearRGB, which keeps far more chroma than the
+    // flood-opacity asks for: measured, a full-strength haze landed under half as dark as
+    // specified and the bottom third of the slider did nothing visible. sRGB makes the amount
+    // mean what it says.
+    x += '<filter id="hz' + k + '" x="-30%" y="-30%" width="160%" height="160%" '
+       + 'color-interpolation-filters="sRGB">'
+       + '<feFlood flood-color="__GROUND__" flood-opacity="'
+       + (HAZE_MAX * k / HAZE_STEPS).toFixed(3) + '" result="f"/>'
+       + '<feComposite in="f" in2="SourceGraphic" operator="in" result="t"/>'
+       + '<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="t"/></feMerge></filter>';
+  }
+  document.getElementById("hazedefs").innerHTML = x;
+})();
+
+// One chain per figure, depth cue FIRST and the shadow after it, so a receded figure still casts
+// a shadow rather than having the cue applied to the shadow as well.
+function chain(deep){
+  var k = SHADE / 100 * deep, f = "";
+  if (k > 0.001){
+    if (MODE === "haze")
+      f = "url(#hz" + Math.max(1, Math.min(HAZE_STEPS, Math.round(k * HAZE_STEPS))) + ") ";
+    else
+      // Toward black with some desaturation: brightness alone leaves the seat colour at full
+      // chroma, which reads as different plastic rather than as distance.
+      f = "brightness(" + (1 - 0.50 * k).toFixed(3) + ") saturate("
+        + (1 - 0.40 * k).toFixed(3) + ") ";
+  }
+  return f + (shadow ? "drop-shadow(3px 5px 4px rgba(0,0,0,.55))" : "none");
+}
+
+// WHO IS IN FRONT IS DECIDED BY WHERE A PIECE STANDS, not by who was created last. A piece's
+// foot is the bottom of its box, so ordering by that is the order a camera would see. Without
+// it a sculpt at the BACK can be drawn over one in front, which reads as a rendering fault
+// rather than as a row of figures.
+function depthOrder(box){
+  var live = [].slice.call(box.querySelectorAll(".fig")).filter(function(e){
+    return !e.classList.contains("drag"); });
+  live.sort(function(a, b){
+    return (a.offsetTop + a.offsetHeight) - (b.offsetTop + b.offsetHeight); });
+  live.forEach(function(e, i){ e.style.zIndex = 10 + i; });
+  return 10 + live.length;
+}
+
+// ---------------------------------------------------------------- build
+function build(){
+  // The square takes the smaller viewport axis, so it is maximal for whatever window it is
+  // given. Height binds on a laptop, which is why nothing chrome-like sits above the board.
+  BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
+  CELL = BUD / 3;
+  var FIG = FIGS[String(SIZE)] || [];
+  var figH = FIG.length ? Math.max.apply(null, FIG.map(function(f){ return f.h; })) : 0;
+  var banW = CELL * 0.55, banH = banW / 3,
+      gapA = CELL * 0.046, gapB = CELL * 0.010, icon = Math.round(CELL * 0.168);
+  var fieldH = figH + RANK;
+  var maxY = Math.max(BACK, RANK, 1);   // the deepest a slot can sit, for the cue
+  var total = fieldH + gapA + banH + gapB + (ICON ? icon : 0);
+  var groupTop = (CELL - total) / 2;
+
+  var h = "", i, j;
+  for (i = 0; i < 9; i++){
+    var r = (i / 3) | 0, c = i % 3, parts = BOARD[i] || [];
+    var n = parts.reduce(function(a, b){ return a + b; }, 0);
+    var q = queueFor(parts);
+    var slots = formation(n).slice().sort(function(a, b){ return a.x - b.x; });
+    h += '<div class=cell style="left:' + px(c * CELL) + ';top:' + px(r * CELL)
+       + ';width:' + px(CELL) + ';height:' + px(CELL) + '">';
+    h += '<div class=figs data-t="' + i + '" style="top:' + px(groupTop) + ';left:0;width:'
+       + px(CELL) + ';height:' + px(Math.max(fieldH, 1)) + '">';
+    slots.forEach(function(p, jj){
+      var seat = FIG[q[jj]];
+      if (!seat) return;                        // no art for this size: the tile draws empty
+      var pin = PINNED[i + ":" + jj], at = pin || p;
+      var deep = Math.min(1, Math.max(0, at.y) / maxY);
+      h += '<div class="fig' + (pin ? " moved" : "") + '" data-t="' + i + '" data-j="' + jj
+         + '" style="left:' + px(CELL / 2 + at.x - seat.w / 2)
+         + ';top:' + px(fieldH - seat.h - at.y)
+         + ';width:' + px(seat.w) + ';height:' + px(seat.h)
+         + ';filter:' + chain(deep) + '"><img src="' + seat.uri + '"></div>';
+    });
+    h += '</div>';
+    h += '<div class=shape style="top:' + px(groupTop - 22) + '"><em>'
+       + (n ? parts.join("+") : "empty") + '</em>  '
+       + q.map(function(s){ return "p" + (s + 1); }).join(" ") + '</div>';
+    if (BANNER && BANNERS[i])
+      h += '<div class=ban data-t="' + i + '" style="top:' + px(groupTop + fieldH + gapA)
+         + ';width:' + px(banW) + ';height:' + px(banH) + '"><img src="' + BANNERS[i]
+         + '"><b style="top:' + (BANNER_TOP * 100) + '%;font-size:' + px(banH * BANNER_FS)
+         + ';letter-spacing:' + px(banH * BANNER_FS * BANNER_TRACK) + ';color:' + BANNER_INK
+         + '">' + (NAMES[i] || "").toUpperCase() + '</b></div>';
+    if (ICON){
+      var a = "";
+      if (ICONS[i] && ICONS[i].length)
+        ICONS[i].forEach(function(sv){
+          a += '<div class=slot style="width:' + px(icon) + ';height:' + px(icon)
+             + ';margin:0 ' + px(icon * 0.076) + '">'
+             + sv.replace(/width="\d+"/, 'width="' + px(icon * 0.78) + '"')
+                 .replace(/height="\d+"/, 'height="' + px(icon * 0.78) + '"') + '</div>';
+        });
+      else a = '<span class=noicon>no action icon</span>';
+      h += '<div class=acts style="top:' + px(groupTop + fieldH + gapA + banH + gapB)
+         + ';height:' + px(icon) + '">' + a + '</div>';
+    }
+    h += '</div>';
+  }
+  var S = document.getElementById("stage");
+  S.style.width = px(BUD); S.style.height = px(BUD);
+  S.innerHTML = h;
+  [].forEach.call(S.querySelectorAll(".figs"), depthOrder);
+  wire();
+  say(figH, CELL - total);
+}
+
+function wire(){
+  [].forEach.call(document.querySelectorAll(".fig"), function(el){
+    el.onpointerdown = function(e){
+      var b = el.getBoundingClientRect();
+      el.dataset.dx = e.clientX - b.left; el.dataset.dy = e.clientY - b.top;
+      el.classList.add("drag");
+      el.style.zIndex = ++zTop;                 // the one being moved comes to the front
+      try { el.setPointerCapture(e.pointerId); } catch (_){}
+      e.preventDefault();
+    };
+    el.onpointermove = function(e){
+      if (!el.classList.contains("drag")) return;
+      var box = el.parentElement.getBoundingClientRect();
+      el.style.left = (e.clientX - box.left - +el.dataset.dx) + "px";
+      el.style.top  = (e.clientY - box.top  - +el.dataset.dy) + "px";
+    };
+    el.onpointerup = function(){
+      if (!el.classList.contains("drag")) return;
+      el.classList.remove("drag");
+      // Stored in the FORMATION's coordinates -- x from the tile centre, y above the field
+      // floor -- not as an absolute offset, so a pin survives a resize or a size change and its
+      // numbers sit in the same frame as the rule's.
+      var box = el.parentElement;
+      PINNED[el.dataset.t + ":" + el.dataset.j] = {
+        x: Math.round(el.offsetLeft * DPR + el.offsetWidth * DPR / 2 - CELL / 2),
+        y: Math.round(box.offsetHeight * DPR - el.offsetTop * DPR - el.offsetHeight * DPR)};
+      build();
+    };
+  });
+  [].forEach.call(document.querySelectorAll(".ban"), function(el){
+    el.onclick = function(){
+      var i = +el.dataset.t, key = (BOARD[i] || []).join("+");
+      var all = [[]].concat(SHAPES.map(function(s){ return s.parts; }));
+      var at = -1, k;
+      for (k = 0; k < all.length; k++) if (all[k].join("+") === key){ at = k; break; }
+      BOARD[i] = all[(at + 1) % all.length];
+      for (k in PINNED) if (k.indexOf(i + ":") === 0) delete PINNED[k];
+      build();
+    };
+  });
+}
+
+function say(figH, slack){
+  var tot = BOARD.map(function(s){ return s.reduce(function(a, b){ return a + b; }, 0); });
+  var seats = [0, 0, 0];
+  BOARD.forEach(function(s){ s.forEach(function(c, i){ seats[i] += c; }); });
+  var sum = tot.reduce(function(a, b){ return a + b; }, 0);
+  document.getElementById("note").innerHTML =
+      "DUTY BOARD, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
+    + "board   <b>" + BUD + "</b> real px  (" + (BUD / DPR).toFixed(0) + " css)\n"
+    + "row     <b>" + Math.round(CELL) + "</b> real px\n"
+    + (figH ? "sculpt  <b>" + figH + "</b> real px\n"
+            : "sculpt  <s>no art embedded</s>\n")
+    + "slack   <b>" + Math.round(slack) + "</b> real px per row"
+    + (slack < 0 ? "   <s>OVER</s>" : "") + "\n\n"
+    + "seating <b>" + (GROUPED ? "grouped" : "arrival order") + "</b>\n"
+    + "depth   <b>" + (SHADE ? MODE + " " + SHADE + "%" : "off") + "</b>\n"
+    + "on tile <b>" + tot.join(" ") + "</b>   total " + sum + "\n"
+    + "by seat p1 <b>" + seats[0] + "</b>  p2 <b>" + seats[1] + "</b>  p3 <b>"
+    + seats[2] + "</b>\n"
+    + "seed    <b>" + SEED + "</b>\n\n"
+    + "view at 100% browser zoom";
+}
+
+// ---------------------------------------------------------------- controls
+function $(id){ return document.getElementById(id); }
+function press(sel, test){
+  [].forEach.call(document.querySelectorAll(sel), function(b){
+    b.setAttribute("aria-pressed", test(b) ? "true" : "false"); });
+}
+
+(function sizeButtons(){
+  var host = $("szbtns"), h = "";
+  HAVE.forEach(function(s){
+    h += '<button class=sz data-px="' + s + '" aria-pressed="' + (s === SIZE) + '">'
+       + s + '</button>';
+  });
+  host.innerHTML = h || '<span class=lab>no sculpt art</span>';
+  [].forEach.call(document.querySelectorAll(".sz"), function(b){
+    b.onclick = function(){
+      SIZE = +b.dataset.px;
+      press(".sz", function(x){ return +x.dataset.px === SIZE; });
+      build();
+    };
+  });
+})();
+
+function seating(g){
+  GROUPED = g;
+  $("bgrp").setAttribute("aria-pressed", g ? "true" : "false");
+  $("barr").setAttribute("aria-pressed", g ? "false" : "true");
+  build();
+}
+$("bgrp").onclick = function(){ seating(true); };
+$("barr").onclick = function(){ seating(false); };
+
+function mode(m){
+  MODE = m;
+  press("#bhaze,#bdark,#boff", function(b){
+    return b.id === (m === "haze" ? "bhaze" : m === "dark" ? "bdark" : "boff"); });
+  if (m === "off"){ SHADE = 0; $("sh").value = 0; $("shv").textContent = "0"; }
+  else if (SHADE === 0){ SHADE = D.shade; $("sh").value = D.shade;
+                         $("shv").textContent = D.shade; }
+  build();
+}
+$("bhaze").onclick = function(){ mode("haze"); };
+$("bdark").onclick = function(){ mode("dark"); };
+$("boff").onclick  = function(){ mode("off"); };
+
+["typ", "one", "crowd", "sweep"].forEach(function(kind){
+  var id = {typ: "btyp", one: "bone", crowd: "bcrowd", sweep: "bsweep"}[kind];
+  $(id).onclick = function(){
+    press("#btyp,#bone,#bcrowd,#bsweep", function(b){ return b.id === id; });
+    deal(kind);
+  };
+});
+
+$("bban").onclick = function(){
+  BANNER = !BANNER; $("bban").setAttribute("aria-pressed", BANNER ? "true" : "false"); build(); };
+$("bico").onclick = function(){
+  ICON = !ICON; $("bico").setAttribute("aria-pressed", ICON ? "true" : "false"); build(); };
+
+function slider(id, value, set){
+  var e = $(id), v = $(id + "v");
+  e.value = value; v.textContent = value;
+  e.oninput = function(){ set(+e.value); v.textContent = e.value; build(); };
+}
+slider("sprd", SPREAD, function(v){ SPREAD = v; });
+slider("dep",  BACK,   function(v){ BACK   = v; });
+slider("rg",   RANK,   function(v){ RANK   = v; });
+slider("sh",   SHADE,  function(v){ SHADE  = v; });
+
+$("breset").onclick = function(){ PINNED = {}; build(); };
+$("bdump").onclick  = function(){
+  console.log(JSON.stringify({seed: SEED, seating: GROUPED ? "grouped" : "arrival",
+    depth: MODE, amount: SHADE, sculpt: SIZE, spread: SPREAD, back: BACK, rank: RANK,
+    board: BOARD, pinned: PINNED}, null, 1));
+};
+
+addEventListener("keydown", function(e){
+  // A bare-letter shortcut fires as half of a system chord unless the modifiers are checked --
+  // ctrl+c once cleared a whole board on the page this grew out of.
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "g"){ seating(!GROUPED); return; }
+  if (e.key === "b"){ $("bban").click(); return; }
+  if (e.key === "i"){ $("bico").click(); return; }
+  if (e.key === "d"){ $("btyp").click(); return; }
+  if (e.key === "r"){ $("breset").click(); return; }
+  if (e.key === "s"){ shadow = !shadow; build(); return; }
+  var n = parseInt(e.key, 10);
+  if (n >= 1 && n <= HAVE.length){
+    SIZE = HAVE[n - 1];
+    press(".sz", function(x){ return +x.dataset.px === SIZE; });
+    build(); return;
+  }
+  if (e.key === "f")
+    document.fullscreenElement ? document.exitFullscreen()
+                               : document.documentElement.requestFullscreen();
+});
+addEventListener("resize", build);
+addEventListener("fullscreenchange", build);
+
+deal("typ");
+// document.fonts.check() is false until something asks for the face, so without this the first
+// paint of every banner title is a fallback serif.
+(function(){
+  if (!document.fonts) return;
+  document.fonts.load('400 20px "PB"').then(function(){
+    return document.fonts.ready; }).then(build).catch(function(){});
+})();
+</script>
