@@ -104,6 +104,16 @@
  /* `h` strips the page to the artwork, and a title set in code is not artwork. */
  body.bare .banner{display:none}
  body.imgmode #wheel{cursor:move}
+ /* Draggable only when the picture framing is NOT on: `i` hands the wheel over to framing, and
+    one pointer cannot serve two drags. */
+ /* A title is a label, not a document. Without this a drag selects the word under the
+    cursor and the double-click that puts a banner back highlights it instead -- the
+    pieces already carry the same three lines for the same reason. */
+ .banner{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+ body.imgmode .banner{cursor:inherit;pointer-events:none}
+ body.bandrag .banner{cursor:grabbing}
+ /* `h` strips the page to the artwork, and a title set in code is not artwork. */
+ body.bare .banner{display:none}
  #dump{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;display:none;
    background:#14100b;border:1px solid #4a4133;border-radius:4px;padding:10px}
  #dump textarea{width:62ch;height:40vh;background:#0b0907;color:#cbbb98;border:0;
@@ -139,6 +149,8 @@
     drag from the tray top right to mint a piece &#183; double-click a piece to remove it<br>
     <b>i</b> duty pictures &#183; then click a face &#183; <b>&larr; &rarr;</b> (or <b>[ ]</b>, <b>, .</b>)
     change picture &#183; drag move &#183; scroll zoom &#183; x clear face &#183; j copy framing<br>
+    <b>banner</b> none/small/medium/large &#183; drag one to move it &#183; double-click to put it
+    back on its tile &#183; turn fans them about the middle column<br>
     a <b style="color:#e0705f">red outline</b> means that tile is drawn past the picture's own
     resolution &#183; select it and press <b>n</b> to pull it back</div>
 </div>
@@ -502,7 +514,7 @@ function paint(){
       var turn = Math.abs(bx - mid) < bf.bw * 0.25 ? 0
                                                    : (bx < mid ? BAN.turn : -BAN.turn);
       var nm = DUTY_NAMES[bi] || "";
-      bann += '<g transform="translate(' + bx.toFixed(2) + ' ' + by.toFixed(2) +
+      bann += '<g class="banner" transform="translate(' + bx.toFixed(2) + ' ' + by.toFixed(2) +
               ') rotate(' + turn.toFixed(2) + ')">' +
               '<image href="' + BANNERS[bi % BANNERS.length] + '" x="' + (-bw / 2).toFixed(2) +
               '" y="' + (-bh / 2).toFixed(2) + '" width="' + bw.toFixed(2) +
@@ -895,7 +907,40 @@ function pickFace(e){
   return null;
 }
 
+// Which banner is under the cursor, in box units, taking the fan into account: the rect is
+// rotated, so the point is rotated back by the same angle and tested against the upright box.
+// Last match wins, matching pickFace -- later faces are drawn over earlier ones.
+function bannerAt(e){
+  if (!BAN.size || !BANNERS.length || !V) return null;
+  var d = geom(), b = toBox(e), found = null;
+  var bw = BANNER_SIZES[BAN.size - 1] * TILE.s, bh = bw / 3;
+  var mid = 0;
+  for (var i = 0; i < d.faces.length; i++) mid += d.faces[i].cx;
+  mid = mid / d.faces.length * d.box;
+  for (var j = 0; j < d.faces.length; j++){
+    var f = d.faces[j], o = BAN.off[f.pos] || {x: 0, y: 0};
+    var cx = f.cx * d.box + o.x * TILE.s, cy = f.cy * d.box_h + o.y * TILE.s;
+    var turn = Math.abs(cx - mid) < f.bw * 0.25 ? 0 : (cx < mid ? BAN.turn : -BAN.turn);
+    var r = -turn * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
+    var px = b[0] - cx, py = b[1] - cy;
+    var lx = px * co - py * si, ly = px * si + py * co;
+    if (Math.abs(lx) <= bw / 2 && Math.abs(ly) <= bh / 2) found = f;
+  }
+  return found;
+}
+
+var bpan = null;
+
 wheelBox.addEventListener("pointerdown", function(e){
+  if (!imgMode && V){
+    var bf = bannerAt(e);
+    if (bf){
+      bpan = {id: e.pointerId, x: e.clientX, y: e.clientY, pos: bf.pos};
+      document.body.classList.add("bandrag");
+      try { wheelBox.setPointerCapture(e.pointerId); } catch (_){}
+      return;
+    }
+  }
   if (!imgMode || !V) return;
   var f = pickFace(e);
   selFace = f ? f.pos : null;
@@ -907,6 +952,17 @@ wheelBox.addEventListener("pointerdown", function(e){
 });
 
 wheelBox.addEventListener("pointermove", function(e){
+  if (bpan && e.pointerId === bpan.id){
+    var bd = geom();
+    // Stored BEFORE the tile scale, because the render multiplies the offset by it -- keep the
+    // drag in drawn units and a banner nudged at 130% would jump when the slider came back.
+    var o = BAN.off[bpan.pos] || (BAN.off[bpan.pos] = {x: 0, y: 0});
+    o.x += (e.clientX - bpan.x) / V.ww * bd.box   / TILE.s;
+    o.y += (e.clientY - bpan.y) / V.wh * bd.box_h / TILE.s;
+    bpan.x = e.clientX; bpan.y = e.clientY;
+    paint();
+    return;
+  }
   if (!pan || e.pointerId !== pan.id) return;
   var d = geom(), f = faceAt(pan.pos), g = DRESS[pan.pos];
   if (!f || !g) return;
@@ -919,12 +975,26 @@ wheelBox.addEventListener("pointermove", function(e){
 });
 
 function endPan(e){
+  if (bpan){
+    try { wheelBox.releasePointerCapture(bpan.id); } catch (_){}
+    bpan = null;
+    document.body.classList.remove("bandrag");
+  }
   if (!pan) return;
   try { wheelBox.releasePointerCapture(pan.id); } catch (_){}
   pan = null;
 }
 wheelBox.addEventListener("pointerup", endPan);
 wheelBox.addEventListener("pointercancel", endPan);
+// Back to the tile's own centre. The offsets are the only thing on this page with no slider to
+// drag them home, so they get the same gesture the pieces use for "undo this one".
+wheelBox.addEventListener("dblclick", function(e){
+  if (imgMode) return;
+  var bf = bannerAt(e);
+  if (!bf) return;
+  delete BAN.off[bf.pos];
+  paint();
+});
 
 // NOT passive. A wheel listener defaults to passive on some engines, and preventDefault() is then
 // ignored SILENTLY -- the picture would zoom and the page would scroll at the same time, with
