@@ -32,6 +32,14 @@
     do nothing and a figure with no art would still take up space. */
  .fig[hidden]{display:none!important}
  .fig.copy{cursor:grab}
+ /* A SHADOW ON THE PLACED PIECES ONLY. Three sculpts in a zig-zag read as one silhouette without
+    it: same palette, overlapping, nothing saying which is in front. drop-shadow follows the
+    alpha channel rather than the box, so it traces the figure instead of putting a rectangle
+    behind it. The TRAY keeps none -- it is the true-size reference the placed pieces are
+    compared against, and a reference should not be dressed. `s` turns it off for judging the
+    art clean, the same way `h` strips the chrome. */
+ body.shadow .fig.copy{filter:drop-shadow(3px 5px 4px rgba(0,0,0,.55))}
+ body.shadow.imgmode .fig.copy{filter:none}
  .fig.copy.drag{cursor:grabbing}
  #tray{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:14px;
    align-items:flex-end;z-index:5}
@@ -145,7 +153,7 @@
       step="0.5" value="0" style="width:110px"> <b id="brv">0°</b></div>
   <div class="row"><label for="ow"><input type="checkbox" id="ow" checked> only Duty wheel</label>
     <span id="owv"></span></div>
-  <div class="hint">a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; h hide<br>
+  <div class="hint">s piece shadow &#183; a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; h hide<br>
     drag from the tray top right to mint a piece &#183; double-click a piece to remove it<br>
     <b>i</b> duty pictures &#183; then click a face &#183; <b>&larr; &rarr;</b> (or <b>[ ]</b>, <b>, .</b>)
     change picture &#183; drag move &#183; scroll zoom &#183; x clear face &#183; j copy framing<br>
@@ -188,6 +196,11 @@ var V = null;                            // where paint() last put the wheel, in
 //   dx dy  offsets in units of the face's OWN bounding box, not pixels and not box units, so a
 //          framing holds its place under the width, height and scale sliders.
 var DRESS = {}, imgMode = false, selFace = null, pan = null;
+var shadow = true;
+// Set at load, not only on the keypress: `shadow = true` with nothing wearing the class
+// means the default is off and the first `s` turns it ON while the variable says it went
+// off -- a state and its display disagreeing from the first frame.
+document.body.classList.add("shadow");
 var SMIN = 0.15, SMAX = 8;
 
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -653,8 +666,15 @@ function hud(){
     out.push([pos === "north_west" ? "corner" : pos,
               Math.round(Math.sqrt(f.frac * wPx * hPx)) + " px square"]);
   });
-  var fitW = wPx / (devicePixelRatio || 1) <= innerWidth,
-      fitH = hPx / (devicePixelRatio || 1) <= innerHeight;
+  // MEASURED ON WHAT IS DRAWN, not on the box. The box is the wheel's footprint and the sliders
+  // set it, but `gap` below 100% pulls the tiles well inside it -- at 78% the box can be 850 css
+  // px tall in an 823 px window while the tiles themselves span 636 and nothing is anywhere near
+  // an edge. Warning about the box there is true of the box and false of the screen, which is
+  // the worse of the two things to be right about.
+  var dprN = devicePixelRatio || 1, spv = spanOf(d);
+  var drawnW = (spv.x1 - spv.x0) / d.box * wPx / dprN,
+      drawnH = (spv.y1 - spv.y0) / d.box_h * hPx / dprN;
+  var fitW = drawnW <= innerWidth, fitH = drawnH <= innerHeight;
   if (!fitW || !fitH)
     out.push(["", ""], ["!", "wheel is wider or taller than the window and is being clipped — " +
       "nothing is scaled down, so what you see is still true size"]);
@@ -755,12 +775,27 @@ function grab(p, e, dx, dy){
   p.el.style.zIndex = ++zTop;                     // the one being moved comes to the front
 }
 
+// WHO IS IN FRONT IS DECIDED BY WHERE A PIECE STANDS, not by who was dropped last. Sculpts put
+// down in a zig-zag overlap, and with creation order deciding it a piece at the BACK can be drawn
+// over one in front of it -- which reads as a rendering fault rather than as a row of figures.
+// A piece's foot is the bottom of its box, so ordering by that is the order a camera would see.
+// The one being dragged stays on top for the duration: it is the thing you are holding.
+function depthOrder(){
+  var live = COPIES.filter(function(q){ return q.el && !q.drag; });
+  live.sort(function(a, b){
+    return (a.el.offsetTop + a.el.offsetHeight) - (b.el.offsetTop + b.el.offsetHeight);
+  });
+  live.forEach(function(q, i){ q.el.style.zIndex = 10 + i; });
+  zTop = 10 + live.length;
+}
+
 function drop(p){
   if (!p.drag) return;
   var moved = p.drag.moved;
   try { p.el.releasePointerCapture(p.drag.id); } catch (_){}
   p.drag = null;
   p.el.classList.remove("drag");
+  depthOrder();
   // A plain click on the tray mints a copy exactly ON the stock, where it would look like nothing
   // had happened. Step a never-moved NEW piece clear so it is visibly its own thing. Only a new
   // one: clicking a piece already on the board must leave it exactly where it stands.
@@ -1060,6 +1095,8 @@ addEventListener("keydown", function(e){
                (tn === "INPUT" && /^(text|search|url|email|number|password|tel)$/i.test(el.type || "text"));
   if (typing && e.key !== "Escape") return;
   if (e.key === "a" && KEYS.length > 1) nextWheel();
+  if (e.key === "s"){ shadow = !shadow;
+    document.body.classList.toggle("shadow", shadow); }
   else if (e.key === "m") matchAspect();
   else if (e.key === "c") COPIES.slice().forEach(discard);
   else if (e.key === "t") { pal = (pal + 1) % PALETTES.length; paint(); }
