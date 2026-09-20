@@ -153,7 +153,7 @@
       step="0.5" value="0" style="width:110px"> <b id="brv">0°</b></div>
   <div class="row"><label for="ow"><input type="checkbox" id="ow" checked> only Duty wheel</label>
     <span id="owv"></span></div>
-  <div class="hint">s piece shadow &#183; a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; h hide<br>
+  <div class="hint">s piece shadow &#183; a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; u undo a clear &#183; h hide<br>
     drag from the tray top right to mint a piece &#183; double-click a piece to remove it<br>
     <b>i</b> duty pictures &#183; then click a face &#183; <b>&larr; &rarr;</b> (or <b>[ ]</b>, <b>, .</b>)
     change picture &#183; drag move &#183; scroll zoom &#183; x clear face &#183; j copy framing<br>
@@ -838,6 +838,37 @@ function wire(p){
   p.el.addEventListener("dblclick", function(e){ discard(p); e.preventDefault(); });
 }
 
+// CLEARING IS UNDOABLE. A wheel full of carefully placed pieces is the most expensive thing on
+// this page and `c` used to end it outright. Only the position and which stock it came from are
+// kept -- everything else about a copy is derived -- so restoring is minting them again where
+// they stood.
+var cleared = null;
+
+function revive(rec){
+  var q = {spec: rec.spec, el: makeImg(rec.spec, "copy", document.body, ++zTop),
+           u: rec.u, v: rec.v, on: rec.on, fresh: false};
+  COPIES.push(q);
+  wire(q);
+  placeCopy(q);
+  return q;
+}
+
+function clearAll(){
+  if (!COPIES.length) return;
+  cleared = COPIES.map(function(q){
+    return {spec: q.spec, u: q.u, v: q.v, on: q.on};
+  });
+  COPIES.slice().forEach(discard);
+}
+
+function unclear(){
+  if (!cleared || !cleared.length) return;
+  cleared.forEach(revive);
+  cleared = null;
+  depthOrder();
+  readout();
+}
+
 // Pressing a stock figure mints a copy under the cursor and hands the drag straight to it, so
 // picking a piece off the tray and putting it on a tile is one motion, not click-then-find.
 function mint(spec, e, dx, dy){
@@ -1094,11 +1125,17 @@ addEventListener("keydown", function(e){
   var typing = tn === "TEXTAREA" ||
                (tn === "INPUT" && /^(text|search|url|email|number|password|tel)$/i.test(el.type || "text"));
   if (typing && e.key !== "Escape") return;
+  // NOT WHILE A MODIFIER IS DOWN. Every binding here is a bare letter, and Ctrl+C, Cmd+C,
+  // Ctrl+A and friends arrive as keydown with that same `key`. Without this, copying anything on
+  // the page ran `c` -- which cleared every piece placed on the wheel, with no way back. A
+  // shortcut that fires as half of a system chord is a shortcut that eats work.
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === "a" && KEYS.length > 1) nextWheel();
   if (e.key === "s"){ shadow = !shadow;
     document.body.classList.toggle("shadow", shadow); }
   else if (e.key === "m") matchAspect();
-  else if (e.key === "c") COPIES.slice().forEach(discard);
+  else if (e.key === "c") clearAll();
+  else if (e.key === "u") unclear();
   else if (e.key === "t") { pal = (pal + 1) % PALETTES.length; paint(); }
   else if (e.key === "h") document.body.classList.toggle("bare");
   else if (e.key === "i") setMode(!imgMode);
