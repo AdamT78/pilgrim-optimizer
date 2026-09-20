@@ -40,6 +40,15 @@ def _shipped(states=("present",)):
     return sorted(out, key=lambda r: (r[1]["collection"] or "", r[1]["title"] or ""))
 
 
+def _check_sources():
+    bad = ["%s: %r" % (path, a["source"]) for path, a, _ in _shipped()
+           if a["source"] and not a["source"].startswith(("http://", "https://"))]
+    if bad:
+        raise SystemExit("a credited file's `source` must be a URL, because it is written into "
+                         "an href; put anything else in a field of its own:\n  "
+                         + "\n  ".join(bad))
+
+
 def _mods(a):
     return a.get("modifications") or DATA["modificationsDefault"]
 
@@ -83,8 +92,9 @@ def markdown():
     return "\n".join(o)
 
 
-def _esc(t):
-    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _esc(t, quote=False):
+    t = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return t.replace('"', "&quot;") if quote else t
 
 
 def html():
@@ -103,13 +113,23 @@ def html():
         # and Y icon by Z". Several creators keep their own names.
         creators = {i["creator"] for i in items}
         titles = ["&ldquo;%s&rdquo;" % _esc(i["title"]) for i in items]
-        if len(creators) == 1:
-            names = "%s icon%s by %s" % (" and ".join(titles), "s" if len(items) > 1 else "",
-                                         _esc(items[0]["creator"]))
+        # What the thing IS, not what this tree happened to hold first. "Pirata One icon by
+        # Rodrigo Fuenzalida" was what the hardcoded noun produced the day a font arrived, and a
+        # credit that miscalls the work it is crediting is worse than a bare name. `kind`
+        # defaults to icon so every entry that predates this reads exactly as it did.
+        kinds = {i.get("kind", "icon") for i in items}
+        noun = kinds.pop() if len(kinds) == 1 else None
+        if len(creators) == 1 and noun:
+            names = "%s %s%s by %s" % (" and ".join(titles), noun,
+                                       "s" if len(items) > 1 else "",
+                                       _esc(items[0]["creator"]))
+        elif len(creators) == 1:
+            names = "%s by %s" % (" and ".join(titles), _esc(items[0]["creator"]))
         else:
-            names = " and ".join("%s icon by %s" % (t, _esc(i["creator"]))
+            names = " and ".join("%s %s by %s" % (t, i.get("kind", "icon"), _esc(i["creator"]))
                                  for t, i in zip(titles, items))
-        srcs = " and ".join('<a href="%s">%s</a>' % (i["source"], _esc(i["title"]))
+        srcs = " and ".join('<a href="%s">%s</a>' % (_esc(i["source"], quote=True),
+                                                     _esc(i["title"]))
                             for i in items if i["source"])
         lic_html = ('<a href="%s">%s</a>' % (lic["url"], _esc(lic["name"]))
                     if lic["url"] else _esc(lic["name"]))
@@ -128,6 +148,7 @@ def html():
 
 
 def main(check=False):
+    _check_sources()
     want = {MD: markdown(), HTML: html()}
     if check:
         stale = [p.name for p, t in want.items() if not p.exists() or p.read_text() != t]

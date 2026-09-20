@@ -37,6 +37,13 @@
       "url": null,
       "attributionRequired": true,
       "shareAlike": null
+    },
+    "OFL-1.1": {
+      "name": "SIL Open Font License 1.1",
+      "url": "https://scripts.sil.org/OFL",
+      "attributionRequired": true,
+      "shareAlike": false,
+      "conditions": "the licence and copyright notice must travel with the font files (ui/assets/fonts/OFL.txt); the font may not be sold on its own; and 'Pirata' is a Reserved Font Name, so a modified copy may not carry it"
     }
   },
   "files": {
@@ -156,11 +163,31 @@
       "modifications": "resized from the 1905x826 master to a 1024x444 production cut, native aspect preserved",
       "notes": "Transparent coordinate-bound overlay: preserve the native aspect ratio, never stretch with preserveAspectRatio=\"none\". Resource symbols placed on top keep their own separate attribution. Do not describe the frame as manually illustrated by a human. Generated with OpenAI image generation in ChatGPT for the Pilgrim UI project. Output rights assigned to the user under the OpenAI Europe Terms of Use: commercial use, modification, embedding, reproduction and distribution as part of the game and its marketing. Not exclusive -- similar AI output may exist or be generated for others. The unmodified, wholly AI-generated image likely does not independently qualify for copyright protection in Sweden; substantial human-authored modification, or the wider player-board composition, may qualify separately.",
       "master": "_masters/frames/player_frame_gothic_red_01.png"
+    },
+    "fonts/PirataOne-Regular.ttf": {
+      "state": "present",
+      "kind": "font",
+      "title": "Pirata One",
+      "creator": "Rodrigo Fuenzalida and Nicolas Massi",
+      "collection": "Google Fonts",
+      "source": "https://github.com/google/fonts/tree/main/ofl/pirataone",
+      "version": "1.001; PirataOne-Regular.ttf, md5 a4fe72b95bae51fd7c43b30269f42713",
+      "licence": "OFL-1.1",
+      "modifications": "none; the file is the upstream release byte for byte, and the family name is unchanged because 'Pirata' is a Reserved Font Name",
+      "role": "duty tile banner titles, set live at render time rather than baked into the banner art"
     }
   },
   "projectOwned": [
     "icons/actions/*.svg",
     "icons/resources/*/pilgrim_*.svg",
-    "portraits/*/pilgrim_*.svg"
+    "portraits/*/pilgrim_*.svg",
+    "fonts/*.txt"
+  ],
+  "assetDirs": [
+    "icons",
+    "portraits",
+    "frames",
+    "ui",
+    "fonts"
   ]
 }
