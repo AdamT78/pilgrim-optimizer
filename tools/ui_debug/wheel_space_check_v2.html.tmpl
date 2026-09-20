@@ -31,12 +31,31 @@
  .trow{display:flex;gap:16px;align-items:flex-end;justify-content:flex-end}
  .trow .tag{font-size:11px;color:#6f6556;align-self:flex-end;padding-bottom:1px}
  #tray .fig{position:static;cursor:copy}          /* the tray mints, it never moves */
+ /* The token tray, bottom right. Same machinery as the one above it -- press to mint, drag to
+    place -- and the readout is pushed clear of it by its MEASURED height rather than a guessed
+    allowance, because it grows with the art exactly as the figure tray did. */
+ /* A PANEL, not a bare row of images, and that is about arithmetic rather than taste. The two
+    trays want 608 px and 376 px of height; a 14-inch MacBook offers 950 between the margins, so
+    on the shorter screens they overlap by about 34 px however the gaps are tuned. Tuning them to
+    fit exactly one display is the kind of fix that breaks on the next one. Given its own ground
+    and a border, and sitting above, the token tray reads as a panel laid over the figures --
+    which is an ordinary thing for a panel to do -- instead of as two rows colliding. */
+ #tray2{position:fixed;right:18px;bottom:14px;display:flex;flex-direction:column;gap:8px;
+   align-items:flex-end;z-index:6;background:rgba(11,9,7,.92);padding:10px 12px;
+   border:1px solid #2e2820;border-radius:3px}
+ #tray2 .fig{position:static;cursor:copy}
+ body.bare #tray2 .tag{display:none}
  body.bare .trow .tag{display:none}
  #hud{position:fixed;left:16px;top:18px;white-space:pre;color:#7b7160;
    pointer-events:none;font-size:12px;line-height:1.55}
  #hud b{color:#c9b27a;font-weight:400}
  #hud s{color:#e0705f;text-decoration:none}
- #figread{position:fixed;right:18px;bottom:14px;text-align:right;white-space:pre;
+ /* LEFT column, under the hud. It used to sit bottom-right, which stopped working the moment
+    the right-hand side carried two trays: pushed up clear of the token tray it simply collided
+    with the figure tray instead. The left side has the hud at the top and the panel at the
+    bottom and a clear stretch between them, so that is where it goes -- its top measured from
+    the hud rather than guessed, because the hud grows a line when the wheel is stretched. */
+ #figread{position:fixed;left:16px;text-align:left;white-space:pre;
    color:#7b7160;font-size:12px;line-height:1.55;pointer-events:none}
  #figread b{color:#c9b27a;font-weight:400}
  #figread s{color:#e0705f;text-decoration:none}
@@ -50,7 +69,9 @@
  #panel .row{margin:2px 0}
  #panel button{font:inherit;color:#cbbb98;background:#241d16;border:1px solid #4a4133;
    border-radius:3px;padding:3px 9px;cursor:pointer}
- #panel .hint{color:#5f574a;margin-top:5px}
+ /* Wraps rather than running on. At full width the hint reached under the token tray, which
+    put text behind a panel and read as a rendering fault rather than as a long line. */
+ #panel .hint{color:#5f574a;margin-top:5px;max-width:52ch}
  #err{position:fixed;left:0;right:0;top:0;background:#5a1d16;color:#ffd9d2;padding:8px 14px;
    font-size:13px;display:none;z-index:9;white-space:pre-wrap}
  body.bare #hud,body.bare #panel,body.bare #figread,
@@ -74,6 +95,7 @@
 <div id="rules"></div>
 <div id="wheel"></div>
 <div id="tray"></div>
+<div id="tray2"></div>
 <div id="hud"></div>
 <div id="figread"></div>
 <div id="dump"><div class="lab">framing &#183; copy this, then press Escape</div><textarea spellcheck="false"></textarea></div>
@@ -101,7 +123,7 @@ window.onerror = function(m, src, line){
 };
 
 var WH = __WHEELS__, KEYS = __KEYS__, ROWS = __ROWS__, PALETTES = __PALETTES__;
-var TILES = __TILES__, PROD_PX = __PRODPX__;
+var TILES = __TILES__, PROD_PX = __PRODPX__, TOKENS = __TOKENS__;
 var WR = __WRANGE__, HR = __HRANGE__, SR = __SRANGE__;
 var CANVASES = __CANVASES__, START = __START__;
 var key = KEYS[0], pal = 0, wheelOnly = true;
@@ -236,6 +258,22 @@ ROWS.forEach(function(row){
     if (SIZES.indexOf(spec.nom) < 0) SIZES.push(spec.nom);
   });
 });
+// The tokens go into their own tray but into the SAME stock list, so minting, dragging,
+// dropping, scaling and the tile test are all the code that already works -- a second tray is a
+// second place to put pieces, not a second kind of piece.
+var tray2 = document.getElementById("tray2");
+TOKENS.forEach(function(row){
+  var r = document.createElement("div");
+  r.className = "trow";
+  var tag = document.createElement("span");
+  tag.className = "tag"; tag.textContent = row.tag;
+  r.appendChild(tag);
+  tray2.appendChild(r);
+  row.items.forEach(function(spec){
+    STOCK.push({spec: spec, el: makeImg(spec, "stock", r)});
+    if (SIZES.indexOf(spec.nom) < 0) SIZES.push(spec.nom);
+  });
+});
 SIZES.sort(function(a, b){ return a - b; });
 var COPIES = [], zTop = 10;
 
@@ -365,6 +403,11 @@ function paint(){
   // The tray is laid out by CSS and now several rows deep, so its left edge is measured rather
   // than assumed -- the canvas labels have to keep clear of it and it grows with the art.
   var trayL = tray.getBoundingClientRect().left;
+  // Both trays are right-aligned, so the canvas labels must clear whichever reaches further
+  // left, and the readout must sit above the lower one. Measured, never allowed for: the token
+  // tray's height depends on how many sizes it carries and changes the day one is added.
+  var t2 = tray2.getBoundingClientRect();
+  if (t2.width) trayL = Math.min(trayL, t2.left);
   RULES.forEach(function(r, i){
     var f = canvasFit(r.c);
     r.l.style.left = f.x + "px";
@@ -385,7 +428,14 @@ function paint(){
   var z = pieceScale();
   document.getElementById("owv").textContent =
     wheelOnly ? "placed pieces held at true size" : "placed pieces ×" + z.toFixed(2);
-  hud(); place();
+  hud();
+  // AFTER hud(), not before it. Measured first, the hud has not been filled yet this frame, so
+  // its box is the empty 18 px it started at and the readout lands on top of it -- right for one
+  // paint out of every two, which is the same "one frame stale" fault the past-native warning
+  // had. Nothing here may measure an element that this same function is still writing.
+  document.getElementById("figread").style.top =
+    (document.getElementById("hud").getBoundingClientRect().bottom + 18) + "px";
+  place();
 }
 
 function hud(){
@@ -470,14 +520,23 @@ function readout(){
   // Grouped by NOMINAL size, not by tray slot: with four subjects a line each would be eight
   // lines of mostly zeroes, and the count per size is what says how busy the wheel is.
   var z = pieceScale();
-  SIZES.forEach(function(nom){
-    var n = 0;
-    COPIES.forEach(function(p){ if (p.spec.nom === nom) n++; });
-    // When the pieces are zooming, the nominal is no longer what is on the glass, so both are
-    // shown rather than leaving the label quietly wrong.
-    lines.push("<b>" + nom + " px</b>" + (wheelOnly ? "" : " → " + Math.round(nom * z)) +
-               "  " + n + " placed");
+  // Split by FAMILY as well as size: the figures and the tokens both use 90, 120 and 150, so a
+  // line reading "90 px  3 placed" would be three of something unspecified. Only families that
+  // actually have a piece on the board get a line, so a board with no tokens reads as it always
+  // did.
+  [["figure", "fig"], ["token", "tok"]].forEach(function(fam){
+    SIZES.forEach(function(nom){
+      var n = 0;
+      COPIES.forEach(function(p){
+        if (p.spec.nom === nom && (p.spec.fam || "figure") === fam[0]) n++; });
+      if (!n) return;
+      // When the pieces are zooming, the nominal is no longer what is on the glass, so both are
+      // shown rather than leaving the label quietly wrong.
+      lines.push("<b>" + fam[1] + " " + nom + " px</b>" +
+                 (wheelOnly ? "" : " → " + Math.round(nom * z)) + "  " + n + " placed");
+    });
   });
+  if (!COPIES.length) lines.push("<s>no pieces placed</s>");
   COPIES.forEach(function(p){
     if (!p.on){ off++; return; }
     if (!tally[p.on.pos]){ tally[p.on.pos] = 0; order.push(p.on.pos); }
