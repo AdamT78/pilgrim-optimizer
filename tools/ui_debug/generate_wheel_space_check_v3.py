@@ -14,6 +14,15 @@ narrowest and the nine cannot be the same size as each other. The traced tiles h
 width to the top -- 273 to 295, an 8% spread -- and take a 240-unit banner on all nine. That
 is a different question about a different shape, not a setting on the same one.
 
+THE BANNERS
+
+Four buttons -- none, small, medium, large -- put a blank parchment on every tile with its duty
+name set live from gen_duty_grid.DUTY_NAMES. `none` is the default, so with it selected this page
+is simply v2 on the traced tiles. Drag a banner to move it, double-click to put it back on its
+tile, and the turn slider fans them about the middle column. The art is embedded and downscaled
+because it draws at a couple of hundred pixels from a 2172 px source; the TITLES ARE NOT IN THE
+ART, so renaming a duty needs no new asset.
+
 TILE SIZE AND SPACING ARE SLIDERS HERE
 
 The rosette is a built tessellation and its faces cannot move without being rebuilt. These are
@@ -42,13 +51,11 @@ arithmetic, and with it the chance of quoting a size that is not the size on the
 
 THE HEIGHT SLIDER REALLY STRETCHES
 
-The two layouts are BUILT at their aspects by build_duty_wheel_v2.py -- the hub is held as a
-ratio of the rim, the spokes are recomputed -- they are not one wheel scaled to two shapes. So
-setting a width and height whose ratio is not the layout's own does not show you that layout at a
-different size: it shows you the drawing stretched, and the faces are no longer the shape the
-builder would produce. The page says so in the readout whenever it happens, and the wheel button
-snaps the height back to the built ratio. Read a stretched wheel as a sketch of where the size
-might go, then rebuild at that aspect if you want to trust it.
+These contours were TRACED off a square picture, so square is the shape they were drawn in rather
+than a ratio a builder was asked for. Setting a width and height whose ratio is not 1:1 does not
+show you the tiles some other aspect would have produced -- there is no such build -- it simply
+distorts these. The page says so in the readout whenever it happens, and `m` squares it up.
+Read a stretched wheel as a sketch of where the size might go, not as a shape anything can make.
 
 THE CANVAS LINES ARE NOT THE WHEEL'S COLUMN
 
@@ -82,10 +89,11 @@ THE DUTY PICTURES, AND THE ONE THING THIS PAGE GIVES UP FOR THEM
 `i` turns on image mode: click a face, then the arrow keys (or `[` `]`, or `,` `.`) put one of the
 nine version-C duty pictures on it, drag moves it and scroll zooms it, `x` clears the face and `j`
 copies the whole framing out as JSON. Each face keeps its own picture and its own framing, held as
-offsets in that face's OWN bounding box, so a framing survives the sliders and the 1.5 <-> 1.778
-switch. The picture is clipped by the face's real outline, drawn at its own aspect so nothing is
-cropped by the fit, and the tile colour stays painted underneath it. The selected face also shows
-the whole picture dimmed around the outline, which is what is being cut away.
+offsets in that face's OWN bounding box, so a framing survives every slider on the page,
+including tile and gap. The picture is clipped by the face's real outline, drawn at its own
+aspect so nothing is cropped by the fit, and the tile colour stays painted underneath it.
+The selected face also shows the whole picture dimmed around the outline, which is what is
+being cut away.
 
 TWO LIMITS, ONE ENFORCED AND ONE REPORTED
 
@@ -242,7 +250,6 @@ TOKEN_SUBJECTS = (("token_wheat", "wheat"),
                   ("token_cornucopia", "wild"))
 TOKEN_SIZES = (90, 120, 150)
 
-# Both wheels build_duty_wheel_v2.py writes. The label is the built aspect and doubles as the key.
 # One wheel here, not two: the traced contours are a single set. The label is not an aspect the
 # way v2's are -- these were traced off a picture rather than built to a ratio -- so nothing
 # asserts it against the box.
@@ -336,10 +343,13 @@ def acolyte_svg(seat: str, px: int) -> tuple[str, int, int]:
 
 
 def _polygon(cell):
-    """The face as a flat list of points. `d` is the drawn outline with curves in it; `d_poly` is
-    the same face already flattened by build_duty_wheel_v2, which is what a point-in-polygon test
-    needs. Taking the numbers out of `d` instead would read the curve CONTROL points as vertices
-    and quietly give a face a different shape than the one on screen."""
+    """The face as a flat list of points, read out of `d_poly`.
+
+    v2 gets that field from build_duty_wheel_v2, which flattens its curves for exactly this
+    reason: taking the numbers out of a `d` with curves in it would read the CONTROL points as
+    vertices and quietly give a face a different shape than the one on screen. The traced
+    contours have no curves -- M, L and Z and nothing else -- so this page hands its `d` straight
+    in as `d_poly`, and asserts that it really is curve-free before doing so."""
     v = [float(t) for t in _NUM.findall(cell["d_poly"])]
     assert len(v) >= 6 and len(v) % 2 == 0, "face %s has %d coordinates" % (cell["position"], len(v))
     return list(zip(v[0::2], v[1::2]))

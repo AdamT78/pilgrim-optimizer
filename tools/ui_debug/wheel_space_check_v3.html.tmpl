@@ -890,6 +890,19 @@ function nextWheel(){
   matchAspect();                         // switching wheels lands on that wheel's own shape
 }
 document.getElementById("wbtn").addEventListener("click", nextWheel);
+// ONE WHEEL, so the control that cycles them has nothing to cycle to. The code stays -- a second
+// traced set would want it back and it costs nothing -- but a button that visibly does nothing
+// when pressed teaches you to distrust the rest of the panel, so it says why instead.
+if (KEYS.length < 2){
+  var wb = document.getElementById("wbtn");
+  wb.disabled = true;
+  wb.style.opacity = "0.55";
+  wb.style.cursor = "default";
+  wb.title = "the only wheel on this page";
+  var hintEl = document.querySelector("#panel .hint");
+  if (hintEl) hintEl.innerHTML = hintEl.innerHTML.replace("a wheel &#183; ", "")
+                                                 .replace("a wheel · ", "");
+}
 
 // IMAGE MODE. Everything below is inert until `i` turns it on, and turning it off puts the page
 // back exactly as it was -- no piece is moved and no dressing is lost.
@@ -1046,7 +1059,7 @@ addEventListener("keydown", function(e){
   var typing = tn === "TEXTAREA" ||
                (tn === "INPUT" && /^(text|search|url|email|number|password|tel)$/i.test(el.type || "text"));
   if (typing && e.key !== "Escape") return;
-  if (e.key === "a") nextWheel();
+  if (e.key === "a" && KEYS.length > 1) nextWheel();
   else if (e.key === "m") matchAspect();
   else if (e.key === "c") COPIES.slice().forEach(discard);
   else if (e.key === "t") { pal = (pal + 1) % PALETTES.length; paint(); }
