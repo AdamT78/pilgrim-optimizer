@@ -55,10 +55,13 @@ import urllib.parse
 import webbrowser
 
 try:
-    import numpy as np
     from PIL import Image
-except ModuleNotFoundError:                                          # pragma: no cover
-    raise SystemExit("this needs Pillow: pip3 install --user Pillow")
+except ModuleNotFoundError as exc:                                   # pragma: no cover
+    # NAMED, not guessed. This used to import numpy alongside Pillow and report either absence as
+    # "this needs Pillow", so a CI job that had Pillow and not numpy spent nine minutes arriving
+    # at a message about the package it already had.
+    raise SystemExit("ui/concept/build_browser.py needs %s: pip3 install --user %s"
+                     % (exc.name, exc.name))
 
 HERE = pathlib.Path(__file__).resolve().parent          # ui/concept
 ROOT = HERE.parents[1]                                  # the repository
@@ -577,9 +580,9 @@ def compose(paths: list[pathlib.Path], ground: str,
     for a in arts:
         k = target / a.width
         assert k <= 1.0 + 1e-9, "levelling would UPSCALE %dpx to %dpx" % (a.width, target)
-        arr = np.array(a.resize((target, max(1, round(a.height * k))), Image.LANCZOS))
-        arr[..., 3] = np.where(arr[..., 3] > 240, 255, arr[..., 3])
-        scaled.append(Image.fromarray(arr, "RGBA"))
+        one = a.resize((target, max(1, round(a.height * k))), Image.LANCZOS)
+        one.putalpha(one.getchannel("A").point(lambda v: 255 if v > 240 else v))
+        scaled.append(one)
     pad = round(target * gap)
     w = pad + sum(s.width + pad for s in scaled)
     h = max(s.height for s in scaled) + 2 * pad
