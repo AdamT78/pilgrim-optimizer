@@ -2100,6 +2100,52 @@ are linked from `ui/assets-gothic/` rather than inlined — base64 would have ma
 and re-encoding them small would mean choosing a crop by looking at a resample. It therefore only
 works from its place in the repository.
 
+## The same page on the traced tiles, with banners
+
+`generate_wheel_space_check_v3.py` is that page on the other wheel: the nine traced contours from
+`ui/assets-gothic/metadata/duty_grid_shapes.json` rather than the built 1.500 rosette. Same
+sliders, same trays, same framing, same true-size discipline.
+
+    python3 tools/ui_debug/generate_wheel_space_check_v3.py --open
+
+It exists because of a measurement rather than a preference. Across the rosette's nine faces the
+width available *where a title sits* runs 186 to 346 units — the corners pinch to 57% of their own
+mid-width — so a banner has to shrink to about 116 to clear the narrowest, and the nine cannot be
+the same size as each other. The traced tiles hold their width to the top: 273 to 295, an 8%
+spread, taking a 240-unit banner on all nine with room to 290. That is a different question about
+a different shape, not a setting on the same one.
+
+It opens at 1474 × 1474, which is derived and not chosen: the size at which one traced tile is
+drawn at the `PROD_PX` that `gen_duty_grid` re-encodes every tile to. Square, because these
+contours were traced off a square picture — the height slider still stretches, but there is no
+build at any other aspect, so a stretched tile is simply distorted and the readout says so.
+
+Two sliders the rosette could not have. **tile** scales each contour about its own centre and
+**gap** moves them toward or away from the middle of the arrangement; the rosette is a built
+tessellation whose faces cannot move without being rebuilt, while these are nine independent
+contours. Both are questions the banner forces: a banner wants a wide tile, and a wide tile wants
+the gaps closed. They move the *geometry* — `geom()` returns the faces already moved and
+everything reads faces from it — rather than wrapping the drawing in a transform, which would
+leave the clip paths, the framing, the native-resolution test and the drop targets all computing
+against the unmoved shape. Tiles pushed past the box are drawn rather than clipped, and the hud
+says how many real pixels wider than the wheel they now reach: the box is the wheel's footprint,
+so that is a layout fact and hiding it would help nobody.
+
+**banner** is four buttons — none, small, medium, large — putting a blank parchment on every tile
+with its name set live from `gen_duty_grid.DUTY_NAMES`. `none` is the default, so with it selected
+this page is simply v2 on the traced tiles. Drag one to move it, double-click to put it back, and
+`turn` fans them about the middle column. The offsets are stored before the tile scale, because
+the render multiplies by it — keep the drag in drawn units instead and a banner nudged at 130%
+jumps when the slider comes back. Banners take `pointer-events: none` while `i` is on, since one
+pointer cannot serve two drags and the tile you most want to frame would be the one wearing a
+banner.
+
+Unlike v2 this page **is** portable. The banner art is embedded, downscaled to 560 px for 180 KB
+the lot, because a banner draws at a couple of hundred pixels from a 2172 px source; the duty
+pictures are still linked, so those need the repository. The titles are not in the art, so
+renaming a duty needs no new asset — which it has already had to, twice.
+
+
 ## The tray pieces, and judging a new sculpt
 
 `make_tray_figures.py` renders the pieces that page drags around, at every size in `SIZES`, from
