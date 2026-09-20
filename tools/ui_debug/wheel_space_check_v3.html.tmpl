@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Duty wheel at a size you set</title>
+<style>
+ /* Embedded rather than linked: the titles are what this page is for, and a fallback serif
+    would quietly answer a different question than the one being asked. */
+ @font-face{font-family:"PilgrimBanner";src:url(__BANNERFONT__) format("truetype");
+   font-display:block}
+ html,body{margin:0;height:100%;background:__GROUND__;overflow:hidden;
+   font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8b8071}
+ /* No stage and no transform anywhere on this page. One CSS pixel is exactly dpr device pixels,
+    so every size here is a real device pixel with nothing to divide back out. */
+ /* Explicit z-index rather than DOM order: the rules must sit UNDER the wheel so they never cut
+    across a face or a piece, while their labels stay readable over it. */
+ /* The box is the wheel's footprint, and the sliders below can push a tile outside it. An SVG
+    clips to its viewBox by default, which would hide exactly the thing worth seeing: that these
+    tiles no longer fit the wheel they are supposed to make. Left visible, the spill draws over
+    the page and the hud says how far -- a layout fact rather than a rendering limit. */
+ #wheel{position:absolute;z-index:1;overflow:visible}
+ #wheel svg{overflow:visible}
+ #wheel svg{display:block;width:100%;height:100%}
+ .vedge{position:fixed;top:0;bottom:0;width:0;border-left:1px dashed #4d4536;
+   pointer-events:none;z-index:0}
+ .vlab{position:fixed;font-size:11px;color:#7b7160;background:rgba(11,9,7,.85);
+   padding:1px 6px;border-radius:2px;pointer-events:none;white-space:pre;z-index:2}
+ .fig{position:absolute;touch-action:none;
+   user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+ /* An AUTHOR `display` beats the user agent's `[hidden]{display:none}` outright -- origin wins
+    before specificity is even consulted -- so without this line `el.hidden = true` would quietly
+    do nothing and a figure with no art would still take up space. */
+ .fig[hidden]{display:none!important}
+ .fig.copy{cursor:grab}
+ .fig.copy.drag{cursor:grabbing}
+ #tray{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:14px;
+   align-items:flex-end;z-index:5}
+ /* Each row is one subject at every size, bottom-aligned so the bases stand on a common line
+    and the height differences between the characters are the thing you actually see. */
+ .trow{display:flex;gap:16px;align-items:flex-end;justify-content:flex-end}
+ .trow .tag{font-size:11px;color:#6f6556;align-self:flex-end;padding-bottom:1px}
+ #tray .fig{position:static;cursor:copy}          /* the tray mints, it never moves */
+ /* The token tray, bottom right. Same machinery as the one above it -- press to mint, drag to
+    place -- and the readout is pushed clear of it by its MEASURED height rather than a guessed
+    allowance, because it grows with the art exactly as the figure tray did. */
+ /* A PANEL, not a bare row of images, and that is about arithmetic rather than taste. The two
+    trays want 608 px and 376 px of height; a 14-inch MacBook offers 950 between the margins, so
+    on the shorter screens they overlap by about 34 px however the gaps are tuned. Tuning them to
+    fit exactly one display is the kind of fix that breaks on the next one. Given its own ground
+    and a border, and sitting above, the token tray reads as a panel laid over the figures --
+    which is an ordinary thing for a panel to do -- instead of as two rows colliding. */
+ #tray2{position:fixed;right:18px;bottom:14px;display:flex;flex-direction:column;gap:8px;
+   align-items:flex-end;z-index:6;background:rgba(11,9,7,.92);padding:10px 12px;
+   border:1px solid #2e2820;border-radius:3px}
+ #tray2 .fig{position:static;cursor:copy}
+ body.bare #tray2 .tag{display:none}
+ body.bare .trow .tag{display:none}
+ /* ABOVE THE WHEEL. #wheel carries z-index 1 so the rules can sit under it, and the chrome
+    carried none at all -- which put the hud, the readout and the whole control panel BEHIND the
+    artwork. It survived only because a small wheel does not reach the corners they live in: grow
+    it past the window and the panel is covered, its slider stops taking clicks, and the way back
+    to the size slider is the size slider. The trays were already layered, which is why minting a
+    figure still worked while nothing else did. */
+ #hud{position:fixed;left:16px;top:18px;white-space:pre;color:#7b7160;
+   pointer-events:none;font-size:12px;line-height:1.55;z-index:4}
+ #hud b{color:#c9b27a;font-weight:400}
+ #hud s{color:#e0705f;text-decoration:none}
+ /* LEFT column, under the hud. It used to sit bottom-right, which stopped working the moment
+    the right-hand side carried two trays: pushed up clear of the token tray it simply collided
+    with the figure tray instead. The left side has the hud at the top and the panel at the
+    bottom and a clear stretch between them, so that is where it goes -- its top measured from
+    the hud rather than guessed, because the hud grows a line when the wheel is stretched. */
+ #figread{position:fixed;left:16px;text-align:left;white-space:pre;
+   color:#7b7160;font-size:12px;line-height:1.55;pointer-events:none;z-index:4}
+ #figread b{color:#c9b27a;font-weight:400}
+ #figread s{color:#e0705f;text-decoration:none}
+ /* Highest of the lot, above both trays. It is the one surface that must always be reachable:
+    every other thing on this page can be recovered from it, and it cannot be recovered from
+    anything else. */
+ #panel{position:fixed;left:16px;bottom:14px;color:#6f6556;font-size:12px;z-index:7;
+   background:rgba(11,9,7,.9);padding:9px 12px;border:1px solid #2e2820;border-radius:3px}
+ #panel input[type=range]{width:230px;vertical-align:middle}
+ #panel input[type=checkbox]{vertical-align:middle;margin:0 5px 0 0}
+ #panel label{cursor:pointer;user-select:none}
+ #panel #owv{color:#8a7c64;margin-left:8px}
+ #panel b{color:#c9b27a}
+ #panel .row{margin:2px 0}
+ #panel button{font:inherit;color:#cbbb98;background:#241d16;border:1px solid #4a4133;
+   border-radius:3px;padding:3px 9px;cursor:pointer}
+ /* Wraps rather than running on. At full width the hint reached under the token tray, which
+    put text behind a panel and read as a rendering fault rather than as a long line. */
+ #panel .hint{color:#5f574a;margin-top:5px;max-width:52ch}
+ #err{position:fixed;left:0;right:0;top:0;background:#5a1d16;color:#ffd9d2;padding:8px 14px;
+   font-size:13px;display:none;z-index:9;white-space:pre-wrap}
+ body.bare #hud,body.bare #panel,body.bare #figread,
+ body.bare .vedge,body.bare .vlab{display:none}
+ /* IMAGE MODE. The pieces stop taking pointer events so a drag that starts over an acolyte
+    still reaches the wheel underneath -- without this the tile you most want to frame is the
+    one you cannot, because it is the one with a piece standing on it. */
+ body.imgmode .fig{pointer-events:none}
+ /* The past-native warning is CHROME, not artwork, so `h` takes it away with the rest of the
+    furniture -- otherwise the one view meant for judging the wheel clean would have red on it. */
+ body.bare .warn{display:none}
+ /* `h` strips the page to the artwork, and a title set in code is not artwork. */
+ body.bare .banner{display:none}
+ body.imgmode #wheel{cursor:move}
+ #dump{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;display:none;
+   background:#14100b;border:1px solid #4a4133;border-radius:4px;padding:10px}
+ #dump textarea{width:62ch;height:40vh;background:#0b0907;color:#cbbb98;border:0;
+   font:12px/1.5 ui-monospace,Menlo,monospace;resize:none}
+ #dump .lab{color:#6f6556;font-size:11px;margin-bottom:6px}
+</style>
+
+<div id="err"></div>
+<div id="rules"></div>
+<div id="wheel"></div>
+<div id="tray"></div>
+<div id="tray2"></div>
+<div id="hud"></div>
+<div id="figread"></div>
+<div id="dump"><div class="lab">framing &#183; copy this, then press Escape</div><textarea spellcheck="false"></textarea></div>
+<div id="panel">
+  <div class="row">wheel <button id="wbtn" type="button">&nbsp;</button>
+    &nbsp;&#183;&nbsp; <b id="sizev">&nbsp;</b></div>
+  <div class="row">width &nbsp;<input type="range" id="ws"> <b id="wv">&nbsp;</b></div>
+  <div class="row">height <input type="range" id="hs"> <b id="hv">&nbsp;</b></div>
+  <div class="row">scale &nbsp;<input type="range" id="ss"> <b id="sv">&nbsp;</b></div>
+  <div class="row">tile &nbsp;&nbsp;<input type="range" id="tls" min="50" max="140" value="100">
+    <b id="tlv">&nbsp;</b></div>
+  <div class="row">gap &nbsp;&nbsp;&nbsp;<input type="range" id="gps" min="70" max="150" value="100">
+    <b id="gpv">&nbsp;</b></div>
+  <div class="row">banner <button id="b0" type="button">none</button><button id="b1"
+      type="button">small</button><button id="b2" type="button">medium</button><button id="b3"
+      type="button">large</button> &nbsp;turn <input type="range" id="brt" min="-20" max="20"
+      step="0.5" value="0" style="width:110px"> <b id="brv">0°</b></div>
+  <div class="row"><label for="ow"><input type="checkbox" id="ow" checked> only Duty wheel</label>
+    <span id="owv"></span></div>
+  <div class="hint">a wheel &#183; m match built aspect &#183; t tile colour &#183; c clear pieces &#183; h hide<br>
+    drag from the tray top right to mint a piece &#183; double-click a piece to remove it<br>
+    <b>i</b> duty pictures &#183; then click a face &#183; <b>&larr; &rarr;</b> (or <b>[ ]</b>, <b>, .</b>)
+    change picture &#183; drag move &#183; scroll zoom &#183; x clear face &#183; j copy framing<br>
+    a <b style="color:#e0705f">red outline</b> means that tile is drawn past the picture's own
+    resolution &#183; select it and press <b>n</b> to pull it back</div>
+</div>
+
+<script>
+window.onerror = function(m, src, line){
+  var e = document.getElementById("err");
+  e.style.display = "block";
+  e.textContent = "This page hit an error and stopped drawing:\n" + m + "  (line " + line + ")";
+};
+
+var WH = __WHEELS__, KEYS = __KEYS__, ROWS = __ROWS__, PALETTES = __PALETTES__;
+var TILES = __TILES__, PROD_PX = __PRODPX__, TOKENS = __TOKENS__;
+var BANNERS = __BANNERS__, BANNER_FONT = __BANNERFONT__, BANNER_SIZES = __BANNERSIZES__,
+    BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__,
+    BANNER_INK = __BANNERINK__, DUTY_NAMES = __DUTYNAMES__;
+// 0 is none; 1, 2 and 3 index BANNER_SIZES. Offsets are per FACE and in that face's own units,
+// so a banner keeps its place on its tile through both tile sliders -- an absolute position
+// would come adrift the moment either moved, which is the whole reason they exist.
+var BAN = {size: 0, turn: 0, off: {}};
+var WR = __WRANGE__, HR = __HRANGE__, SR = __SRANGE__;
+var CANVASES = __CANVASES__, START = __START__;
+var key = KEYS[0], pal = 0, wheelOnly = true;
+var wPx = START[0], hPx = START[1];      // REAL DEVICE pixels, both of them
+// The scale slider multiplies a BASE shape rather than the live size, or dragging it would
+// compound its own output. Touching width or height rebases and sends scale back to 100%, so the
+// two size sliders always read as the wheel's actual size and there is no hidden multiplier.
+var baseW = wPx, baseH = hPx, scale = 1;
+var V = null;                            // where paint() last put the wheel, in CSS px
+
+// THE DRESSING. One entry per face that is carrying a duty picture, keyed by the face's position
+// rather than its index, so it survives the 1.5 <-> 1.778 switch -- the two layouts have the same
+// nine positions and a framing found on one is worth carrying to the other.
+//   t  index into TILES        s  scale, 1 = covers the face's bounding box
+//   dx dy  offsets in units of the face's OWN bounding box, not pixels and not box units, so a
+//          framing holds its place under the width, height and scale sliders.
+var DRESS = {}, imgMode = false, selFace = null, pan = null;
+var SMIN = 0.15, SMAX = 8;
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function hit(x, y, poly){                // ray cast, in box units
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++){
+    var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function faceAt(pos){
+  var fs = geom().faces;
+  for (var i = 0; i < fs.length; i++) if (fs[i].pos === pos) return fs[i];
+  return null;
+}
+
+// The picture's rectangle in BOX UNITS -- and it is the WHOLE picture, drawn at the picture's
+// OWN aspect. At s = 1 it is the smallest such rectangle that still covers the face's bounding
+// box, so the face starts fully painted and s is an honest zoom from there.
+//
+// The first version sized this rect to the face's bounding box and let the renderer fit the
+// picture into it with preserveAspectRatio="slice". That crops to fit -- a square picture in a
+// 1.75:1 box silently loses 43% of its height BEFORE anything is chosen, and dragging then only
+// moves around inside the part that survived. A framing tool that hides part of the source is
+// not a framing tool, so the rect carries the whole thing and the face does the cropping.
+//
+// Centred on the face's AREA CENTROID, not its bbox middle: these faces are curved wedges whose
+// bbox centre can fall outside the face entirely, and zooming about a point that is not on the
+// tile feels broken however correct the arithmetic is.
+function frame(f, g, d, tile){
+  var k = Math.max(f.bw / tile.w, f.bh / tile.h) * g.s;
+  var w = tile.w * k, h = tile.h * k;
+  return {w: w, h: h,
+          x: f.cx * d.box   - w / 2 + g.dx * f.bw,
+          y: f.cy * d.box_h - h / 2 + g.dy * f.bh};
+}
+
+// THE ZOOM STOPS AT THE PICTURE'S OWN RESOLUTION -- the scale at which one source pixel is one
+// DEVICE pixel. Past it the browser is inventing detail and the crop looks sharper on screen than
+// anything the board could ever print, which is the sort of thing you only notice after choosing.
+//
+// Not a constant, because it depends on how big the wheel currently is: the same scale is well
+// under native on a 600 px wheel and past it on a 2600 px one. So it is recomputed against V on
+// every zoom. The two axes are checked separately and the STRICTER wins -- a stretched wheel
+// magnifies more on one axis than the other, and capping on the gentler one would let the tighter
+// one run past native unnoticed.
+function nativeMax(f, tile, d){
+  if (!V) return SMAX;
+  var dpr = devicePixelRatio || 1;
+  var perUnit = Math.max(V.ww / d.box * dpr, V.wh / d.box_h * dpr);
+  return 1 / (Math.max(f.bw / tile.w, f.bh / tile.h) * perUnit);
+}
+
+// 1.0 means the picture is drawn at exactly its own resolution; below that there is detail in the
+// file still in hand, above it the browser is upscaling.
+function nativeAt(f, g, d){
+  var c = nativeMax(f, TILES[g.t], d);
+  return c > 0 ? g.s / c : 0;
+}
+
+// THE OTHER LIMIT, and the one with consequences off this page.
+//
+// The board does not draw these files. gen_duty_grid re-encodes every tile to PROD_PX before the
+// wheel is built, so a crop holding fewer than PROD_PX of the source's own pixels is finer than
+// anything the shipped asset pipeline carries -- the detail you framed by is not lost on screen,
+// it is lost in the build. Unlike the native limit this does NOT move with the wheel: it is a
+// fact about the assets, so a framing that clears it clears it at every size.
+//
+// Face-independent by construction: the ratio works out to srcDim / (s * PROD_PX) whatever the
+// face's shape, which is why all nine come out at the same number.
+function prodMax(f, tile){
+  if (!PROD_PX) return SMAX;
+  var srcDim = (f.bw / tile.w >= f.bh / tile.h) ? tile.w : tile.h;
+  return srcDim / PROD_PX;
+}
+
+// How many of the source's OWN pixels fall across the face's bounding box at this framing.
+function cropPx(f, g){
+  var t = TILES[g.t], cover = Math.max(f.bw / t.w, f.bh / t.h);
+  return f.bw / (cover * g.s);
+}
+
+// Window point -> box units. The wheel is an absolutely placed box with no transform on it, so
+// this is the whole conversion; V is where paint() last put it.
+function toBox(e){
+  var d = WH[key];
+  return [(e.clientX - V.wx) / V.ww * d.box, (e.clientY - V.wy) / V.wh * d.box_h];
+}
+
+// STOCK is the fixed tray, COPIES are the only things that move. A copy's position is held as a
+// FRACTION of the wheel box rather than in pixels, so it keeps its tile while the sliders move
+// the wheel under it -- which is the whole question this page is asking.
+function makeImg(spec, cls, parent, z){
+  var el = document.createElement("img");
+  el.className = "fig " + cls; el.alt = ""; el.draggable = false; el.hidden = true;
+  if (z) el.style.zIndex = z;
+  el.src = spec.uri;
+  parent.appendChild(el);
+  return el;
+}
+var tray = document.getElementById("tray");
+var STOCK = [], SIZES = [];
+ROWS.forEach(function(row){
+  var r = document.createElement("div");
+  r.className = "trow";
+  var tag = document.createElement("span");
+  tag.className = "tag"; tag.textContent = row.tag;
+  r.appendChild(tag);
+  tray.appendChild(r);
+  row.items.forEach(function(spec){
+    STOCK.push({spec: spec, el: makeImg(spec, "stock", r)});
+    if (SIZES.indexOf(spec.nom) < 0) SIZES.push(spec.nom);
+  });
+});
+// The tokens go into their own tray but into the SAME stock list, so minting, dragging,
+// dropping, scaling and the tile test are all the code that already works -- a second tray is a
+// second place to put pieces, not a second kind of piece.
+var tray2 = document.getElementById("tray2");
+TOKENS.forEach(function(row){
+  var r = document.createElement("div");
+  r.className = "trow";
+  var tag = document.createElement("span");
+  tag.className = "tag"; tag.textContent = row.tag;
+  r.appendChild(tag);
+  tray2.appendChild(r);
+  row.items.forEach(function(spec){
+    STOCK.push({spec: spec, el: makeImg(spec, "stock", r)});
+    if (SIZES.indexOf(spec.nom) < 0) SIZES.push(spec.nom);
+  });
+});
+SIZES.sort(function(a, b){ return a - b; });
+var COPIES = [], zTop = 10;
+
+// One pair of rules per canvas, built once and moved on every paint.
+var RULES = CANVASES.map(function(c){
+  var box = document.getElementById("rules");
+  function line(){ var e = document.createElement("div"); e.className = "vedge"; box.appendChild(e); return e; }
+  var lab = document.createElement("div");
+  lab.className = "vlab"; box.appendChild(lab);
+  return {c: c, l: line(), r: line(), lab: lab};
+});
+
+// v1's own rule: a canvas is a box of UNITS scaled to fit the window, so how many real pixels it
+// is worth depends on the display. Width-bound means the canvas fills the window and its rules
+// land on the window edges -- which is the answer to "is the canvas even the limit here".
+function canvasFit(c){
+  var dpr = devicePixelRatio || 1;
+  var k = Math.min(innerWidth / c.w, innerHeight / c.h);
+  var cssW = c.w * k;
+  return {k: k, cssW: cssW, x: (innerWidth - cssW) / 2,
+          realW: Math.round(c.w * k * dpr), realH: Math.round(c.h * k * dpr),
+          wide: innerWidth / c.w <= innerHeight / c.h};
+}
+
+// With "only Duty wheel" ticked, a piece on the wheel holds its true size while the wheel grows
+// or shrinks under it, which is the question this page was built to answer. Untick it and pieces
+// ON THE WHEEL keep their PROPORTION to it instead, so the board zooms as one thing.
+//
+// The tray never scales either way. It is the reference you are comparing against -- the whole
+// point of a row labelled 90 px is that it IS 90 px -- so it stays put and a piece minted while
+// zoomed simply arrives bigger than the stock it came from.
+//
+// Measured against the size the page opens at, not against the scale slider, so it holds however
+// you got there -- the slider rebases scale to 100% every time you touch width or height, and a
+// piece that snapped back to nominal on a rebase while the wheel stayed big would be nonsense.
+// Geometric mean of the two axes, so a stretched wheel moves the pieces by a sensible amount
+// rather than following whichever axis was picked.
+function pieceScale(){
+  if (wheelOnly) return 1;
+  return Math.sqrt((wPx / START[0]) * (hPx / START[1]));
+}
+
+// The file's OWN pixel size, not its nominal: a plinth-levelled piece comes in under the nominal
+// and drawing it at the nominal would be the browser's resample of art that is already correct.
+// `placed` is what separates a piece on the wheel from the stock in the tray.
+function size(spec, placed){             // real device px -> CSS px, the only conversion here
+  var dpr = devicePixelRatio || 1, z = placed ? pieceScale() : 1;
+  return {w: spec.w * z / dpr, h: spec.h * z / dpr};
+}
+
+// TILE SIZE AND SPACING, applied to the GEOMETRY rather than to a transform on the drawing.
+// Everything downstream -- the fills, the clip paths, the duty-picture framing, the native-
+// resolution test, where a dropped piece lands -- reads faces out of this. Move the tiles with a
+// wrapping <g transform> instead and every one of those would go on computing against the
+// untransformed shape, which is the kind of split that shows up as a piece landing on the tile
+// next door.
+//
+// These contours are polylines, so rebuilding `d` from the moved points is exact: there are no
+// curve control points to transform separately and get subtly wrong.
+var TILE = {s: 1, gap: 1};
+function geom(){
+  var d = WH[key];
+  if (TILE.s === 1 && TILE.gap === 1) return d;
+  // The middle of the ARRANGEMENT, taken from the tiles themselves. The box's own centre is a
+  // different point -- these were traced off a picture and do not sit perfectly in it -- and
+  // spreading about the wrong one drifts the whole wheel sideways as the slider moves.
+  var mx = 0, my = 0;
+  for (var i = 0; i < d.faces.length; i++){ mx += d.faces[i].cx; my += d.faces[i].cy; }
+  mx = mx / d.faces.length * d.box; my = my / d.faces.length * d.box_h;
+  var faces = d.faces.map(function(f){
+    var cx = f.cx * d.box, cy = f.cy * d.box_h;
+    var nx = mx + (cx - mx) * TILE.gap, ny = my + (cy - my) * TILE.gap;
+    var poly = f.poly.map(function(pt){
+      return [nx + (pt[0] - cx) * TILE.s, ny + (pt[1] - cy) * TILE.s];
+    });
+    var dd = "M " + poly.map(function(pt){ return pt[0].toFixed(2) + " " + pt[1].toFixed(2); })
+                        .join(" L ") + " Z";
+    return {d: dd, pos: f.pos, frac: f.frac * TILE.s * TILE.s,
+            cx: nx / d.box, cy: ny / d.box_h, poly: poly,
+            bw: f.bw * TILE.s, bh: f.bh * TILE.s};
+  });
+  return {box: d.box, box_h: d.box_h, aspect: d.aspect, faces: faces};
+}
+// How far the tiles reach, in box units, so the hud can say when they have left the wheel.
+function spanOf(d){
+  var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  d.faces.forEach(function(f){ f.poly.forEach(function(pt){
+    if (pt[0] < x0) x0 = pt[0]; if (pt[0] > x1) x1 = pt[0];
+    if (pt[1] < y0) y0 = pt[1]; if (pt[1] > y1) y1 = pt[1];
+  }); });
+  return {x0: x0, y0: y0, x1: x1, y1: y1};
+}
+
+// AWAITED, not assumed. document.fonts.check() is false until something has asked for the
+// face, so the first paint would set nine titles in a fallback serif and then silently reflow.
+// Everything on this page is a measurement, and a title measured in the wrong face is a wrong
+// measurement that looks like a right one.
+if (BANNER_FONT && document.fonts && document.fonts.load){
+  document.fonts.load('400 40px "PilgrimBanner"').then(function(){ paint(); },
+                                                       function(){ /* drawn in a fallback */ });
+}
+
+function paint(){
+  var d = geom(), dpr = devicePixelRatio || 1;
+  var wCss = wPx / dpr, hCss = hPx / dpr;
+  var x = Math.round((innerWidth - wCss) / 2), y = Math.round((innerHeight - hCss) / 2);
+  var el = document.getElementById("wheel");
+  el.style.left = x + "px"; el.style.top = y + "px";
+  el.style.width = wCss + "px"; el.style.height = hCss + "px";
+  // V IS SET BEFORE THE DRAWING, not after it. The past-native test below reads V, and with the
+  // assignment further down every warning was computed against the PREVIOUS frame's wheel size --
+  // so growing the wheel lit nothing until some unrelated repaint happened to come along. The
+  // numbers were right and the colour was one paint behind, which is the hardest kind to spot.
+  V = {dpr: dpr, wx: x, wy: y, ww: wCss, wh: hCss};
+  var P = PALETTES[pal], p = "", defs = "", over = "", ghost = "", marks = "";
+  for (var i = 0; i < d.faces.length; i++){
+    var f = d.faces[i];
+    // The tile colour stays painted UNDER the picture, so a picture zoomed in past the face's
+    // edge shows tile rather than a hole punched through to the page.
+    p += '<path fill="' + (f.pos === "centre" ? P.centre : P.face) + '" d="' + f.d + '"/>';
+    var g = DRESS[f.pos];
+    if (!g || !TILES.length) continue;
+    // Clipped by the face's OWN outline, not an approximation of it: the same `d` the fill uses.
+    defs += '<clipPath id="clip-' + f.pos + '"><path d="' + f.d + '"/></clipPath>';
+    // Checked for EVERY dressed face, not just the selected one: growing the wheel puts them all
+    // past native together, and a warning that only ever spoke about the face you happened to have
+    // clicked was how this went unnoticed in the first place.
+    if (nativeAt(f, g, d) > 1.02)
+      marks += '<path class="warn" d="' + f.d + '" fill="none" stroke="#e0705f" ' +
+               'stroke-width="2" vector-effect="non-scaling-stroke"/>';
+    var r = frame(f, g, d, TILES[g.t]);
+    // preserveAspectRatio="none": the rect already HAS the picture's aspect, so there is nothing
+    // left to fit and nothing for the renderer to crop on its own initiative.
+    over += '<g clip-path="url(#clip-' + f.pos + ')"><image href="' + TILES[g.t].src +
+            '" x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h +
+            '" preserveAspectRatio="none"/></g>';
+  }
+  // THE GHOST. The whole picture, dimmed, drawn under the clipped copies and only for the face
+  // being edited: inside the outline is what the tile will show, everything faint around it is
+  // what is being cut. Without it you are framing a picture you cannot see the edges of.
+  if (imgMode && selFace && DRESS[selFace] && TILES.length){
+    var gf = faceAt(selFace), gg = DRESS[selFace];
+    if (gf){
+      var gr = frame(gf, gg, d, TILES[gg.t]);
+      // The box around the whole picture goes red too, since that box IS the thing that has got
+      // too big -- the outline says which tile, this says what about it.
+      var gpast = nativeAt(gf, gg, d) > 1.02;
+      ghost = '<image href="' + TILES[gg.t].src + '" x="' + gr.x + '" y="' + gr.y +
+              '" width="' + gr.w + '" height="' + gr.h +
+              '" preserveAspectRatio="none" opacity="0.3"/>' +
+              '<rect class="' + (gpast ? "warn" : "") + '" x="' + gr.x + '" y="' + gr.y +
+              '" width="' + gr.w + '" height="' + gr.h + '" fill="none" stroke="' +
+              (gpast ? "#e0705f" : "#e8c97a") + '" stroke-opacity="' + (gpast ? "0.9" : "0.45") +
+              '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    }
+  }
+  if (imgMode && selFace){
+    var sf2 = faceAt(selFace), sg2 = DRESS[selFace];
+    // non-scaling-stroke, because the box is being stretched anisotropically and a plain stroke
+    // would come out thick on one axis and thin on the other -- which reads as a drawing bug.
+    if (sf2) marks += '<path d="' + sf2.d + '" fill="none" stroke="' +
+                      (sg2 && nativeAt(sf2, sg2, d) > 1.02 ? "#e0705f" : "#e8c97a") +
+                      '" stroke-width="2" vector-effect="non-scaling-stroke" ' +
+                      'stroke-dasharray="7 5"/>';
+  }
+  // preserveAspectRatio="none" is what makes the height slider a lever at all: left at its
+  // default the SVG would letterbox inside the box and the slider would move nothing but margin.
+  // Order is the whole design: tile fills, then the dim whole picture, then the crisp clipped
+  // copies over it, then the outlines on top of everything.
+  // THE BANNERS, over everything: they are the label on the tile, not part of the picture.
+  // Positioned from the face's own centroid so they follow both tile sliders, and sized as a
+  // fraction of the box so all nine are the same banner -- the one thing the rosette could not
+  // give, since its faces differ in width by 86% where a title sits.
+  var bann = "";
+  if (BAN.size && BANNERS.length){
+    for (var bi = 0; bi < d.faces.length; bi++){
+      var bf = d.faces[bi];
+      var bw = BANNER_SIZES[BAN.size - 1] * TILE.s, bh = bw / 3;
+      var o = BAN.off[bf.pos] || {x: 0, y: 0};
+      var bx = bf.cx * d.box + o.x * TILE.s, by = bf.cy * d.box_h + o.y * TILE.s;
+      // Mirrored about the middle column, so the left and right of the wheel lean toward each
+      // other instead of the whole thing skewing one way.
+      var mid = 0;
+      for (var mi = 0; mi < d.faces.length; mi++) mid += d.faces[mi].cx;
+      mid = mid / d.faces.length * d.box;
+      // A TOLERANCE OF A QUARTER TILE, not a hair. These contours were traced by hand and the
+      // middle column sits at 497, 501 and 504 rather than all at 500 -- a tight test called
+      // two of the three "left of centre" and leaned them, which reads as a crooked wheel
+      // rather than as a bug. A quarter of a tile separates the columns by a mile and is
+      // immune to how well the tracing lined up.
+      var turn = Math.abs(bx - mid) < bf.bw * 0.25 ? 0
+                                                   : (bx < mid ? BAN.turn : -BAN.turn);
+      var nm = DUTY_NAMES[bi] || "";
+      bann += '<g transform="translate(' + bx.toFixed(2) + ' ' + by.toFixed(2) +
+              ') rotate(' + turn.toFixed(2) + ')">' +
+              '<image href="' + BANNERS[bi % BANNERS.length] + '" x="' + (-bw / 2).toFixed(2) +
+              '" y="' + (-bh / 2).toFixed(2) + '" width="' + bw.toFixed(2) +
+              '" height="' + bh.toFixed(2) + '" preserveAspectRatio="none"/>' +
+              '<text x="0" y="' + (bh * (BANNER_TOP - 0.5)).toFixed(2) +
+              '" font-family="PilgrimBanner" font-size="' + (bh * BANNER_FS).toFixed(2) +
+              '" letter-spacing="' + (bh * BANNER_FS * BANNER_TRACK).toFixed(3) +
+              '" text-anchor="middle" dominant-baseline="central" fill="' + BANNER_INK + '">' +
+              nm.toUpperCase().replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</text></g>';
+    }
+  }
+  el.innerHTML = '<svg viewBox="0 0 ' + d.box + ' ' + d.box_h +
+                 '" preserveAspectRatio="none"><defs>' + defs + '</defs>' +
+                 p + ghost + over + marks + bann + "</svg>";
+
+  STOCK.forEach(function(s){
+    var z = size(s.spec);
+    s.el.hidden = false;
+    s.el.style.width = z.w + "px"; s.el.style.height = z.h + "px";
+  });
+  // The tray is laid out by CSS and now several rows deep, so its left edge is measured rather
+  // than assumed -- the canvas labels have to keep clear of it and it grows with the art.
+  var trayL = tray.getBoundingClientRect().left;
+  // Both trays are right-aligned, so the canvas labels must clear whichever reaches further
+  // left, and the readout must sit above the lower one. Measured, never allowed for: the token
+  // tray's height depends on how many sizes it carries and changes the day one is added.
+  var t2 = tray2.getBoundingClientRect();
+  if (t2.width) trayL = Math.min(trayL, t2.left);
+  // WHERE THE LABELS GO IS MEASURED, not fixed at 72 px down the screen. The wheel is centred,
+  // so while it is smaller than the window there is a clear band above it and another below, and
+  // a label in either of those is never over the artwork. The old constant sat in the clear band
+  // on a wide display and landed squarely on a duty picture on a laptop -- the same way round as
+  // the panel that was behind the wheel: correct on the screen it was written on, wrong on the
+  // next one. Preferring ABOVE keeps them where they have always been when there is room.
+  var LAB_H = 19, stack = RULES.length * LAB_H, GAP = 8;
+  var above = V.wy - GAP - stack, below = V.wy + V.wh + GAP;
+  // No clear band means the wheel reaches both edges -- and .vedge sits at z-index 0, UNDER the
+  // wheel, so in that state the dashed rules are themselves hidden behind the artwork. The
+  // labels would be naming lines that cannot be seen, over a picture you are trying to judge,
+  // and the hud already carries the same widths in more detail. So they go away instead, and
+  // come back the moment there is somewhere for them to stand.
+  var band = above >= GAP ? above : (below + stack <= innerHeight - GAP ? below : null);
+  RULES.forEach(function(r, i){
+    var f = canvasFit(r.c);
+    r.l.style.left = f.x + "px";
+    r.r.style.left = (f.x + f.cssW) + "px";
+    r.lab.textContent = "canvas " + r.c.w + "  " + f.realW + " px wide" + (f.wide ? "  (fills window)" : "");
+    // Clamp against the label's MEASURED width, not a guess: the text is longer when a canvas
+    // fills the window, and a fixed allowance clipped exactly those two off the right edge.
+    // Stepped down the screen so canvases landing on the same edge stay readable.
+    r.lab.hidden = band === null;
+    if (band === null) return;
+    r.lab.style.top = (band + i * LAB_H) + "px";
+    var lw = r.lab.offsetWidth, lim = Math.max(4, Math.min(innerWidth, trayL - 8) - lw - 5);
+    r.lab.style.left = clamp(f.x + f.cssW - lw - 5, 4, lim) + "px";
+  });
+  document.getElementById("wbtn").textContent = key;
+  document.getElementById("sizev").textContent = wPx + " × " + hPx + " real px";
+  document.getElementById("wv").textContent = wPx;
+  document.getElementById("hv").textContent = hPx;
+  document.getElementById("sv").textContent = Math.round(scale * 100) + "%";
+  banButtons();
+  document.getElementById("tlv").textContent = Math.round(TILE.s * 100) + "%";
+  document.getElementById("gpv").textContent = Math.round(TILE.gap * 100) + "%";
+  var z = pieceScale();
+  document.getElementById("owv").textContent =
+    wheelOnly ? "placed pieces held at true size" : "placed pieces ×" + z.toFixed(2);
+  hud();
+  // AFTER hud(), not before it. Measured first, the hud has not been filled yet this frame, so
+  // its box is the empty 18 px it started at and the readout lands on top of it -- right for one
+  // paint out of every two, which is the same "one frame stale" fault the past-native warning
+  // had. Nothing here may measure an element that this same function is still writing.
+  document.getElementById("figread").style.top =
+    (document.getElementById("hud").getBoundingClientRect().bottom + 18) + "px";
+  place();
+}
+
+function hud(){
+  var d = geom(), ar = wPx / hPx;
+  var out = [
+    ["screen", innerWidth + " × " + innerHeight + " css  " + (devicePixelRatio || 1).toFixed(2) + "×"],
+    ["wheel", wPx + " × " + hPx + " real px"],
+    ["aspect", ar.toFixed(3)],
+    ["scale", Math.round(scale * 100) + "% of " + baseW + " × " + baseH],
+    ["tile", PALETTES[pal].name + "  " + PALETTES[pal].face + "   (t)"],
+    // What the two new sliders actually did, in the page's own unit: real device pixels. A tile
+    // percentage is not a size, and the whole point of this page is that everything on it is.
+    ["tiles", Math.round(TILE.s * 100) + "% at " + Math.round(TILE.gap * 100) + "% spacing   "
+              + "one tile now " + (d.faces[0].bw / d.box * wPx).toFixed(0) + " × "
+              + (d.faces[0].bh / d.box_h * hPx).toFixed(0) + " real px"
+              + (PROD_PX ? "   (the board draws one at " + PROD_PX + ")" : "")]
+  ];
+  // The page's whole promise is that a size on screen is a real device pixel. The moment the
+  // pieces are allowed to zoom with the wheel that stops being true, so it says so, and it says
+  // when they have gone past the resolution of their own art rather than letting that pass.
+  var z = pieceScale();
+  if (!wheelOnly){
+    out.push(["placed", "×" + z.toFixed(2) + " of nominal — no longer true size (the tray is)"]);
+    if (z > 1.02)
+      out.push(["", ""], ["!", "placed pieces are drawn larger than the art they come from: " +
+        "above ×1 that is the browser's resample, not a " + Math.round(z * 100) + "% piece"]);
+  }
+  // TILES PAST THE WHEEL. The two sliders can push a tile outside the box, and the box is the
+  // wheel's whole footprint on the board -- so this is a layout fact, not a rendering one. The
+  // svg is overflow:visible, so the spill is drawn rather than clipped and this line says how
+  // much of it there is, in the page's own unit.
+  var sp = spanOf(d);
+  if (sp.x0 < -0.5 || sp.y0 < -0.5 || sp.x1 > d.box + 0.5 || sp.y1 > d.box_h + 0.5)
+    out.push(["", ""], ["!", "tiles reach " + (sp.x1 - sp.x0).toFixed(0) + " × " +
+      (sp.y1 - sp.y0).toFixed(0) + " of a " + d.box + " × " + d.box_h + " box — " +
+      Math.round(Math.max(sp.x1 - sp.x0 - d.box, 0) / d.box * wPx) +
+      " real px wider than the wheel"]);
+  // These tiles were TRACED off a square picture, so the square is the shape they were drawn in
+  // rather than a ratio a builder was asked for. Stretching does not produce the tiles some
+  // other aspect would have given -- there is no such build -- it just distorts these.
+  var off = Math.abs(ar - d.aspect) / d.aspect;
+  if (off > 0.005)
+    out.push(["", ""], ["!", "stretched to " + ar.toFixed(3) + " — these contours were traced " +
+      "square, so the tiles are simply distorted (m to square them)"]);
+  out.push(["", ""]);
+  CANVASES.forEach(function(c){
+    var f = canvasFit(c);
+    out.push(["canvas " + c.w, c.w + " × " + c.h + " units  ·  " + f.realW + " × " + f.realH +
+              " real px here" + (f.wide ? "  (fills window)" : "")]);
+  });
+  // Said once rather than on each row: the rules are the canvas EDGE. In the real layout the
+  // boards, the alms column and the action box come out first and the wheel takes what is left,
+  // so fitting between these lines is necessary and nowhere near sufficient -- v1 answers that.
+  out.push(["", ""], ["note", "rules are the canvas edge, not the wheel's column"]);
+  out.push(["", ""]);
+  ["north", "north_west", "east"].forEach(function(pos){
+    var f, j;
+    for (j = 0; j < d.faces.length; j++) if (d.faces[j].pos === pos) f = d.faces[j];
+    // Reported as the side of a square of equal area, so it sits in the same unit as a piece's
+    // height and you can compare the two without doing a square root in your head.
+    out.push([pos === "north_west" ? "corner" : pos,
+              Math.round(Math.sqrt(f.frac * wPx * hPx)) + " px square"]);
+  });
+  var fitW = wPx / (devicePixelRatio || 1) <= innerWidth,
+      fitH = hPx / (devicePixelRatio || 1) <= innerHeight;
+  if (!fitW || !fitH)
+    out.push(["", ""], ["!", "wheel is wider or taller than the window and is being clipped — " +
+      "nothing is scaled down, so what you see is still true size"]);
+  document.getElementById("hud").innerHTML = out.map(function(r){
+    if (!r[0]) return "";
+    if (r[0] === "!") return '<s>' + r[1] + '</s>';
+    return '<b>' + r[0] + '</b>  ' + r[1];
+  }).join("\n");
+}
+
+function placeCopy(p){
+  var z = size(p.spec, true), d = WH[key];
+  var x = V.wx + p.u * V.ww - z.w / 2, y = V.wy + p.v * V.wh - z.h / 2;
+  // Clamp on the piece's BOX, not its centre, so it can never leave the window entirely.
+  x = clamp(x, 0, innerWidth - z.w);
+  y = clamp(y, 0, innerHeight - z.h);
+  p.u = (x + z.w / 2 - V.wx) / V.ww;              // write the clamp back, so it sticks
+  p.v = (y + z.h / 2 - V.wy) / V.wh;
+  p.el.hidden = false;
+  p.el.style.left = x + "px"; p.el.style.top = y + "px";
+  p.el.style.width = z.w + "px"; p.el.style.height = z.h + "px";
+  // A piece stands on its BASE, so the tile it occupies is the one under the bottom centre of the
+  // art -- not under its middle, which for a tall figure can be a face further out.
+  var bx = (x + z.w / 2 - V.wx) / V.ww * d.box, by = (y + z.h - V.wy) / V.wh * d.box_h;
+  p.on = null;
+  for (var i = 0; i < d.faces.length; i++)
+    if (hit(bx, by, d.faces[i].poly)){ p.on = d.faces[i]; break; }
+}
+
+// Bounded whatever the count: a line per size, then one tally line across the faces. Listing
+// every piece would run the readout off the screen as soon as the board got interesting.
+function readout(){
+  var lines = [], tally = {}, order = [], off = 0;
+  // Grouped by NOMINAL size, not by tray slot: with four subjects a line each would be eight
+  // lines of mostly zeroes, and the count per size is what says how busy the wheel is.
+  var z = pieceScale();
+  // Split by FAMILY as well as size: the figures and the tokens both use 90, 120 and 150, so a
+  // line reading "90 px  3 placed" would be three of something unspecified. Only families that
+  // actually have a piece on the board get a line, so a board with no tokens reads as it always
+  // did.
+  [["figure", "fig"], ["token", "tok"]].forEach(function(fam){
+    SIZES.forEach(function(nom){
+      var n = 0;
+      COPIES.forEach(function(p){
+        if (p.spec.nom === nom && (p.spec.fam || "figure") === fam[0]) n++; });
+      if (!n) return;
+      // When the pieces are zooming, the nominal is no longer what is on the glass, so both are
+      // shown rather than leaving the label quietly wrong.
+      lines.push("<b>" + fam[1] + " " + nom + " px</b>" +
+                 (wheelOnly ? "" : " → " + Math.round(nom * z)) + "  " + n + " placed");
+    });
+  });
+  if (!COPIES.length) lines.push("<s>no pieces placed</s>");
+  COPIES.forEach(function(p){
+    if (!p.on){ off++; return; }
+    if (!tally[p.on.pos]){ tally[p.on.pos] = 0; order.push(p.on.pos); }
+    tally[p.on.pos]++;
+  });
+  if (order.length)
+    lines.push(order.map(function(k){ return k + " " + tally[k]; }).join(" · "));
+  if (off) lines.push("<s>" + off + " off the wheel</s>");
+  if (imgMode){
+    var dressed = Object.keys(DRESS);
+    lines.push("<b>duty pictures</b>  " + (TILES.length ? dressed.length + " of 9 faces"
+                                                        : "<s>none found on disk</s>"));
+    if (selFace){
+      var g = DRESS[selFace];
+      if (g){
+        var sf3 = faceAt(selFace), nf = nativeAt(sf3, g, geom());
+        lines.push(selFace + "  " + TILES[g.t].title + "  ×" + g.s.toFixed(2) + "  " +
+                   (nf > 1.02 ? "<s>" + nf.toFixed(2) + "× past native (n to pull back)</s>"
+                    : nf > 0.98 ? "<b>at native</b>"
+                    : Math.round(nf * 100) + "% of native"));
+        // The production line. Reported, never enforced -- it is a statement about the assets and
+        // the right answer to breaking it is often a bigger source file, not a looser crop.
+        if (PROD_PX){
+          var held = cropPx(sf3, g), pct = Math.round(100 * held / PROD_PX);
+          lines.push("  crop holds " + Math.round(held) + " src px · board draws " + PROD_PX +
+                     " · " + (held < PROD_PX ? "<s>" + pct + "% — finer than the build</s>"
+                                             : pct + "%"));
+        }
+      } else lines.push(selFace + "  <s>empty — → to place</s>");
+    } else if (TILES.length) lines.push("<s>click a face</s>");
+  }
+  document.getElementById("figread").innerHTML = lines.join("\n");
+}
+
+function place(){
+  if (!V) return;
+  COPIES.forEach(placeCopy);
+  readout();
+}
+
+function grab(p, e, dx, dy){
+  p.drag = {id: e.pointerId, dx: dx, dy: dy, moved: false};
+  try { p.el.setPointerCapture(e.pointerId); } catch (_){}
+  p.el.classList.add("drag");
+  p.el.style.zIndex = ++zTop;                     // the one being moved comes to the front
+}
+
+function drop(p){
+  if (!p.drag) return;
+  var moved = p.drag.moved;
+  try { p.el.releasePointerCapture(p.drag.id); } catch (_){}
+  p.drag = null;
+  p.el.classList.remove("drag");
+  // A plain click on the tray mints a copy exactly ON the stock, where it would look like nothing
+  // had happened. Step a never-moved NEW piece clear so it is visibly its own thing. Only a new
+  // one: clicking a piece already on the board must leave it exactly where it stands.
+  if (!moved && p.fresh){
+    var z = size(p.spec, true);
+    p.u -= (z.w * 1.2) / V.ww;
+    p.v += (z.h * (0.5 + 0.28 * (COPIES.indexOf(p) % 4))) / V.wh;
+    placeCopy(p); readout();
+  }
+  p.fresh = false;
+}
+
+function discard(p){
+  var i = COPIES.indexOf(p);
+  if (i < 0) return;
+  COPIES.splice(i, 1);
+  p.el.parentNode.removeChild(p.el);
+  readout();
+}
+
+function wire(p){
+  p.el.addEventListener("pointerdown", function(e){
+    if (e.button !== 0 || !V || p.drag) return;   // left button held, as asked -- nothing else
+    var r = p.el.getBoundingClientRect();
+    grab(p, e, e.clientX - r.left, e.clientY - r.top);
+    e.preventDefault(); e.stopPropagation();
+  });
+  p.el.addEventListener("pointermove", function(e){
+    if (!p.drag || e.pointerId !== p.drag.id || !V) return;
+    // No stage transform on this page, so a client coordinate IS a page coordinate: the only
+    // conversion is the piece's own grab offset.
+    var z = size(p.spec, true);
+    p.u = (e.clientX - p.drag.dx + z.w / 2 - V.wx) / V.ww;
+    p.v = (e.clientY - p.drag.dy + z.h / 2 - V.wy) / V.wh;
+    p.drag.moved = true;
+    placeCopy(p); readout();                      // only this piece
+  });
+  p.el.addEventListener("pointerup", function(){ drop(p); });
+  p.el.addEventListener("pointercancel", function(){ drop(p); });
+  p.el.addEventListener("dblclick", function(e){ discard(p); e.preventDefault(); });
+}
+
+// Pressing a stock figure mints a copy under the cursor and hands the drag straight to it, so
+// picking a piece off the tray and putting it on a tile is one motion, not click-then-find.
+function mint(spec, e, dx, dy){
+  var p = {spec: spec, el: makeImg(spec, "copy", document.body, ++zTop),
+           u: 0, v: 0, on: null, fresh: true};
+  COPIES.push(p);
+  wire(p);
+  var z = size(spec, true);
+  p.u = (e.clientX - dx + z.w / 2 - V.wx) / V.ww;
+  p.v = (e.clientY - dy + z.h / 2 - V.wy) / V.wh;
+  placeCopy(p);
+  grab(p, e, dx, dy);
+  readout();
+}
+
+STOCK.forEach(function(s){
+  s.el.addEventListener("pointerdown", function(e){
+    if (e.button !== 0 || !V) return;
+    var r = s.el.getBoundingClientRect();
+    mint(s.spec, e, e.clientX - r.left, e.clientY - r.top);
+    e.preventDefault();
+  });
+});
+
+var ws = document.getElementById("ws"), hs = document.getElementById("hs"),
+    ss = document.getElementById("ss");
+ws.min = WR[0]; ws.max = WR[1]; ws.step = 1; ws.value = wPx;
+hs.min = HR[0]; hs.max = HR[1]; hs.step = 1; hs.value = hPx;
+ss.min = SR[0]; ss.max = SR[1]; ss.step = 1; ss.value = 100;
+
+function rebase(){                       // the size sliders ARE the size; scale starts over
+  baseW = wPx; baseH = hPx; scale = 1; ss.value = 100;
+}
+function applyScale(){
+  // Clamp the SCALE, not the results: clamping width and height separately would let one hit its
+  // limit while the other kept going, which would silently stretch the wheel the scale slider is
+  // supposed to leave alone.
+  var lo = Math.max(SR[0] / 100, WR[0] / baseW, HR[0] / baseH),
+      hi = Math.min(SR[1] / 100, WR[1] / baseW, HR[1] / baseH);
+  scale = clamp(scale, lo, hi);
+  ss.value = Math.round(scale * 100);
+  wPx = Math.round(baseW * scale);
+  hPx = Math.round(baseH * scale);
+  ws.value = wPx; hs.value = hPx;
+  paint();
+}
+ws.addEventListener("input", function(){ wPx = +ws.value; rebase(); paint(); });
+hs.addEventListener("input", function(){ hPx = +hs.value; rebase(); paint(); });
+ss.addEventListener("input", function(){ scale = +ss.value / 100; applyScale(); });
+var tls = document.getElementById("tls"), gps = document.getElementById("gps");
+// These two do NOT rebase. The width and height sliders set the wheel's real size and rebase the
+// scale slider to 100% when touched; tile and gap change what is drawn inside that size and
+// leave it alone -- a tile slider that silently reset the zoom would be the same trap.
+tls.addEventListener("input", function(){ TILE.s = +tls.value / 100; paint(); });
+// FOUR BUTTONS, one state. Exclusive by construction rather than by three checkboxes agreeing
+// with each other, and "none" is a size rather than a separate visibility flag -- two ways to
+// hide the same thing is how a control ends up disagreeing with what is on screen.
+["b0", "b1", "b2", "b3"].forEach(function(id, n){
+  var el = document.getElementById(id);
+  el.addEventListener("click", function(){ BAN.size = n; paint(); });
+});
+function banButtons(){
+  ["b0", "b1", "b2", "b3"].forEach(function(id, n){
+    document.getElementById(id).style.borderColor = (BAN.size === n) ? "#c9b27a" : "#4a4133";
+    document.getElementById(id).style.color = (BAN.size === n) ? "#e8d8b0" : "#cbbb98";
+  });
+  document.getElementById("brv").textContent = BAN.turn.toFixed(1) + "\u00b0";
+}
+var brt = document.getElementById("brt");
+brt.addEventListener("input", function(){ BAN.turn = +brt.value; paint(); });
+gps.addEventListener("input", function(){ TILE.gap = +gps.value / 100; paint(); });
+document.getElementById("ow").addEventListener("change", function(){
+  wheelOnly = this.checked;
+  paint();
+});
+
+function matchAspect(){                  // height follows the BUILT ratio of the current wheel
+  hPx = clamp(Math.round(wPx / WH[key].aspect), HR[0], HR[1]);
+  hs.value = hPx;
+  rebase();
+  paint();
+}
+function nextWheel(){
+  key = KEYS[(KEYS.indexOf(key) + 1) % KEYS.length];
+  matchAspect();                         // switching wheels lands on that wheel's own shape
+}
+document.getElementById("wbtn").addEventListener("click", nextWheel);
+
+// IMAGE MODE. Everything below is inert until `i` turns it on, and turning it off puts the page
+// back exactly as it was -- no piece is moved and no dressing is lost.
+var wheelBox = document.getElementById("wheel");
+
+function setMode(on){
+  imgMode = on;
+  document.body.classList.toggle("imgmode", on);
+  paint();
+}
+
+function pickFace(e){
+  var b = toBox(e), fs = geom().faces;
+  for (var i = 0; i < fs.length; i++) if (hit(b[0], b[1], fs[i].poly)) return fs[i];
+  return null;
+}
+
+wheelBox.addEventListener("pointerdown", function(e){
+  if (!imgMode || !V) return;
+  var f = pickFace(e);
+  selFace = f ? f.pos : null;
+  if (f && DRESS[f.pos]){
+    pan = {id: e.pointerId, x: e.clientX, y: e.clientY, pos: f.pos};
+    try { wheelBox.setPointerCapture(e.pointerId); } catch (_){}
+  }
+  paint();
+});
+
+wheelBox.addEventListener("pointermove", function(e){
+  if (!pan || e.pointerId !== pan.id) return;
+  var d = geom(), f = faceAt(pan.pos), g = DRESS[pan.pos];
+  if (!f || !g) return;
+  // The drag is in CSS px; the offsets are in face-box units. Converting through the live wheel
+  // box means a drag moves the picture by exactly the distance the cursor moved, at any size.
+  g.dx += (e.clientX - pan.x) / V.ww * d.box   / f.bw;
+  g.dy += (e.clientY - pan.y) / V.wh * d.box_h / f.bh;
+  pan.x = e.clientX; pan.y = e.clientY;
+  paint();
+});
+
+function endPan(e){
+  if (!pan) return;
+  try { wheelBox.releasePointerCapture(pan.id); } catch (_){}
+  pan = null;
+}
+wheelBox.addEventListener("pointerup", endPan);
+wheelBox.addEventListener("pointercancel", endPan);
+
+// NOT passive. A wheel listener defaults to passive on some engines, and preventDefault() is then
+// ignored SILENTLY -- the picture would zoom and the page would scroll at the same time, with
+// nothing in the console to say why.
+wheelBox.addEventListener("wheel", function(e){
+  if (!imgMode || !selFace) return;
+  var g = DRESS[selFace];
+  if (!g) return;
+  e.preventDefault();
+  var d = geom(), f = faceAt(selFace);
+  var next = g.s * Math.exp(-e.deltaY * 0.0015);
+  // Only the zoom-IN direction is capped. Clamping both ways would make one scroll-down jump the
+  // scale when the framing is already past native -- which it can be, since growing the wheel
+  // raises the magnification without anyone touching the zoom.
+  if (f && next > g.s) next = Math.min(next, nativeMax(f, TILES[g.t], d));
+  g.s = clamp(next, SMIN, SMAX);
+  paint();
+}, {passive: false});
+
+function cycle(step){
+  if (!imgMode || !selFace || !TILES.length) return;
+  var g = DRESS[selFace];
+  if (!g) DRESS[selFace] = {t: step > 0 ? 0 : TILES.length - 1, s: 1, dx: 0, dy: 0};
+  else g.t = (g.t + step + TILES.length) % TILES.length;
+  paint();
+}
+
+function dumpFraming(){
+  var out = {};
+  for (var k in DRESS) if (DRESS.hasOwnProperty(k)){
+    var g = DRESS[k];
+    out[k] = {picture: TILES[g.t].src.split("/").pop(), scale: +g.s.toFixed(4),
+              dx: +g.dx.toFixed(4), dy: +g.dy.toFixed(4)};
+  }
+  var box = document.getElementById("dump"), ta = box.querySelector("textarea");
+  ta.value = JSON.stringify({wheel: key, faces: out}, null, 2);
+  box.style.display = "block";
+  ta.focus(); ta.select();
+}
+
+addEventListener("resize", paint);
+addEventListener("keydown", function(e){
+  // Only where text is actually being TYPED. The framing box is a real textarea and takes focus
+  // so its contents can be selected and copied, and without a guard every shortcut would be typed
+  // into it as well. But guarding on INPUT wholesale was wrong: the three sliders are inputs and
+  // keep focus after a click, so touching one silently disabled every key on the page -- i, t, a
+  // and the brackets alike -- with nothing to say why. A range or a checkbox is not typing.
+  var el = e.target, tn = el && el.tagName;
+  var typing = tn === "TEXTAREA" ||
+               (tn === "INPUT" && /^(text|search|url|email|number|password|tel)$/i.test(el.type || "text"));
+  if (typing && e.key !== "Escape") return;
+  if (e.key === "a") nextWheel();
+  else if (e.key === "m") matchAspect();
+  else if (e.key === "c") COPIES.slice().forEach(discard);
+  else if (e.key === "t") { pal = (pal + 1) % PALETTES.length; paint(); }
+  else if (e.key === "h") document.body.classList.toggle("bare");
+  else if (e.key === "i") setMode(!imgMode);
+  // Three bindings each, because [ and ] are not direct keys on every layout -- on a Swedish or
+  // Norwegian Mac they are Option+8 and Option+9, which is a poor thing to require of a control
+  // you are meant to tap repeatedly. The arrows are prevented from ALSO nudging a focused slider.
+  else if (e.key === "[" || e.key === ",") cycle(-1);
+  else if (e.key === "]" || e.key === ".") cycle(1);
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && imgMode && selFace){
+    e.preventDefault(); cycle(e.key === "ArrowLeft" ? -1 : 1);
+  }
+  else if (e.key === "x" && imgMode && selFace){ delete DRESS[selFace]; paint(); }
+  // Opt-in, never automatic. Pulling the scale back on its own when a slider grows the wheel
+  // would silently re-crop the tile, and a framing chosen at one wheel size would quietly be a
+  // different framing at another.
+  else if (e.key === "n" && imgMode && selFace && DRESS[selFace]){
+    var gn = DRESS[selFace], fn = faceAt(selFace);
+    if (fn) gn.s = Math.min(gn.s, nativeMax(fn, TILES[gn.t], geom()));
+    paint();
+  }
+  // preventDefault, or this very keystroke arrives at the textarea dumpFraming() just focused
+  // and replaces the selected JSON with the letter "j" -- which is exactly what it did.
+  else if (e.key === "j" && imgMode){ e.preventDefault(); dumpFraming(); }
+  else if (e.key === "Escape") document.getElementById("dump").style.display = "none";
+});
+paint();
+</script>
+</html>
