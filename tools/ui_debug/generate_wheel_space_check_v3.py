@@ -75,9 +75,16 @@ THE FIGURES
 
 The tray in the top-right corner holds one unmovable figure per size in FIGURE_SIZES. Pressing
 one mints a copy under the cursor and hands it the drag, so taking a piece to a tile is one
-motion; release to drop, double-click to remove, `c` clears the board. Copies hold their position
-as a FRACTION of the wheel box, so they keep their tile while you work the sliders -- which is
-the point, since the question is whether a piece still fits once the wheel shrinks.
+motion; release to drop, double-click to remove, `c` clears the board and `u` brings a clear
+back. Copies hold their position as a FRACTION of the wheel box, so they keep their tile while
+you work the sliders -- which is the point, since the question is whether a piece still fits once
+the wheel shrinks.
+
+They stack by their FOOT rather than by who was dropped last, because sculpts put down in a
+zig-zag overlap and creation order will happily draw a piece at the back over one in front. The
+placed pieces also carry a drop-shadow, which `s` removes: three figures of one colour overlapping
+read as a single silhouette without it. The TRAY carries none -- it is the true-size reference the
+placed pieces are compared against, and a reference should not be dressed.
 
 Art comes from generated/figure_<px>.png (or --figures DIR) and each file must already BE that
 many pixels tall; one of the wrong height is left out with a note rather than drawn, because the

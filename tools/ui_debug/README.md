@@ -2140,6 +2140,20 @@ jumps when the slider comes back. Banners take `pointer-events: none` while `i` 
 pointer cannot serve two drags and the tile you most want to frame would be the one wearing a
 banner.
 
+Placed pieces stack by their **foot**, not by drop order — sculpts in a zig-zag overlap, and
+creation order will draw one at the back over one in front, which reads as a rendering fault
+rather than a row of figures. They carry a drop-shadow for the same reason, since three figures
+of one colour overlapping read as a single silhouette; `s` removes it and image mode drops it, so
+a framing is never judged through an effect. The tray carries none — it is the true-size
+reference, and a reference should not be dressed.
+
+The clipping warning measures **what is drawn**, not the box. With `gap` below 100% the tiles sit
+well inside their box, so warning on the box says the wheel is clipped while nothing on screen is
+anywhere near an edge.
+
+Every shortcut is a bare letter and the handler ignores ctrl, meta and alt — without that, copying
+text off the page ran `c` and cleared the board. `u` undoes a clear regardless.
+
 Unlike v2 this page **is** portable. The banner art is embedded, downscaled to 560 px for 180 KB
 the lot, because a banner draws at a couple of hundred pixels from a 2172 px source; the duty
 pictures are still linked, so those need the repository. The titles are not in the art, so
