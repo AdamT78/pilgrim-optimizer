@@ -101,6 +101,20 @@
       ]
     },
     {
+      "path": "logo/wordmark.png",
+      "subject": "logo",
+      "kind": "wordmark",
+      "original_filename": "ChatGPT Image Sep 19, 2026, 07_12_50 PM.png",
+      "origin": "Generated with ChatGPT (OpenAI). Not public domain, not stock; do not describe as manually illustrated.",
+      "committed": true,
+      "bytes": 509394,
+      "sha256": "d15ae78d007b4feedd1bfc9937b4db6389de9ed5938ae254f31e48f3bfb6d4a7",
+      "pixels": [
+        2172,
+        724
+      ]
+    },
+    {
       "path": "player_1/concept.png",
       "subject": "player_1",
       "kind": "concept",
