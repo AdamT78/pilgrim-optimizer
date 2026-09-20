@@ -55,6 +55,7 @@ import urllib.parse
 import webbrowser
 
 try:
+    import numpy as np
     from PIL import Image
 except ModuleNotFoundError:                                          # pragma: no cover
     raise SystemExit("this needs Pillow: pip3 install --user Pillow")
@@ -212,7 +213,53 @@ SUBJECTS.append({
               for nn, slug, title in DUTY_TILES],
 })
 
+# The banners are BLANK. Every title on them is set at render time from the table above, which is
+# what makes ten pictures enough for nine duties and a rename free -- "The City" was "City" for
+# part of an afternoon and no artwork had to move.
+#
+# These four numbers are the CSS component's, not this page's: `top` is where the parchment's
+# own middle sits (measured across all ten at 49.45-50.76%, so ONE value serves them all, where
+# the previous set drifted 44.4-51.3 and needed a lookup per banner), and `size` is the single
+# font size that fits every one of the nine inside the 70% text-safe zone -- the binding case is
+# "Build Roads" at 67.7% of banner width.
+BANNER_GROUND = "#17130d"
+BANNER_INK = "#201b17"
+BANNER_TOP = 0.502          # of banner height
+BANNER_SIZE = 29.0 / 64.0   # font-size as a fraction of banner height
+BANNER_TRACK = 0.025        # letter-spacing, in em
+BANNER_FONT = "ui/assets/fonts/PirataOne-Regular.ttf"
+BANNER_DIR = "ui/assets-gothic/banners"
+# Longest title on the widest clear parchment. The ten differ a little in how far the scorch eats
+# in -- 75.4% to 80.3% of the canvas stays clear -- and pairing them this way rather than in file
+# order lifts the tightest clearance in the set from 4.0 to 5.3 points of banner width. Free, and
+# it only has to be got right once.
+DUTY_BANNERS = ["duty_banner_01.png", "duty_banner_05.png", "duty_banner_08.png",
+                "duty_banner_03.png", "duty_banner_09.png", "duty_banner_04.png",
+                "duty_banner_07.png", "duty_banner_06.png", "duty_banner_02.png"]
+SUBJECTS.append({
+    "id": "duty_banners",
+    "label": "Duty banners",
+    "tag": "components",
+    "ink": "#c9a227",
+    "kinds": [
+        {"kind": "nine_titled", "title": "Nine duties, titles set live", "root": "assets",
+         "rel": "%s/%s" % (BANNER_DIR, DUTY_BANNERS[0]),
+         "banners": [("%s/%s" % (BANNER_DIR, f), title)
+                     for f, (_, _, title) in zip(DUTY_BANNERS, DUTY_TILES)],
+         "font": BANNER_FONT},
+        # The spare, untitled, straight through the ordinary path: what the asset actually is
+        # before anything is set on it.
+        {"kind": "blank_spare", "title": "Blank, the tenth", "root": "assets",
+         "rel": "%s/duty_banner_10.png" % BANNER_DIR, "ground": BANNER_GROUND},
+    ],
+})
+
 # Components, not people: same shape of entry, a different subject. The table is a list of
+# The board's own dark ground. The tokens are metal -- gold, pewter, stone -- and the player
+# board draws their icons in pale fills on a black page, so a dark ground is where they actually
+# sit. Measured on it, every pair of the four is 49 or more apart in mean RGB at 30 px.
+TOKEN_GROUND = "#17130d"
+
 # subjects rather than a list of players, which is why this costs one block and no plumbing.
 SUBJECTS.append({
     "id": "tithe_resources",
@@ -220,6 +267,22 @@ SUBJECTS.append({
     "tag": "components",
     "ink": "#b08d57",
     "kinds": [
+        # The four tithe tokens as one picture, LEVELLED and composed here rather than saved as a
+        # fifth file. They arrive at four different diameters -- 1009 to 1138 px as generated --
+        # and a set whose discs disagree reads as four unrelated pictures however carefully each
+        # one is drawn. Levelling targets the NARROWEST, so nothing is ever upscaled: that is the
+        # rule the player sculpts already use, for the same reason.
+        #
+        # Three are resources; the cornucopia is the WILDCARD, where the tithing player chooses
+        # which resource to take. Piety is deliberately absent -- it is not a token on the board,
+        # it is gained at the Clerical duty and lives on its own track.
+        {"kind": "tithe_tokens", "title": "Tokens, levelled", "root": "assets",
+         "rel": "ui/assets-gothic/resources/token_wheat.png",
+         "compose": ["ui/assets-gothic/resources/token_wheat.png",
+                     "ui/assets-gothic/resources/token_stone.png",
+                     "ui/assets-gothic/resources/token_silver.png",
+                     "ui/assets-gothic/resources/token_cornucopia.png"],
+         "ground": TOKEN_GROUND},
         {"kind": "counters", "title": "Counters"},
         {"kind": "board_frame", "title": "Board frame"},
         {"kind": "render_3d", "title": "3D render"},
@@ -429,6 +492,115 @@ def shapes_svg(path: pathlib.Path,
             box, box_h, len(raw), note)
 
 
+def banners_svg(entries: list[tuple[str, pathlib.Path]], font: pathlib.Path,
+                top: float, size: float, track: float,
+                raster: int = 900) -> tuple[str, float, float, int, str]:
+    """The nine duty titles SET on the blank banners, as one SVG.
+
+    The banners are blank on purpose: no title is painted into the artwork, so the name comes
+    from DUTY_TILES here and the same ten pictures serve any wording. Baking "The City" into a
+    parchment would mean regenerating art to rename a tile -- and the rename has already happened
+    once this project.
+
+    SVG rather than a flattened WebP because the text must stay text. Rasterising it here would
+    make this card a picture OF a title rather than the title, and the thing worth checking on
+    this page -- does the name fit the clear parchment, at the one size that serves all nine --
+    stops being checkable the moment the glyphs become pixels.
+
+    The font travels inside the SVG as a data URI, which Chromium honours in an <img> because it
+    is not an external reference. Embedded once for nine titles, which is why these are one card
+    and not nine.
+
+    `top`, `size` and `track` are the CSS component's own numbers, kept in one place so the card
+    and the game cannot drift: a preview that agrees with nothing is worse than no preview.
+    """
+    face = base64.b64encode(font.read_bytes()).decode("ascii")
+    rows, y, parts = [], 0.0, []
+    for title, path in entries:
+        im = Image.open(path).convert("RGBA")
+        k = raster / im.width
+        assert k <= 1.0 + 1e-9, "the card would UPSCALE %s" % path.name
+        # Flattened onto the page's own ground BEFORE the resize. PIL weights an RGBA resize by
+        # alpha and divides it back out, inventing light pixels along the torn edge -- which on a
+        # scorched parchment reads as a bloom that is not in the file.
+        flat = Image.new("RGBA", im.size, BANNER_GROUND)
+        flat.alpha_composite(im)
+        small = flat.convert("RGB").resize((raster, max(1, round(im.height * k))), Image.LANCZOS)
+        buf = io.BytesIO()
+        small.save(buf, "WEBP", quality=QUALITY, method=6)
+        rows.append((title, buf.getvalue(), small.width, small.height))
+    gap = round(raster * 0.022)
+    total_h = sum(h for _, _, _, h in rows) + gap * (len(rows) - 1)
+    for title, blob, w, h in rows:
+        parts.append('<image x="0" y="%g" width="%g" height="%g" href="data:image/webp;base64,%s"/>'
+                     % (y, w, h, base64.b64encode(blob).decode("ascii")))
+        parts.append('<text x="%g" y="%g" font-family="PilgrimBanner" font-size="%g" '
+                     'letter-spacing="%g" text-anchor="middle" dominant-baseline="central" '
+                     'fill="%s">%s</text>'
+                     % (w / 2.0, y + h * top, h * size, h * size * track, BANNER_INK,
+                        html.escape(title.upper())))
+        y += h + gap
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g" viewBox="0 0 %g %g">'
+           '<defs><style>@font-face{font-family:"PilgrimBanner";'
+           'src:url(data:font/ttf;base64,%s) format("truetype")}</style></defs>'
+           '<rect width="%g" height="%g" fill="%s"/>%s</svg>'
+           % (raster, total_h, raster, total_h, face, raster, total_h, BANNER_GROUND,
+              "".join(parts)))
+    raw = svg.encode("utf-8")
+    note = ("%d titles set live in %s at %.1f%% of banner height"
+            % (len(rows), font.stem, 100 * size))
+    return ("data:image/svg+xml;base64," + base64.b64encode(raw).decode("ascii"),
+            raster, total_h, len(raw), note)
+
+def compose(paths: list[pathlib.Path], ground: str,
+            gap: float = 0.14) -> tuple[str, int, int, int, tuple[int, int]]:
+    """Several cut-out tokens as one picture, levelled to a common diameter.
+
+    LEVELLED TO THE NARROWEST, so every token is scaled DOWN or not at all. Levelling up would
+    mean enlarging a source to match a bigger sibling, which is the one operation here that
+    invents detail nobody drew -- the same rule, and the same reason, as the player sculpts.
+
+    ALPHA IS SNAPPED before compositing. These arrive with no fully opaque pixel at all: the
+    bodies sit at 251-254 and only the anti-aliased rim is genuinely partial. Left alone the
+    ground shows through the artwork by a percent or two, which is invisible on a dark field and
+    measurably flattens the darks on a pale one. Snapping only the near-solid body leaves the rim
+    to do its job.
+    """
+    arts = []
+    for p in paths:
+        im = Image.open(p).convert("RGBA")
+        box = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+        arts.append(im.crop(box) if box else im)
+    target = min(a.width for a in arts)
+    assert target > 0, "every token cropped to nothing -- are these actually cut out?"
+    scaled = []
+    for a in arts:
+        k = target / a.width
+        assert k <= 1.0 + 1e-9, "levelling would UPSCALE %dpx to %dpx" % (a.width, target)
+        arr = np.array(a.resize((target, max(1, round(a.height * k))), Image.LANCZOS))
+        arr[..., 3] = np.where(arr[..., 3] > 240, 255, arr[..., 3])
+        scaled.append(Image.fromarray(arr, "RGBA"))
+    pad = round(target * gap)
+    w = pad + sum(s.width + pad for s in scaled)
+    h = max(s.height for s in scaled) + 2 * pad
+    sheet = Image.new("RGBA", (w, h), ground)
+    x = pad
+    for s in scaled:
+        sheet.alpha_composite(s, (x, (h - s.height) // 2))
+        x += s.width + pad
+    source = sheet.size
+    # Flattened before the thumbnail: PIL weights an RGBA resize by alpha and divides it back
+    # out, which invents light pixels along a part-transparent edge. Nothing is transparent here
+    # any more, so the resize that follows is plain opaque RGB.
+    flat = sheet.convert("RGB")
+    flat.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
+    buf = io.BytesIO()
+    flat.save(buf, "WEBP", quality=QUALITY, method=6)
+    raw = buf.getvalue()
+    return ("data:image/webp;base64," + base64.b64encode(raw).decode("ascii"),
+            flat.width, flat.height, len(raw), source)
+
+
 def where(subject: dict, spec: dict) -> pathlib.Path:
     """The file this entry means.
 
@@ -490,6 +662,26 @@ def collect(out_dir: pathlib.Path) -> tuple[list, list, list]:
             if "layout" in spec:
                 uri, w, h, size, note = wheel_svg(path)
                 dims = "%g \u00d7 %g units" % (w, h)
+            elif "compose" in spec:
+                members = [ROOT / m for m in spec["compose"]]
+                absent_members = [m for m in members if not m.is_file()]
+                if absent_members:
+                    missing.append("%s / %s: %s" % (ch["label"], kind, absent_members[0]))
+                    continue
+                uri, w, h, size, source = compose(members, spec["ground"])
+                note = "%d tokens, levelled to the narrowest" % len(members)
+                dims = "%d \u00d7 %d" % source
+            elif "banners" in spec:
+                members = [(t, ROOT / rel) for rel, t in spec["banners"]]
+                gone = [p for _, p in members if not p.is_file()]
+                font = ROOT / spec["font"]
+                if gone or not font.is_file():
+                    missing.append("%s / %s: %s" % (ch["label"], kind,
+                                                    (gone or [font])[0]))
+                    continue
+                uri, w, h, size, note = banners_svg(members, font, BANNER_TOP,
+                                                    BANNER_SIZE, BANNER_TRACK)
+                dims = "%d × %d" % (w, h)
             elif "shapes" in spec:
                 pal = spec.get("palette_from")
                 uri, w, h, size, note = shapes_svg(path, ROOT / pal if pal else None)
