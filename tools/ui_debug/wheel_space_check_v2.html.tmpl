@@ -417,6 +417,20 @@ function paint(){
   // tray's height depends on how many sizes it carries and changes the day one is added.
   var t2 = tray2.getBoundingClientRect();
   if (t2.width) trayL = Math.min(trayL, t2.left);
+  // WHERE THE LABELS GO IS MEASURED, not fixed at 72 px down the screen. The wheel is centred,
+  // so while it is smaller than the window there is a clear band above it and another below, and
+  // a label in either of those is never over the artwork. The old constant sat in the clear band
+  // on a wide display and landed squarely on a duty picture on a laptop -- the same way round as
+  // the panel that was behind the wheel: correct on the screen it was written on, wrong on the
+  // next one. Preferring ABOVE keeps them where they have always been when there is room.
+  var LAB_H = 19, stack = RULES.length * LAB_H, GAP = 8;
+  var above = V.wy - GAP - stack, below = V.wy + V.wh + GAP;
+  // No clear band means the wheel reaches both edges -- and .vedge sits at z-index 0, UNDER the
+  // wheel, so in that state the dashed rules are themselves hidden behind the artwork. The
+  // labels would be naming lines that cannot be seen, over a picture you are trying to judge,
+  // and the hud already carries the same widths in more detail. So they go away instead, and
+  // come back the moment there is somewhere for them to stand.
+  var band = above >= GAP ? above : (below + stack <= innerHeight - GAP ? below : null);
   RULES.forEach(function(r, i){
     var f = canvasFit(r.c);
     r.l.style.left = f.x + "px";
@@ -425,7 +439,9 @@ function paint(){
     // Clamp against the label's MEASURED width, not a guess: the text is longer when a canvas
     // fills the window, and a fixed allowance clipped exactly those two off the right edge.
     // Stepped down the screen so canvases landing on the same edge stay readable.
-    r.lab.style.top = (72 + i * 19) + "px";
+    r.lab.hidden = band === null;
+    if (band === null) return;
+    r.lab.style.top = (band + i * LAB_H) + "px";
     var lw = r.lab.offsetWidth, lim = Math.max(4, Math.min(innerWidth, trayL - 8) - lw - 5);
     r.lab.style.left = clamp(f.x + f.cssW - lw - 5, 4, lim) + "px";
   });
