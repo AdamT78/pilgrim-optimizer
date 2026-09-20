@@ -46,8 +46,14 @@
  #tray2 .fig{position:static;cursor:copy}
  body.bare #tray2 .tag{display:none}
  body.bare .trow .tag{display:none}
+ /* ABOVE THE WHEEL. #wheel carries z-index 1 so the rules can sit under it, and the chrome
+    carried none at all -- which put the hud, the readout and the whole control panel BEHIND the
+    artwork. It survived only because a small wheel does not reach the corners they live in: grow
+    it past the window and the panel is covered, its slider stops taking clicks, and the way back
+    to the size slider is the size slider. The trays were already layered, which is why minting a
+    figure still worked while nothing else did. */
  #hud{position:fixed;left:16px;top:18px;white-space:pre;color:#7b7160;
-   pointer-events:none;font-size:12px;line-height:1.55}
+   pointer-events:none;font-size:12px;line-height:1.55;z-index:4}
  #hud b{color:#c9b27a;font-weight:400}
  #hud s{color:#e0705f;text-decoration:none}
  /* LEFT column, under the hud. It used to sit bottom-right, which stopped working the moment
@@ -56,10 +62,13 @@
     bottom and a clear stretch between them, so that is where it goes -- its top measured from
     the hud rather than guessed, because the hud grows a line when the wheel is stretched. */
  #figread{position:fixed;left:16px;text-align:left;white-space:pre;
-   color:#7b7160;font-size:12px;line-height:1.55;pointer-events:none}
+   color:#7b7160;font-size:12px;line-height:1.55;pointer-events:none;z-index:4}
  #figread b{color:#c9b27a;font-weight:400}
  #figread s{color:#e0705f;text-decoration:none}
- #panel{position:fixed;left:16px;bottom:14px;color:#6f6556;font-size:12px;
+ /* Highest of the lot, above both trays. It is the one surface that must always be reachable:
+    every other thing on this page can be recovered from it, and it cannot be recovered from
+    anything else. */
+ #panel{position:fixed;left:16px;bottom:14px;color:#6f6556;font-size:12px;z-index:7;
    background:rgba(11,9,7,.9);padding:9px 12px;border:1px solid #2e2820;border-radius:3px}
  #panel input[type=range]{width:230px;vertical-align:middle}
  #panel input[type=checkbox]{vertical-align:middle;margin:0 5px 0 0}
