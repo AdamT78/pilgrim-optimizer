@@ -39,6 +39,14 @@ to PNG and Base64 embedding.
 - **Licence** Creative Commons Attribution 3.0 Unported -- https://creativecommons.org/licenses/by/3.0/
 - **Changes** background rectangle removed, recoloured to the card's ink, and the SVG path data embedded in a Python-generated SVG
 
+## Pirata One
+
+- **File** `fonts/PirataOne-Regular.ttf`
+- **Creator** Rodrigo Fuenzalida and Nicolas Massi (Google Fonts)
+- **Source** https://github.com/google/fonts/tree/main/ofl/pirataone
+- **Licence** SIL Open Font License 1.1 -- https://scripts.sil.org/OFL
+- **Changes** none; the file is the upstream release byte for byte, and the family name is unchanged because 'Pirata' is a Reserved Font Name
+
 ## Wagon
 
 - **File** `ui/markers/merchant_wagon.svg`

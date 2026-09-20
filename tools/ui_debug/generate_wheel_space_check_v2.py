@@ -102,6 +102,7 @@ import json
 import os
 import pathlib
 import re
+import io
 import struct
 import sys
 import urllib.parse
@@ -127,6 +128,7 @@ import gen_duty_grid as dg                                          # noqa: E402
 # this toolchain already requires would be the wrong trade. Missing, the duty pictures drop out
 # with a note and the page still builds.
 try:
+    import numpy as np
     from PIL import Image as _Img
 except ModuleNotFoundError:                                         # pragma: no cover
     _Img = None
@@ -138,6 +140,13 @@ except ModuleNotFoundError:                                         # pragma: no
 # renderer to describe a shape it does not own is how a second copy of that shape gets made the
 # day the renderer changes.
 import population_sets as pop                                       # noqa: E402
+
+# The alpha-safe downscale, from the module that already owns it. PIL weights an RGBA resize by
+# alpha and divides it back out, which invents light pixels along a part-transparent edge; that
+# function resizes the premultiplied RGB and the alpha SEPARATELY and is the one that was
+# falsified against the fault. A third copy of it here is how the two would drift apart.
+sys.path.insert(0, str(HERE))
+import sculpt_metrics as sm                                         # noqa: E402
 
 GROUND = "#17130d"
 
@@ -197,6 +206,20 @@ ACOLYTE_PX = 60
 # and is not offered, because a figure standing ON the tile would have an outline the same colour
 # as the thing behind it -- which is this line with extra steps, minus half a stroke of fill.
 ACOLYTE_STROKE = None
+
+# THE TITHE TOKENS, the second tray. Read from the production art rather than from generated/,
+# because unlike the sculpts these are committed files that every clone has -- there is nothing
+# to render first and nothing to go missing.
+#
+# Three resources and the cornucopia WILDCARD, where the tithing player chooses which resource to
+# take. Piety is deliberately not here: it is not a token on the board at all, it is gained at the
+# Clerical duty and lives on its own track.
+TOKEN_DIR = ROOT / "ui" / "assets-gothic" / "resources"
+TOKEN_SUBJECTS = (("token_wheat", "wheat"),
+                  ("token_stone", "stone"),
+                  ("token_silver", "silver"),
+                  ("token_cornucopia", "wild"))
+TOKEN_SIZES = (90, 120, 150)
 
 # Both wheels build_duty_wheel_v2.py writes. The label is the built aspect and doubles as the key.
 LAYOUTS = (("1.500", "duty_wheel_v2_1500_layout.json"),
@@ -395,6 +418,57 @@ if TILES:
 else:
     tile_notes.append("no duty pictures found -- `i` will have nothing to place")
 
+# The tokens, levelled and inlined. They arrive at four diameters -- 1009 to 1138 px -- and a set
+# whose discs disagree reads as four unrelated pictures, so they are levelled to the NARROWEST and
+# nothing is ever upscaled. Same rule as the sculpt plinths and the concept browser's own card.
+#
+# Inlined at the sizes the tray uses rather than linked at full size: a 150 px sprite does not
+# need a 2 MB file behind it, and re-encoding each one small costs a few KB. That is the opposite
+# trade to the duty pictures above, and for the opposite reason -- nobody zooms a tray piece.
+TOKEN_ROWS, token_notes = [], []
+if _Img is None:
+    token_notes.append("Pillow is not installed, so the tokens are left out (pip3 install --user Pillow)")
+else:
+    srcs = {}
+    for name, tag in TOKEN_SUBJECTS:
+        f = TOKEN_DIR / ("%s.png" % name)
+        if not f.is_file():
+            token_notes.append("%-6s missing %s, left out" % (tag, f.name))
+            continue
+        srcs[name] = sm.crop_to_art(_Img.open(f).convert("RGBA"))
+    if srcs:
+        target = min(im.width for im in srcs.values())
+        for px in sorted(TOKEN_SIZES, reverse=True):
+            for name, tag in TOKEN_SUBJECTS:
+                im = srcs.get(name)
+                if im is None:
+                    continue
+                k = (target / im.width) * (px / target)
+                small = sm.down(im, max(1, round(im.width * k)), max(1, round(im.height * k)),
+                                "%s at %d" % (name, px))
+                a = np.array(small)
+                # Snap the near-solid body. These arrive with no fully opaque pixel at all -- the
+                # discs sit at 251-254 -- which lets the tile show through the artwork by a percent
+                # or two. Only the body: the part-alpha rim is doing real work.
+                a[..., 3] = np.where(a[..., 3] > 240, 255, a[..., 3])
+                buf = io.BytesIO()
+                _Img.fromarray(a, "RGBA").save(buf, "WEBP", quality=90, method=6, lossless=False)
+                raw = buf.getvalue()
+                # GROUPED BY SIZE, NOT BY TOKEN, and that is a layout decision with a reason.
+                # A row per token is four rows of up to 150 px, and stacked under the figure
+                # tray -- itself four rows -- the two collide on any window shorter than about
+                # 1300 px. A row per size is three rows of 150, 120 and 90, which is 40% of the
+                # height, and it also puts the comparison the right way round: each row is the
+                # whole set at one size, which is what you are actually judging.
+                row = next((r for r in TOKEN_ROWS if r["tag"] == "%d px" % px), None)
+                if row is None:
+                    row = {"tag": "%d px" % px, "items": []}
+                    TOKEN_ROWS.append(row)
+                row["items"].append({"nom": px, "w": small.width, "h": small.height, "fam": "token",
+                                     "uri": "data:image/webp;base64," + base64.b64encode(raw).decode("ascii")})
+        token_notes.append("%d tokens levelled to %d px, the narrowest disc, then sized to %s"
+                           % (len(srcs), target, ", ".join(str(s) for s in TOKEN_SIZES)))
+
 ROWS, fig_notes = [], []
 assert len(FIGURE_SUBJECTS) <= len(pop.SEAT_ORDER), (
     "%d tray rows against %d seats in population_sets -- a row past the end of the cast has no "
@@ -405,7 +479,7 @@ for n, (subject, tag) in enumerate(FIGURE_SUBJECTS):
     # exists on a fresh clone even with nothing in generated/.
     seat = pop.SEAT_ORDER[n]
     uri, aw, ah = acolyte_svg(seat, ACOLYTE_PX)
-    items.append({"nom": ACOLYTE_PX, "w": aw, "h": ah, "uri": uri})
+    items.append({"nom": ACOLYTE_PX, "w": aw, "h": ah, "fam": "figure", "uri": uri})
     fig_notes.append("%-9s %3d px  acolyte vector, %-6s %s  %d x %d  %s"
                      % (tag, ACOLYTE_PX, seat, pop.SEAT_SWATCH[seat], aw, ah,
                         "outline %s" % ACOLYTE_STROKE if ACOLYTE_STROKE else "no outline"))
@@ -425,7 +499,7 @@ for n, (subject, tag) in enumerate(FIGURE_SUBJECTS):
             fig_notes.append("%-9s %3d px  %s is %d px tall, LEFT OUT -- taller than its own "
                              "nominal, render it down from the original" % (tag, px, p.name, h))
             continue
-        items.append({"nom": px, "w": w, "h": h,
+        items.append({"nom": px, "w": w, "h": h, "fam": "figure",
                       "uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii")})
         fig_notes.append("%-9s %3d px  %s  %d × %d%s"
                          % (tag, px, p.name, w, h,
@@ -449,6 +523,7 @@ page = ((HERE / "wheel_space_check_v2.html.tmpl").read_text(encoding="utf-8")
         .replace("__HRANGE__", json.dumps(list(H_RANGE)))
         .replace("__SRANGE__", json.dumps(list(S_RANGE)))
         .replace("__CANVASES__", json.dumps(CANVASES))
+        .replace("__TOKENS__", json.dumps(TOKEN_ROWS))
         .replace("__TILES__", json.dumps(TILES))
         .replace("__PRODPX__", json.dumps(PROD_PX))
         .replace("__START__", json.dumps([START_W, START_H])))
@@ -466,6 +541,8 @@ print("  canvases %s" % ", ".join("%d × %d" % (c["w"], c["h"]) for c in CANVASE
 for note in fig_notes:
     print("  %s" % note)
 for note in tile_notes:
+    print("  %s" % note)
+for note in token_notes:
     print("  %s" % note)
 if args.open:
     webbrowser.open(OUT.resolve().as_uri())

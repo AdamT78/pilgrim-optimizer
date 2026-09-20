@@ -386,7 +386,7 @@
       "title": "Pilgrim trail at night, left half of the background panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/left.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the left half of ui/panorama.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is confined to the outer quarter, and everything from 25% of its width rightward is fog carrying no nameable outline, because that is where the board sits.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -397,7 +397,7 @@
       "title": "Pilgrim trail at night, right half of the background panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/right.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the right half of ui/panorama.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a praying monk and a grazing deer among ruins -- is confined to the outer quarter, and its sky carries no light source at all: the moon belongs to the left half and a second one would have read as two moons over one landscape.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -408,7 +408,7 @@
       "title": "Pilgrim trail in pale mist, left half of the lighter background panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left_v2.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/left_v2.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the left half of ui/panorama_mist.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is confined to the outer quarter, and the rest is a PALE mist carrying no nameable outline. Pale is the point: the night halves put L* 12.9 behind the wheel against a tile edge ink of L* 13.5, so a duty tile's outline was the same value as the ground and did nothing.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -419,7 +419,7 @@
       "title": "Pilgrim trail in pale mist, right half of the lighter background panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right_v2.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/right_v2.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the right half of ui/panorama_mist.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a kneeling monk and a grazing deer, with ruins among the trees -- is confined to the outer quarter, and the rest is a PALE mist carrying no nameable outline. Pale is the point: the night halves put L* 12.9 behind the wheel against a tile edge ink of L* 13.5, so a duty tile's outline was the same value as the ground and did nothing.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -430,7 +430,7 @@
       "title": "Pilgrim trail, night at the edges, left half of the clearing panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/left_v3.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/left_v3.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the left half of ui/panorama_clearing.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, banked candles and kneeling pilgrims, under the only moon in the panorama -- is anchored against the INNER edge of the half rather than its outer edge, because the board covers a fixed slice of the panorama at every display aspect and the outer edge is the first thing a narrow screen crops.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -441,7 +441,7 @@
       "title": "Pilgrim trail, night at the edges, right half of the clearing panorama",
       "creator": "Generated with ChatGPT (OpenAI)",
       "collection": "Pilgrim gothic v2",
-      "source": "generated in a ChatGPT session for this project from ui/docs/duty-wheel/prompts_txt/background/right_v3.txt; no upstream URL, no seed on record",
+      "source": "generated in a ChatGPT session for this project from ui/prompts/duty-wheel/background/right_v3.txt; no upstream URL, no seed on record",
       "licence": "openai-generated",
       "role": "the right half of ui/panorama_clearing.webp, kept as the master it is joined from. Its subject -- a shrine with a white statue, a kneeling monk and a grazing deer, with ruins among the trees -- is anchored against the INNER edge of the half rather than its outer edge, because the board covers a fixed slice of the panorama at every display aspect and the outer edge is the first thing a narrow screen crops.",
       "modifications": "none; used as generated. Re-encoded from the 1430x1100 PNG to LOSSLESS WebP and verified pixel-for-pixel -- lossy here would move the level step at the inner edge, which gen_panorama.py measures off these very columns, so the join would no longer reproduce the committed picture.",
@@ -1029,6 +1029,132 @@
       "role": "duty wheel source panel",
       "modifications": "re-encoded to WebP q92; full resolution kept, measured mean error 1.95 of 255",
       "reproducibleBy": "not reproducible: diffusion output, no seed on record"
+    },
+    "resources/token_wheat.png": {
+      "state": "present",
+      "title": "tithe token wheat",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "tithe resource token artwork -- wheat"
+    },
+    "resources/token_stone.png": {
+      "state": "present",
+      "title": "tithe token stone",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "tithe resource token artwork -- stone"
+    },
+    "resources/token_silver.png": {
+      "state": "present",
+      "title": "tithe token silver",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "tithe resource token artwork -- silver"
+    },
+    "resources/token_cornucopia.png": {
+      "state": "present",
+      "title": "tithe token cornucopia",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "role": "tithe resource token artwork -- the cornucopia wildcard, where the tithing player chooses the resource"
+    },
+    "banners/duty_banner_01.png": {
+      "state": "present",
+      "title": "duty tile banner blank 01",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_1.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_02.png": {
+      "state": "present",
+      "title": "duty tile banner blank 02",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_2.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_03.png": {
+      "state": "present",
+      "title": "duty tile banner blank 03",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_4.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_04.png": {
+      "state": "present",
+      "title": "duty tile banner blank 04",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_6.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_05.png": {
+      "state": "present",
+      "title": "duty tile banner blank 05",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_7.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_06.png": {
+      "state": "present",
+      "title": "duty tile banner blank 06",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_8.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_07.png": {
+      "state": "present",
+      "title": "duty tile banner blank 07",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_9.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_08.png": {
+      "state": "present",
+      "title": "duty tile banner blank 08",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_10.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_09.png": {
+      "state": "present",
+      "title": "duty tile banner blank 09",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_11.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "banners/duty_banner_10.png": {
+      "state": "present",
+      "title": "duty tile banner blank 10",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_12.png; no seed on record",
+      "licence": "openai-generated",
+      "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
     }
   },
   "assetDirs": [
@@ -1039,7 +1165,8 @@
     "resources",
     "template",
     "metadata",
-    "duty-tiles"
+    "duty-tiles",
+    "banners"
   ],
   "projectOwned": [
     "template/*.svg",

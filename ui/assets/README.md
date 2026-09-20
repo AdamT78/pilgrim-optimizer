@@ -32,6 +32,14 @@ What lives here is what a generator cannot produce: drawings, portraits, frames,
         buttons/
         markers/             merchant_wagon.svg
         miscellaneous/
+      fonts/                 PirataOne-Regular.ttf, OFL.txt
+
+`fonts/` is the first thing here that is neither drawn nor bought: **Pirata One** by Rodrigo
+Fuenzalida and Nicolas Massi, under the SIL Open Font License 1.1, which sets the duty tile
+banner titles. The file is the upstream Google Fonts release byte for byte and the family name is
+untouched, because 'Pirata' is a Reserved Font Name and a modified copy may not carry it. `OFL.txt`
+sits beside it because the licence requires its own text to travel with the font -- that is the
+obligation here, rather than a credit line, though the credits carry one anyway.
 
 The four marks the shortlist prototype opens with are Font Awesome's **Hands Praying** and **Wheat
 Awn** (CC BY 4.0) and Game-icons' **Stone Block** by Lorc and **Two Coins** by Delapouite
