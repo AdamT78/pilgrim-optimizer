@@ -1,0 +1,88 @@
+Create ONE blank parchment title banner for a medieval board game UI.
+
+THE SHAPE — THIS IS WHAT THE EARLIER ATTEMPTS GOT WRONG
+Two attempts asking for "3.12 times as wide as it is tall" came back at 3.85 and
+3.61. The generator does not do arithmetic on its own output. Asking it to fill
+the frame VERTICALLY hit 3.10 first time. Keep this wording.
+
+The parchment must nearly fill the frame in BOTH directions:
+  - about 95% of the frame's width, edge to edge
+  - about 94% of the frame's HEIGHT, top to bottom
+It should come close to touching the top and bottom edges of the image, leaving
+only a thin band of transparency above and below. A strip that leaves a fifth of
+the frame empty above and below comes out too long and thin.
+
+Expressed as a ratio, the strip is 3.12 times as wide as it is tall. The
+attached reference image has the right proportion — MATCH IT.
+
+A REFERENCE IMAGE IS ATTACHED (reference_medium.png)
+Match its PROPORTION above all else, then its tone, and how evenly its top and
+bottom edges are balanced through the middle.
+Reduce the colour saturation very slightly compared with the reference: a little
+less orange, a little more neutral tan.
+Do NOT copy its tear pattern. Every variant must have its own damage, different
+from the reference and from the other variants — several of these banners will
+be visible on the board at once and repeats will show.
+
+SINGLE IMAGE, SINGLE BANNER
+Exactly one banner in one image. No grid, no sheet, no contact sheet, no set,
+no second banner. Run this prompt again for each variant.
+
+BALANCED TOP AND BOTTOM
+Through the central 70% of the length, the top edge and the bottom edge must be
+roughly mirror images in how deeply they are eaten into, so the parchment's own
+vertical centre there sits within a couple of percent of the strip's middle.
+Tears biting deeper into the top than the bottom push the printed title
+off-centre, and that cannot be corrected without measuring each banner
+individually.
+
+PURPOSE
+A reusable blank asset. The title is set later in code, in Pirata One.
+Render NO text, letters, numbers or glyphs of any kind.
+
+CONTENT
+One parchment strip and nothing else. No title, no symbols, no motifs, no
+flourishes, no ornament, no filigree, no heraldry, no icons, no shields, no
+ribbons, no wax seals, no nails, no wood, no metal, no rope, no poles, no frame,
+no scenery, no background. Transparent everywhere outside the parchment.
+
+TITLE-SAFE ZONE
+The central 70% of the width must be calm, even and quiet: consistent tone, low
+contrast, no holes, no deep tears, no large stains, no dark blotches, no fold
+crossing it, no edge intrusion. A line of uppercase blackletter must be readable
+over it with no text box, outline or shadow.
+
+DISTRESS
+Essentially all damage in the outer 14% at each end: irregular tears, small
+missing corners, fraying, subtle splitting, warm brown edge scorching. Do not
+mirror the two ends — let them differ naturally — while keeping the overall
+visual mass balanced so a centred title still reads as centred.
+Because the strip is thick, keep the tears along the top and bottom shallow:
+they should nibble the edge, not cut into the body.
+
+TONE
+A warm, distinctly TANNED parchment, slightly less saturated than the reference.
+  body of the parchment    #c9ac84
+  lit areas                #e6d1af
+  shadowed areas           #a87d4d
+  scorched edges           #57351a
+Amber-brown, not ivory. Do NOT produce a pale, desaturated, grey or cream
+parchment. No bright yellow, no orange fluorescence, no gold, no red.
+
+MATERIAL
+Old animal-skin parchment. Fine restrained fibre grain, soft tonal variation,
+shallow creases, minor wrinkles, small age spots, restrained staining. Not
+photographic, not noisy, not filthy.
+
+RENDERING
+Flat straight-on orthographic view. Soft diffuse light. Subtle shading for form
+only. No perspective tilt, no cast shadow onto the transparent background, no
+glow, no halo, no vignette. Clean alpha immediately outside the torn silhouette,
+and the parchment itself fully opaque throughout.
+
+THIS VARIANT
+Number __N__ of 6, damage level __LEVEL__
+   1 lightly worn   2 lightly worn, different tears   3 moderately torn
+   4 moderately torn, different tears   5 rugged   6 heavily weathered
+Change only the damage pattern and minor surface aging. Everything above stays
+identical across all six.
