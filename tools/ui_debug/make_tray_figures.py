@@ -60,7 +60,7 @@ import sculpt_metrics as sm                                          # noqa: E40
 bbox, plinth, resize, down, fringe = (
     sm.bbox, sm.plinth_width, sm.resize, sm.down, sm.fringe)
 
-SIZES = (90, 120, 150)
+SIZES = (90, 120, 150, 180, 210)
 PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 CONCEPT = ROOT / "ui" / "concept"
 

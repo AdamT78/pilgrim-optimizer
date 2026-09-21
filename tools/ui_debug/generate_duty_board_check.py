@@ -143,12 +143,96 @@ SLUGS = ("allocation", "clerical", "construct", "build_roads", "city",
          "ordination", "produce", "taxation", "give_alms")
 
 FIGURE_DIR = HERE / "generated"
-FIGURE_SIZES = (90, 120, 150)
+FIGURE_SIZES = (90, 120, 150, 180, 210)
 FIGURE_SEATS = (1, 2, 3)
 
-# Formation defaults, in real device pixels. Starting points for the sliders rather than
-# answers -- what they should be is the question the page exists to ask.
-DEFAULTS = {"spread": 44, "back": 12, "rank": 30, "shade": 45, "size": 120}
+# THE ARRANGEMENT RULES LIVE IN A FILE, NOT HERE.
+#
+# ONE SET OF NUMBERS, USED AT EVERY SIZE. They were per size for a while, scaled so the
+# arrangement held still as the sculpt grew -- but the working size is 210 and only 210, so a
+# table of five was four rows of upkeep for sizes nobody tunes against. The consequence is worth
+# naming rather than discovering: a spread of 77 is nearly twice a 90 px figure's own width, so
+# the small sizes stand well apart. They are there to glance at, not to judge.
+#
+# Kept as data for the same reason configs/board.json is: a rule that outlives a session and is
+# read by more than one thing has no business being a constant in one of them.
+PLACEMENT = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
+
+# The drawing rules -- formation, seat order and the depth cue -- inlined into the page.
+# One copy, shared with the placement sheet.
+RULES_JS = HERE / "duty_sculpt_rules.js"
+
+# Only if the file is missing. A page built from these instead of from the file would look right
+# and be wrong, so it says so in the run output rather than quietly standing in.
+FALLBACK = {"tuned_at": 210, "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+            "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
+
+
+def _short(path):
+    """Repo-relative when it can be, absolute when it cannot.
+
+    `relative_to` RAISES for a path outside the tree, so using it directly in an error message
+    means the message itself blows up -- and the operator sees a ValueError about subpaths
+    instead of the thing that was actually wrong with their file.
+    """
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
+
+
+def placement(notes):
+    """The arrangement rules, checked hard enough that a typo cannot reach a page silently."""
+    if not PLACEMENT.is_file():
+        notes.append("%s is missing -- built from the fallback, which may not be what you tuned"
+                     % _short(PLACEMENT))
+        return dict(FALLBACK)
+    data = json.loads(PLACEMENT.read_text(encoding="utf-8"))
+    for key in ("spread", "back", "rank"):
+        if key not in data:
+            raise SystemExit("%s has no %s -- the arrangement cannot be drawn without it"
+                             % (_short(PLACEMENT), key))
+        if not isinstance(data[key], int) or isinstance(data[key], bool) or data[key] < 0:
+            raise SystemExit("%s: %s is %r -- want a non-negative whole number of real device "
+                             "pixels" % (_short(PLACEMENT), key, data[key]))
+    # WHICH SIZES ARE ON OFFER, not which sizes have their own numbers. There is still exactly
+    # one spread, one set-back and one rank gap, used at every size -- this list only says which
+    # sculpt sizes a page should put a button on. A per-size TABLE is the thing that was taken
+    # out and is not coming back: it was four rows of upkeep for sizes nobody tunes against.
+    if "sizes" in data:
+        sizes = data["sizes"]
+        if not isinstance(sizes, list) or not sizes:
+            raise SystemExit("%s: sizes is %r, want a non-empty list of sculpt sizes"
+                             % (_short(PLACEMENT), sizes))
+        for px in sizes:
+            if isinstance(px, bool) or not isinstance(px, int) or px <= 0:
+                raise SystemExit("%s: sizes holds %r, want positive whole numbers of pixels"
+                                 % (_short(PLACEMENT), px))
+        if len(set(sizes)) != len(sizes):
+            raise SystemExit("%s: sizes repeats a value (%r) -- one button each"
+                             % (_short(PLACEMENT), sizes))
+    if data.get("order") not in ("grouped", "arrival"):
+        raise SystemExit("%s: order is %r, want 'grouped' or 'arrival'"
+                         % (_short(PLACEMENT), data.get("order")))
+    if data.get("mark") not in ("floor", "foot", "box", "gild"):
+        raise SystemExit("%s: mark is %r, want floor, foot, box or gild"
+                         % (_short(PLACEMENT), data.get("mark")))
+    depth = data.get("depth") or {}
+    if depth.get("mode") not in ("haze", "dark", "off"):
+        raise SystemExit("%s: depth.mode is %r, want haze, dark or off"
+                         % (_short(PLACEMENT), depth.get("mode")))
+    if not isinstance(depth.get("amount"), int) or not 0 <= depth["amount"] <= 100:
+        raise SystemExit("%s: depth.amount is %r, want a whole number 0-100"
+                         % (_short(PLACEMENT), depth.get("amount")))
+    # full_at is the e-fold distance of the cue. Zero would divide the depth by nothing and send
+    # every figure straight to full haze, so it has to be a real distance.
+    if not isinstance(depth.get("full_at"), int) or depth["full_at"] <= 0:
+        raise SystemExit("%s: depth.full_at is %r, want a positive whole number of real device "
+                         "pixels" % (_short(PLACEMENT), depth.get("full_at")))
+    return data
+
+
+DEFAULTS = {"size": 210}
 
 
 def shapes():
@@ -194,63 +278,13 @@ def queues(shape):
     return {"grouped": grouped, "arrival": arrival}
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", default=None,
-                    help="where to write the page (default: %s)" % OUT.relative_to(ROOT))
-    ap.add_argument("--figures", default=None,
-                    help="folder holding figure_player_<seat>_<px>.png (default: %s)"
-                         % FIGURE_DIR.relative_to(ROOT))
-    ap.add_argument("--open", action="store_true", help="open the page when it is written")
-    args = ap.parse_args()
+def figures(fig_dir, notes):
+    """Every sculpt size that has art, inlined. Shared with generate_placement_sheet.py.
 
-    out = pathlib.Path(args.out).expanduser() if args.out else OUT
-    fig_dir = pathlib.Path(args.figures).expanduser() if args.figures else FIGURE_DIR
-    notes = []
-
-    assert len(NAMES) == 9, "expected nine duty names from gen_duty_grid, got %d" % len(NAMES)
-    assert len(SLUGS) == len(NAMES), "slug table and duty names have drifted apart"
-
-    # ---- the shape table, built here so the page displays rather than derives ----------------
-    SHAPES = [{"parts": s, "total": sum(s), "queues": queues(s)} for s in shapes()]
-    assert len(SHAPES) == 15, "expected 15 distinct shapes, got %d" % len(SHAPES)
-
-    # ---- banners -----------------------------------------------------------------------------
-    banners, font_uri = [], ""
-    if not BANNER_FONT.is_file():
-        notes.append("%s is missing, so titles would fall back to a serif -- banners left out"
-                     % BANNER_FONT.name)
-    elif _Img is None:
-        notes.append("Pillow is not installed, so the banner art cannot be downscaled for "
-                     "embedding -- banners left out (pip3 install --user Pillow)")
-    else:
-        font_uri = "data:font/ttf;base64," + base64.b64encode(
-            BANNER_FONT.read_bytes()).decode("ascii")
-        for n in BANNER_ORDER:
-            path = BANNER_DIR / ("duty_banner_%02d.png" % n)
-            if not path.is_file():
-                notes.append("%s is missing -- banners left out" % path.name)
-                banners = []
-                break
-            im = _Img.open(path).convert("RGBA")
-            # Already premultiplied-clean, so a straight resize is safe here and the alpha rides
-            # along; the separate-channel path is for art that is not.
-            k = BANNER_RASTER / im.width
-            small = im.resize((BANNER_RASTER, max(1, round(im.height * k))), _Img.LANCZOS)
-            buf = io.BytesIO()
-            small.save(buf, "WEBP", quality=86, method=6)
-            banners.append("data:image/webp;base64,"
-                           + base64.b64encode(buf.getvalue()).decode("ascii"))
-
-    # ---- action icons --------------------------------------------------------------------
-    icons = []
-    for slug in SLUGS:
-        found = sorted(ICON_DIR.glob("%s_*.svg" % slug))
-        icons.append([p.read_text(encoding="utf-8").strip() for p in found])
-    if not any(icons):
-        notes.append("no action icons found under %s" % ICON_DIR.relative_to(ROOT))
-
-    # ---- sculpts -----------------------------------------------------------------------------
+    Extracted rather than copied: this function is where "never upscale", "lossless because
+    these are the true-size reference" and "name the cause, not the symptom" live, and a second
+    copy is how those three quietly drift apart.
+    """
     figs = {}
     # THE CAUSE IS CHECKED BEFORE THE SYMPTOM. Inside the loop, a missing Pillow looked exactly
     # like missing art -- every file present, no per-size note, and a summary telling you to run
@@ -283,6 +317,110 @@ def main():
         if not figs:
             notes.append("no sculpts embedded -- run tools/ui_debug/make_tray_figures.py "
                          "first; the page still builds and shows the tiles empty")
+    return figs
+
+
+def banners(notes):
+    """The nine parchments and the face that letters them, inlined. Shared with the sow page.
+
+    Extracted for the same reason `figures()` was: the sow page needs the identical pairing of
+    parchment to duty name, and a second copy would be a second place for BANNER_ORDER to be
+    wrong in. Returns ([], "") rather than raising when the art or the font is absent -- a page
+    with no banners is still worth looking at, and the note says which.
+    """
+    art, font_uri = [], ""
+    if not BANNER_FONT.is_file():
+        notes.append("%s is missing, so titles would fall back to a serif -- banners left out"
+                     % BANNER_FONT.name)
+        return art, font_uri
+    if _Img is None:
+        notes.append("Pillow is not installed, so the banner art cannot be downscaled for "
+                     "embedding -- banners left out (pip3 install --user Pillow)")
+        return art, font_uri
+    font_uri = "data:font/ttf;base64," + base64.b64encode(
+        BANNER_FONT.read_bytes()).decode("ascii")
+    for n in BANNER_ORDER:
+        path = BANNER_DIR / ("duty_banner_%02d.png" % n)
+        if not path.is_file():
+            notes.append("%s is missing -- banners left out" % path.name)
+            return [], font_uri
+        im = _Img.open(path).convert("RGBA")
+        # Already premultiplied-clean, so a straight resize is safe here and the alpha rides
+        # along; the separate-channel path is for art that is not.
+        k = BANNER_RASTER / im.width
+        small = im.resize((BANNER_RASTER, max(1, round(im.height * k))), _Img.LANCZOS)
+        buf = io.BytesIO()
+        small.save(buf, "WEBP", quality=86, method=6)
+        art.append("data:image/webp;base64,"
+                   + base64.b64encode(buf.getvalue()).decode("ascii"))
+    return art, font_uri
+
+
+def show(target, wanted):
+    """Say where the page is, and open it unless told not to.
+
+    THE URL IS PRINTED EVERY TIME, opened or not. A tool whose output you have to reconstruct
+    from a relative path is a tool you stop using, and in a terminal the line below is clickable.
+
+    `webbrowser.open` RETURNS FALSE when it cannot find a browser to launch, and every caller
+    here used to throw that away -- so a machine with no browser looked exactly like a tool that
+    had quietly decided not to open anything.
+    """
+    url = target if isinstance(target, str) else target.resolve().as_uri()
+    print("  %s" % url)
+    if not wanted:
+        return
+    if not webbrowser.open(url):
+        print("  (nothing here could launch a browser -- open the line above yourself)")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--out", default=None,
+                    help="where to write the page (default: %s)" % OUT.relative_to(ROOT))
+    ap.add_argument("--figures", default=None,
+                    help="folder holding figure_player_<seat>_<px>.png (default: %s)"
+                         % FIGURE_DIR.relative_to(ROOT))
+    # OPENING IS THE DEFAULT. These pages exist to be looked at; a run that writes one and says
+    # nothing is a run you have to follow with a second command, and the flag was easy to forget.
+    # `--open` is still accepted so it stays in anyone's fingers and in any note that mentions it.
+    ap.add_argument("--open", action="store_true", default=True, help=argparse.SUPPRESS)
+    ap.add_argument("--no-open", dest="open", action="store_false",
+                    help="write the page without opening it")
+    args = ap.parse_args()
+
+    out = pathlib.Path(args.out).expanduser() if args.out else OUT
+    fig_dir = pathlib.Path(args.figures).expanduser() if args.figures else FIGURE_DIR
+    notes = []
+    PLACE = placement(notes)
+
+    assert len(NAMES) == 9, "expected nine duty names from gen_duty_grid, got %d" % len(NAMES)
+    assert len(SLUGS) == len(NAMES), "slug table and duty names have drifted apart"
+
+    # ---- the shape table, built here so the page displays rather than derives ----------------
+    SHAPES = [{"parts": s, "total": sum(s), "queues": queues(s)} for s in shapes()]
+    assert len(SHAPES) == 15, "expected 15 distinct shapes, got %d" % len(SHAPES)
+
+    # ---- banners -----------------------------------------------------------------------------
+    banner_art, font_uri = banners(notes)
+
+    # ---- action icons --------------------------------------------------------------------
+    icons = []
+    for slug in SLUGS:
+        found = sorted(ICON_DIR.glob("%s_*.svg" % slug))
+        icons.append([p.read_text(encoding="utf-8").strip() for p in found])
+    if not any(icons):
+        notes.append("no action icons found under %s" % ICON_DIR.relative_to(ROOT))
+
+    # ---- sculpts -----------------------------------------------------------------------------
+    figs = figures(fig_dir, notes)
+
+    # NAMED, NOT TRACEBACKED. Without this the run died on a bare FileNotFoundError from inside
+    # the template substitution, which says where Python gave up rather than what is missing --
+    # and this file is the one most likely to be absent, because it is the newest.
+    if not RULES_JS.is_file():
+        raise SystemExit("%s is missing -- it is where the drawing rules live"
+                         % _short(RULES_JS))
 
     # ---- assemble ----------------------------------------------------------------------------
     page = ((HERE / "duty_board_check.html.tmpl").read_text(encoding="utf-8")
@@ -292,7 +430,7 @@ def main():
             # right failure: the face never loads and the titles fall back rather than the page
             # breaking.
             .replace("__FONTURI_CSS__", font_uri)
-            .replace("__BANNERS__", json.dumps(banners))
+            .replace("__BANNERS__", json.dumps(banner_art))
             .replace("__NAMES__", json.dumps(NAMES))
             .replace("__ICONS__", json.dumps(icons))
             .replace("__FIGS__", json.dumps(figs))
@@ -302,7 +440,9 @@ def main():
             .replace("__BANNERFS__", json.dumps(BANNER_FS))
             .replace("__BANNERTRACK__", json.dumps(BANNER_TRACK))
             .replace("__BANNERINK__", json.dumps(BANNER_INK))
-            .replace("__DEFAULTS__", json.dumps(DEFAULTS)))
+            .replace("__DEFAULTS__", json.dumps(DEFAULTS))
+            .replace("__PLACEMENT__", json.dumps(PLACE))
+            .replace("__FORMATION__", RULES_JS.read_text(encoding="utf-8")))
     left = re.findall(r"__[A-Z_]+__", page)
     assert not left, "placeholders left unsubstituted: %s" % sorted(set(left))
 
@@ -312,13 +452,17 @@ def main():
     print("  %d shapes, %d of them telling the seating rules apart"
           % (len(SHAPES), sum(1 for s in SHAPES
                               if s["queues"]["grouped"] != s["queues"]["arrival"])))
+    print("  placement from %s: spread %d, set-back %d, rank gap %d  (tuned at %s px, used at "
+          "every size)" % (PLACEMENT.name, PLACE["spread"], PLACE["back"], PLACE["rank"],
+                           PLACE.get("tuned_at", "?")))
+    print("  order %s  ·  mark %s  ·  depth %s %d%%"
+          % (PLACE["order"], PLACE["mark"], PLACE["depth"]["mode"], PLACE["depth"]["amount"]))
     print("  sculpts %s  ·  banners %d  ·  icons %d across %d duties"
-          % (", ".join(sorted(figs, key=int)) or "none", len(banners),
+          % (", ".join(sorted(figs, key=int)) or "none", len(banner_art),
              sum(len(i) for i in icons), sum(1 for i in icons if i)))
     for note in notes:
         print("  %s" % note)
-    if args.open:
-        webbrowser.open(out.resolve().as_uri())
+    show(out, args.open)
 
 
 if __name__ == "__main__":
