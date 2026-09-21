@@ -1175,6 +1175,36 @@
       "modifications": "none; used as generated",
       "title": "flagstones slab",
       "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
+    },
+    "sculpts/player_3_lantern_and_strap.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "player 3 acolyte, lantern and strap",
+      "role": "duty tile acolyte, seat 3 -- lantern carried low in the right hand, left hand at the satchel strap. Camera measured 32.2 degrees, height over plinth 2.79 with the camera divided out"
+    },
+    "sculpts/player_3_lantern_at_waist.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "player 3 acolyte, lantern at waist",
+      "role": "duty tile acolyte, seat 3 -- lantern held at the waist, left hand free. Camera measured 32.3 degrees, height over plinth 2.74 with the camera divided out"
+    },
+    "sculpts/player_3_staff_and_lantern.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "player 3 acolyte, staff and lantern",
+      "role": "duty tile acolyte, seat 3 -- staff in the left hand, lantern in the right. Camera measured 33.5 degrees, height over plinth 2.75 with the camera divided out"
     }
   },
   "assetDirs": [
@@ -1187,7 +1217,8 @@
     "metadata",
     "duty-tiles",
     "banners",
-    "grounds"
+    "grounds",
+    "sculpts"
   ],
   "projectOwned": [
     "template/*.svg",
