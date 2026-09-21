@@ -66,9 +66,12 @@ jobs:
         if: needs.changes.outputs.ui == 'true'
         with:
           python-version: "3.13"
+      # pillow and numpy used to be installed by hand here. They are in the dev extras now, which
+      # is where the fast lane picks them up too -- installing them only here is what let an
+      # undeclared dependency sit unnoticed until a test outside ui/ imported the measuring.
       - name: Install what the UI checks need
         if: needs.changes.outputs.ui == 'true'
-        run: pip install -e ".[dev]" pillow numpy
+        run: pip install -e ".[dev]"
       - name: Every generated page still rebuilds, and none is a fossil
         if: needs.changes.outputs.ui == 'true'
         run: python ui/rebuild_ui_pages.py --check

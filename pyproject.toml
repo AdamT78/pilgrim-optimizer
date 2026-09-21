@@ -12,8 +12,19 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
+  # numpy is not optional and never was: tools/ui_debug/sculpt_metrics.py imports it at module
+  # level, and everything that measures a sculpt or a plate imports that. It was undeclared and
+  # only installed by hand in the `ui` CI lane -- a lane gated on paths under ui/, so a change to
+  # tools/ or tests/ never ran it. The first test to import the measuring errored in the fast
+  # lane instead, with a ModuleNotFoundError that looked like a code bug.
+  "numpy",
   "pillow",
   "playwright",
+  # The asset checker degrades without scipy -- it simply stops offering the background estimate
+  # for a screenshot that arrived with no alpha. The TEST of that estimate cannot degrade: it
+  # asserts the estimate lands within a couple of degrees of the truth, and with scipy absent it
+  # fails rather than skips. Declared so the guard actually guards.
+  "scipy",
   "pytest>=8.0.0",
   "ruff>=0.5.0",
 ]

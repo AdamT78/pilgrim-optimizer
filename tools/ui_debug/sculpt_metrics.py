@@ -18,13 +18,22 @@ Height -- the visible side wall -- resisted three approaches before this one:
   * Shading works. The wall is lit flat and even, and there is a sharp specular spike where the
     rounded top rim catches the light. That spike is the top of the wall.
 
-Angle is the rise from the bottom of the art to the widest row, which is the semi-minor axis of
-the base's bottom ellipse. Divided by the width it says how far above the piece the camera sits:
-a bigger number means more of the top surface is showing.
+Angle is NOT the rise. `rise` is the drop from the widest row to the bottom of the art, and this
+docstring used to call it the semi-minor axis of the base's bottom ellipse. It is not: the plinth
+is a cylinder, so its silhouette is equally wide down the whole side wall and `argmax` returns the
+TOP of that wall. The rise therefore spans the wall AND the front half of the bottom ellipse.
+Measured on player_1's full-size art: widest row at 1262, the silhouette's bottom at the edges at
+1292.5, at its centre at 1327 -- so 30.5 of wall and 34.5 of ellipse, and taking the whole 65 as
+the semi-minor axis reports a 26 degree camera for a 7 degree one.
+
+`ground_ellipse` measures it properly, off the BOTTOM outline, which is the one curve nothing ever
+stands in front of.
 
 Every ratio is against the base's OWN width, so a figure drawn larger or smaller compares
 directly with the rest of the set.
 """
+import math
+
 import numpy as np
 from PIL import Image
 
@@ -59,6 +68,74 @@ def _base_row(c):
 def plinth_width(c):
     """Just the width, for callers that do not need the rest."""
     return _base_row(c)[1]
+
+
+def ground_ellipse(im, base_band=True, inset=0.03, span=0.02):
+    """The ellipse the base draws on the ground, and so where the camera is.
+
+    A circle on the ground seen from `theta` above the horizon draws an ellipse whose height is
+    sin(theta) times its width. The top of that ellipse is hidden by whatever stands on the base,
+    but the BOTTOM outline never is: at the horizontal extremes it sits at the foot of the wall,
+    and at the centre it sits one semi-minor axis lower. The difference is the semi-minor axis,
+    and nothing about the figure above enters the measurement.
+
+    `base_band` restricts the search for the widest row to the bottom of the art, which is right
+    for a figure whose robe is wider than its plinth and wrong for a bare ground plate, which is
+    all base. The caller knows which it has.
+
+    HOW FAR TO TRUST IT. On a turned plinth the bottom outline IS an ellipse arc and the answer is
+    exact: the four sculpts agree to within a degree, which is what one camera should look like.
+    On a ground plate whose edge is ragged cobble or stepped stone the outline is not an ellipse,
+    the measurement under-reads, and it should be treated as a sanity check with the overlay
+    looked at rather than as a number to accept. The honest reading of a plate is the aspect of a
+    square paving stone on its surface, and that still wants an eye.
+
+    `inset` keeps the edge samples off the extreme column, where a single stray pixel would move
+    the answer; `span` averages a few columns at the centre for the same reason.
+    """
+    c = crop_to_art(im)
+    m = np.array(c)[..., 3] > ALPHA
+    h, w = m.shape
+    if base_band:
+        widest, width, lo, hi = _base_row(c)
+    else:
+        # A BARE PLATE IS ALL BASE. Restricting the search to the bottom band, which is right for
+        # a figure standing on a plinth, cuts a ground plate off below its widest row and returns
+        # a chord: measured that way the cobbles read 11 degrees against 25 for the whole outline.
+        rows = m.sum(1)
+        widest = int(np.argmax(rows))
+        width = int(rows[widest])
+        cols = np.nonzero(m[widest])[0]
+        lo, hi = int(cols.min()), int(cols.max())
+
+    def bottom(x):
+        col = np.nonzero(m[:, x])[0]
+        return int(col.max()) if len(col) else None
+
+    pad = max(1, int(inset * width))
+    edges = [v for v in (bottom(lo + pad), bottom(hi - pad)) if v is not None]
+    mid = (lo + hi) // 2
+    reach = max(1, int(span * width))
+    centres = [v for v in (bottom(x) for x in range(mid - reach, mid + reach + 1))
+               if v is not None]
+    if not edges or not centres or width <= 0:
+        return None
+    edge = float(np.mean(edges))
+    centre = float(np.mean(centres))
+    a = (hi - lo) / 2.0
+    t = max(0.0, min(1.0, (a - pad) / a)) if a > 0 else 0.0
+    shortfall = 1.0 - math.sqrt(max(0.0, 1.0 - t * t))
+    if shortfall <= 1e-6 or centre <= edge:
+        return None
+    minor = 2.0 * (centre - edge) / shortfall
+    sin_theta = min(1.0, max(0.0, minor / width))
+    return {
+        "width": width, "minor": minor, "sin_theta": sin_theta,
+        "degrees": math.degrees(math.asin(sin_theta)),
+        # where the measurement landed, so a caller can draw it and see for itself
+        "widest_row": widest, "bottom_edge": edge, "bottom_centre": centre,
+        "left": lo, "right": hi, "art_w": w, "art_h": h,
+    }
 
 
 def measure(im):

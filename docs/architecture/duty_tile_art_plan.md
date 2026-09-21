@@ -42,27 +42,56 @@ stops being true.
 
 ## The work, in the order it wants doing
 
-### 1. Choose the camera angle
+### 1. Choose the camera angle — SETTLED AT 32 DEGREES
 
-**This gates almost everything below and is not a coding task.**
+**This gated almost everything below. It is decided; what follows is how, and why not 29.**
 
-Measured from their plinth ellipses the sculpts sit about 6 degrees above the horizon — minor over
-major 0.113, spread 0.035 across the four, tight enough to be one camera. The ground plates read
-near 38 degrees. Figures look pasted onto the ground until one side moves, and the decision taken
-is that the sculpts move.
+The numbers this section first carried were wrong, and wrongly in the same direction. Measuring an
+inset column instead of the extreme one costs height, because the ellipse has already begun to
+drop there — so a drawn 10 degree disc measured back as 6.5. Corrected, the sculpts sit near 9 to
+10 degrees rather than 6, and the ground plates near 32 rather than 38. The finding stands that
+figures look pasted onto the ground until one side moves, and that the sculpts are the side that
+moves; only the sizes changed.
 
-What has *not* been decided is the target, and it is not a number that falls out of the existing
-art. Matching down to 6 degrees would make a ground plate a sliver with no visible surface, so the
-angle is a judgement about how the whole board should read from above: high enough that a floor is
-a floor, low enough that a standing figure still reads as standing rather than as seen from a
-gantry. Somewhere in the twenties or thirties is the obvious place to look, and the way to settle
-it is to generate one sculpt at two or three angles and stand each on the plates that exist.
+The target is 32 because that is where this generator lands and the ask stopped steering it. Two
+batches of ten hooded figurines, asks three degrees apart with reference cards drawn to match,
+produced means of 32.1 and 31.9 — three degrees of instruction bought two tenths of a degree of
+result. Ground plates converge on the same place without being asked: nine style-varied plates
+averaged 32.6. Both halves of the board already agree at 32, so any other target has to be fought
+for on both sides at once.
 
-Nothing downstream can be specified properly until that number exists. The validator in step 2
-cannot give a verdict without a spec, and with no spec the only spec available is "like the four we
-already have", which is the constraint the redraw exists to escape.
+Two numbers were tried before it and neither survived. 30 was picked from an uncorrected
+measurement; 40 from the corrected one, by arithmetic alone. 29 came from actually compositing
+sculpts at 210 px on a plate at 320 px and looking — which was the right method and produced a
+number the generator would not reach. That composite is still worth its place in the record for
+what it ruled out: below about 20 degrees a ground plate stops reading as a floor and becomes a
+puddle, and the failure is much more visible on the flat side than on the steep side.
 
-### 2. A tool to create and validate sculpts and ground plates
+Two things about the generator are worth writing down, because they are not obvious and both cost
+a round to learn. A single word of style is worth degrees: swapping "limestone" for "slate" in an
+otherwise identical prompt moved a plate 4.4 degrees, against a within-style scatter near 1. And a
+figurine's camera cannot be steered by text at all — every photograph of a miniature ever taken is
+at eye level, and that prior wins. What did work was attaching a diagram of the base alone, drawn
+at the wanted ellipse ratio, with the instruction to keep it exactly as it is; the base pins the
+camera, and the figure follows the base. Drawing any of the FIGURE into that diagram was tried
+three times and produced two traffic cones and a lampshade, so the reference carries the base and
+the empty room above it and nothing else.
+
+`tools/ui_debug/generate_asset_check.py` holds the target as `TARGET_DEGREES`, with a test that
+fails if it drifts. It moves when a composite says to, not when a batch misses it.
+
+### 2. A tool to create and validate sculpts and ground plates — BUILT
+
+`tools/ui_debug/generate_asset_check.py`. Drop a PNG on the served page, or `--scan` a folder of
+them in one pass. What it reports, and what it refuses to report, is in `tools/ui_debug/README.md`.
+Two of its findings changed this document: that the camera measurement was biased, and that
+height over plinth width is a PROJECTED quantity which shrinks as the camera rises, so figures at
+two different cameras cannot be compared on it without dividing the camera out first.
+
+One piece of upkeep it needs when the set is redrawn: its reference band is computed from whatever
+sits in `ui/concept/`, so until the four seats are replaced every new sculpt is judged against art
+being discarded, and reports a height gap that is real but no longer relevant.
+
 
 Drop a generated PNG onto a page, get back its measurements and a verdict. For a sculpt: plinth
 width, wall height, the plinth ellipse and so the camera angle, overall height, the height-to-
@@ -78,6 +107,17 @@ Open questions: what the tolerances are measured against — a chosen spec or th
 current set; and whether the page only reports, or also files the asset, which means registering
 attribution and running `make_tray_figures.py`. Filing needs the `--serve` path, since a page
 opened from disk cannot write to the repository.
+
+### Not doing: a 3D pipeline
+
+Generating actual 3D models and screenshotting arrangements from code was considered and set aside.
+It would solve the camera problem outright — one scene, one camera, every figure and plate
+guaranteed consistent, and rotations for free rather than begged for. It is the right answer
+eventually and the wrong one now: it replaces a pipeline that works with one that has to be built,
+learned and paid for before a single tile improves. The 2D route has since been made to hold a
+camera to within a couple of degrees across both sculpts and plates, which was the thing in doubt.
+Worth revisiting when the board is otherwise finished, or if per-seat variety turns out to be
+unreachable by prompting.
 
 ### 3. The hand, and the City
 
