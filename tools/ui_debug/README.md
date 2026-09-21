@@ -2310,3 +2310,29 @@ brightness.
 
 The measuring lives in `sculpt_metrics.py`, shared with `make_tray_figures.py` and
 `check_sculpt.py`, so a threshold that moves moves for all three.
+
+## The card a sculpt is generated from
+
+`generate_sculpt_reference.py` draws the diagram attached to the image model when a new acolyte
+is made.
+
+    python3 tools/ui_debug/generate_sculpt_reference.py
+
+A figurine's camera cannot be steered by text. Every photograph of a miniature ever taken is at
+eye level and that prior wins, so sculpts came back at 9 degrees however the brief was worded.
+What works is handing over a picture of the BASE at the wanted ellipse ratio and saying to keep
+it exactly as it is: the base pins the camera and the figure follows the base. Only the base is
+drawn — three attempts at a schematic figure produced two traffic cones and a lampshade, any of
+which the model might have copied — so the card carries the base, the empty room above it marked
+at the figure's height, and nothing else.
+
+The card reads **27 degrees while the target is 32, and that is deliberate**. It was set to 27 to
+correct a measured bias while the target was still 29, and the batches that followed showed the
+ask does not steer the result at all: cards of 30 and 27 produced 32.1 and 31.9. So the target
+moved and the card stayed. Every sculpt in `ui/assets-gothic/sculpts/` came from this card, and
+redrawing it at 32 changes nothing about the output while breaking the one property worth having
+— that the committed art and the committed card agree about how the art was made. The docstring
+says the same thing at more length before anyone edits the number.
+
+The committed PNG lives at `ui/assets-gothic/references/` and is byte-identical to this script's
+output.

@@ -80,6 +80,16 @@ the empty room above it and nothing else.
 `tools/ui_debug/generate_asset_check.py` holds the target as `TARGET_DEGREES`, with a test that
 fails if it drifts. It moves when a composite says to, not when a batch misses it.
 
+The reference card reads 27 degrees, and that is deliberate rather than a leftover. It was set to
+27 to correct a measured bias while the target was still 29; what the two batches then showed is
+that the ask does not steer the result, so the card was left where it was and the target moved
+instead. Every sculpt in `ui/assets-gothic/sculpts/` was generated from that 27 card and every one
+measures within 2.5 degrees of 32. Redrawing the card at 32 has been measured to change nothing
+about what comes out, while breaking the one property worth having: that the committed sculpts and
+the committed card agree about how they were made. The card is built by
+`tools/ui_debug/generate_sculpt_reference.py`, whose docstring carries the same warning, and the
+committed PNG is byte-identical to the script's output.
+
 ### 2. A tool to create and validate sculpts and ground plates — BUILT
 
 `tools/ui_debug/generate_asset_check.py`. Drop a PNG on the served page, or `--scan` a folder of
