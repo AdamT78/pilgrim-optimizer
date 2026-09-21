@@ -1155,6 +1155,26 @@
       "source": "generated in ChatGPT for this project from ui/prompts/banners/duty_banner.txt; downloaded as banner_12.png; no seed on record",
       "licence": "openai-generated",
       "role": "blank scorched-parchment banner for duty tile titles; title text is rendered in code, not baked in"
+    },
+    "grounds/cobbles_oval.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "cobbles oval",
+      "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
+    },
+    "grounds/flagstones_slab.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "flagstones slab",
+      "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
     }
   },
   "assetDirs": [
@@ -1166,7 +1186,8 @@
     "template",
     "metadata",
     "duty-tiles",
-    "banners"
+    "banners",
+    "grounds"
   ],
   "projectOwned": [
     "template/*.svg",

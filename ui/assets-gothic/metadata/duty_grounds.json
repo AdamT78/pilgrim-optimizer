@@ -1,0 +1,35 @@
+{
+  "note": "Which ground plate each duty stands on, and how each plate is drawn. Read by tools/ui_debug/generate_placement_sheet.py and generate_duty_sow.py. The plates themselves live in ui/assets-gothic/grounds/ and are DISCOVERED -- what art exists is a fact about the folder, so nothing here lists them. What is decided, and therefore written down, is which duty gets which, and how each one is toned down to sit under sculpts rather than compete with them.",
+  "layer_note": "A ground is a layer, not a tile face. The duty-tiles tree holds the opaque face of the wheel; a plate is a transparent cut-out drawn ON TOP of that face and UNDER the figures, so the same plate can sit on any face and a face can change without redrawing its ground.",
+  "default": "cobbles_oval",
+  "by_duty": {
+    "produce": "cobbles_oval",
+    "clerical": "cobbles_oval",
+    "build_roads": "flagstones_slab",
+    "construct": "flagstones_slab",
+    "give_alms": "cobbles_oval",
+    "ordination": "cobbles_oval",
+    "allocation": "cobbles_oval",
+    "taxation": "cobbles_oval",
+    "city": "flagstones_slab"
+  },
+  "by_duty_note": "Keyed by duty slug rather than by compass position, because duty tiles can be shuffled by a scenario and a ground belongs to the duty rather than to the place it happens to sit this game.",
+  "grounds": {
+    "cobbles_oval": {
+      "anchor": 46,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "opacity": 100
+    },
+    "flagstones_slab": {
+      "anchor": 61,
+      "scale": 100,
+      "dim": 55,
+      "saturate": 65,
+      "opacity": 100
+    }
+  },
+  "grounds_note": "All whole-number percentages. `anchor` is where down the plate's own ink the standing line falls -- where the figures' feet belong -- and it is per plate rather than global because it is a property of the picture: measured at the widest row, the oval sits at 46% and the slab at 61%. `scale` is the plate's width as a percentage of the frame's. `dim`, `saturate` and `opacity` tone it down; the plates arrive at full strength and compete with the sculpts until they are brought down.",
+  "angle_note": "The plates and the sculpts do not yet agree about where the camera is. Measured from their plinth ellipses the sculpts sit about 6 degrees above the horizon (minor/major 0.113, spread 0.035 across the four, which is tight enough to be one camera); the oval plate reads near 38 degrees if its outline is taken as a circle in plan. Figures will look pasted onto the ground until one side moves. The sculpts are the side being redrawn."
+}

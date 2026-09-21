@@ -8,8 +8,11 @@ board nobody asked for.
 """
 
 import importlib.util
+import json
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -434,7 +437,7 @@ def sow():
     return m
 
 
-def test_the_lit_set_is_the_board_graph_and_not_a_drawing_of_one(sow):
+def test_the_lit_set_is_the_board_graph_and_not_a_drawing_of_one(sow, mod):
     """The sow walks the real topology or it is a different game.
 
     A page that restated the ring would keep looking correct while the board moved underneath
@@ -444,23 +447,27 @@ def test_the_lit_set_is_the_board_graph_and_not_a_drawing_of_one(sow):
     edges = sow.graph()
     real = _json.loads((ROOT / "configs" / "board.json").read_text(encoding="utf-8"))["edges"]
     assert edges == real
-    branching = sorted(p for p in sow.GRID if len(edges.get(p, [])) > 1)
+    branching = sorted(p for p in mod.GRID if len(edges.get(p, [])) > 1)
     assert branching == ["city", "east", "west"], (
         "the positions that offer a choice have changed: %s" % branching)
-    for pos in sow.GRID:
+    for pos in mod.GRID:
         assert 1 <= len(edges[pos]) <= 2, "%s has %d exits; the page lights at most two" % (
             pos, len(edges[pos]))
 
 
-def test_every_position_carries_a_duty_the_slug_table_knows(sow):
+def test_every_position_carries_a_duty_the_slug_table_knows(mod):
     """The banner and the title are looked up by slug, so an unknown one would pair a name with
-    somebody else's parchment rather than failing."""
-    board = sow._board_module()
-    at = sow.duty_at()
-    assert set(at) >= set(sow.GRID), "a compass position has no duty"
-    for pos in sow.GRID:
-        assert at[pos] in board.SLUGS, "%s carries %r, which is not in the slug table" % (
+    somebody else's parchment rather than failing.
+
+    This lives with the slug table and the parchment now rather than in the sow generator: the
+    placement sheet draws the same nine tiles, and the pairing was about to be written twice.
+    """
+    at = mod.duty_at()
+    assert set(at) >= set(mod.GRID), "a compass position has no duty"
+    for pos in mod.GRID:
+        assert at[pos] in mod.SLUGS, "%s carries %r, which is not in the slug table" % (
             pos, at[pos])
+    assert set(mod.GRID) == set(mod.duty_at()), "the compass and the layout have drifted apart"
 
 
 def test_the_sow_page_stays_on_its_side_of_the_seam():
@@ -471,12 +478,14 @@ def test_the_sow_page_stays_on_its_side_of_the_seam():
     shows, and reaching into the model also drags in an interpreter requirement a tools run
     cannot count on.
     """
-    src = SOW.read_text(encoding="utf-8")
-    for line in src.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(("import ", "from ")):
-            assert "pilgrim" not in stripped, "the sow page imports the engine: %s" % stripped
-    assert "configs" in src and "duty_tiles" in src, (
+    for path in (SOW, GEN, ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("import ", "from ")):
+                assert "pilgrim" not in stripped, "%s imports the engine: %s" % (
+                    path.name, stripped)
+    owner = GEN.read_text(encoding="utf-8")
+    assert "configs" in owner and "duty_tiles" in owner, (
         "the duty layout no longer comes from a config")
 
 
@@ -588,3 +597,301 @@ def test_sow_page_builds_and_reads_the_placement_file(sow, mod, tmp_path, monkey
     assert '"spread": 999' in page, "the doctored value never reached the page"
     assert "function dutyFormation" in page, "the shared rules were not inlined"
     assert '"north_east"' in page, "the board graph never reached the page"
+
+
+# ---------------------------------------------------------------- where a tile's parts sit
+
+
+RULES = ROOT / "tools" / "ui_debug" / "duty_sculpt_rules.js"
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+def _in_node(expression):
+    """Evaluate one expression against the real rules file, in node.
+
+    The alternative was a Python reimplementation of the geometry to assert against, which is
+    the second copy this whole file exists to prevent: it would agree on the day it was written
+    and drift silently afterwards, and the test would go on passing either way.
+    """
+    script = (
+        "const fs = require('fs');\n"
+        "eval(fs.readFileSync(%r, 'utf8'));\n"
+        "process.stdout.write(JSON.stringify(%s));\n" % (str(RULES), expression)
+    )
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(done.stdout)
+
+
+def test_the_tile_layout_lives_in_exactly_one_file():
+    """It was written out in each page that draws the wheel, and the copies had drifted.
+
+    The gap above the banner was 0.046 of the cell in the board checker and 0.050 in the sow
+    page, so the two disagreed about where a banner sat -- by about two and a half real pixels,
+    which is the size of difference nobody notices and nobody can then explain.
+    """
+    js = RULES.read_text(encoding="utf-8")
+    assert "function dutyTileLayout" in js
+    for page in ("duty_board_check.html.tmpl", "duty_sow.html.tmpl"):
+        src = (ROOT / "tools" / "ui_debug" / page).read_text(encoding="utf-8")
+        assert "dutyTileLayout(" in src, "%s no longer asks for the shared layout" % page
+        for own in ("* 0.55", "* 0.046", "* 0.05,", "* 0.010", "* 0.168"):
+            assert own not in src, "%s computes %r itself again" % (page, own)
+
+
+@needs_node
+def test_the_field_clears_the_deeper_of_the_set_back_and_the_rank_gap():
+    """The board checker took only the rank gap, which clips the middle of three the moment a
+    set-back larger than the rank gap is tried. Latent rather than broken at 21 against 52 --
+    measured, the middle figure's top went to -34 css px at a set-back of 120."""
+    shallow = _in_node("dutyTileLayout(600, 210, 52, 21, {icons: false})")
+    deep = _in_node("dutyTileLayout(600, 210, 52, 120, {icons: false})")
+    assert shallow["field"] == 210 + 52, "the field no longer clears the rank gap"
+    assert deep["field"] == 210 + 120, "a set-back past the rank gap is being ignored again"
+
+
+@needs_node
+def test_the_layout_centres_the_stack_and_counts_the_icons_only_when_they_are_drawn():
+    without = _in_node("dutyTileLayout(600, 210, 52, 21, {icons: false})")
+    with_icons = _in_node("dutyTileLayout(600, 210, 52, 21, {icons: true})")
+    assert with_icons["total"] > without["total"], "the icon row costs no height"
+    assert with_icons["total"] - without["total"] == pytest.approx(
+        with_icons["gapB"] + with_icons["icon"])
+    for layout in (without, with_icons):
+        assert layout["top"] * 2 + layout["total"] == pytest.approx(600), "the stack is not centred"
+        assert layout["mark"] > layout["banW"], "the floor mark no longer overhangs the banner"
+
+
+@needs_node
+def test_the_group_box_measures_the_figures_rather_than_the_spread():
+    """The sculpts are not one width, so the room a formation takes depends on who is standing
+    in it. A box computed from the spread alone would be wrong for the widest seat."""
+    narrow = _in_node("dutyCapacityBox(5, 110, 21, 52, 91, 210)")
+    wide = _in_node("dutyCapacityBox(5, 110, 21, 52, 108, 210)")
+    assert wide["w"] - narrow["w"] == pytest.approx(108 - 91), (
+        "the envelope ignores how wide the figures are")
+    assert narrow["h"] == 210 + 52, "the envelope does not reach the back rank's head"
+    assert _in_node("dutyGroupBox([])") is None
+    one = _in_node("dutyGroupBox([{x: 0, y: 0, w: 90, h: 200}])")
+    assert (one["left"], one["right"], one["top"], one["bottom"]) == (-45, 45, 200, 0)
+
+
+# ---------------------------------------------------------------- the frame a tile is drawn on
+
+
+def test_placement_refuses_a_broken_frame(mod, tmp_path, monkeypatch):
+    """The frame is what art gets drawn to, so a nonsense rectangle must not reach a page."""
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for bad in ({"w": 0, "h": 430, "drop": 0}, {"w": 369, "h": -1, "drop": 0},
+                {"w": 369.5, "h": 430, "drop": 0}, {"w": True, "h": 430, "drop": 0},
+                {"w": 369, "h": 430, "drop": "40"}, {"h": 430, "drop": 0}, [369, 430]):
+        doctored = dict(good)
+        doctored["frame"] = bad
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        with pytest.raises(SystemExit) as caught:
+            mod.placement([])
+        assert "frame" in str(caught.value), "the refusal does not name the frame: %r" % (bad,)
+
+
+def test_the_frame_may_sit_below_or_above_the_floor(mod, tmp_path, monkeypatch):
+    """A ground that continues under the feet needs a positive drop; lifting the frame off the
+    floor is a legitimate thing to try, so a negative one is not an error."""
+    good = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    for drop in (-60, 0, 40):
+        doctored = dict(good)
+        doctored["frame"] = {"w": 369, "h": 430, "drop": drop}
+        path = tmp_path / "duty_placement.json"
+        path.write_text(json.dumps(doctored), encoding="utf-8")
+        monkeypatch.setattr(mod, "PLACEMENT", path)
+        assert mod.placement([])["frame"]["drop"] == drop
+
+
+def test_the_sheet_saves_the_frame_without_losing_the_prose(sheet, mod, tmp_path, monkeypatch):
+    board = sheet._board_module()
+    path = tmp_path / "duty_placement.json"
+    path.write_text(mod.PLACEMENT.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(board, "PLACEMENT", path)
+    saved = sheet.save_settings(board, {
+        "spread": 110, "back": 21, "rank": 52, "order": "grouped",
+        "depth": {"mode": "haze", "amount": 60, "full_at": 52},
+        "frame": {"w": 400, "h": 500, "drop": -10}})
+    assert saved["frame"] == {"w": 400, "h": 500, "drop": -10}
+    assert "frame_note" in saved, "the explanation of what the frame is was thrown away"
+    assert "note" in saved and "one_set_on_purpose" in saved
+    # And the file it wrote is one the generator would accept back.
+    monkeypatch.setattr(mod, "PLACEMENT", path)
+    assert mod.placement([])["frame"]["w"] == 400
+
+
+def test_the_sheet_has_the_wheel_view_and_the_frame_controls(sheet):
+    """The controls are the deliverable here: a frame you cannot drag is a number in a file."""
+    src = sheet.TEMPLATE
+    assert 'id=viewb' in src, "the view switch is gone"
+    assert '"arrangements", "wheel"' in src, "the two views are no longer offered"
+    for control in ("id=frw type=range", "id=frh type=range", "id=frd type=range"):
+        assert control in src, "%s is missing; the frame cannot be adjusted" % control
+    for wiring in ('\nslider("frw"', '\nslider("frh"', '\nslider("frd"'):
+        assert wiring in src, "%s is not wired to anything" % wiring.strip()
+    assert "function drawWheel" in src and "function drawCases" in src
+    assert "FRAME = __FRAME__" in src, (
+        "the frame is hardcoded in the page rather than coming from the file")
+
+
+def test_the_wheel_view_does_not_grow_its_own_copy_of_the_nine_tiles(sheet):
+    """The compass order, the slug table and the parchment pairing live in one module. The sow
+    page had them first; when the sheet needed them too they moved rather than multiplied."""
+    src = sheet.TEMPLATE + (ROOT / "tools" / "ui_debug" / "generate_placement_sheet.py").read_text(
+        encoding="utf-8")
+    assert "board.tiles(" in src, "the sheet no longer asks for the shared tiles"
+    assert "north_west" not in src, "the sheet has written out its own compass order"
+    sow_src = SOW.read_text(encoding="utf-8")
+    assert "north_west" not in sow_src, "the sow generator has grown the compass back"
+
+
+# ---------------------------------------------------------------- the ground a tile stands on
+
+
+def test_every_ground_plate_has_a_licence_on_record(mod):
+    """The gothic tree keeps its own attribution.json and CI verifies it. This fails earlier and
+    says which file, because art that lands without a record is the kind of thing that is cheap
+    to fix the day it arrives and archaeology a month later."""
+    att = json.loads(
+        (ROOT / "ui" / "assets-gothic" / "attribution.json").read_text(encoding="utf-8"))
+    assert "grounds" in att["assetDirs"], "the grounds folder is not checked by the verifier"
+    for path in sorted(mod.GROUNDS_DIR.glob("*")):
+        if path.name.startswith("."):
+            continue
+        key = "grounds/%s" % path.name
+        assert key in att["files"], "%s has no entry in attribution.json" % key
+        assert att["files"][key]["licence"] in att["licences"], (
+            "%s claims a licence the register does not define" % key)
+
+
+def test_the_plates_are_discovered_rather_than_listed(mod):
+    """Dropping a PNG in the folder is all it takes to be able to pick it. A list in the plan
+    would be a second place for the folder's contents to be wrong."""
+    notes = []
+    art = mod.ground_art(notes)
+    on_disk = {p.stem for p in mod.GROUNDS_DIR.glob("*.png")}
+    assert set(art) == on_disk, "the loader and the folder disagree about what exists"
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    for name in art:
+        assert name in plan.get("grounds", {}) or True   # tuning is optional; existence is not
+    # and each plate reports where its own widest row sits, which is the anchor's starting guess
+    for name, g in art.items():
+        assert 0 <= g["widest"] <= 100, "%s reports a nonsense standing line" % name
+        assert g["w"] > 0 and g["h"] > 0
+
+
+def test_ground_plan_refuses_what_would_draw_nothing(mod, tmp_path, monkeypatch):
+    good = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    bad_plans = [
+        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], anchor=101)}},
+        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], scale=0)}},
+        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], dim="55")}},
+        {"grounds": {"cobbles_oval": dict(good["grounds"]["cobbles_oval"], opacity=True)}},
+        {"grounds": good["grounds"], "by_duty": {"not_a_duty": "cobbles_oval"}},
+        {"grounds": good["grounds"], "by_duty": {"produce": "no_such_plate"}},
+    ]
+    for bad in bad_plans:
+        path = tmp_path / "duty_grounds.json"
+        path.write_text(json.dumps(bad), encoding="utf-8")
+        monkeypatch.setattr(mod, "GROUND_PLAN", path)
+        with pytest.raises(SystemExit):
+            mod.ground_plan([])
+
+
+def test_a_missing_plan_says_so_rather_than_drawing_a_bare_board(mod, tmp_path, monkeypatch):
+    missing = tmp_path / "duty_grounds.json"
+    monkeypatch.setattr(mod, "GROUND_PLAN", missing)
+    notes = []
+    plan = mod.ground_plan(notes)
+    assert plan["by_duty"] == {} and plan["grounds"] == {}
+    assert any(missing.name in n and "missing" in n for n in notes), (
+        "a missing plan passed without a word: %r" % notes)
+
+
+def test_the_grounds_save_merges_and_validates(sheet, mod, tmp_path, monkeypatch):
+    board = sheet._board_module()
+    path = tmp_path / "duty_grounds.json"
+    path.write_text(mod.GROUND_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(board, "GROUND_PLAN", path)
+    saved = sheet.save_grounds(board, {
+        "by_duty": {"produce": "flagstones_slab"},
+        "grounds": {"flagstones_slab": {"anchor": 61, "scale": 100, "dim": 40,
+                                        "saturate": 50, "opacity": 90}}})
+    assert saved["by_duty"]["produce"] == "flagstones_slab"
+    assert saved["grounds"]["flagstones_slab"]["dim"] == 40
+    assert "note" in saved and "angle_note" in saved, "the prose was thrown away"
+    # and what it wrote is a file the generator would accept back
+    monkeypatch.setattr(mod, "GROUND_PLAN", path)
+    assert mod.ground_plan([])["grounds"]["flagstones_slab"]["dim"] == 40
+    with pytest.raises(ValueError):
+        sheet.save_grounds(board, {"by_duty": {"produce": "missing"}, "grounds": {}})
+
+
+def test_switching_view_hides_everything_the_other_view_owns(sheet):
+    """The view switch has to own every element a view puts on screen, not most of them.
+
+    The picker strip was only ever touched by drawWheel(), so leaving the wheel left it sitting
+    above the arrangements carrying a selection from a board that was no longer visible. The
+    dispatcher shows and hides; the drawing functions draw.
+    """
+    src = sheet.TEMPLATE
+    body = src[src.index("function draw(){"):src.index("function drawPicker")]
+    for element in ("stage", "grid", "picker"):
+        assert ('getElementById("%s").hidden' % element) in body, (
+            "draw() does not decide whether #%s is on screen" % element)
+
+
+def test_the_sow_page_plays_on_what_the_sheet_saved(sow, mod, tmp_path, monkeypatch):
+    """The sheet tunes and the sow page plays on the result. It was reading neither the frame
+    nor the grounds -- it took the placement file and drew acolytes on an empty board, so a
+    ground you had just assigned simply was not there when you went to move a piece.
+
+    Proved the only way that means anything: put unmistakable values in both files and look for
+    them in the page.
+    """
+    board = sow._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+
+    place = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    place["frame"] = {"w": 299, "h": 411, "drop": -13}
+    doctored_place = tmp_path / "duty_placement.json"
+    doctored_place.write_text(json.dumps(place), encoding="utf-8")
+
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    plan["by_duty"]["taxation"] = ""                       # bare floor
+    plan["grounds"]["flagstones_slab"]["dim"] = 11
+    doctored_plan = tmp_path / "duty_grounds.json"
+    doctored_plan.write_text(json.dumps(plan), encoding="utf-8")
+
+    monkeypatch.setattr(board, "PLACEMENT", doctored_place)
+    monkeypatch.setattr(board, "GROUND_PLAN", doctored_plan)
+    monkeypatch.setattr(sow, "_board_module", lambda: board)
+    out = tmp_path / "duty_sow.html"
+    monkeypatch.setattr(sys, "argv", ["generate_duty_sow.py", "--no-open", "--out", str(out)])
+    sow.main()
+
+    page = out.read_text(encoding="utf-8")
+    assert '"w": 299' in page and '"drop": -13' in page, "the frame never reached the page"
+    assert '"dim": 11' in page, "the ground tuning never reached the page"
+    assert '"taxation": ""' in page, "a duty set to a bare floor never reached the page"
+    assert "class=plate" in page, "the page has no way to draw a ground plate"
+
+
+def test_the_sheet_can_pick_a_ground(sheet):
+    """The picker is the deliverable: a ground you cannot assign is a filename in a folder."""
+    src = sheet.TEMPLATE
+    assert "id=picker" in src and "function drawPicker" in src
+    assert 'data-g=""' in src, "there is no way back to a bare floor"
+    for control in ("id=ganc type=range", "id=gsca type=range", "id=gdim type=range",
+                    "id=gsat type=range", "id=gopa type=range"):
+        assert control in src, "%s is missing" % control
+    for wiring in ("\nfunction setGround", "\nfunction syncGroundSliders"):
+        assert wiring in src, "%s is not there" % wiring.strip()
+    assert "PLATES = __PLATES__" in src and "PLAN = __GROUNDPLAN__" in src, (
+        "the plates or the plan are hardcoded rather than read")

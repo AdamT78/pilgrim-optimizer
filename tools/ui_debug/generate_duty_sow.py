@@ -49,16 +49,9 @@ ROOT = HERE.parents[1]
 OUT = HERE / "generated" / "duty_sow.html"
 
 BOARD_JSON = ROOT / "configs" / "board.json"
-SETUP = ROOT / "configs" / "setups" / "basic_mancala_sandbox.json"
 RULES_JS = HERE / "duty_sculpt_rules.js"
 TEMPLATE = HERE / "duty_sow.html.tmpl"
 
-# The nine positions as a compass, so the ring on screen reads as the ring on the board. The
-# artwork order is an IDENTITY and not a position, so laying the page out in it would draw a
-# ring that wanders.
-GRID = ("north_west", "north", "north_east",
-        "west", "city", "east",
-        "south_west", "south", "south_east")
 
 
 def _by_path(name, path, extra_sys_path=None):
@@ -83,9 +76,24 @@ def _by_path(name, path, extra_sys_path=None):
     return mod
 
 
+_BOARD = None
+
+
 def _board_module():
-    return _by_path("generate_duty_board_check", HERE / "generate_duty_board_check.py",
-                    ROOT / "ui" / "render")
+    """The board checker, which owns the placement rules, the art and the nine tiles.
+
+    Cached: it is asked for several times a run, and re-executing a module to read a constant
+    off it is the kind of waste that turns into a puzzling slowdown rather than an error.
+    """
+    global _BOARD
+    if _BOARD is None:
+        _BOARD = _by_path("generate_duty_board_check", HERE / "generate_duty_board_check.py",
+                          ROOT / "ui" / "render")
+    return _BOARD
+
+
+def board_grid():
+    return _board_module().GRID
 
 
 def graph():
@@ -99,33 +107,11 @@ def graph():
                          % BOARD_JSON.relative_to(ROOT))
     data = json.loads(BOARD_JSON.read_text(encoding="utf-8"))
     edges = data.get("edges") or {}
-    missing = [p for p in GRID if p not in edges]
+    missing = [p for p in board_grid() if p not in edges]
     if missing:
         raise SystemExit("%s has no edges for %s -- the compass and the graph have drifted apart"
                          % (BOARD_JSON.relative_to(ROOT), ", ".join(missing)))
     return edges
-
-
-def duty_at():
-    """Which duty sits at which position, from a committed scenario.
-
-    FROM THE CONFIG, NOT FROM THE ENGINE. The model can answer this too, but everything under
-    tools/ui_debug is a derived view: it reads data and draws it, and a game config is the
-    source of truth for any real game value a view happens to show. Reading the scenario also
-    keeps this script free of the engine, which needs a newer interpreter than a tools run can
-    count on.
-
-    Duty tiles can be shuffled, so this is one deal rather than the deal -- which is the right
-    shape for a page about sculpts.
-    """
-    if not SETUP.is_file():
-        raise SystemExit("%s is missing -- there is no duty to put on a tile"
-                         % SETUP.relative_to(ROOT))
-    tiles = dict((json.loads(SETUP.read_text(encoding="utf-8")) or {}).get("duty_tiles") or {})
-    if not tiles:
-        raise SystemExit("%s carries no duty_tiles" % SETUP.relative_to(ROOT))
-    tiles["city"] = "city"
-    return tiles
 
 
 def offered(place, figs, notes):
@@ -182,20 +168,12 @@ def main():
                          "draw (run tools/ui_debug/make_tray_figures.py)")
 
     edges = graph()
-    at = duty_at()
-    banner_art, font_uri = board.banners(notes)
-
-    # Parchment and title are looked up by the duty's slug, so the page cannot pair a name with
-    # someone else's banner even if the compass or the layout changes.
-    cells = []
-    for pos in GRID:
-        slug = at.get(pos)
-        if slug not in board.SLUGS:
-            raise SystemExit("position %s carries duty %r, which is not in the slug table"
-                             % (pos, slug))
-        i = board.SLUGS.index(slug)
-        cells.append({"pos": pos, "slug": slug, "title": board.NAMES[i],
-                      "ban": banner_art[i] if banner_art else ""})
+    cells, font_uri = board.tiles(notes)
+    # The same two files the placement sheet writes. The sheet tunes; this page plays on what
+    # the sheet saved -- if it read its own copy of any of this, the two would drift the first
+    # time a slider moved.
+    plan = board.ground_plan(notes)
+    plates = board.ground_art(notes)
 
     # Only the seats the page can actually draw: the sculpt rows are p1..p3 and so is the sow.
     art = {str(px): [{"uri": f["uri"], "w": f["w"], "h": f["h"]} for f in figs[str(px)]]
@@ -214,6 +192,10 @@ def main():
             ("__SIZES__", json.dumps(sizes)),
             ("__OPENING__", json.dumps(place.get("tuned_at", sizes[-1]))),
             ("__PLACEMENT__", json.dumps(place)),
+            ("__FRAME__", json.dumps(place.get("frame")
+                                     or {"w": 320, "h": 390, "drop": 40})),
+            ("__PLATES__", json.dumps(plates)),
+            ("__GROUNDPLAN__", json.dumps(plan)),
             ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
             ("__BANNERFS__", json.dumps(board.BANNER_FS)),
             ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
@@ -226,11 +208,17 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
-    branch = sorted(p for p in GRID if len(edges.get(p, [])) > 1)
+    branch = sorted(p for p in board_grid() if len(edges.get(p, [])) > 1)
     print("  board from %s: %d positions, %d of them a choice (%s)"
-          % (BOARD_JSON.name, len(GRID), len(branch), ", ".join(branch)))
+          % (BOARD_JSON.name, len(board_grid()), len(branch), ", ".join(branch)))
     print("  sculpt sizes offered: %s  (named by %s)"
           % (", ".join(str(s) for s in sizes), board.PLACEMENT.name))
+    frame = place.get("frame") or {}
+    if frame:
+        print("  frame %d x %d real px, base %d below the floor"
+              % (frame["w"], frame["h"], frame.get("drop", 0)))
+    print("  %d ground plate(s), %d duties assigned  (from %s)"
+          % (len(plates), len(plan.get("by_duty") or {}), board.GROUND_PLAN.name))
     print("  spread %d, set-back %d, rank gap %d  ·  order %s  ·  mark %s  ·  depth %s %d%%"
           % (place["spread"], place["back"], place["rank"], place["order"], place["mark"],
              place["depth"]["mode"], place["depth"]["amount"]))
