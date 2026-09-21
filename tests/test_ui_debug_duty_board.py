@@ -895,3 +895,376 @@ def test_the_sheet_can_pick_a_ground(sheet):
         assert wiring in src, "%s is not there" % wiring.strip()
     assert "PLATES = __PLATES__" in src and "PLAN = __GROUNDPLAN__" in src, (
         "the plates or the plan are hardcoded rather than read")
+
+
+# ---------------------------------------------------------------- judging a new asset
+
+
+@pytest.fixture(scope="module")
+def checker():
+    spec = importlib.util.spec_from_file_location(
+        "generate_asset_check", ROOT / "tools" / "ui_debug" / "generate_asset_check.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+@pytest.fixture(scope="module")
+def metrics():
+    spec = importlib.util.spec_from_file_location(
+        "sculpt_metrics", ROOT / "tools" / "ui_debug" / "sculpt_metrics.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _disc(width, degrees, wall=30, pad=40, stem=0):
+    """A cylinder drawn at a known camera angle, to measure the measurer against.
+
+    Ground truth rather than agreement with the art: comparing `ground_ellipse` to the sculpts
+    only shows it is consistent with them, which it would also be if both were wrong.
+    """
+    import math
+
+    from PIL import Image, ImageDraw
+    minor = width * math.sin(math.radians(degrees))
+    w = width + 2 * pad
+    h = int(minor + wall + 2 * pad)
+    h += stem
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    top = pad + stem
+    if stem:
+        # SOMETHING STANDING ON IT, so the art is taller than it is wide and the checker reads it
+        # as a figure. Narrower than the base, like a robe on a plinth.
+        d.rectangle([pad + width * 0.3, pad, pad + width * 0.7, top + wall],
+                    fill=(140, 140, 140, 255))
+    d.ellipse([pad, top, pad + width, top + minor], fill=(120, 120, 120, 255))
+    d.rectangle([pad, top + minor / 2, pad + width, top + minor / 2 + wall],
+                fill=(90, 90, 90, 255))
+    d.ellipse([pad, top + wall, pad + width, top + minor + wall], fill=(90, 90, 90, 255))
+    return im
+
+
+def test_the_camera_angle_is_measured_against_a_known_answer(metrics):
+    """A drawn cylinder whose angle we chose, measured back."""
+    for degrees in (10, 20, 30, 40):
+        g = metrics.ground_ellipse(_disc(600, degrees), base_band=False)
+        assert g is not None
+        assert abs(g["degrees"] - degrees) <= 1.5, (
+            "a %d degree disc measured as %.1f" % (degrees, g["degrees"]))
+
+
+def test_the_widest_row_is_the_base_and_not_the_robe(metrics):
+    """Taking the whole silhouette's widest row found player_4's robe rather than its plinth and
+    reported a 90 degree camera for a 6 degree one. The set has to agree with itself."""
+    from PIL import Image
+    seen = []
+    for name in ("player_1", "player_2", "player_3", "player_4"):
+        path = ROOT / "ui" / "concept" / name / "sculpt_plastic.png"
+        if not path.is_file():
+            pytest.skip("the concept art is not here")
+        g = metrics.ground_ellipse(Image.open(path).convert("RGBA"))
+        assert g is not None
+        seen.append(g["degrees"])
+    assert max(seen) - min(seen) <= 3.0, (
+        "four figures sharing one camera measured %s" % [round(v, 1) for v in seen])
+
+
+def test_a_bare_plate_is_not_measured_in_the_base_band(metrics):
+    """The band is right for a figure standing on a plinth and wrong for a plate, which is all
+    base: banded, the cobbles read 11 degrees against 25 for the whole outline."""
+    from PIL import Image
+    path = ROOT / "ui" / "assets-gothic" / "grounds" / "cobbles_oval.png"
+    if not path.is_file():
+        pytest.skip("no ground plates on record")
+    im = Image.open(path).convert("RGBA")
+    banded = metrics.ground_ellipse(im, base_band=True)
+    whole = metrics.ground_ellipse(im, base_band=False)
+    assert whole["width"] > banded["width"], "the band is not cutting the plate short any more"
+
+
+def test_the_checker_reads_tall_as_a_sculpt_and_wide_as_a_plate(checker):
+    import io
+    buf = io.BytesIO()
+    _disc(200, 30, stem=420).save(buf, "PNG")
+    assert checker.judge(buf.getvalue(), 30.0, 2.5)["row"]["kind"] == "sculpt"
+
+    buf = io.BytesIO()
+    _disc(600, 30).save(buf, "PNG")
+    assert checker.judge(buf.getvalue(), 30.0, 2.5)["row"]["kind"] == "plate"
+
+
+def test_the_verdict_moves_with_the_target(checker):
+    """The point of the tool: the same file passes against one target and fails against another,
+    so the target is the thing being argued about rather than the measurement."""
+    import io
+    buf = io.BytesIO()
+    _disc(240, 30, wall=20, stem=500).save(buf, "PNG")
+    raw = buf.getvalue()
+
+    def angle_verdict(target):
+        for name, _value, verdict, _why in checker.judge(raw, target, 2.5)["checks"]:
+            if name == "camera angle":
+                return verdict
+        return None
+
+    assert angle_verdict(30.0) == "ok"
+    assert angle_verdict(6.0) == "bad", "a 30 degree disc passed a 6 degree target"
+
+
+def test_the_widest_figure_is_measured_rather_than_remembered(checker):
+    """The fit check had 108 written into it -- player_4's width -- while the board draws three
+    seats whose widest is 91. It reported a full tile needing 328 px instead of 311 and called a
+    frame that fits it bad."""
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    assert "108" not in src.split("def judge")[1].split("def serve")[0], (
+        "a figure width is hardcoded in the fit check again")
+    assert "board.figures(" in src, "the fit check no longer asks what the figures measure"
+
+
+def test_a_file_with_no_alpha_is_told_so_rather_than_measured(checker):
+    """A screenshot has no transparency, so every row is the full canvas width, the base's bottom
+    outline is flat and the angle comes out 0.0 -- which reads as a measurement of a flat camera
+    rather than as the absence of one. Three derived checks failing on a single root cause is how
+    an operator ends up fixing the wrong thing."""
+    import io
+
+    from PIL import Image
+    art = _disc(240, 30, wall=20, stem=500)
+    flat = Image.new("RGBA", art.size, (60, 62, 66, 255))
+    flat.alpha_composite(art)
+    buf = io.BytesIO()
+    flat.convert("RGB").save(buf, "PNG")
+
+    result = checker.judge(buf.getvalue(), 30.0, 2.5)
+    named = {c[0]: (c[1], c[2]) for c in result["checks"]}
+    assert named["cut out"][1] == "bad"
+    assert "camera angle" not in named, "a verdict was given on art that could not be measured"
+    assert any(v[1] == "cannot" for v in named.values()), (
+        "nothing said the rest could not be measured")
+    assert any("cut out" in n for n in result["notes"])
+
+
+def test_the_background_estimate_is_offered_and_labelled(checker):
+    """Screenshots are a normal thing to arrive with, so the tool guesses at the art and says the
+    number is a guess. It is close enough to be worth having: measured against the same figure
+    with its real alpha, the estimate lands within a couple of degrees."""
+    import io
+
+    from PIL import Image
+    art = _disc(240, 30, wall=20, stem=500)
+    buf = io.BytesIO()
+    art.save(buf, "PNG")
+    cut = checker.judge(buf.getvalue(), 30.0, 2.5)
+    truth = cut["row"]["degrees"]
+
+    flat = Image.new("RGBA", art.size, (12, 12, 14, 255))
+    flat.alpha_composite(art)
+    buf = io.BytesIO()
+    flat.convert("RGB").save(buf, "PNG")
+    guessed = checker.judge(buf.getvalue(), 30.0, 2.5)
+
+    assert "degrees" in guessed["row"], (
+        "the background could not be separated, so this proves nothing")
+    named = {c[0]: c[2] for c in guessed["checks"]}
+    assert "camera angle, estimated" in named, "the estimate is not labelled as one"
+    assert named["camera angle, estimated"] == "info", "an estimate was given as a verdict"
+    assert abs(guessed["row"]["degrees"] - truth) <= 3.0, (
+        "the estimate is %.1f against %.1f" % (guessed["row"]["degrees"], truth))
+
+
+def _height_row(checker, raw, height_tol):
+    for name, value, verdict, _why in checker.judge(
+            raw, 30.0, 2.5, height_tol=height_tol)["checks"]:
+        if name == "height":
+            return value, verdict
+    return None, None
+
+
+def test_the_height_verdict_moves_with_its_own_tolerance(checker):
+    """Height has a tolerance of its own rather than sharing the angle's.
+
+    The same figure has to pass a loose bar and fail a tight one, or the number in the box is
+    decoration. The angle is held at its target throughout, so a change of verdict can only have
+    come from the height tolerance and not from the file being wrong in some other way.
+    """
+    import io
+    buf = io.BytesIO()
+    _disc(240, 30, wall=20, stem=500).save(buf, "PNG")     # about +24% of the set
+    raw = buf.getvalue()
+
+    if _height_row(checker, raw, 15.0)[1] is None:
+        pytest.skip("no set on record to compare a height against")
+
+    assert _height_row(checker, raw, 45.0)[1] == "ok", (
+        "a figure 41% over the set failed a 45% tolerance")
+    assert _height_row(checker, raw, 15.0)[1] == "bad", (
+        "a figure 41% over the set passed a 15% tolerance")
+
+    angles = {t: [c[2] for c in checker.judge(raw, 30.0, 2.5, height_tol=t)["checks"]
+                  if c[0] == "camera angle"] for t in (15.0, 45.0)}
+    assert angles[15.0] == angles[45.0] == ["ok"], (
+        "the angle moved too, so the height tolerance is not what changed the verdict")
+
+
+def test_a_tall_figure_is_told_what_it_costs_the_rest_of_the_set(checker):
+    """Being out of tolerance is not the whole story: the tray levels every figure by the
+    narrowest plinth and then scales the set so the TALLEST reaches the target size, so one tall
+    newcomer shrinks its four siblings. A percentage off the median does not say that; the cost
+    row does, and only when the figure actually becomes the tallest."""
+    import io
+
+    def cost(stem):
+        buf = io.BytesIO()
+        _disc(240, 30, wall=20, stem=stem).save(buf, "PNG")
+        for name, value, verdict, _why in checker.judge(buf.getvalue(), 30.0, 2.5)["checks"]:
+            if name == "cost to the set":
+                return value, verdict
+        return None, None
+
+    short = cost(300)
+    if short[1] is None:
+        pytest.skip("no set on record to be shrunk")
+    assert short == ("none", "ok"), "a figure shorter than the set was said to cost it something"
+
+    value, verdict = cost(700)
+    assert verdict == "bad" and "smaller" in value, (
+        "a figure well over the tallest on record cost the set nothing: %r" % (value,))
+
+
+def test_the_height_tolerance_admits_the_set_it_judges_newcomers_against(checker):
+    """A bar the existing art cannot clear would fail every honest new figure.
+
+    With the camera divided out the set is tighter than it looked: player_2, _3 and _4 agree on
+    proportion to within 1% of each other, and player_1 stands 8.3% above them. So the guard is
+    that the CLUSTER passes and at most one figure sits outside -- which still catches a
+    tolerance screwed down so far that honest art fails, without pretending the known outlier
+    is not there. When the set is regenerated this should tighten, and the number here with it.
+    """
+    seen = {}
+    for name in checker.PLAYERS:
+        path = checker.CONCEPT / name / "sculpt_plastic.png"
+        if not path.is_file():
+            continue
+        for row, value, verdict, _why in checker.judge(path.read_bytes(), 29.0, 2.5)["checks"]:
+            if row == "height":
+                seen[name] = (value, verdict)
+    if len(seen) < 3:
+        pytest.skip("the concept art is not here")
+    bad = {k: v for k, v in seen.items() if v[1] != "ok"}
+    assert len(bad) <= 1, "the tool fails most of the set it was calibrated on: %s" % bad
+    assert not [k for k, v in seen.items() if v[1] == "bad"], (
+        "a figure on record is more than twice the tolerance out: %s" % seen)
+
+
+def test_a_tightly_cropped_cutout_is_measured_rather_than_estimated(checker):
+    """"Cut out" asked whether the art touched the canvas edge, which is a question about
+    margins, not about alpha. A PNG cropped flush to its own silhouette -- which every tight
+    crop is, and which recolouring produces -- was therefore declared to have no transparency
+    and quietly measured by the background ESTIMATE instead: it reported 29.1 for a figure whose
+    alpha says 29.8, with nothing on screen to say it had guessed."""
+    import io
+    art = _disc(240, 30, wall=20, stem=500)
+    buf = io.BytesIO()
+    art.save(buf, "PNG")
+    loose = checker.judge(buf.getvalue(), 29.0, 2.5)
+
+    tight = art.crop(art.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox())
+    assert tight.size != art.size, "the fixture was not actually cropped, so this proves nothing"
+    buf = io.BytesIO()
+    tight.save(buf, "PNG")
+    cropped = checker.judge(buf.getvalue(), 29.0, 2.5)
+
+    named = {c[0]: c[2] for c in cropped["checks"]}
+    assert named["cut out"] == "ok", "a cut-out PNG was called opaque because it was cropped tight"
+    assert "camera angle, estimated" not in named, "real alpha was measured by guesswork"
+    assert abs(cropped["row"]["degrees"] - loose["row"]["degrees"]) < 0.2, (
+        "cropping moved the measurement: %.1f against %.1f"
+        % (cropped["row"]["degrees"], loose["row"]["degrees"]))
+
+
+def test_height_is_compared_with_the_camera_divided_out(checker):
+    """height/plinth is a PROJECTED measurement. Raising the camera shortens a figure's drawn
+    height by cos(theta) while leaving its base width alone, so one sculpt measures smaller the
+    higher you look from. Comparing 30 degree figures against a 9 degree band reported the new
+    sculpts 29% short when they are 18% short -- reading a camera move as a change of shape."""
+    import math
+    true_ratio = 2.18
+    for deg in (9.0, 30.0, 45.0):
+        projected = true_ratio * math.cos(math.radians(deg))
+        assert abs(checker._proportion(projected, deg) - true_ratio) < 1e-9, (
+            "the camera was not divided out at %.0f degrees" % deg)
+    raw_gap = abs(true_ratio*math.cos(math.radians(9.0))
+                  - true_ratio*math.cos(math.radians(30.0)))
+    assert raw_gap > 0.25, (
+        "the uncorrected numbers barely differ, so correcting them proves nothing")
+
+
+def test_the_height_check_does_not_compare_raw_ratios_across_cameras(checker):
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    body = src.split("def judge")[1].split("def serve")[0]
+    assert "_proportion(" in body, "judge compares raw height/plinth across cameras again"
+
+
+def _batch(tmp_path, degrees):
+    """A folder of drawn plates at chosen angles, standing in for a run of generations."""
+    for i, d in enumerate(degrees):
+        _disc(600, d).save(tmp_path / ("plate_%02d.png" % i))
+    return tmp_path
+
+
+def _scan_text(checker, folder, capsys, match=None):
+    checker.scan(folder, match) if match else checker.scan(folder)
+    return capsys.readouterr().out
+
+
+def test_a_scan_measures_a_whole_run_in_one_pass(checker, tmp_path, capsys):
+    """One file at a time answers 'is this one good'. A run answers whether the prompt is good,
+    and that only shows up with the spread in front of you.
+
+    The fixture is drawn RELATIVE to the target rather than at a fixed angle: written as 29 it
+    passed until the target moved to 32 and then failed for a reason that had nothing to do with
+    what it tests.
+    """
+    t = checker.TARGET_DEGREES
+    out = _scan_text(checker, _batch(tmp_path, [t, t - 0.4, t + 0.4]), capsys)
+    assert out.count("plate_") == 3, "not every file in the folder was measured"
+    assert "3 measured" in out and "sd" in out, "the batch's own spread was not reported"
+    assert "3 of 3 inside" in out
+
+
+def test_a_scan_of_unrelated_art_refuses_to_call_it_a_batch(checker, tmp_path, capsys):
+    """Pointed at a folder of unrelated images this once announced that every generation shared
+    one bias -- true of a run from a single prompt, nonsense about a mixed folder. A claim about
+    a batch may only be made once the spread shows there IS a batch."""
+    out = _scan_text(checker, _batch(tmp_path, [10.0, 30.0, 50.0, 70.0]), capsys)
+    assert "not one batch" in out, "a folder with a 60 degree spread was summarised as a batch"
+    assert "BATCH is off" not in out, "a shared bias was claimed across unrelated files"
+
+
+def test_a_shared_bias_is_named_only_when_the_generations_agree(checker, tmp_path, capsys):
+    """The case the scan exists for: files that agree with each other and are all wrong together
+    are a prompt to fix, not twenty files to throw away."""
+    out = _scan_text(checker, _batch(tmp_path, [21.0, 21.4, 20.7, 21.2]), capsys)
+    assert "BATCH is off" in out, "a tight cluster 8 degrees off target was not named as a bias"
+    assert "not one batch" not in out
+    assert "prompt to change rather than files to discard" in out
+
+
+def test_a_scan_can_be_narrowed_to_one_run(checker, tmp_path, capsys):
+    """Downloads holds every generation ever made, so measuring 'the folder' measures the wrong
+    thing; the run being judged has to be selectable."""
+    _batch(tmp_path, [29.0, 29.2])
+    _disc(600, 70.0).save(tmp_path / "unrelated_thing.png")
+    out = _scan_text(checker, tmp_path, capsys, match="plate_*.png")
+    assert "unrelated_thing" not in out, "the glob did not narrow the scan"
+    assert out.count("plate_") == 2
+
+
+def test_the_target_angle_is_the_one_the_generator_actually_reaches(checker):
+    """30 and 40 were picked from numbers and neither survived a composite. 29 was picked by
+    looking, and then the ask stopped steering: two batches of ten, asks three degrees apart,
+    landed at 32.1 and 31.9. The plates converge on the same place unprompted. A target the
+    generator cannot be moved to is a target that fails honest art on both sides of the board."""
+    assert checker.TARGET_DEGREES == 32.0
