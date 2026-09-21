@@ -1,0 +1,424 @@
+<!doctype html><html lang=en><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Sow, by hand</title>
+<style>
+@font-face{font-family:"PB";src:url(__FONTURI_CSS__) format("truetype");font-display:block}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0b08;color:#8b8071;
+  font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+#wrap{height:100%;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;background:__GROUND__;flex:none}
+.cell{position:absolute}
+.ban{position:absolute;left:50%;transform:translateX(-50%);z-index:3}
+.ban img{display:block;width:100%;height:100%}
+.ban b{position:absolute;left:50%;transform:translate(-50%,-50%);
+  font-family:"PB",serif;text-transform:uppercase;white-space:nowrap;line-height:1}
+.figs{position:absolute;z-index:4}
+.fig{position:absolute}
+.fig img{display:block;width:100%;height:100%;pointer-events:none}
+
+/* ---- the marking ---------------------------------------------------------------------------
+   LIT MEANS LEGAL NOW, and nothing else. An earlier version also ghosted the tiles further
+   along a forced run; it was dropped rather than fixed. The lookahead answered "where will this
+   end up", which is not the question in front of the player -- the question is where THIS
+   acolyte goes -- and the count in the hand already says how much is left to place.
+
+   The mark sits UNDER the figures and above the ground, and is invisible until something is in
+   hand. A board that is always outlined is a form; a board that outlines itself only while you
+   are holding something is a board. */
+.mark{position:absolute;z-index:2;pointer-events:none;opacity:0;transition:opacity .14s}
+.cell.live .mark{opacity:1}
+/* NO MARK ON THE SOURCE. It answered "where did this fistful come from", which is history and
+   not a choice. Every opacity rule here is scoped by the cell's state on purpose: a rule
+   carrying three classes once outranked the one-class default and painted every tile at once. */
+
+/* FLOOR -- the line the figures stand on, lit and widened. What we settled on. */
+.mark.floor{position:absolute;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,rgba(201,178,122,0),#c9b27a 18%,#c9b27a 82%,rgba(201,178,122,0))}
+/* FOOTPRINTS -- an ellipse where the next sculpt will stand. Kept because the placement file
+   still admits it, not because it is the choice: it promises a SPOT, and a rule that re-lays
+   the whole group cannot keep that promise. */
+.mark.foot{position:absolute;border-radius:50%;border:1.5px solid #c9b27a;
+  background:radial-gradient(ellipse at center,rgba(201,178,122,.16),rgba(201,178,122,0) 70%)}
+.cell.live .mark.foot.next{animation:pulse 1.15s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+.cell.live .mark.foot.later{opacity:.34}
+/* BOX -- a thin border rising from the banner's ends, open at the top: a closed rectangle reads
+   as a form field, and leaving it open keeps it a pen. */
+.mark.box{position:absolute;border:1px solid rgba(201,178,122,.75);
+  border-bottom:none;border-radius:3px 3px 0 0}
+.mark.box::before,.mark.box::after{content:"";position:absolute;top:-1px;width:26%;height:1px;
+  background:rgba(201,178,122,.75)}
+.mark.box::before{left:-1px} .mark.box::after{right:-1px}
+/* GILD -- no new geometry at all; the parchment itself lights. */
+.cell.live.m-gild .ban img{filter:brightness(1.22) saturate(1.15)
+  drop-shadow(0 0 7px rgba(201,178,122,.55))}
+.cell.src.m-gild .ban img{filter:brightness(.9) saturate(.85)}
+
+.ground{position:absolute;height:1px;background:#241e15;z-index:1}
+
+/* ---- the hand ------------------------------------------------------------------------------
+   Beside the wheel rather than on it, so the board keeps its whole square. */
+/* Under the panels, not over them. A hand of three 210 px sculpts is taller than half the
+   screen, and with the tray on top it covered the seat buttons completely -- the controls were
+   still there and simply could not be clicked. */
+#hand{position:fixed;display:flex;flex-direction:column-reverse;align-items:center;gap:2px;
+  padding:10px 12px 12px;border-radius:4px;background:rgba(20,16,10,.82);
+  border:1px solid #2c2519;z-index:6}
+#hand.empty{opacity:.25}
+#hand .lab{color:#5f574a;font-size:10px;margin-top:6px;order:99}
+#hand .held{cursor:grab;touch-action:none;filter:drop-shadow(2px 4px 4px rgba(0,0,0,.6))}
+#hand .held img{display:block;width:100%;height:100%;pointer-events:none}
+.ghost{position:fixed;z-index:20;pointer-events:none;
+  filter:drop-shadow(4px 8px 6px rgba(0,0,0,.7))}
+.ghost img{display:block;width:100%;height:100%}
+
+#note{position:fixed;left:10px;top:12px;width:250px;color:#5f574a;white-space:pre-wrap;
+  pointer-events:none;z-index:8}
+#note b{color:#c9b27a;font-weight:400}
+#ui{position:fixed;left:10px;bottom:12px;width:252px;color:#6b6152;z-index:8}
+#ui .row{display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap}
+#ui button{font:inherit;color:#8b8071;background:#1c1811;border:1px solid #332c20;
+  border-radius:3px;padding:3px 8px;cursor:pointer}
+#ui button:hover{border-color:#5a4c36}
+#ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
+#ui button[aria-disabled=true]{cursor:default;opacity:.85}
+#ui button[aria-disabled=true]:hover{border-color:#c9b27a}
+#ui .lab{color:#4f483d;min-width:46px}
+#ui .hint{color:#3f3930;line-height:1.5}
+</style>
+<svg width=0 height=0 style="position:absolute" aria-hidden=true><defs id=hazedefs></defs></svg>
+<div id=wrap><div class=stage id=stage></div></div>
+<div id=hand class=empty></div>
+<div id=note></div>
+<div id=ui>
+  <div class=row><span class=lab>sculpt</span><span id=szb></span></div>
+  <div class=row><span class=lab>seat</span><span id=seatb></span>
+    <button id=breset>reset board</button></div>
+  <div class="row hint">click a tile holding your own sculpts to LIFT them &#183;
+    drag one out of the hand onto a lit tile &#183; u undo &#183; r reset &#183; f full</div>
+</div>
+<script>
+// ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js -----------------------
+__FORMATION__
+// -----------------------------------------------------------------------------------------------
+var CELLS = __CELLS__, EDGES = __EDGES__, FIGS = __FIGS__, SIZES = __SIZES__;
+var PLACE = __PLACEMENT__, OPENING = __OPENING__;
+var BANNER_FS = __BANNERFS__, BANNER_TRACK = __BANNERTRACK__;
+var BANNER_TOP = __BANNERTOP__, BANNER_INK = __BANNERINK__;
+
+// EVERYTHING THE PAGE DRAWS WITH COMES FROM THE PLACEMENT FILE. There are no sliders here on
+// purpose: the numbers are tuned next door in the placement sheet, saved, and this page shows
+// what they do to a sow. A control here would be a second place to set them, and the two would
+// disagree the first time one was nudged.
+var SPREAD = PLACE.spread, BACK = PLACE.back, RANK = PLACE.rank;
+var ORDER = PLACE.order, MARK = PLACE.mark;
+var MODE = PLACE.depth.mode, SHADE = PLACE.depth.amount, FULL_AT = PLACE.depth.full_at;
+var HAZE_STEPS = DUTY_HAZE.steps, HAZE_MAX = DUTY_HAZE.max;
+
+var DPR = devicePixelRatio || 1, px = function(v){ return (v / DPR) + "px"; };
+var POS = CELLS.map(function(c){ return c.pos; });
+var SIZE = SIZES.indexOf(OPENING) >= 0 ? OPENING : SIZES[SIZES.length - 1];
+var SEAT = 0, shadow = true;
+
+// THE FORMATION ONLY KNOWS FIVE. A tile already holding five is not lit, because there is no
+// sixth place for the rules to describe and a silent refusal at the drop would look like a bug
+// in the drag. What a sow that would overfill a tile actually does is a rule question the game
+// has not answered yet; until it does, the page declines rather than inventing an answer.
+var SLOTS = 5;
+
+// A tile is the LIST of seats standing on it, in the order they arrived. Not a count: `arrival`
+// needs to know who got there first, and a count cannot remember that.
+var BOARD = [], HAND = 0, FROM = -1, AT = -1, HIST = [];
+
+document.getElementById("hazedefs").innerHTML =
+  dutyHazeDefs("__GROUND__", HAZE_STEPS, HAZE_MAX);
+
+function figFilter(y){
+  return dutyFilter(y, {ref: FULL_AT, amount: SHADE, mode: MODE, shadow: shadow,
+                        steps: HAZE_STEPS});
+}
+
+function countsOf(tile){
+  var c = [0, 0, 0];
+  tile.forEach(function(s){ c[s] += 1; });
+  return c;
+}
+
+function reset(){
+  // An opening-ish board rather than an empty one: the setup config starts a player with three
+  // on a single position, so a pile is the normal state and not an edge case.
+  BOARD = CELLS.map(function(){ return []; });
+  OPENING_BOARD.forEach(function(p){
+    var i = POS.indexOf(p.pos);
+    if (i >= 0) for (var k = 0; k < p.n && BOARD[i].length < SLOTS; k++) BOARD[i].push(p.seat);
+  });
+  HAND = 0; FROM = -1; AT = -1; HIST = [];
+  build();
+}
+var OPENING_BOARD = [{pos: "north", seat: 0, n: 3}, {pos: "east", seat: 1, n: 2},
+                     {pos: "south_west", seat: 2, n: 1}, {pos: "west", seat: 0, n: 1},
+                     {pos: "north_west", seat: 2, n: 1}];
+
+// THE LIT SET: the tiles this acolyte may legally go to, and only those. The board graph runs
+// one way and only three positions branch, so this is one tile most of the time and two at
+// east, west and the City. Both choices are lit identically -- the page has no business
+// implying one of them is the real one.
+function legal(){
+  if (AT < 0 || HAND <= 0) return [];
+  return (EDGES[POS[AT]] || []).map(function(n){ return POS.indexOf(n); })
+                               .filter(function(i){ return i >= 0 && BOARD[i].length < SLOTS; });
+}
+
+// Which seats stand where, left to right, for a tile's current occupants.
+function queueFor(tile){
+  return ORDER === "arrival" ? tile.slice()
+                             : tile.slice().sort(function(a, b){ return a - b; });
+}
+
+var BUD = 0, CELL = 0, FIELD = 0, TIGHT = 0;
+function build(){
+  BUD = Math.floor(Math.min(innerWidth, innerHeight) * DPR);
+  CELL = BUD / 3;
+  var FIG = FIGS[String(SIZE)], figH = Math.max.apply(null, FIG.map(function(f){ return f.h; }));
+  var banW = CELL * 0.55, banH = banW / 3, gapA = CELL * 0.05;
+  // Tall enough for the deepest thing the formation can ask for, which is the rank gap at four
+  // and five but the set-back at three -- taking only one of them clips whichever is larger.
+  FIELD = figH + Math.max(RANK, BACK);
+  var total = FIELD + gapA + banH, top = (CELL - total) / 2;
+  // TRUE SIZE IS THE POINT, so nothing here scales to fit: a sculpt on this page is the size it
+  // is on the table. When the window cannot afford that, the tile's contents run past it and the
+  // bottom row loses its banner -- which looks like a drawing bug rather than a small window.
+  // So the page says so instead, and says what to do about it.
+  TIGHT = total > CELL ? Math.ceil((total - CELL) / DPR) : 0;
+  var lit = legal();
+
+  var h = "";
+  for (var i = 0; i < 9; i++){
+    var r = (i / 3) | 0, c = i % 3, C = CELLS[i];
+    var tile = BOARD[i], n = tile.length;
+    var isLive = lit.indexOf(i) >= 0;
+    h += '<div class="cell m-' + MARK + (isLive ? " live" : "") + (i === FROM ? " src" : "")
+       + '" data-i="' + i + '" style="left:' + px(c * CELL) + ';top:' + px(r * CELL)
+       + ';width:' + px(CELL) + ';height:' + px(CELL) + '">';
+
+    // THE MARK CLAIMS THE TILE'S TERRITORY, NOT ITS CONTENTS. Sized to the current formation it
+    // gave an empty tile a narrow slot and a crowded one a wide pen, so it said "how full am I"
+    // when its whole job is to say "this much of the board is mine". The banner already declares
+    // the tile's width, so the mark takes its width from that.
+    var wide = banW * 1.06;
+    if (MARK === "floor"){
+      h += '<div class="mark floor" style="left:' + px(CELL / 2 - wide / 2) + ';top:'
+         + px(top + FIELD) + ';width:' + px(wide) + '"></div>';
+    } else if (MARK === "box"){
+      h += '<div class="mark box" style="left:' + px(CELL / 2 - wide / 2) + ';top:' + px(top)
+         + ';width:' + px(wide) + ';height:' + px(FIELD) + '"></div>';
+    } else if (MARK === "foot"){
+      // WHICH SLOT THE NEWCOMER ACTUALLY TAKES, not "the last one". Slots fill left to right and
+      // `grouped` sorts by seat, so a low-seat sculpt lands on the LEFT and pushes everyone
+      // right. Assuming the rightmost slot pointed at the wrong ellipse whenever the dropping
+      // seat was not already the highest on the tile.
+      var after = queueFor(tile.concat([SEAT]));
+      var nextIdx = after.indexOf(SEAT) + countsOf(tile)[SEAT];
+      dutyFormation(n + 1, SPREAD, BACK, RANK)
+        .sort(function(a, b){ return a.x - b.x; })
+        .forEach(function(s, j){
+          h += '<div class="mark foot ' + (j === nextIdx ? "next" : "later") + '" style="left:'
+             + px(CELL / 2 + s.x - FIG[0].w * 0.42) + ';top:'
+             + px(top + FIELD - s.y - FIG[0].w * 0.20) + ';width:' + px(FIG[0].w * 0.84)
+             + ';height:' + px(FIG[0].w * 0.30) + '"></div>';
+        });
+    }
+    // `gild` draws no geometry at all -- the banner lights, from CSS.
+
+    h += '<div class=figs style="top:' + px(top) + ';left:0;width:' + px(CELL) + ';height:'
+       + px(FIELD) + '">';
+    var q = queueFor(tile);
+    // Painter's order by foot, so a sculpt standing further back never covers a nearer one.
+    var placed = dutyFormation(n, SPREAD, BACK, RANK)
+                   .sort(function(a, b){ return a.x - b.x; })
+                   .map(function(p, j){ return {x: p.x, y: p.y, seat: q[j]}; });
+    placed.slice().sort(function(a, b){ return b.y - a.y || a.x - b.x; }).forEach(function(p){
+      var f = FIG[p.seat];
+      h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
+         + px(FIELD - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
+         + ';filter:' + figFilter(p.y) + '"><img src="' + f.uri + '"></div>';
+    });
+    h += '</div>';
+
+    h += '<div class=ground style="left:' + px(CELL / 2 - wide / 2) + ';top:' + px(top + FIELD)
+       + ';width:' + px(wide) + '"></div>';
+    h += '<div class=ban style="top:' + px(top + FIELD + gapA) + ';width:' + px(banW)
+       + ';height:' + px(banH) + '">' + (C.ban ? '<img src="' + C.ban + '">' : "")
+       + '<b style="top:' + (BANNER_TOP * 100).toFixed(2) + '%;color:' + BANNER_INK
+       + ';font-size:' + px(banH * BANNER_FS) + ';letter-spacing:'
+       + px(banH * BANNER_FS * BANNER_TRACK) + '">' + C.title.toUpperCase() + '</b></div>';
+    h += '</div>';
+  }
+  var S = document.getElementById("stage");
+  S.style.width = px(BUD); S.style.height = px(BUD);
+  S.innerHTML = h;
+  S.querySelectorAll(".cell").forEach(function(el){
+    el.onclick = function(){ tap(+el.dataset.i); };
+  });
+  drawHand(); say(); pressAll();
+}
+
+// ---- the hand ---------------------------------------------------------------------------------
+function drawHand(){
+  var el = document.getElementById("hand"), f = FIGS[String(SIZE)][SEAT];
+  el.classList.toggle("empty", HAND === 0);
+  var sq = BUD / DPR, left = (innerWidth - sq) / 2;
+  el.style.left = Math.max(8, left - 108) + "px";
+  var h = "";
+  for (var i = 0; i < HAND; i++)
+    h += '<div class="held' + (i === HAND - 1 ? " top" : "") + '" style="width:' + px(f.w)
+       + ';height:' + px(f.h) + '"><img src="' + f.uri + '"></div>';
+  h += '<div class=lab>' + (HAND ? HAND + " in hand" : "hand") + '</div>';
+  el.innerHTML = h;
+  // CENTRED ON WHAT IT ACTUALLY IS. The top was computed from a fixed half-height, which was
+  // about right for a hand of one 120 px sculpt and ran a hand of three 210s off the bottom of
+  // the screen -- the acolytes you had not placed yet were the ones you could not see.
+  var h2 = el.offsetHeight;
+  el.style.top = Math.max(8, Math.min(innerHeight / 2 - h2 / 2, innerHeight - h2 - 8)) + "px";
+  var topOne = el.querySelector(".held.top");
+  if (topOne) topOne.onpointerdown = function(e){ lift(e, f); };
+}
+
+var GH = null;
+function lift(e, f){
+  GH = document.createElement("div");
+  GH.className = "ghost";
+  GH.style.width = px(f.w); GH.style.height = px(f.h);
+  GH.innerHTML = '<img src="' + f.uri + '">';
+  document.body.appendChild(GH);
+  moveGhost(e);
+  var mv = function(ev){ moveGhost(ev); };
+  var up = function(ev){
+    removeEventListener("pointermove", mv); removeEventListener("pointerup", up);
+    var el = document.elementFromPoint(ev.clientX, ev.clientY);
+    GH.remove(); GH = null;
+    var cell = el && el.closest ? el.closest(".cell") : null;
+    if (cell && cell.classList.contains("live")) drop(+cell.dataset.i);
+    else build();                                   // a miss puts it back, silently
+  };
+  addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  e.preventDefault();
+}
+function moveGhost(e){
+  if (!GH) return;
+  GH.style.left = (e.clientX - GH.offsetWidth / 2) + "px";
+  GH.style.top = (e.clientY - GH.offsetHeight * 0.8) + "px";
+}
+
+// ---- the moves --------------------------------------------------------------------------------
+function remember(){
+  HIST.push(JSON.stringify({B: BOARD, H: HAND, F: FROM, A: AT}));
+}
+function tap(i){
+  if (HAND > 0){                                    // clicking a lit tile also drops
+    if (legal().indexOf(i) >= 0) drop(i);
+    return;
+  }
+  var mine = BOARD[i].filter(function(s){ return s === SEAT; }).length;
+  if (mine <= 0) return;                            // only your own, and only if there are any
+  remember();
+  HAND = mine;
+  BOARD[i] = BOARD[i].filter(function(s){ return s !== SEAT; });
+  FROM = i; AT = i;
+  build();
+}
+function drop(i){
+  if (HAND <= 0 || BOARD[i].length >= SLOTS) return;
+  remember();
+  BOARD[i] = BOARD[i].concat([SEAT]);
+  HAND -= 1;
+  AT = i;
+  if (HAND === 0){ FROM = -1; AT = -1; }            // the sow is over; nothing is lit
+  build();
+}
+function undo(){
+  if (!HIST.length) return;
+  var s = JSON.parse(HIST.pop());
+  BOARD = s.B; HAND = s.H; FROM = s.F; AT = s.A;
+  build();
+}
+
+function say(){
+  var names = legal().map(function(i){ return CELLS[i].title; });
+  var mine = BOARD.reduce(function(a, t){
+    return a + t.filter(function(s){ return s === SEAT; }).length; }, 0);
+  var blocked = AT >= 0 && HAND > 0
+    && (EDGES[POS[AT]] || []).length > names.length;
+  document.getElementById("note").innerHTML =
+    "SOW BY HAND, true size at <b>" + DPR.toFixed(2) + "x</b>\n"
+  + "sculpt  <b>" + FIGS[String(SIZE)][0].h + "</b> real px\n"
+  + "seat    <b>p" + (SEAT + 1) + "</b>, <b>" + mine + "</b> on the wheel\n\n"
+  + (HAND === 0
+      ? "click one of your tiles to lift\nits acolytes into the hand."
+      : "in hand <b>" + HAND + "</b>\nfrom    <b>" + (FROM >= 0 ? CELLS[FROM].title : "-")
+        + "</b>\nat      <b>" + (AT >= 0 ? CELLS[AT].title : "-") + "</b>\nnext    "
+        + (names.length === 0 ? "<b>nowhere</b>  (every exit is full)"
+           : names.length === 1 ? "<b>" + names[0] + "</b>  (forced)"
+           : "<b>" + names.join("</b> or <b>") + "</b>  (choose)")
+        + (blocked && names.length ? "\n        an exit is full, so not lit" : ""))
+  + "\n\norder   <b>" + ORDER + "</b>\nmark    <b>" + MARK + "</b>\ndepth   <b>"
+  + (SHADE ? MODE + " " + SHADE + "%, full at " + FULL_AT : "off") + "</b>"
+  + (TIGHT ? "\n\n<b>the window is " + TIGHT + " px too short</b>\nfor a tile at this sculpt "
+             + "size;\nthe bottom row is clipped.\npress f for fullscreen."
+           : "")
+  + "\n\nthe numbers are the placement\nfile's; tune them next door in\nthe placement sheet.";
+}
+
+// ---- the two controls -------------------------------------------------------------------------
+function buttons(host, values, current, label, choose){
+  host.innerHTML = "";
+  values.forEach(function(v){
+    var b = document.createElement("button");
+    b.textContent = label(v);
+    b.onclick = function(){ choose(v); };
+    host.appendChild(b);
+    b._value = v;
+  });
+  host._values = values; host._current = current;
+}
+function pressAll(){
+  [["szb", function(){ return SIZE; }], ["seatb", function(){ return SEAT; }]]
+    .forEach(function(pair){
+      var host = document.getElementById(pair[0]);
+      [].forEach.call(host.children, function(b){
+        b.setAttribute("aria-pressed", b._value === pair[1]() ? "true" : "false");
+        // A row with one button has nothing to switch to. It still names the size, which is
+        // worth saying, so it is drawn and simply does not pretend to be a choice.
+        if (host._values.length < 2) b.setAttribute("aria-disabled", "true");
+      });
+    });
+}
+buttons(document.getElementById("szb"), SIZES, null,
+        function(v){ return String(v); },
+        function(v){ SIZE = v; build(); });
+buttons(document.getElementById("seatb"), [0, 1, 2], null,
+        function(v){ return "p" + (v + 1); },
+        function(v){
+          if (HAND > 0) return;                     // a seat change mid-sow would strand the hand
+          SEAT = v; build();
+        });
+document.getElementById("breset").onclick = reset;
+
+addEventListener("keydown", function(e){
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "u") return undo();
+  if (e.key === "r") return reset();
+  if (e.key === "s"){ shadow = !shadow; return build(); }
+  if (e.key === "1" || e.key === "2" || e.key === "3"){
+    if (HAND > 0) return;
+    SEAT = +e.key - 1; return build();
+  }
+  if (e.key === "f") document.fullscreenElement ? document.exitFullscreen()
+                                                : document.documentElement.requestFullscreen();
+});
+addEventListener("resize", build);
+addEventListener("fullscreenchange", build);
+reset();
+(async function(){ try{ await document.fonts.load('400 20px "PB"'); await document.fonts.ready;
+                        build(); } catch(e){} })();
+</script>
