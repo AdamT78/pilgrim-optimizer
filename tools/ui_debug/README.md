@@ -2230,3 +2230,83 @@ aspect and not on the screen. The pixel counts are where the screens differ.
 The canvas is held at 1600 — what the game ships today — so the aspect is the only thing moving.
 `gen_screen_budget` is the page for the canvas trade. Output goes to `generated/` and is not
 committed.
+
+## Arranging a tile, and saving what you chose
+
+`generate_placement_sheet.py` draws every arrangement the placement rules produce — 1 on a tile,
+2, 2+1, 4+1, all of them — from `ui/assets-gothic/metadata/duty_placement.json`, the file that
+decides them.
+
+    python3 tools/ui_debug/generate_placement_sheet.py --serve
+
+Served rather than opened from disk, because the page writes back. The numbers in that file are
+small and abstract on their own — a spread, a set-back, a rank gap, bare pixels with no figure
+beside them — and nothing about reading `spread: 110` tells you whether 4+1 will look deliberate
+or like a pile-up. So the sliders move the rules and the page redraws every case at once, and
+saving writes the values back into the JSON rather than into a screenshot you then have to
+transcribe. `generate_duty_sow.py` reads the same file, so what you tune here is what the Sow
+plays with.
+
+The frame, the ground-plate picker and the wheel view live here too. The frame is the picture
+area a tile's art has to fit; the picker reads `ui/assets-gothic/grounds/` as a tree and writes
+the choice into `duty_grounds.json`, where what art EXISTS stays a fact about the folder and only
+which duty uses which is written down.
+
+## The duty board, for random checks
+
+`generate_duty_board_check.py` puts nine duty tiles on a page carrying mixed stacks, which is the
+case the other wheel pages never reach.
+
+    python3 tools/ui_debug/generate_duty_board_check.py --open
+
+The wheel pages draw at most one piece per tile. A duty position holds a vector — p1's acolytes
+there, p2's, p3's — and the questions that only appear when several seats share a tile are where
+each sculpt stands, whether a rank gap reads as a second row or as a mistake, and whether a
+player can still count the tile at a glance. Four independent decisions, so four controls rather
+than one mode. Like the other generators here it opens its page on a plain run; `--no-open`
+writes the file and leaves it alone.
+
+## The Sow, played by hand
+
+`generate_duty_sow.py` is the only page in this toolchain where sculpts MOVE.
+
+    python3 tools/ui_debug/generate_duty_sow.py --open
+
+Everything else draws an arrangement that already exists. A sow is a physical act before it is a
+rule — you pick a tile up, you hold a fistful of acolytes, you put them down one at a time along
+a route — and the only way to find out whether an arrangement still reads while your hand is in
+the way is to put your hand in the way. Only the next duty tile is lit, whether or not it
+involves a choice; there is no faded lookahead, because a route you can see the end of is not the
+decision the player actually faces.
+
+It carries no settings of its own. Sizes and spreads come from `duty_placement.json`, so a size
+button appears here because the file has that size, not because this script knows about it.
+
+## Judging a new asset
+
+`generate_asset_check.py` measures a sculpt or a ground plate and says which parts of it are
+inside tolerance.
+
+    python3 tools/ui_debug/generate_asset_check.py --serve
+    python3 tools/ui_debug/generate_asset_check.py --scan ~/Downloads --match "batch_*.png"
+
+Generating art is cheap and judging it is not. The hard part is not making another sculpt, it is
+knowing which of the eight you just made is the one to keep — and "looks about right" is not a
+judgement that repeats tomorrow. Drop a PNG on the served page and it reports the camera angle,
+the figure's height against its own base, whether it is cut out, and whether five of them fit the
+frame, each against a tolerance you can see and change.
+
+`--scan` measures a folder in one pass, because a run of generations answers a different question
+from a single file: not "is this one good" but "is the prompt wrong, or are these files wrong",
+and that only shows up with the spread in front of you. It says so only when the spread shows
+there IS a batch — pointed at a mixed folder it will tell you to read the rows instead, rather
+than announcing that forty-five unrelated images share one bias.
+
+Two things worth knowing before trusting a number. The angle is exact for a circular plate and
+only approximate for a rectangular one, which the page says on itself. And a file with no
+transparency cannot be measured at all: rather than reporting the 0.0 degrees that falls out of a
+flat silhouette, it says so and offers a labelled estimate from separating the background by
+brightness.
+
+The measuring lives in `sculpt_metrics.py`, shared with `make_tray_figures.py` and
+`check_sculpt.py`, so a threshold that moves moves for all three.
