@@ -33,7 +33,6 @@ both pages would then disagree about what a valid file is while each looked enti
 """
 
 import argparse
-import base64
 import html
 import importlib.util
 import json
@@ -124,12 +123,81 @@ def save_settings(board, sent):
         raise ValueError("depth.full_at is %r, want a positive whole number" % depth.get("full_at"))
     merged["depth"] = {"mode": depth["mode"], "amount": depth["amount"],
                        "full_at": depth["full_at"]}
+    # The frame, when the page is showing the wheel. Same rules the generator reads by, so the
+    # button cannot write a file the tool would then refuse to load.
+    frame = sent.get("frame")
+    if frame is not None:
+        for key in ("w", "h"):
+            value = frame.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError("frame.%s is %r, want a positive whole number" % (key, value))
+        drop = frame.get("drop", 0)
+        if isinstance(drop, bool) or not isinstance(drop, int):
+            raise ValueError("frame.drop is %r, want a whole number" % drop)
+        merged["frame"] = {"w": frame["w"], "h": frame["h"], "drop": drop}
+
+    # ---- and the grounds, which live in their own file ---------------------------------------
+    # Two files, one button. They are separate files because they are separate decisions with
+    # separate lifetimes -- how sculpts stand outlives which picture they stand on -- but they
+    # are tuned in the same sitting, and a second button would mean a half-saved board.
+    grounds = sent.get("grounds")
+    if grounds is not None:
+        save_grounds(board, grounds)
 
     # Written via a neighbour and renamed into place: a crash halfway through a direct write
     # leaves the file truncated, and this one is read by every page in the toolchain.
     tmp = board.PLACEMENT.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     tmp.replace(board.PLACEMENT)
+    return merged
+
+
+def save_grounds(board, sent):
+    """Write the ground assignments and their tuning back, merged like the placement file.
+
+    Validated with the same rules the generator reads by, so the button cannot write a file the
+    tool would then refuse to load.
+    """
+    current = {}
+    if board.GROUND_PLAN.is_file():
+        current = json.loads(board.GROUND_PLAN.read_text(encoding="utf-8"))
+    merged = dict(current)
+
+    by_duty = sent.get("by_duty")
+    if by_duty is not None:
+        if not isinstance(by_duty, dict):
+            raise ValueError("by_duty is %r, want an object keyed by duty slug" % by_duty)
+        for slug in by_duty:
+            if slug not in board.SLUGS:
+                raise ValueError("by_duty has %r, which is not a duty slug" % slug)
+        merged["by_duty"] = dict(by_duty)
+
+    grounds = sent.get("grounds")
+    if grounds is not None:
+        if not isinstance(grounds, dict):
+            raise ValueError("grounds is %r, want an object keyed by plate name" % grounds)
+        clean = {}
+        for name, g in grounds.items():
+            row = {}
+            for key, lo, hi in (("anchor", 0, 100), ("scale", 1, 300), ("dim", 0, 100),
+                                ("saturate", 0, 100), ("opacity", 0, 100)):
+                value = (g or {}).get(key)
+                if isinstance(value, bool) or not isinstance(value, int) \
+                        or not lo <= value <= hi:
+                    raise ValueError("grounds.%s.%s is %r, want a whole number %d-%d"
+                                     % (name, key, value, lo, hi))
+                row[key] = value
+            clean[name] = row
+        merged["grounds"] = clean
+
+    # A plate the plan names but the folder no longer holds would draw nothing and say nothing.
+    for slug, name in (merged.get("by_duty") or {}).items():
+        if name and name not in (merged.get("grounds") or {}):
+            raise ValueError("%s is assigned %r, which has no entry under grounds" % (slug, name))
+
+    tmp = board.GROUND_PLAN.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(board.GROUND_PLAN)
     return merged
 
 
@@ -167,11 +235,21 @@ def serve(page, board, port, open_it):
             except Exception as exc:                                # noqa: BLE001
                 print("  refused a save: %s" % exc)
                 return self._send(400, json.dumps({"error": str(exc)}))
+            frame = saved.get("frame") or {}
             print("  saved  spread %d  set-back %d  rank %d  order %s  depth %s %d%%"
                   % (saved["spread"], saved["back"], saved["rank"], saved["order"],
                      saved["depth"]["mode"], saved["depth"]["amount"]))
-            return self._send(200, json.dumps({"ok": True,
-                                               "file": str(board._short(board.PLACEMENT))}))
+            if frame:
+                print("         frame %d x %d, base %d below the floor"
+                      % (frame["w"], frame["h"], frame.get("drop", 0)))
+            if sent.get("grounds"):
+                print("         grounds written to %s"
+                      % board._short(board.GROUND_PLAN))
+            written = [str(board._short(board.PLACEMENT))]
+            if sent.get("grounds"):
+                written.append(str(board._short(board.GROUND_PLAN)))
+            return self._send(200, json.dumps({"ok": True, "file": ", ".join(written),
+                                               "files": written}))
 
         def log_message(self, *a):                                  # quiet; we print what matters
             return
@@ -208,16 +286,18 @@ def main():
     notes = []
     place = board.placement(notes)
     figs = board.figures(fig_dir, notes)
+    # The nine tiles come from the board checker, which owns the compass order, the slug table
+    # and the parchment. The wheel view would otherwise be a third copy of that pairing.
+    cells, font = board.tiles(notes)
+    # The plates are discovered from the folder; the plan says which duty stands on which.
+    plan = board.ground_plan(notes)
+    plates = board.ground_art(notes)
     if not figs:
         raise SystemExit("no sculpt art -- run tools/ui_debug/make_tray_figures.py first; "
                          "this page is nothing but arrangements of it")
 
     sizes = sorted(int(k) for k in figs)   # figures() keys by string; work in ints
     orders = ["grouped", "arrival"]
-    font = ""
-    ffile = ROOT / "ui" / "assets" / "fonts" / "PirataOne-Regular.ttf"
-    if ffile.is_file():
-        font = "data:font/ttf;base64," + base64.b64encode(ffile.read_bytes()).decode("ascii")
 
     # The CASES and the art are data; the arrangement is computed in the page, because the
     # sliders change it while you watch. The rule doing that computing is the shared file.
@@ -237,6 +317,15 @@ def main():
                      ("__RULE__", json.dumps({k: place[k] for k in ("spread", "back", "rank")})),
                      ("__ART__", json.dumps(art_uris)),
                      ("__SIZES__", json.dumps(sizes)), ("__ORDERS__", json.dumps(orders)),
+                     ("__CELLS__", json.dumps(cells)),
+                     ("__PLATES__", json.dumps(plates)),
+                     ("__GROUNDPLAN__", json.dumps(plan)),
+                     ("__FRAME__", json.dumps(place.get(
+                         "frame", {"w": 320, "h": 390, "drop": 40}))),
+                     ("__BANNERTOP__", json.dumps(board.BANNER_TOP)),
+                     ("__BANNERFS__", json.dumps(board.BANNER_FS)),
+                     ("__BANNERTRACK__", json.dumps(board.BANNER_TRACK)),
+                     ("__BANNERINK__", json.dumps(board.BANNER_INK)),
                      ("__OPENORDER__", json.dumps(place.get("order", "grouped"))),
                      ("__DEPTH__", json.dumps(place.get("depth", {"mode": "haze", "amount": 60}))),
                      # _short, not relative_to: the latter RAISES for a path outside the repo, so a
@@ -248,8 +337,14 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
+    frame = place.get("frame") or {}
     print("  %d cases, %d sizes, both orders -- arranged live in the page"
           % (len(CASES), len(sizes)))
+    if frame:
+        print("  frame %d x %d real px (%.2f:1), base %d below the floor"
+              % (frame["w"], frame["h"], frame["w"] / frame["h"], frame.get("drop", 0)))
+    print("  %d ground plate(s) from %s, %d duties assigned"
+          % (len(plates), board.GROUNDS_DIR.name, len(plan.get("by_duty") or {})))
     print("  spread %d, set-back %d, rank gap %d  (from %s, tuned at %s px and used at every "
           "size)" % (place["spread"], place["back"], place["rank"], board.PLACEMENT.name,
                      place.get("tuned_at", "?")))
@@ -268,6 +363,7 @@ TEMPLATE = r"""<!doctype html><html lang=en><meta charset=utf-8>
 @font-face{font-family:"PB";src:url(__FONT__) format("truetype");font-display:block}
 html,body{margin:0;min-height:100%;background:#0d0b08;color:#8b8071;
   font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+body{padding-left:243px}
 #head{padding:14px 18px 6px;color:#5f574a}
 #head b{color:#c9b27a;font-weight:400}
 #grid{display:flex;flex-wrap:wrap;gap:10px;padding:8px 18px 28px;align-items:flex-start}
@@ -280,37 +376,116 @@ html,body{margin:0;min-height:100%;background:#0d0b08;color:#8b8071;
 .cap{padding:5px 8px 7px;color:#5f574a;font-size:10px;text-align:center}
 .cap em{font-style:normal;color:#8b8071}
 .cap i{font-style:normal;color:#4f483d}
-#ui{position:sticky;top:0;background:rgba(13,11,8,.94);padding:10px 18px;z-index:5;
-  border-bottom:1px solid #1e1811;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-#ui .lab{color:#4f483d;margin-right:2px}
-#ui input[type=range]{width:104px;accent-color:#c9b27a;background:transparent}
-#ui .val{color:#c9b27a;min-width:26px;text-align:right}
+/* ---- the wheel view ---------------------------------------------------------------------
+   The same nine tiles the board draws, at true size, so the frame can be judged against the
+   thing that stands in it rather than against a number. */
+#stage{position:relative;margin:6px auto 24px;background:#17130d;flex:none}
+#stage .cell{position:absolute}
+#stage .frame{position:absolute;z-index:1;border:1px solid rgba(201,178,122,.55);
+  border-radius:2px;background:rgba(201,178,122,.045)}
+#stage .frame.tight{border-color:#e0705f;background:rgba(224,112,95,.07)}
+#stage .ground{position:absolute;z-index:2;pointer-events:none}
+#stage .ground img{display:block;width:100%;height:100%}
+#stage .cap{position:absolute;z-index:5;border:1px dashed rgba(201,178,122,.45);padding:0}
+#stage .cell{cursor:pointer}
+#stage .cell.picked .frame{border-color:#f0dcaa;box-shadow:0 0 0 1px rgba(240,220,170,.35)}
+/* The picker: the plates on offer, shown where you are about to put one. */
+#picker{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:4px 18px 10px}
+#picker .opt{border:1px solid #221c14;border-radius:3px;padding:4px;cursor:pointer;
+  background:#17130d;text-align:center;color:#5f574a}
+#picker .opt:hover{border-color:#5a4c36}
+#picker .opt[aria-pressed=true]{border-color:#c9b27a;background:#1e1810}
+#picker .opt img{display:block;height:54px;width:auto}
+#picker .opt span{display:block;margin-top:3px;font-size:10px}
+#picker .who{color:#c9b27a;align-self:center;margin-right:4px}
+#stage .figs{position:absolute;z-index:3}
+#stage .fig{position:absolute}
+#stage .ban{position:absolute;left:50%;transform:translateX(-50%);z-index:4}
+#stage .ban img{display:block;width:100%;height:100%}
+#stage .ban b{position:absolute;left:50%;transform:translate(-50%,-50%);font-family:"PB",serif;
+  text-transform:uppercase;white-space:nowrap;line-height:1}
+/* ---- the panel ---------------------------------------------------------------------------
+   A column down the left rather than a strip across the top. The strip wrapped as soon as the
+   frame controls arrived, which put a slider on a line of its own with its name left behind on
+   the line above -- an unlabelled slider is a control nobody can use without guessing.
+
+   Three columns: name, control, value. Everything lines up because the grid makes it, not
+   because each row was spaced by hand. */
+#ui{position:fixed;left:0;top:0;bottom:0;width:206px;overflow:auto;z-index:5;
+  background:#100d09;border-right:1px solid #1e1811;padding:12px 10px 18px;
+  display:grid;grid-template-columns:58px 1fr 32px;gap:7px 7px;align-content:start;
+  align-items:center}
+#ui .lab{color:#4f483d;text-align:right;white-space:nowrap}
+#ui .wide{grid-column:2 / span 2;display:flex;gap:4px;flex-wrap:wrap}
+#ui .full{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#ui .sep{grid-column:1 / -1;height:1px;background:#1e1811;margin:3px 0 1px}
+#ui .ttl{grid-column:1 / -1;color:#3f3930;letter-spacing:.08em;text-transform:uppercase;
+  font-size:9px;margin-top:2px}
 #ui button{font:inherit;color:#8b8071;background:#1c1811;border:1px solid #332c20;
-  border-radius:3px;padding:3px 9px;cursor:pointer}
+  border-radius:3px;padding:3px 7px;cursor:pointer}
 #ui button:hover{border-color:#5a4c36}
 #ui button[aria-pressed=true]{background:#c9b27a;border-color:#c9b27a;color:#1a1610}
+#ui input[type=range]{width:100%;accent-color:#c9b27a;background:transparent;margin:0}
+#ui .val{color:#c9b27a;text-align:right}
 #save{border-color:#4a5a3a}
 #saymsg{margin-left:4px}
 #saymsg.ok{color:#8fae6a} #saymsg.bad{color:#e0705f} #saymsg.busy{color:#5f574a}
 </style>
 <svg width=0 height=0 style="position:absolute" aria-hidden=true><defs id=hazedefs></defs></svg>
 <div id=ui>
-  <span class=lab>sculpt</span><span id=szb></span>
-  <span class=lab>order</span><span id=ordb></span>
-  <span class=lab>spread</span><input id=sprd type=range min=0 max=200 step=1><span class=val id=sprdv></span>
-  <span class=lab>set-back</span><input id=back type=range min=0 max=120 step=1><span class=val id=backv></span>
-  <span class=lab>rank</span><input id=rank type=range min=0 max=160 step=1><span class=val id=rankv></span>
-  <span class=lab>depth</span><span id=dmb></span>
+  <div class=ttl>what you are looking at</div>
+  <span class=lab>view</span><span id=viewb class=wide></span>
+  <span class=lab>sculpt</span><span id=szb class=wide></span>
+  <span class=lab>order</span><span id=ordb class=wide></span>
+
+  <div class=ttl>how the sculpts stand</div>
+  <span class=lab>spread</span>
+  <input id=sprd type=range min=0 max=200 step=1><span class=val id=sprdv></span>
+  <span class=lab>set-back</span>
+  <input id=back type=range min=0 max=120 step=1><span class=val id=backv></span>
+  <span class=lab>rank gap</span>
+  <input id=rank type=range min=0 max=160 step=1><span class=val id=rankv></span>
+
+  <div class=ttl>depth</div>
+  <span class=lab>mode</span><span id=dmb class=wide></span>
+  <span class=lab>amount</span>
   <input id=haze type=range min=0 max=100 step=1><span class=val id=hazev></span>
   <span class=lab>full at</span>
   <input id=full type=range min=4 max=200 step=1><span class=val id=fullv></span>
-  <button id=bshadow aria-pressed=true>shadow</button>
-  <button id=save>save to json</button><span id=saymsg></span>
+
+  <div class=ttl>the frame the art fills</div>
+  <span class=lab>width</span>
+  <input id=frw type=range min=120 max=900 step=1><span class=val id=frwv></span>
+  <span class=lab>height</span>
+  <input id=frh type=range min=120 max=900 step=1><span class=val id=frhv></span>
+  <span class=lab>drop</span>
+  <input id=frd type=range min=-150 max=300 step=1><span class=val id=frdv></span>
+  <span class=lab>ratio</span><span class=wide id=ratio></span>
+
+  <div class=ttl>the ground it stands on</div>
+  <span class=lab>plate</span><span class=wide id=gwho></span>
+  <span class=lab>anchor</span>
+  <input id=ganc type=range min=0 max=100 step=1><span class=val id=gancv></span>
+  <span class=lab>scale</span>
+  <input id=gsca type=range min=20 max=200 step=1><span class=val id=gscav></span>
+  <span class=lab>dim</span>
+  <input id=gdim type=range min=0 max=100 step=1><span class=val id=gdimv></span>
+  <span class=lab>saturate</span>
+  <input id=gsat type=range min=0 max=100 step=1><span class=val id=gsatv></span>
+  <span class=lab>opacity</span>
+  <input id=gopa type=range min=0 max=100 step=1><span class=val id=gopav></span>
+
+  <div class=sep></div>
+  <div class=full><button id=bshadow aria-pressed=true>shadow</button>
+    <button id=save>save to json</button></div>
+  <div class=full><span id=saymsg></span></div>
 </div>
 <div id=head></div>
+<div id=picker hidden></div>
+<div id=stage hidden></div>
 <div id=grid></div>
 <script>
-// ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js -------------------------
+// ---- the drawing rules, inlined from tools/ui_debug/duty_sculpt_rules.js ----------------
 __FORMATION__
 // -------------------------------------------------------------------------------------------
 var CASES = __CASES__, RULE = __RULE__, ART = __ART__, SIZES = __SIZES__, ORDERS = __ORDERS__;
@@ -318,6 +493,38 @@ var DEPTH = __DEPTH__, MODE = DEPTH.mode, SHADE = DEPTH.amount;
 var FULL_AT = DEPTH.full_at || 52;
 var SIZE = SIZES.indexOf(210) >= 0 ? 210 : SIZES[SIZES.length - 1], ORDER = __OPENORDER__;
 var SPREAD = RULE.spread, BACK = RULE.back, RANK = RULE.rank;
+var CELLS = __CELLS__, FRAME = __FRAME__, VIEW = "arrangements";
+var PLATES = __PLATES__, PLAN = __GROUNDPLAN__;
+// Which tile the picker is aimed at. Null until you click one, because a picker with no target
+// would have to guess, and the guess it would make is "all of them".
+var PICKED = null, RESIZING = false;
+var GROUND_DEFAULTS = {anchor: 50, scale: 100, dim: 55, saturate: 65, opacity: 100};
+
+// A plate that is in the folder but not in the plan is a NEW asset, not a broken one: it draws
+// with the defaults until somebody tunes it. Only a plate the plan names and the folder lacks is
+// a real problem, and that one the page says out loud.
+function groundFor(slug){
+  var name = (PLAN.by_duty || {})[slug];
+  if (name === undefined) name = PLAN["default"] || "";
+  return name;
+}
+function settingsFor(name){
+  var g = (PLAN.grounds || {})[name];
+  if (!g){
+    g = {};
+    for (var k in GROUND_DEFAULTS) g[k] = GROUND_DEFAULTS[k];
+    if (PLATES[name]) g.anchor = PLATES[name].widest;   // the plate's own widest row
+    (PLAN.grounds = PLAN.grounds || {})[name] = g;
+  }
+  return g;
+}
+var BANNER_TOP = __BANNERTOP__, BANNER_FS = __BANNERFS__,
+    BANNER_TRACK = __BANNERTRACK__, BANNER_INK = __BANNERINK__;
+// One illustrative deal for the wheel: nine tiles carrying nought to five, with the seats mixed
+// so a frame is judged against colours next to each other rather than against one player's row.
+// Every arrangement in detail is what the other view is for.
+var WHEEL_DEAL = [[0,0,0],[1,0,0],[1,1,0],[2,1,0],[2,1,1],
+                  [2,2,1],[1,1,1],[2,0,0],[0,1,0]];
 var DPR = devicePixelRatio || 1;
 function px(v){ return (v / DPR) + "px"; }
 
@@ -330,6 +537,177 @@ function figFilter(y, shadowOn){
 }
 
 function draw(){
+  showRatio();
+  var wheel = VIEW === "wheel";
+  document.getElementById("stage").hidden = !wheel;
+  document.getElementById("grid").hidden = wheel;
+  document.getElementById("picker").hidden = !wheel || !PICKED;
+  return wheel ? drawWheel() : drawCases();
+}
+
+// ---- the wheel ---------------------------------------------------------------------------------
+// The frame is INDEPENDENT of the formation on purpose -- art is drawn to a fixed rectangle, and
+// a frame that moved every time a spread slider did would be art you have to redraw. So the page
+// draws the formation's own envelope inside it and turns the frame red when the sculpts no longer
+// fit. The file decides; the page measures and says when the decision has been outgrown.
+function drawWheel(){
+  var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
+  var figH = Math.max.apply(null, art.map(function(f){ return f.h; }));
+  var widest = Math.max.apply(null, art.map(function(f){ return f.w; }));
+  // The panel is a fixed column down the left now, so it takes width rather than height.
+  var panel = document.getElementById("ui").getBoundingClientRect().width;
+  var headH = document.getElementById("head").getBoundingClientRect().height;
+  var pick = document.getElementById("picker");
+  var pickH = pick.hidden ? 0 : pick.getBoundingClientRect().height;
+  var side = Math.max(300,
+                      Math.min(innerWidth - panel - 48, innerHeight - headH - pickH - 34));
+  var BUD = Math.floor(side * DPR), CELL = BUD / 3;
+  var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: false});
+  var floor = L.top + L.field;
+  var CAP = dutyCapacityBox(5, SPREAD, BACK, RANK, widest, figH);
+  // Room above the floor line is the frame's height less however far its base sits below it.
+  var room = FRAME.h - FRAME.drop;
+  var tight = CAP.w > FRAME.w || CAP.h > room;
+  // AND WHETHER THE FRAME ITSELF FITS THE TILE. Two different questions that look like one:
+  // the sculpts can sit happily inside a frame that is itself taller than the tile's share of
+  // the wheel, and then the top row's pictures run off the board with nothing to say so.
+  var frameTop = floor + FRAME.drop - FRAME.h;
+  var over = Math.max(0, -frameTop) + Math.max(0, floor + FRAME.drop - CELL);
+  var wide = Math.max(0, FRAME.w - CELL);
+
+  var h = "";
+  for (var i = 0; i < 9; i++){
+    var r = (i / 3) | 0, c = i % 3, C = CELLS[i] || {title: "", ban: ""};
+    h += '<div class="cell' + (PICKED === C.slug ? " picked" : "") + '" data-slug="'
+       + C.slug + '" style="left:' + px(c * CELL) + ';top:' + px(r * CELL) + ';width:'
+       + px(CELL) + ';height:' + px(CELL) + '">';
+    h += '<div class="frame' + (tight || over || wide ? " tight" : "") + '" style="left:'
+       + px(CELL / 2 - FRAME.w / 2) + ';top:' + px(floor + FRAME.drop - FRAME.h) + ';width:'
+       + px(FRAME.w) + ';height:' + px(FRAME.h) + '">'
+       + '</div>';
+    // THE GROUND, between the frame and the figures. Its standing line -- the row of the plate
+    // the feet belong on -- is put ON the floor line, which is why the anchor is a property of
+    // each picture rather than a number shared by all of them.
+    var gname = groundFor(C.slug), plate = PLATES[gname];
+    if (plate){
+      var gs = settingsFor(gname);
+      var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
+      h += '<div class=ground style="left:' + px(CELL / 2 - gw / 2) + ';top:'
+         + px(floor - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)
+         + ';opacity:' + (gs.opacity / 100) + ';filter:brightness(' + (gs.dim / 100)
+         + ') saturate(' + (gs.saturate / 100) + ')"><img src="' + plate.uri + '"></div>';
+    }
+    h += '<div class=cap style="left:' + px(CELL / 2 + CAP.left) + ';top:'
+       + px(floor - CAP.top) + ';width:' + px(CAP.w) + ';height:' + px(CAP.h) + '"></div>';
+
+    var counts = WHEEL_DEAL[i], n = counts.reduce(function(a, b){ return a + b; }, 0);
+    var who = dutySeatOrder(counts, ORDER);
+    h += '<div class=figs style="top:' + px(L.top) + ';left:0;width:' + px(CELL) + ';height:'
+       + px(L.field) + '">';
+    dutyFormation(n, SPREAD, BACK, RANK)
+      .sort(function(a, b){ return a.x - b.x; })
+      .map(function(p, j){ return {x: p.x, y: p.y, seat: who[j]}; })
+      .sort(function(a, b){ return b.y - a.y || a.x - b.x; })
+      .forEach(function(p){
+        var f = art[p.seat];
+        h += '<div class=fig style="left:' + px(CELL / 2 + p.x - f.w / 2) + ';top:'
+           + px(L.field - f.h - p.y) + ';width:' + px(f.w) + ';height:' + px(f.h)
+           + ';filter:' + figFilter(p.y, shadowOn) + '"><img src="' + f.uri + '"></div>';
+      });
+    h += '</div>';
+    h += '<div class=ban style="top:' + px(floor + L.gapA) + ';width:' + px(L.banW)
+       + ';height:' + px(L.banH) + '">' + (C.ban ? '<img src="' + C.ban + '">' : "")
+       + '<b style="top:' + (BANNER_TOP * 100).toFixed(2) + '%;color:' + BANNER_INK
+       + ';font-size:' + px(L.banH * BANNER_FS) + ';letter-spacing:'
+       + px(L.banH * BANNER_FS * BANNER_TRACK) + '">' + (C.title || "").toUpperCase()
+       + '</b></div>';
+    h += '</div>';
+  }
+  var S = document.getElementById("stage");
+  S.style.width = px(BUD); S.style.height = px(BUD);
+  S.innerHTML = h;
+  S.querySelectorAll(".cell").forEach(function(el){
+    el.onclick = function(){
+      PICKED = PICKED === el.dataset.slug ? null : el.dataset.slug;
+      draw();
+    };
+  });
+  drawPicker();
+  syncGroundSliders();
+  // The strip's height is only knowable once it is in the document, and it changes the board's
+  // budget. One re-measure, guarded, rather than a layout loop.
+  var after = pick.hidden ? 0 : pick.getBoundingClientRect().height;
+  if (Math.abs(after - pickH) > 1 && !RESIZING){ RESIZING = true; drawWheel(); RESIZING = false; }
+
+  document.getElementById("head").innerHTML =
+      "The wheel at true size, from <b>__FILE__</b>.  frame <b>" + FRAME.w + "&#215;"
+    + FRAME.h + "</b> real px, ratio <b>" + (FRAME.w / FRAME.h).toFixed(2) + ":1</b>, base <b>"
+    + FRAME.drop + "</b> below the floor.  A full tile needs <b>" + Math.round(CAP.w)
+    + "&#215;" + Math.round(CAP.h) + "</b> and has <b>" + Math.round(room)
+    + "</b> above the floor to stand in."
+    + (tight ? "  <b style='color:#e0705f'>The sculpts do not fit the frame.</b>" : "")
+    + "  Tile is <b>" + Math.round(CELL) + "</b> real px"
+    + (over || wide
+        ? ", and the frame runs past it by <b style='color:#e0705f'>"
+          + Math.round(Math.max(over, wide)) + "</b> real px."
+        : ", which the frame fits inside.");
+}
+
+// The plates on offer, shown only once a tile is chosen -- the strip has to know what it is
+// assigning to, and "all of them" is not an answer anybody wants by accident.
+function drawPicker(){
+  var strip = document.getElementById("picker");
+  strip.hidden = VIEW !== "wheel" || !PICKED;
+  if (strip.hidden) return;
+  var title = "";
+  CELLS.forEach(function(c){ if (c.slug === PICKED) title = c.title; });
+  var here = groundFor(PICKED);
+  var h = '<span class=who>' + title + ' stands on</span>';
+  h += '<button class=opt data-g="" aria-pressed="' + (here ? "false" : "true")
+     + '"><span>bare floor</span></button>';
+  Object.keys(PLATES).sort().forEach(function(name){
+    h += '<button class=opt data-g="' + name + '" aria-pressed="'
+       + (name === here ? "true" : "false") + '"><img src="' + PLATES[name].uri
+       + '"><span>' + name + '</span></button>';
+  });
+  strip.innerHTML = h;
+  strip.querySelectorAll(".opt").forEach(function(b){
+    b.onclick = function(){
+      PLAN.by_duty = PLAN.by_duty || {};
+      PLAN.by_duty[PICKED] = b.dataset.g;
+      if (b.dataset.g) settingsFor(b.dataset.g);
+      draw();                      // which re-syncs the sliders onto whatever is now assigned
+    };
+  });
+}
+
+// The ground sliders act on the plate under the CHOSEN tile, or on the default when no tile is
+// chosen, so moving one always has something visible to move.
+function currentGround(){
+  return groundFor(PICKED || (CELLS[0] || {}).slug);
+}
+function syncGroundSliders(){
+  var name = currentGround();
+  var g = name ? settingsFor(name) : GROUND_DEFAULTS;
+  [["ganc", "anchor"], ["gsca", "scale"], ["gdim", "dim"],
+   ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
+    var e = document.getElementById(pair[0]);
+    if (!e) return;
+    e.value = g[pair[1]];
+    e.disabled = !name;
+    document.getElementById(pair[0] + "v").textContent = name ? g[pair[1]] : "-";
+  });
+  var who = document.getElementById("gwho");
+  if (who) who.textContent = name || "none";
+}
+function setGround(key, value){
+  var name = currentGround();
+  if (!name) return;
+  settingsFor(name)[key] = value;
+  draw();
+}
+
+function drawCases(){
   var art = ART[String(SIZE)], shadowOn = document.body.classList.contains("shadow");
   // Measured across every case at the CURRENT settings, so a cell is never sized to a formation
   // it is not drawing -- the sliders can outgrow any constant put here.
@@ -401,6 +779,8 @@ function slider(id, value, set){
   e.value = value; v.textContent = value;
   e.oninput = function(){ set(+e.value); v.textContent = e.value; draw(); };
 }
+buttons(document.getElementById("viewb"), ["arrangements", "wheel"],
+        function(){ return VIEW; }, function(v){ VIEW = v; });
 buttons(document.getElementById("szb"), SIZES, function(){ return SIZE; },
         function(v){ SIZE = v; });
 buttons(document.getElementById("ordb"), ORDERS, function(){ return ORDER; },
@@ -416,6 +796,19 @@ slider("back", BACK,   function(v){ BACK = v; });
 slider("rank", RANK,   function(v){ RANK = v; });
 slider("haze", SHADE,  function(v){ SHADE = v; });
 slider("full", FULL_AT, function(v){ FULL_AT = v; });
+slider("frw", FRAME.w, function(v){ FRAME.w = v; });
+slider("frh", FRAME.h, function(v){ FRAME.h = v; });
+slider("frd", FRAME.drop, function(v){ FRAME.drop = v; });
+[["ganc", "anchor"], ["gsca", "scale"], ["gdim", "dim"],
+ ["gsat", "saturate"], ["gopa", "opacity"]].forEach(function(pair){
+  slider(pair[0], 0, function(v){ setGround(pair[1], v); });
+});
+syncGroundSliders();
+function showRatio(){
+  document.getElementById("ratio").textContent =
+    (FRAME.w / FRAME.h).toFixed(2) + " : 1";
+}
+showRatio();
 document.getElementById("bshadow").onclick = function(){
   var on = document.body.classList.toggle("shadow");
   this.setAttribute("aria-pressed", on ? "true" : "false");
@@ -428,12 +821,15 @@ document.getElementById("bshadow").onclick = function(){
 // generator writes the file, merging into what is already there so the prose notes survive.
 function settings(){
   return {spread: SPREAD, back: BACK, rank: RANK, order: ORDER,
-          depth: {mode: MODE, amount: SHADE, full_at: FULL_AT}};
+          depth: {mode: MODE, amount: SHADE, full_at: FULL_AT},
+          frame: {w: FRAME.w, h: FRAME.h, drop: FRAME.drop},
+          grounds: {by_duty: PLAN.by_duty || {}, grounds: PLAN.grounds || {}}};
 }
 function say(msg, cls){
   var e = document.getElementById("saymsg");
   e.textContent = msg; e.className = cls || "";
 }
+addEventListener("resize", function(){ if (VIEW === "wheel") draw(); });
 document.getElementById("save").onclick = function(){
   var body = JSON.stringify(settings(), null, 2);
   if (location.protocol !== "http:" && location.protocol !== "https:"){

@@ -330,6 +330,27 @@ SUBJECTS.append({
 })
 
 
+# The ground plates the acolytes stand on. A LAYER rather than a tile face: the duty-tiles tree
+# holds the opaque face of the wheel, and a plate is a transparent cut-out drawn over it and under
+# the figures, so the same plate can sit on any face. Which duty stands on which is in
+# ui/assets-gothic/metadata/duty_grounds.json, not here -- this page is the archive of what exists.
+#
+# They are drawn on the tile ground rather than on nothing, because they are cut out and half of
+# each file is transparent: on the page's own background the stones would float.
+SUBJECTS.append({
+    "id": "grounds",
+    "label": "Ground plates",
+    "tag": "layer",
+    "ink": "#c9b27a",
+    "kinds": [
+        {"kind": "cobbles_oval", "title": "Cobbles, oval", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/cobbles_oval.png", "ground": TOKEN_GROUND},
+        {"kind": "flagstones_slab", "title": "Flagstones, slab", "root": "assets",
+         "rel": "ui/assets-gothic/grounds/flagstones_slab.png", "ground": TOKEN_GROUND},
+    ],
+})
+
+
 def plinth(im: Image.Image) -> dict | None:
     """Where the miniature meets the ground: the widest row of its base.
 

@@ -165,7 +165,63 @@ RULES_JS = HERE / "duty_sculpt_rules.js"
 # Only if the file is missing. A page built from these instead of from the file would look right
 # and be wrong, so it says so in the run output rather than quietly standing in.
 FALLBACK = {"tuned_at": 210, "spread": 77, "back": 21, "rank": 52, "order": "grouped",
+            "frame": {"w": 320, "h": 390, "drop": 40},
             "mark": "floor", "depth": {"mode": "haze", "amount": 60, "full_at": 52}}
+
+
+# The nine positions as a compass, so a wheel drawn from this reads as the ring on the board.
+# The artwork order is an IDENTITY and not a position: laying a wheel out in it draws a ring
+# that wanders.
+GRID = ("north_west", "north", "north_east",
+        "west", "city", "east",
+        "south_west", "south", "south_east")
+
+# Which duty sits where, taken from a committed scenario rather than from the model. Everything
+# under tools/ui_debug is a derived view: it reads data and draws it, and a game config is the
+# source of truth for any real game value a view shows.
+SETUP = ROOT / "configs" / "setups" / "basic_mancala_sandbox.json"
+
+
+def duty_at():
+    """Position to duty slug, from the sandbox scenario. One deal, not the deal."""
+    if not SETUP.is_file():
+        raise SystemExit("%s is missing -- there is no duty to put on a tile" % _short(SETUP))
+    tiles = dict((json.loads(SETUP.read_text(encoding="utf-8")) or {}).get("duty_tiles") or {})
+    if not tiles:
+        raise SystemExit("%s carries no duty_tiles" % _short(SETUP))
+    tiles["city"] = "city"
+    return tiles
+
+
+def tiles(notes):
+    """The nine tiles in compass order, each with its parchment and its title.
+
+    Parchment and title are looked up by the duty's SLUG, so a page cannot pair a name with
+    somebody else's banner even if the compass or the layout changes.
+    """
+    art, font_uri = banners(notes)
+    at = duty_at()
+    out = []
+    for pos in GRID:
+        slug = at.get(pos)
+        if slug not in SLUGS:
+            raise SystemExit("position %s carries duty %r, which is not in the slug table"
+                             % (pos, slug))
+        i = SLUGS.index(slug)
+        out.append({"pos": pos, "slug": slug, "title": NAMES[i],
+                    "ban": art[i] if art else ""})
+    return out, font_uri
+
+
+# THE GROUND PLATES. A layer, not a tile face: the duty-tiles tree holds the opaque face of the
+# wheel, and a plate is a transparent cut-out drawn over it and under the figures.
+#
+# The plates are DISCOVERED rather than listed. What art exists is a fact about the folder, and a
+# list would be a second place for it to be wrong; which duty gets which is a decision, and that
+# is what the metadata file carries.
+GROUNDS_DIR = ROOT / "ui" / "assets-gothic" / "grounds"
+GROUND_PLAN = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_grounds.json"
+GROUND_RASTER = 520      # drawn near 320 real px wide; this leaves room and costs little
 
 
 def _short(path):
@@ -217,6 +273,24 @@ def placement(notes):
     if data.get("mark") not in ("floor", "foot", "box", "gild"):
         raise SystemExit("%s: mark is %r, want floor, foot, box or gild"
                          % (_short(PLACEMENT), data.get("mark")))
+    # THE FRAME IS NOT DERIVED FROM THE FORMATION, and that is the decision rather than an
+    # oversight: art is drawn to a fixed rectangle. `drop` may be negative, because a frame
+    # whose base sits ABOVE the floor line is a legitimate thing to want to try.
+    frame = data.get("frame")
+    if frame is not None:
+        if not isinstance(frame, dict):
+            raise SystemExit("%s: frame is %r, want an object with w, h and drop"
+                             % (_short(PLACEMENT), frame))
+        for key in ("w", "h"):
+            value = frame.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise SystemExit("%s: frame.%s is %r, want a positive whole number of real "
+                                 "device pixels" % (_short(PLACEMENT), key, value))
+        drop = frame.get("drop", 0)
+        if isinstance(drop, bool) or not isinstance(drop, int):
+            raise SystemExit("%s: frame.drop is %r, want a whole number of real device pixels "
+                             "(negative lifts the frame off the floor)"
+                             % (_short(PLACEMENT), drop))
     depth = data.get("depth") or {}
     if depth.get("mode") not in ("haze", "dark", "off"):
         raise SystemExit("%s: depth.mode is %r, want haze, dark or off"
@@ -276,6 +350,78 @@ def queues(shape):
                 arrival.append(seat)
                 left[seat] -= 1
     return {"grouped": grouped, "arrival": arrival}
+
+
+def ground_plan(notes):
+    """Which duty stands on which plate, and how each plate is toned down.
+
+    Checked the same way the placement file is -- a typo here draws a tile with no ground and
+    no explanation, which looks like missing art rather than a bad key.
+    """
+    if not GROUND_PLAN.is_file():
+        notes.append("%s is missing -- no grounds will be drawn" % _short(GROUND_PLAN))
+        return {"default": "", "by_duty": {}, "grounds": {}}
+    data = json.loads(GROUND_PLAN.read_text(encoding="utf-8"))
+    grounds = data.get("grounds") or {}
+    if not isinstance(grounds, dict):
+        raise SystemExit("%s: grounds is %r, want an object keyed by plate name"
+                         % (_short(GROUND_PLAN), grounds))
+    for name, g in grounds.items():
+        for key, lo, hi in (("anchor", 0, 100), ("scale", 1, 300),
+                            ("dim", 0, 100), ("saturate", 0, 100), ("opacity", 0, 100)):
+            value = g.get(key)
+            if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+                raise SystemExit("%s: grounds.%s.%s is %r, want a whole number %d-%d"
+                                 % (_short(GROUND_PLAN), name, key, value, lo, hi))
+    by_duty = data.get("by_duty") or {}
+    for slug, name in by_duty.items():
+        if slug not in SLUGS:
+            raise SystemExit("%s: by_duty has %r, which is not a duty slug"
+                             % (_short(GROUND_PLAN), slug))
+        if name and name not in grounds:
+            raise SystemExit("%s: %s is assigned %r, which has no entry under grounds"
+                             % (_short(GROUND_PLAN), slug, name))
+    return data
+
+
+def ground_art(notes):
+    """Every plate in the grounds folder, downscaled and inlined.
+
+    Discovered, so dropping a PNG in the folder is all it takes to be able to pick it. A plate
+    with no entry in the plan still appears -- it simply carries the defaults until you tune it,
+    which is the difference between a new asset and a broken one.
+    """
+    art = {}
+    if _Img is None:
+        notes.append("Pillow is not installed, so the ground plates cannot be embedded")
+        return art
+    if not GROUNDS_DIR.is_dir():
+        notes.append("%s does not exist -- no ground plates to offer" % _short(GROUNDS_DIR))
+        return art
+    for path in sorted(GROUNDS_DIR.glob("*.png")):
+        im = _Img.open(path).convert("RGBA")
+        box = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+        if box is None:
+            notes.append("%s is fully transparent -- skipped" % path.name)
+            continue
+        im = im.crop(box)
+        k = min(1.0, GROUND_RASTER / im.width)
+        small = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))),
+                          _Img.LANCZOS)
+        buf = io.BytesIO()
+        small.save(buf, "WEBP", quality=88, method=6)
+        # The widest row is where the plate is at its broadest, which is the best guess at its
+        # standing line for a plate nobody has tuned yet.
+        rows = [sum(1 for x in range(small.width) if small.getpixel((x, y))[3] > 8)
+                for y in range(small.height)]
+        widest = rows.index(max(rows)) if rows else 0
+        art[path.stem] = {"uri": "data:image/webp;base64,"
+                                 + base64.b64encode(buf.getvalue()).decode("ascii"),
+                          "w": small.width, "h": small.height,
+                          "widest": round(100 * widest / max(1, small.height))}
+    if not art:
+        notes.append("no ground plates found under %s" % _short(GROUNDS_DIR))
+    return art
 
 
 def figures(fig_dir, notes):

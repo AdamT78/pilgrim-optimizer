@@ -10,6 +10,12 @@
   "spread_note": "Distance between neighbouring sculpts in a rank, centre to centre. The sculpts are not one width: measured at 210 px tall, three of the four are 91 px across and the fourth is 108, so any spread means two different things depending on who is standing there. At 110 the three narrow figures stand about a fifth of a width apart and the wide one just touches its neighbour -- 110 is roughly where overlap stops for every seat rather than for most of them.",
   "back_note": "How far the middle of three is set back from the other two. A flat row of three identical silhouettes is the hardest case to read, and lifting the centre one breaks the repeat.",
   "rank_note": "How far a back rank stands behind the front one, used at four and five sculpts.",
+  "frame": {
+    "w": 320,
+    "h": 390,
+    "drop": 40
+  },
+  "frame_note": "The picture a duty tile is drawn on -- the ground the acolytes stand on, and whatever border it carries. Real device pixels, independent of the formation ON PURPOSE: art is drawn to a fixed rectangle, and a frame that moved every time a spread slider did would be art you have to redraw. The pages draw the formation's own envelope inside it as a check and say so when the sculpts outgrow the frame. `drop` is how far the frame's base sits BELOW the floor line the figures stand on, because a ground that continues under and behind the feet reads as a place rather than as a backdrop. These starting numbers are provisional and were chosen to fit rather than to look right: 320 clears the 311 a full stack of five needs by nine pixels, and 390 is the tallest that fits a tile at the current wheel pitch. The banner is wider than the frame and overhangs its sides, which is what the first concept art does too.",
   "order": "grouped",
   "order_note": "grouped keeps a seat's sculpts adjacent and countable; arrival never reorders what is already down. Measured, the two move the same number of sculpts per drop (2.73 of them), because the shuffle comes from the formation changing shape with the count, not from the ordering.",
   "mark": "floor",

@@ -197,11 +197,14 @@ function build(){
   CELL = BUD / 3;
   var FIG = FIGS[String(SIZE)] || [];
   var figH = FIG.length ? Math.max.apply(null, FIG.map(function(f){ return f.h; })) : 0;
-  var banW = CELL * 0.55, banH = banW / 3,
-      gapA = CELL * 0.046, gapB = CELL * 0.010, icon = Math.round(CELL * 0.168);
-  var fieldH = figH + RANK;
-  var total = fieldH + gapA + banH + gapB + (ICON ? icon : 0);
-  var groupTop = (CELL - total) / 2;
+  // Shared with the sow page and the placement sheet. The field here used to be figH + RANK,
+  // which ignores the set-back and would clip the middle of three the moment a set-back larger
+  // than the rank gap was tried; the shared version clears the deeper of the two.
+  var L = dutyTileLayout(CELL, figH, RANK, BACK, {icons: ICON});
+  var banW = L.banW, banH = L.banH, gapA = L.gapA, gapB = L.gapB, icon = L.icon;
+  var fieldH = L.field;
+  var total = L.total;
+  var groupTop = L.top;
 
   var h = "", i, j;
   for (i = 0; i < 9; i++){
