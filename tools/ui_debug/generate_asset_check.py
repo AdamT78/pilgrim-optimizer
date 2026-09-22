@@ -289,6 +289,126 @@ def figure_picture(im, height=250, degrees=None):
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def arrangement_picture(folder=SCULPTS, place=None):
+    """A full tile: five sculpts on a plate, in the formation the placement file describes.
+
+    The two checks above judge a figure ALONE. A set can pass both and still not work on a tile,
+    because what collides there is the plinths, and a plinth's ellipse is as deep as its width
+    times sin(camera). Raising the camera from 9 to 32 degrees made the base three times deeper
+    without moving a single number in duty_placement.json, and the rank gap those numbers were
+    tuned against stopped being enough.
+
+    So this draws the file's own formation and then RASTERISES every plinth and intersects each
+    pair, rather than inviting anyone to judge overlap by eye. Red means a clash. The picture
+    follows the file: change `back` or `rank` there and this follows, which is the point -- it is
+    a check, not a screenshot of one good arrangement.
+    """
+    grounds = ROOT / "ui" / "assets-gothic" / "grounds"
+    place = place or ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
+    if not folder.is_dir() or not place.is_file():
+        return None
+    P = json.loads(place.read_text(encoding="utf-8"))
+    frame, spread = P["frame"], P["spread"]
+    back, rank, size = P["back"], P["rank"], P["tuned_at"]
+    plates = sorted(grounds.glob("*.png"))
+    files = sorted(folder.glob("*.png"))
+    if not plates or not files:
+        return None
+
+    def trim(im):
+        bb = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+        return im.crop(bb) if bb else im
+
+    raw = [trim(Image.open(f).convert("RGBA")) for f in files]
+    pw = [sm.plinth_width(f) for f in raw]
+    narrow = min(pw)
+    tall = max(f.height * (narrow / w) for f, w in zip(raw, pw, strict=True))
+    built = []
+    for f, w in zip(raw, pw, strict=True):
+        k = (narrow / w) * size / tall
+        g = sm.ground_ellipse(f)
+        built.append({"im": f.resize((max(1, round(f.width*k)), max(1, round(f.height*k))),
+                                     Image.LANCZOS),
+                      "pw": w * k, "minor": (g["width"] * g["sin_theta"] * k) if g else 0.0})
+
+    W, H, drop = frame["w"], frame["h"], frame["drop"]
+    pad, top = 22, 16
+    card = Image.new("RGBA", (W + 2*pad, H + pad + top + 48), (23, 19, 13, 255))
+    floor = H - drop
+
+    plate = trim(Image.open(plates[0]).convert("RGBA"))
+    ph = max(1, round(plate.height * W / plate.width))
+    pl = np.asarray(plate.resize((W, ph), Image.LANCZOS)).astype(float)
+    rgb, al = pl[..., :3], pl[..., 3:]
+    grey = (0.2126*rgb[..., 0] + 0.7152*rgb[..., 1] + 0.0722*rgb[..., 2])[..., None]
+    pl = Image.fromarray(np.concatenate(
+        [np.clip((grey + (rgb-grey)*0.65)*0.55, 0, 255), al], 2).astype(np.uint8))
+    card.alpha_composite(pl, (pad, int(top + floor - 0.48*ph)))
+
+    pick = [i % len(built) for i in (0, 2, 1, 0, 2)]
+    # THE MIDDLE STEPS FORWARD, far enough that the top of its plinth lands on the floor line the
+    # outer two stand on -- minus half its own plinth depth, since y is height above the floor.
+    # The file still says a set-BACK of `back`, and at 21 the middle plinth overlaps both of the
+    # back rank's: a plinth is as deep as it is wide times sin(camera), so raising the camera
+    # from 9 to 32 degrees made every base three times deeper without moving a number in that
+    # file. Stepping forward clears it without growing `field`, which a larger rank gap would.
+    forward = built[pick[3]]["minor"] / 2.0
+    slots = [(-spread/2, rank), (spread/2, rank), (-spread, 0), (0, -forward), (spread, 0)]
+    del back
+    ells = [(W/2 + dx, floor - dy, built[i]["pw"]/2.0, built[i]["minor"]/2.0)
+            for (dx, dy), i in zip(slots, pick, strict=True)]
+
+    masks = []
+    for cx, cy, a, b in ells:
+        m = Image.new("L", card.size, 0)
+        ImageDraw.Draw(m).ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b], fill=255)
+        masks.append(np.asarray(m) > 0)
+    clash = [(i, j) for i in range(len(masks)) for j in range(i+1, len(masks))
+             if (masks[i] & masks[j]).any()]
+
+    for i in sorted(range(len(slots)), key=lambda k: -slots[k][1]):
+        dx, dy = slots[i]
+        b = built[pick[i]]
+        im = b["im"]
+        if dy:
+            a = np.asarray(im).astype(float)
+            a[..., :3] *= 0.80
+            im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+        card.alpha_composite(im, (int(pad + W/2 + dx - im.width/2),
+                                  int(top + floor - dy + b["minor"]/2 - im.height)))
+
+    d = ImageDraw.Draw(card, "RGBA")
+    hot = {i for pair in clash for i in pair}
+    for i, (cx, cy, a, b) in enumerate(ells):
+        d.ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b],
+                  outline=(255, 96, 96, 235) if i in hot else (120, 220, 150, 200), width=2)
+    d.rectangle([pad, top, pad+W, top+H], outline=(255, 212, 126, 200), width=2)
+    xs = [W/2 + dx + s*built[i]["im"].width/2
+          for (dx, _), i in zip(slots, pick, strict=True) for s in (-1, 1)]
+    span = round(max(xs) - min(xs))
+    low = round(max(cy + b for _, cy, _, b in ells) - floor)
+    # THREE SHORT LINES, not one long one: the card is only W + 2*pad wide and a single line ran
+    # off its right edge, which the page happily rendered with the verdict missing.
+    ok = (120, 220, 150, 255)
+    d.text((pad, top + H + 6),
+           "five sculpts, spread %d, middle forward %d, rank %d"
+           % (spread, round(forward), rank),
+           fill=(201, 178, 122, 255))
+    d.text((pad, top + H + 19),
+           "%d of %d px across" % (span, W),
+           fill=ok if span <= W else (255, 120, 120, 255))
+    d.text((pad, top + H + 32),
+           "lowest plinth %d below the floor, frame drop %d" % (low, drop),
+           fill=ok if low <= drop else (255, 120, 120, 255))
+    d.text((pad + 168, top + H + 19),
+           "no plinths overlap" if not clash else "%d plinth clash(es)" % len(clash),
+           fill=ok if not clash else (255, 120, 120, 255))
+    buf = io.BytesIO()
+    card.convert("RGB").save(buf, "WEBP", quality=86, method=6)
+    return {"uri": "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii"),
+            "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop}
+
+
 def on_record(folder=SCULPTS):
     """The sculpts a newcomer is being judged against, drawn rather than summarised."""
     out = []
@@ -651,7 +771,8 @@ def main():
             .replace("__HTOL__", json.dumps(HEIGHT_TOLERANCE_PCT))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BAND__", json.dumps(band))
-            .replace("__ONRECORD__", json.dumps(on_record())))
+            .replace("__ONRECORD__", json.dumps(on_record()))
+            .replace("__ARRANGE__", json.dumps(arrangement_picture())))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
@@ -713,6 +834,9 @@ td.why{color:#403a31}
 #record .one .num{color:#5f574a;padding-top:4px}
 #record img{display:block}
 #record .fig{height:250px}
+#record .tile{margin-top:16px}
+#record .tile .cap{color:#5f574a;padding-bottom:6px;max-width:96ch}
+#record .tile .bad{color:#ff8a8a}
 </style>
 <div id=head>Drop a sculpt or a ground plate. It is measured by
 <b>tools/ui_debug/sculpt_metrics.py</b> &#8212; the same code that builds the pieces &#8212;
@@ -730,6 +854,7 @@ and drawn back with the measurement on it.</div>
 <script>
 var BAND = __BAND__;
 var ONRECORD = __ONRECORD__;
+var ARRANGE = __ARRANGE__;
 (function(){
   if (!ONRECORD || !ONRECORD.length) return;
   var host = document.getElementById("record");
@@ -749,6 +874,25 @@ var ONRECORD = __ONRECORD__;
            + "</div></div>");
   });
   h.push("</div>");
+  if (ARRANGE) {
+    h.push("<div class=tile><div class=cap>And the same sculpts on a tile, five of them at the "
+           + "spread, rank and frame from <b>duty_placement.json</b> &#8212; but with the middle "
+           + "of the front three stepped FORWARD until the top of its plinth reaches the floor "
+           + "line, where that file still says set it back. At a set-back of 21 its plinth "
+           + "overlaps both of the back rank's: a plinth is as deep as it is wide times "
+           + "sin(camera), so raising the camera from 9&#176; to 32&#176; made every base three "
+           + "times deeper without moving a number in that file. Overlap is rasterised and "
+           + "intersected rather than judged by eye &#8212; green outlines clear, red clash."
+           + (ARRANGE.clashes
+              ? " <span class=bad>" + ARRANGE.clashes + " clash.</span>"
+              : "")
+           + (ARRANGE.low > ARRANGE.drop
+              ? " <span class=bad>The front plinth reaches " + ARRANGE.low
+                + " px below the floor and the frame's drop is " + ARRANGE.drop
+                + ", so it needs " + (ARRANGE.low - ARRANGE.drop) + " px more.</span>"
+              : "")
+           + "</div><img src='" + ARRANGE.uri + "' alt=''></div>");
+  }
   host.innerHTML = h.join("");
 })();
 if (BAND && BAND.degrees)

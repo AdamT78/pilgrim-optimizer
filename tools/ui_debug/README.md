@@ -2327,6 +2327,14 @@ figures is a poor thing to hold in your head while looking at a new sculpt, and 
 measurements on the pixels they were taken from is also the only way to notice them being taken
 from the wrong place.
 
+Below them is a whole tile: five of those sculpts at the spread, rank and frame from
+`duty_placement.json`, with the middle of the front three stepped forward until the top of its
+plinth reaches the floor line. The checks above judge a figure alone; what collides on a tile is
+the plinths, and a plinth is as deep as it is wide times sin(camera) — so raising the camera from
+9° to 32° made every base three times deeper without moving a number in that file, and at the
+set-back of 21 it still holds, the middle plinth overlaps both of the back rank's. Every pair is
+rasterised and intersected rather than judged by eye.
+
 Those figures are **not** the band a newcomer is judged against. That still comes from
 `ui/concept/`, the 9° art being replaced, which is why a correct new sculpt reports a height gap
 against it. The page says so on itself, and there is a test that fails if the two stop being

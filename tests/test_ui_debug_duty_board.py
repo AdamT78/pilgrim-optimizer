@@ -1473,3 +1473,55 @@ def test_the_figure_picture_leaves_room_for_its_own_labels(checker, metrics):
     fw = round(art.width * (250 / art.height))
     assert got.width - fw >= 100, (
         "only %d px of gutter for the height labels" % (got.width - fw))
+
+
+def _placement(tmp_path, **over):
+    """A copy of the real placement file with one or two numbers changed."""
+    import json
+    src = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_placement.json"
+    d = json.loads(src.read_text(encoding="utf-8"))
+    d.update(over)
+    out = tmp_path / "duty_placement.json"
+    out.write_text(json.dumps(d), encoding="utf-8")
+    return out
+
+
+def test_the_tile_picture_follows_the_placement_file(checker, tmp_path):
+    """It is a check, not a screenshot of one good arrangement. Change the file and the picture
+    changes, or it is decoration that happened to be right on the day it was drawn."""
+    a = checker.arrangement_picture(place=_placement(tmp_path, back=21, rank=52))
+    b = checker.arrangement_picture(place=_placement(tmp_path, back=21, rank=80))
+    if a is None or b is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert a["uri"] != b["uri"], "the tile picture ignored a changed rank gap"
+
+
+def test_the_tile_picture_has_no_plinths_overlapping(checker, tmp_path):
+    """The arrangement drawn is the one that clears: the middle steps forward until the top of
+    its plinth reaches the floor line, instead of being set back into the rank behind it.
+
+    What collides on a tile is the plinths, and a plinth is as deep as it is wide times
+    sin(camera) -- raising the camera from 9 to 32 degrees made every base three times deeper
+    without moving a number in duty_placement.json. Overlap is rasterised and intersected rather
+    than judged by eye, so this fails if the arrangement ever stops clearing.
+    """
+    got = checker.arrangement_picture()
+    if got is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert got["clashes"] == 0, "%d plinth clash(es) in the drawn arrangement" % got["clashes"]
+
+    # and the detection is not simply always-zero: squeeze the rank gap and it must find one
+    squashed = checker.arrangement_picture(place=_placement(tmp_path, rank=4))
+    assert squashed["clashes"] > 0, "a rank gap of 4 reported no clash, so nothing is detected"
+
+
+def test_the_tile_picture_reports_whether_the_group_fits_the_frame(checker, tmp_path):
+    wide = checker.arrangement_picture(place=_placement(tmp_path, spread=260))
+    if wide is None:
+        pytest.skip("no sculpts or no plates on file")
+    assert wide["span"] > wide["frame"], (
+        "a spread of 260 was reported as fitting a %d px frame" % wide["frame"])
+    normal = checker.arrangement_picture()
+    assert normal["span"] <= normal["frame"], (
+        "the file's own spread overflows the frame: %d of %d"
+        % (normal["span"], normal["frame"]))
