@@ -75,15 +75,24 @@ PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 # would have to be fought for on both sides to buy a difference of three degrees.
 TARGET_DEGREES = 32.0
 TOLERANCE_DEGREES = 2.5
-# How far a figure may stand from the set's median height before it is a problem.
-# Height is carried as height/plinth because levelling makes every plinth the same
-# width, so that ratio IS the levelled height -- a figure generated larger or
-# smaller compares directly with its siblings.
-HEIGHT_TOLERANCE_PCT = 8.0
+# THERE IS NO HEIGHT TOLERANCE, AND THAT IS THE DECISION, not an omission.
+#
+# Height was judged against the median of whatever was on file. Two things were wrong with that.
+# The median moves as the set fills, so the same sculpt passes or fails depending on what was
+# filed before it -- a verdict that is a fact about the folder rather than about the figure. And
+# the two sets on file disagree by 26% in proportion even after the camera is divided out (the
+# concept art at 2.18, the sculpts drawn at the board's camera at 2.75), so the check fired on
+# every new sculpt: arithmetically right, practically useless. Which proportion is wanted is a
+# decision about how the game looks, and no median can make it.
+#
+# Height is still measured, still reported and still drawn on the figure picture. It is judged by
+# looking at the candidates that got past the camera and the base.
+#
 # How far a plinth may be chunkier or thinner than the set's, measured as its own side wall over
-# its own width. A separate question from the camera and from the figure's height: a thin base
-# and a chunky one photograph at the same angle and carry the same figure. Wider than the height
-# tolerance because it is a smaller measurement on a shorter edge, and so noisier.
+# its own width. A separate question from the camera: a thin base and a chunky one photograph at
+# the same angle and carry the same figure. Wide because it is a small measurement on a short
+# edge, and so noisy. This one survives because the two sets AGREE on it -- concept 0.132-0.146,
+# the new sculpts 0.126-0.141 -- so the median is not hostage to which art is on file.
 BASE_TOLERANCE_PCT = 12.0
 
 
@@ -444,6 +453,28 @@ def on_record(folder=SCULPTS):
     return out
 
 
+def reference_card(path=None):
+    """The card the sculpts are generated FROM, offered as a download.
+
+    THE ORIGINAL BYTES, not a re-encode and not the downscaled copy the page shows elsewhere.
+    This file is an input to an image model: it carries a base drawn at a stated ellipse ratio
+    and a scale line at a stated multiple of that base's width, and both survive only at the
+    resolution they were drawn. A page that handed over a 520 px preview under the same filename
+    would be handing over a different instruction while looking identical in the browser.
+
+    Returned as a data URI so the button works from a file:// page, which is how this page is
+    usually opened -- there is nothing to measure with offline, but there is still a card to
+    fetch, and needing a server to collect a committed file would be absurd.
+    """
+    path = path or (ROOT / "ui" / "assets-gothic" / "references" / "base_scale_reference_27.png")
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    im = Image.open(io.BytesIO(raw))
+    return {"name": path.name, "w": im.width, "h": im.height, "bytes": len(raw),
+            "uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii")}
+
+
 def without_background(im):
     """A best guess at the art in a screenshot, for a file that arrived with no alpha.
 
@@ -479,9 +510,12 @@ def without_background(im):
     return Image.fromarray(out)
 
 
-def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT,
-          base_tol=BASE_TOLERANCE_PCT):
-    """Measure one dropped file and say what is inside tolerance and what is not."""
+def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT):
+    """Measure one dropped file and say what is inside tolerance and what is not.
+
+    TWO QUESTIONS, NOT THREE. Height was the third and has been withdrawn -- see the note where
+    the proportion is measured. It is still reported; it is no longer a verdict.
+    """
     im = Image.open(io.BytesIO(raw)).convert("RGBA")
     W, H = im.size
     checks, notes = [], []
@@ -581,26 +615,23 @@ def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT,
                            "%.3f, tolerance %.0f%%"
                            % (m["wall_ratio"], deg, base, b["mid"], base_tol)])
 
-        prop = _proportion(m["h_plinth"], g["degrees"] if g else None)
-        if band and "proportion" in band and prop is not None:
-            b = band["proportion"]
+        # HEIGHT IS MEASURED AND SHOWN, BUT NOT JUDGED. It was a third check and it has been
+        # withdrawn, because a pass/fail on it was answering a question the tool cannot settle.
+        #
+        # What the numbers said: the concept set sits at proportion 2.18 and the sculpts drawn at
+        # the board's camera at 2.75, a 26% gap that survives dividing the camera out -- so the
+        # verdict fired on every new sculpt, correctly by its own arithmetic and uselessly in
+        # practice. Which of the two is right is a decision about how the game looks, and a
+        # median of whatever happens to be on file cannot make it. Worse, the median moves as the
+        # set fills: the same sculpt passes or fails depending on what was filed before it.
+        #
+        # So the proportion is still measured, still written into the row, and still drawn on the
+        # figure picture, because comparing candidates by eye is easier with the number beside
+        # them. It simply no longer carries a verdict. Height is judged by looking at the
+        # candidates that got through the camera and the base.
+        prop = _proportion(m["h_plinth"], deg)
+        if prop is not None:
             row["proportion"] = round(prop, 3)
-            off = 100.0 * (prop - b["mid"]) / b["mid"] if b["mid"] else 0.0
-            verdict = ("ok" if abs(off) <= height_tol
-                       else ("check" if abs(off) <= height_tol * 2 else "bad"))
-            checks.append(["height", "%+.1f%% of the set" % off, verdict,
-                           "height/plinth %.2f at %.1f deg is proportion %.2f, against a median "
-                           "of %.2f, tolerance %.0f%%"
-                           % (m["h_plinth"], g["degrees"], prop, b["mid"], height_tol)])
-            if prop > b["hi"]:
-                shrink = 100.0 * (1.0 - b["hi"] / prop)
-                checks.append(["cost to the set", "everything else %.1f%% smaller" % shrink,
-                               "check" if shrink <= height_tol else "bad",
-                               "the tray scales so the tallest levelled figure reaches the "
-                               "target size, and this one would become the tallest"])
-            else:
-                checks.append(["cost to the set", "none", "ok",
-                               "it is not taller than the tallest, so nothing else rescales"])
         fr = sm.fringe(im)
         checks.append(["edge rim", "%+.1f" % fr, "ok" if fr <= 0 else "check",
                        "a part-transparent rim lighter than the body is a halo; the art runs "
@@ -659,9 +690,8 @@ def serve(page, port, open_it):
                 raw = base64.b64decode(sent["data"].split(",", 1)[-1])
                 target = float(sent.get("target", TARGET_DEGREES))
                 tol = float(sent.get("tolerance", TOLERANCE_DEGREES))
-                htol = float(sent.get("height_tolerance", HEIGHT_TOLERANCE_PCT))
                 btol = float(sent.get("base_tolerance", BASE_TOLERANCE_PCT))
-                result = judge(raw, target, tol, htol, btol)
+                result = judge(raw, target, tol, btol)
             except Exception as exc:                                    # noqa: BLE001
                 print("  could not measure %s: %s" % (sent.get("name", "?"), exc))
                 return self._send(400, json.dumps({"error": str(exc)}))
@@ -778,10 +808,10 @@ def main():
     page = (TEMPLATE
             .replace("__TARGET__", json.dumps(TARGET_DEGREES))
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
-            .replace("__HTOL__", json.dumps(HEIGHT_TOLERANCE_PCT))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BAND__", json.dumps(band))
             .replace("__ONRECORD__", json.dumps(on_record()))
+            .replace("__CARD__", json.dumps(reference_card()))
             .replace("__ARRANGE__", json.dumps(arrangement_picture())))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
@@ -790,13 +820,12 @@ def main():
         b = band["degrees"]
         print("  the set on record sits %.1f to %.1f degrees (median %.1f, %d figures)"
               % (b["lo"], b["hi"], b["mid"], b["n"]))
-    if band and "h_plinth" in band:
-        b = band["h_plinth"]
-        print("  and %.2f to %.2f height/plinth (median %.2f), the tallest %+.1f%% of it"
-              % (b["lo"], b["hi"], b["mid"],
-                 100.0 * (b["hi"] - b["mid"]) / b["mid"] if b["mid"] else 0.0))
-    print("  target %.0f deg, tolerance %.1f, height tolerance %.0f%%, base tolerance %.0f%%"
-          % (TARGET_DEGREES, TOLERANCE_DEGREES, HEIGHT_TOLERANCE_PCT, BASE_TOLERANCE_PCT))
+    if band and "proportion" in band:
+        b = band["proportion"]
+        print("  and %.2f to %.2f in proportion (median %.2f) -- REPORTED, NOT JUDGED"
+              % (b["lo"], b["hi"], b["mid"]))
+    print("  target %.0f deg, tolerance %.1f, base tolerance %.0f%%  (height is not checked)"
+          % (TARGET_DEGREES, TOLERANCE_DEGREES, BASE_TOLERANCE_PCT))
     if args.serve is not None:
         serve(out, args.serve, args.open)
     else:
@@ -840,6 +869,12 @@ td.why{color:#403a31}
 #record h2 b{color:#8b8071;font-weight:400}
 #record .row{display:flex;gap:18px;flex-wrap:wrap}
 #record .one{background:#17130d;border:1px solid #241d13;padding:8px;max-width:366px}
+/* The reference card's download, above the row it produced. */
+#card{margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#card .dl{display:inline-block;padding:6px 12px;border:1px solid #4a5a3a;border-radius:3px;
+  background:#1c1811;color:#c9b27a;text-decoration:none;white-space:nowrap}
+#card .dl:hover{border-color:#8fae6a;background:#201c13}
+#card .note{color:#5f574a;max-width:720px;line-height:1.45}
 /* the caption used to set the cell's width -- one long line made the tile cell 528 px and
    wrapped the row at 1600. It wraps to the picture's width instead. */
 #record .one .num{white-space:normal;max-width:366px}
@@ -858,7 +893,6 @@ and drawn back with the measurement on it.</div>
 <div id=bar>
   <label for=target>target angle</label><input id=target value=__TARGET__>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
-  <label for=htol>height tol %</label><input id=htol value=__HTOL__>
   <label for=btol>base tol %</label><input id=btol value=__BTOL__>
   <span id=ref class=info></span>
 </div>
@@ -868,23 +902,39 @@ and drawn back with the measurement on it.</div>
 <script>
 var BAND = __BAND__;
 var ONRECORD = __ONRECORD__;
+var CARD = __CARD__;
 var ARRANGE = __ARRANGE__;
 (function(){
   if (!ONRECORD || !ONRECORD.length) return;
   var host = document.getElementById("record");
   var h = ["<h2>The sculpts on file in <b>ui/assets-gothic/sculpts/</b>. Below each figure, the "
            + "two numbers check (b) compares: the base's own width, and the lit wall above it."
-           + "<br>These are NOT the band a newcomer is judged against &#8212; that still comes "
-           + "from <b>ui/concept/</b>, the 9&#176; art being replaced, which is why a correct new "
-           + "sculpt reports a height gap. Recompute it once the four seats exist."
+           + "<br>Height is <b>reported, not judged</b>. It was a third check against the median "
+           + "of whatever was on file, and that median is a fact about the folder rather than "
+           + "about the figure &#8212; it moves as the set fills, and the two sets on file "
+           + "disagree by 26&#37; in proportion with the camera already divided out. Which "
+           + "proportion is wanted is a look, so it is decided by comparing the candidates that "
+           + "got past the camera and the base."
+           + "<br>The base median a newcomer IS judged against is <b>not</b> these figures: it still comes from <b>ui/concept/</b>, the 9&#176; art being replaced. That one survives because both sets agree on it &#8212; concept 0.132&#8211;0.146 against 0.126&#8211;0.141 here &#8212; but two sets on one page are two sets, so read the number knowing which it is."
            + "<br>The last cell is five of them on a tile, at the spread, rank and frame from "
            + "<b>duty_placement.json</b>, with the middle of the front three stepped FORWARD "
            + "until the top of its plinth reaches the floor line &#8212; where that file still "
            + "says set it back. A plinth is as deep as it is wide times sin(camera), so raising "
            + "the camera from 9&#176; to 32&#176; made every base three times deeper without "
            + "moving a number there, and at a set-back of 21 the middle plinth overlaps both of "
-           + "the back rank's. Overlap is rasterised and intersected, not judged by eye.</h2>"
-           + "<div class=row>"];
+           + "the back rank's. Overlap is rasterised and intersected, not judged by eye.</h2>"];
+  // THE CARD THESE WERE GENERATED FROM, to hand back to the image model for the next seat.
+  // Above the figures rather than beside them because it comes FIRST in the actual job: you
+  // fetch the card, you generate against it, and then you drop what comes back here.
+  if (CARD) {
+    h.push("<div id=card><a class=dl download='" + CARD.name + "' href='" + CARD.uri + "'>"
+           + "&#8595;&nbsp; download " + CARD.name + "</a>"
+           + "<span class=note>the reference the three sculpts below were generated from &#183; "
+           + CARD.w + "&#215;" + CARD.h + " px, " + Math.round(CARD.bytes / 1024) + " KB, the "
+           + "committed file byte for byte. Attach it when generating the next seat.</span>"
+           + "</div>");
+  }
+  h.push("<div class=row>");
   ONRECORD.forEach(function(r){
     h.push("<div class=one><div class=nm>" + r.name + "</div>");
     h.push("<img class=fig src='" + r.figure + "' alt=''>");
@@ -949,7 +999,6 @@ function measure(file){
       body: JSON.stringify({name: file.name, data: reader.result,
                             target: +document.getElementById("target").value,
                             tolerance: +document.getElementById("tol").value,
-                            height_tolerance: +document.getElementById("htol").value,
                             base_tolerance: +document.getElementById("btol").value})})
       .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
       .then(function(pair){ show(file.name, pair[0], pair[1]); })

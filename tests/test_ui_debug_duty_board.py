@@ -1437,88 +1437,46 @@ def test_the_background_estimate_is_offered_and_labelled(checker):
         "the estimate is %.1f against %.1f" % (guessed["row"]["degrees"], truth))
 
 
-def _height_row(checker, raw, height_tol):
-    for name, value, verdict, _why in checker.judge(
-            raw, 30.0, 2.5, height_tol=height_tol)["checks"]:
-        if name == "height":
-            return value, verdict
-    return None, None
+def test_height_is_reported_but_never_judged(checker):
+    """Height was the third check and has been WITHDRAWN. This is the guard on that.
 
+    It was measured against the median of whatever sat in the reference folder, which made the
+    verdict a fact about the folder rather than about the figure: the median moves as the set
+    fills, so the same sculpt passes or fails depending on what was filed before it. And the two
+    sets on file disagree by 26% in proportion with the camera already divided out -- the concept
+    art at 2.18, the sculpts drawn at the board's camera at 2.75 -- so it fired on every new
+    sculpt, arithmetically right and practically useless. Which proportion is wanted is a look.
 
-def test_the_height_verdict_moves_with_its_own_tolerance(checker):
-    """Height has a tolerance of its own rather than sharing the angle's.
-
-    The same figure has to pass a loose bar and fail a tight one, or the number in the box is
-    decoration. The angle is held at its target throughout, so a change of verdict can only have
-    come from the height tolerance and not from the file being wrong in some other way.
+    Two things have to stay true, and they pull in opposite directions, which is why they are
+    asserted together: NO check may carry a height verdict, and the proportion must still be
+    measured and reported, because comparing candidates by eye is easier with the number there.
     """
-    import io
-    buf = io.BytesIO()
-    _disc(240, 30, wall=20, stem=500).save(buf, "PNG")     # about +24% of the set
-    raw = buf.getvalue()
-
-    if _height_row(checker, raw, 15.0)[1] is None:
-        pytest.skip("no set on record to compare a height against")
-
-    assert _height_row(checker, raw, 45.0)[1] == "ok", (
-        "a figure 41% over the set failed a 45% tolerance")
-    assert _height_row(checker, raw, 15.0)[1] == "bad", (
-        "a figure 41% over the set passed a 15% tolerance")
-
-    angles = {t: [c[2] for c in checker.judge(raw, 30.0, 2.5, height_tol=t)["checks"]
-                  if c[0] == "camera angle"] for t in (15.0, 45.0)}
-    assert angles[15.0] == angles[45.0] == ["ok"], (
-        "the angle moved too, so the height tolerance is not what changed the verdict")
+    result = checker.judge(_png(_plinth(240, 32, 40)), 32.0, 2.5)
+    names = [c[0] for c in result["checks"]]
+    for gone in ("height", "cost to the set"):
+        assert gone not in names, (
+            "%r is being judged again; height is decided by looking, not by a median: %s"
+            % (gone, names))
+    assert not any("height" in n and n != "base height / width" for n in names), (
+        "something height-shaped crept back into the verdicts: %s" % names)
+    assert "proportion" in result["row"], (
+        "the proportion stopped being reported -- withdrawing the verdict was not meant to "
+        "withdraw the measurement")
+    assert result["row"]["proportion"] > 0
 
 
-def test_a_tall_figure_is_told_what_it_costs_the_rest_of_the_set(checker):
-    """Being out of tolerance is not the whole story: the tray levels every figure by the
-    narrowest plinth and then scales the set so the TALLEST reaches the target size, so one tall
-    newcomer shrinks its four siblings. A percentage off the median does not say that; the cost
-    row does, and only when the figure actually becomes the tallest."""
-    import io
-
-    def cost(stem):
-        buf = io.BytesIO()
-        _disc(240, 30, wall=20, stem=stem).save(buf, "PNG")
-        for name, value, verdict, _why in checker.judge(buf.getvalue(), 30.0, 2.5)["checks"]:
-            if name == "cost to the set":
-                return value, verdict
-        return None, None
-
-    short = cost(300)
-    if short[1] is None:
-        pytest.skip("no set on record to be shrunk")
-    assert short == ("none", "ok"), "a figure shorter than the set was said to cost it something"
-
-    value, verdict = cost(700)
-    assert verdict == "bad" and "smaller" in value, (
-        "a figure well over the tallest on record cost the set nothing: %r" % (value,))
-
-
-def test_the_height_tolerance_admits_the_set_it_judges_newcomers_against(checker):
-    """A bar the existing art cannot clear would fail every honest new figure.
-
-    With the camera divided out the set is tighter than it looked: player_2, _3 and _4 agree on
-    proportion to within 1% of each other, and player_1 stands 8.3% above them. So the guard is
-    that the CLUSTER passes and at most one figure sits outside -- which still catches a
-    tolerance screwed down so far that honest art fails, without pretending the known outlier
-    is not there. When the set is regenerated this should tighten, and the number here with it.
-    """
-    seen = {}
-    for name in checker.PLAYERS:
-        path = checker.CONCEPT / name / "sculpt_plastic.png"
-        if not path.is_file():
-            continue
-        for row, value, verdict, _why in checker.judge(path.read_bytes(), 29.0, 2.5)["checks"]:
-            if row == "height":
-                seen[name] = (value, verdict)
-    if len(seen) < 3:
-        pytest.skip("the concept art is not here")
-    bad = {k: v for k, v in seen.items() if v[1] != "ok"}
-    assert len(bad) <= 1, "the tool fails most of the set it was calibrated on: %s" % bad
-    assert not [k for k, v in seen.items() if v[1] == "bad"], (
-        "a figure on record is more than twice the tolerance out: %s" % seen)
+def test_the_height_tolerance_is_gone_from_the_tool_and_the_page(checker):
+    """Not just unused: absent. A tolerance left behind as a constant and a box on the page is
+    an invitation to wire it back up, and a box that changes nothing is worse than no box."""
+    assert not hasattr(checker, "HEIGHT_TOLERANCE_PCT"), (
+        "the height tolerance is still a constant")
+    src = checker.PAGE if hasattr(checker, "PAGE") else pathlib.Path(
+        checker.__file__).read_text(encoding="utf-8")
+    assert "__HTOL__" not in src and "id=htol" not in src, (
+        "the page still offers a height tolerance box")
+    import inspect
+    assert "height_tol" not in inspect.signature(checker.judge).parameters, (
+        "judge still takes a height tolerance")
 
 
 def test_a_tightly_cropped_cutout_is_measured_rather_than_estimated(checker):
@@ -1676,18 +1634,56 @@ def test_the_plinth_fixture_is_readable_by_the_measurement(metrics):
         assert abs(got - drawn) <= 6, "drew a %d px wall and measured %d" % (drawn, got)
 
 
-def test_a_sculpt_is_judged_on_angle_then_base_then_height(checker):
-    """Three questions, asked in that order, because they fail independently.
+def test_the_reference_card_is_offered_whole(checker):
+    """The card is an INPUT to an image model, so the button must hand over the committed bytes.
 
-    The camera says where you stood. The base says how chunky the plinth is. The height says how
-    tall the figure stands above it. A set can agree on any two and disagree on the third: ten
-    nuns and ten monks shared a camera and a height and differed by two thirds on their bases.
+    A page that offered the 520 px preview under the same filename would be handing over a
+    different instruction while looking identical in the browser: the base's ellipse ratio and
+    the scale line's multiple only survive at the resolution they were drawn.
+    """
+    card = checker.reference_card()
+    if card is None:
+        pytest.skip("the reference card is not on file")
+    path = (checker.ROOT / "ui" / "assets-gothic" / "references"
+            / "base_scale_reference_27.png")
+    assert card["name"] == path.name
+    assert card["bytes"] == path.stat().st_size, (
+        "the card was re-encoded: %d bytes offered against %d on disk"
+        % (card["bytes"], path.stat().st_size))
+    import base64 as _b64
+    raw = _b64.b64decode(card["uri"].split(",", 1)[1])
+    assert raw == path.read_bytes(), "the download is not the committed file byte for byte"
+    assert card["uri"].startswith("data:image/png;base64,"), (
+        "a file:// page cannot fetch anything but a data URI, and that is how this page opens")
+
+
+def test_the_card_button_sits_above_the_sculpts_it_produced(checker):
+    """Above, not beside: fetching the card comes first in the actual job -- you take it to the
+    model, generate against it, and drop what comes back here."""
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "id=card" in src and "class=dl" in src, "there is no download control"
+    block = src[src.index("if (CARD) {"):]
+    block = block[:block.index("h.push(\"<div class=row>\")")]
+    assert "download=" in block, "the anchor does not download, it navigates"
+    assert "CARD.uri" in block, "the button does not point at the card"
+    # and it is emitted BEFORE the row of sculpt cards
+    assert src.index("if (CARD) {") < src.index('h.push("<div class=row>")'), (
+        "the card button is emitted after the figures it produced")
+
+
+def test_a_sculpt_is_judged_on_angle_then_base(checker):
+    """Two questions now, asked in that order, because they fail independently.
+
+    The camera says where you stood. The base says how chunky the plinth is. A set can agree on
+    one and disagree on the other: ten nuns and ten monks shared a camera and differed by two
+    thirds on their bases. Height was a third question and is now decided by eye -- see
+    test_height_is_reported_but_never_judged.
     """
     order = [c[0] for c in checker.judge(_png(_plinth(240, 32, 40)), 32.0, 2.5)["checks"]]
-    for name in ("camera angle", "base height / width", "height"):
+    for name in ("camera angle", "base height / width"):
         assert name in order, "%s is not among the sculpt checks" % name
-    assert (order.index("camera angle") < order.index("base height / width")
-            < order.index("height")), "the three questions are not asked in order: %s" % order
+    assert order.index("camera angle") < order.index("base height / width"), (
+        "the two questions are not asked in order: %s" % order)
 
 
 def test_the_base_check_sees_what_the_other_two_cannot(checker):
@@ -1762,14 +1758,18 @@ def test_the_page_shows_the_sculpts_on_file_with_their_plinths(checker):
 
 
 def test_the_page_does_not_call_two_different_sets_the_set_on_record(checker):
-    """The panel draws ui/assets-gothic/sculpts/ at 32 degrees while the band that actually
-    judges a newcomer still comes from ui/concept/ at 9. Calling both 'the set on record' on one
-    page is how someone reads the wrong number off the screen."""
+    """The panel draws ui/assets-gothic/sculpts/ at 32 degrees while the median that actually
+    judges a newcomer's BASE still comes from ui/concept/ at 9. Calling both 'the set on record'
+    on one page is how someone reads the wrong number off the screen.
+
+    Withdrawing the height verdict did not retire this: the base check still compares against the
+    concept art, so the page carries two sets and has to say which is which.
+    """
     src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
-    panel = src.split('id="record"')[-1] if 'id="record"' in src else src
     assert "ui/assets-gothic/sculpts/" in src, "the panel does not say where its figures came from"
-    assert "NOT the band" in src, "the panel does not distinguish itself from the judging band"
-    del panel
+    assert "ui/concept/" in src, "the panel never names where the judging median comes from"
+    assert "not</b> these figures" in src, (
+        "the panel does not distinguish the figures it draws from the median it judges by")
 
 
 def test_the_plinth_picture_states_the_camera_it_was_measured_at(checker, metrics):
