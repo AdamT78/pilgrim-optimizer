@@ -948,25 +948,44 @@ function connected(){
 // The two files as the generator would write them: the tuned keys merged INTO the documents that
 // are on disk, so every line of prose explaining those numbers survives. The key lists come from
 // the generator, so this cannot merge a different set than the server does.
+// WHAT THE TWO FILES LOOKED LIKE WHEN THE PAGE OPENED, frozen. PLAN is mutated as you work --
+// settingsFor() writes a new plate's defaults into it -- so it cannot be its own before-picture.
+var OPENED = {place: JSON.parse(JSON.stringify(DOC_PLACEMENT)),
+              plan: JSON.parse(JSON.stringify(PLAN))};
+
 function documents(){
   var sent = settings(), k, i, out = [];
   var place = {};
   for (k in DOC_PLACEMENT) place[k] = DOC_PLACEMENT[k];
   for (i = 0; i < SAVE_KEYS.placement.length; i++)
     place[SAVE_KEYS.placement[i]] = sent[SAVE_KEYS.placement[i]];
-  out.push({name: SAVE_KEYS.placement_file, doc: place});
+  out.push({name: SAVE_KEYS.placement_file, doc: place,
+            changed: JSON.stringify(place) !== JSON.stringify(OPENED.place)});
   var plan = {};
   for (k in PLAN) plan[k] = PLAN[k];
   for (i = 0; i < SAVE_KEYS.grounds.length; i++)
     plan[SAVE_KEYS.grounds[i]] = sent.grounds[SAVE_KEYS.grounds[i]];
-  out.push({name: SAVE_KEYS.grounds_file, doc: plan});
+  out.push({name: SAVE_KEYS.grounds_file, doc: plan,
+            changed: JSON.stringify(plan) !== JSON.stringify(OPENED.plan)});
   return out;
 }
 addEventListener("resize", function(){ if (VIEW === "wheel") draw(); });
 document.getElementById("save").onclick = function(){
   var body = JSON.stringify(settings(), null, 2);
   if (!connected()){
-    var docs = documents(), names = [];
+    // ONLY WHAT ACTUALLY MOVED. Handing over both files every time meant a browser prompt to
+    // allow multiple downloads, a folder with two copies of a document you never touched, and
+    // -- because the browser will not overwrite -- names like "duty_placement (1).json", where
+    // the useful file is the one with the suffix and the stale one keeps the clean name.
+    // Nudging the lift changes one file; the button should hand you one file.
+    var docs = documents().filter(function(d){ return d.changed; });
+    var kept = documents().filter(function(d){ return !d.changed; })
+                          .map(function(d){ return d.name; });
+    if (!docs.length){
+      say("nothing to save -- both files already match what is on disk.", "busy");
+      return;
+    }
+    var names = [];
     docs.forEach(function(d){
       var a = document.createElement("a");
       a.href = "data:application/json;charset=utf-8,"
@@ -976,9 +995,12 @@ document.getElementById("save").onclick = function(){
       names.push(d.name);
     });
     say("NOT saved -- a file:// page cannot write to the repository. Downloaded "
-        + names.join(" and ") + " instead; they are the finished files, so copy them into "
-        + SAVE_KEYS.where + " to keep this. Re-run with --serve to have the button do it.",
-        "bad");
+        + names.join(" and ") + " instead; "
+        + (names.length > 1 ? "they are" : "it is") + " the finished "
+        + (names.length > 1 ? "files" : "file") + ", so copy "
+        + (names.length > 1 ? "them" : "it") + " into " + SAVE_KEYS.where + " to keep this."
+        + (kept.length ? "  " + kept.join(" and ") + " is unchanged, so it was left alone." : "")
+        + "  Re-run with --serve to have the button do it.", "bad");
     return;
   }
   say("saving...", "busy");

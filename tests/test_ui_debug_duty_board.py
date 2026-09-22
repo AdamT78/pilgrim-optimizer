@@ -928,6 +928,33 @@ def test_the_offline_button_downloads_both_real_files(sheet):
     assert "JSON.stringify(d.doc" in offline, "the download is not a document"
 
 
+def test_the_offline_button_downloads_only_what_moved(sheet):
+    """Nudging one slider changed one file and handed over two.
+
+    The browser then asks permission to download multiple files, and -- because it will not
+    overwrite -- the second copy lands as "duty_placement (1).json", which leaves the USEFUL
+    file wearing the suffix while whatever stale thing was already there keeps the clean name.
+    So the offline path compares each document against what the page opened with and hands over
+    only the ones that moved.
+
+    The before-picture has to be frozen at load: PLAN is mutated while you work, because
+    settingsFor() writes a new plate's defaults into it, so it cannot be its own baseline.
+    """
+    src = sheet.TEMPLATE
+    assert "var OPENED = " in src, "nothing records what the two files looked like on opening"
+    opened = src[src.index("var OPENED = "):]
+    opened = opened[:opened.index(";\n")]
+    assert "JSON.parse(JSON.stringify(PLAN))" in opened, (
+        "the baseline aliases PLAN, which is mutated as you work -- it could never differ")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    assert docs.count("changed:") == 2, "not every document is compared against its baseline"
+    save = src[src.index('document.getElementById("save").onclick'):]
+    save = save[:save.index("\n};")]
+    assert "return d.changed; }" in save, "the offline path downloads regardless of what moved"
+    assert "nothing to save" in save, "pressing save with nothing changed still downloads"
+
+
 def test_the_two_save_paths_merge_the_same_keys(sheet):
     """The served save and the offline download are two pieces of code writing two files.
 
