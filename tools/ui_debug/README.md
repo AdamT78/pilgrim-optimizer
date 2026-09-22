@@ -2292,9 +2292,23 @@ inside tolerance.
 
 Generating art is cheap and judging it is not. The hard part is not making another sculpt, it is
 knowing which of the eight you just made is the one to keep — and "looks about right" is not a
-judgement that repeats tomorrow. Drop a PNG on the served page and it reports the camera angle,
-the figure's height against its own base, whether it is cut out, and whether five of them fit the
-frame, each against a tolerance you can see and change.
+judgement that repeats tomorrow. Drop a PNG on the served page and it answers, in this order:
+
+**(a) is the angle right** — where the camera stood, read off the base's ellipse.
+**(b) is the base right** — the plinth's own side wall over its own width, which says how chunky
+the base is. A thin base and a chunky one photograph at the same angle and carry the same figure,
+so neither of the other two questions can see this one. Ten nuns measured 0.22 here against ten
+monks at 0.13 — bases two thirds thicker — while agreeing on both the others.
+**(c) is the height right** — the figure's height over that base width.
+
+Then whether it is cut out, whether the edge carries a halo, and whether five of them fit the
+frame. Each has a tolerance you can see and change on the page.
+
+(b) and (c) are both PROJECTED measurements and are corrected before being compared. The wall and
+the figure are vertical, so raising the camera shortens them while leaving the base's width alone:
+the same sculpt measures smaller the higher you look from. Comparing a 32° figure with a 9° one
+uncorrected reads a camera move as a change of shape, which is the precise confusion this tool
+exists to prevent.
 
 `--scan` measures a folder in one pass, because a run of generations answers a different question
 from a single file: not "is this one good" but "is the prompt wrong, or are these files wrong",

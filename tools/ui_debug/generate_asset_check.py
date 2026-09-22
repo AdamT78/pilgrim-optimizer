@@ -79,6 +79,11 @@ TOLERANCE_DEGREES = 2.5
 # width, so that ratio IS the levelled height -- a figure generated larger or
 # smaller compares directly with its siblings.
 HEIGHT_TOLERANCE_PCT = 8.0
+# How far a plinth may be chunkier or thinner than the set's, measured as its own side wall over
+# its own width. A separate question from the camera and from the figure's height: a thin base
+# and a chunky one photograph at the same angle and carry the same figure. Wider than the height
+# tolerance because it is a smaller measurement on a shorter edge, and so noisier.
+BASE_TOLERANCE_PCT = 12.0
 
 
 def _board():
@@ -89,6 +94,20 @@ def _board():
     sys.modules["generate_duty_board_check"] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def _upright(ratio, degrees):
+    """Any VERTICAL measurement over the base's width, with the camera divided out.
+
+    Height over plinth width and wall over plinth width are both projected: raising the camera
+    shortens the drawn height of anything standing up while leaving the base's width alone, so
+    the same sculpt measures smaller the higher you look from. Both therefore need dividing by
+    cos(theta) before one figure can be compared with another shot from elsewhere.
+    """
+    if ratio is None or degrees is None:
+        return None
+    c = math.cos(math.radians(max(0.0, min(89.0, degrees))))
+    return ratio / c if c > 1e-6 else None
 
 
 def _proportion(h_plinth, degrees):
@@ -121,11 +140,12 @@ def reference_band(kind="sculpt_plastic"):
         g = sm.ground_ellipse(im)
         rows.append({"h_plinth": m["h_plinth"], "wall_ratio": m["wall_ratio"],
                      "degrees": g["degrees"] if g else None,
-                     "proportion": _proportion(m["h_plinth"], g["degrees"] if g else None)})
+                     "proportion": _proportion(m["h_plinth"], g["degrees"] if g else None),
+                     "base_ratio": _upright(m["wall_ratio"], g["degrees"] if g else None)})
     if not rows:
         return None
     out = {}
-    for key in ("h_plinth", "wall_ratio", "degrees", "proportion"):
+    for key in ("h_plinth", "wall_ratio", "degrees", "proportion", "base_ratio"):
         vals = [r[key] for r in rows if r[key] is not None]
         if vals:
             out[key] = {"lo": min(vals), "hi": max(vals),
@@ -195,7 +215,8 @@ def without_background(im):
     return Image.fromarray(out)
 
 
-def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT):
+def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT,
+          base_tol=BASE_TOLERANCE_PCT):
     """Measure one dropped file and say what is inside tolerance and what is not."""
     im = Image.open(io.BytesIO(raw)).convert("RGBA")
     W, H = im.size
@@ -277,6 +298,25 @@ def judge(raw, target, tol, height_tol=HEIGHT_TOLERANCE_PCT):
                            "ok" if off <= tol else ("check" if off <= tol * 2 else "bad"),
                            "target %.0f, tolerance %.1f" % (target, tol)])
         band = reference_band()
+        deg = g["degrees"] if g else None
+
+        # (b) THE BASE ITSELF, before anything standing on it. Its own side wall over its own
+        # width says how chunky the plinth is, which neither the camera nor the figure's height
+        # can see: a thin base and a chunky one photograph at the same angle and carry the same
+        # figure. Ten nuns measured 0.22 against ten monks at 0.13 -- bases two thirds thicker,
+        # with both batches passing every other check they were given.
+        base = _upright(m["wall_ratio"], deg)
+        if band and "base_ratio" in band and base is not None:
+            b = band["base_ratio"]
+            row["base_ratio"] = round(base, 3)
+            off = 100.0 * (base - b["mid"]) / b["mid"] if b["mid"] else 0.0
+            checks.append(["base height / width", "%+.1f%% of the set" % off,
+                           "ok" if abs(off) <= base_tol
+                           else ("check" if abs(off) <= base_tol * 2 else "bad"),
+                           "wall/width %.3f at %.1f deg is %.3f upright, against a median of "
+                           "%.3f, tolerance %.0f%%"
+                           % (m["wall_ratio"], deg, base, b["mid"], base_tol)])
+
         prop = _proportion(m["h_plinth"], g["degrees"] if g else None)
         if band and "proportion" in band and prop is not None:
             b = band["proportion"]
@@ -356,7 +396,8 @@ def serve(page, port, open_it):
                 target = float(sent.get("target", TARGET_DEGREES))
                 tol = float(sent.get("tolerance", TOLERANCE_DEGREES))
                 htol = float(sent.get("height_tolerance", HEIGHT_TOLERANCE_PCT))
-                result = judge(raw, target, tol, htol)
+                btol = float(sent.get("base_tolerance", BASE_TOLERANCE_PCT))
+                result = judge(raw, target, tol, htol, btol)
             except Exception as exc:                                    # noqa: BLE001
                 print("  could not measure %s: %s" % (sent.get("name", "?"), exc))
                 return self._send(400, json.dumps({"error": str(exc)}))
@@ -474,6 +515,7 @@ def main():
             .replace("__TARGET__", json.dumps(TARGET_DEGREES))
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__HTOL__", json.dumps(HEIGHT_TOLERANCE_PCT))
+            .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BAND__", json.dumps(band)))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
@@ -487,8 +529,8 @@ def main():
         print("  and %.2f to %.2f height/plinth (median %.2f), the tallest %+.1f%% of it"
               % (b["lo"], b["hi"], b["mid"],
                  100.0 * (b["hi"] - b["mid"]) / b["mid"] if b["mid"] else 0.0))
-    print("  target %.0f deg, tolerance %.1f, height tolerance %.0f%%"
-          % (TARGET_DEGREES, TOLERANCE_DEGREES, HEIGHT_TOLERANCE_PCT))
+    print("  target %.0f deg, tolerance %.1f, height tolerance %.0f%%, base tolerance %.0f%%"
+          % (TARGET_DEGREES, TOLERANCE_DEGREES, HEIGHT_TOLERANCE_PCT, BASE_TOLERANCE_PCT))
     if args.serve is not None:
         serve(out, args.serve, args.open)
     else:
@@ -535,6 +577,7 @@ and drawn back with the measurement on it.</div>
   <label for=target>target angle</label><input id=target value=__TARGET__>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
   <label for=htol>height tol %</label><input id=htol value=__HTOL__>
+  <label for=btol>base tol %</label><input id=btol value=__BTOL__>
   <span id=ref class=info></span>
 </div>
 <div id=drop>drop PNGs here</div>
@@ -582,7 +625,8 @@ function measure(file){
       body: JSON.stringify({name: file.name, data: reader.result,
                             target: +document.getElementById("target").value,
                             tolerance: +document.getElementById("tol").value,
-                            height_tolerance: +document.getElementById("htol").value})})
+                            height_tolerance: +document.getElementById("htol").value,
+                            base_tolerance: +document.getElementById("btol").value})})
       .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
       .then(function(pair){ show(file.name, pair[0], pair[1]); })
       .catch(function(e){ show(file.name, false, {error: String(e)}); });

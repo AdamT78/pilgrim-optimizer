@@ -1268,3 +1268,115 @@ def test_the_target_angle_is_the_one_the_generator_actually_reaches(checker):
     landed at 32.1 and 31.9. The plates converge on the same place unprompted. A target the
     generator cannot be moved to is a target that fails honest art on both sides of the board."""
     assert checker.TARGET_DEGREES == 32.0
+
+
+def _plinth(width, degrees, wall, pad=40, stem=500):
+    """A disc with a LIT RIM, because that is what the wall measurement actually looks for.
+
+    `measure` scans up from the bottom of the art for the brightest row in a central strip and
+    calls that the top of the wall -- a real sculpt's rounded rim catches the light there. The
+    flat-filled disc used elsewhere in this file has no such row, so it reported the same wall
+    whatever was drawn, and any test built on it would have proved nothing.
+    """
+    import math
+
+    from PIL import Image, ImageDraw
+    minor = width*math.sin(math.radians(degrees))
+    im = Image.new("RGBA", (width+2*pad, int(minor+wall+2*pad)+stem), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    top = pad+stem
+    d.rectangle([pad+width*0.3, pad, pad+width*0.7, top+wall], fill=(140, 140, 140, 255))
+    d.ellipse([pad, top, pad+width, top+minor], fill=(120, 120, 120, 255))
+    d.rectangle([pad, top+minor/2, pad+width, top+minor/2+wall], fill=(90, 90, 90, 255))
+    d.ellipse([pad, top+wall, pad+width, top+minor+wall], fill=(90, 90, 90, 255))
+    d.ellipse([pad, top+minor-3, pad+width, top+minor+3], fill=(250, 250, 250, 255))
+    return im
+
+
+def _named(checker, raw, **kw):
+    return {c[0]: (c[1], c[2]) for c in checker.judge(raw, 32.0, 2.5, **kw)["checks"]}
+
+
+def _png(im):
+    import io
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_the_plinth_fixture_is_readable_by_the_measurement(metrics):
+    """The guard on the guards. Every base test below varies the drawn wall, so if the measured
+    wall does not follow it they all pass against a constant and mean nothing."""
+    seen = [metrics.measure(_plinth(240, 32, w))["wall"] for w in (40, 60, 90)]
+    assert seen == sorted(seen), "measured wall does not rise with the drawn wall: %s" % seen
+    for drawn, got in zip((40, 60, 90), seen, strict=True):
+        assert abs(got - drawn) <= 6, "drew a %d px wall and measured %d" % (drawn, got)
+
+
+def test_a_sculpt_is_judged_on_angle_then_base_then_height(checker):
+    """Three questions, asked in that order, because they fail independently.
+
+    The camera says where you stood. The base says how chunky the plinth is. The height says how
+    tall the figure stands above it. A set can agree on any two and disagree on the third: ten
+    nuns and ten monks shared a camera and a height and differed by two thirds on their bases.
+    """
+    order = [c[0] for c in checker.judge(_png(_plinth(240, 32, 40)), 32.0, 2.5)["checks"]]
+    for name in ("camera angle", "base height / width", "height"):
+        assert name in order, "%s is not among the sculpt checks" % name
+    assert (order.index("camera angle") < order.index("base height / width")
+            < order.index("height")), "the three questions are not asked in order: %s" % order
+
+
+def test_the_base_check_sees_what_the_other_two_cannot(checker):
+    """A plinth drawn twice as thick at the same camera. The angle does not move; the base
+    measurement moves enormously. That gap is the whole reason the check exists -- without it a
+    batch whose bases are two thirds too thick passes every question it is asked.
+
+    Note the walls: below about 45 px the base band clips into the wall and the ANGLE starts
+    moving too, which would make this a test of two things at once rather than of one.
+    """
+    band = checker.reference_band()
+    if not band or "base_ratio" not in band:
+        pytest.skip("no set on record to compare a base against")
+    thin = _named(checker, _png(_plinth(240, 32, 45)))
+    thick = _named(checker, _png(_plinth(240, 32, 90)))
+    # NOT a skip: with a band on record the row has to be there. Skipping when it is missing is
+    # how a renamed or deleted check goes green instead of red.
+    assert "base height / width" in thin, "the base check is not being reported at all"
+    assert thin["camera angle"][:2] == thick["camera angle"][:2], (
+        "the camera moved too, so this is not an isolated change of base: %s against %s"
+        % (thin["camera angle"], thick["camera angle"]))
+
+    def pct(row):
+        return float(row[0].split("%")[0])
+
+    assert pct(thick["base height / width"]) - pct(thin["base height / width"]) > 50.0, (
+        "doubling the plinth's thickness barely moved the base reading: %s against %s"
+        % (thin["base height / width"][0], thick["base height / width"][0]))
+
+
+def test_the_base_verdict_moves_with_its_own_tolerance(checker):
+    """Its own tolerance and not the height's: a smaller measurement on a shorter edge is
+    noisier and wants a wider bar, and sharing one would hide that."""
+    band = checker.reference_band()
+    if not band or "base_ratio" not in band:
+        pytest.skip("no set on record to compare a base against")
+    raw = _png(_plinth(240, 32, 60))
+    assert "base height / width" in _named(checker, raw), (
+        "the base check is not being reported at all")
+    loose = _named(checker, raw, base_tol=200.0)["base height / width"][1]
+    tight = _named(checker, raw, base_tol=4.0)["base height / width"][1]
+    assert loose == "ok" and tight == "bad", (
+        "the base tolerance did not change the verdict: %s then %s" % (loose, tight))
+
+
+def test_the_base_measurement_divides_the_camera_out(checker):
+    """wall over width is projected exactly as height over width is: the wall is a vertical edge,
+    so raising the camera shortens it while leaving the base's width alone. Comparing a 32 degree
+    plinth against a 9 degree one uncorrected reads a camera move as a thicker base."""
+    import math
+    for deg in (9.0, 32.0, 45.0):
+        assert abs(checker._upright(0.14*math.cos(math.radians(deg)), deg) - 0.14) < 1e-9, (
+            "the camera was not divided out of the base ratio at %.0f degrees" % deg)
+    gap = 0.14*math.cos(math.radians(9.0)) - 0.14*math.cos(math.radians(32.0))
+    assert gap > 0.01, "the uncorrected numbers barely differ, so correcting proves nothing"
