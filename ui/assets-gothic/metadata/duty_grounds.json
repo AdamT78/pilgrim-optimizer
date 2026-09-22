@@ -2,7 +2,7 @@
   "note": "Which ground plate each duty stands on, and how each plate is drawn. Read by tools/ui_debug/generate_placement_sheet.py and generate_duty_sow.py. The plates themselves live in ui/assets-gothic/grounds/ and are DISCOVERED -- what art exists is a fact about the folder, so nothing here lists them. What is decided, and therefore written down, is which duty gets which, and how each one is toned down to sit under sculpts rather than compete with them.",
   "layer_note": "A ground is a layer, not a tile face. The duty-tiles tree holds the opaque face of the wheel; a plate is a transparent cut-out drawn ON TOP of that face and UNDER the figures, so the same plate can sit on any face and a face can change without redrawing its ground.",
   "default": "flagstones_grey",
-  "lift": 0,
+  "lift": 92,
   "by_duty": {
     "produce": "flagstones_grey",
     "clerical": "limestone_irregular",
