@@ -897,6 +897,210 @@ def test_the_sheet_can_pick_a_ground(sheet):
         "the plates or the plan are hardcoded rather than read")
 
 
+# ---------------------------------------------------------------- the button that did not save
+
+def test_the_offline_button_downloads_both_real_files(sheet):
+    """THE BUG THIS PAIR EXISTS FOR.
+
+    Opened as a file:// page -- which is what the generator does without --serve -- the save
+    button could not POST, so it fell back to a download. It downloaded ONE file, named
+    duty_placement.json, whose contents were the wire payload: spread/back/rank at the top and
+    every ground assignment nested under a `grounds` key. That is not the shape of the placement
+    file. Dropped into the repository it would have replaced a document full of explanatory prose
+    with a payload, and STILL lost every ground, because nothing reads grounds out of that file.
+
+    An afternoon of assignments went into ~/Downloads and looked, from the panel, like a save.
+
+    So: the offline path must build BOTH documents, name them after the files they are, and never
+    hand out the wire payload under a real filename.
+    """
+    src = sheet.TEMPLATE
+    save = src[src.index("document.getElementById(\"save\").onclick"):]
+    save = save[:save.index("\n};")]
+    assert "documents()" in save, "the offline path does not build the real documents"
+    assert "a.download = d.name" in save, "the download is not named after the document it is"
+    assert '"duty_placement.json"' not in save and "'duty_placement.json'" not in save, (
+        "a filename is hardcoded in the save path -- that is how the payload got that name")
+    # and the payload must never be what gets downloaded
+    offline = save[save.index("if (!connected())"):save.index("say(\"saving")]
+    assert "encodeURIComponent(body)" not in offline, (
+        "the offline path still downloads the wire payload")
+    assert "JSON.stringify(d.doc" in offline, "the download is not a document"
+
+
+def test_the_two_save_paths_merge_the_same_keys(sheet):
+    """The served save and the offline download are two pieces of code writing two files.
+
+    They agreed by coincidence until they did not. The generator now owns ONE list of keys per
+    file and hands it to the page, so the page cannot merge a different set -- there is no second
+    list to drift from. This test is the guard on that arrangement, not on the lists themselves.
+    """
+    src = sheet.TEMPLATE
+    assert "SAVE_KEYS = __SAVEKEYS__" in src, "the page was not given the key lists"
+    assert "DOC_PLACEMENT = __PLACEMENTDOC__" in src, (
+        "the page has no copy of the placement document to merge into, so it cannot build it")
+    docs = src[src.index("function documents()"):]
+    docs = docs[:docs.index("\n}")]
+    for key in ("SAVE_KEYS.placement[i]", "SAVE_KEYS.grounds[i]",
+                "SAVE_KEYS.placement_file", "SAVE_KEYS.grounds_file"):
+        assert key in docs, "documents() does not go through %s" % key
+    for literal in ("spread", "back", "rank", "by_duty"):
+        assert '"%s"' % literal not in docs, (
+            "documents() names %r itself instead of taking the generator's list" % literal)
+
+
+def test_the_generator_hands_the_page_the_keys_it_merges_by(sheet, mod, tmp_path, monkeypatch):
+    """Proved by writing the page and reading back what it was given, not by reading the source.
+
+    The lists must be the ones save_settings and save_grounds actually merge by; a page handed a
+    stale copy is the same bug wearing the fix.
+    """
+    board = sheet._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+    out = tmp_path / "placement_sheet.html"
+    monkeypatch.setattr(sys, "argv",
+                        ["generate_placement_sheet.py", "--no-open", "--out", str(out)])
+    sheet.main()
+    page = out.read_text(encoding="utf-8")
+    m = re.search(r"SAVE_KEYS = (\{.*?\});", page, re.S)
+    assert m, "the key lists never reached the page"
+    keys = json.loads(m.group(1))
+    assert tuple(keys["placement"]) == sheet.PLACEMENT_KEYS
+    assert tuple(keys["grounds"]) == sheet.GROUND_KEYS
+    assert keys["placement_file"] == mod.PLACEMENT.name
+    assert keys["grounds_file"] == mod.GROUND_PLAN.name
+
+    # the whole placement document, not the three numbers the sliders move
+    d = re.search(r"DOC_PLACEMENT = (\{.*?\}), SAVE_KEYS", page, re.S)
+    assert d, "the placement document never reached the page"
+    doc = json.loads(d.group(1))
+    on_disk = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    assert set(doc) == set(on_disk), (
+        "the page was given a trimmed placement document, so its download would lose "
+        "%s" % sorted(set(on_disk) - set(doc)))
+
+
+def test_save_settings_writes_exactly_the_keys_it_advertises(sheet, mod, tmp_path, monkeypatch):
+    """Whatever PLACEMENT_KEYS names, a save must move -- and nothing outside it may move.
+
+    The page merges by that list offline. A key this function quietly validated but left out of
+    the list would be saved when served and lost when not, which is precisely the failure that
+    started this.
+    """
+    board = sheet._board_module()
+    path = tmp_path / "duty_placement.json"
+    original = json.loads(mod.PLACEMENT.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(board, "PLACEMENT", path)
+    sent = {"spread": 97, "back": 13, "rank": 41, "order": "arrival",
+            "depth": {"mode": "dark", "amount": 33, "full_at": 44},
+            "frame": {"w": 301, "h": 402, "drop": -7}}
+    saved = sheet.save_settings(board, sent)
+    moved = {k for k in saved if saved[k] != original.get(k)}
+    assert moved <= set(sheet.PLACEMENT_KEYS), (
+        "%s moved but is not named by PLACEMENT_KEYS" % sorted(moved - set(sheet.PLACEMENT_KEYS)))
+    assert moved == set(sheet.PLACEMENT_KEYS), (
+        "%s is named by PLACEMENT_KEYS but a save does not move it"
+        % sorted(set(sheet.PLACEMENT_KEYS) - moved))
+    assert "tuned_at" in saved, "the prose and the untouched keys were thrown away"
+
+
+def test_the_page_says_it_cannot_save_before_the_tuning_not_after(sheet):
+    """The old page mentioned that a file:// URL cannot write only once the button was pressed --
+    at the end of a sitting, in the one small line a success message also uses. That is too late
+    to be a warning; it is a bereavement notice. It has to be on screen from the start."""
+    src = sheet.TEMPLATE
+    opening = src[src.index("document.body.classList.add(\"shadow\")") - 900:
+                  src.index("document.body.classList.add(\"shadow\")")]
+    assert "connected()" in opening, "nothing checks on load whether the page can save"
+    assert "download json" in opening, (
+        "the button still says 'save to json' on a page that cannot save")
+
+
+def test_one_rule_decides_what_a_duty_stands_on(sheet, mod):
+    """The sheet assigns a ground; the sow plays on it. They must draw the same picture.
+
+    Each had its own resolver, with its own fallback for a plate nobody had tuned. Two spellings
+    of one rule is how you assign a ground in one page and get a different one in the other.
+    """
+    rules = (pathlib.Path(mod.__file__).parent / "duty_sculpt_rules.js").read_text(
+        encoding="utf-8")
+    for fn in ("function dutyGroundFor", "function dutyGroundSettings"):
+        assert fn in rules, "%s is not in the shared file" % fn
+    sow_tmpl = (pathlib.Path(mod.__file__).parent / "duty_sow.html.tmpl").read_text(
+        encoding="utf-8")
+    for page, src in (("the placement sheet", sheet.TEMPLATE), ("the sow", sow_tmpl)):
+        assert "dutyGroundFor(PLAN" in src, "%s resolves the ground itself" % page
+        assert "dutyGroundSettings(PLAN" in src, "%s has its own tuning fallback" % page
+        assert 'PLAN["default"]' not in src, (
+            "%s still unpacks the plan by hand, so the rule lives in two places" % page)
+
+
+def test_bare_floor_survives_the_shared_rule(sheet, mod):
+    """An unassigned duty falls back to the plan's default. A duty assigned the empty string has
+    been DECIDED -- bare floor -- and must stay bare. Collapsing the two makes that choice
+    unsaveable, which is not a subtle failure: the picker's first button stops working."""
+    rules = (pathlib.Path(mod.__file__).parent / "duty_sculpt_rules.js").read_text(
+        encoding="utf-8")
+    body = rules[rules.index("function dutyGroundFor"):]
+    body = body[:body.index("\n}")]
+    assert "=== undefined" in body, (
+        "dutyGroundFor tests the name for truthiness, so bare floor becomes the default")
+
+
+def test_a_ground_with_no_picture_is_named_out_loud(mod):
+    """A duty assigned a plate the folder does not hold draws nothing and says nothing, which on
+    screen is the same as a duty nobody has assigned. ground_plan cannot catch it -- it checks
+    the plan against itself -- and ground_art cannot, because it only knows what exists."""
+    notes = []
+    plan = {"default": "", "by_duty": {s: "ghost_plate" for s in mod.SLUGS}, "grounds": {}}
+    in_use = mod.ground_check(plan, {"cobbles_oval": {"widest": 46}}, notes)
+    assert in_use == [], "a plate with no art was reported as in use"
+    assert any("ghost_plate" in n and "no art" in n for n in notes), (
+        "an assigned plate with no picture passed without a word: %r" % notes)
+    # and the other direction: art nobody stands on is worth saying once, not nine times
+    notes = []
+    plan = {"default": "cobbles_oval", "by_duty": {}, "grounds": {}}
+    in_use = mod.ground_check(plan, {"cobbles_oval": {"widest": 46},
+                                     "spare_plate": {"widest": 50}}, notes)
+    assert in_use == ["cobbles_oval"]
+    assert sum("spare_plate" in n for n in notes) == 1, notes
+
+
+def test_the_sow_names_every_plate_it_stands_a_duty_on(sow, mod, tmp_path, monkeypatch):
+    """Asked for directly: the sow must take its grounds from duty_grounds.json, all of them.
+
+    It did read the file -- but the file had never changed, because the save button was dropping
+    the assignments. The terminal line now names what was actually resolved, so the next time the
+    two disagree you can see it without opening the page.
+    """
+    board = sow._board_module()
+    if not any((board.FIGURE_DIR / ("figure_player_1_%d.png" % s)).is_file()
+               for s in board.FIGURE_SIZES):
+        pytest.skip("no rendered sculpts; run make_tray_figures.py")
+
+    plan = json.loads(mod.GROUND_PLAN.read_text(encoding="utf-8"))
+    names = sorted(p.stem for p in mod.GROUNDS_DIR.glob("*.png"))
+    assert len(names) >= 2, "need at least two plates on file to tell them apart"
+    # every duty on a DIFFERENT plate than the file ships, so a page reading a stale copy shows
+    plan["by_duty"] = {slug: names[i % len(names)] for i, slug in enumerate(mod.SLUGS)}
+    plan["grounds"] = {n: {"anchor": 50, "scale": 100, "dim": 55, "saturate": 65, "opacity": 100}
+                       for n in names}
+    doctored = tmp_path / "duty_grounds.json"
+    doctored.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(board, "GROUND_PLAN", doctored)
+    monkeypatch.setattr(sow, "_board_module", lambda: board)
+    out = tmp_path / "duty_sow.html"
+    monkeypatch.setattr(sys, "argv", ["generate_duty_sow.py", "--no-open", "--out", str(out)])
+    sow.main()
+
+    page = out.read_text(encoding="utf-8")
+    for name in set(plan["by_duty"].values()):
+        assert '"%s"' % name in page, "%s is assigned but never reached the page" % name
+
+
 # ---------------------------------------------------------------- judging a new asset
 
 

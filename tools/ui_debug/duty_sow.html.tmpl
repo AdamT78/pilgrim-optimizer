@@ -282,8 +282,11 @@ function build(){
     });
     h += '</div>';
 
-    var gname0 = (PLAN.by_duty || {})[C.slug];
-    if (gname0 === undefined) gname0 = PLAN["default"] || "";
+    // Resolved by the shared rule in duty_sculpt_rules.js, not by a second copy of it here.
+    // This page had its own, and its own fallback for an untuned plate; the placement sheet had
+    // another. Assign a ground in the sheet and play on it here and they must be the same
+    // picture, which two spellings of one rule do not guarantee.
+    var gname0 = dutyGroundFor(PLAN, C.slug);
     if (!PLATES[gname0])
       h += '<div class=ground style="left:' + px(CELL / 2 - wide / 2) + ';top:'
          + px(top + FIELD) + ';width:' + px(wide) + '"></div>';
@@ -296,8 +299,7 @@ function build(){
        + px(FRAME.h) + '"></div>';
     var plate = PLATES[gname0];
     if (plate){
-      var gs = (PLAN.grounds || {})[gname0] || {anchor: plate.widest, scale: 100,
-                                               dim: 55, saturate: 65, opacity: 100};
+      var gs = dutyGroundSettings(PLAN, PLATES, gname0);
       var gw = FRAME.w * gs.scale / 100, gh = gw * plate.h / plate.w;
       h += '<div class=plate style="left:' + px(CELL / 2 - gw / 2) + ';top:'
          + px(floorY - gh * gs.anchor / 100) + ';width:' + px(gw) + ';height:' + px(gh)

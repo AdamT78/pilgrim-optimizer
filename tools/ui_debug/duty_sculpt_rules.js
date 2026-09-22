@@ -12,6 +12,38 @@
 // x is measured from the tile centre, y as height above the floor the figures stand on, both in
 // real device pixels. Positions come back unsorted; callers that care sort by x.
 
+// ---- the ground a duty stands on ------------------------------------------------------------
+// Which plate a duty stands on, and how that plate is toned down, was worked out twice: once in
+// the placement sheet, where you assign it, and once in the sow, where you play on it. Two
+// answers to one question, in two files, is how the sheet ends up showing you a ground the sow
+// does not draw. Both pages call this now.
+//
+// The plan is ui/assets-gothic/metadata/duty_grounds.json read whole; `plates` is the folder,
+// discovered. This decides NOTHING about which plate is right -- it resolves what the file says.
+var DUTY_GROUND_DEFAULTS = {anchor: 50, scale: 100, dim: 55, saturate: 65, opacity: 100};
+
+function dutyGroundFor(plan, slug) {
+  var name = ((plan || {}).by_duty || {})[slug];
+  // UNDEFINED AND EMPTY ARE NOT THE SAME ANSWER. Undefined means nobody has decided, and falls
+  // back to the plan's default. An empty string IS the decision -- bare floor -- and turning it
+  // back into the default would make that choice unsaveable.
+  if (name === undefined) name = (plan || {})["default"] || "";
+  return name;
+}
+
+function dutyGroundSettings(plan, plates, name) {
+  if (!name) return null;                       // bare floor has nothing to tune
+  var tuned = ((plan || {}).grounds || {})[name];
+  if (tuned) return tuned;
+  // A plate in the folder but not in the plan is a NEW asset, not a broken one: it draws with
+  // the defaults, standing on its own widest row, until somebody tunes it.
+  var g = {}, k;
+  for (k in DUTY_GROUND_DEFAULTS) g[k] = DUTY_GROUND_DEFAULTS[k];
+  if (plates && plates[name] && plates[name].widest !== undefined)
+    g.anchor = plates[name].widest;
+  return g;
+}
+
 function dutyFormation(n, spread, back, rank) {
   // AN EMPTY TILE MUST RETURN NO SLOTS. Without this the chain falls through to the five-slot
   // case, the seat queue has nothing to fill them with, and the board build throws on the first
