@@ -39,7 +39,17 @@ from PIL import Image
 
 ALPHA = 16          # anything fainter is background, not art
 PLINTH_BAND = 0.14  # bottom slice of a figure that is base rather than robe
-RIM_SEARCH = (35, 150)
+
+# WHERE THE RIM CAN BE, as a fraction of the plinth's OWN width rather than in pixels.
+#
+# It was (35, 150) absolute, and that was wrong twice over. Art arrives at whatever size the
+# generator felt like, so a fixed window means a different question on every image; and the
+# committed set runs 0.11 to 0.16 of the plinth's width, so 150 px sat barely above the band on
+# a 600 px plinth and BELOW it on a larger one. Anything genuinely chunky was clipped by the
+# window rather than measured.
+RIM_SEARCH_RATIO = (0.04, 0.40)
+RIM_SEARCH_FLOOR = 8        # px, so a thumbnail still has somewhere to look
+RIM_PROMINENCE = 0.5        # how far up from the dark wall a peak must stand to be the rim
 
 
 def bbox(im):
@@ -138,6 +148,55 @@ def ground_ellipse(im, base_band=True, inset=0.03, span=0.02):
     }
 
 
+def _rim(strip, h, width):
+    """How far above the bottom edge the rim highlight sits, or None when there isn't one.
+
+    A RIM IS A PEAK, NOT THE EDGE OF A SEARCH WINDOW. This used to be a plain argmax over a
+    band fixed in PIXELS, which cannot fail and therefore cannot be trusted: when the brightest
+    thing in view was a lit robe hem above the window, argmax returned the last row searched and
+    the caller got that boundary back as a measurement. It read as a plinth about twice as thick
+    as the one in the picture -- plausible enough to be believed, and 21 of 128 monk
+    measurements in one evening were exactly this, every one of them reported as a base that had
+    failed its check.
+
+    AND THE RIM IS NOT THE BRIGHTEST THING, which is the trap in the obvious repair. Widen the
+    window and the robe wins: on the three sculpts on file the rim sits at 145, 149 and 175
+    while folds above it reach 172, 146 and 200. The old narrow band was hiding that by keeping
+    the robe out of view, so widening it alone turned a 0.14 base into a 0.37 one.
+
+    What actually identifies the rim is that it is the FIRST strong thing above the bottom edge.
+    Below it is the plinth's own dark wall, a flat low run; the rim is a sharp bright line on
+    top of it. So: take the lowest local maximum that stands at least RIM_PROMINENCE of the way
+    from that dark floor up to the brightest peak in view. Ties and noise inside the wall sit
+    far below the threshold and are skipped.
+
+    Returns None when nothing qualifies, or when the winner is hard against either end of the
+    window -- there is no peak in view and the answer must say so. None is the point: a wall
+    that could not be found must not be indistinguishable from a wall that was measured.
+    """
+    lo = max(RIM_SEARCH_FLOOR, int(RIM_SEARCH_RATIO[0] * width))
+    hi = min(h - 1, int(RIM_SEARCH_RATIO[1] * width))
+    if hi - lo < 5:
+        return None
+    ks = np.arange(lo, hi + 1)
+    vals = np.array([strip[h - 1 - k] for k in ks], dtype=np.float64)
+    inner = np.arange(1, len(ks) - 1)
+    peaks = inner[(vals[1:-1] >= vals[:-2]) & (vals[1:-1] >= vals[2:])]
+    if not len(peaks):
+        return None
+    floor = float(np.percentile(vals, 10))
+    ceiling = float(vals[peaks].max())
+    if ceiling - floor < 1e-6:
+        return None
+    strong = [i for i in peaks if vals[i] >= floor + RIM_PROMINENCE * (ceiling - floor)]
+    if not strong:
+        return None
+    first = int(strong[0])
+    if first <= 0 or first >= len(ks) - 1:
+        return None
+    return int(ks[first])
+
+
 def measure(im):
     """Every number this project asks of a sculpt, from an image already cropped to its art."""
     c = crop_to_art(im) if im.size != (bbox(im)[2] - bbox(im)[0], bbox(im)[3] - bbox(im)[1]) else im
@@ -148,15 +207,15 @@ def measure(im):
     # A strip rather than one column: flutes and noise average out, the rim highlight does not.
     cx = (xl + xr) // 2
     strip = lum[:, max(0, cx - 12):cx + 13].mean(1)
-    ks = np.arange(*RIM_SEARCH)
-    ks = ks[ks < h]
-    wall = int(ks[int(np.argmax([strip[h - 1 - k] for k in ks]))])
-    ymid = h - 1 - max(2, wall // 2)
+    wall = _rim(strip, h, width)
+    ymid = h - 1 - max(2, (wall if wall is not None else int(0.12 * width)) // 2)
     seg = lum[ymid, xl + int(0.18 * (xr - xl)):xr - int(0.18 * (xr - xl))]
     al = np.array(c)[..., 3]
     return {
         "art_w": w, "art_h": h, "plinth": width, "wall": wall, "rise": h - 1 - y,
-        "wall_ratio": wall / width, "rise_ratio": (h - 1 - y) / width, "h_plinth": h / width,
+        # None rather than a number when no rim was found -- see _rim
+        "wall_ratio": (wall / width) if wall is not None else None,
+        "rise_ratio": (h - 1 - y) / width, "h_plinth": h / width,
         # fluting shows as a high ripple, a smooth disc as a low one
         "ripple": float(np.abs(np.diff(seg)).mean()) if len(seg) > 1 else 0.0,
         "clear_pct": 100.0 * float((al == 0).mean()),

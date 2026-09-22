@@ -136,6 +136,17 @@ TOLERANCE_DEGREES = 2.5
 # which is 43% under and nowhere near this limit. A base below the set reads as a sliver and
 # takes the camera down with it -- the anti-correlation between base thickness and camera height
 # runs at r = +0.92 -- so there is no case for loosening that side to match this one.
+# A GROUND PLATE IS HELD TIGHTER THAN A SCULPT, and it is a different number rather than the
+# same one because the two are not the same measurement.
+#
+# A sculpt's camera is read off a plinth perhaps 150 px wide inside a figure the generator drew
+# freehand, and five near-identical renders of one monk scatter by about 0.6 degrees -- so 2.5
+# is a tolerance sized to the noise in the instrument. A plate is a single flat ellipse 1500 px
+# across with nothing standing on it: the reading is far steadier, and what it has to agree with
+# is the whole set of figures at once. Four plates measured 27.5, 31.5, 31.9 and 34.2 -- two in
+# use, two not -- and at 2.5 a plate 2.2 degrees out passes while looking visibly wrong under
+# the same figures.
+GROUND_TOLERANCE_DEGREES = 1.0
 BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
 BASE_THIN_PCT = 12.0             # thinner than it
 
@@ -824,7 +835,10 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         m = sm.measure(im)
         row.update({"plinth": m["plinth"], "wall": m["wall"],
                     "h_plinth": round(m["h_plinth"], 3),
-                    "wall_ratio": round(m["wall_ratio"], 3),
+                    # None when no rim was found -- sculpt_metrics._rim refuses to invent one,
+                    # and a verdict computed from an invented wall is worse than no verdict.
+                    "wall_ratio": (round(m["wall_ratio"], 3)
+                                   if m["wall_ratio"] is not None else None),
                     "ripple": round(m["ripple"], 2)})
         if g:
             off = abs(g["degrees"] - target)
@@ -840,7 +854,11 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
         # figure. Ten nuns measured 0.22 against ten monks at 0.13 -- bases two thirds thicker,
         # with both batches passing every other check they were given.
         base = _upright(m["wall_ratio"], deg)
-        if band and "base_ratio" in band and base is not None:
+        if m["wall_ratio"] is None:
+            checks.append(["base height / width", "no rim found", "check",
+                           "the plinth's lit rim is not a peak anywhere it could be -- the "
+                           "wall was not measured, and a number was not invented for it"])
+        elif band and "base_ratio" in band and base is not None:
             b = band["base_ratio"]
             row["base_ratio"] = round(base, 3)
             off = 100.0 * (base - b["mid"]) / b["mid"] if b["mid"] else 0.0
@@ -1088,6 +1106,7 @@ def main():
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BTHIN__", json.dumps(BASE_THIN_PCT))
+            .replace("__GTOL__", json.dumps(GROUND_TOLERANCE_DEGREES))
             .replace("__BAND__", json.dumps(band))
             .replace("__ONRECORD__", json.dumps(on_record(rel_to=out.parent)))
             .replace("__GROUNDS__", json.dumps(ground_record(rel_to=out.parent)))
@@ -1109,6 +1128,8 @@ def main():
               % (b["lo"], b["hi"], b["mid"]))
     print("  target %.0f deg, tolerance %.1f  (height is not checked)"
           % (TARGET_DEGREES, TOLERANCE_DEGREES))
+    print("  ground plates: same %.0f deg target, tolerance %.1f -- tighter than a sculpt's %.1f"
+          % (TARGET_DEGREES, GROUND_TOLERANCE_DEGREES, TOLERANCE_DEGREES))
     if band and "base_ratio" in band:
         m = band["base_ratio"]["mid"]
         print("  base %.3f to %.3f  (median %.3f, %.0f%% thinner to %.0f%% chunkier)"
@@ -1203,6 +1224,7 @@ and drawn back with the measurement on it.</div>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
   <label for=btol>base, max % chunkier</label><input id=btol value=__BTOL__>
   <label for=bthin>max % thinner</label><input id=bthin value=__BTHIN__>
+  <label for=gtol>ground tol</label><input id=gtol value=__GTOL__>
   <span id=ref class=info></span>
 </div>
 <div id=tabs><button class="tab on" data-t=record>sculpts</button><button class=tab data-t=grounds>ground tiles</button></div>
@@ -1452,7 +1474,7 @@ function show(name, ok, res){
   // tunable while the page is open, and a plate has to be judged by the same two numbers a
   // sculpt is or the two panels are answering different questions.
   var TARGET = +document.getElementById("target").value;
-  var TOL = +document.getElementById("tol").value;
+  var TOL = +document.getElementById("gtol").value;   // a plate's own, tighter than a sculpt's
   var host = document.getElementById("grounds");
   var h = ["<h2>The ground plates in <b>ui/assets-gothic/grounds/</b>, judged on the camera and "
            + "nothing else. A plate has no plinth and no figure, so the base and height checks "

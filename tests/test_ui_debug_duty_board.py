@@ -1955,31 +1955,35 @@ def test_the_cards_differ_only_where_the_registry_says_they_do(cards, tmp_path):
     assert a.height > b.height, "the dimensioned card is not the taller layout"
 
 
-def test_the_plinth_fixture_is_only_honest_above_a_certain_wall(metrics):
-    """THE FLOOR ON THE FIXTURE, pinned here because it silently fooled a test being written.
+def test_the_fixture_is_measured_honestly_or_refused(metrics):
+    """WHAT THIS TEST USED TO SAY IS THE INTERESTING PART, so it is worth writing down.
 
-    `_plinth` draws a lit rim for `measure` to find. Below roughly 30 px of wall on a 240 px
-    base the scan misses that rim and locks onto the top of the disc instead, so a SIX pixel
-    wall reports as 134 and the camera reads 3.6 degrees instead of 32. The numbers do not look
-    like errors -- they look like a very chunky plinth photographed from very low down -- and a
-    thin-base test built on them passes for exactly the wrong reason.
+    It used to pin a FLOOR: below about 30 px of wall on a 240 px base, `measure` missed the
+    lit rim and locked onto the top of the disc instead, so a SIX pixel wall reported as 134
+    and the camera read 3.6 degrees. Those numbers do not look like errors -- they look like a
+    chunky plinth photographed from very low down -- and a thin-base test built on them passed
+    for exactly the wrong reason, which is how it was found.
 
-    So there is no synthetic thin plinth in this file, and any test that wants one has to fix
-    the fixture first. This guard fails the moment someone makes it usable, which is the point:
-    the news should arrive as a failure here rather than as a test that quietly proves nothing.
+    sculpt_metrics._rim no longer works that way. It takes the lowest peak standing clear of
+    the plinth's own dark wall, over a window sized to the plinth rather than fixed in pixels,
+    and returns None when there is no such peak. The floor is gone: the fixture measures true
+    from about 12 px up, and the one thickness it cannot see refuses instead of inventing.
     """
-    honest, wrong = [], []
-    for wall in (6, 12, 20, 40, 60, 90):
-        im = _plinth(240, 32.0, wall)
-        got = metrics.measure(im)["wall"]
-        (honest if abs(got - wall) <= 6 else wrong).append((wall, got))
-    assert [w for w, _ in honest] == [40, 60, 90], (
-        "the fixture's honest range has moved: honest at %s, wrong at %s" % (honest, wrong))
+    honest, refused, wrong = [], [], []
+    for wall in (6, 12, 20, 34, 40, 60, 90):
+        got = metrics.measure(_plinth(240, 32.0, wall))["wall"]
+        if got is None:
+            refused.append(wall)
+        elif abs(got - wall) <= 6:
+            honest.append(wall)
+        else:
+            wrong.append((wall, got))
+    assert not wrong, "a wall was measured wrongly rather than refused: %s" % wrong
+    assert honest == [12, 20, 34, 40, 60, 90], "the honest range has moved: %s" % honest
+    assert refused == [6], "what the fixture refuses has moved: %s" % refused
 
-    # The floor is a wall thickness in PIXELS, not a ratio, so a wider base buys headroom --
-    # which is how the asymmetry test below gets a drawable plinth inside the band.
-    wide = metrics.measure(_plinth(480, 32.0, 66))["wall"]
-    assert abs(wide - 66) <= 6, "66 px on a 480 px base measured %s" % wide
+    # a wide base measures the same way, because the window is a fraction of the plinth
+    assert abs(metrics.measure(_plinth(480, 32.0, 66))["wall"] - 66) <= 6
 
 
 def test_the_base_is_judged_asymmetrically(checker):
@@ -2001,12 +2005,11 @@ def test_the_base_is_judged_asymmetrically(checker):
 
     import math
 
-    # A 480 px base, not 240: the fixture's rim scan needs about 30 px of wall before it is
-    # honest (see the test above), and on a narrow base the whole band sits under that floor.
+    # A 480 px base keeps the drawn wall comfortably large across the whole band. A 240 px one
+    # is honest now too -- see the test above -- but leaves less room between the two numbers.
     def verdict(upright, degrees=32.0, width=480):
         raw = upright * math.cos(math.radians(degrees))
         wall = round(raw * width)
-        assert wall >= 34, "this asks for a wall the fixture cannot draw honestly"
         return _named(checker, _png(_plinth(width, degrees, wall)))["base height / width"][1]
 
     assert verdict(mid * 1.15) == "ok", "a plinth 15% chunkier than the set was not allowed"
@@ -2133,3 +2136,51 @@ def test_one_href_has_to_work_from_disk_and_from_the_server(checker):
     rel = checker.href(checker.SCULPTS / "player_2_v1.png", checker.OUT.parent)
     assert rel.startswith("../../../ui/"), "unexpected shape for a reference: %s" % rel
     assert (checker.OUT.parent / rel).resolve() == (checker.SCULPTS / "player_2_v1.png").resolve()
+
+
+def test_a_plate_is_held_tighter_than_a_sculpt(checker):
+    """Two tolerances, not one, because they are not the same measurement.
+
+    A sculpt's camera is read off a plinth inside a figure the generator drew freehand, and five
+    near-identical renders scatter by about 0.6 degrees -- 2.5 is sized to that noise. A plate
+    is one flat ellipse with nothing standing on it, read far more steadily, and it has to agree
+    with every figure at once. The guard is that the plate number is the smaller one and that it
+    actually changes a verdict: at 2.5 a plate 2.2 degrees out passes.
+    """
+    assert checker.GROUND_TOLERANCE_DEGREES < checker.TOLERANCE_DEGREES, (
+        "a plate is not held tighter than a sculpt: %s against %s"
+        % (checker.GROUND_TOLERANCE_DEGREES, checker.TOLERANCE_DEGREES))
+
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+
+    def verdict(deg, tol):
+        off = abs(deg - checker.TARGET_DEGREES)
+        return "ok" if off <= tol else ("check" if off <= 2 * tol else "bad")
+
+    tight = [r["name"] for r in rows
+             if verdict(r["degrees"], checker.GROUND_TOLERANCE_DEGREES) == "ok"]
+    loose = [r["name"] for r in rows
+             if verdict(r["degrees"], checker.TOLERANCE_DEGREES) == "ok"]
+    assert set(tight) < set(loose), (
+        "the tighter tolerance passes the same plates as the looser one, so it is decorative: "
+        "%s against %s" % (tight, loose))
+
+    # and every plate a duty actually stands on still passes at the tighter number
+    for r in rows:
+        if r["duties"]:
+            assert verdict(r["degrees"], checker.GROUND_TOLERANCE_DEGREES) == "ok", (
+                "%s carries %s and no longer passes at %s degrees"
+                % (r["name"], ", ".join(r["duties"]), checker.GROUND_TOLERANCE_DEGREES))
+
+
+def test_the_grounds_panel_reads_its_own_tolerance_box(checker):
+    """The panel silently rendered nothing the first time, because it read a TARGET constant
+    that does not exist -- the numbers live in the boxes at the top. It must read the GROUND
+    box, not the sculpt one, or the two panels answer different questions from the same input.
+    """
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "__GTOL__" in src and "id=gtol" in src, "the plate tolerance has no box on the page"
+    assert 'getElementById("gtol").value' in src, "the grounds panel does not read its own box"
+    assert 'json.dumps(GROUND_TOLERANCE_DEGREES)' in src, "__GTOL__ is never filled in"
