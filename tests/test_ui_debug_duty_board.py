@@ -1654,11 +1654,16 @@ def test_the_reference_card_is_offered_whole(checker):
     assert card["bytes"] == path.stat().st_size, (
         "the card was re-encoded: %d bytes offered against %d on disk"
         % (card["bytes"], path.stat().st_size))
-    import base64 as _b64
-    raw = _b64.b64decode(card["uri"].split(",", 1)[1])
-    assert raw == path.read_bytes(), "the download is not the committed file byte for byte"
-    assert card["uri"].startswith("data:image/png;base64,"), (
-        "a file:// page cannot fetch anything but a data URI, and that is how this page opens")
+    # REFERENCED, not embedded, since the page stopped swallowing 15 MB of files that were
+    # already on disk. What must still hold is what this test was always about: the thing the
+    # button hands over is the committed card and not the preview beside it. That is now a
+    # question about where the href points rather than about what a data URI decodes to.
+    assert not card["uri"].startswith("data:"), "the card is embedded again"
+    pointed = (checker.OUT.parent / card["uri"]).resolve()
+    assert pointed.is_file(), "the card's href points at %s, which is not there" % card["uri"]
+    assert pointed == path.resolve(), (
+        "the button points at %s but the card on file is %s" % (pointed, path))
+    assert pointed.read_bytes() == path.read_bytes()
 
 
 def test_the_card_button_sits_above_the_sculpts_it_produced(checker):
@@ -2037,3 +2042,94 @@ def test_the_page_carries_both_base_tolerances(checker):
     assert "base_thin" in src, "the page never sends the thin tolerance back"
     # and the substitution actually happens, so the box is not left holding the placeholder
     assert 'json.dumps(BASE_THIN_PCT)' in src, "__BTHIN__ is never filled in"
+
+
+def test_the_plates_are_judged_on_the_camera_they_share_with_a_sculpt(checker):
+    """A plate has no plinth, so only one of the three sculpt checks transfers -- and it does.
+
+    `base_band=False` is the whole trick and it is easy to lose: the band exists to scan the
+    bottom strip of a sculpt, where a plinth lives, and a plate IS the ellipse. Scanning a
+    plate's bottom strip reports about 17 degrees for every one of them, which is a plausible
+    enough number to be believed.
+    """
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+    for r in rows:
+        assert r["degrees"] is not None, "%s has no camera" % r["name"]
+        assert 5.0 < r["degrees"] < 85.0, "%s measured %s" % (r["name"], r["degrees"])
+
+    # the spread across the folder is real, not the band collapsing everything together
+    seen = sorted(r["degrees"] for r in rows)
+    assert seen[-1] - seen[0] > 5.0, (
+        "every plate measured nearly the same angle (%s) -- the ellipse is not being found"
+        % seen)
+
+    from PIL import Image
+    plate = checker.GROUNDS / (rows[0]["name"] + ".png")
+    im = Image.open(plate).convert("RGBA")
+    banded = checker.sm.ground_ellipse(im, base_band=True)
+    whole = checker.sm.ground_ellipse(im, base_band=False)
+    assert banded and whole
+    assert abs(whole["degrees"] - rows[0]["degrees"]) < 0.2, "the record is not the whole-art read"
+    assert whole["degrees"] - banded["degrees"] > 5.0, (
+        "the bottom-strip scan agrees with the whole-art scan on a plate, so this guard is "
+        "no longer guarding the mistake it was written for")
+
+
+def test_a_plate_nobody_stands_on_is_named_rather_than_dropped(checker):
+    """Three of the five carry no duty and are kept as the evidence of a camera that missed.
+
+    A panel that quietly listed only the plates in use would be throwing that away, and the
+    next person to wonder what a mismatch looks like would have to generate one.
+    """
+    rows = checker.ground_record()
+    if not rows:
+        pytest.skip("no ground plates on file")
+    idle = [r for r in rows if not r["duties"]]
+    used = [r for r in rows if r["duties"]]
+    assert used, "no plate has a duty standing on it"
+    assert idle, "every plate is in use -- this guard needs a different fixture"
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "no duty stands on this one" in src, "the page does not say when nobody stands on one"
+
+
+def test_the_page_references_committed_files_instead_of_swallowing_them(checker, tmp_path):
+    """15.3 MB of the page was base64 of files already on disk, against 0.3 MB of the drawn
+    previews anyone actually looks at. The originals are referenced now; only what is GENERATED
+    is embedded, because there is nothing on disk to point at.
+    """
+    out = tmp_path / "asset_check.html"
+    for r in checker.on_record(rel_to=out.parent) + checker.ground_record(rel_to=out.parent):
+        assert not r["orig"].startswith("data:"), "%s is embedded again" % r["file"]
+        assert (out.parent / r["orig"]).resolve().is_file(), (
+            "%s points at %s, which is not there" % (r["file"], r["orig"]))
+    card = checker.reference_card(rel_to=out.parent)
+    if card:
+        assert not card["uri"].startswith("data:"), "the reference card is embedded again"
+        assert (out.parent / card["uri"]).resolve().is_file()
+    for p in checker.prompts(rel_to=out.parent):
+        for a in p["attach"]:
+            assert not a["uri"].startswith("data:"), "%s is embedded again" % a["name"]
+            assert (out.parent / a["uri"]).resolve().is_file()
+    # and the previews, which exist nowhere on disk, still are embedded
+    rows = checker.ground_record(rel_to=out.parent)
+    if rows:
+        assert rows[0]["preview"].startswith("data:image/png;base64,")
+
+
+def test_one_href_has_to_work_from_disk_and_from_the_server(checker):
+    """The page is served at its own path under a document root of the repository, NOT at "/".
+
+    That is the only reason a single relative href can work in both modes. Serving it at the
+    root would leave every ../../../ pointing above the document root, and the links would work
+    from disk and 404 when served -- which is exactly the mode they were added for, since
+    Chromium ignores `download` on a file:// link.
+    """
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "page_path = href(page, ROOT)" in src, "the server does not know the page's own path"
+    assert '"Location", "/" + page_path' in src, "/ does not redirect to the page's real path"
+    assert "os.path.realpath" in src, "the static branch is not path-confined"
+    rel = checker.href(checker.SCULPTS / "player_2_v1.png", checker.OUT.parent)
+    assert rel.startswith("../../../ui/"), "unexpected shape for a reference: %s" % rel
+    assert (checker.OUT.parent / rel).resolve() == (checker.SCULPTS / "player_2_v1.png").resolve()

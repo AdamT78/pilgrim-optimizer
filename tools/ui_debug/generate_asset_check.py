@@ -42,6 +42,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 import pathlib
 import re
 import statistics
@@ -50,6 +51,25 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = HERE / "generated" / "asset_check.html"
+
+
+def href(path, rel_to=None):
+    """Where the PAGE should point at a committed file, as a path and not as ten megabytes.
+
+    THE SAME STRING HAS TO WORK IN BOTH MODES, which is the only reason this is a function.
+    Opened from disk the page sits in tools/ui_debug/generated/, so a file three levels up is
+    ../../../ui/... ; served, the page is handed out at that same path under a document root of
+    the repository, so the identical relative href resolves to the identical file. Serving the
+    page at "/" would have broken every one of these.
+
+    Embedding was the alternative and it was measured: the originals and the attachments came to
+    15.3 MB of base64 against 0.3 MB of the drawn previews that actually appear on screen -- 98%
+    of the page was link targets nobody looks at. What embedding buys is a one-click download
+    from a file:// page, because Chromium ignores the `download` attribute on a file:// link and
+    navigates to the image instead. That is the whole trade, and --serve wins it back.
+    """
+    rel = os.path.relpath(str(path), str((rel_to or OUT.parent)))
+    return rel.replace(os.sep, "/")
 
 sys.path.insert(0, str(HERE))
 import numpy as np                                                      # noqa: E402
@@ -62,6 +82,8 @@ except ModuleNotFoundError:                                             # pragma
 
 CONCEPT = ROOT / "ui" / "concept"
 SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
+GROUNDS = ROOT / "ui" / "assets-gothic" / "grounds"
+GROUND_PLAN = ROOT / "ui" / "assets-gothic" / "metadata" / "duty_grounds.json"
 PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 
 # THE ANGLE THE SET IS BEING REDRAWN TO. A constant rather than a file because exactly one thing
@@ -506,7 +528,7 @@ def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
             "plate": plate_path.stem, "anchor": round(anchor*100)}
 
 
-def on_record(folder=SCULPTS):
+def on_record(folder=SCULPTS, rel_to=None):
     """The sculpts a newcomer is being judged against, drawn rather than summarised."""
     out = []
     if not folder.is_dir():
@@ -517,6 +539,14 @@ def on_record(folder=SCULPTS):
             m = sm.measure(im)
             g = sm.ground_ellipse(im)
             out.append({"name": path.stem,
+                        # THE ORIGINAL, not the drawn preview beside it. Same reason the
+                        # reference card is offered whole: this file is what you attach to a
+                        # v2 brief, and the previews above it are 520 px with measurements
+                        # burnt in -- handing one of those over under the sculpt's name would
+                        # be handing over a different instruction that looks identical.
+                        "file": path.name,
+                        "kb": round(path.stat().st_size / 1024),
+                        "orig": href(path, rel_to),
                         "degrees": round(g["degrees"], 1) if g else None,
                         "base": round(_upright(m["wall_ratio"], g["degrees"]) or 0, 3) if g
                         else None,
@@ -531,7 +561,81 @@ def on_record(folder=SCULPTS):
     return out
 
 
-def prompts(folder=None):
+def ground_record(folder=GROUNDS, rel_to=None):
+    """The ground plates, judged on the ONE check they share with a sculpt.
+
+    A plate has no plinth and no figure, so two of the three sculpt checks have nothing to
+    measure. The camera does transfer, and it is the check that matters: a circle on the ground
+    seen from theta above draws an ellipse of sin(theta) x its width, which is the same
+    arithmetic whether the circle is a figurine's base or the ground the figurine stands on. If
+    the plate and the figure disagree about where you are standing, the tile is wrong however
+    good either one looks alone.
+
+    `base_band=False` is not a detail. The band exists to scan the bottom strip of a sculpt,
+    where a plinth lives; a plate IS the ellipse, and scanning its bottom strip reports about
+    17 degrees for everything.
+
+    ANCHOR IS REPORTED AGAINST THE FILE AND NOT RECONCILED WITH IT. The widest row of the art is
+    where the standing line falls, and duty_grounds.json carries a hand-set value per plate. The
+    two differ by a point or so, consistently in one direction, which reads as deliberate -- feet
+    set a little forward of the widest row -- rather than as drift. Two numbers side by side let
+    that stay a judgement; one number would quietly make it an error.
+    """
+    out = []
+    if not folder.is_dir():
+        return out
+    plan = {}
+    if GROUND_PLAN.is_file():
+        try:
+            plan = json.loads(GROUND_PLAN.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            print("  could not read %s: %s" % (GROUND_PLAN.name, exc))
+    settings = plan.get("grounds") or {}
+    by_duty = plan.get("by_duty") or {}
+    for path in sorted(folder.glob("*.png")):
+        try:
+            im = Image.open(path).convert("RGBA")
+            g = sm.ground_ellipse(im, base_band=False)
+            art = sm.crop_to_art(im)
+            import numpy as np
+            rows = (np.asarray(art)[:, :, 3] > 128).sum(1)
+            widest = int(rows.argmax()) if rows.size else 0
+            duties = sorted(d for d, name in by_duty.items() if name == path.stem)
+            out.append({
+                "name": path.stem,
+                "file": path.name,
+                "kb": round(path.stat().st_size / 1024),
+                "orig": href(path, rel_to),
+                "degrees": round(g["degrees"], 1) if g else None,
+                "anchor": round(100.0 * widest / max(1, art.height), 1),
+                "anchor_set": (settings.get(path.stem) or {}).get("anchor"),
+                "duties": duties,
+                "w": art.width, "h": art.height,
+                "preview": preview(art, 360),
+            })
+        except Exception as exc:                                        # noqa: BLE001
+            print("  could not read %s: %s" % (path.name, exc))
+    return out
+
+
+def preview(art, width):
+    """A plate, small, as a data URI. The ONLY thing embedded now, and deliberately.
+
+    The originals are referenced -- see href() -- but a preview is generated here and exists
+    nowhere on disk, so there is nothing to reference. At 360 px across, five of them cost
+    about as much as one paragraph of the page's own prose.
+    """
+    k = min(1.0, float(width) / max(1, art.width))
+    small = art.resize((max(1, round(art.width * k)), max(1, round(art.height * k))),
+                       Image.LANCZOS)
+    back = Image.new("RGBA", small.size, (23, 19, 13, 255))
+    back.alpha_composite(small)
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def prompts(folder=None, rel_to=None):
     """The briefs that produced the art on file, offered to the clipboard.
 
     A prompt is an INPUT, exactly as the reference card is, and it has the same problem: the one
@@ -572,15 +676,13 @@ def prompts(folder=None):
                 print("  %s names an attachment that is not there: %s"
                       % (path.name, m.group(1)))
                 continue
-            raw = target.read_bytes()
-            attach.append({"name": target.name, "bytes": len(raw),
-                           "uri": "data:image/png;base64,"
-                                  + base64.b64encode(raw).decode("ascii")})
+            attach.append({"name": target.name, "bytes": target.stat().st_size,
+                           "uri": href(target, rel_to)})
         out.append({"name": path.stem, "text": text, "attach": attach})
     return out
 
 
-def reference_card(path=None):
+def reference_card(path=None, rel_to=None):
     """The card the next batch should be generated FROM, offered as a download.
 
     WHICH card is a live decision, not a constant of nature. Cards are appended rather than
@@ -604,10 +706,9 @@ def reference_card(path=None):
                     / "base_scale_reference_27_wall_127.png")
     if not path.is_file():
         return None
-    raw = path.read_bytes()
-    im = Image.open(io.BytesIO(raw))
-    return {"name": path.name, "w": im.width, "h": im.height, "bytes": len(raw),
-            "uri": "data:image/png;base64," + base64.b64encode(raw).decode("ascii")}
+    im = Image.open(path)
+    return {"name": path.name, "w": im.width, "h": im.height, "bytes": path.stat().st_size,
+            "uri": href(path, rel_to)}
 
 
 def without_background(im):
@@ -803,7 +904,22 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT)
 
 
 def serve(page, port, open_it):
-    """Serve the page and measure what it posts. Bound to 127.0.0.1 and nothing else."""
+    """Serve the page and measure what it posts. Bound to 127.0.0.1 and nothing else.
+
+    THE DOCUMENT ROOT IS THE REPOSITORY, and the page is handed out at its own path within it
+    rather than at "/". That looks like a detail and is the thing that makes one href work in
+    both modes: the page references a committed file as ../../../ui/assets-gothic/..., which
+    resolves from tools/ui_debug/generated/ whether that folder is a directory on disk or a
+    path on this server. Serving the page at "/" would have left every one of those pointing
+    above the root.
+
+    Serving files at all is what buys back the one-click download that referencing costs --
+    Chromium ignores `download` on a file:// link and navigates to the image instead, so from
+    disk the page can show you a file but not hand it over. Here it can.
+
+    Read-only, and confined: a GET resolves under the repository or it is refused. Nothing is
+    written, nothing outside is reachable, and it listens on the loopback address only.
+    """
     import http.server
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -816,10 +932,29 @@ def serve(page, port, open_it):
             self.wfile.write(raw)
 
         def do_GET(self):                                               # noqa: N802
-            if self.path in ("/", "/index.html"):
-                self._send(200, page.read_bytes(), "text/html; charset=utf-8")
-            else:
-                self._send(404, json.dumps({"error": "not found"}))
+            import mimetypes
+            import urllib.parse
+
+            want = urllib.parse.unquote(self.path.split("?", 1)[0].split("#", 1)[0])
+            if want in ("/", "/index.html"):
+                self.send_response(302)
+                self.send_header("Location", "/" + page_path)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            # CONFINED. realpath first, then ask whether it is still inside the repository --
+            # checking the string before resolving it would be fooled by a symlink, and
+            # checking after resolving cannot be.
+            target = pathlib.Path(os.path.realpath(str(ROOT / want.lstrip("/"))))
+            root = pathlib.Path(os.path.realpath(str(ROOT)))
+            if root != target and root not in target.parents:
+                return self._send(403, json.dumps({"error": "outside the repository"}))
+            if not target.is_file():
+                return self._send(404, json.dumps({"error": "not found"}))
+            kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            if target == pathlib.Path(os.path.realpath(str(page))):
+                kind = "text/html; charset=utf-8"
+            self._send(200, target.read_bytes(), kind)
 
         def do_POST(self):                                              # noqa: N802
             if self.path != "/measure":
@@ -845,9 +980,11 @@ def serve(page, port, open_it):
         def log_message(self, *a):
             return
 
+    page_path = href(page, ROOT)
     srv = http.server.HTTPServer(("127.0.0.1", port), Handler)
-    url = "http://127.0.0.1:%d/" % srv.server_address[1]
+    url = "http://127.0.0.1:%d/%s" % (srv.server_address[1], page_path)
     print("  serving %s -- drop PNGs on it" % url)
+    print("  document root is the repository, so the download links work here")
     print("  ctrl-c to stop")
     if open_it:
         import webbrowser
@@ -952,9 +1089,10 @@ def main():
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
             .replace("__BTHIN__", json.dumps(BASE_THIN_PCT))
             .replace("__BAND__", json.dumps(band))
-            .replace("__ONRECORD__", json.dumps(on_record()))
-            .replace("__CARD__", json.dumps(reference_card()))
-            .replace("__PROMPTS__", json.dumps(prompts()))
+            .replace("__ONRECORD__", json.dumps(on_record(rel_to=out.parent)))
+            .replace("__GROUNDS__", json.dumps(ground_record(rel_to=out.parent)))
+            .replace("__CARD__", json.dumps(reference_card(rel_to=out.parent)))
+            .replace("__PROMPTS__", json.dumps(prompts(rel_to=out.parent)))
             .replace("__ARRANGE__", json.dumps(arrangement_picture()))
             .replace("__INGAME__", json.dumps(
                 arrangement_picture(colour=True, plain=True))))
@@ -1034,6 +1172,15 @@ td.why{color:#403a31}
 #prompts .att{font:inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;
   border-radius:3px;padding:6px 10px;text-decoration:none;white-space:nowrap}
 #prompts .att:hover{border-color:#5a4c36;color:#c9b27a}
+#tabs{margin:18px 0 0;display:flex;gap:6px}
+#tabs .tab{font:inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;border-bottom:none;border-radius:3px 3px 0 0;padding:6px 16px;cursor:pointer}
+#tabs .tab.on{color:#d8d0c0;background:#221d14;border-color:#5a4c36}
+#tabs .tab:hover{color:#c9b27a}
+.plate{display:inline-block;vertical-align:top;margin:0 14px 18px 0;max-width:24em}
+.plate img{display:block;max-width:100%;border:1px solid #2a241a}
+.plate .who{font-size:11px;color:#8b8071;margin-top:3px}
+.one .orig,.plate .orig{display:block;margin:5px auto 0;max-width:22em;font:11px/1.5 inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;border-radius:3px;padding:3px 7px;text-decoration:none;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.one .orig:hover,.plate .orig:hover{border-color:#5a4c36;color:#c9b27a}
 #prompts .note{color:#5f574a;max-width:700px;line-height:1.45}
 #prompts .note.ok{color:#8fae6a} #prompts .note.bad{color:#e0705f}
 /* the caption used to set the cell's width -- one long line made the tile cell 528 px and
@@ -1058,12 +1205,15 @@ and drawn back with the measurement on it.</div>
   <label for=bthin>max % thinner</label><input id=bthin value=__BTHIN__>
   <span id=ref class=info></span>
 </div>
+<div id=tabs><button class="tab on" data-t=record>sculpts</button><button class=tab data-t=grounds>ground tiles</button></div>
 <div id=record></div>
+<div id=grounds hidden></div>
 <div id=drop>drop PNGs here</div>
 <div id=cards></div>
 <script>
 var BAND = __BAND__;
 var ONRECORD = __ONRECORD__;
+var GROUNDS = __GROUNDS__;
 var CARD = __CARD__;
 var PROMPTS = __PROMPTS__;
 var ARRANGE = __ARRANGE__;
@@ -1136,7 +1286,12 @@ var INGAME = __INGAME__;
     h.push("<div class=num>" + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg")
            + " &#183; base " + (r.base == null ? "&#8212;" : r.base.toFixed(3))
            + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
-           + "</div></div>");
+           + "</div>");
+    if (r.orig) {
+      h.push("<a class=orig download='" + r.file + "' href='" + r.orig + "'>"
+             + "&#8595;&nbsp; " + r.file + " &#183; " + r.kb + " KB</a>");
+    }
+    h.push("</div>");
   }
   order.forEach(function(seat){
     h.push("<div class=row>");
@@ -1287,6 +1442,61 @@ function show(name, ok, res){
   h += '</div>';
   card(name, h);
 }
+
+(function(){
+  // THE PLATES, on the one check they share with a sculpt. A plate nobody stands on is NAMED
+  // rather than hidden: three of the five are kept precisely as the evidence of what a camera
+  // mismatch looks like, and a panel that quietly dropped them would be throwing that away.
+  if (!GROUNDS || !GROUNDS.length) return;
+  // The target and the tolerance live in the boxes at the top, not in a constant -- they are
+  // tunable while the page is open, and a plate has to be judged by the same two numbers a
+  // sculpt is or the two panels are answering different questions.
+  var TARGET = +document.getElementById("target").value;
+  var TOL = +document.getElementById("tol").value;
+  var host = document.getElementById("grounds");
+  var h = ["<h2>The ground plates in <b>ui/assets-gothic/grounds/</b>, judged on the camera and "
+           + "nothing else. A plate has no plinth and no figure, so the base and height checks "
+           + "have nothing to measure &#8212; but the camera is the same arithmetic as a "
+           + "sculpt's base, because a circle on the ground seen from above draws an ellipse of "
+           + "sin(angle) &#215; its width whether it is a figurine's plinth or the floor it "
+           + "stands on. Ground and figure have to agree about where you are standing."
+           + "<br><b>anchor</b> is where down the plate the standing line falls. The measured "
+           + "value is the widest row of the art; the second is what <b>duty_grounds.json</b> "
+           + "sets. They differ by a point or so, always the same way, which reads as feet set "
+           + "deliberately forward of the widest row rather than as drift &#8212; so both are "
+           + "shown and neither is called wrong.</h2>"];
+  GROUNDS.forEach(function(r){
+    var off = r.degrees == null ? 99 : Math.abs(r.degrees - TARGET);
+    var cls = off <= TOL ? "ok" : (off <= 2 * TOL ? "check" : "bad");
+    h.push("<div class=plate><div class=nm>" + r.name + "</div>");
+    h.push("<img src='" + r.preview + "' alt=''>");
+    h.push("<div class=num><span class=" + cls + ">"
+           + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg") + "</span>"
+           + " &#183; anchor " + r.anchor.toFixed(1) + "%"
+           + (r.anchor_set == null ? "" : " (file says " + r.anchor_set + ")")
+           + " &#183; " + r.w + "&#215;" + r.h + "</div>");
+    h.push("<div class=who>" + (r.duties.length
+           ? r.duties.length + " dut" + (r.duties.length === 1 ? "y" : "ies") + ": "
+             + r.duties.join(", ")
+           : "no duty stands on this one &#8212; kept as evidence of a camera that missed")
+           + "</div>");
+    h.push("<a class=orig download='" + r.file + "' href='" + r.orig + "'>"
+           + "&#8595;&nbsp; " + r.file + " &#183; " + r.kb + " KB</a>");
+    h.push("</div>");
+  });
+  host.innerHTML = h.join("");
+})();
+(function(){
+  var tabs = document.querySelectorAll("#tabs .tab");
+  Array.prototype.forEach.call(tabs, function(b){
+    b.addEventListener("click", function(){
+      Array.prototype.forEach.call(tabs, function(o){ o.classList.remove("on"); });
+      b.classList.add("on");
+      document.getElementById("record").hidden = b.dataset.t !== "record";
+      document.getElementById("grounds").hidden = b.dataset.t !== "grounds";
+    });
+  });
+})();
 </script>
 """
 

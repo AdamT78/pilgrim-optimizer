@@ -1176,6 +1176,16 @@
       "title": "flagstones slab",
       "role": "duty tile ground plate -- the surface acolytes stand on, drawn over the tile face"
     },
+    "sculpts/player_1_v1.png": {
+      "state": "present",
+      "creator": "Generated with ChatGPT (OpenAI) across several sessions",
+      "collection": "Pilgrim gothic v2",
+      "source": "generated in ChatGPT sessions for this project; no upstream URL, no prompt or seed on record",
+      "licence": "openai-generated",
+      "modifications": "none; used as generated",
+      "title": "player 1 acolyte, bald monk with book, v1",
+      "role": "duty tile acolyte, seat 1 -- monastic habit, hood and mantle worn down, bald head, knotted rope cincture, a clasped book held to the chest. Camera measured 31.8 degrees and base wall/width 0.161 upright against a 0.142 median: the closest camera of the 34 seat-1 candidates measured, and one of only three to pass both checks. Height 2.85, above the 2.70-2.74 the rest of the set sits at, which the toolchain reports and does not judge. Generated from tools/ui_debug/prompts/player_1_v1.md with the base-and-scale card whose side wall is dimensioned at 0.127 x W. The same bytes are kept at sculpts/candidates/player_1_c01.png, beside the batch it came from."
+    },
     "sculpts/player_2_v1.png": {
       "state": "present",
       "creator": "Generated with ChatGPT (OpenAI) across several sessions",
