@@ -1963,7 +1963,6 @@ def test_the_plinth_fixture_is_only_honest_above_a_certain_wall(metrics):
     the fixture first. This guard fails the moment someone makes it usable, which is the point:
     the news should arrive as a failure here rather than as a test that quietly proves nothing.
     """
-    import math
     honest, wrong = [], []
     for wall in (6, 12, 20, 40, 60, 90):
         im = _plinth(240, 32.0, wall)
@@ -1996,9 +1995,9 @@ def test_the_base_is_judged_asymmetrically(checker):
     mid = band["base_ratio"]["mid"]
 
     import math
+
     # A 480 px base, not 240: the fixture's rim scan needs about 30 px of wall before it is
     # honest (see the test above), and on a narrow base the whole band sits under that floor.
-    import math
     def verdict(upright, degrees=32.0, width=480):
         raw = upright * math.cos(math.radians(degrees))
         wall = round(raw * width)
