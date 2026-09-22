@@ -245,12 +245,45 @@ def plinth_picture(im, width=340, degrees=None):
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def figure_picture(im, height=250):
+def figure_picture(im, height=250, degrees=None):
+    """The whole sculpt with check (c) drawn on it: how tall it stands over its own base.
+
+    Height alone is not a number anyone can use -- a figure generated larger or smaller is not a
+    different sculpt -- so what is drawn is the span and what is reported is the span over the
+    base's own width. And that ratio is projected like everything else standing up, so the camera
+    is stated beside it and divided out, exactly as on the plinth below.
+    """
     art = sm.crop_to_art(im)
     k = height / art.height
-    big = art.resize((max(1, round(art.width * k)), height), Image.LANCZOS).convert("RGBA")
-    back = Image.new("RGBA", big.size, (23, 19, 13, 255))
-    back.alpha_composite(big)
+    fw = max(1, round(art.width * k))
+    big = art.resize((fw, height), Image.LANCZOS).convert("RGBA")
+    gutter = 112
+    back = Image.new("RGBA", (fw + gutter, height + 18), (23, 19, 13, 255))
+    back.alpha_composite(big, (0, 18))
+    d = ImageDraw.Draw(back, "RGBA")
+    gold = (255, 212, 126, 255)
+
+    top, bot = 18, 18 + height - 1
+    x = fw + 14
+    d.line([(x, top), (x, bot)], fill=gold, width=2)
+    for y in (top, bot):
+        d.line([(x - 6, y), (x + 6, y)], fill=gold, width=2)
+
+    m = sm.measure(art)
+    plinth = m["plinth"] or 1
+    d.text((x + 11, top + 4), "height", fill=gold)
+    d.text((x + 11, top + 16), "%d" % art.height, fill=gold)
+    d.text((x + 11, (top + bot) / 2 - 18), "over", fill=(150, 142, 124, 255))
+    d.text((x + 11, (top + bot) / 2 - 6), "base", fill=(150, 142, 124, 255))
+    d.text((x + 11, (top + bot) / 2 + 6), "%d" % plinth, fill=(150, 142, 124, 255))
+    d.text((x + 11, bot - 26), "= %.2f" % m["h_plinth"], fill=gold)
+    if degrees is not None:
+        up = _proportion(m["h_plinth"], degrees)
+        if up is not None:
+            d.text((x + 11, bot - 14), "%.2f upright" % up, fill=gold)
+    cap = "camera %.1f deg" % degrees if degrees is not None else "camera not measured"
+    d.text((4, 3), cap, fill=(201, 178, 122, 255))
+
     buf = io.BytesIO()
     back.convert("RGB").save(buf, "WEBP", quality=88, method=6)
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
@@ -272,7 +305,8 @@ def on_record(folder=SCULPTS):
                         else None,
                         "proportion": round(_proportion(m["h_plinth"], g["degrees"]) or 0, 2) if g
                         else None,
-                        "figure": figure_picture(im),
+                        "figure": figure_picture(
+                            im, degrees=g["degrees"] if g else None),
                         "plinth": plinth_picture(
                             im, degrees=g["degrees"] if g else None)})
         except Exception as exc:                                        # noqa: BLE001

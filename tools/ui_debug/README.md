@@ -2316,9 +2316,10 @@ and that only shows up with the spread in front of you. It says so only when the
 there IS a batch — pointed at a mixed folder it will tell you to read the rows instead, rather
 than announcing that forty-five unrelated images share one bias.
 
-The page opens with the sculpts on file in `ui/assets-gothic/sculpts/`, each drawn beside a
-magnified picture of its own plinth with the width and the wall marked on it, captioned with the
-camera it was measured at. The camera is on the picture because a wall is meaningless without
+The page opens with the sculpts on file in `ui/assets-gothic/sculpts/`. Each is drawn twice:
+the whole figure with its height bracketed and reported over its own base's width — check (c) —
+and below it a magnified picture of its plinth with the width and the wall marked — check (b).
+Both are captioned with the camera they were measured at. The camera is on the picture because a wall is meaningless without
 it: a wall is a vertical edge, so a higher camera draws it shorter, and 67 px at 32° is a
 different plinth from 67 px at 9°. Two pictures captioned with a width and a wall and nothing
 else would invite precisely the comparison this tool exists to stop anyone making. A band printed as

@@ -1431,3 +1431,45 @@ def test_the_plinth_caption_stays_within_the_default_font(checker):
     for line in body.splitlines():
         if "cap" in line and ("=" in line or "+=" in line):
             assert line.isascii(), "a non-ASCII character reached the plinth caption: %r" % line
+
+
+def test_the_figure_picture_draws_the_height_it_reports(checker):
+    """Check (c) drawn on the sculpt, as (b) is drawn on the plinth. Height alone is not a number
+    anyone can use -- a figure generated larger is not a different sculpt -- so the span is drawn
+    and the RATIO to the base's own width is what gets reported, with the camera stated beside it
+    because that ratio is projected like everything else standing up."""
+    im = _plinth(240, 32, 60, stem=700)
+    bare = checker.figure_picture(im)
+    at32 = checker.figure_picture(im, degrees=32.0)
+    at9 = checker.figure_picture(im, degrees=9.0)
+    assert bare and at32 and at9, "the figure picture was not drawn"
+    assert at32 != bare, "stating the camera changed nothing on the figure picture"
+    assert at32 != at9, "the same figure picture is drawn for two different cameras"
+
+    # THE IMAGE TEST ALONE IS NOT ENOUGH. Two cameras give two different pictures because the
+    # camera-corrected ratio is also drawn, so deleting the camera caption left this passing.
+    # The caption has to be asserted where it is written.
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    body = src.split("def figure_picture")[1].split("def on_record")[0]
+    drawn = [ln for ln in body.splitlines() if "d.text(" in ln or "cap =" in ln]
+    assert any("camera" in ln for ln in drawn), (
+        "the figure picture no longer states the camera it was measured at")
+    for ln in drawn:
+        assert ln.isascii(), "a non-ASCII character reached the figure caption: %r" % ln
+
+
+def test_the_figure_picture_leaves_room_for_its_own_labels(checker, metrics):
+    """The labels sit in a gutter beside the art. Drawn into too narrow a gutter they run off the
+    edge silently -- the image still renders, the tests still pass, and the number is simply not
+    there to read."""
+    im = _plinth(240, 32, 60, stem=700)
+    art = metrics.crop_to_art(im)
+    drawn = checker.figure_picture(im, degrees=32.0)
+    import base64
+    import io as _io
+
+    from PIL import Image as _Image
+    got = _Image.open(_io.BytesIO(base64.b64decode(drawn.split(",", 1)[1])))
+    fw = round(art.width * (250 / art.height))
+    assert got.width - fw >= 100, (
+        "only %d px of gutter for the height labels" % (got.width - fw))
