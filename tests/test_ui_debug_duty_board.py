@@ -1380,3 +1380,30 @@ def test_the_base_measurement_divides_the_camera_out(checker):
             "the camera was not divided out of the base ratio at %.0f degrees" % deg)
     gap = 0.14*math.cos(math.radians(9.0)) - 0.14*math.cos(math.radians(32.0))
     assert gap > 0.01, "the uncorrected numbers barely differ, so correcting proves nothing"
+
+
+def test_the_page_shows_the_sculpts_on_file_with_their_plinths(checker):
+    """The band is printed as figures everywhere else, and a figure is a poor way to hold a shape
+    in your head while judging a new one. Each sculpt on file is drawn with the two numbers check
+    (b) compares marked on the pixels they were taken from -- which is also the only way to catch
+    the measurement being taken from the wrong place."""
+    rows = checker.on_record()
+    if not rows:
+        pytest.skip("no sculpts on file yet")
+    for r in rows:
+        assert r["plinth"], "%s has no plinth picture" % r["name"]
+        assert r["plinth"].startswith("data:image/"), "the plinth picture is not embedded"
+        assert r["figure"], "%s has no figure picture" % r["name"]
+        assert r["degrees"] and r["base"] and r["proportion"], (
+            "%s was drawn but not measured" % r["name"])
+
+
+def test_the_page_does_not_call_two_different_sets_the_set_on_record(checker):
+    """The panel draws ui/assets-gothic/sculpts/ at 32 degrees while the band that actually
+    judges a newcomer still comes from ui/concept/ at 9. Calling both 'the set on record' on one
+    page is how someone reads the wrong number off the screen."""
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    panel = src.split('id="record"')[-1] if 'id="record"' in src else src
+    assert "ui/assets-gothic/sculpts/" in src, "the panel does not say where its figures came from"
+    assert "NOT the band" in src, "the panel does not distinguish itself from the judging band"
+    del panel

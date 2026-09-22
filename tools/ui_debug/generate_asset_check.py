@@ -60,6 +60,7 @@ except ModuleNotFoundError:                                             # pragma
     Image = ImageDraw = None
 
 CONCEPT = ROOT / "ui" / "concept"
+SCULPTS = ROOT / "ui" / "assets-gothic" / "sculpts"
 PLAYERS = ("player_1", "player_2", "player_3", "player_4")
 
 # THE ANGLE THE SET IS BEING REDRAWN TO. A constant rather than a file because exactly one thing
@@ -178,6 +179,89 @@ def overlay(im, g, kind):
     buf = io.BytesIO()
     back.convert("RGB").save(buf, "WEBP", quality=88, method=6)
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def plinth_picture(im, width=340):
+    """The base on its own, magnified, with the two numbers check (b) compares drawn on it.
+
+    The band is printed as figures everywhere else, and a figure is a poor way to hold a shape in
+    your head while looking at a new sculpt. The width is measured across the widest row of the
+    base; the wall is the lit rim down to the bottom of the art, which is what `measure` finds by
+    looking for the brightest row. Drawing both on the actual pixels they were taken from is the
+    only way to see that they were taken from the right place.
+    """
+    art = sm.crop_to_art(im)
+    y, w, lo, hi = sm._base_row(art)
+    wall = sm.measure(art)["wall"]
+    H = art.height
+    pad = max(18, int(wall * 0.9))
+    box = (max(0, lo - pad), max(0, H - 1 - int(wall * 2.6) - pad),
+           min(art.width, hi + pad), H)
+    crop = art.crop(box)
+    if crop.width < 4 or crop.height < 4:
+        return None
+    k = width / crop.width
+    big = crop.resize((width, max(1, round(crop.height * k))), Image.LANCZOS).convert("RGBA")
+    back = Image.new("RGBA", (big.width, big.height + 34), (23, 19, 13, 255))
+    back.alpha_composite(big)
+    d = ImageDraw.Draw(back, "RGBA")
+
+    gold, ink = (255, 212, 126, 255), (150, 142, 124, 255)
+    xl, xr = (lo - box[0]) * k, (hi - box[0]) * k
+    yb = (H - 1 - box[1]) * k
+    ytop = (H - 1 - wall - box[1]) * k
+
+    d.line([(xl, yb + 12), (xr, yb + 12)], fill=gold, width=2)          # width, across the base
+    for x in (xl, xr):
+        d.line([(x, yb + 6), (x, yb + 18)], fill=gold, width=2)
+    d.text((max(2, (xl + xr) / 2 - 34), yb + 18), "width %d" % w, fill=gold)
+
+    xw = min(back.width - 3, xr + 10)                                   # wall, down the near side
+    d.line([(xw, ytop), (xw, yb)], fill=gold, width=2)
+    for yy in (ytop, yb):
+        d.line([(xw - 6, yy), (xw + 6, yy)], fill=gold, width=2)
+    d.line([(xl, ytop), (xr, ytop)], fill=ink, width=1)
+    # above the bracket rather than beside it: beside it, the label sat on its own tick marks
+    d.text((max(2, min(back.width - 56, xw - 26)), max(0, ytop - 15)), "wall %d" % wall,
+           fill=gold)
+
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "WEBP", quality=90, method=6)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def figure_picture(im, height=250):
+    art = sm.crop_to_art(im)
+    k = height / art.height
+    big = art.resize((max(1, round(art.width * k)), height), Image.LANCZOS).convert("RGBA")
+    back = Image.new("RGBA", big.size, (23, 19, 13, 255))
+    back.alpha_composite(big)
+    buf = io.BytesIO()
+    back.convert("RGB").save(buf, "WEBP", quality=88, method=6)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def on_record(folder=SCULPTS):
+    """The sculpts a newcomer is being judged against, drawn rather than summarised."""
+    out = []
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.glob("*.png")):
+        try:
+            im = Image.open(path).convert("RGBA")
+            m = sm.measure(im)
+            g = sm.ground_ellipse(im)
+            out.append({"name": path.stem,
+                        "degrees": round(g["degrees"], 1) if g else None,
+                        "base": round(_upright(m["wall_ratio"], g["degrees"]) or 0, 3) if g
+                        else None,
+                        "proportion": round(_proportion(m["h_plinth"], g["degrees"]) or 0, 2) if g
+                        else None,
+                        "figure": figure_picture(im),
+                        "plinth": plinth_picture(im)})
+        except Exception as exc:                                        # noqa: BLE001
+            print("  could not draw %s: %s" % (path.name, exc))
+    return out
 
 
 def without_background(im):
@@ -516,7 +600,8 @@ def main():
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__HTOL__", json.dumps(HEIGHT_TOLERANCE_PCT))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
-            .replace("__BAND__", json.dumps(band)))
+            .replace("__BAND__", json.dumps(band))
+            .replace("__ONRECORD__", json.dumps(on_record())))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
@@ -569,6 +654,15 @@ td.why{color:#403a31}
 .key{color:#403a31;margin-top:10px;line-height:1.7}
 .key i{font-style:normal}
 .k1{color:#ff6060} .k2{color:#78c8ff} .k3{color:#78ff96} .k4{color:#ffd47e}
+#record{padding:4px 18px 14px}
+#record h2{font:11px/1.5 inherit;font-weight:400;color:#5f574a;margin:0 0 8px;max-width:96ch}
+#record h2 b{color:#8b8071;font-weight:400}
+#record .row{display:flex;gap:18px;flex-wrap:wrap}
+#record .one{background:#17130d;border:1px solid #241d13;padding:8px}
+#record .one .nm{color:#c9b27a;padding-bottom:4px}
+#record .one .num{color:#5f574a;padding-top:4px}
+#record img{display:block}
+#record .fig{height:250px}
 </style>
 <div id=head>Drop a sculpt or a ground plate. It is measured by
 <b>tools/ui_debug/sculpt_metrics.py</b> &#8212; the same code that builds the pieces &#8212;
@@ -580,10 +674,33 @@ and drawn back with the measurement on it.</div>
   <label for=btol>base tol %</label><input id=btol value=__BTOL__>
   <span id=ref class=info></span>
 </div>
+<div id=record></div>
 <div id=drop>drop PNGs here</div>
 <div id=cards></div>
 <script>
 var BAND = __BAND__;
+var ONRECORD = __ONRECORD__;
+(function(){
+  if (!ONRECORD || !ONRECORD.length) return;
+  var host = document.getElementById("record");
+  var h = ["<h2>The sculpts on file in <b>ui/assets-gothic/sculpts/</b>. Below each figure, the "
+           + "two numbers check (b) compares: the base's own width, and the lit wall above it."
+           + "<br>These are NOT the band a newcomer is judged against &#8212; that still comes "
+           + "from <b>ui/concept/</b>, the 9&#176; art being replaced, which is why a correct new "
+           + "sculpt reports a height gap. Recompute it once the four seats exist.</h2>"
+           + "<div class=row>"];
+  ONRECORD.forEach(function(r){
+    h.push("<div class=one><div class=nm>" + r.name + "</div>");
+    h.push("<img class=fig src='" + r.figure + "' alt=''>");
+    if (r.plinth) h.push("<img src='" + r.plinth + "' alt=''>");
+    h.push("<div class=num>" + (r.degrees == null ? "&#8212;" : r.degrees.toFixed(1) + " deg")
+           + " &#183; base " + (r.base == null ? "&#8212;" : r.base.toFixed(3))
+           + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
+           + "</div></div>");
+  });
+  h.push("</div>");
+  host.innerHTML = h.join("");
+})();
 if (BAND && BAND.degrees)
   document.getElementById("ref").textContent =
     "the set on record sits " + BAND.degrees.lo.toFixed(1) + " to "

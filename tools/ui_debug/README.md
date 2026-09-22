@@ -2316,6 +2316,17 @@ and that only shows up with the spread in front of you. It says so only when the
 there IS a batch — pointed at a mixed folder it will tell you to read the rows instead, rather
 than announcing that forty-five unrelated images share one bias.
 
+The page opens with the sculpts on file in `ui/assets-gothic/sculpts/`, each drawn beside a
+magnified picture of its own plinth with the width and the wall marked on it. A band printed as
+figures is a poor thing to hold in your head while looking at a new sculpt, and drawing the two
+measurements on the pixels they were taken from is also the only way to notice them being taken
+from the wrong place.
+
+Those figures are **not** the band a newcomer is judged against. That still comes from
+`ui/concept/`, the 9° art being replaced, which is why a correct new sculpt reports a height gap
+against it. The page says so on itself, and there is a test that fails if the two stop being
+distinguished. Recompute the band from the new seats once all four exist.
+
 Two things worth knowing before trusting a number. The angle is exact for a circular plate and
 only approximate for a rectangular one, which the page says on itself. And a file with no
 transparency cannot be measured at all: rather than reporting the 0.0 degrees that falls out of a
