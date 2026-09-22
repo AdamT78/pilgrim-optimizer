@@ -181,7 +181,7 @@ def overlay(im, g, kind):
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def plinth_picture(im, width=340):
+def plinth_picture(im, width=340, degrees=None):
     """The base on its own, magnified, with the two numbers check (b) compares drawn on it.
 
     The band is printed as figures everywhere else, and a figure is a poor way to hold a shape in
@@ -189,6 +189,12 @@ def plinth_picture(im, width=340):
     base; the wall is the lit rim down to the bottom of the art, which is what `measure` finds by
     looking for the brightest row. Drawing both on the actual pixels they were taken from is the
     only way to see that they were taken from the right place.
+
+    THE CAMERA IS STATED ON THE PICTURE because the wall is meaningless without it. A wall is a
+    vertical edge, so it is drawn shorter the higher the camera sits: 67 px at 32 degrees is a
+    different plinth from 67 px at 9. Two of these pictures side by side, each captioned with its
+    own width and wall and nothing else, would invite exactly the comparison the whole tool
+    exists to stop anyone making.
     """
     art = sm.crop_to_art(im)
     y, w, lo, hi = sm._base_row(art)
@@ -225,6 +231,15 @@ def plinth_picture(im, width=340):
     d.text((max(2, min(back.width - 56, xw - 26)), max(0, ytop - 15)), "wall %d" % wall,
            fill=gold)
 
+    if degrees is not None:
+        cap = "camera %.1f deg" % degrees
+        up = _upright(wall / float(w), degrees) if w else None
+        if up is not None:
+            # ASCII only: the default bitmap font has no em dash and draws a missing-glyph box
+            cap += "   wall/width %.3f, %.3f upright" % (wall / float(w), up)
+        d.rectangle([0, 0, back.width, 17], fill=(23, 19, 13, 215))
+        d.text((4, 3), cap, fill=(201, 178, 122, 255))
+
     buf = io.BytesIO()
     back.convert("RGB").save(buf, "WEBP", quality=90, method=6)
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
@@ -258,7 +273,8 @@ def on_record(folder=SCULPTS):
                         "proportion": round(_proportion(m["h_plinth"], g["degrees"]) or 0, 2) if g
                         else None,
                         "figure": figure_picture(im),
-                        "plinth": plinth_picture(im)})
+                        "plinth": plinth_picture(
+                            im, degrees=g["degrees"] if g else None)})
         except Exception as exc:                                        # noqa: BLE001
             print("  could not draw %s: %s" % (path.name, exc))
     return out

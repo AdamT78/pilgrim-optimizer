@@ -1407,3 +1407,27 @@ def test_the_page_does_not_call_two_different_sets_the_set_on_record(checker):
     assert "ui/assets-gothic/sculpts/" in src, "the panel does not say where its figures came from"
     assert "NOT the band" in src, "the panel does not distinguish itself from the judging band"
     del panel
+
+
+def test_the_plinth_picture_states_the_camera_it_was_measured_at(checker, metrics):
+    """A wall is a vertical edge, so a higher camera draws it shorter: 67 px at 32 degrees is a
+    different plinth from 67 px at 9. Two of these pictures captioned with a width and a wall and
+    nothing else would invite exactly the comparison this tool exists to stop anyone making."""
+    im = _plinth(240, 32, 60)
+    bare = checker.plinth_picture(im)
+    at32 = checker.plinth_picture(im, degrees=32.0)
+    at9 = checker.plinth_picture(im, degrees=9.0)
+    assert bare and at32 and at9, "the plinth picture was not drawn"
+    assert at32 != bare, "stating the camera changed nothing on the picture"
+    assert at32 != at9, "the same picture is drawn for two different cameras"
+
+
+def test_the_plinth_caption_stays_within_the_default_font(checker):
+    """PIL's default bitmap font draws a missing-glyph box for anything outside ASCII, and an em
+    dash in the caption shipped one. The caption is built from a format string in the source, so
+    the source is where it can be checked."""
+    src = (ROOT / "tools" / "ui_debug" / "generate_asset_check.py").read_text(encoding="utf-8")
+    body = src.split("def plinth_picture")[1].split("def figure_picture")[0]
+    for line in body.splitlines():
+        if "cap" in line and ("=" in line or "+=" in line):
+            assert line.isascii(), "a non-ASCII character reached the plinth caption: %r" % line

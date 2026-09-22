@@ -2317,7 +2317,11 @@ there IS a batch — pointed at a mixed folder it will tell you to read the rows
 than announcing that forty-five unrelated images share one bias.
 
 The page opens with the sculpts on file in `ui/assets-gothic/sculpts/`, each drawn beside a
-magnified picture of its own plinth with the width and the wall marked on it. A band printed as
+magnified picture of its own plinth with the width and the wall marked on it, captioned with the
+camera it was measured at. The camera is on the picture because a wall is meaningless without
+it: a wall is a vertical edge, so a higher camera draws it shorter, and 67 px at 32° is a
+different plinth from 67 px at 9°. Two pictures captioned with a width and a wall and nothing
+else would invite precisely the comparison this tool exists to stop anyone making. A band printed as
 figures is a poor thing to hold in your head while looking at a new sculpt, and drawing the two
 measurements on the pixels they were taken from is also the only way to notice them being taken
 from the wrong place.
