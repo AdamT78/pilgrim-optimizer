@@ -1644,9 +1644,13 @@ def test_the_reference_card_is_offered_whole(checker):
     card = checker.reference_card()
     if card is None:
         pytest.skip("the reference card is not on file")
-    path = (checker.ROOT / "ui" / "assets-gothic" / "references"
-            / "base_scale_reference_27.png")
-    assert card["name"] == path.name
+    # NOT a hardcoded filename. Which card the button offers is a live decision -- cards are
+    # appended as the wall value moves and the button follows the current one -- so naming one
+    # here only records which card was current the day the test was written, and fails the next
+    # time the work moves on. What must hold is that the button hands over a REAL committed
+    # card, whole.
+    path = (checker.ROOT / "ui" / "assets-gothic" / "references" / card["name"])
+    assert path.is_file(), "the button offers %s, which is not on file" % card["name"]
     assert card["bytes"] == path.stat().st_size, (
         "the card was re-encoded: %d bytes offered against %d on disk"
         % (card["bytes"], path.stat().st_size))
@@ -1888,3 +1892,149 @@ def test_the_tile_picture_reports_whether_the_group_fits_the_frame(checker, tmp_
     assert normal["span"] <= normal["frame"], (
         "the file's own spread overflows the frame: %d of %d"
         % (normal["span"], normal["frame"]))
+
+
+@pytest.fixture(scope="module")
+def cards():
+    spec = importlib.util.spec_from_file_location(
+        "generate_sculpt_reference", ROOT / "tools" / "ui_debug" / "generate_sculpt_reference.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_every_committed_card_still_redraws_byte_for_byte(cards, tmp_path):
+    """The registry is the only record of what each batch of art was actually asked for.
+
+    A card is an INPUT that was handed to an image model, and the sculpts on file were generated
+    against a specific one. If the generator stops reproducing a committed card, that card
+    becomes an orphan -- a file nothing in the repo can account for -- and the provenance in
+    CARDS quietly becomes a claim rather than a fact. This is the test that keeps it a fact.
+
+    It is also the guard on the one subtlety in the drawing code: the first card's wall is
+    24/360 of the base width, which in floating point is 24.000000000000004 rather than 24, and
+    rounding it is what keeps that card's pixels where they were.
+    """
+    refs = ROOT / "ui" / "assets-gothic" / "references"
+    checked = 0
+    for spec in cards.CARDS:
+        committed = refs / spec["name"]
+        if not committed.is_file():
+            continue
+        out = tmp_path / spec["name"]
+        cards.card(wall_ratio=spec["wall"],
+                   dimension_wall=spec["dimension_wall"]).save(out)
+        assert out.read_bytes() == committed.read_bytes(), (
+            "%s no longer redraws to the committed file" % spec["name"])
+        checked += 1
+    assert checked >= 2, "only %d card(s) on file -- this guard is not guarding anything" % checked
+
+
+def test_the_cards_differ_only_where_the_registry_says_they_do(cards, tmp_path):
+    """The guard on the guard above: byte-equality is worthless if every card draws the same.
+
+    Two entries with different wall values must produce different files, and the dimensioned
+    ones must actually carry the dimension -- otherwise a registry row could be edited to any
+    number at all and the reproduction test would still pass.
+    """
+    drawn = {}
+    for spec in cards.CARDS:
+        out = tmp_path / spec["name"]
+        cards.card(wall_ratio=spec["wall"], dimension_wall=spec["dimension_wall"]).save(out)
+        drawn[spec["name"]] = out.read_bytes()
+    assert len(set(drawn.values())) == len(drawn), "two cards in the registry draw identically"
+
+    a = cards.card(wall_ratio=0.127, dimension_wall=True)
+    b = cards.card(wall_ratio=0.127, dimension_wall=False)
+    assert a.tobytes() != b.tobytes(), "dimension_wall changes nothing that is drawn"
+    assert a.height > b.height, "the dimensioned card is not the taller layout"
+
+
+def test_the_plinth_fixture_is_only_honest_above_a_certain_wall(metrics):
+    """THE FLOOR ON THE FIXTURE, pinned here because it silently fooled a test being written.
+
+    `_plinth` draws a lit rim for `measure` to find. Below roughly 30 px of wall on a 240 px
+    base the scan misses that rim and locks onto the top of the disc instead, so a SIX pixel
+    wall reports as 134 and the camera reads 3.6 degrees instead of 32. The numbers do not look
+    like errors -- they look like a very chunky plinth photographed from very low down -- and a
+    thin-base test built on them passes for exactly the wrong reason.
+
+    So there is no synthetic thin plinth in this file, and any test that wants one has to fix
+    the fixture first. This guard fails the moment someone makes it usable, which is the point:
+    the news should arrive as a failure here rather than as a test that quietly proves nothing.
+    """
+    import math
+    honest, wrong = [], []
+    for wall in (6, 12, 20, 40, 60, 90):
+        im = _plinth(240, 32.0, wall)
+        got = metrics.measure(im)["wall"]
+        (honest if abs(got - wall) <= 6 else wrong).append((wall, got))
+    assert [w for w, _ in honest] == [40, 60, 90], (
+        "the fixture's honest range has moved: honest at %s, wrong at %s" % (honest, wrong))
+
+    # The floor is a wall thickness in PIXELS, not a ratio, so a wider base buys headroom --
+    # which is how the asymmetry test below gets a drawable plinth inside the band.
+    wide = metrics.measure(_plinth(480, 32.0, 66))["wall"]
+    assert abs(wide - 66) <= 6, "66 px on a 480 px base measured %s" % wide
+
+
+def test_the_base_is_judged_asymmetrically(checker):
+    """Chunky and thin carry different tolerances, and the chunky side is the wider one.
+
+    They were one symmetric number, fitted before any monk existed, and the first monks broke it
+    by landing outside the band and, once levelled onto a common plinth width, being
+    indistinguishable from the set. Only the chunky side is exercised against a drawn plinth
+    here -- see the test above for why there is no thin one.
+    """
+    assert checker.BASE_TOLERANCE_PCT > checker.BASE_THIN_PCT, (
+        "the two sides are equal, so nothing is asymmetric: %s and %s"
+        % (checker.BASE_TOLERANCE_PCT, checker.BASE_THIN_PCT))
+
+    band = checker.reference_band()
+    if not band or "base_ratio" not in band:
+        pytest.skip("no reference band on file")
+    mid = band["base_ratio"]["mid"]
+
+    import math
+    # A 480 px base, not 240: the fixture's rim scan needs about 30 px of wall before it is
+    # honest (see the test above), and on a narrow base the whole band sits under that floor.
+    import math
+    def verdict(upright, degrees=32.0, width=480):
+        raw = upright * math.cos(math.radians(degrees))
+        wall = round(raw * width)
+        assert wall >= 34, "this asks for a wall the fixture cannot draw honestly"
+        return _named(checker, _png(_plinth(width, degrees, wall)))["base height / width"][1]
+
+    assert verdict(mid * 1.15) == "ok", "a plinth 15% chunkier than the set was not allowed"
+    assert verdict(mid * 1.90) == "bad", "a plinth 90% chunkier than the set was allowed"
+
+
+def test_each_side_of_the_band_answers_to_its_own_number(checker):
+    """The page offers two boxes, so the two must be wired separately in the tool.
+
+    Checked on the explanation the verdict carries rather than on a drawn plinth: the sentence
+    states the band it applied, so moving one tolerance must move one end of that band and leave
+    the other where it was. A single number driving both ends would move them together.
+    """
+    raw = _png(_plinth(240, 32.0, 60))
+    def band_text(**kw):
+        return _named(checker, raw, **kw)["base height / width"]
+
+    base = band_text()[1]
+    assert base in ("ok", "check", "bad")
+    wide_chunky = checker.judge(raw, 32.0, 2.5, 400.0, checker.BASE_THIN_PCT)
+    wide_thin = checker.judge(raw, 32.0, 2.5, checker.BASE_TOLERANCE_PCT, 400.0)
+    def note(result):
+        return [c[3] for c in result["checks"] if c[0] == "base height / width"][0]
+    a, b = note(wide_chunky), note(wide_thin)
+    assert a != b, "the two tolerances produce the same band, so one of them does nothing"
+    assert "400%% chunkier" % () not in b, "the thin box moved the chunky end of the band"
+
+
+def test_the_page_carries_both_base_tolerances(checker):
+    """Both numbers reach the browser, or the page is judging by rules the tool does not have."""
+    src = pathlib.Path(checker.__file__).read_text(encoding="utf-8")
+    assert "__BTHIN__" in src and "id=bthin" in src, "the thin tolerance has no box on the page"
+    assert "base_thin" in src, "the page never sends the thin tolerance back"
+    # and the substitution actually happens, so the box is not left holding the placeholder
+    assert 'json.dumps(BASE_THIN_PCT)' in src, "__BTHIN__ is never filled in"

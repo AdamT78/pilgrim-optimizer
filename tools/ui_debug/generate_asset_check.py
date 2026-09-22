@@ -43,6 +43,7 @@ import io
 import json
 import math
 import pathlib
+import re
 import statistics
 import sys
 
@@ -93,7 +94,28 @@ TOLERANCE_DEGREES = 2.5
 # the same angle and carry the same figure. Wide because it is a small measurement on a short
 # edge, and so noisy. This one survives because the two sets AGREE on it -- concept 0.132-0.146,
 # the new sculpts 0.126-0.141 -- so the median is not hostage to which art is on file.
-BASE_TOLERANCE_PCT = 12.0
+#
+# THE TWO SIDES ARE NOT THE SAME FAILURE, which is why there are two numbers rather than one.
+#
+# A single symmetric 12% was fitted before any monk existed, on a sample of a nun and three
+# pilgrims, and the first monks broke it: they came back at 0.159-0.171 against a median of
+# 0.141 -- outside the band, and, levelled onto a common plinth width the way
+# make_tray_figures.py levels them, indistinguishable from the set. The band was measuring the
+# sample it was fitted to.
+#
+# What the failures actually look like, across four batches of five:
+#
+#     in the set, levelled and judged by eye   0.136 - 0.171
+#     the model ignoring the card entirely     0.217 - 0.279
+#
+# Nothing has ever landed between those. So the chunky side is set to admit the first population
+# whole and still reject the second by a wide margin, and the thin side is left where it was,
+# because the thin failure is real and separate: an undimensioned card produced bases near 0.08,
+# which is 43% under and nowhere near this limit. A base below the set reads as a sliver and
+# takes the camera down with it -- the anti-correlation between base thickness and camera height
+# runs at r = +0.92 -- so there is no case for loosening that side to match this one.
+BASE_TOLERANCE_PCT = 24.0        # chunkier than the set's median
+BASE_THIN_PCT = 12.0             # thinner than it
 
 
 def _board():
@@ -298,7 +320,43 @@ def figure_picture(im, height=250, degrees=None):
     return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def arrangement_picture(folder=SCULPTS, place=None):
+def seat_tint(im, hexv):
+    """One monochrome sculpt in one seat's colour, as a duotone over its own luminance.
+
+    THE GAME DOES NOT DO THIS, and that is worth knowing before trusting the picture. The four
+    coloured sculpts in ui/concept/ arrived coloured from the generator; nothing in the pipeline
+    recolours a grey one. So this is a PREVIEW of how the seats would read, built from the game's
+    own SEAT_SWATCH so the hues are right, using the same dark-to-light luminance ramp that
+    gen_duty_grid.acolyte_tints() uses for the acolyte icon.
+
+    It is not shared with that function because that one is about a specific committed asset and
+    wraps its result in a silhouette halo. If a recolour step ever becomes part of how sculpts are
+    made, the ramp belongs in one place and this is the second caller that would move.
+    """
+    import colorsys
+    r, g, b = (int(hexv[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, sat, v = colorsys.rgb_to_hsv(r, g, b)
+    dark = colorsys.hsv_to_rgb(h, min(1, sat * 1.3), v * 0.30)
+    light = colorsys.hsv_to_rgb(h, min(1, sat * 0.95), min(1, v * 1.10))
+    a = np.asarray(im.convert("RGBA")).astype(float)
+    lum = (0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]) / 255.0
+    lum = np.clip((lum - 0.06) / 0.84, 0, 1) ** 0.80
+    out = np.zeros_like(a)
+    for c in range(3):
+        out[..., c] = (dark[c] + (light[c] - dark[c]) * lum) * 255
+    out[..., 3] = a[..., 3]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+
+
+def seat_swatch():
+    """The seat colours the game actually uses, read rather than copied."""
+    try:
+        return dict(_board().dg.SEAT_SWATCH)
+    except Exception:                                                   # noqa: BLE001
+        return {}
+
+
+def arrangement_picture(folder=SCULPTS, place=None, colour=False, plain=False):
     """A full tile: five sculpts on a plate, in the formation the placement file describes.
 
     The two checks above judge a figure ALONE. A set can pass both and still not work on a tile,
@@ -384,10 +442,18 @@ def arrangement_picture(folder=SCULPTS, place=None):
     clash = [(i, j) for i in range(len(masks)) for j in range(i+1, len(masks))
              if (masks[i] & masks[j]).any()]
 
+    # WHICH SEAT STANDS WHERE, for the coloured preview only. An illustrative deal rather than
+    # a rule: two sage, one pewter, one plum, one bone, so every seat colour appears and one
+    # repeats, which is what a real tile mostly looks like.
+    swatch = seat_swatch() if colour else {}
+    order = ["sage", "pewter", "plum", "bone", "sage"]
+
     for i in sorted(range(len(slots)), key=lambda k: -slots[k][1]):
         dx, dy = slots[i]
         b = built[pick[i]]
         im = b["im"]
+        if colour and swatch:
+            im = seat_tint(im, swatch.get(order[i % len(order)], "#A8A296"))
         if dy:
             a = np.asarray(im).astype(float)
             a[..., :3] *= 0.80
@@ -397,10 +463,11 @@ def arrangement_picture(folder=SCULPTS, place=None):
 
     d = ImageDraw.Draw(card, "RGBA")
     hot = {i for pair in clash for i in pair}
-    for i, (cx, cy, a, b) in enumerate(ells):
-        d.ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b],
-                  outline=(255, 96, 96, 235) if i in hot else (120, 220, 150, 200), width=2)
-    d.rectangle([pad, top, pad+W, top+H], outline=(255, 212, 126, 200), width=2)
+    if not plain:
+        for i, (cx, cy, a, b) in enumerate(ells):
+            d.ellipse([pad+cx-a, top+cy-b, pad+cx+a, top+cy+b],
+                      outline=(255, 96, 96, 235) if i in hot else (120, 220, 150, 200), width=2)
+        d.rectangle([pad, top, pad+W, top+H], outline=(255, 212, 126, 200), width=2)
     xs = [W/2 + dx + s*built[i]["im"].width/2
           for (dx, _), i in zip(slots, pick, strict=True) for s in (-1, 1)]
     span = round(max(xs) - min(xs))
@@ -408,6 +475,17 @@ def arrangement_picture(folder=SCULPTS, place=None):
     # THREE SHORT LINES, not one long one: the card is only W + 2*pad wide and a single line ran
     # off its right edge, which the page happily rendered with the verdict missing.
     ok = (120, 220, 150, 255)
+    if plain:
+        # THE SAME CARD SIZE, caption area simply left empty. Cropping the strip off made this
+        # image shorter than its neighbour, and the page sizes tile pictures by HEIGHT -- so the
+        # shorter one was scaled wider than the cell and lost a figure off each edge. Two pictures
+        # meant to be compared have to share a shape.
+        buf = io.BytesIO()
+        card.convert("RGB").save(buf, "WEBP", quality=86, method=6)
+        return {"uri": "data:image/webp;base64,"
+                       + base64.b64encode(buf.getvalue()).decode("ascii"),
+                "span": span, "frame": W, "clashes": len(clash), "low": low, "drop": drop,
+                "plate": plate_path.stem, "anchor": round(anchor * 100)}
     d.text((pad, top + H + 6),
            "five sculpts, spread %d, middle forward %d, rank %d"
            % (spread, round(forward), rank),
@@ -453,8 +531,64 @@ def on_record(folder=SCULPTS):
     return out
 
 
+def prompts(folder=None):
+    """The briefs that produced the art on file, offered to the clipboard.
+
+    A prompt is an INPUT, exactly as the reference card is, and it has the same problem: the one
+    that worked is a thing you have to be able to reproduce next time, and retyping it from a
+    chat window is how it quietly drifts. So the text that produced a filed sculpt lives beside
+    the tool and the page hands it back verbatim.
+
+    Named after the sculpt they made, so the pairing is visible in the folder rather than
+    remembered. Copy rather than download because a prompt's destination is a text box.
+
+    A brief may DECLARE WHAT TO ATTACH, on a first line of the form
+
+        <!-- attach: ui/assets-gothic/sculpts/player_2_v1.png -->
+
+    which the page offers as a download beside the button. This matters more than it looks: a
+    brief that says "don't change the base or the angle, use the same as in the attached image"
+    is worthless without the right image, and produced nine passes out of ten only because the
+    thing attached was already correct. The declaration travels with the text so the pairing
+    cannot be lost, and it is stripped before copying -- the clipboard gets the brief, not its
+    bookkeeping.
+    """
+    folder = folder or (HERE / "prompts")
+    out = []
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        attach = []
+        # AS MANY AS THE BRIEF NAMES, in the order it names them, because that is the order they
+        # are attached in and the briefs say "the first attached image" and "the second".
+        while True:
+            m = re.match(r"\s*<!--\s*attach:\s*(.+?)\s*-->\s*\n", text)
+            if not m:
+                break
+            text = text[m.end():]
+            target = ROOT / m.group(1)
+            if not target.is_file():
+                print("  %s names an attachment that is not there: %s"
+                      % (path.name, m.group(1)))
+                continue
+            raw = target.read_bytes()
+            attach.append({"name": target.name, "bytes": len(raw),
+                           "uri": "data:image/png;base64,"
+                                  + base64.b64encode(raw).decode("ascii")})
+        out.append({"name": path.stem, "text": text, "attach": attach})
+    return out
+
+
 def reference_card(path=None):
-    """The card the sculpts are generated FROM, offered as a download.
+    """The card the next batch should be generated FROM, offered as a download.
+
+    WHICH card is a live decision, not a constant of nature. Cards are appended rather than
+    redrawn -- tools/ui_debug/generate_sculpt_reference.py holds all of them in CARDS, each
+    recorded beside the sculpts it produced -- so this button has to name one, and it names the
+    current one. Every brief in prompts/ also declares its own card in an `attach:` line, and
+    those are what a brief was measured with; this button is the convenience copy of whichever
+    card the work has moved on to. If the two ever disagree, the brief is right.
 
     THE ORIGINAL BYTES, not a re-encode and not the downscaled copy the page shows elsewhere.
     This file is an input to an image model: it carries a base drawn at a stated ellipse ratio
@@ -466,7 +600,8 @@ def reference_card(path=None):
     usually opened -- there is nothing to measure with offline, but there is still a card to
     fetch, and needing a server to collect a committed file would be absurd.
     """
-    path = path or (ROOT / "ui" / "assets-gothic" / "references" / "base_scale_reference_27.png")
+    path = path or (ROOT / "ui" / "assets-gothic" / "references"
+                    / "base_scale_reference_27_wall_127.png")
     if not path.is_file():
         return None
     raw = path.read_bytes()
@@ -510,7 +645,7 @@ def without_background(im):
     return Image.fromarray(out)
 
 
-def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT):
+def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT, thin_tol=BASE_THIN_PCT):
     """Measure one dropped file and say what is inside tolerance and what is not.
 
     TWO QUESTIONS, NOT THREE. Height was the third and has been withdrawn -- see the note where
@@ -608,12 +743,17 @@ def judge(raw, target, tol, base_tol=BASE_TOLERANCE_PCT):
             b = band["base_ratio"]
             row["base_ratio"] = round(base, 3)
             off = 100.0 * (base - b["mid"]) / b["mid"] if b["mid"] else 0.0
+            # ASYMMETRIC: see the constants. Chunky and thin are different failures with
+            # different evidence, and one number could only be right about one of them.
+            room = base_tol if off >= 0 else thin_tol
             checks.append(["base height / width", "%+.1f%% of the set" % off,
-                           "ok" if abs(off) <= base_tol
-                           else ("check" if abs(off) <= base_tol * 2 else "bad"),
+                           "ok" if abs(off) <= room
+                           else ("check" if abs(off) <= room * 1.5 else "bad"),
                            "wall/width %.3f at %.1f deg is %.3f upright, against a median of "
-                           "%.3f, tolerance %.0f%%"
-                           % (m["wall_ratio"], deg, base, b["mid"], base_tol)])
+                           "%.3f -- %.0f%% thinner to %.0f%% chunkier is %.3f to %.3f"
+                           % (m["wall_ratio"], deg, base, b["mid"], thin_tol, base_tol,
+                              b["mid"] * (1 - thin_tol / 100.0),
+                              b["mid"] * (1 + base_tol / 100.0))])
 
         # HEIGHT IS MEASURED AND SHOWN, BUT NOT JUDGED. It was a third check and it has been
         # withdrawn, because a pass/fail on it was answering a question the tool cannot settle.
@@ -691,7 +831,8 @@ def serve(page, port, open_it):
                 target = float(sent.get("target", TARGET_DEGREES))
                 tol = float(sent.get("tolerance", TOLERANCE_DEGREES))
                 btol = float(sent.get("base_tolerance", BASE_TOLERANCE_PCT))
-                result = judge(raw, target, tol, btol)
+                bthin = float(sent.get("base_thin", BASE_THIN_PCT))
+                result = judge(raw, target, tol, btol, bthin)
             except Exception as exc:                                    # noqa: BLE001
                 print("  could not measure %s: %s" % (sent.get("name", "?"), exc))
                 return self._send(400, json.dumps({"error": str(exc)}))
@@ -809,10 +950,14 @@ def main():
             .replace("__TARGET__", json.dumps(TARGET_DEGREES))
             .replace("__TOL__", json.dumps(TOLERANCE_DEGREES))
             .replace("__BTOL__", json.dumps(BASE_TOLERANCE_PCT))
+            .replace("__BTHIN__", json.dumps(BASE_THIN_PCT))
             .replace("__BAND__", json.dumps(band))
             .replace("__ONRECORD__", json.dumps(on_record()))
             .replace("__CARD__", json.dumps(reference_card()))
-            .replace("__ARRANGE__", json.dumps(arrangement_picture())))
+            .replace("__PROMPTS__", json.dumps(prompts()))
+            .replace("__ARRANGE__", json.dumps(arrangement_picture()))
+            .replace("__INGAME__", json.dumps(
+                arrangement_picture(colour=True, plain=True))))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     print("wrote %s  (%.0f KB)" % (out, len(page) / 1024))
@@ -824,8 +969,13 @@ def main():
         b = band["proportion"]
         print("  and %.2f to %.2f in proportion (median %.2f) -- REPORTED, NOT JUDGED"
               % (b["lo"], b["hi"], b["mid"]))
-    print("  target %.0f deg, tolerance %.1f, base tolerance %.0f%%  (height is not checked)"
-          % (TARGET_DEGREES, TOLERANCE_DEGREES, BASE_TOLERANCE_PCT))
+    print("  target %.0f deg, tolerance %.1f  (height is not checked)"
+          % (TARGET_DEGREES, TOLERANCE_DEGREES))
+    if band and "base_ratio" in band:
+        m = band["base_ratio"]["mid"]
+        print("  base %.3f to %.3f  (median %.3f, %.0f%% thinner to %.0f%% chunkier)"
+              % (m * (1 - BASE_THIN_PCT / 100.0), m * (1 + BASE_TOLERANCE_PCT / 100.0),
+                 m, BASE_THIN_PCT, BASE_TOLERANCE_PCT))
     if args.serve is not None:
         serve(out, args.serve, args.open)
     else:
@@ -875,6 +1025,17 @@ td.why{color:#403a31}
   background:#1c1811;color:#c9b27a;text-decoration:none;white-space:nowrap}
 #card .dl:hover{border-color:#8fae6a;background:#201c13}
 #card .note{color:#5f574a;max-width:720px;line-height:1.45}
+/* The briefs, on the same shelf as the card they were used with. */
+#prompts{margin:0 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#prompts .lab{color:#3f3930;letter-spacing:.06em;text-transform:uppercase}
+#prompts .cp{font:inherit;color:#c9b27a;background:#1c1811;border:1px solid #4a5a3a;
+  border-radius:3px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+#prompts .cp:hover{border-color:#8fae6a;background:#201c13}
+#prompts .att{font:inherit;color:#8b8071;background:#17130d;border:1px solid #332c20;
+  border-radius:3px;padding:6px 10px;text-decoration:none;white-space:nowrap}
+#prompts .att:hover{border-color:#5a4c36;color:#c9b27a}
+#prompts .note{color:#5f574a;max-width:700px;line-height:1.45}
+#prompts .note.ok{color:#8fae6a} #prompts .note.bad{color:#e0705f}
 /* the caption used to set the cell's width -- one long line made the tile cell 528 px and
    wrapped the row at 1600. It wraps to the picture's width instead. */
 #record .one .num{white-space:normal;max-width:366px}
@@ -893,7 +1054,8 @@ and drawn back with the measurement on it.</div>
 <div id=bar>
   <label for=target>target angle</label><input id=target value=__TARGET__>
   <label for=tol>tolerance</label><input id=tol value=__TOL__>
-  <label for=btol>base tol %</label><input id=btol value=__BTOL__>
+  <label for=btol>base, max % chunkier</label><input id=btol value=__BTOL__>
+  <label for=bthin>max % thinner</label><input id=bthin value=__BTHIN__>
   <span id=ref class=info></span>
 </div>
 <div id=record></div>
@@ -903,7 +1065,9 @@ and drawn back with the measurement on it.</div>
 var BAND = __BAND__;
 var ONRECORD = __ONRECORD__;
 var CARD = __CARD__;
+var PROMPTS = __PROMPTS__;
 var ARRANGE = __ARRANGE__;
+var INGAME = __INGAME__;
 (function(){
   if (!ONRECORD || !ONRECORD.length) return;
   var host = document.getElementById("record");
@@ -934,8 +1098,38 @@ var ARRANGE = __ARRANGE__;
            + "committed file byte for byte. Attach it when generating the next seat.</span>"
            + "</div>");
   }
-  h.push("<div class=row>");
+  // THE PROMPTS THAT WORKED, beside the card they were used with -- the two halves of one
+  // instruction. Copied rather than downloaded: a prompt's destination is a text box.
+  if (PROMPTS && PROMPTS.length) {
+    var ph = ["<div id=prompts><span class=lab>copy the brief:</span>"];
+    PROMPTS.forEach(function(p, i){
+      ph.push("<button class=cp data-i='" + i + "'>&#128203;&nbsp; " + p.name + "</button>");
+      // The image the brief tells you to attach, right beside it. "use the same base and angle
+      // as in the attached image" is only an instruction if the attachment is the right file.
+      (p.attach || []).forEach(function(a, k){
+        ph.push("<a class=att download='" + a.name + "' href='" + a.uri + "'>"
+                + "&#128206;&nbsp; " + (k + 1) + ". " + a.name + "</a>");
+      });
+    });
+    ph.push("<span class=note id=cpsay>the brief that produced the sculpt of the same name, "
+            + "verbatim from tools/ui_debug/prompts/</span></div>");
+    h.push(ph.join(""));
+  }
+  // ONE ROW PER SEAT, rather than one long row that wraps wherever the window happens to end.
+  // Seat 3 leads because it is the set a newcomer is compared against; the seats filed after it
+  // sit underneath, so a row is a seat and not an accident of viewport width.
+  var seats = {}, order = [];
   ONRECORD.forEach(function(r){
+    var seat = (r.name.match(/^player_\d+/) || ["other"])[0];
+    if (!seats[seat]) { seats[seat] = []; order.push(seat); }
+    seats[seat].push(r);
+  });
+  order.sort(function(a, b){
+    if (a === "player_3") return -1;              // the reference set leads
+    if (b === "player_3") return 1;
+    return a < b ? -1 : 1;
+  });
+  function cell(r){
     h.push("<div class=one><div class=nm>" + r.name + "</div>");
     h.push("<img class=fig src='" + r.figure + "' alt=''>");
     if (r.plinth) h.push("<img src='" + r.plinth + "' alt=''>");
@@ -943,20 +1137,78 @@ var ARRANGE = __ARRANGE__;
            + " &#183; base " + (r.base == null ? "&#8212;" : r.base.toFixed(3))
            + " &#183; height " + (r.proportion == null ? "&#8212;" : r.proportion.toFixed(2))
            + "</div></div>");
-  });
-  if (ARRANGE) {
-    h.push("<div class=one><div class=nm>five on a tile &#183; " + ARRANGE.plate + "</div>"
-           + "<img class=tileimg src='" + ARRANGE.uri + "' alt=''>"
-           + "<div class=num>" + ARRANGE.span + " of " + ARRANGE.frame + " px across &#183; "
-           + (ARRANGE.clashes ? "<span class=bad>" + ARRANGE.clashes + " plinth clash</span>"
-                              : "no plinths overlap")
-           + (ARRANGE.low > ARRANGE.drop
-              ? " &#183; <span class=bad>front plinth needs " + (ARRANGE.low - ARRANGE.drop)
-                + " px more drop</span>" : "")
-           + "</div></div>");
   }
-  h.push("</div>");
+  order.forEach(function(seat){
+    h.push("<div class=row>");
+    seats[seat].forEach(cell);
+    h.push("</div>");
+  });
+  // THE TILES GET THEIR OWN ROW, side by side. They were the tail of the seat-3 row until a
+  // fifth card pushed one of them onto a line of its own at any ordinary window width -- and
+  // these two exist to be compared with each other, so they have to sit together.
+  (function(){
+    if (!ARRANGE && !INGAME) return;
+    h.push("<div class=row>");
+    if (ARRANGE) {
+      h.push("<div class=one><div class=nm>five on a tile &#183; " + ARRANGE.plate + "</div>"
+             + "<img class=tileimg src='" + ARRANGE.uri + "' alt=''>"
+             + "<div class=num>" + ARRANGE.span + " of " + ARRANGE.frame + " px across &#183; "
+             + (ARRANGE.clashes ? "<span class=bad>" + ARRANGE.clashes + " plinth clash</span>"
+                                : "no plinths overlap")
+             + (ARRANGE.low > ARRANGE.drop
+                ? " &#183; <span class=bad>front plinth needs " + (ARRANGE.low - ARRANGE.drop)
+                  + " px more drop</span>" : "")
+             + "</div></div>");
+    }
+    // THE SAME TILE WITH NOTHING WRITTEN ON IT, in the seat colours: the measurements answer
+    // whether it fits, and this answers whether it reads. They are different questions and the
+    // second one cannot be asked while the first one's ellipses are drawn over the figures.
+    if (INGAME) {
+      h.push("<div class=one><div class=nm>the same tile, in game</div>"
+             + "<img class=tileimg src='" + INGAME.uri + "' alt=''>"
+             + "<div class=num>seat colours over the grey sculpts, no measurements &#183; "
+             + "a PREVIEW: nothing in the pipeline recolours a sculpt, the four on file came "
+             + "coloured from the generator</div></div>");
+    }
+    h.push("</div>");
+  })();
   host.innerHTML = h.join("");
+
+  // TWO WAYS TO COPY, because this page is usually opened as a file. navigator.clipboard needs
+  // a secure context and a user gesture; a click supplies the gesture, but if the context is
+  // refused there is still execCommand on a temporary textarea. Falling back silently would
+  // leave a button that looks like it worked, so the note says which happened either way.
+  function toClipboard(text, done){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function(){ done(true); },
+                                              function(){ done(legacy(text)); });
+      return;
+    }
+    done(legacy(text));
+  }
+  function legacy(text){
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  host.querySelectorAll("#prompts .cp").forEach(function(b){
+    b.onclick = function(){
+      var p = PROMPTS[+b.dataset.i], say = document.getElementById("cpsay");
+      toClipboard(p.text, function(ok){
+        say.textContent = ok
+          ? p.name + " copied — " + p.text.length + " characters, paste it as it is"
+          : "could not reach the clipboard; the browser refused it on this page";
+        say.className = ok ? "note ok" : "note bad";
+      });
+    };
+  });
 })();
 if (BAND && BAND.degrees)
   document.getElementById("ref").textContent =
@@ -999,7 +1251,8 @@ function measure(file){
       body: JSON.stringify({name: file.name, data: reader.result,
                             target: +document.getElementById("target").value,
                             tolerance: +document.getElementById("tol").value,
-                            base_tolerance: +document.getElementById("btol").value})})
+                            base_tolerance: +document.getElementById("btol").value,
+                            base_thin: +document.getElementById("bthin").value})})
       .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
       .then(function(pair){ show(file.name, pair[0], pair[1]); })
       .catch(function(e){ show(file.name, false, {error: String(e)}); });
